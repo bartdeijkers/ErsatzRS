@@ -16,6 +16,64 @@ use crate::{
     repositories::{SqliteAddonMediaListRepository, SqlxResultExt as _},
 };
 
+/// Resolve a persisted Remote Stream with the same installed-add-on and immutable
+/// publication contracts used by native playback. Call outside scheduler locks;
+/// consumers must revalidate their exact item/version binding after preparation.
+/// This resolves ownership and commands but never starts a provider process.
+///
+/// # Errors
+/// Rejects missing sources, legacy scripts, unknown liveness, invalid add-ons or
+/// unavailable published artifacts without falling back to mutable source options.
+pub async fn resolve_persisted_remote_stream(
+    pool: &DbPool,
+    remote_stream_id: i64,
+    runtime: &AddonRuntimeContext,
+    artifact_root: &Path,
+) -> Result<ResolvedRemoteStream> {
+    let row = sqlx::query(
+        r#"SELECT "Url", "AddonId", "Script", "Duration", "FallbackQuery", "Liveness", "IsLive"
+           FROM "RemoteStream" WHERE "Id"=?"#,
+    )
+    .bind(remote_stream_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or_else(unavailable)?;
+    if row
+        .try_get::<Option<String>, _>("Script")
+        .repository()?
+        .is_some()
+    {
+        return Err(RepositoryError::unavailable(
+            "remote stream playback",
+            "legacy script source requires migration to an add-on",
+        ));
+    }
+    if let Some(published) =
+        resolve_published_remote_stream(pool, remote_stream_id, runtime, artifact_root).await?
+    {
+        return Ok(published);
+    }
+    let is_live = row.try_get::<i64, _>("IsLive").repository()? != 0;
+    let liveness = crate::remote_stream::decode_persisted_liveness(
+        row.try_get("Liveness").repository()?,
+        is_live,
+    )
+    .map_err(|_| unavailable())?;
+    let definition = RemoteStreamDefinition {
+        url: row.try_get("Url").repository()?,
+        addon: row.try_get("AddonId").repository()?,
+        duration: row.try_get("Duration").repository()?,
+        fallback_query: row.try_get("FallbackQuery").repository()?,
+        liveness: Some(liveness),
+        is_live,
+        ..Default::default()
+    };
+    crate::remote_stream::resolve_remote_stream_with_addons(pool, &definition, runtime)
+        .await
+        .map_err(|_| unavailable())
+}
+
 /// Resolve a selected media version's remote-stream identity through its owning list.
 /// `None` means that the stream has no managed-list owner. A scheduled version
 /// does not pin a publication: this selects the list's current published revision.
@@ -352,12 +410,16 @@ fn unavailable() -> RepositoryError {
 }
 
 #[cfg(test)]
-mod tests {
+#[path = "addon_media_list_playback_persisted_tests.rs"]
+mod persisted_tests;
+
+#[cfg(test)]
+pub(crate) mod tests {
     use ersatzrs_core::repositories::AddonMediaListRevisionArtifacts;
 
     use super::*;
 
-    async fn fixture() -> (tempfile::TempDir, DbPool) {
+    pub(crate) async fn fixture() -> (tempfile::TempDir, DbPool) {
         let temporary = tempfile::tempdir().unwrap();
         let pool = crate::db::init(&format!(
             "sqlite:{}",

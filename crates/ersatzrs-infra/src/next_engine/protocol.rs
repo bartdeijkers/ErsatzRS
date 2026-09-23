@@ -23,6 +23,9 @@ pub struct PlayoutFolder {
 pub struct Ffmpeg {
     pub ffmpeg_path: String,
     pub ffprobe_path: String,
+    /// Next f2a981b enables reports through this path, without a `save_reports` flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reports_folder: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disabled_filters: Vec<String>,
 }
@@ -262,6 +265,11 @@ pub enum Source {
     },
     Http {
         uri: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        probe_hint: Option<ProbeHint>,
+        /// Live input disables source seeks and work-ahead in Next.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        is_live: Option<bool>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         headers: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -279,6 +287,14 @@ pub enum Source {
         #[serde(skip_serializing_if = "Option::is_none")]
         out_point_ms: Option<u64>,
     },
+    /// RTSP is a live input in Next and has no source seek fields.
+    Rtsp {
+        uri: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        probe_hint: Option<ProbeHint>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timeout_us: Option<u64>,
+    },
     /// Resolve one complete concrete item before Next probes its media inputs.
     /// Dynamic is only supported at the item's top-level source, not on a track.
     Dynamic {
@@ -295,6 +311,55 @@ pub enum Source {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         probe_hint: Option<AudioOnlyProbeHint>,
     },
+}
+
+/// Official Next metadata for an input that must not be consumed by probing.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProbeHint {
+    pub video: Vec<VideoProbeHint>,
+    pub audio: Vec<AudioProbeHint>,
+    pub subtitle: Vec<SubtitleProbeHint>,
+    pub format_name: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VideoProbeHint {
+    pub codec: String,
+    pub width: u32,
+    pub height: u32,
+    pub pix_fmt: String,
+    pub stream_index: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_order: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_aspect_ratio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_aspect_ratio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_space: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_transfer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_primaries: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dv_profile: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_hdr10_metadata: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<i32>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SubtitleProbeHint {
+    pub codec: String,
+    pub stream_index: u32,
 }
 
 /// Finite metadata for generated silence; Next must not probe an infinite lavfi input.

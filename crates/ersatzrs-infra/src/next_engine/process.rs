@@ -82,7 +82,30 @@ impl NextProcess {
         overlay_directory: Option<&Path>,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
-        let command = channel_command(
+        Self::start_with_session(
+            executable,
+            number,
+            output_folder,
+            config,
+            overlay_directory,
+            None,
+            deadline,
+        )
+        .await
+    }
+
+    /// Supply a reserved callback identity only to this spawned Next process.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn start_with_session(
+        executable: &Path,
+        number: &str,
+        output_folder: &Path,
+        config: &ChannelConfig,
+        overlay_directory: Option<&Path>,
+        instance: Option<uuid::Uuid>,
+        deadline: Instant,
+    ) -> Result<Self, ProcessError> {
+        let mut command = channel_command(
             executable,
             number,
             output_folder,
@@ -90,6 +113,7 @@ impl NextProcess {
             deadline,
         )
         .await?;
+        set_session_environment(&mut command, instance);
         Self::start_command(command, output_folder, config, deadline).await
     }
 
@@ -274,6 +298,14 @@ fn io_error(operation: &'static str, error: &io::Error) -> ProcessError {
     ProcessError::Io {
         operation,
         kind: error.kind(),
+    }
+}
+
+fn set_session_environment(command: &mut Command, instance: Option<uuid::Uuid>) {
+    // Never inherit a stale identity from the host environment.
+    command.env_remove(super::media::SESSION_ENV);
+    if let Some(instance) = instance {
+        command.env(super::media::SESSION_ENV, instance.to_string());
     }
 }
 

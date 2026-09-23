@@ -3,22 +3,24 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-23): `e8b7bb638831548e85a78992ba1b3b0ebf982aea`
-  — fix: amd vaapi accel when driver is set to default (#3036).
-- Ledger: **170 commits**, **132 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-23): `27f9d2174f377e27baa553872c73fcac863a52d7`
+  — fix: jellyfin 12 collections as shows (#3038).
+- Ledger: **172 commits**, **133 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
-  A subsequent refresh adds the AMD VAAPI default-driver fix.
+  A subsequent refresh adds the AMD VAAPI default-driver fix. The subtitle
+  correction audit appends graphics-subtitle performance and Jellyfin 12 collection
+  handling as two pending tail rows; neither is processed by the row-39 audit.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **38**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **39**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 39.
+  green CI on pushed candidate `8f722099`. UCU-04 row 39 is accepted; stop at its local checkpoint before row 40.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -28,6 +30,91 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 39 source map: Next Remote Streams and reports
+
+Upstream `7c4a5e3a` (PR #2899) changes four files: the Next playout exporter,
+session configuration builder and their wire models. It adds RemoteStream
+versions/files/subtitles, HTTP live/reconnect/keep-alive, RTSP, raw command argv,
+and opt-in FFmpeg reports. No test, migration, UI or changelog file changes.
+
+- Outcome: scheduled Remote Streams play through Next while preserving selected
+  audio/subtitles, finite/live timing, source ownership and existing add-on
+  preparation contracts. Enable the persisted report setting for Next too.
+- Accepted adaptation: supported remote subtitle/lifecycle paths, substantive
+  review and Next/native smoke pass. ADR 0100 owns the accepted embedded text limitations.
+  Direct sources and prepared artifacts use authenticated callbacks; retained
+  callbacks reuse native preparation and pass installed-producer playback proof.
+  Retained runtime proof now applies requested source intervals and verifies
+  mapped Burn/Convert captions across the cut. Ordinary producers now pass finite/live callback playback
+  and finite/live absolute and relative external subtitle Burn/Convert proof with one producer and
+  source-owned seek; UCU-04 owns the detailed evidence and remaining acceptance.
+- Accepted adaptation: ADR 0066 removed raw `script:` playback and supersedes
+  ADR 0057 on that point. Preserve installed add-on commands and their structured
+  argv, environment, working directory, tool leases and cancellation ownership.
+  Do not recreate upstream's raw command parser or flatten add-ons into Next's
+  bare script source. No reversal of this accepted boundary is proposed.
+- Reuse: `resolve_published_remote_stream` takes precedence over legacy direct
+  resolution. Preserve prepared artifacts and frozen option envelopes. Retained
+  intervals use `prepare_playback_cancellable`, fresh stream metadata and the
+  producer-applied seek; do not seek the resulting bytes again.
+- Transport integration: reuse authenticated demand-time item callbacks
+  to keep credentials out of published JSON. The existing prepared-input
+  transfer now supports an owned bounded byte sink, preserving prefix replay and
+  process cleanup; expose unchanged bytes through scoped Next HTTP transport.
+  Bind transfer ownership to the particular normal/preview session, interval
+  and publication, including cancellation on body drop and awaited shutdown.
+  This is not permission to add a generic broker or another transcoder.
+- Session binding: shared channel publications use the Dynamic header environment
+  templates supported by official Next f2a981b. A reserved child-only instance
+  UUID identifies normal/preview independently without changing the
+  channel number or overlay lookup. Validate that header against the exact
+  active context; never fall back to a channel-only owner. Register pending
+  preparation before external work, close admission before shutdown, then cancel
+  and await all preparation/transfers before capacity release. Header expansion
+  has official-runtime proof; independent contexts and stale callbacks have
+  focused regressions. Bounded pending/active registration and awaited shutdown
+  are implemented and regression-tested. Production-router runtime proof now
+  verifies independent normal/preview producers, stopping preview while normal
+  continues, and final process/output/capacity cleanup.
+- Direct HTTP/RTSP resolution must retain finite/live semantics; RTSP is always
+  live. Add-on preparation must occur outside scheduler locks. Unsupported or
+  stale exact selections must fail visibly, not silently choose another track.
+- Official Next f2a981b drops multiplexed live embedded text in Burn mode;
+  Convert rejects RTSP and waits for HTTP EOF. Its global live flag also affects
+  sidecar timing. Row 39 upstream forwarding does not resolve those limitations.
+  The maintainer accepted ADR 0100 for live embedded text and ordinary one-shot
+  embedded text without an independent source-bound caption artifact: keep the
+  official engine and refuse the unavailable selection explicitly. Image
+  subtitles, external sidecar timing and HTTP lifecycle remain required.
+  UCU-04 evidence and visible parity debt track the exception; wire selection
+  tests must not be represented as subtitle playback acceptance.
+- Standalone live captions are rebased to the callback's source clock before
+  Next clears live input seeks. Reuse the bounded Burn artifact cache, bind the
+  output to publication, content and millisecond join, then revalidate publication
+  and session identity. The adapter reads only independent finite sidecars;
+  whole-source extraction of live embedded text remains refused.
+- Reports: official Next f2a981b enables diagnostics by `reports_folder` presence;
+  it has no operative `save_reports` field. Map the existing persisted opt-in to
+  the application-data `ffmpeg-reports` directory, preserving overlay priority.
+- Acceptance evidence: source/protocol/timing regressions, finite/live HTTP,
+  RTSP and managed-producer runtime proof, selected tracks and subtitles,
+  disconnect/cancellation cleanup, reports, focused review and HTTP smoke.
+  The one-shot non-seekable NUT prerequisite passes with official Next and fresh
+  probe_hint metadata (UCU-04 evidence). The prepared-artifact callback now passes
+  five real Next text/audio/seek scenarios. Retained production callbacks are
+  connected and fresh-index/no-second-seek regressions pass. The installed
+  retained producer now passes callback-to-decoder proof with one producer and
+  selected audio; the expanded fixture also verifies actual requested cuts and
+  mapped Burn/Convert captions. Ordinary finite/live external Burn/Convert and
+  direct finite/live HTTP/RTSP sidecar playback now pass. Production routing
+  proves finite producer authentication, single claims, independent normal/preview
+  lifetimes and stop cleanup. A real HTTP body disconnect reaps its producer
+  before session stop; claiming the consumed transfer again returns Gone.
+  Final scoped review/checks and Next Burn/Convert plus native lifecycle smoke
+  pass. Row 39 is Adapt under ADRs 0066/0100; full UCU-04 window gates and
+  supported-platform acceptance remain open. Stop at the authorized local
+  checkpoint before row 40.
 
 ## Row 36 source map: Next channel configuration overlays
 
@@ -616,7 +703,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 36 | `64296597` | feat: add channel config overlays for next engine (#2891) | Port | upstream-baseline-catch-up | `feat(infra): apply Next channel configuration overlays` | ucu-04; ordered profile/default/channel overlays, startup directory, null omission and localized bounded health inspection. Existing deinterlace/tonemap mapping retained. 122 Next tests including decoded overlay playback, four health tests, all-culture localization, scoped Clippy, Burn/Convert HTTP smoke and substantive review pass. Window gates remain open. |
 | 37 | `fecce92e` | fix: use configured ffmpeg with all graphics elements (#2892) | Covered | drawvg-graphics-engine | `docs(porting): verify configured FFmpeg for native graphics` | ucu-04; ADR 0005 native motion/subtitle inputs share the resolved FFmpeg executable. Existing locator/snapshot CI proof plus decoded all-kinds graphics test with poisoned PATH pass; substantive review agrees. Next graphics projection remains separately open under ADR 0095. No Rust changes. |
 | 38 | `41bf22eb` | chore: dependency updates (#2893) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency updates` | ucu-04; eight project files plus ReSharper tool manifest, version-only changes. Exact packages are absent from Rust; ADRs 0009/0058/0076/0096 preserve existing search/template/JavaScript boundaries. No application, test, schema or runtime-artifact change and no new parity claim. Substantive review passes. |
-| 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | | | | ucu-04; provisional: Next behavior triage. |
+| 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | Adapt (ADRs 0066/0100) | upstream-baseline-catch-up | `feat(infra): support Next remote streams and reports` | ucu-04; authenticated direct/prepared/retained/ordinary sources, fresh selected tracks, finite/live timing and supported captions, opt-in reports and independent normal/preview ownership. Real routed disconnect/stop cleanup, scoped review/tests/Clippy and Next Burn/Convert plus native lifecycle smoke pass. Accepted embedded-text limits remain visible debt. Stop before row 40; window gates remain open. |
 | 40 | `2c02561f` | chore: update dependencies (#2900) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | | | | ucu-04; provisional: Next behavior triage. |
 | 42 | `822c7547` | pin imagesharp dependency (#2909) | | | | ucu-04; provisional: Upstream tooling candidate. |
@@ -713,38 +800,40 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 133 | `4a2aa157` | fix: local folder etags (#3004) | | | | ucu-08; provisional: Port candidate. |
 | 134 | `188274e8` | fix: season scanning fixes (#3005) | | | | ucu-08; provisional: Port candidate. |
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
-| 136 | `3c41959f` | fix: health check improvements (#3006) | | | | ucu-09; provisional: Port candidate. |
-| 137 | `96cef081` | fix: heal artwork cache (#3007) | | | | ucu-09; provisional: Port candidate. |
-| 138 | `7e141a13` | fix: use static hash functions (#3008) | | | | ucu-09; provisional: Port candidate. |
-| 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Next behavior triage. |
-| 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: Adapt candidate. |
-| 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | | | | ucu-09; provisional: Upstream tooling candidate. |
-| 142 | `00db622d` | chore: trigger new build for updated next engine | | | | ucu-09; provisional: Upstream tooling candidate. |
-| 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | | | | ucu-09; provisional: Likely Covered; verify ADR 0064 persisted fields. |
-| 144 | `b30d9670` | chore: update changelog for new next build | | | | ucu-09; provisional: Upstream tooling candidate. |
-| 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | | | | ucu-09; provisional: Port candidate. |
-| 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt candidate. |
-| 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | | | | ucu-09; provisional: Port candidate. |
-| 148 | `c673082e` | fix: playout item converter subtitles (#3014) | | | | ucu-09; provisional: Port candidate. |
-| 149 | `4fffa955` | fix: plex other video tags (#3015) | | | | ucu-09; provisional: Port candidate. |
-| 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | | | | ucu-09; provisional: Next behavior triage. |
-| 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | | | | ucu-09; provisional: Port candidate. |
-| 152 | `495e3799` | chore: update changelog for new next build | | | | ucu-09; provisional: Upstream tooling candidate. |
-| 153 | `0e1b355f` | chore: update dependencies (#3018) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 154 | `908fa961` | fix: graphics engine motion (#3019) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 155 | `d1c2ab3a` | chore: updates for new next, ffmpeg builds | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 156 | `a4642d95` | fix: api response codes (#3020) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 157 | `2bbfbd10` | fix: playback troubleshooting (#3021) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 159 | `94c8c014` | fix: scheduler service reliability (#3023) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 160 | `b403012f` | fix: movie custom order ui (#3024) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | | | | ucu-09; untriaged addition from latest upstream refresh. |
-| 163 | `db5a81e4` | fix: scripted schedule file validation (#3027) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 164 | `3f4255be` | fix: many ui bug fixes (#3028) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 165 | `3054e5d0` | fix: more bug fixes (#3029) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 166 | `3d31bfdd` | fix: remote stream yaml extension (#3030) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
-| 169 | `ee038ba4` | feat: next engine rotation (#3034) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 136 | `3c41959f` | fix: health check improvements (#3006) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: health check isolation and reporting; the native health engine has the same shape. |
+| 137 | `96cef081` | fix: heal artwork cache (#3007) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: no native artwork orphan cleanup or cache healing exists. |
+| 138 | `7e141a13` | fix: use static hash functions (#3008) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: C# static-hash refactor; native hashing is already stateless. |
+| 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: report Next sessions through the native sessions API once Next playback lands. |
+| 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: workflow and changelog only; QSV padding lives in their custom FFmpeg build per ADR 0008/0063. Check native QSV padding as separate debt. |
+| 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog and Next build trigger. |
+| 142 | `00db622d` | chore: trigger new build for updated next engine | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: Next build trigger only. |
+| 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: DolbyVision, Hdr and Color columns are already persisted under p8a-01/p8a-02; verify the probe fills them. |
+| 144 | `b30d9670` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
+| 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: logging and validation for four TODOs, including the external JSON playout provider. |
+| 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: canvas feed for Next only; native graphics stay drawvg under ADR 0005. |
+| 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: YAML post-roll state must survive playout builds; upstream ships 345 lines of tests. |
+| 148 | `c673082e` | fix: playout item converter subtitles (#3014) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: playout item converter subtitles; subtitle parity is a priority surface. |
+| 149 | `4fffa955` | fix: plex other video tags (#3015) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: Plex other-video tags plus a native SQLite reset migration under ADR 0004. |
+| 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: default the Next channel config to show errors over fallback. |
+| 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: music video credits in the troubleshooter under ADR 0076. |
+| 152 | `495e3799` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
+| 153 | `0e1b355f` | chore: update dependencies (#3018) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: dependency bumps; verify AAC above two channels in a native argv snapshot instead. |
+| 154 | `908fa961` | fix: graphics engine motion (#3019) | | | | ucu-09; provisional: Adapt (ADR 0005). Claude 2026-09-23 triage: graphics motion timing and hold, and seek seconds reaching templates. |
+| 155 | `d1c2ab3a` | chore: updates for new next, ffmpeg builds | | | | ucu-09; provisional: N/A (ADR 0063). Claude 2026-09-23 triage: their custom FFmpeg build and Next config; check native AMF capability coverage as separate debt. |
+| 156 | `a4642d95` | fix: api response codes (#3020) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: correct API status codes for validation errors on the same endpoints. |
+| 157 | `2bbfbd10` | fix: playback troubleshooting (#3021) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: troubleshooter lock release and reliability. |
+| 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: native locking is lease-based, not the C# EntityLocker. |
+| 159 | `94c8c014` | fix: scheduler service reliability (#3023) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: scheduler reliability; read for the real failure modes rather than copying the C# design. |
+| 160 | `b403012f` | fix: movie custom order ui (#3024) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: manual collection custom order plus a data reset migration. |
+| 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: no font cache to race in the native drawtext and graphics path. |
+| 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: MPEG-TS script reliability. |
+| 163 | `db5a81e4` | fix: scripted schedule file validation (#3027) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: scripted schedule file validation. |
+| 164 | `3f4255be` | fix: many ui bug fixes (#3028) | | | | ucu-09; provisional: Port (selective). Claude 2026-09-23 triage: Razor editor fixes; map each page to its Leptos equivalent, several may already be correct. |
+| 165 | `3054e5d0` | fix: more bug fixes (#3029) | | | | ucu-09; provisional: Port (selective). Claude 2026-09-23 triage: HLS session worker, credits query and streaming controller fixes. |
+| 166 | `3d31bfdd` | fix: remote stream yaml extension (#3030) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: the scanner already accepts yml and yaml, crates/ersatzrs-scanner/src/lib.rs:699. |
+| 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: local library paths must be absolute and errors must name the path. |
+| 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: upstream release preparation. |
+| 169 | `ee038ba4` | feat: next engine rotation (#3034) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: Rotation is persisted and orientation applied once under p8c-02; Next projection is Adapt when that row runs. |
 | 170 | `e8b7bb63` | fix: amd vaapi accel when driver is set to default (#3036) | | | | ucu-09; pending source review. |
+| 171 | `62b7a5e9` | perf: graphics engine subtitles (#3037) | | | | ucu-09; pending source review. |
+| 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; pending source review. |

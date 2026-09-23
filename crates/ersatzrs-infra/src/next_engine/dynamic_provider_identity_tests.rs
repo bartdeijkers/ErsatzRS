@@ -137,6 +137,8 @@ fn local_source() -> Source {
 
 fn http_source() -> Source {
     Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: "https://media.example.test/synthetic".into(),
         headers: vec![],
         user_agent: None,

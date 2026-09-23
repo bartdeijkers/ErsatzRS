@@ -27,7 +27,10 @@ use crate::addons::{
 use crate::db::DbPool;
 
 mod prepared_input;
-pub use prepared_input::{spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput};
+pub use prepared_input::{
+    spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
+    PreparedRemoteStreamTransfer,
+};
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
@@ -115,6 +118,34 @@ pub struct RemoteStreamCommand {
 }
 
 impl RemoteStreamCommand {
+    /// Resolve exact seek placeholders for one playback-owned producer.
+    /// Returns the remaining seek that the consumer must apply. Live sources
+    /// always open at the current boundary; unmarked finite/unknown producers
+    /// retain their consumer seek. Other arguments, environment and leases are
+    /// preserved, and the original reusable command is not changed.
+    #[must_use]
+    pub fn with_playback_seek(
+        &self,
+        liveness: RemoteStreamLiveness,
+        requested: std::time::Duration,
+    ) -> (Self, std::time::Duration) {
+        let requested = if liveness == RemoteStreamLiveness::Live {
+            std::time::Duration::ZERO
+        } else {
+            requested
+        };
+        if self.accepts_seek() {
+            let position = if requested.is_zero() {
+                "0".to_owned()
+            } else {
+                ersatzrs_ffmpeg::format_time_limit(requested)
+            };
+            (self.with_seek(&position), std::time::Duration::ZERO)
+        } else {
+            (self.clone(), requested)
+        }
+    }
+
     fn accepts_seek(&self) -> bool {
         self.args
             .iter()
@@ -1323,10 +1354,10 @@ struct PreparedProducerReplay {
 }
 
 #[allow(clippy::too_many_lines)] // Keep producer status, pipe closure and diagnostics under one owner.
-async fn run_remote_stream_producer(
+async fn run_remote_stream_producer<W: tokio::io::AsyncWrite + Unpin>(
     mut producer: ManagedAddonChild,
     mut stdout: ChildStdout,
-    consumer_stdin: ChildStdin,
+    consumer_stdin: W,
     stderr_task: Option<JoinHandle<String>>,
     mut cancellation: oneshot::Receiver<()>,
     diagnostics: RemoteStreamProducerDiagnostics,
@@ -1347,15 +1378,13 @@ async fn run_remote_stream_producer(
                 .ok_or_else(|| io::Error::other("prepared consumer stdin unavailable"))?;
             stdin.write_all(&prepared.prefix).await?;
             tokio::io::copy(&mut stdout, stdin).await?;
-            Ok(())
+            stdin.flush().await
         } else {
-            copy_remote_producer_to_stdin(
-                stdout,
-                held_stdin
-                    .take()
-                    .ok_or_else(|| io::Error::other("consumer stdin unavailable"))?,
-            )
-            .await
+            let mut stdin = held_stdin
+                .take()
+                .ok_or_else(|| io::Error::other("consumer stdin unavailable"))?;
+            tokio::io::copy(&mut stdout, &mut stdin).await?;
+            stdin.shutdown().await
         }
     };
     let copy_result = tokio::select! {
@@ -1385,7 +1414,9 @@ async fn run_remote_stream_producer(
         }
     };
     if let Some(prepared) = &prepared {
-        let failed = !status.as_ref().is_ok_and(ExitStatus::success) && !cancelled;
+        let failed = !cancelled
+            && (!status.as_ref().is_ok_and(ExitStatus::success)
+                || copy_result.as_ref().is_some_and(Result::is_err));
         prepared.result.store(
             if failed { 2 } else { 1 },
             std::sync::atomic::Ordering::Release,
@@ -1906,6 +1937,65 @@ content_rating: PG
             "/D /S /C \"\"C:\\Program Files\\ErsatzRS\\Remote Producer.bat\" \
              \"https://example.test/watch?id=1&x=2\" \"\"\""
         );
+    }
+
+    #[test]
+    fn playback_seek_preserves_process_context_and_has_exactly_one_owner() {
+        let original = RemoteStreamCommand {
+            tool_paths: vec![PathBuf::from("tools/fixture")],
+            program: "producer".into(),
+            args: vec!["play".into(), "prefix-{seek}".into()],
+            working_directory: PathBuf::from("package"),
+            environment: [("FIXTURE_OPTION".into(), "unchanged".into())].into(),
+        };
+        let requested = std::time::Duration::from_millis(1_560_500);
+        for liveness in [
+            RemoteStreamLiveness::Finite,
+            RemoteStreamLiveness::Unknown,
+            RemoteStreamLiveness::Live,
+        ] {
+            for marker in ["none", "argv", "environment"] {
+                let mut command = original.clone();
+                if marker == "argv" {
+                    command.args.push("{seek}".into());
+                } else if marker == "environment" {
+                    command
+                        .environment
+                        .insert("FIXTURE_SEEK".into(), "{seek}".into());
+                }
+                let (resolved, remaining) = command.with_playback_seek(liveness, requested);
+                assert_eq!(resolved.program, command.program);
+                assert_eq!(resolved.tool_paths, command.tool_paths);
+                assert_eq!(resolved.working_directory, command.working_directory);
+                assert_eq!(resolved.args[1], "prefix-{seek}");
+                assert_eq!(resolved.environment["FIXTURE_OPTION"], "unchanged");
+                if marker == "none" {
+                    assert_eq!(resolved, command);
+                    assert_eq!(
+                        remaining,
+                        if liveness == RemoteStreamLiveness::Live {
+                            std::time::Duration::ZERO
+                        } else {
+                            requested
+                        }
+                    );
+                } else {
+                    assert!(remaining.is_zero());
+                    let expected = if liveness == RemoteStreamLiveness::Live {
+                        "0"
+                    } else {
+                        "00:26:00.5000000"
+                    };
+                    if marker == "argv" {
+                        assert_eq!(resolved.args.last().unwrap(), expected);
+                        assert_eq!(command.args.last().unwrap(), "{seek}");
+                    } else {
+                        assert_eq!(resolved.environment["FIXTURE_SEEK"], expected);
+                        assert_eq!(command.environment["FIXTURE_SEEK"], "{seek}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

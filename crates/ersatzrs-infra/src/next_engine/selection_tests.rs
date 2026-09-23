@@ -169,6 +169,8 @@ async fn http_sources_retain_transport_options_when_audio_is_missing() {
         ..Default::default()
     };
     let source = wire::Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: "https://media.example.test/video.mkv".to_owned(),
         headers: vec!["X-Fixture: synthetic".to_owned()],
         user_agent: Some("ErsatzRS-fixture".to_owned()),
@@ -724,6 +726,8 @@ async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity()
         ..Default::default()
     };
     let source = wire::Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: "https://media.example.test/fixture.mkv".into(),
         headers: vec!["X-Fixture: synthetic".into()],
         user_agent: Some("fixture".into()),
@@ -965,3 +969,55 @@ async fn published_audio_override_preserves_silence_and_rejects_stale_or_conflic
 
 #[path = "provider_subtitle_tests.rs"]
 mod provider_subtitle_tests;
+
+#[tokio::test]
+async fn live_projection_preserves_selected_audio_and_embedded_subtitles_without_seek() {
+    let pool = fixture_pool().await;
+    let channel = Channel {
+        preferred_audio_language_code: Some("nld".into()),
+        preferred_subtitle_language_code: Some("eng".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+        ..Default::default()
+    };
+    for source in [
+        serde_json::json!({"source_type":"http", "uri":"https://example.test/live", "is_live":true, "in_point_ms":123, "out_point_ms":456}),
+        serde_json::json!({"source_type":"rtsp", "uri":"rtsp://example.test/live"}),
+    ] {
+        let projection = project_item(
+            &pool,
+            &channel,
+            &item(),
+            100,
+            serde_json::from_value(source).unwrap(),
+            &Resolution {
+                width: 320,
+                height: 180,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let tracks = serde_json::to_value(projection.tracks.unwrap()).unwrap();
+        assert_eq!(tracks["audio"]["stream_index"], 2);
+        assert_eq!(tracks["subtitle"]["stream_index"], 4);
+        for kind in ["video", "audio", "subtitle"] {
+            assert!(tracks[kind]["source"].get("in_point_ms").is_none());
+            assert!(tracks[kind]["source"].get("out_point_ms").is_none());
+        }
+    }
+}
+
+#[test]
+fn finite_http_projection_keeps_programme_in_and_out_points() {
+    for is_live in [None, Some(false)] {
+        let mut source: wire::Source = serde_json::from_value(serde_json::json!({
+            "source_type":"http", "uri":"https://example.test/finite", "is_live":is_live
+        }))
+        .unwrap();
+        apply_item_seek(&mut source, &item()).unwrap();
+        let json = serde_json::to_value(source).unwrap();
+        assert_eq!(json["in_point_ms"], 1000);
+        assert_eq!(json["out_point_ms"], 61000);
+    }
+}

@@ -15,6 +15,19 @@ release section when tagging a release.
 
 ### Added
 
+- Resolve direct Remote Streams and ready published local artifacts through
+  session-bound Next callbacks, preserving track selection and rejecting changed
+  publications. Ordinary and retained-interval add-ons use a session-owned
+  producer and one-shot HTTP transfer with fresh audio/video metadata, preserving
+  producer-applied seek. Finite and live ordinary streams support absolute and relative
+  external subtitles in Burn and Convert modes; finite and live producers retain
+  selected embedded image subtitles. Retained-interval playback preserves mapped
+  text captions across cuts. Independently readable live text sidecars use bounded,
+  publication-validated preparation to preserve caption timing when joining a programme.
+
+- Honor the persisted FFmpeg reports setting for Next sessions, writing opt-in
+  diagnostics under the application-data `ffmpeg-reports` directory (upstream
+  PR #2899). The existing Next configuration overlays retain precedence.
 - Apply optional Next channel configuration overlays after the FFmpeg profile:
   `next/channel-config-overlays/default.json` followed by `{channel_number}.json`
   under the application data root (upstream PR #2891). Next owns the merge and
@@ -33,6 +46,11 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Keep the official Next build and explicitly refuse unsupported live embedded
+  text captions and one-shot producer embedded text without an independently
+  prepared caption artifact (ADR 0100). These accepted alpha limitations remain
+  visible parity debt; there is no silent subtitle loss or engine fallback.
 
 - Add the optional Next engine's per-channel text subtitle mode: Burn or
   Convert If Possible (upstream PR #2869), with authenticated WebVTT playlists
@@ -141,6 +159,19 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve clean EOF for Next's one-shot producer HTTP streams by retaining
+  FFmpeg's chunked-reader state, while keeping reconnection disabled. The
+  separate Next CI check now covers full-frame decoding through the production
+  HTTP response.
+
+- Initialize rawvideo pixel-format metadata while probing a retained producer's
+  bounded NUT prefix, so Next can consume that same producer without reopening it
+  or rejecting otherwise valid media as incomplete.
+
+- Bind Next playback callbacks to their originating normal or preview session,
+  preserving each session's tools and path replacements and rejecting callbacks
+  from stopped or replaced instances. Retained-source preflight also observes
+  cancellation and deadlines while waiting for database or sidecar preparation.
 - Make the synthetic add-on option test provider consume runtime requests before
   replying on Unix and Windows, preventing a process-input race in browser tests.
 

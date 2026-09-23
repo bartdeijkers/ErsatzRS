@@ -25,6 +25,9 @@ pub(crate) struct Identity {
 pub(crate) struct Snapshot {
     pub projection: selection::DeferredProjection,
     pub identity: Identity,
+    pub prepared_remote: Option<super::remote_projection::PreparedContext>,
+    pub producer_remote: Option<super::remote_projection::ProducerContext>,
+    pub retained_remote: Option<super::remote_projection::RetainedContext>,
 }
 
 /// Re-read the original persisted interval, even when the requested range starts
@@ -62,6 +65,25 @@ pub(crate) async fn project_snapshot(
     let profile = playback::load_channel_playback_profile(pool, channel_id)
         .await?
         .ok_or_else(unavailable)?;
+    if media.remote_stream_id.is_some() {
+        let result = super::remote_projection::project_publishable(
+            pool,
+            &channel,
+            media,
+            &profile.resolution,
+            selection::AudioDirective::Published(published_audio),
+        )
+        .await;
+        drop(schedule_snapshot);
+        return Box::pin(super::remote_projection::materialize_prepared(
+            pool,
+            locker,
+            result?,
+            published_audio,
+            &crate::file_system_layout::addon_processed_media_folder(),
+        ))
+        .await;
+    }
     let selection_time = schedule_snapshot.context.source_time(media.item.start)?;
     let watermarks = playback::select_playback_watermarks(
         pool,
@@ -95,6 +117,9 @@ pub(crate) async fn project_snapshot(
     Ok(Snapshot {
         projection,
         identity,
+        prepared_remote: None,
+        retained_remote: None,
+        producer_remote: None,
     })
 }
 

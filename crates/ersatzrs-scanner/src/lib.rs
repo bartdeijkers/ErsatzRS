@@ -4704,9 +4704,11 @@ mod tests {
         format_metadata.insert("LANGUAGE".to_owned(), "nl".to_owned());
         format_metadata.insert("Keywords".to_owned(), "one;two".to_owned());
         let probed = ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            field_orders: std::collections::BTreeMap::new(),
             version: ersatzrs_domain::MediaVersion::default(),
             streams: Vec::new(),
             chapters: Vec::new(),
+            format_name: None,
             format_metadata,
         };
 
@@ -4721,9 +4723,11 @@ mod tests {
     #[test]
     fn local_metadata_kind_distinguishes_sidecar_embedded_and_unrelated_tags() {
         let probe = |key: &str, value: &str| ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            field_orders: std::collections::BTreeMap::new(),
             version: ersatzrs_domain::MediaVersion::default(),
             streams: Vec::new(),
             chapters: Vec::new(),
+            format_name: None,
             format_metadata: [(key.to_owned(), value.to_owned())].into_iter().collect(),
         };
 
@@ -5790,6 +5794,7 @@ broadcasters: [Current Network]
 
     fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
         ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            field_orders: std::collections::BTreeMap::new(),
             version: ersatzrs_domain::MediaVersion {
                 name: "Main".to_owned(),
                 duration: chrono::Duration::seconds(180),
@@ -5800,6 +5805,7 @@ broadcasters: [Current Network]
             },
             streams: Vec::new(),
             chapters: Vec::new(),
+            format_name: None,
             format_metadata: std::collections::BTreeMap::new(),
         }
     }
@@ -7722,6 +7728,7 @@ defaults:
 
         fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
             ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+                field_orders: std::collections::BTreeMap::new(),
                 version: ersatzrs_domain::MediaVersion {
                     name: "Main".to_owned(),
                     duration: chrono::Duration::seconds(180),
@@ -7732,6 +7739,7 @@ defaults:
                 },
                 streams: Vec::new(),
                 chapters: Vec::new(),
+                format_name: None,
                 format_metadata: std::collections::BTreeMap::new(),
             }
         }
@@ -8343,6 +8351,7 @@ defaults:
 
         fn probed_version() -> FfprobeMediaVersion {
             FfprobeMediaVersion {
+                field_orders: std::collections::BTreeMap::new(),
                 version: MediaVersion {
                     name: "Main".to_owned(),
                     duration: Duration::seconds(180),
@@ -8353,6 +8362,7 @@ defaults:
                 },
                 streams: Vec::new(),
                 chapters: Vec::new(),
+                format_name: None,
                 format_metadata: std::collections::BTreeMap::new(),
             }
         }

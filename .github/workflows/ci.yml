@@ -342,9 +342,11 @@ jobs:
           echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_NEXT_TEST_BIN=$TMPDIR/next/ersatztv-channel" >> "$GITHUB_ENV"
           cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
-      - name: Next components and real-engine decoding
+          python3 scripts/e2e/stage-rtsp-test-server.py --output "$TMPDIR/rtsp-server" | tee ci-artifacts/next-engine/rtsp-test-server.log
+          echo "ERSATZRS_NEXT_TEST_RTSP_SERVER=$TMPDIR/rtsp-server/mediamtx" >> "$GITHUB_ENV"
+      - name: Next components, real-engine decoding and HTTP EOF
         run: |
-          ./run.sh test -p ersatzrs-infra --lib --profile ci --run-ignored all -E 'test(next_engine::) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
+          ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all -E '(test(next_engine::) or test(transport::iptv::next_media::)) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
         run: cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
       - name: Next Hybrid playback with converted subtitles

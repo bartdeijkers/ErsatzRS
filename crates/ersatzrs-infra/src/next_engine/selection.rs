@@ -20,6 +20,7 @@ use super::protocol as wire;
 pub(crate) struct DeferredProjection {
     pub item: wire::PlayoutItem,
     pub pending_burn: Option<PendingBurn>,
+    pub selected_subtitle: Option<PlaybackSubtitle>,
 }
 
 /// Exact selected embedded track and its original, sought media source.
@@ -180,13 +181,16 @@ pub(crate) async fn project_deferred_item_with_audio(
         },
         None => silent_audio(duration_ms),
     };
+    let selected_subtitle = subtitle;
     let (subtitle, pending_burn) = project_subtitle(
-        subtitle.as_ref(),
+        selected_subtitle.as_ref(),
         &source,
         channel.next_engine_text_subtitle_mode,
+        item,
     )?;
     Ok(DeferredProjection {
         pending_burn,
+        selected_subtitle,
         item: wire::PlayoutItem {
             watermark: None,
             id: item.id.to_string(),
@@ -209,7 +213,10 @@ fn project_subtitle(
     subtitle: Option<&PlaybackSubtitle>,
     source: &wire::Source,
     mode: ersatzrs_domain::NextEngineTextSubtitleMode,
+    item: &PlayoutItem,
 ) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
+    let standalone = subtitle
+        .is_some_and(|selected| selected.subtitle_kind != crate::metadata::subtitle_kind::EMBEDDED);
     let pending_burn = subtitle
         .filter(|subtitle| {
             subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED
@@ -220,7 +227,7 @@ fn project_subtitle(
             subtitle: subtitle.clone(),
             source: source.clone(),
         });
-    let subtitle = if let Some(pending) = &pending_burn {
+    let mut subtitle = if let Some(pending) = &pending_burn {
         Some(wire::Track {
             source: Some(pending.source.clone()),
             stream_index: Some(
@@ -233,10 +240,18 @@ fn project_subtitle(
             .map(|subtitle| subtitle_track(subtitle, source, mode))
             .transpose()?
     };
+    // A standalone sidecar follows the programme's source clock even when the
+    // video is live. Next clears live input seeks; the callback rebases these
+    // independently readable cues before handing them to the engine.
+    if standalone {
+        if let Some(source) = subtitle.as_mut().and_then(|track| track.source.as_mut()) {
+            apply_item_seek(source, item)?;
+        }
+    }
     Ok((subtitle, pending_burn))
 }
 
-fn silent_audio(duration_ms: u64) -> wire::Track {
+pub(crate) fn silent_audio(duration_ms: u64) -> wire::Track {
     wire::Track {
         source: Some(wire::Source::Lavfi {
             params: "anullsrc=channel_layout=stereo:sample_rate=48000".to_owned(),
@@ -308,6 +323,7 @@ fn subtitle_track(
             out_point_ms,
             ..
         } => (uri, *in_point_ms, *out_point_ms),
+        wire::Source::Rtsp { uri, .. } => (uri, None, None),
         wire::Source::Lavfi { .. } | wire::Source::Dynamic { .. } => {
             return Err(invalid("subtitle requires a media source"));
         }
@@ -323,6 +339,8 @@ fn subtitle_track(
         source.clone()
     } else if input.path.starts_with("http://") || input.path.starts_with("https://") {
         wire::Source::Http {
+            probe_hint: None,
+            is_live: None,
             uri: input.path,
             headers: Vec::new(),
             user_agent: None,
@@ -499,6 +517,15 @@ fn apply_item_seek(source: &mut wire::Source, item: &PlayoutItem) -> Result<()> 
         return Err(invalid("item out-point does not follow in-point"));
     }
     match source {
+        wire::Source::Http {
+            is_live: Some(true),
+            in_point_ms,
+            out_point_ms,
+            ..
+        } => {
+            *in_point_ms = None;
+            *out_point_ms = None;
+        }
         wire::Source::Local {
             in_point_ms,
             out_point_ms,
@@ -512,7 +539,7 @@ fn apply_item_seek(source: &mut wire::Source, item: &PlayoutItem) -> Result<()> 
             *in_point_ms = Some(start);
             *out_point_ms = (finish != 0).then_some(finish);
         }
-        wire::Source::Lavfi { .. } => {}
+        wire::Source::Lavfi { .. } | wire::Source::Rtsp { .. } => {}
         wire::Source::Dynamic { .. } => {
             return Err(invalid("dynamic source requires concrete resolution"));
         }

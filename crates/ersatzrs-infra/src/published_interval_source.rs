@@ -29,6 +29,8 @@ pub struct RetainedIntervalPlayback {
     pub prepared: PreparedRemoteStreamInput,
     pub video_input: InputFile,
     pub audio_input: InputFile,
+    /// Fresh retained-prefix metadata, preserving codecs and pixel formats for Next hints.
+    pub probe: FfprobeMediaVersion,
     pub source_video: SourceVideoStream,
     pub source_audio: Vec<SourceAudioStream>,
 }
@@ -143,10 +145,10 @@ impl PublishedIntervalSource {
             }) {
                 return Err(ItemRuntimeError::InvalidResult);
             }
-            playback_metadata(&probe, None)
+            playback_metadata(&probe, None).map(|metadata| (metadata, probe))
         }
         .await;
-        let (source_video, source_audio) = match metadata {
+        let ((source_video, source_audio), probe) = match metadata {
             Ok(metadata) => metadata,
             Err(error) => {
                 prepared
@@ -169,6 +171,7 @@ impl PublishedIntervalSource {
                 .with_input_options(["-f", "nut"])
                 .with_stream_index(audio_index),
             prepared,
+            probe,
             source_video,
             source_audio,
         }))

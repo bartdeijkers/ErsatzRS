@@ -1,5 +1,46 @@
 use super::*;
 
+#[test]
+fn prepared_source_binds_single_use_session_transport_without_seeking() {
+    let relay = MediaRelay::new();
+    relay.configure("0.0.0.0:8409".parse().unwrap()).unwrap();
+    let instance = Uuid::new_v4();
+    let transfer = Uuid::new_v4();
+    let hint = super::super::protocol::ProbeHint {
+        video: Vec::new(),
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        format_name: Some("nut".into()),
+        duration_ms: Some(12_000),
+    };
+    let Source::Http {
+        uri,
+        headers,
+        reconnect,
+        keep_alive,
+        in_point_ms,
+        out_point_ms,
+        probe_hint,
+        ..
+    } = relay
+        .prepared_source(instance, transfer, hint, false)
+        .unwrap()
+    else {
+        panic!("expected HTTP");
+    };
+    assert_eq!(
+        uri,
+        format!("http://127.0.0.1:8409/ffmpeg/next-prepared/{instance}/{transfer}")
+    );
+    assert_eq!(reconnect, Some(false));
+    assert_eq!(keep_alive, Some(true));
+    assert_eq!((in_point_ms, out_point_ms), (None, None));
+    assert_eq!(probe_hint.unwrap().format_name.as_deref(), Some("nut"));
+    let (name, capability) = headers[0].split_once(": ").unwrap();
+    assert_eq!(name, ACCESS_HEADER);
+    assert!(relay.authorized(capability));
+}
+
 #[tokio::test]
 async fn publication_uses_listener_and_capability_without_provider_credentials() {
     for kind in RemoteMediaSourceKind::ALL {
@@ -204,4 +245,23 @@ async fn redirects_preserve_ranges_but_never_forward_credentials_across_origins(
         .await
         .is_err());
     looped.assert_calls_async(6).await;
+}
+
+#[test]
+fn dynamic_publication_uses_a_shared_process_expanded_session_header() {
+    let relay = MediaRelay::new();
+    relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let Source::Dynamic {
+        headers: Some(headers),
+        ..
+    } = relay.dynamic_source(1, 2, "fixture", None).unwrap()
+    else {
+        panic!("expected dynamic callback");
+    };
+    assert!(headers
+        .iter()
+        .any(|header| header == "x-ersatzrs-next-session: {{ERSATZRS_NEXT_SESSION}}"));
+    assert!(headers.iter().any(|header| header
+        .split_once(": ")
+        .is_some_and(|(name, value)| name == ACCESS_HEADER && relay.authorized(value))));
 }

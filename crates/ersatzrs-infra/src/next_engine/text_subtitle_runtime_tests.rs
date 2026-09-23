@@ -217,6 +217,15 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                     .map(|(_, value)| value.trim());
                 let authorized = header(crate::next_engine::media::ACCESS_HEADER)
                     .is_some_and(|value| host.media.authorized(value));
+                if authorized && target.starts_with("/ffmpeg/next-prepared/") {
+                    let parts: Vec<_> = target.trim_start_matches("/ffmpeg/next-prepared/").split('/').collect();
+                    assert_eq!(parts.len(), 2);
+                    let mut reader = host.claim_prepared(parts[0].parse().unwrap(),parts[1].parse().unwrap()).await.unwrap();
+                    socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n").await.unwrap();
+                    let _ = tokio::io::copy(&mut reader,&mut socket).await;
+                    let _ = socket.shutdown().await;
+                    return;
+                }
                 let (status, body) = if authorized {
                     let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
                         .split('/').collect();
@@ -226,7 +235,9 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                     let until = chrono::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap())
                         .unwrap().with_timezone(&chrono::Utc);
                     match host.resolve_dynamic(parts[0].parse().unwrap(), parts[1].parse().unwrap(),
-                        parts[2], if parts[3] == "off" { None } else { Some(parts[3].parse().unwrap()) }, header("x-etv-channel").unwrap(), now, until).await {
+                        parts[2], if parts[3] == "off" { None } else { Some(parts[3].parse().unwrap()) }, header("x-etv-channel").unwrap(),
+                        uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)
+                            .expect("official Next must expand the session header")).unwrap(), now, until).await {
                         Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
                         Err(error) => panic!("production callback failed: {error}"),
                     }
@@ -245,12 +256,23 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off() {
-    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
-    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
-    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
-    let root = tempfile::tempdir().unwrap();
-    let clip = generate_text_clip(&ffmpeg, root.path()).await;
-    let profile = FFmpegProfile {
+    text_runtime_cases(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; isolated app data under the temporary directory"]
+async fn real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek() {
+    prepared_artifact_runtime::run_isolated().await;
+}
+
+#[tokio::test]
+#[ignore = "child of real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek"]
+async fn fixture_child_prepared_artifacts() {
+    text_runtime_cases(true).await;
+}
+
+fn text_profile() -> FFmpegProfile {
+    FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::H264,
         audio_format: FFmpegProfileAudioFormat::Aac,
         video_bitrate: 1000,
@@ -258,7 +280,20 @@ async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off()
         audio_sample_rate: 48,
         audio_channels: 1,
         ..Default::default()
+    }
+}
+
+async fn text_runtime_cases(prepared_artifact: bool) {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = if prepared_artifact {
+        prepared_artifact_runtime::temporary_root().await
+    } else {
+        tempfile::tempdir().unwrap()
     };
+    let clip = generate_text_clip(&ffmpeg, root.path()).await;
+    let profile = text_profile();
     for (embedded, convert, off) in [
         (true, false, false),
         (true, true, false),
@@ -268,6 +303,9 @@ async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off()
     ] {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
         configure_text_tracks(&pool, embedded, convert, off).await;
+        if prepared_artifact {
+            prepared_artifact_runtime::publish_fixture(&pool, &clip).await;
+        }
         let host = std::sync::Arc::new(host::NextHost::new(
             pool,
             locker,
@@ -350,3 +388,19 @@ mod watermark_runtime_tests;
 
 #[path = "provider_text_runtime_tests.rs"]
 mod provider_text_runtime_tests;
+
+#[path = "prepared_artifact_runtime_tests.rs"]
+mod prepared_artifact_runtime;
+
+// POSIX-shell fixture add-on; native production code remains platform-neutral.
+#[cfg(unix)]
+#[path = "retained_callback_runtime_tests.rs"]
+mod retained_callback_runtime;
+
+// Installed fixture add-on uses a POSIX shell; production remains portable.
+#[cfg(unix)]
+#[path = "ordinary_callback_runtime_tests.rs"]
+mod ordinary_callback_runtime;
+
+#[path = "direct_remote_runtime_tests.rs"]
+mod direct_remote_runtime;

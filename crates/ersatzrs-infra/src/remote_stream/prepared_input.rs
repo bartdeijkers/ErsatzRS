@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::ExitStatus;
 use std::sync::{atomic::AtomicU8, Arc};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::process::ChildStdout;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -76,9 +76,33 @@ impl PreparedRemoteStreamInput {
         request_json: &[u8],
         context: RemoteStreamSpawnContext,
         deadline: tokio::time::Instant,
+        cancellation: oneshot::Receiver<()>,
+    ) -> Result<Self, RemoteStreamError> {
+        Self::start_inner(command, Some(request_json), context, deadline, cancellation).await
+    }
+
+    /// Start an ordinary installed add-on without writing a prepared request.
+    /// Its stdin is closed, while startup and cleanup follow the prepared path.
+    ///
+    /// # Errors
+    /// Returns redacted startup, cancellation or deadline errors.
+    pub async fn start_without_request(
+        command: &RemoteStreamCommand,
+        context: RemoteStreamSpawnContext,
+        deadline: tokio::time::Instant,
+        cancellation: oneshot::Receiver<()>,
+    ) -> Result<Self, RemoteStreamError> {
+        Self::start_inner(command, None, context, deadline, cancellation).await
+    }
+
+    async fn start_inner(
+        command: &RemoteStreamCommand,
+        request_json: Option<&[u8]>,
+        context: RemoteStreamSpawnContext,
+        deadline: tokio::time::Instant,
         mut cancellation: oneshot::Receiver<()>,
     ) -> Result<Self, RemoteStreamError> {
-        if request_json.len() > MAX_REQUEST_BYTES {
+        if request_json.is_some_and(|request| request.len() > MAX_REQUEST_BYTES) {
             return Err(RemoteStreamError::PreparedRequestTooLarge);
         }
         if !matches!(
@@ -101,8 +125,9 @@ impl PreparedRemoteStreamInput {
                 temporary_directory.path().to_string_lossy().into_owned(),
             );
         }
-        let mut producer = spawn_remote_stream_producer_with_stdin(&producer_command, true)
-            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+        let mut producer =
+            spawn_remote_stream_producer_with_stdin(&producer_command, request_json.is_some())
+                .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
         let stdout = producer.stdout().take();
         let stderr_task = producer
             .stderr()
@@ -149,24 +174,25 @@ impl PreparedRemoteStreamInput {
         Ok(input)
     }
 
-    async fn read_prefix(&mut self, request_json: &[u8]) -> Result<(), RemoteStreamError> {
+    async fn read_prefix(&mut self, request_json: Option<&[u8]>) -> Result<(), RemoteStreamError> {
         let producer = self
             .producer
             .as_mut()
             .ok_or(RemoteStreamError::PreparedProducerFailed)?;
-        let mut stdin = producer
-            .stdin()
-            .take()
-            .ok_or(RemoteStreamError::PreparedProducerFailed)?;
-        stdin
-            .write_all(request_json)
-            .await
-            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
-        stdin
-            .shutdown()
-            .await
-            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
-        drop(stdin);
+        if let Some(request_json) = request_json {
+            let mut stdin = producer
+                .stdin()
+                .take()
+                .ok_or(RemoteStreamError::PreparedProducerFailed)?;
+            stdin
+                .write_all(request_json)
+                .await
+                .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+            stdin
+                .shutdown()
+                .await
+                .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+        }
         let stdout = self
             .stdout
             .as_mut()
@@ -200,6 +226,66 @@ impl PreparedRemoteStreamInput {
         &self.prefix
     }
 
+    /// Forward the original bytes to one owned sink with normal backpressure.
+    /// The returned owner must be shut down and awaited by the playback session.
+    /// Dropping it signals cancellation but cannot await process cleanup.
+    ///
+    /// # Errors
+    /// Returns a redacted error after cleanup if preparation lost its producer.
+    pub async fn transfer_to<W>(
+        mut self,
+        sink: W,
+    ) -> Result<PreparedRemoteStreamTransfer, RemoteStreamError>
+    where
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let Some(stdout) = self.stdout.take() else {
+            self.cancel().await?;
+            return Err(RemoteStreamError::PreparedProducerFailed);
+        };
+        let Some(mut diagnostics) = self.diagnostics.take() else {
+            self.cancel().await?;
+            return Err(RemoteStreamError::PreparedProducerFailed);
+        };
+        let Some(producer) = self.producer.take() else {
+            self.cancel().await?;
+            return Err(RemoteStreamError::PreparedProducerFailed);
+        };
+        let result = Arc::new(AtomicU8::new(0));
+        diagnostics.prepared = Some(PreparedProducerReplay {
+            prefix: std::mem::take(&mut self.prefix),
+            exited: self.exited,
+            result: Arc::clone(&result),
+        });
+        let (cancel, cancellation) = oneshot::channel();
+        let producer_task = run_remote_stream_producer(
+            producer,
+            stdout,
+            sink,
+            self.stderr_task.take(),
+            cancellation,
+            diagnostics,
+        );
+        let directory = self.temporary_directory.take();
+        let task = tokio::spawn(async move {
+            if !producer_task.await {
+                return Err(RemoteStreamError::PreparedTerminationUnconfirmed);
+            }
+            if let Some(directory) = directory {
+                directory.remove_after_reap();
+            }
+            if result.load(std::sync::atomic::Ordering::Acquire) == 2 {
+                Err(RemoteStreamError::PreparedProducerFailed)
+            } else {
+                Ok(())
+            }
+        });
+        Ok(PreparedRemoteStreamTransfer {
+            cancel: Some(cancel),
+            task: Some(task),
+        })
+    }
+
     /// Terminate the managed producer and await its bounded stderr reader.
     ///
     /// # Errors
@@ -214,6 +300,53 @@ impl PreparedRemoteStreamInput {
             self.exited.is_some(),
         )
         .await
+    }
+}
+
+/// Playback ownership of byte forwarding and managed producer cleanup.
+#[derive(Debug)]
+pub struct PreparedRemoteStreamTransfer {
+    cancel: Option<oneshot::Sender<()>>,
+    task: Option<JoinHandle<Result<(), RemoteStreamError>>>,
+}
+
+impl PreparedRemoteStreamTransfer {
+    /// Signal cancellation; call `wait` or `shutdown` to confirm cleanup.
+    pub fn cancel(&mut self) {
+        if let Some(cancel) = self.cancel.take() {
+            let _ = cancel.send(());
+        }
+    }
+
+    /// Await byte transfer and cleanup without interrupting the producer.
+    /// This wait may be cancelled and resumed without losing its task owner.
+    ///
+    /// # Errors
+    /// Reports transfer/producer failure or unconfirmed cleanup.
+    pub async fn wait(&mut self) -> Result<(), RemoteStreamError> {
+        let Some(task) = self.task.as_mut() else {
+            return Ok(());
+        };
+        let result = task
+            .await
+            .map_err(|_| RemoteStreamError::PreparedTerminationUnconfirmed);
+        self.task.take();
+        result?
+    }
+
+    /// Cancel and await cleanup, including its bounded stderr reader.
+    ///
+    /// # Errors
+    /// Reports producer failure or unconfirmed cleanup.
+    pub async fn shutdown(&mut self) -> Result<(), RemoteStreamError> {
+        self.cancel();
+        self.wait().await
+    }
+}
+
+impl Drop for PreparedRemoteStreamTransfer {
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
@@ -541,6 +674,132 @@ mod tests {
             process.wait().await.is_err(),
             "consumer success cannot hide producer failure"
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn managed_sink_preserves_bytes_and_does_not_invent_a_request() {
+        let (producer, _) = commands("cat; printf tail");
+        let (_sender, receiver) = oneshot::channel();
+        let prepared = PreparedRemoteStreamInput::start_without_request(
+            &producer,
+            RemoteStreamSpawnContext::probe(),
+            tokio::time::Instant::now() + Duration::from_secs(15),
+            receiver,
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.prefix(), b"tail");
+        let directory = prepared
+            .temporary_directory
+            .as_ref()
+            .unwrap()
+            .0
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_path_buf();
+        let (writer, mut reader) = tokio::io::duplex(2);
+        let mut transfer = prepared.transfer_to(writer).await.unwrap();
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await.unwrap();
+        transfer.wait().await.unwrap();
+        assert_eq!(bytes, b"tail");
+        assert!(!directory.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn managed_sink_preserves_prefix_and_detects_late_producer_failure() {
+        for exit_code in [0, 7] {
+            let (producer, _) = commands(&format!(
+                "cat >/dev/null; head -c 70000 /dev/zero; printf tail; exit {exit_code}"
+            ));
+            let (_sender, receiver) = oneshot::channel();
+            let prepared = PreparedRemoteStreamInput::start(
+                &producer,
+                b"{}",
+                RemoteStreamSpawnContext::probe(),
+                tokio::time::Instant::now() + Duration::from_secs(15),
+                receiver,
+            )
+            .await
+            .unwrap();
+            assert_eq!(prepared.prefix().len(), PREFIX_BYTES);
+            let (writer, mut reader) = tokio::io::duplex(1024);
+            let mut transfer = prepared.transfer_to(writer).await.unwrap();
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await.unwrap();
+            let outcome = transfer.wait().await;
+            assert_eq!(outcome.is_ok(), exit_code == 0);
+            assert_eq!(bytes.len(), 70004);
+            assert!(bytes[..70000].iter().all(|byte| *byte == 0));
+            assert_eq!(&bytes[70000..], b"tail");
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn managed_sink_shutdown_drop_and_disconnected_reader_reap_producer() {
+        for mode in ["shutdown", "drop", "disconnect"] {
+            let (producer, _) =
+                commands("cat >/dev/null; head -c 70000 /dev/zero; while :; do :; done");
+            let (_sender, receiver) = oneshot::channel();
+            let prepared = PreparedRemoteStreamInput::start_without_request(
+                &producer,
+                RemoteStreamSpawnContext::probe(),
+                tokio::time::Instant::now() + Duration::from_secs(15),
+                receiver,
+            )
+            .await
+            .unwrap();
+            let pid = i32::try_from(prepared.producer.as_ref().unwrap().id().unwrap()).unwrap();
+            let directory = prepared
+                .temporary_directory
+                .as_ref()
+                .unwrap()
+                .0
+                .as_ref()
+                .unwrap()
+                .path()
+                .to_path_buf();
+            let (writer, reader) = tokio::io::duplex(1);
+            let mut transfer = prepared.transfer_to(writer).await.unwrap();
+            match mode {
+                "shutdown" => {
+                    // The sink is blocked; a timed-out wait must retain ownership.
+                    assert!(
+                        tokio::time::timeout(Duration::from_millis(10), transfer.wait())
+                            .await
+                            .is_err()
+                    );
+                    transfer.shutdown().await.unwrap();
+                    drop(reader);
+                }
+                "disconnect" => {
+                    drop(reader);
+                    assert!(matches!(
+                        transfer.wait().await,
+                        Err(RemoteStreamError::PreparedProducerFailed)
+                    ));
+                }
+                _ => {
+                    drop(transfer);
+                    drop(reader);
+                }
+            }
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while directory.exists() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+                Err(nix::errno::Errno::ESRCH),
+            );
+        }
     }
 
     #[cfg(unix)]

@@ -231,3 +231,94 @@ fn full_entry_limit_recovers_interrupted_lease_manifest_temporary_files() {
     assert_eq!(cleanup_with_limit(root.path(), 3), Err(CacheError::Full));
     assert!(first.exists() && second.exists());
 }
+
+#[tokio::test]
+async fn rebased_formats_share_leases_and_revalidate_hits() {
+    let root = tempfile::tempdir().unwrap();
+    let cache = BurnCache::new(root.path().into());
+    let finish = Utc::now() + Duration::minutes(1);
+    for (index, format) in [(1, "srt"), (2, "ass"), (3, "vtt")] {
+        let identity = key(index);
+        let path = cache
+            .prepare_text(
+                &identity,
+                format,
+                "complete cues",
+                finish,
+                Instant::now() + std::time::Duration::from_secs(5),
+                || async { true },
+            )
+            .await
+            .unwrap();
+        assert_eq!(path.extension().unwrap(), format);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "complete cues");
+        assert_eq!(
+            read_manifest(root.path(), &identity)
+                .unwrap()
+                .unwrap()
+                .expires,
+            finish + Duration::seconds(GRACE_SECONDS)
+        );
+        assert_eq!(
+            cache
+                .prepare_text(
+                    &identity,
+                    format,
+                    "complete cues",
+                    finish,
+                    Instant::now() + std::time::Duration::from_secs(5),
+                    || async { false }
+                )
+                .await,
+            Err(CacheError::Stale)
+        );
+    }
+    assert_eq!(cleanup_root(root.path()).unwrap().1, 6);
+}
+
+#[tokio::test]
+async fn rebased_artifact_failure_leaves_no_admitted_or_partial_entry() {
+    let root = tempfile::tempdir().unwrap();
+    let cache = BurnCache::new(root.path().into());
+    let finish = Utc::now() + Duration::minutes(1);
+    assert_eq!(
+        cache
+            .prepare_text(
+                &key(1),
+                "vtt",
+                "complete cues",
+                finish,
+                Instant::now() + std::time::Duration::from_secs(5),
+                || async { false }
+            )
+            .await,
+        Err(CacheError::Stale)
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert_eq!(
+        cache
+            .prepare_text(
+                &key(1),
+                "vtt",
+                "",
+                finish,
+                Instant::now() + std::time::Duration::from_secs(5),
+                || async { true }
+            )
+            .await,
+        Err(CacheError::Storage)
+    );
+    assert_eq!(
+        cache
+            .prepare_text(
+                &key(1),
+                "vtt",
+                "complete cues",
+                finish,
+                Instant::now(),
+                || async { true }
+            )
+            .await,
+        Err(CacheError::Deadline)
+    );
+}

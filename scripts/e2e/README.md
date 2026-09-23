@@ -1,5 +1,26 @@
 # TSDuck playback gate (E2E)
 
+## Next RTSP input fixture
+
+The separate Next CI job stages a pinned, checksum-verified MediaMTX v1.21.1
+Linux x64 binary using `stage-rtsp-test-server.py`. It is a temporary RTSP source
+for input-protocol acceptance, not a server dependency shipped with ErsatzRS.
+The test starts its own loopback listener with synthetic media and stops it on
+completion. TSDuck remains the transport-stream output validator; its HTTP/HLS
+and UDP/RTP output plugins do not supply an RTSP control server.
+
+For the opt-in Next runtime tests, supply the staged binary as
+`ERSATZRS_NEXT_TEST_RTSP_SERVER` alongside `ERSATZRS_NEXT_TEST_BIN`,
+`ERSATZRS_NEXT_TEST_FFMPEG` and `ERSATZRS_NEXT_TEST_FFPROBE`. Local tests on other
+platforms can point at a compatible official MediaMTX binary; this Linux x64
+staging helper serves the existing Linux x64 Next CI job only. The archive hash,
+binary hash and upstream license are retained in the staging directory, and CI
+uploads the staging provenance with its Next diagnostics. Tests require no
+camera, external stream, personal library or permanent service.
+
+References: [MediaMTX v1.21.1 configuration](https://github.com/bluenviron/mediamtx/blob/v1.21.1/mediamtx.yml)
+and [TSDuck plugins](https://tsduck.io/commands/).
+
 ## Real SponsorBlock publication and transport probe
 
 `tests/e2e/addon-sponsorblock-streaming.spec.ts` is opt-in and never runs in

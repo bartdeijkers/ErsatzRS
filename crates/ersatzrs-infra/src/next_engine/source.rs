@@ -220,6 +220,8 @@ fn http_source(uri: &Url, header: String) -> Result<Source> {
         return Err(unavailable("invalid media-server transport value"));
     }
     Ok(Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri,
         headers: vec![header],
         user_agent: None,

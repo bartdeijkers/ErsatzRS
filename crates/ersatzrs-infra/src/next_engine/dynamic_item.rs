@@ -22,7 +22,8 @@ pub(crate) enum DynamicItemError {
 /// returning the original item would restart media on every work-ahead callback.
 /// Out-points and the original finish remain unchanged. Generated lavfi inputs
 /// have no source seeks and use the shortened item's duration in Next's
-/// `input_timing`; preserve their finite probe hints and explicit silence.
+/// `input_timing`; preserve their finite probe hints and explicit silence. Live
+/// HTTP and RTSP inputs never seek; separately selected finite sidecars still do.
 ///
 /// # Errors
 /// Rejects requests outside the original half-open interval, overflowing or
@@ -57,6 +58,15 @@ pub(crate) fn resolve_at(
 
 fn advance(source: &mut Source, offset_ms: u64) -> Result<(), DynamicItemError> {
     match source {
+        Source::Http {
+            is_live: Some(true),
+            in_point_ms,
+            out_point_ms,
+            ..
+        } => {
+            *in_point_ms = None;
+            *out_point_ms = None;
+        }
         Source::Local {
             in_point_ms,
             out_point_ms,
@@ -78,7 +88,7 @@ fn advance(source: &mut Source, offset_ms: u64) -> Result<(), DynamicItemError> 
                 *in_point_ms = Some(seek);
             }
         }
-        Source::Lavfi { .. } => {}
+        Source::Lavfi { .. } | Source::Rtsp { .. } => {}
         Source::Dynamic { .. } => return Err(DynamicItemError::RecursiveSource),
     }
     Ok(())

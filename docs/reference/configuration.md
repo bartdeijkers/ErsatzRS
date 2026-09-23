@@ -269,3 +269,16 @@ JSON-object syntax. Inspection is limited to 1 MiB per file and five seconds in
 total; exceeding those limits reports incomplete validation, not an engine
 configuration limit. Next remains responsible for schema validation and the
 merged configuration at session startup.
+
+## Next FFmpeg reports
+
+The existing FFmpeg reports setting also applies to Next sessions. When enabled,
+ErsatzRS passes the application-data `ffmpeg-reports` directory to Next. When
+unset or disabled, the generated configuration omits the report directory.
+Configuration overlays retain their later precedence. The setting is read at
+session startup and applies to ordinary playback and preview.
+
+Next reports may include FFmpeg arguments, source URLs, playout items and channel
+configuration. Treat these opt-in diagnostics as potentially containing private
+media paths or credentials. Next owns report generation; the existing FFmpeg
+Reports health warning remains applicable.

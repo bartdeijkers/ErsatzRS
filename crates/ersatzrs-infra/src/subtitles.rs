@@ -509,6 +509,43 @@ fn strip_prefix_ci<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
     }
 }
 
+/// Rebase an independently readable text artifact without filesystem work or fallback.
+/// SRT/WebVTT preserve millisecond timing; ASS retains its native centisecond precision.
+/// `None` means every parsed cue ended before the requested join.
+pub(crate) fn rebase_text_cues_milliseconds(
+    bytes: Vec<u8>,
+    format: SubtitleTextFormat,
+    seek_milliseconds: u64,
+    limit: usize,
+) -> Result<Option<String>> {
+    let invalid = || {
+        ersatzrs_core::repositories::RepositoryError::unavailable(
+            "Next live subtitles",
+            "standalone subtitle cues could not be safely rebased",
+        )
+    };
+    if bytes.len() > limit {
+        return Err(invalid());
+    }
+    let content = decode_subtitle_text(bytes).map_err(|_| invalid())?;
+    if content.len() > limit {
+        return Err(invalid());
+    }
+    let seek = i64::try_from(seek_milliseconds).map_err(|_| invalid())?;
+    let rebased = match format {
+        SubtitleTextFormat::Ass => rebase_ass_cues_at(&content, seek / 10),
+        SubtitleTextFormat::Srt => rebase_line_block_cues_at(&content, seek, TimestampSyntax::Srt),
+        SubtitleTextFormat::WebVtt => {
+            rebase_line_block_cues_at(&content, seek, TimestampSyntax::WebVtt)
+        }
+    }
+    .map_err(|_| invalid())?;
+    if rebased.text.len() > limit {
+        return Err(invalid());
+    }
+    Ok((rebased.remaining_cues != 0).then_some(rebased.text))
+}
+
 /// Rewrite every cue's timestamps in `content` for `seek_seconds`, dispatched
 /// by the format `seek_subtitle_output_format` selected (`"srt"`, `"ass"`, or
 /// `"webvtt"`).
@@ -535,7 +572,17 @@ fn rebase_line_block_cues(
     seek_seconds: i64,
     syntax: TimestampSyntax,
 ) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
-    let seek_units = seek_seconds * 1_000;
+    let seek_units = seek_seconds
+        .checked_mul(1_000)
+        .ok_or(RebaseSubtitleError::UnparseableCue)?;
+    rebase_line_block_cues_at(content, seek_units, syntax)
+}
+
+fn rebase_line_block_cues_at(
+    content: &str,
+    seek_units: i64,
+    syntax: TimestampSyntax,
+) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
     let (parse, format): (TimestampParseFn, TimestampFormatFn) = match syntax {
         TimestampSyntax::Srt => (parse_srt_timestamp, format_srt_timestamp),
         TimestampSyntax::WebVtt => (parse_vtt_timestamp, format_vtt_timestamp),
@@ -668,8 +715,16 @@ fn rebase_ass_cues(
     content: &str,
     seek_seconds: i64,
 ) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
-    let seek_units = seek_seconds * 100;
+    let seek_units = seek_seconds
+        .checked_mul(100)
+        .ok_or(RebaseSubtitleError::UnparseableCue)?;
+    rebase_ass_cues_at(content, seek_units)
+}
 
+fn rebase_ass_cues_at(
+    content: &str,
+    seek_units: i64,
+) -> std::result::Result<RebasedSubtitle, RebaseSubtitleError> {
     let mut out = String::new();
     let mut remaining_cues = 0_usize;
     let mut recognized_cues = 0_usize;
@@ -2390,3 +2445,7 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
 #[cfg(test)]
 #[path = "subtitles_extraction_tests.rs"]
 mod extraction_tests;
+
+#[cfg(test)]
+#[path = "subtitles_rebase_millisecond_tests.rs"]
+mod rebase_millisecond_tests;

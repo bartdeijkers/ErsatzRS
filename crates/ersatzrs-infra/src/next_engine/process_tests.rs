@@ -153,3 +153,21 @@ async fn expired_deadline_and_missing_binary_return_redacted_errors() {
         .to_string()
         .contains(&folder.path().display().to_string()));
 }
+
+#[test]
+fn session_identity_is_reserved_to_the_child_and_never_inherited() {
+    let mut command = Command::new("fixture-next");
+    command.env(super::super::media::SESSION_ENV, "stale-fixture-value");
+    let instance = uuid::Uuid::new_v4();
+    set_session_environment(&mut command, Some(instance));
+    let lookup = |command: &Command| {
+        command
+            .as_std()
+            .get_envs()
+            .find(|(key, _)| *key == std::ffi::OsStr::new(super::super::media::SESSION_ENV))
+            .map(|(_, value)| value.map(std::ffi::OsStr::to_os_string))
+    };
+    assert_eq!(lookup(&command), Some(Some(instance.to_string().into())));
+    set_session_environment(&mut command, None);
+    assert_eq!(lookup(&command), Some(None));
+}

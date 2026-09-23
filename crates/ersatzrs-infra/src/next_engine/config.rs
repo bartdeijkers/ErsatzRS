@@ -63,6 +63,7 @@ pub fn channel_config(
         ffmpeg: wire::Ffmpeg {
             ffmpeg_path: runtime_path(ffmpeg_path)?,
             ffprobe_path: runtime_path(ffprobe_path)?,
+            reports_folder: None,
             disabled_filters: Vec::new(),
         },
         normalization: wire::Normalization {

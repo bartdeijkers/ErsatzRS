@@ -51,7 +51,7 @@ fn bitmap_subtitles(x: u16) -> Vec<u8> {
     output
 }
 
-async fn generate_bitmap_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
+pub(super) async fn generate_bitmap_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     let source = folder.join("source.mkv");
     generate_clip(ffmpeg, &source).await;
     let english = folder.join("english.sup");
@@ -127,7 +127,7 @@ async fn configure_bitmap_tracks(pool: &crate::db::DbPool, subtitles_off: bool) 
     }
 }
 
-async fn assert_bitmap_output(ffmpeg: &Path, segment: &Path, subtitles_off: bool) {
+pub(super) async fn assert_bitmap_output(ffmpeg: &Path, segment: &Path, subtitles_off: bool) {
     let mut video = Command::new(ffmpeg);
     video
         .args(["-v", "error", "-nostdin", "-i"])

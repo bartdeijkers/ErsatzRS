@@ -53,6 +53,8 @@ fn caption_channel() -> Channel {
 
 fn http_source() -> wire::Source {
     wire::Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: "https://media.example.test/synthetic.mkv".into(),
         headers: Vec::new(),
         user_agent: None,

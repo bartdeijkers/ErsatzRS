@@ -818,6 +818,9 @@ mod text_subtitle_runtime_tests;
 #[path = "scaling_runtime_tests.rs"]
 mod scaling_runtime_tests;
 
+#[path = "reports_runtime_tests.rs"]
+mod reports_runtime_tests;
+
 #[tokio::test]
 #[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
 async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tracks() {
@@ -994,3 +997,9 @@ async fn assert_overlay_session(
     assert!(!request.output.exists());
     assert!(registry.try_get("1").await.is_none());
 }
+
+#[path = "retained_nut_runtime_tests.rs"]
+mod retained_nut_runtime_tests;
+
+#[path = "producer_prefix_runtime_tests.rs"]
+mod producer_prefix_runtime_tests;

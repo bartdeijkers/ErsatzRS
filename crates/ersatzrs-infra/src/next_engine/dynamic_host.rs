@@ -21,15 +21,16 @@ impl NextHost {
         digest: &str,
         audio: Option<u32>,
         number: &str,
+        instance: uuid::Uuid,
         now: DateTime<Utc>,
         until: DateTime<Utc>,
     ) -> Result<protocol::PlayoutItem> {
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
         timeout_at(
             deadline,
-            self.resolve_dynamic_inner(
-                channel_id, item_id, digest, audio, number, now, until, deadline,
-            ),
+            Box::pin(self.resolve_dynamic_inner(
+                channel_id, item_id, digest, audio, number, instance, now, until, deadline,
+            )),
         )
         .await
         .map_err(|_| unavailable("resolution deadline expired"))?
@@ -43,6 +44,7 @@ impl NextHost {
         digest: &str,
         audio: Option<u32>,
         number: &str,
+        instance: uuid::Uuid,
         now: DateTime<Utc>,
         until: DateTime<Utc>,
         deadline: Instant,
@@ -55,11 +57,11 @@ impl NextHost {
             .dynamic_contexts
             .lock()
             .await
-            .get(number)
+            .get(&instance)
             .map(|context| context.request.clone())
-            .filter(|request| request.channel_id == channel_id)
+            .filter(|request| request.channel_id == channel_id && request.number == number)
             .ok_or_else(|| unavailable("session is unavailable"))?;
-        let before = dynamic_projection::project_snapshot(
+        let mut before = dynamic_projection::project_snapshot(
             &self.pool,
             &self.locker,
             &self.media,
@@ -73,6 +75,64 @@ impl NextHost {
         .await?;
         if before.identity.descriptor != digest {
             return Err(unavailable("publication changed"));
+        }
+        if super::live_subtitles::prepare(&self.burn_cache, &mut before, now, deadline).await? {
+            let current = dynamic_projection::project_snapshot(
+                &self.pool,
+                &self.locker,
+                &self.media,
+                channel_id,
+                item_id,
+                now,
+                until,
+                &request.replacements,
+                audio,
+            )
+            .await?;
+            if current.identity.descriptor != digest
+                || !self.dynamic_contexts.lock().await.contains_key(&instance)
+            {
+                return Err(unavailable(
+                    "publication or session changed during caption preparation",
+                ));
+            }
+        }
+        if let Some(retained) = before.retained_remote.take() {
+            return Box::pin(
+                self.resolve_retained(before, retained, &request, instance, audio, now, deadline),
+            )
+            .await;
+        }
+        if let Some(producer) = before.producer_remote.take() {
+            return Box::pin(
+                self.resolve_producer(before, producer, &request, instance, audio, now, deadline),
+            )
+            .await;
+        }
+        Box::pin(self.resolve_concrete(
+            before, &request, item_id, instance, audio, now, until, deadline,
+        ))
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn resolve_concrete(
+        &self,
+        before: dynamic_projection::Snapshot,
+        request: &super::host::NextStart,
+        item_id: i64,
+        instance: uuid::Uuid,
+        audio: Option<usize>,
+        now: DateTime<Utc>,
+        until: DateTime<Utc>,
+        deadline: Instant,
+    ) -> Result<protocol::PlayoutItem> {
+        let channel_id = request.channel_id;
+        let digest = &before.identity.descriptor;
+        if before.projection.pending_burn.is_none() {
+            return self
+                .resolve_ready_item(instance, &before.projection.item, now)
+                .await;
         }
         let pending = before
             .projection
@@ -107,7 +167,7 @@ impl NextHost {
                     )
                     .await
                     .is_ok_and(|current| {
-                        current.identity.descriptor == digest
+                        &current.identity.descriptor == digest
                             && current.identity.cache_key == before.identity.cache_key
                     })
                 },
@@ -128,14 +188,26 @@ impl NextHost {
             audio,
         )
         .await?;
-        if after.identity.descriptor != digest
+        if &after.identity.descriptor != digest
             || after.identity.cache_key != before.identity.cache_key
-            || !self.dynamic_contexts.lock().await.contains_key(number)
+            || !self.dynamic_contexts.lock().await.contains_key(&instance)
         {
             return Err(unavailable("publication changed during preparation"));
         }
         let item = install_prepared_track(after.projection.item, &prepared)?;
         dynamic_item::resolve_at(&item, now)
+            .map_err(|_| unavailable("requested item timing is invalid"))
+    }
+    async fn resolve_ready_item(
+        &self,
+        instance: uuid::Uuid,
+        item: &protocol::PlayoutItem,
+        now: DateTime<Utc>,
+    ) -> Result<protocol::PlayoutItem> {
+        if !self.dynamic_contexts.lock().await.contains_key(&instance) {
+            return Err(unavailable("session is unavailable"));
+        }
+        dynamic_item::resolve_at(item, now)
             .map_err(|_| unavailable("requested item timing is invalid"))
     }
 }

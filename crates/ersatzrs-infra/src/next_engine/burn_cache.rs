@@ -73,7 +73,7 @@ impl BurnCache {
     /// Revalidation runs after admission on hits and before promotion on misses.
     /// Atomic filesystem workers retain admission until completion even when their
     /// caller times out; they may finish committing a complete artifact afterwards.
-    #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // One admission spans validation, extraction and commit.
+    #[allow(clippy::too_many_arguments)] // Existing extraction contract supplies source, timing and validation.
     pub(crate) async fn prepare<F, Fut>(
         &self,
         key: &str,
@@ -89,6 +89,85 @@ impl BurnCache {
         F: FnOnce() -> Fut,
         Fut: Future<Output = bool>,
     {
+        let format = if codec.eq_ignore_ascii_case("ass") || codec.eq_ignore_ascii_case("ssa") {
+            "ass"
+        } else {
+            "srt"
+        };
+        self.prepare_artifact(
+            key,
+            format,
+            expires,
+            deadline,
+            validate,
+            |path, _file| async move {
+                burn_subtitles::extract(source, stream, codec, ffmpeg, &path, deadline)
+                    .await
+                    .map_err(CacheError::from)
+            },
+        )
+        .await
+    }
+
+    /// Store complete rebased sidecar bytes under the same bounded leases as Burn artifacts.
+    pub(crate) async fn prepare_text<F, Fut>(
+        &self,
+        key: &str,
+        format: &str,
+        content: &str,
+        expires: DateTime<Utc>,
+        deadline: Instant,
+        validate: F,
+    ) -> Result<PathBuf, CacheError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+    {
+        if content.is_empty()
+            || u64::try_from(content.len()).map_err(|_| CacheError::Storage)? > MAX_ARTIFACT_BYTES
+        {
+            return Err(CacheError::Storage);
+        }
+        self.prepare_artifact(
+            key,
+            format,
+            expires,
+            deadline,
+            validate,
+            |_path, file| async move {
+                use tokio::io::AsyncWriteExt as _;
+                let mut file = tokio::fs::File::from_std(file);
+                tokio::time::timeout_at(deadline, async {
+                    file.write_all(content.as_bytes()).await?;
+                    file.flush().await
+                })
+                .await
+                .map_err(|_| CacheError::Deadline)?
+                .map_err(|_| CacheError::Storage)
+            },
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)] // One admission owns cleanup, validation, building and atomic promotion.
+    async fn prepare_artifact<F, Fut, Build, Built>(
+        &self,
+        key: &str,
+        format: &str,
+        expires: DateTime<Utc>,
+        deadline: Instant,
+        validate: F,
+        build: Build,
+    ) -> Result<PathBuf, CacheError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+        Build: FnOnce(PathBuf, std::fs::File) -> Built,
+        Built: Future<Output = Result<(), CacheError>>,
+    {
+        if !matches!(format, "srt" | "ass" | "vtt") {
+            return Err(CacheError::Identity);
+        }
         let lease = expires
             .checked_add_signed(Duration::seconds(GRACE_SECONDS))
             .filter(|expiry| *expiry > Utc::now())
@@ -100,11 +179,6 @@ impl BurnCache {
             .await
             .map_err(|_| CacheError::Deadline)?;
         check_deadline(deadline)?;
-        let format = if codec.eq_ignore_ascii_case("ass") || codec.eq_ignore_ascii_case("ssa") {
-            "ass"
-        } else {
-            "srt"
-        };
         let root = self.root.clone();
         let requested_key = key.to_owned();
         // The filesystem worker retains admission even if its awaiter is cancelled.
@@ -162,7 +236,11 @@ impl BurnCache {
             .prefix(".burn-")
             .tempfile_in(&self.root)
             .map_err(|_| CacheError::Storage)?;
-        burn_subtitles::extract(source, stream, codec, ffmpeg, pending.path(), deadline).await?;
+        build(
+            pending.path().to_owned(),
+            pending.reopen().map_err(|_| CacheError::Storage)?,
+        )
+        .await?;
         if !tokio::time::timeout_at(deadline, validate())
             .await
             .map_err(|_| CacheError::Deadline)?
@@ -275,7 +353,7 @@ fn valid_key(key: &str) -> bool {
 
 fn owned_file(name: &str) -> bool {
     name.starts_with(".burn-")
-        || [".json", ".ass", ".srt"]
+        || [".json", ".ass", ".srt", ".vtt"]
             .into_iter()
             .any(|suffix| name.strip_suffix(suffix).is_some_and(valid_key))
 }
@@ -317,7 +395,7 @@ fn read_manifest(root: &Path, key: &str) -> Result<Option<Manifest>, CacheError>
     };
     if manifest.version != VERSION
         || manifest.key != key
-        || !matches!(manifest.format.as_str(), "ass" | "srt")
+        || !matches!(manifest.format.as_str(), "ass" | "srt" | "vtt")
         || manifest.bytes == 0
         || manifest.bytes > MAX_ARTIFACT_BYTES
     {

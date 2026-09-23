@@ -16,6 +16,9 @@ use super::{connections::PlexConnections, protocol::Source, schedule::ScheduledM
 use crate::{db::DbPool, repositories::SqlxResultExt as _};
 
 pub const ACCESS_HEADER: &str = "x-ersatzrs-next-media";
+/// Identifies one admitted Next process, including concurrent browser previews.
+pub const SESSION_HEADER: &str = "x-ersatzrs-next-session";
+pub(super) const SESSION_ENV: &str = "ERSATZRS_NEXT_SESSION";
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// One process-local capability. Its published URLs contain only binding IDs;
@@ -75,6 +78,8 @@ impl MediaRelay {
             .get()
             .ok_or_else(|| unavailable("media listener not configured"))?;
         Ok(Source::Http {
+            probe_hint: None,
+            is_live: None,
             uri: format!(
                 "http://{address}/ffmpeg/next-media/{}/{}/{}",
                 media.item.media_item_id, media.media_version_id, media.media_file_id
@@ -104,9 +109,48 @@ impl MediaRelay {
         let audio = audio.map_or_else(|| "off".to_owned(), |index| index.to_string());
         Ok(Source::Dynamic {
             uri: format!("http://{address}/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}"),
-            headers: Some(vec![format!("{ACCESS_HEADER}: {}", self.capability)]),
+            headers: Some(vec![
+                format!("{ACCESS_HEADER}: {}", self.capability),
+                // Official Next expands headers from its own process environment.
+                format!("{SESSION_HEADER}: {{{{{SESSION_ENV}}}}}"),
+            ]),
             user_agent: None,
             timeout_us: Some(35_000_000),
+        })
+    }
+
+    /// Address one prepared producer without exposing its command or provider URL.
+    /// The caller must register it in the matching active session first. Fresh
+    /// probe hints avoid a consuming probe before the single playback open.
+    ///
+    /// # Errors
+    /// Returns a redacted error until the actual host listener is configured.
+    pub fn prepared_source(
+        &self,
+        instance: Uuid,
+        transfer: Uuid,
+        probe_hint: super::protocol::ProbeHint,
+        is_live: bool,
+    ) -> Result<Source> {
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        Ok(Source::Http {
+            uri: format!("http://{address}/ffmpeg/next-prepared/{instance}/{transfer}"),
+            probe_hint: Some(probe_hint),
+            is_live: Some(is_live),
+            headers: vec![format!("{ACCESS_HEADER}: {}", self.capability)],
+            user_agent: None,
+            // Next maps this to FFmpeg's multiple_requests=1. Its chunked
+            // reader then retains EOF state instead of closing the connection
+            // and reporting EIO on the next read. This does not enable retries.
+            keep_alive: Some(true),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(20_000_000),
+            in_point_ms: None,
+            out_point_ms: None,
         })
     }
 

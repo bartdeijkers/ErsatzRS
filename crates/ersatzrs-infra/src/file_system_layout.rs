@@ -42,6 +42,12 @@ pub fn data_folder() -> PathBuf {
     app_state_folder().join("data")
 }
 
+/// Opt-in `FFmpeg` troubleshooting reports, matching upstream's application-data layout.
+#[must_use]
+pub fn ffmpeg_reports_folder() -> PathBuf {
+    app_data_folder().join("ffmpeg-reports")
+}
+
 /// Operator-managed Next configuration overlays, outside disposable caches.
 #[must_use]
 pub fn next_channel_config_overlays_folder() -> PathBuf {

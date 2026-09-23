@@ -7971,6 +7971,417 @@ six-platform acceptance, or imply a new UI reorder feature. Independent Codex
 review agrees. No Rust/dependency change requires retesting; structured progress
 and diff validation pass. Upstream tip remains e8b7bb63, with 38/170 rows
 reconciled. Row 39 and UCU-04 window acceptance remain open.
+
+Row 39 (7c4a5e3a, PR 2899) is being implemented; pin stays at row 38.
+Full four-file upstream diff is read. It adds RemoteStream export, HTTP liveness,
+RTSP and script sources, plus opt-in FFmpeg reports; no upstream tests/schema/UI
+or changelog changes. Current Next source resolution explicitly refuses Remote
+Streams. Independent audits locate existing package-owned producers and prepared
+inputs for reuse. ADR 0066 remains binding: raw script execution stays removed;
+port command producers through installed add-ons without dropping argv, cwd,
+environment, leases, frozen options or cleanup. Required retained-interval bytes
+and fresh metadata must be preserved without a second seek or extra transcoder.
+The row source map records transport design and remaining runtime acceptance.
+
+The reports portion now maps the persisted true/1 setting to optional
+reports_folder under application data. Official Next f2a981b uses folder presence
+and has no operative save_reports field. Configuration overlays retain priority;
+the existing FFmpeg Reports health warning remains. No reports are uploaded or
+made public by this change. The initial focused regression failed because the
+shared schedule fixture uses unsupported default codecs; the fixture now
+persists H264/AAC. The corrected persisted-setting regression passes for normal and preview
+configuration (absent, false, true, 1 and disable-again cases). The isolated
+real_next_reports_follow_persisted_opt_in test passes with official Next f2a981b
+and FFmpeg 9: disabled/enabled/disabled sessions reach playback, only enabled
+creates a nonempty in-flight report, and session shutdown is awaited. Both
+application roots are disposable; report contents are never read or logged.
+Log: ucu04-row39-report-runtime.log.
+
+The HTTP is_live and RTSP wire/timing slice passes 126 focused Next tests.
+Live sources clear/omit seek fields; finite sources and independent sidecars
+retain callback timing. Selected audio/subtitle indices survive projection.
+The first broad run hit sandbox socket/home-write restrictions; the successful
+run isolates both application roots and permits local fixture sockets
+(ucu04-row39-next-focused-isolated.log). These are projection tests, not live
+subtitle rendering evidence. Managed prepared input now transfers original
+bytes to an owned bounded sink without an invented stdin request, preserving
+prefix replay, cancellation, process leases and reap-before-delete cleanup.
+Eight prepared-input tests pass, including late producer failure, blocked
+sink cancellation, disconnected reader and dropped-owner cleanup
+(ucu04-row39-producer-tests.log). Next session/HTTP wiring is still pending.
+Scoped infrastructure all-target Clippy passes after documentation, import and
+numeric-literal lint corrections (ucu04-row39-clippy-final.log). Formatting,
+diff and structured progress validation pass for this partial checkpoint.
+
+The official Next retained-NUT transport prerequisite now passes
+(ucu04-row39-nut-runtime.log): generated rawvideo plus two PCM audio tracks,
+unchanged close-delimited HTTP bytes, no Range/Content-Length/replay support,
+and a server returning 410 on every subsequent GET. Fresh probed metadata is
+provided through the official probe_hint wire field. Next makes exactly one
+GET and its HLS output decodes blue video and selected 880 Hz audio index 2.
+This initial proof establishes one-shot non-seekable transport, not production
+retained-interval integration. No extra production transcoder is introduced.
+Infrastructure all-target Clippy also passes with the new NUT regression
+(ucu04-row39-nut-clippy.log).
+
+Production probe_hint DTOs and retained metadata conversion now preserve fresh
+stream indices, rawvideo/pcm_f32le codecs, pixel format, geometry, frame rate,
+color/HDR metadata, rotation and exact interlaced field order. The fresh probe
+survives retained preparation; field order is ephemeral and adds no SQL column.
+The one-shot runtime test now uses that typed conversion and native pcm_f32le.
+Next session contexts are keyed by fresh instance UUIDs, independently retaining
+normal/preview tools and replacements. A shared Dynamic header template expands
+the reserved child-only instance variable; callbacks reject missing, stale or
+channel-mismatched identities. No channel-number fallback is permitted.
+The persisted source resolver preserves immutable publication/artifact priority,
+installed add-on ownership, finite/live classification and raw-script refusal;
+invalid publication cannot fall back even to an otherwise playable direct URL.
+
+148 focused infrastructure tests pass (ucu04-row39-binding-tests.log), including
+source refusal, probe metadata, field orders and callback isolation. Two official
+Next runtime tests pass (ucu04-row39-binding-runtime.log): production header
+expansion with selected text/audio playback and one-shot typed NUT decoding.
+Four focused web/scanner consumer tests pass, including missing/invalid session
+headers, media authentication before SQL, response header isolation and scanner
+metadata classification (ucu04-row39-consumer-tests.log). Infrastructure, web
+and scanner all-target Clippy pass after test-only style corrections
+(ucu04-row39-binding-clippy-final.log). Formatting, diff and progress checks
+pass. The official test binary SHA-256 remains
+0a4dbee9303a13c12ac7dfc7a34a3471e041adaf09d30d2ee92de5eff1068672.
+The session-owned pending/active producer registry and authenticated single-use
+HTTP transport are implemented. Registration precedes preparation; stop closes
+admission and awaits cleanup, reader EOF includes producer status, and body drop
+cancels the producer. HEAD and nonzero/bounded ranges cannot claim the reader;
+FFmpeg's initial bytes=0- request remains supported without seek promises.
+15 focused infrastructure/web tests pass (ucu04-row39-transfer-tests-final.log),
+including real producer cleanup, expiry, single claim and late producer failure.
+Review then corrected completed-error retention: confirmed failures must release
+admission slots, while unconfirmed termination preserves registry evidence,
+output and host capacity. The added repeated-failure and capacity-disposition
+regressions pass with all 17 focused infrastructure/web tests in
+ucu04-row39-transfer-recovery-tests.log. Managed Remote Stream callback
+preparation wiring remains open. The DB-only remote_projection module now
+compiles and three focused database tests pass
+(ucu04-row39-remote-projection-tests-final.log): frozen alternate audio,
+snapshot lock release, changed URL/stream identity, live HTTP/RTSP seek refusal,
+unknown-liveness refusal and legacy-script refusal. Review replaced nonexistent
+MediaStream dimension columns (silently treated as string constants by SQLite)
+with qualified persisted stream metadata.
+Direct unmanaged HTTP/RTSP publication now emits authenticated Dynamic sources
+and callbacks revalidate the publication and exact session before applying
+callback timing. Finite embedded-text Burn uses the existing bounded extraction
+path. Six focused tests pass (ucu04-row39-direct-tests.log), including the host
+callback with selected alternate audio, exactly seven seconds of seek,
+changed-source refusal and stopped-session refusal. Managed publication tests
+preserve frozen finite liveness with disabled providers and reject missing
+ownership/revisions, corrupt snapshot digests and changed source URLs.
+Prepared artifact identity now also includes the current confined-relative path,
+byte length, duration and update revision from the ready artifact row. Missing
+readiness/path/duration or empty bytes fail before publication; changed artifact
+metadata invalidates the descriptor. Seven focused projection/host tests pass
+(ucu04-row39-artifact-binding-tests-final.log). The invalid-duration fixture uses
+NULL because SQLite already disallows zero duration. Next callbacks now reuse
+the native confined-file/byte-length resolver outside scheduler locks, project
+against the actual artifact (including relative sidecars), then reacquire a
+snapshot and reject changed publications. Burn cache identity includes artifact
+path, length and modification time. Nine focused tests pass
+(ucu04-row39-artifact-open-tests-final.log), including selected alternate audio,
+artifact-relative subtitles, disappeared files and changed track metadata.
+Infrastructure all-target Clippy passes after boxing large async operations and
+extracting shared callback publication/session cleanup helpers
+(ucu04-row39-artifact-clippy-final.log). All 24 focused projection, host and
+producer-lifecycle regressions pass after the refactor
+(ucu04-row39-artifact-regressions.log).
+The official Next binary (SHA-256
+0a4dbee9303a13c12ac7dfc7a34a3471e041adaf09d30d2ee92de5eff1068672) now passes
+the real prepared-artifact callback matrix: embedded/external text Burn and
+Convert, explicit subtitle-off, seeked cue timing and decoded selected 880-Hz
+audio. The fixture disables the provider and stores an unavailable original
+media path, requiring the production immutable-artifact callback. Its isolated
+child supplies both app roots; the parent run passes without inherited app-root
+variables (ucu04-row39-artifact-runtime-isolated.log). An initial sandbox-only
+socket denial was rerun with authorized loopback access. Infrastructure
+all-target Clippy passes with the final fixture
+(ucu04-row39-artifact-runtime-clippy-final.log). The existing separate Next CI
+job already includes this test and excludes its fixture_child helper; no CI run
+or milestone acceptance is claimed at this intermediate row.
+Retained callbacks now register their preparation with the exact session before
+provider work, reuse native retained-range preparation and verified rebased
+sidecars, revalidate publication/session identity, and expose one-shot NUT bytes
+with fresh probe hints. Frozen audio choices map by native track identity onto
+fresh indexes; silence stays explicit and producer-applied seek is not repeated.
+Dropped callbacks signal cancellation even after preparation has completed.
+43 focused selection, projection, host and transfer tests pass
+(ucu04-row39-retained-host-regressions.log); infrastructure all-target Clippy
+passes (ucu04-row39-retained-clippy-final.log). These prove mapping, lifecycle
+components and regressions. The installed-provider retained callback now also
+passes through the registered HTTP reader into official Next: exactly one
+play-intervals producer start, the frozen source ranges/options/fingerprint,
+selected Dutch 880 Hz audio, decoded blue video and session output cleanup are
+asserted. The synthetic producer supplies already-edited NUT; this proves the
+callback/transport integration, not provider cut correctness or retained subtitle
+rendering. Four real runtime tests pass (ucu04-row39-retained-callback-runtime.log),
+including the existing standalone NUT transport and new compressed MPEG-TS/Matroska
+prefix and 1080p rawvideo-prefix regressions. The full callback exposed missing
+pixel-format metadata from -nofind_stream_info; stream inspection now operates
+on the same copied 64 KiB, including when it is smaller than one rawvideo frame.
+No second producer or extra transcoder is used. After this fix, 48 focused
+FFprobe, selection, projection, host and transfer regressions pass
+(ucu04-row39-retained-prefix-regressions.log); infrastructure all-target Clippy
+and workspace formatting pass (ucu04-row39-retained-callback-clippy.log).
+Ordinary add-on producer integration now uses the same registered transfer owner
+as described below; managed sources cannot fall through to direct URLs. Live sources with selected subtitles currently
+fail closed pending the unresolved live subtitle work; this is not an accepted
+deferral or completed parity. Full runtime acceptance remains open.
+
+Ordinary producer integration must retain the detected container when constructing
+fresh probe hints: official Next f2a981b channel_session::probe_hint_to_result
+defaults an absent format_name to MPEG-TS. It must also preserve the native seek
+placeholder contract (producer-applied seek versus consumer-applied seek), tool
+leases, environment, working directory and cancellation. A copied-prefix probe
+must never consume or reopen the playback-owned producer.
+
+The ordinary producer metadata foundation now preserves FFprobe's detected
+format_name as ephemeral metadata and forwards it into typed Next hints, including
+compressed video/audio and selected-index subtitle metadata. Container attachments
+are omitted from the hint's selectable tracks while remaining in the actual
+stream. Prefix-derived duration is not treated as whole-source duration. Both
+MPEG-TS and Matroska prefix tests prove exact container forwarding and absent
+duration (ucu04-row39-producer-hint-runtime.log). The new command seek adapter
+preserves argv/environment/tool leases/working directory, substitutes only exact
+placeholders, returns unapplied consumer seek for unmarked producers and forces
+live seek to zero. Eleven focused hint/seek tests pass
+(ucu04-row39-producer-hint-seek-unit.log); scanner all-target checking passes
+after ephemeral metadata literal updates (ucu04-row39-producer-hint-scanner-check.log).
+Infrastructure all-target Clippy and workspace formatting also pass
+(ucu04-row39-producer-hint-clippy.log).
+Those metadata checks preceded callback integration. A synthetic one-shot HTTP
+experiment decodes the expected post-seek color with one open for TS and Matroska;
+an EOF demux I/O diagnostic also reproduces without seek. Confirm transport
+framing and end-of-stream behavior against the real host before accepting this
+consumer-seek path. No diagnostic suppression or fallback is accepted by this
+intermediate evidence.
+
+Ordinary installed producers are now connected to demand-time Next callbacks.
+Native persisted resolution preserves installed package settings and frozen list
+options, runtime tool paths, height limits and seek placeholders. Preparation is
+registered before provider work; prefix probing never reopens the producer, and
+cancellation awaits cleanup. Publication and exact session identity are rechecked
+before exposing one-shot bytes. Fresh native track identity remaps the selected
+audio; shared explicit-silence behavior remains intact. Current installed add-on
+commands always carry ERSATZRS_REMOTE_STREAM_SEEK, so the producer applies seek
+and Next does not repeat it. Finite absolute external sidecars retain source-clock
+seek independently of the prepared A/V input. Relative sidecars now resolve
+against the stored MediaFile.Path through the native helper, then use a canonical
+readable local path independent of Next working directory. Selected embedded
+subtitles remain explicitly refused rather than omitted; that path remains required.
+The official Next fixture now passes four installed-producer cases: finite
+resume, live zero-seek, finite external SRT Burn and Convert. Red/blue/green
+source windows distinguish missed/double seek, the recorded environment confirms
+source timing, each case starts one producer and retains selected Dutch 880 Hz
+audio. Burn decodes visible glyphs; Convert keeps video clear and verifies VTT
+cue content, timestamp mapping and clipping after seek. Each session is stopped
+and its output removed. Evidence: ucu04-row39-ordinary-callback-runtime-final.log.
+The retained callback regression also passes after this wiring
+(ucu04-row39-ordinary-callback-runtime.log). Twenty-six focused projection,
+transfer, hint, retained and producer-subtitle preflight tests pass
+(ucu04-row39-ordinary-callback-unit.log). Infrastructure all-target Clippy and
+workspace formatting pass (ucu04-row39-ordinary-callback-clippy.log).
+The expanded six-case matrix also passes relative SRT Burn and Convert with
+source-clock and audio checks (ucu04-row39-relative-sidecar-runtime.log).
+Focused sidecar tests and infrastructure all-target Clippy pass
+(ucu04-row39-relative-sidecar-unit.log, ucu04-row39-relative-sidecar-clippy.log).
+These use the production host callback and reader with fixture HTTP framing;
+full routed HTTP/EOF/cancellation acceptance
+and the remaining subtitle surfaces are not claimed complete.
+
+The production Axum prepared_response EOF regression first reproduced the
+managed FFmpeg demux EIO after a complete chunked HTTP body
+(ucu04-row39-production-http-eof.log). Prepared sources now set keep_alive=true,
+which official Next f2a981b maps to multiple_requests=1; reconnect remains false.
+The reader retains chunk-end state instead of treating a subsequent read after
+connection closure as premature EOF. The same regression now consumes all 40
+frames with empty FFmpeg stderr and exactly one GET
+(ucu04-row39-production-http-eof-fixed.log). It derives its HTTP option from
+MediaRelay::prepared_source and runs inside the separate Next CI job. This proves
+production response framing, not the full authenticated AppState/session route.
+After the transport option change, all four focused tests pass, including the
+six-case ordinary callback matrix and retained callback parent, source-option
+binding and sidecar preflight (ucu04-row39-prepared-keepalive-runtime.log).
+
+The retained fixture now applies the actual requested ranges to a synthetic
+30-second source with distinguishable source-time colors. Both Burn and Convert
+pass blue-to-green-to-cyan timing after a removed yellow interval, selected
+Dutch 880 Hz audio and one producer invocation. Native digest-verified source
+and mapped subtitle artifacts are used: before-seek and removed cues disappear,
+while across-cut and after-cut cues remain, with Convert segment clipping.
+Evidence: ucu04-row39-retained-timeline-runtime.log and
+ucu04-row39-retained-timeline-clippy.log. Python 3 is required only by this
+Unix-only synthetic installed-provider fixture; no production dependency changed.
+Infrastructure and web all-target Clippy also pass after the prepared HTTP EOF
+correction (ucu04-row39-prepared-http-clippy.log).
+
+Ordinary embedded image subtitles now use the same prepared source as video
+and audio. Selection is remapped to one unambiguous fresh codec/language/title/
+default/forced identity; missing or ambiguous tracks fail closed. Four official
+Next PGS scenarios pass: finite/live with selected subtitles and explicit off.
+The producer remux changes Dutch subtitle index 4 to 1 and audio index 2 to 3;
+decoded right-side Dutch images, absent English/off images, Dutch 880 Hz audio,
+one producer and finite/live seek are checked. Eleven focused tests pass.
+Evidence: ucu04-row39-producer-image-runtime.log and
+ucu04-row39-producer-image-unit.log. Image support narrows the old blanket live
+refusal; it does not imply live external text timing or embedded text support.
+
+The official Next comparison on 2026-09-23 finds main at
+f6350a0ad9077290c0fbad7ea3feacaef71f0ca3: the sole commit after bundled f2a981b
+changes canvas overlay conversion and acceleration tests, not these subtitle
+paths (https://github.com/ErsatzTV/next/compare/f2a981b...f6350a0).
+The source findings below concern text subtitles; image overlay remains an
+independent capability requiring rendered proof, not an upstream exemption.
+Source audit of official Next f2a981b finds live text subtitle limitations:
+channel_session::transcode_item drops multiplexed embedded text in Burn mode;
+web_vtt::convert_to_vtt rejects RTSP and awaits whole HTTP source completion.
+Global live timing also clears sidecar seek timing. Upstream row 39 forwards
+the selected embedded index without fixing those engine paths. Do not claim
+rendered live text parity from serialization tests or apply finite whole-source
+extraction to an endless feed. The maintainer accepted ADR 0100 on 2026-09-23:
+retain the official engine and explicitly refuse live embedded text and ordinary
+one-shot embedded text lacking an independent source-bound caption artifact.
+The exception remains visible open debt; image subtitles, external sidecar timing
+and full route/cancellation proof are not waived. Stop after row 39 acceptance
+and its authorized local checkpoint, before processing row 40, as requested.
+Remote source subtitle integration, full routed HTTP lifecycle, row review/checks and
+smoke remain open; no row verdict or milestone acceptance is claimed.
+
+2026-09-23 continuation: upstream origin/main remains 27f9d217; the pin,
+last processed ledger row and upstream checkout still agree at 41bf22eb.
+GitHub independently confirms CI 35880721503 terminal success and remote main
+at its tested UCU-03 SHA 8f722099d71c5801e92836b0aac44ca9667a4df4.
+The current official Next linux-x64 artifact is f6350a0, archive SHA-256
+178ce2d4f9c60d7f07b852bd7f2a5b11fb913abcfbd7b566f9fd4065b42013b8.
+Against that artifact, real_next_routed_producer_auth_claim_and_cleanup passes
+through the production Axum router and AppState (ucu04-routed.log; nextest run
+5cd9cbe7-baeb-47a1-a47d-6d44a3eef31a, 1 passed, 691 outside the selection).
+It verifies missing capabilities, stale item sessions, HEAD and real-seek
+rejection without consuming the transfer, wrong-session and duplicate claims,
+decoded source-owned seek and selected Dutch audio, exactly one producer,
+producer liveness before stop, awaited process/output cleanup, and a rejected
+claim after stop. This is one finite ordinary producer scenario; it does not
+prove concurrent normal/preview remote lifetimes or every disconnect path.
+Live external caption preparation remains disconnected and explicitly refused;
+the two unused preparation helpers are not implementation or acceptance proof.
+The direct HTTP/RTSP regression initially failed only at fixture readiness:
+pinned MediaMTX v1.21.1 reports its three-track stream and publisher admission
+on separate lines. The fixture now requires both actual messages, including
+H264 and both MPEG-4 Audio tracks, without changing its timeout or retries.
+The corrected real_next_direct_http_and_rtsp_preserve_audio_and_source_clock
+passes (ucu04-direct-fixed.log; nextest run
+287b667b-5728-44e4-a564-ba4c5146923a, 1 passed, 1487 outside the selection).
+Finite HTTP resumes at the expected source color; live HTTP starts at its
+producer boundary; RTSP decodes the expected blue video. All three preserve
+selected Dutch 880 Hz audio and remove session output on stop. The RTSP
+publisher/server are reaped and their listener closes. This matrix explicitly
+disables subtitles and does not prove remote caption rendering.
+Next is live external caption integration; row-39 review, remaining
+subtitle/lifecycle evidence and smoke remain open.
+
+Live external captions now use the existing bounded Burn cache after reading
+only the selected independent sidecar. Millisecond rebasing preserves active
+cues and removes proven expired cues; unsupported/malformed captions fail
+explicitly. Cache identity includes the publication, rebased content and join.
+The callback revalidates publication and session after preparation, before any
+ordinary producer starts. RTSP is treated as live even with finite legacy metadata.
+The official Next f6350a0 ten-case ordinary producer matrix passes
+(ucu04-live-runtime.log): finite/live no-subtitle cases and absolute/relative
+sidecars in Burn/Convert, with one producer, source-owned finite seek/live zero
+seek, Dutch audio, decoded glyphs or clear Convert video and clipped timed VTT.
+The six-case direct sidecar matrix also passes (ucu04-direct-captions.log,
+nextest e6af6a8a-bf84-403f-af6a-2a1aa0941be2): finite HTTP, live HTTP and RTSP,
+each Burn/Convert, preserving Dutch audio and source clock with process/output
+cleanup. Both matrices use generated sources and standalone SRT captions.
+Nine final focused safety tests pass (ucu04-live-safety.log), including
+fractional SRT/WebVTT/ASS timing, encoding/size bounds, content-bound cache
+identity, expired versus malformed cues, connection closure for oversized or
+stalled HTTP sidecars, and publication replacement/session stop during the
+caption read. The earlier 36 selection/projection tests and corrected 26-test
+revalidation selection pass. Refactoring only moved standalone seek projection
+into its subtitle helper; no acceptance assertion or runtime timeout was weakened.
+Finite direct HTTP embedded text also passes Burn, Convert and explicit off
+(ucu04-direct-embedded-text.log; nextest 0bcd39a0-c8d4-4169-97a5-d3e19b9bb13b),
+including unextracted Burn preparation, selected Dutch audio and source-time
+clipped Convert cues. Direct HTTP embedded images pass six finite/live cases
+covering both text modes and explicit off (ucu04-direct-images.log; nextest
+2c88b994-ba51-4080-aa50-e4dd58ec24a5). Synthetic English and Dutch PGS tracks
+render distinct left/right markers: only the selected Dutch marker appears,
+and off removes both while preserving Dutch audio. No RTSP image proof is
+claimed: the synthetic RTP publisher carries H264 and two AAC tracks only.
+Infrastructure all-target Clippy and workspace formatting pass after the full
+caption matrix additions (ucu04-caption-matrix-clippy.log and
+ucu04-caption-matrix-format.log). No lint suppression was added.
+The final focused subtitle regression run also passes all 54 selected tests
+(ucu04-subtitle-regressions.log), including existing native rebasing, encoding,
+retained-cut mapping, extraction selection/cache and the new live-caption safety
+paths. Its 1,445 excluded tests are outside this focused claim.
+Remaining: concurrent normal/preview remote lifetimes, final row review/checks
+and smoke. No row verdict or pin advancement.
+
+Production-router lifecycle closure passes three selected real-runtime tests
+(ucu04-routed-lifetimes.log; nextest 2288bd2d-f2c7-4a23-8998-4e3c44758784,
+3 passed, 693 outside the selection). Normal and preview use distinct producer
+PIDs and transfer paths; both decode blue video and selected Dutch 880 Hz audio.
+Stopping preview reaps only its producer, removes only its output and releases
+one slot while normal remains playable. Final stop reaps normal and leaves
+zero slots and no session outputs, with exactly two producer starts.
+A separate real HTTP client consumes prepared bytes then closes its connection:
+the producer is reaped before session stop is invoked, and reclaim returns Gone.
+The existing authentication/single-claim/stop-cleanup regression passes again.
+The concurrency orchestration was split into a helper to satisfy the function
+size lint; assertions, timeouts and retries were unchanged. Final row review,
+checks and smoke remain open; no row verdict or pin advancement.
+Web all-target Clippy, workspace formatting and workflow actionlint pass after
+the routed lifecycle additions. Review then identified retained preflight SQL
+and sidecar work that did not observe session cancellation until producer
+preparation began. The correction selects cancellation/deadline around that
+preflight and adds a regression holding the only SQL connection. This correction
+still requires focused verification; the already-running smoke build predates it.
+That smoke attempt failed at host startup, before playback: only FFmpeg had an
+explicit runtime path, so the host selected an unrelated ffprobe from PATH whose
+shared libraries were unavailable. A disposable launch of the built host exposed
+the exact acquisition error. The corrected smoke invocation must set both
+verified tool paths and retain its temporary logs. This is not playback evidence.
+The configured local target exceeded 60 GiB during the build and was cleaned
+before the next focused compilation, following the repository maintenance rule.
+The retained preflight correction passes the busy-pool cancellation/deadline
+regression (ucu04-retained-preflight.log; nextest
+2a4e8337-6b7d-49e2-9a1f-34d5bc817d6a) and the four-test retained host/runtime
+selection (ucu04-retained-preflight-runtime.log; nextest
+aa051032-19f7-4ad0-b09f-7be6a4c4096a). The official Next callback still uses one
+registered producer and preserves the existing cut/audio/caption assertions.
+No assertion or timeout was weakened. Clippy and corrected smoke remain pending.
+Infrastructure all-target Clippy passes after the preflight correction
+(ucu04-retained-preflight-clippy.log). The scoped Codex review covered source
+publication identity, exact track remapping, finite/live seek ownership, bounded
+single claims, pending preparation registration, body-drop/stop cleanup,
+capacity quarantine, sidecar cache/timing and opt-in reports. Its retained
+preflight cancellation finding is corrected and regression-tested. No further
+blocking code finding remains from that review; corrected smoke is still open.
+Corrected Next Burn and Convert smoke both pass with explicit FFmpeg and ffprobe
+paths (ucu04-row39-next-smoke-fixed.log and
+ucu04-row39-next-convert-smoke.log). The real host rejects unauthenticated
+media access, serves HLS/preview segments, decodes selected Dutch audio, renders
+Burn glyphs or clear Convert video with the selected Dutch WebVTT cue, and
+preserves HLS after wrapper disconnect. Normal/preview idle cleanup and wrapper
+restart/second cleanup pass. Native lifecycle smoke is the remaining runtime
+check before the row verdict. Formatting and progress validation also pass.
+Row 39 acceptance: native HLS/MPEG-TS lifecycle smoke passes too
+(ucu04-row39-native-smoke.log), including idle cleanup and wrapper restart.
+The row is Adapt under ADRs 0066/0100: installed producer ownership replaces
+raw scripts, and the accepted embedded-text limitations remain visible debt.
+Supported source/subtitle/audio paths, reports, routed lifecycle, focused tests,
+scoped Clippy/review, workflow lint and Next/native smoke have evidence above.
+The pin advances to 7c4a5e3a with this row's authorized local checkpoint.
+Stop before row 40 as requested. UCU-04 remains In progress; its full window
+gates, push and exact-SHA CI are not claimed or triggered by this row checkpoint.
 """
 
 [[milestone]]
@@ -8082,7 +8493,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through e8b7bb63 (latest fetched tip) in order,
+Process every ledger row in this release window through 27f9d217 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -8106,4 +8517,8 @@ Not started. All window rows remain pending; no implementation or gate evidence 
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.
+2026-09-23 subtitle-fix audit verifies live upstream main at 27f9d217 and appends
+rows 171 (62b7a5e9, graphics subtitle performance) and 172 (27f9d217, Jellyfin 12
+collections). The existing 170 SHA/subject pairs are an exact prefix. No new row
+is processed and the pin remains at row 38 while row 39 acceptance continues.
 """

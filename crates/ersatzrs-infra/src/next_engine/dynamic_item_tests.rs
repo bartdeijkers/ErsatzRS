@@ -29,6 +29,8 @@ fn item() -> PlayoutItem {
             }),
             subtitle: Some(Track {
                 source: Some(Source::Http {
+                    probe_hint: None,
+                    is_live: None,
                     uri: "http://127.0.0.1:8409/synthetic".into(),
                     headers: vec!["X-Fixture: synthetic".into()],
                     user_agent: Some("fixture".into()),
@@ -228,4 +230,76 @@ fn joining_programme_does_not_seek_the_independent_watermark() {
     let expected = serde_json::to_value(&original.watermark).unwrap();
     let resolved = resolve_at(&original, original.start + Duration::seconds(15)).unwrap();
     assert_eq!(serde_json::to_value(&resolved.watermark).unwrap(), expected);
+}
+
+#[test]
+fn live_callbacks_preserve_tracks_without_seeking_live_inputs() {
+    for live in [
+        serde_json::json!({"source_type":"http", "uri":"https://example.test/live", "is_live":true, "in_point_ms":90000, "out_point_ms":1}),
+        serde_json::json!({"source_type":"rtsp", "uri":"rtsp://example.test/live", "timeout_us":500_000}),
+    ] {
+        let source: Source = serde_json::from_value(live).unwrap();
+        let mut original = item();
+        original.source = Some(source.clone());
+        let tracks = original.tracks.as_mut().unwrap();
+        tracks.video.as_mut().unwrap().source = Some(source.clone());
+        tracks.audio.as_mut().unwrap().source = Some(source);
+        // The subtitle is a finite sidecar and must still advance independently.
+        let requested = original.start + Duration::seconds(12);
+        let result = resolve_at(&original, requested).unwrap();
+        let json = serde_json::to_value(result).unwrap();
+        assert_eq!(json["start"], serde_json::to_value(requested).unwrap());
+        assert_eq!(
+            json["finish"],
+            serde_json::to_value(original.finish).unwrap()
+        );
+        for source in [
+            &json["source"],
+            &json["tracks"]["video"]["source"],
+            &json["tracks"]["audio"]["source"],
+        ] {
+            assert!(source.get("in_point_ms").is_none());
+            assert!(source.get("out_point_ms").is_none());
+        }
+        assert_eq!(json["tracks"]["audio"]["stream_index"], 2);
+        assert_eq!(json["tracks"]["subtitle"]["source"]["in_point_ms"], 22000);
+    }
+}
+
+#[test]
+fn remote_source_wire_preserves_explicit_liveness_and_omits_absent_options() {
+    for live in [None, Some(false), Some(true)] {
+        let mut json =
+            serde_json::json!({"source_type":"http", "uri":"https://example.test/media"});
+        if let Some(live) = live {
+            json["is_live"] = live.into();
+        }
+        let source: Source = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), json);
+    }
+    for timeout in [None, Some(500_000)] {
+        let mut json = serde_json::json!({"source_type":"rtsp", "uri":"rtsp://example.test/live"});
+        if let Some(timeout) = timeout {
+            json["timeout_us"] = timeout.into();
+        }
+        let source: Source = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), json);
+    }
+}
+
+#[test]
+fn explicitly_finite_http_callback_advances_in_point_and_keeps_out_point() {
+    let mut original = item();
+    original.source = Some(
+        serde_json::from_value(serde_json::json!({
+            "source_type":"http", "uri":"https://example.test/finite", "is_live":false,
+            "in_point_ms":10000, "out_point_ms":90000
+        }))
+        .unwrap(),
+    );
+    let resolved = resolve_at(&original, original.start + Duration::seconds(12)).unwrap();
+    let source = serde_json::to_value(resolved.source.unwrap()).unwrap();
+    assert_eq!(source["in_point_ms"], 22000);
+    assert_eq!(source["out_point_ms"], 90000);
+    assert_eq!(source["is_live"], false);
 }

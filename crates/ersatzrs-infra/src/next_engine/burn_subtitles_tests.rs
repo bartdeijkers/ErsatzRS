@@ -39,6 +39,8 @@ fn selected_track_preserves_timeline_and_ass_style_with_explicit_output_format()
 #[test]
 fn http_input_preserves_transport_options_before_exact_input() {
     let source = Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: "http://127.0.0.1:8409/synthetic".into(),
         headers: vec!["X-Fixture: synthetic".into(), "X-Other: value".into()],
         user_agent: Some("synthetic-agent".into()),
@@ -134,6 +136,8 @@ async fn real_ffmpeg_extraction_deadline_closes_http_and_never_commits_cache() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let source = Source::Http {
+        probe_hint: None,
+        is_live: None,
         uri: format!("http://{address}/synthetic-stalled-media"),
         headers: Vec::new(),
         user_agent: None,

@@ -132,10 +132,11 @@ push and terminal green consolidated CI at 8f722099. UCU-04 row 35 is Covered
 (existing HLS Direct JWT propagation). Row 36 ports Next configuration overlays
 with focused and HTTP smoke proof. Row 37 is Covered: native graphics share
 the configured FFmpeg executable (ADR 0005), with decoded PATH-isolation proof.
-Row 38 is N/A for upstream .NET dependency/tool versions. Next: row 39;
-continue ordered reconciliation and require green CI at its window boundary.
-Supported-platform acceptance remains open; Remote Stream/add-on
-and graphics capabilities belong to later ordered rows. The first consolidated
+Row 38 is N/A for upstream .NET dependency/tool versions. Row 39 adapts Remote
+Streams and reports under ADRs 0066/0100, with supported subtitle/audio, routed
+lifecycle, scoped review and Next/native smoke proof. Stop at its authorized
+local checkpoint before row 40. UCU-04 window gates and exact-SHA CI remain open.
+Supported-platform acceptance and later graphics capabilities remain open. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first

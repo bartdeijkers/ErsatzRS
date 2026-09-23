@@ -2408,6 +2408,7 @@ mod tests {
     #[test]
     fn episode_facets_fall_back_to_embedded_values_per_field() {
         let probed = FfprobeMediaVersion {
+            field_orders: std::collections::BTreeMap::new(),
             version: ersatzrs_domain::MediaVersion::default(),
             streams: vec![ersatzrs_domain::MediaStream {
                 kind: ersatzrs_domain::MediaStreamKind::Audio,
@@ -2415,6 +2416,7 @@ mod tests {
                 ..ersatzrs_domain::MediaStream::default()
             }],
             chapters: Vec::new(),
+            format_name: None,
             format_metadata: [
                 ("genre".to_owned(), "Embedded Genre".to_owned()),
                 ("studio".to_owned(), "Embedded Studio".to_owned()),

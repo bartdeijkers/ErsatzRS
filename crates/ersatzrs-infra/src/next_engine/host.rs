@@ -12,8 +12,8 @@ use crate::{
     db::DbPool,
     playback::load_channel_playback_profile,
     transcode_capacity::{
-        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
-        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeReservation,
+        ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
     },
 };
 use chrono::Utc;
@@ -21,7 +21,7 @@ use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionRegistry},
     locking::EntityLocker,
     path_replacement::PathReplacement,
-    repositories::{ChannelRepository, RepositoryError},
+    repositories::{ChannelRepository, ConfigRepository, RepositoryError},
 };
 use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
@@ -36,38 +36,40 @@ pub struct NextHost {
     pub(super) locker: EntityLocker,
     root: PathBuf,
     config_overlays: Option<PathBuf>,
+    // Failed descendant cleanup cannot release capacity or reuse its output.
+    // Existing capacity admission bounds this host-lifetime quarantine.
+    cleanup_quarantine: Mutex<Vec<ActiveTranscodeReservation>>,
     publishers: Mutex<HashMap<i64, ChannelPublisher>>,
-    pub(super) dynamic_contexts: Mutex<HashMap<String, DynamicContext>>,
+    pub(super) dynamic_contexts: Mutex<HashMap<uuid::Uuid, DynamicContext>>,
     pub(super) burn_cache: super::burn_cache::BurnCache,
 }
 
-/// Normal playback and browser preview share callback source configuration.
-/// Their independent registry lifetimes must retain it until both have stopped.
+/// One exact Next process instance; normal playback and preview never share it.
 pub(super) struct DynamicContext {
     pub request: NextStart,
-    owners: usize,
+    pub transfers: Arc<super::session_transfers::SessionTransfers>,
 }
 
-fn retain_dynamic_context(contexts: &mut HashMap<String, DynamicContext>, request: &NextStart) {
-    contexts
-        .entry(request.number.clone())
-        .and_modify(|context| context.owners += 1)
-        .or_insert_with(|| DynamicContext {
+fn retain_dynamic_context(
+    contexts: &mut HashMap<uuid::Uuid, DynamicContext>,
+    request: &NextStart,
+) -> uuid::Uuid {
+    let instance = uuid::Uuid::new_v4();
+    contexts.insert(
+        instance,
+        DynamicContext {
             request: request.clone(),
-            owners: 1,
-        });
+            transfers: Arc::default(),
+        },
+    );
+    instance
 }
 
-fn release_dynamic_context(contexts: &mut HashMap<String, DynamicContext>, number: &str) {
-    if let std::collections::hash_map::Entry::Occupied(mut entry) =
-        contexts.entry(number.to_owned())
-    {
-        if entry.get().owners > 1 {
-            entry.get_mut().owners -= 1;
-        } else {
-            entry.remove();
-        }
-    }
+fn release_dynamic_context(
+    contexts: &mut HashMap<uuid::Uuid, DynamicContext>,
+    instance: uuid::Uuid,
+) -> Option<DynamicContext> {
+    contexts.remove(&instance)
 }
 
 #[derive(Clone)]
@@ -94,6 +96,7 @@ impl NextHost {
             burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),
             root,
             config_overlays: None,
+            cleanup_quarantine: Mutex::new(Vec::new()),
             dynamic_contexts: Mutex::new(HashMap::new()),
             publishers: Mutex::new(HashMap::new()),
         }
@@ -105,6 +108,40 @@ impl NextHost {
     pub fn with_config_overlays(mut self, folder: PathBuf) -> Self {
         self.config_overlays = Some(folder);
         self
+    }
+
+    /// Claim bytes only from the exact active Next process instance.
+    /// The HTTP boundary must authenticate the internal capability first.
+    /// # Errors
+    /// Rejects expired sessions and unavailable or already consumed transfers.
+    pub async fn claim_prepared(
+        &self,
+        instance: uuid::Uuid,
+        id: uuid::Uuid,
+    ) -> Result<super::session_transfers::TransferReader, crate::remote_stream::RemoteStreamError>
+    {
+        let contexts = self.dynamic_contexts.lock().await;
+        let context = contexts
+            .get(&instance)
+            .ok_or(crate::remote_stream::RemoteStreamError::PreparedCancelled)?;
+        context.transfers.claim(id)
+    }
+
+    async fn quarantine_unconfirmed_cleanup(
+        &self,
+        error: &crate::remote_stream::RemoteStreamError,
+        reservation: &mut Option<ActiveTranscodeReservation>,
+    ) -> bool {
+        if !matches!(
+            error,
+            crate::remote_stream::RemoteStreamError::PreparedTerminationUnconfirmed
+        ) {
+            return false;
+        }
+        if let Some(reservation) = reservation.take() {
+            self.cleanup_quarantine.lock().await.push(reservation);
+        }
+        true
     }
 
     async fn configuration(
@@ -129,14 +166,29 @@ impl NextHost {
             .await
             .map_err(|_| ProcessError::Preparation("channel read"))?;
         let playout_folder = self.root.join(request.channel_id.to_string());
-        config::channel_config(
+        let mut configuration = config::channel_config(
             &profile,
             channel.next_engine_text_subtitle_mode,
             &playout_folder,
             &request.ffmpeg,
             &request.ffprobe,
         )
-        .map_err(|_| ProcessError::Preparation("profile conversion"))
+        .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+        let save_reports = crate::repositories::make_repositories(self.pool.clone())
+            .config
+            .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_SAVE_REPORTS)
+            .await
+            .map_err(|_| ProcessError::Preparation("reports setting read"))?
+            .is_some_and(|raw| raw.eq_ignore_ascii_case("true") || raw == "1");
+        if save_reports {
+            configuration.ffmpeg.reports_folder = Some(
+                crate::file_system_layout::ffmpeg_reports_folder()
+                    .to_str()
+                    .ok_or(ProcessError::Preparation("reports path encoding"))?
+                    .to_owned(),
+            );
+        }
+        Ok(configuration)
     }
 
     /// Reserve before spawning or touching the output folder. Concurrent starts
@@ -160,7 +212,8 @@ impl NextHost {
         }
         let host = self.clone();
         Some(tokio::spawn(async move {
-            retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request);
+            let instance =
+                retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request);
             let mut publishers = host.publishers.lock().await;
             let publisher = publishers
                 .entry(request.channel_id)
@@ -203,12 +256,13 @@ impl NextHost {
                     session.set_admission(HlsAdmissionStatus::AtCapacity);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
-                NextProcess::start_with_overlays(
+                NextProcess::start_with_session(
                     &request.executable,
                     &request.number,
                     &request.output,
                     &config,
                     host.config_overlays.as_deref(),
+                    Some(instance),
                     request.deadline,
                 )
                 .await
@@ -220,16 +274,62 @@ impl NextHost {
             if let Err(error) = outcome {
                 tracing::warn!(channel_id = request.channel_id, %error, "Next session failed");
             }
+            if !host
+                .shutdown_producers(instance, request.channel_id, &mut reservation)
+                .await
+            {
+                return;
+            }
             // Keep capacity and registry ownership until process and files are gone.
             if let Err(error) = tokio::fs::remove_dir_all(&request.output).await {
                 if error.kind() != std::io::ErrorKind::NotFound {
                     tracing::warn!(channel_id = request.channel_id, kind = ?error.kind(), "Next output cleanup failed");
                 }
             }
-            release_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request.number);
             drop(reservation);
             registry.remove(&request.number).await;
         }))
+    }
+
+    async fn shutdown_producers(
+        &self,
+        instance: uuid::Uuid,
+        channel_id: i64,
+        reservation: &mut Option<ActiveTranscodeReservation>,
+    ) -> bool {
+        // Revoke callbacks before awaiting cleanup. Unconfirmed termination keeps
+        // the HLS registry, output directory and capacity reserved.
+        let context = release_dynamic_context(&mut *self.dynamic_contexts.lock().await, instance);
+        if let Some(context) = context {
+            if let Err(error) = context.transfers.shutdown().await {
+                tracing::warn!(channel_id, "Next producer cleanup failed");
+                return !self
+                    .quarantine_unconfirmed_cleanup(&error, reservation)
+                    .await;
+            }
+        }
+        true
+    }
+
+    fn defer_item(
+        &self,
+        channel_id: i64,
+        item_id: i64,
+        descriptor: &str,
+        mut item: super::protocol::PlayoutItem,
+    ) -> ersatzrs_core::repositories::Result<super::protocol::PlayoutItem> {
+        let audio = item
+            .tracks
+            .as_ref()
+            .and_then(|tracks| tracks.audio.as_ref())
+            .filter(|track| !matches!(track.source, Some(super::protocol::Source::Lavfi { .. })))
+            .and_then(|track| track.stream_index);
+        item.source = Some(
+            self.media
+                .dynamic_source(channel_id, item_id, descriptor, audio)?,
+        );
+        item.tracks = None;
+        Ok(item)
     }
 
     async fn refresh(
@@ -251,6 +351,23 @@ impl NextHost {
                         .ok_or_else(|| unavailable("profile unavailable"))?;
                     let mut items = Vec::with_capacity(media.len());
                     for media in media {
+                        if media.remote_stream_id.is_some() {
+                            let snapshot = super::remote_projection::project_publishable(
+                                &self.pool,
+                                &channel,
+                                &media,
+                                &profile.resolution,
+                                selection::AudioDirective::Select,
+                            )
+                            .await?;
+                            items.push(self.defer_item(
+                                channel_id,
+                                media.item.id,
+                                &snapshot.identity.descriptor,
+                                snapshot.projection.item,
+                            )?);
+                            continue;
+                        }
                         let source = source::resolve_published(
                             &self.pool,
                             &media,
@@ -300,25 +417,12 @@ impl NextHost {
                                 &channel,
                             )
                             .await?;
-                            let audio = projection
-                                .item
-                                .tracks
-                                .as_ref()
-                                .and_then(|tracks| tracks.audio.as_ref())
-                                .filter(|track| {
-                                    !matches!(
-                                        track.source,
-                                        Some(super::protocol::Source::Lavfi { .. })
-                                    )
-                                })
-                                .and_then(|track| track.stream_index);
-                            projection.item.source = Some(self.media.dynamic_source(
+                            projection.item = self.defer_item(
                                 channel_id,
                                 media.item.id,
                                 &identity.descriptor,
-                                audio,
-                            )?);
-                            projection.item.tracks = None;
+                                projection.item,
+                            )?;
                         }
                         items.push(projection.item);
                     }
@@ -357,3 +461,7 @@ pub fn channel_binary() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 #[path = "host_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "reports_tests.rs"]
+mod reports_tests;

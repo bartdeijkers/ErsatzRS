@@ -28,9 +28,13 @@ const REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT: StdDuration = StdDuration::from_secs
 pub struct FfprobeMediaVersion {
     pub version: MediaVersion,
     pub streams: Vec<MediaStream>,
+    /// Exact ephemeral scan order by fresh stream index; never persisted to SQL.
+    pub field_orders: BTreeMap<i32, String>,
     pub chapters: Vec<MediaChapter>,
     /// Container-level `FFprobe` tags keyed case-insensitively in lowercase.
     pub format_metadata: BTreeMap<String, String>,
+    /// Detected container name (including `FFprobe` aliases); never persisted to SQL.
+    pub format_name: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -181,14 +185,43 @@ impl FfprobeExtractor {
     }
 
     /// Probe the bounded NUT header from an already-running v4 producer.
-    /// Native container headers identify raw video and PCM without reading or
-    /// decoding a complete frame. The owner replays these bytes to the encoder.
+    /// Inspect only the copied prefix, including stream-info initialization:
+    /// NUT headers alone omit rawvideo pixel format. The owner replays these
+    /// same bytes to the encoder without reopening the producer.
     ///
     /// # Errors
     /// Rejects oversized/empty prefixes, cancellation and malformed media headers.
     pub async fn extract_retained_prefix_cancellable(
         &self,
         prefix: &[u8],
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<FfprobeMediaVersion> {
+        self.extract_prefix_cancellable(prefix, true, deadline, cancellation)
+            .await
+    }
+
+    /// Inspect a bounded replayable prefix from an ordinary installed producer.
+    /// Container detection and compressed-stream inspection read only the copied
+    /// bytes, never the running producer. Incomplete metadata must be rejected by
+    /// the consumer; this operation does not infer a complete stream duration.
+    ///
+    /// # Errors
+    /// Rejects empty/oversized prefixes, cancellation, timeout and invalid media.
+    pub async fn extract_producer_prefix_cancellable(
+        &self,
+        prefix: &[u8],
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<FfprobeMediaVersion> {
+        self.extract_prefix_cancellable(prefix, false, deadline, cancellation)
+            .await
+    }
+
+    async fn extract_prefix_cancellable(
+        &self,
+        prefix: &[u8],
+        retained: bool,
         deadline: tokio::time::Instant,
         cancellation: tokio::sync::oneshot::Receiver<()>,
     ) -> Result<FfprobeMediaVersion> {
@@ -209,20 +242,18 @@ impl FfprobeExtractor {
                 path: label.to_owned(),
                 source,
             })?;
-        let args = vec![
-            "-hide_banner".to_owned(),
-            "-v".to_owned(),
-            "error".to_owned(),
-            "-f".to_owned(),
-            "nut".to_owned(),
-            "-nofind_stream_info".to_owned(),
-            "-show_streams".to_owned(),
-            "-show_format".to_owned(),
-            "-of".to_owned(),
-            "json".to_owned(),
-            "-i".to_owned(),
+        let mut args = vec!["-hide_banner".into(), "-v".into(), "error".into()];
+        if retained {
+            args.extend(["-f".into(), "nut".into()]);
+        }
+        args.extend([
+            "-show_streams".into(),
+            "-show_format".into(),
+            "-of".into(),
+            "json".into(),
+            "-i".into(),
             file.path().to_string_lossy().into_owned(),
-        ];
+        ]);
         self.run_remote_probe(None, args, None, deadline, cancellation)
             .await
     }
@@ -687,6 +718,15 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
     }
 
     FfprobeMediaVersion {
+        format_name: probe
+            .format
+            .as_ref()
+            .and_then(|format| format.format_name.clone()),
+        field_orders: probe
+            .streams
+            .iter()
+            .filter_map(|stream| Some((stream.index?, stream.field_order.clone()?)))
+            .collect(),
         version,
         streams,
         chapters,
@@ -897,6 +937,7 @@ struct FfprobeFrame {
 
 #[derive(Debug, Deserialize)]
 struct FfprobeFormat {
+    format_name: Option<String>,
     duration: Option<String>,
     #[serde(default)]
     tags: BTreeMap<String, String>,
