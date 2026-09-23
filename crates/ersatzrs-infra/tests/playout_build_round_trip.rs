@@ -874,3 +874,76 @@ async fn seed_playout_row(pool: &sqlx::SqlitePool, playout: &Playout) {
     .execute(pool)
     .await;
 }
+
+#[tokio::test]
+async fn upsert_playout_item_preserves_fractional_fallback_source_offsets() {
+    assert_fractional_fallback_source_offsets(false).await;
+}
+
+#[tokio::test]
+async fn apply_build_result_preserves_fractional_fallback_source_offsets() {
+    assert_fractional_fallback_source_offsets(true).await;
+}
+
+async fn assert_fractional_fallback_source_offsets(apply_build: bool) {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+        VALUES (1, 1, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+    let start = common::fixed_time() + Duration::nanoseconds(824_411_900);
+    let clipped_duration = Duration::nanoseconds(175_588_100);
+    let item = ersatzrs_domain::PlayoutItem {
+        id: 1,
+        playout_id: 1,
+        media_item_id: 1,
+        start,
+        finish: start + clipped_duration,
+        filler_kind: FillerKind::Fallback,
+        in_point: Duration::seconds(5),
+        out_point: Duration::seconds(5) + clipped_duration,
+        chapter_title: Some("Clipped fallback".into()),
+        ..Default::default()
+    };
+    if apply_build {
+        let playout = repos.playout.get_with_anchor(1).await.unwrap();
+        repos
+            .playout
+            .apply_build_result(
+                &SchedulingResult {
+                    clear_items: true,
+                    added_items: vec![item.clone()],
+                    ..SchedulingResult::default()
+                },
+                &playout,
+                Duration::zero(),
+            )
+            .await
+            .unwrap();
+    } else {
+        repos.playout.upsert_item(&item).await.unwrap();
+    }
+    let rows = repos
+        .playout
+        .items_in_range(1, start, item.finish)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    let loaded = &rows[0];
+    assert_eq!(loaded.in_point, item.in_point);
+    assert_eq!(loaded.out_point, item.out_point);
+    assert_eq!(loaded.finish - loaded.start, clipped_duration);
+    assert_eq!(loaded.out_point - loaded.in_point, clipped_duration);
+    let stored =
+        sqlx::query(r#"SELECT "InPoint", "OutPoint" FROM "PlayoutItem" WHERE "PlayoutId" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored.get::<String, _>("InPoint"), "00:00:05");
+    assert_eq!(stored.get::<String, _>("OutPoint"), "00:00:05.1755881");
+}

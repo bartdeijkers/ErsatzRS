@@ -3,6 +3,10 @@
 //! expression as a different scripting language.
 
 mod evaluation;
+mod profile;
+#[cfg(test)]
+mod profile_tests;
+mod temporal;
 #[cfg(test)]
 mod tests;
 mod value;
@@ -70,6 +74,7 @@ pub(super) fn filter_chapters(
     let mut parsed =
         ExpressionParser::parse(Rule::root, expression).map_err(|_| ExpressionError)?;
     let root = parsed.next().ok_or(ExpressionError)?;
+    validate_literals(root.clone())?;
     let start = chapters
         .iter()
         .map(|c| c.start_time)
@@ -151,6 +156,31 @@ fn validate_complexity(expression: &str) -> Result<()> {
             ')' => depth = depth.saturating_sub(1),
             _ => {}
         }
+    }
+    Ok(())
+}
+
+/// Parsing validates every literal, including literals in an untaken lazy
+/// branch. Function calls and parameter evaluation remain lazy at runtime.
+fn validate_literals(root: pest::iterators::Pair<'_, Rule>) -> Result<()> {
+    let mut pending = vec![root];
+    while let Some(pair) = pending.pop() {
+        match pair.as_rule() {
+            Rule::string => {
+                value::unescape(pair.as_str())?;
+            }
+            Rule::number => {
+                Value::number(pair.as_str())?;
+            }
+            Rule::temporal => {
+                Value::temporal(pair.as_str())?;
+            }
+            Rule::guid => {
+                uuid::Uuid::parse_str(pair.as_str()).map_err(|_| ExpressionError)?;
+            }
+            _ => {}
+        }
+        pending.extend(pair.into_inner());
     }
     Ok(())
 }

@@ -265,6 +265,10 @@ fn mid_roll_pad_distributes_fallback_clips_between_chapters_before_post_roll() {
     assert_eq!(rows[7].out_point, Duration::minutes(1));
     assert_eq!(rows[9].start, start + Duration::minutes(55));
     assert_eq!(rows[9].finish, start + Duration::hours(1));
+    assert!(
+        ctx.result.warnings.is_empty(),
+        "an empty pad source intentionally uses fallback"
+    );
 }
 
 #[test]
@@ -529,10 +533,12 @@ fn invalid_chapter_expression_refuses_build_instead_of_returning_partial_replace
 
 #[test]
 fn preroll_pad_expression_controls_placement_only_when_midroll_exposes_chapters() {
-    for (with_midroll, expression, expected_first) in [
-        (true, "false", Some(100)),
-        (true, "(", None),
-        (false, "(", Some(5)),
+    for (with_midroll, mid_expression, expression, expected_first) in [
+        (true, None, "false", Some(100)),
+        (true, Some("false"), "false", Some(100)),
+        (true, Some("false"), "(", None),
+        (true, None, "(", None),
+        (false, None, "(", Some(5)),
     ] {
         let (mut ctx, mut item) = context();
         item.pre_roll_filler_id = Some(95);
@@ -545,10 +551,12 @@ fn preroll_pad_expression_controls_placement_only_when_midroll_exposes_chapters(
             .insert(95, pad);
         if with_midroll {
             item.mid_roll_filler_id = Some(96);
-            ctx.request.reference_data.classic_filler_presets.insert(
-                96,
-                filler_preset(96, FillerKind::MidRoll, FillerMode::Count, Some(0), None),
-            );
+            let mut mid = filler_preset(96, FillerKind::MidRoll, FillerMode::Count, Some(0), None);
+            mid.expression = mid_expression.map(str::to_owned);
+            ctx.request
+                .reference_data
+                .classic_filler_presets
+                .insert(96, mid);
         }
         ctx.request
             .reference_data

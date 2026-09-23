@@ -2,9 +2,9 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..ee038ba4 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096']
+adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-one reconciled and 148 pending,
+The ledger registers 169 commits: twenty-two reconciled and 147 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -32,7 +32,13 @@ The interpreter compiles for Windows MSVC/ARMv7 and linked runtime probes pass
 on native Windows and ARMv7 emulation. Full six-platform application acceptance
 remains open; ADR 0096 stays Partial and its platform evidence debt remains visible.
 
-Next action is ordered row 22 (7e38297d), Classic fallback filler. Remote
+Row 22 is Adapt (ADR 0098), with ADR 0097 primary-content preservation. Complete
+fallback intervals, chapter/version identity, persisted filler continuity,
+deterministic bounded expressions and subsecond source-offset storage pass
+focused tests and decoded production-builder playback. All-six-platform
+expression acceptance remains open in Classic scheduling debt; ADR 0098 is Partial.
+
+Next action is ordered row 23 (57f7dfa5), embedded image subtitles for Next. Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Complete Next endpoint/browser/platform and full-window
 acceptance are not inferred from focused proof. ADR 0095 retains Next as an
@@ -70,7 +76,7 @@ evidence    = 'Maintainer accepted ADR 0096 and authorized implementation on 202
 
 [[debt]]
 id          = 'row-22-classic-fallback-padding'
-description = 'Row 22 is in implementation: fallback clip boundaries and chapter-as-media loading are corrected locally, chapter-aware mid-roll padding is implemented; pinned-version chapters and persisted filler identity reconciliation pass focused SQL proof. Expression filtering is in differential review; locale semantics and remaining acceptance are required before the upstream row can land.'
+description = 'Row 22 reconciles complete clipped fallback, chapter-aware padding, version/filler identity and accepted deterministic chapter expressions. Full six-platform expression acceptance remains separately tracked in Classic scheduling debt under ADR 0098.'
 discovered  = '2026-09-23'
-evidence    = 'See UCU-02 and classic-scheduling debt classic-fallback-gap-and-chapter-padding. The processed pin remains e6496bbc; no Covered/Port verdict is claimed for 7e38297d.'
-resolved    = false
+evidence    = 'Resolved by the reviewed row 22 Adapt implementation and UCU-02 focused core/SQL, culture-process, dependency, Clippy, native smoke and decoded production-builder playback evidence. Full platform acceptance is not inferred from these Linux results.'
+resolved    = true

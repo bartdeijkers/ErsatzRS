@@ -95,13 +95,13 @@ Row 20 (bb493670) is Port: scoped paths and current-credential media opens for
 Plex/Jellyfin/Emby pass decoded playback, Plex failover, Range/redirect checks
 and real-host Next HTTP/preview smoke. Row 21 (e6496bbc) is Adapt under accepted
 ADR 0096: bounded JavaScript movie/episode audio hooks serve native and Next
-playback. Focused tests, decoded selection and native/Next smoke pass. Next:
-row 22 (7e38297d), Classic fallback filler. Gap/post-roll clipping and chapter
-filler hydration have tested checkpoints. Mid-roll now uses chapter boundaries
-and wall-clock padding. Pinned-version chapters and persisted filler identity
-reconciliation pass focused SQL tests. NCalc-compatible expression filtering
-is in differential review; locale semantics and runtime proof remain before
-row acceptance. Full platform proof remains open.
+playback. Focused tests, decoded selection and native/Next smoke pass.
+Row 22 (7e38297d) is Adapt under accepted ADRs 0097/0098: complete fallback
+clips, chapter/version identity, safe filler continuation and deterministic
+bounded expressions. Focused core/SQL and four-language-environment tests pass.
+Native smoke and decoded production-builder playback confirm Unicode-selected
+breaks and preserved fractional source offsets. Full platform proof remains open.
+Next: row 23 (57f7dfa5), embedded image subtitles for Next.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

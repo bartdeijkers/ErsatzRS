@@ -1,4 +1,5 @@
 use super::{
+    profile,
     value::{unescape, Value},
     ExpressionError, Parameters, Result, Rule,
 };
@@ -258,8 +259,13 @@ fn contains(left: &Value, right: &Value) -> Result<bool> {
             })
         }
         Value::List(values) if values.iter().all(|v| matches!(v, Value::Text(_))) => {
-            let sought = left.text().to_lowercase();
-            Ok(values.iter().any(|v| v.text().to_lowercase() == sought))
+            let sought = left.text();
+            for value in values {
+                if profile::compare(&value.text(), &sought)? == Ordering::Equal {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         }
         Value::List(values) => Ok(values.iter().any(|v| membership_equal(v, left))),
         value => Ok(membership_equal(value, left)),
@@ -289,7 +295,7 @@ fn arithmetic(operator: &str, left: Value, right: Value) -> Result<Value> {
     }
     if operator == "+" {
         if let (Value::Text(a), Value::Text(b)) = (&left, &right) {
-            if a.trim().parse::<f64>().is_err() || b.trim().parse::<f64>().is_err() {
+            if profile::real(a).is_err() || profile::real(b).is_err() {
                 return Ok(Value::Text(format!("{a}{b}")));
             }
         }
@@ -529,13 +535,12 @@ fn like(text: &str, pattern: &str) -> Result<bool> {
             char::from_u32(0xF_0000 + u32::from(unit)).ok_or(ExpressionError)
         }
     };
-    let encoded_text = text
-        .to_lowercase()
-        .encode_utf16()
+    let encoded_text = profile::like_units(text)
+        .into_iter()
         .map(encode)
         .collect::<Result<String>>()?;
     let mut encoded_pattern = String::from("^");
-    for unit in pattern.to_lowercase().encode_utf16() {
+    for unit in profile::like_units(pattern) {
         match unit {
             37 => encoded_pattern.push_str(".*"),
             95 => encoded_pattern.push('.'),

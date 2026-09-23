@@ -1,6 +1,6 @@
 use super::*;
 
-fn chapters() -> Vec<MediaChapter> {
+pub(super) fn chapters() -> Vec<MediaChapter> {
     (0..6)
         .map(|index| MediaChapter {
             chapter_id: index + 1,
@@ -86,7 +86,7 @@ fn bypasses_and_non_boolean_results_match_upstream() {
     assert!(filter_chapters("MissingFunction(1)", &input, Duration::zero()).is_err());
 }
 
-fn value(expression: &str) -> Result<Value> {
+pub(super) fn value(expression: &str) -> Result<Value> {
     let chapter = &chapters()[1];
     let parameters = Parameters {
         chapter,
@@ -101,6 +101,7 @@ fn value(expression: &str) -> Result<Value> {
         .map_err(|_| ExpressionError)?
         .next()
         .ok_or(ExpressionError)?;
+    validate_literals(pair.clone())?;
     evaluation::evaluate(pair, &parameters)
 }
 
@@ -161,7 +162,7 @@ fn ncalc_membership_wildcards_and_builtin_math() {
 /// Captured from `NCalcSync` 5.12.0 with `CaseInsensitiveStringComparer`, Linux
 /// invariant culture, and callback num=2, point=600.0, title="Here"; other
 /// callback names return null. This is a behavioral oracle, not a snapshot of
-/// this evaluator's own output. Culture-sensitive parity remains separate.
+/// this evaluator's own output. ADR 0098 differences have separate profile tests.
 #[test]
 fn differential_ncalc_5_12_fixtures() {
     #[derive(serde::Deserialize)]

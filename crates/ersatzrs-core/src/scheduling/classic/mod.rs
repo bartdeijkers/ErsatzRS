@@ -1285,14 +1285,13 @@ impl ClassicContext {
                     return None;
                 }
                 if chapters.len() <= 1 && preset.filler_mode != FillerMode::Pad {
-                    let mut without_midroll = schedule_item.clone();
-                    without_midroll.mid_roll_filler_id = None;
                     return self.build_unsplit_block(
-                        &without_midroll,
+                        schedule_item,
                         media_item,
                         start,
                         guide_finish,
                         scheduler,
+                        false,
                     );
                 }
             }
@@ -1307,7 +1306,14 @@ impl ClassicContext {
                 scheduler,
             );
         }
-        self.build_unsplit_block(schedule_item, media_item, start, guide_finish, scheduler)
+        self.build_unsplit_block(
+            schedule_item,
+            media_item,
+            start,
+            guide_finish,
+            scheduler,
+            true,
+        )
     }
 
     fn build_unsplit_block(
@@ -1317,6 +1323,7 @@ impl ClassicContext {
         start: DateTime<Utc>,
         guide_finish: Option<DateTime<Utc>>,
         scheduler: &'static str,
+        include_mid_roll: bool,
     ) -> Option<Vec<PlayoutItem>> {
         let before_filler_media = self.filler_media.clone();
         let mut items = Vec::new();
@@ -1338,7 +1345,9 @@ impl ClassicContext {
         items.push(item);
 
         for filler_id in [
-            schedule_item.mid_roll_filler_id,
+            schedule_item
+                .mid_roll_filler_id
+                .filter(|_| include_mid_roll),
             schedule_item.post_roll_filler_id,
         ]
         .into_iter()
@@ -1584,6 +1593,9 @@ impl ClassicContext {
             .filler_media
             .get(&filler_id)
             .map_or(0, MediaEnumerator::len);
+        if candidate_count == 0 {
+            return items;
+        }
         while remaining > Duration::zero() {
             if consecutive_skips >= candidate_count {
                 self.result.warnings.push(format!(

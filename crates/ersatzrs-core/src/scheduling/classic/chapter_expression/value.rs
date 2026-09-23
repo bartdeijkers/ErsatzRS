@@ -1,5 +1,5 @@
-use super::{ExpressionError, Result};
-use chrono::{Duration, NaiveDate, NaiveDateTime};
+use super::{profile, temporal, ExpressionError, Result};
+use chrono::{Duration, NaiveDateTime};
 use std::cmp::Ordering;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,7 +66,7 @@ impl Value {
             Self::Long(value) => Ok(*value as f64),
             Self::Unsigned(value) => Ok(*value as f64),
             Self::Real(value) => Ok(*value),
-            Self::Text(value) => value.trim().parse().map_err(|_| ExpressionError),
+            Self::Text(value) => profile::real(value),
             _ => Err(ExpressionError),
         }
     }
@@ -77,7 +77,9 @@ impl Value {
             Self::Unsigned(value) => Ok(*value),
             Self::Int(value) => u64::try_from(*value).map_err(|_| ExpressionError),
             Self::Long(value) => u64::try_from(*value).map_err(|_| ExpressionError),
-            Self::Text(value) => value.trim().parse().map_err(|_| ExpressionError),
+            Self::Text(value) => profile::numeric_text(value)
+                .parse()
+                .map_err(|_| ExpressionError),
             _ => {
                 let value = self.real()?.round_ties_even();
                 if (0.0..18_446_744_073_709_551_616.0).contains(&value) {
@@ -92,7 +94,9 @@ impl Value {
     #[allow(clippy::cast_possible_truncation)] // Range checked before conversion.
     pub(super) fn int32(&self) -> Result<i32> {
         if let Self::Text(value) = self {
-            return value.trim().parse().map_err(|_| ExpressionError);
+            return profile::numeric_text(value)
+                .parse()
+                .map_err(|_| ExpressionError);
         }
         let value = self.real()?.round_ties_even();
         if (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&value) {
@@ -128,7 +132,7 @@ impl Value {
             (Self::Null, Self::Null) => Ok(Ordering::Equal),
             (Self::Null, _) => Ok(Ordering::Less),
             (_, Self::Null) => Ok(Ordering::Greater),
-            (Self::Text(a), Self::Text(b)) => Ok(a.to_lowercase().cmp(&b.to_lowercase())),
+            (Self::Text(a), Self::Text(b)) => profile::compare(a, b),
             (Self::Date(a), Self::Date(b)) => Ok(a.cmp(b)),
             (Self::Time(a), Self::Time(b)) => Ok(a.cmp(b)),
             (Self::Guid(a), Self::Guid(b)) => Ok(a.cmp(b)),
@@ -145,18 +149,24 @@ impl Value {
                 Ok(i64::try_from(*a).map_err(|_| ExpressionError)?.cmp(b))
             }
             (Self::Unsigned(a), Self::Unsigned(b)) => Ok(a.cmp(b)),
-            (Self::Int(a), Self::Text(b)) => {
-                Ok(a.cmp(&b.trim().parse::<i32>().map_err(|_| ExpressionError)?))
-            }
-            (Self::Text(a), Self::Int(b)) => {
-                Ok(a.trim().parse::<i32>().map_err(|_| ExpressionError)?.cmp(b))
-            }
-            (Self::Long(a), Self::Text(b)) => {
-                Ok(a.cmp(&b.trim().parse::<i64>().map_err(|_| ExpressionError)?))
-            }
-            (Self::Text(a), Self::Long(b)) => {
-                Ok(a.trim().parse::<i64>().map_err(|_| ExpressionError)?.cmp(b))
-            }
+            (Self::Int(a), Self::Text(b)) => Ok(a.cmp(
+                &profile::numeric_text(b)
+                    .parse::<i32>()
+                    .map_err(|_| ExpressionError)?,
+            )),
+            (Self::Text(a), Self::Int(b)) => Ok(profile::numeric_text(a)
+                .parse::<i32>()
+                .map_err(|_| ExpressionError)?
+                .cmp(b)),
+            (Self::Long(a), Self::Text(b)) => Ok(a.cmp(
+                &profile::numeric_text(b)
+                    .parse::<i64>()
+                    .map_err(|_| ExpressionError)?,
+            )),
+            (Self::Text(a), Self::Long(b)) => Ok(profile::numeric_text(a)
+                .parse::<i64>()
+                .map_err(|_| ExpressionError)?
+                .cmp(b)),
             _ => {
                 let (a, b) = (self.real()?, other.real()?);
                 // Double.CompareTo orders NaN below all other values, including -infinity.
@@ -176,51 +186,7 @@ impl Value {
     }
 
     pub(super) fn temporal(text: &str) -> Result<Self> {
-        let text = &text[1..text.len() - 1];
-        for format in ["%m/%d/%Y %H:%M:%S%.f", "%m/%d/%Y"] {
-            if let Ok(date) = NaiveDateTime::parse_from_str(text, format) {
-                return Ok(Self::Date(date));
-            }
-            if let Ok(date) = NaiveDate::parse_from_str(text, format) {
-                return date
-                    .and_hms_opt(0, 0, 0)
-                    .map(Self::Date)
-                    .ok_or(ExpressionError);
-            }
-        }
-        let mut parts = text.split(':');
-        let hours = parts
-            .next()
-            .ok_or(ExpressionError)?
-            .parse::<i64>()
-            .map_err(|_| ExpressionError)?;
-        let minutes = parts
-            .next()
-            .ok_or(ExpressionError)?
-            .parse::<i64>()
-            .map_err(|_| ExpressionError)?;
-        let seconds = parts
-            .next()
-            .ok_or(ExpressionError)?
-            .parse::<f64>()
-            .map_err(|_| ExpressionError)?;
-        if parts.next().is_some()
-            || hours < 0
-            || !(0..60).contains(&minutes)
-            || !(0.0..60.0).contains(&seconds)
-        {
-            return Err(ExpressionError);
-        }
-        let whole = hours
-            .checked_mul(3600)
-            .and_then(|s| s.checked_add(minutes * 60))
-            .ok_or(ExpressionError)?;
-        let base = Duration::try_seconds(whole).ok_or(ExpressionError)?;
-        #[allow(clippy::cast_possible_truncation)]
-        let fraction = Duration::nanoseconds((seconds * 1_000_000_000.0).round() as i64);
-        base.checked_add(&fraction)
-            .map(Self::Time)
-            .ok_or(ExpressionError)
+        temporal::parse(text)
     }
 }
 

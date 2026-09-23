@@ -7070,6 +7070,81 @@ Remaining: ambient-culture/UTF-16 expression parity and resource-limit policy,
 complete placement review and playback smoke. ADR 0097 does not waive those requirements.
 
 
+2026-09-23 row 22 follow-up:
+A source-path review found that suppressing unmatched non-pad mid-roll also
+removed the mid-roll reference used to evaluate an independent pre/post Pad
+expression. The unsplit builder now suppresses only mid-roll emission while
+retaining the original schedule context. Expanded regressions prove no-match
+mid-roll plus false pre-pad becomes post-roll, and a malformed pre-pad still
+refuses the build; no-mid-roll bypass remains intact. All 16 filler regressions
+pass (0.009 seconds), and core all-target Clippy passes with warnings denied.
+A 22-expression exact-NCalc culture probe across invariant/en-US/nl-NL/tr-TR
+confirms deployment-sensitive collation, coercion, date parsing and LIKE casing.
+ADR 0098 specifies a deterministic bounded expression profile instead of
+silently claiming the existing partial parser is equivalent. The maintainer
+accepted it on 2026-09-23 and requested implementation; culture/formatting
+implementation and acceptance are now in progress.
+Native smoke passes on the rebuilt real host: MPEG-TS HTTP 200 with 8192 bytes,
+HLS variant HTTP 200 and session playlist with initial segments. The first run
+could not reach loopback inside the sandbox; the authorized network-enabled run
+passes without source changes or relaxed assertions.
+A disposable copy of that smoke database creates a Classic schedule through
+POST /api/playouts/create and the production Reset worker. Its main source has
+red/blue chapters and its fallback source is green/880 Hz only inside the chosen
+chapter. An 80-second real MPEG-TS capture decodes to 400 video frames, with
+336 stable color comparisons and zero mismatches, plus 61 correct 440/880 Hz
+audio windows. Builder rows and decoded transitions agree; one final fallback
+is clipped from source second 5 to second 8. This proves scheduler-to-playback
+source intervals, not raw transport continuity (the capture uses FFmpeg copy).
+The run exposed noisy repeated-skip warnings for an intentionally empty pad
+source. That normal fallback case now returns immediately without the warning;
+a regression requires the existing empty-pad/fallback fixture to remain clean.
+ADR 0098 implementation verification: 238 focused core/SQL tests pass, then
+19 expression and atomic-persistence tests pass after adding eager literal
+validation. The SQL fixture verifies unchanged items, anchors and checkpoints
+for malformed, byte/depth-exceeding, unpaired-surrogate and invalid-date rules,
+including invalid literals in untaken lazy branches. Eight profile regressions
+pass in each separate invariant/en-US/nl-NL/tr-TR environment process. Scoped
+core/infra/web all-target Clippy passes with warnings denied (2m 44s).
+Dependency advisory, license, ban and source checks pass; the lockfile retains
+existing unrelated Windows dependencies. A read-only review found no additional
+contract blocker in bounds, literal validation, collation, temporal parsing or
+atomic error handling. The 40 GiB target threshold was exceeded; cargo clean
+removed 46.1 GiB before final real-host playback verification.
+All-six-platform application execution remains an explicit open acceptance
+requirement, as recorded in ADR 0098 and Classic scheduling parity debt.
+Final native MPEG-TS/HLS smoke passes after the clean build. The Unicode runtime
+fixture initially failed setup (temporary script quoting, then a synthetic ID
+collision); after those fixture corrections it exposed an actual persistence
+defect: a fallback source interval of 5..5.1755881 seconds was stored as 5..5.
+Playout timestamps retained the fraction but the common duration encoder dropped
+it. Source-position precision must be corrected and proven before row landing;
+the failed runtime assertion is retained unchanged.
+A dedicated source-offset encoder now preserves 100-nanosecond precision for
+both PlayoutItem write paths only; general/signed schedule-duration codecs retain
+their existing behavior. Three focused regressions pass (0.408 seconds): exact
+and sub-tick codec boundaries, long-hour formatting, negative clamping, and
+actual upsert/build-result SQL round trips for the observed fractional clip.
+Scoped infra Clippy passes with warnings denied (1m 19s). Rebuilt native smoke
+passes MPEG-TS and HLS again. The unchanged runtime assertions now pass through
+HTTP create -> production Classic Reset -> persisted rows -> real MPEG-TS decode:
+400 frames, 358 stable color samples with zero mismatches and 66 correct audio
+windows. The composed title and decomposed mixed-case expression select the same
+chapter boundary through ICU. The captured final fallback retains source interval
+5..5.5236037 seconds; no repeated-skip warning is emitted for the empty Pad source.
+This FFmpeg-copy capture proves decoded source selection, not raw TS continuity.
+
+Final row review: Adapt (ADR 0098), also applying accepted ADR 0097. Findings
+corrected include independent pre/post-pad evaluation, eager invalid-literal
+rejection, empty-pad warning noise and fractional source-offset persistence.
+No remaining local row defect is identified. The newly fetched target remains
+ee038ba4; all 169 ledger entries match source history. Pin/ledger advance from
+e6496bbc to 7e38297d together, with 22 reconciled and 147 pending; upstream checkout
+follows the authorized commit. Next is 57f7dfa5. ADR 0098 remains Partial for
+all-six-platform application proof; no platform requirement is waived. Full-window
+gates remain open and the first hosted CI/push remains after UCU-03 smoke.
+
+
 
 """
 

@@ -1195,3 +1195,100 @@ async fn classic_filler_refresh_allows_new_and_removed_presets() {
         pool.close().await;
     }
 }
+
+#[tokio::test]
+async fn classic_filler_expression_rejection_preserves_persisted_playout_and_redacts_input() {
+    let directory = tempfile::tempdir().expect("expression rejection database");
+    let path = directory.path().join("expression.sqlite");
+    let pool = open_database(&path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    seed_continuity_filler_chapters(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "MediaChapter"
+        ("MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title") VALUES
+        (1010, 0, '00:00:00', '00:05:00', 'Synthetic hidden chapter title'),
+        (1010, 1, '00:05:00', '00:10:00', 'Second half');
+        INSERT INTO "FillerPreset" ("Id", "Name", "FillerMode", "FillerKind",
+            "CollectionType", "CollectionId", "Count", "AllowWatermarks",
+            "UseChaptersAsMediaItems", "Expression")
+        VALUES (79, 'Expression midroll', 'Count', 'MidRoll', 'Collection', 91, 1, 0, 1, 'true');
+        UPDATE "ProgramScheduleItem" SET "PreRollFillerId" = NULL,
+            "PostRollFillerId" = NULL, "MidRollFillerId" = 79 WHERE "Id" = 401;"#,
+    )
+    .await
+    .expect("seed valid chapter expression schedule");
+    let start = common::fixed_time();
+    let built = build_filler_window(
+        &pool,
+        PlayoutBuildMode::Reset,
+        start,
+        start + Duration::minutes(30),
+        true,
+    )
+    .await;
+    assert!(
+        built.added_items.iter().any(|item| {
+            item.media_item_id == RELATED_MEDIA_ID && item.in_point == Duration::minutes(5)
+        }),
+        "baseline must genuinely split the primary programme"
+    );
+    let before = persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await;
+    let marker = "synthetic-private-expression-marker";
+    let expressions = [
+        format!("'{marker}' = ("),
+        format!(r"false and ('\uD800' = '{marker}')"),
+        format!("false and (#2026-02-30# = #2026-02-28# or '{marker}' = '')"),
+        format!("'{marker}' = '{marker}'{}", " ".repeat(65_537)),
+        format!(
+            "{}'{marker}' = '{marker}'{}",
+            "(".repeat(33),
+            ")".repeat(33)
+        ),
+    ];
+    for expression in expressions {
+        sqlx::query(r#"UPDATE "FillerPreset" SET "Expression" = ? WHERE "Id" = 79"#)
+            .bind(&expression)
+            .execute(&pool)
+            .await
+            .expect("persist rejected expression");
+        let repositories = make_repositories(pool.clone());
+        let reference_data = repositories
+            .scheduling
+            .classic_reference_data(RELATED_PLAYOUT_ID, start, Duration::zero())
+            .await
+            .expect("hydrate persisted expression");
+        assert_eq!(
+            reference_data.classic_filler_presets[&79]
+                .expression
+                .as_deref(),
+            Some(expression.as_str())
+        );
+        let playout = repositories
+            .playout
+            .get_with_anchor(RELATED_PLAYOUT_ID)
+            .await
+            .expect("load existing scheduled playout");
+        let error = PlayoutBuilder::default()
+            .build(SchedulingRequest {
+                playout,
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect_err("invalid or excessive expression must fail before replacement");
+        assert!(matches!(
+            error,
+            ersatzrs_core::scheduling::SchedulingError::InvalidClassicFillerExpression(401)
+        ));
+        let diagnostic = format!("{error} {error:?}");
+        assert!(!diagnostic.contains(marker));
+        assert!(!diagnostic.contains("Synthetic hidden chapter title"));
+        assert!(!diagnostic.contains(&expression));
+        assert!(
+            before == persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await,
+            "expression rejection must retain all existing items, anchors and checkpoints"
+        );
+    }
+    pool.close().await;
+}

@@ -6,12 +6,14 @@ Accepted 2026-09-23
 
 ## Implementation
 
-Partial — the existing Classic unsplit-content path and
+Implemented (56c518fa and UCU-02 row 22 acceptance, 2026-09-23).
+
+The Classic unsplit-content path and
 `chapter_expression_selects_breaks_and_preserves_unsplit_content_without_matches`
-regression preserve the programme when a mid-roll padding expression matches no
-chapter points. The maintainer accepted this deviation on 2026-09-23 after the
-newer-upstream history audit. UCU-02 row 22 remains pending its other expression,
-placement and playback acceptance evidence.
+regression preserve the complete programme before clock-aligned post-roll padding.
+The maintainer accepted this deviation after the newer-upstream history audit.
+Focused scheduling/persistence tests and real-host playback acceptance pass;
+UCU-02 retains its separate full-window and platform obligations.
 
 ## Context
 

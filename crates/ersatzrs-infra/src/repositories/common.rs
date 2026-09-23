@@ -232,6 +232,23 @@ pub fn encode_duration(value: Duration) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
+/// Encode a nonnegative playback source offset at .NET's 100-nanosecond
+/// precision. Preserve whole-second formatting and unbounded hour fields.
+///
+/// `PlayoutItem.InPoint`/`OutPoint` are upstream `TimeSpan` values. Fractional
+/// fallback clips must not collapse to zero duration when persisted. Other
+/// schedule-duration fields retain their existing whole-second codec.
+#[must_use]
+pub fn encode_source_duration(value: Duration) -> String {
+    let base = encode_duration(value);
+    let ticks = value.subsec_nanos().max(0) / 100;
+    if value <= Duration::zero() || ticks == 0 {
+        base
+    } else {
+        format!("{base}.{ticks:07}")
+    }
+}
+
 /// Encode a signed [`Duration`] as an ErsatzTV time span (`[-]HH:MM:SS`).
 #[must_use]
 pub fn encode_signed_duration(value: Duration) -> String {
@@ -1055,8 +1072,9 @@ fn insert_columns(insert_sql: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        cascade_safe_upsert, encode_signed_duration, insert_columns, map_data_access_error,
-        not_found, try_decode_duration_text, try_decode_signed_duration_text,
+        cascade_safe_upsert, encode_signed_duration, encode_source_duration, insert_columns,
+        map_data_access_error, not_found, try_decode_duration_text,
+        try_decode_signed_duration_text,
     };
     use chrono::Duration;
     use ersatzrs_core::repositories::RepositoryError;
@@ -1108,6 +1126,39 @@ mod tests {
         assert!(try_decode_duration_text("-01:00:00").is_err());
         assert!(try_decode_signed_duration_text("+01:00:00").is_err());
         assert!(try_decode_signed_duration_text("-01:60:00").is_err());
+    }
+
+    #[test]
+    fn playback_source_duration_preserves_ticks_and_existing_whole_seconds() {
+        for (duration, text) in [
+            (Duration::seconds(5), "00:00:05"),
+            (
+                Duration::seconds(5) + Duration::nanoseconds(175_588_100),
+                "00:00:05.1755881",
+            ),
+            (
+                Duration::seconds(5) + Duration::nanoseconds(175_588_199),
+                "00:00:05.1755881",
+            ),
+            (Duration::nanoseconds(100), "00:00:00.0000001"),
+            (Duration::nanoseconds(99), "00:00:00"),
+            (
+                Duration::hours(123_456) + Duration::nanoseconds(100),
+                "123456:00:00.0000001",
+            ),
+            (-Duration::nanoseconds(100), "00:00:00"),
+            (-Duration::seconds(5), "00:00:00"),
+        ] {
+            assert_eq!(encode_source_duration(duration), text);
+            let decoded = try_decode_duration_text(text).unwrap();
+            let expected = if duration < Duration::zero() {
+                Duration::zero()
+            } else {
+                duration - Duration::nanoseconds(i64::from(duration.subsec_nanos() % 100))
+            };
+            assert_eq!(decoded, expected);
+        }
+        assert_eq!(encode_signed_duration(-Duration::hours(25)), "-25:00:00");
     }
 
     const CHANNEL_INSERT: &str = r#"INSERT INTO "Channel" (

@@ -22,8 +22,8 @@ use super::common::upsert_sql;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
-    encode_datetime, encode_duration, encode_enum, encode_optional_datetime, load_ids, not_found,
-    replace_ids,
+    encode_datetime, encode_enum, encode_optional_datetime, encode_source_duration, load_ids,
+    not_found, replace_ids,
 };
 
 #[derive(Clone)]
@@ -194,8 +194,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .bind(&item.custom_title)
         .bind(item.guide_group)
         .bind(encode_enum(item.filler_kind))
-        .bind(encode_duration(item.in_point))
-        .bind(encode_duration(item.out_point))
+        .bind(encode_source_duration(item.in_point))
+        .bind(encode_source_duration(item.out_point))
         .bind(&item.chapter_title)
         .bind(item.disable_watermarks)
         .bind(&item.preferred_audio_language_code)
@@ -293,8 +293,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .bind(&item.custom_title)
             .bind(item.guide_group)
             .bind(encode_enum(item.filler_kind))
-            .bind(encode_duration(item.in_point))
-            .bind(encode_duration(item.out_point))
+            .bind(encode_source_duration(item.in_point))
+            .bind(encode_source_duration(item.out_point))
             .bind(&item.chapter_title)
             .bind(item.disable_watermarks)
             .bind(&item.preferred_audio_language_code)
