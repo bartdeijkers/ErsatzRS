@@ -80,3 +80,6 @@ pub(super) use zero_duration::ZeroDurationHealthCheck;
 
 mod next_runtime;
 pub(super) use next_runtime::NextRuntimeHealthCheck;
+
+mod audio_script;
+pub(super) use audio_script::AudioScriptHealthCheck;

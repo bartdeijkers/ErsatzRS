@@ -804,6 +804,32 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     };
+    let script_audio = if !active.has_pinned_stream_selection
+        && custom_selection
+            .as_ref()
+            .and_then(|selection| selection.audio_stream_index)
+            .is_none()
+    {
+        ersatzrs_infra::audio_script::select(
+            &state.pool,
+            &channel,
+            active.media_item_id,
+            active.media_version_id,
+            ersatzrs_infra::audio_script::AudioScriptPreferences {
+                language: preferred_audio_language.as_deref(),
+                title: preferred_audio_title,
+                streaming_mode: effective_streaming_mode,
+            },
+            if interval_source.is_some() {
+                &previous_audio_streams
+            } else {
+                &source_audio_streams
+            },
+        )
+        .await
+    } else {
+        None
+    };
     let explicit_audio_selection = if active.has_pinned_stream_selection {
         active
             .audio_stream_index
@@ -817,6 +843,7 @@ async fn serve_channel_stream_admitted_inner(
         custom_selection
             .as_ref()
             .and_then(|selection| selection.audio_stream_index)
+            .or(script_audio)
             .map_or(
                 PlaybackAudioSelection::Automatic,
                 PlaybackAudioSelection::Exact,

@@ -2,11 +2,23 @@
 
 ## Status
 
-Proposed
+Accepted (2026-09-23; maintainer approval)
 
 ## Implementation
 
-Not implemented
+Partial
+
+The shared adapter is integrated into native HLS/MPEG-TS playback, previews and
+Next projection. Each invocation owns a fresh runtime; globals do not carry
+over between selections. Raw HLS Direct retains all audio and bypasses the hook
+when no effective language/title preference requests selection. `rquickjs` 0.14.0 is pinned with only its `std` feature (MSRV
+1.87, MIT); it uses the engine allocator. Linux callback/resource-limit tests
+and decoded Next selection pass. The Rust/C dependency builds with Windows
+MSVC and ARMv7 GNU. A linked interpreter probe also verifies callback, heap-limit
+and interrupt behavior on native Windows and under ARMv7 user emulation.
+Full native execution across all six supported platforms
+remains an acceptance item; these dependency builds do not establish it.
+See UCU-02 evidence and the [selector reference](../reference/javascript-audio-selectors.md).
 
 ## Context
 
@@ -25,11 +37,11 @@ do not execute this JavaScript contract. No existing ADR accepts its omission.
 
 ## Decision
 
-Propose an embedded QuickJS interpreter through `rquickjs`, contained within
+Use an embedded QuickJS interpreter through `rquickjs`, contained within
 `ersatzrs-infra` behind a provider-independent audio-selection adapter. Evaluate
-the documented 0.14 API first; pin a compatible version in Cargo.lock only after
-license, MSRV and platform verification. No Node executable, external service,
-new workspace crate or graphics renderer is introduced.
+the documented 0.14 API and pin the compatible version in Cargo.lock after
+license, MSRV and the Windows/ARMv7 build-risk checks. No Node executable,
+external service, new workspace crate or graphics renderer is introduced.
 
 Preserve the existing script paths, function names, positional arguments,
 metadata GUID normalization (`://` to `_`) and audio fields `index`, `channels`,
@@ -61,6 +73,9 @@ Explicit portability adaptations requiring this decision:
 ## Consequences
 
 The embedded engine adds a C build dependency and transitive Rust dependencies.
+The published 0.14.0 source includes bindings for all six target triples; local
+Windows MSVC and ARMv7 GNU dependency builds pass. This resolves the initial
+binding/build uncertainty, without claiming six-platform runtime acceptance.
 `rquickjs` documents memory limits and interrupt callbacks, but its platform
 matrix does not establish all six ErsatzRS targets: ARMv7 needs explicit proof,
 and Windows MSVC is described as experimental. Verify these two build risks
@@ -68,7 +83,7 @@ before treating the dependency choice as viable. The existing program/platform
 acceptance retains all six native targets; record which builds and native
 fixture runs are proven in the owning milestone. Missing platform evidence
 cannot be relabeled success or silently disable the feature on that target.
-This proposal does not move hosted CI ahead of the authorized UCU-03 boundary.
+This decision does not move hosted CI ahead of the authorized UCU-03 boundary.
 
 Before row acceptance, prove movie and episode argument shapes, GUID mapping,
 custom/pin precedence, missing/null/throw/invalid-index fallback, bounded loops,
@@ -76,8 +91,7 @@ allocation failure, cancellation, and unchanged source audio/subtitle selection.
 Decode a Next stream where JavaScript chooses the non-default audio track.
 Update runtime health/documentation for selector loading/execution failures
 without logging script contents, private metadata or credentials. Keep UCU-02
-and the row pending until their required evidence exists. No new dependency or
-runtime implementation is authorized by the Proposed status alone.
+and the row pending until their required evidence exists. The maintainer authorized this decision and its implementation on 2026-09-23.
 
 ## Alternatives Considered
 

@@ -235,6 +235,24 @@ async fn start_playback_preview(
             content_start_time: Utc::now(),
         })
         .await;
+    let selected_audio_stream_index = match selected_audio_stream_index {
+        Some(index) => Some(index),
+        None => {
+            ersatzrs_infra::audio_script::select(
+                &state.pool,
+                &selector_channel,
+                media_item_id,
+                media.media_version_id,
+                ersatzrs_infra::audio_script::AudioScriptPreferences {
+                    language: preferred_audio_language.as_deref(),
+                    title: selector_channel.preferred_audio_title.as_deref(),
+                    streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                },
+                &source_audio_streams,
+            )
+            .await
+        }
+    };
     let selected_audio_stream_index = selected_audio_stream_index.or_else(|| {
         select_playback_audio_stream_index(
             &source_audio_streams,
@@ -469,6 +487,24 @@ async fn start_channel_playback_preview(
             rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
         )
     };
+    let selected_audio_stream_index =
+        if selected_audio_stream_index.is_none() && !active.has_pinned_stream_selection {
+            ersatzrs_infra::audio_script::select(
+                &state.pool,
+                &channel,
+                active.media_item_id,
+                active.media_version_id,
+                ersatzrs_infra::audio_script::AudioScriptPreferences {
+                    language: preferred_audio_language.as_deref(),
+                    title: preferred_audio_title,
+                    streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                },
+                &source_audio_streams,
+            )
+            .await
+        } else {
+            selected_audio_stream_index
+        };
     let selected_audio_stream_index = selected_audio_stream_index.or_else(|| {
         select_playback_audio_stream_index(
             &source_audio_streams,

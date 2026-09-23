@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **149 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **148 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **20**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **21**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -153,6 +153,29 @@ silence track. Wire-model renames consolidate shared and per-track sources.
   governed by ADR 0095. Row 20 is Port; no new deviation or Next exemption is
   introduced. Full-window and platform acceptance remain owned by UCU-02.
 
+## Row 21 source map: audio selection during Next publication
+
+Upstream `e6496bbc` (#2866) changes six files: the Next sync handler, default
+stream-selector interface/implementation, native caller, selector tests and
+scanner fake. It calls custom YAML selection before the default selector while
+building Next items, retaining existing indexes and item/channel preferences.
+The new logging flag suppresses routine selection diagnostics during publication.
+There is no schema, UI, changelog or FFmpeg argument-builder change.
+
+The default selector also invokes movie/episode JavaScript callbacks. Existing
+Rust YAML/language selection alone therefore cannot cover this row. The source
+map includes `FFmpegStreamSelector`, `ScriptEngine`, `StreamSelectorRepository`
+and both upstream resource scripts. The new `infra/audio_script.rs` adapter
+preserves callback metadata and uses the accepted ADR 0096 runtime constraints.
+Native HLS/MPEG-TS, troubleshooting and Next call it only after stronger audio
+choices, with ordinary selection as fallback. Native transport remaps selected
+indexes by identity when an interval source changes its stream layout.
+Next's existing explicit track source, seek and subtitle projection remain intact.
+
+The row is an adaptation under ADR 0096; unsupported CLR interop and the
+statement-counter replacement are accepted decisions. UCU-02 owns local proof;
+full native execution on all six platforms remains an explicit program gate.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -189,7 +212,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 18 | `f2706f32` | feat: support playout json on windows (#2864) | Adapt (ADR 0095) | upstream-baseline-catch-up | `test(infra): verify Next publication on Windows` | ucu-02; accepted atomic-file publication passes seven native Windows/NTFS tests, including sharing-denial recovery, and six Linux tests. Full Windows Next playback remains open. See ucu-02 evidence. |
 | 19 | `9882b008` | tweak streaming engine editor | Covered | channels-admin-ui | `docs(web): reconcile Next editor mode normalization` | ucu-02; existing editor immediately selects HLS Segmenter for Next and retains server-side no-JS normalization. Unchanged row-11 Chromium/Firefox evidence covers the setter behavior. See ucu-02 evidence. |
 | 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | Port | upstream-baseline-catch-up | `feat(infra): resolve Next media at playback time` | ucu-02; provider-scoped paths, exact file binding, current credentials, bounded Plex failover and Range-preserving media opens. Decoded three-provider/failover proof and Next HTTP/preview smoke pass. See ucu-02 evidence. |
-| 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | | | | ucu-02; provisional: Next behavior triage. |
+| 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | Adapt (ADR 0096) | upstream-baseline-catch-up | `feat(infra): embed bounded JavaScript audio selectors` | ucu-02; shared native/Next callbacks, metadata and YAML/pin precedence; bounded execution and fallback tests, decoded alternate audio, native/Next smoke. Full platform acceptance remains open. See ucu-02 evidence. |
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | | | | ucu-02; provisional: Port candidate. |
 | 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | | | | ucu-02; provisional: Next behavior triage. |
 | 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | | | | ucu-02; provisional: Next behavior triage. |

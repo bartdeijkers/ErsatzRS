@@ -1355,6 +1355,9 @@ pub enum TextKey {
     AddonListsCombinedDiskWarningGb,
     AddonListDiskWarningHelp,
     AddonListDiskWarningFailed,
+    JavascriptAudioSelectionTitle,
+    JavascriptAudioSelectionHealthy,
+    JavascriptAudioSelectionFailures,
     AddonListDiskUsageTitle,
     AddonListDiskUsageBrief,
     AddonListDiskUsageUnavailable,
@@ -3323,6 +3326,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonListsCombinedDiskWarningGb,
     TextKey::AddonListDiskWarningHelp,
     TextKey::AddonListDiskWarningFailed,
+    TextKey::JavascriptAudioSelectionTitle,
+    TextKey::JavascriptAudioSelectionHealthy,
+    TextKey::JavascriptAudioSelectionFailures,
     TextKey::AddonListDiskUsageTitle,
     TextKey::AddonListDiskUsageBrief,
     TextKey::AddonListDiskUsageUnavailable,
@@ -4482,6 +4488,9 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
+        "JavaScript Audio Selection" => {
+            text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
+        }
         "Add-on list disk usage" => text(language, TextKey::AddonListDiskUsageTitle).to_owned(),
         _ => title.to_owned(),
     }
@@ -4632,6 +4641,23 @@ fn tool_maintenance_health_message(language: UiLanguage, message: &str) -> Strin
         .join("; ")
 }
 
+fn javascript_audio_health_message(language: UiLanguage, message: &str, brief: &str) -> String {
+    if brief == "No selector failures recorded" {
+        return text(language, TextKey::JavascriptAudioSelectionHealthy).to_owned();
+    }
+    message
+        .split_whitespace()
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map_or_else(
+            || message.to_owned(),
+            |count| {
+                text(language, TextKey::JavascriptAudioSelectionFailures)
+                    .replace("{count}", &count.to_string())
+            },
+        )
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -4643,6 +4669,9 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if title == "JavaScript Audio Selection" {
+        return javascript_audio_health_message(language, displayed_message, brief_message);
+    }
     if title == ADDONS_HEALTH_TITLE {
         return tool_maintenance_health_message(language, displayed_message);
     }
@@ -5348,6 +5377,40 @@ mod tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn javascript_audio_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, "JavaScript Audio Selection");
+            assert_eq!(
+                title,
+                text(language, TextKey::JavascriptAudioSelectionTitle)
+            );
+            let healthy = health_check_message_text(
+                language,
+                "JavaScript Audio Selection",
+                "No failures",
+                "No selector failures recorded",
+            );
+            assert_eq!(
+                healthy,
+                text(language, TextKey::JavascriptAudioSelectionHealthy)
+            );
+            let warning = health_check_message_text(language, "JavaScript Audio Selection", "12 JavaScript audio-selector loading or execution failures recorded since startup.", "JavaScript audio selection fell back");
+            assert!(warning.contains("12"));
+            assert!(!warning.contains("{count}"));
+            if language != UiLanguage::English {
+                assert_ne!(
+                    healthy,
+                    text(
+                        UiLanguage::English,
+                        TextKey::JavascriptAudioSelectionHealthy
+                    )
+                );
             }
         }
     }

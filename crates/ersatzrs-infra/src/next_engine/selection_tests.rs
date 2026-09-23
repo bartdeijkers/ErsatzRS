@@ -312,3 +312,141 @@ async fn custom_audio_selection_precedes_preferences_but_never_explicit_pins() {
         Some(2)
     );
 }
+
+// Called only by the isolated real-engine child, whose data/state directories
+// are explicitly redirected. Never mutate process environment in async tests.
+pub(crate) async fn assert_javascript_precedence() {
+    use ersatzrs_domain::ChannelStreamSelectorMode;
+    let pool = fixture_pool().await;
+    let mut channel = Channel {
+        preferred_audio_language_code: Some("eng".into()),
+        ..Default::default()
+    };
+    assert_direct_audio_policy(&pool, &channel).await;
+    let mut item = item();
+    let projected = project(&pool, &channel, &item).await.unwrap();
+    assert_eq!(
+        projected.tracks.unwrap().audio.unwrap().stream_index,
+        Some(2)
+    );
+
+    let folder = crate::file_system_layout::channel_stream_selectors_folder();
+    tokio::fs::create_dir_all(&folder).await.unwrap();
+    tokio::fs::write(
+        folder.join("fixture.yml"),
+        "items:\n  - audio_language: [eng]\n",
+    )
+    .await
+    .unwrap();
+    channel.stream_selector_mode = ChannelStreamSelectorMode::Custom;
+    channel.stream_selector = Some("fixture.yml".into());
+    let projected = project(&pool, &channel, &item).await.unwrap();
+    assert_eq!(
+        projected.tracks.unwrap().audio.unwrap().stream_index,
+        Some(1),
+        "YAML must precede JavaScript"
+    );
+
+    item.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: None,
+    });
+    let projected = project(&pool, &channel, &item).await.unwrap();
+    assert_eq!(
+        projected.tracks.unwrap().audio.unwrap().stream_index,
+        Some(2),
+        "pins must precede YAML"
+    );
+    item.pinned_stream_selection
+        .as_mut()
+        .unwrap()
+        .audio_stream_index = None;
+    let projected = project(&pool, &channel, &item).await.unwrap();
+    assert!(
+        matches!(
+            projected.tracks.unwrap().audio.unwrap().source,
+            Some(wire::Source::Lavfi { .. })
+        ),
+        "pinned silence must precede all selectors"
+    );
+    item.pinned_stream_selection = None;
+    channel.stream_selector = None;
+    let script_path =
+        crate::file_system_layout::scripts_folder().join("audio-stream-selector/movie.js");
+    let original = tokio::fs::read(&script_path).await.unwrap();
+    for script in [
+        "function selectMovieAudioStreamIndex(){return null}",
+        "function selectMovieAudioStreamIndex(){throw Error('fixture')}",
+        "function selectMovieAudioStreamIndex(){return 0}",
+        // A finite wait keeps this regression bounded even if a dependency
+        // accidentally enables blocking Atomics in a future update.
+        "function selectMovieAudioStreamIndex(){Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,2000);return 2}",
+    ] {
+        tokio::fs::write(&script_path, script).await.unwrap();
+        let projected = project(&pool, &channel, &item).await.unwrap();
+        assert_eq!(
+            projected.tracks.unwrap().audio.unwrap().stream_index,
+            Some(1),
+            "failed or invalid callbacks must use language fallback"
+        );
+    }
+    tokio::fs::write(&script_path, original).await.unwrap();
+}
+
+async fn assert_direct_audio_policy(pool: &DbPool, channel: &Channel) {
+    use crate::audio_script::{select, AudioScriptPreferences};
+    let audio = load_source_audio_streams(pool, 100).await.unwrap();
+    for (language, title, mode, expected) in [
+        (None, None, StreamingMode::HttpLiveStreamingDirect, None),
+        (
+            Some(" "),
+            Some(" "),
+            StreamingMode::HttpLiveStreamingDirect,
+            None,
+        ),
+        (
+            Some("eng"),
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            Some(2),
+        ),
+        (
+            Some("und"),
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            Some(2),
+        ),
+        (
+            None,
+            Some("English"),
+            StreamingMode::HttpLiveStreamingDirect,
+            Some(2),
+        ),
+        (
+            None,
+            None,
+            StreamingMode::HttpLiveStreamingSegmenter,
+            Some(2),
+        ),
+    ] {
+        assert_eq!(
+            select(
+                pool,
+                channel,
+                10,
+                100,
+                AudioScriptPreferences {
+                    language,
+                    title,
+                    streaming_mode: mode,
+                },
+                &audio
+            )
+            .await,
+            expected,
+            "raw HLS Direct must retain all audio until an effective preference selects one track"
+        );
+    }
+}

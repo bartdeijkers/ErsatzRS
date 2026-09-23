@@ -2,56 +2,46 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..ee038ba4 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095']
+adr        = ['0095', '0096']
 summary    = """
-The ledger registers 169 commits: twenty reconciled and 149 pending,
-tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
-HDHomeRun repository-link correction and channel-only Next packaging are ported,
-with checksum/license/provenance, six-RID artifact and Docker startup evidence.
-UCU-01 owns the evidence for its reconciled tooling and release-note rows.
-UCU-02 is In progress: row 11 ports persisted engine selection, retained native
-defaults, Next mode normalization and the localized SSR editor. Migration,
-repository/application and Chromium/Firefox tests pass, including no-JS forms.
-Row 12 menu bindings are Covered by browser regressions. Row 13 is Adapt (ADR 0095): wire types,
-executable discovery, atomic publication, profile mapping and managed-process
-startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
-audio and burned external subtitle. Persisted selection proves preference precedence, exact pins and silence. Locked schedule reads preserve mirror offsets and one media binding per item. Per-channel publication
-serializes reads and replacement, including cancellation of the awaiting task.
-Host startup/rebuild shares publisher ownership and retries busy source locks. Provider refresh, graphics,
-complete endpoint and platform playback acceptance remain open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
-expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
-shared capacity, registry/output cleanup and rebuild notification wiring are now
-connected. Next previews use the browser-compatible profile override with separate
-capacity/output cleanup and shared rebuild publication. Normal AC3 and preview AAC retain selected tracks and the stored profile.
-Linux HTTP lifecycle smoke and dedicated Next checks pass locally. Continue publishes appended schedules to dependent Next
-channels and previews while preserving native continuity;
-authenticated browser and platform proof remain open. Runtime/profile health
-checks cover enabled Next channels. Row 20 ports scoped local/HTTP media-server
-inputs with decoded failover and real-host HTTP smoke proof. Remote
-Stream/add-on and graphics inputs remain refused.
-The first consolidated CI is authorized after
-UCU-03 smoke, per the maintainer amendment. Row 14 is Covered: existing mirror
-offsets, post-save notifications and executable-relative discovery match the
-upstream corrections; the channel-save regression covers normal and preview
-consumers without rebuilding persisted schedules. Row 15 is Covered by existing
-macOS RID mapping and executable-adjacent archive staging; packaging fixtures
-pass, while active macOS release/native-runtime proof remains open. Row 16 is
-Covered: explicit upload shells already prevent the upstream Windows shell bug.
-Row 17 fixes negative mirror offsets in channel upsert and verifies consistent
-XMLTV actual/guide-window projection without changing source items. Row 18
-verifies atomic Next JSON publication on native Windows/NTFS (seven tests);
-full Windows Next playback remains open. Row 19 editor mode normalization is
-Covered by unchanged row-11 browser evidence.
-UCU-01 and UCU-02 own their evidence;
-docs/automation/parity-baseline.md holds the current pin. The live ledger is
-plans/upstream-catch-up.md; refresh the upstream target and append new rows
-each run. Substantive Codex review replaces Claude review by maintainer decision. The
-bootstrap is accepted: ucu-00 and its AMM-N-03 prerequisite are Complete.
-Milestones own acceptance and evidence; behavioral
-debt stays in each owning feature. AMM-N-03 remains a prerequisite and teletext
-p9a-01 now also depends on ucu-09. ADR 0095 is Accepted for Next as an optional second engine, alongside the
-native pipeline. Packaging, persisted engine selection and local-video host supervision are
-implemented; complete Next playback and platform acceptance remain open. No Next-specific exemption applies.
+The ledger registers 169 commits: twenty-one reconciled and 148 pending,
+tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
+Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
+links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
+and Docker startup have evidence in that milestone.
+
+UCU-02 is In progress. Rows 11-20 cover persisted optional-engine selection,
+retained native defaults, mode normalization and a localized SSR editor with
+Chromium/Firefox and no-JS proof. The optional Next adapter has atomic publication,
+profile mapping, supervised startup/stop, HLS registry/admission/idle cleanup,
+preview isolation and continued schedule publication for channels and mirrors.
+Decoded Linux playback preserves selected alternate audio and external subtitles;
+exact pins/silence, selected versions/files and mirror timing have regression
+coverage. Atomic publication has native Windows/NTFS proof. Media-server inputs
+use scoped local paths or capability-protected media opens with current provider
+credentials, verified Plex failover, Range handling and redirect isolation.
+
+Row 21 is Adapt (ADR 0096), explicitly accepted by the maintainer. Shared bounded
+JavaScript movie/episode callbacks now feed native playback, troubleshooting and
+Next projection after exact pins and YAML selection. Metadata/GUID contracts,
+valid audio-only results, fallback, deadline/heap/stack limits and cancellation
+are tested. Decoded Next playback proves JavaScript can choose the non-default
+track. Native/Next HTTP smoke passes; TSDuck passes its 64 applicable checks,
+while its HLS Direct branch produced no segments and remains unproven by that run.
+The interpreter compiles for Windows MSVC/ARMv7 and linked runtime probes pass
+on native Windows and ARMv7 emulation. Full six-platform application acceptance
+remains open; ADR 0096 stays Partial and its platform evidence debt remains visible.
+
+Next action is ordered row 22 (7e38297d), Classic fallback filler. Remote
+Stream/add-on and graphics integration belong to later rows and remain refused
+where unsupported. Complete Next endpoint/browser/platform and full-window
+acceptance are not inferred from focused proof. ADR 0095 retains Next as an
+optional second engine alongside native playback; no Next-specific exemption
+applies. The first consolidated CI follows UCU-03 smoke, as authorized. Only
+reviewed local row commits are made before that boundary. Direct Codex review
+replaces Claude review. Milestones own acceptance and evidence; the pin document
+is authoritative and the ledger target is refreshed each run. Teletext p9a-01
+also depends on ucu-09.
 """
 
 [[debt]]
@@ -72,8 +62,8 @@ evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now c
 
 [[debt]]
 id          = 'ucu-javascript-audio-selector-parity'
-description = 'UCU-02 row 21 invokes the default selector, including movie.js and episode.js hooks. ErsatzRS lacks those JavaScript hooks; language/title and custom YAML selection alone do not close the row.'
+description = 'ADR 0096 implements bounded movie.js and episode.js audio selection for native playback and Next. Full native execution evidence across all six supported platforms remains open.'
 discovered  = '2026-09-23'
 resolved    = false
 adr         = '0096'
-evidence    = 'Source review of e6496bbc, FFmpegStreamSelector, ScriptEngine, StreamSelectorRepository and upstream sample scripts confirms the missing runtime and metadata callback contract. ADR 0096 proposes a bounded embedded engine with explicit CLR and statement-budget adaptations; maintainer decision is required by catch-up step 4. The pin remains at row 20. UCU-02 owns the acceptance work.'
+evidence    = 'Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'

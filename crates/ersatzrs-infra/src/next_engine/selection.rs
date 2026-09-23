@@ -67,7 +67,16 @@ pub async fn project_item(
         } else {
             None
         };
-    let audio_index = selected_audio(item, channel, &preferences, custom.as_ref(), &audio_streams)?;
+    let audio_index = selected_audio_with_script(
+        pool,
+        channel,
+        item,
+        media_version_id,
+        &preferences,
+        custom.as_ref(),
+        &audio_streams,
+    )
+    .await?;
     let subtitle = selected_subtitle(
         pool,
         channel,
@@ -185,6 +194,54 @@ fn invalid(message: &str) -> RepositoryError {
     RepositoryError::Decode {
         kind: "Next item stream selection",
         value: message.to_owned(),
+    }
+}
+
+async fn selected_audio_with_script(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+    media_version_id: i64,
+    preferences: &PlaybackLanguagePreferences,
+    custom: Option<&CustomStreamSelection>,
+    audio_streams: &[SourceAudioStream],
+) -> Result<Option<usize>> {
+    let script_audio = if item.pinned_stream_selection.is_none()
+        && custom
+            .as_ref()
+            .and_then(|selection| selection.audio_stream_index)
+            .is_none()
+    {
+        let title = item
+            .preferred_audio_title
+            .as_deref()
+            .or(channel.preferred_audio_title.as_deref());
+        let language = preferences.audio_language(
+            item.preferred_audio_language_code.as_deref(),
+            channel.preferred_audio_language_code.as_deref(),
+            title,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        );
+        crate::audio_script::select(
+            pool,
+            channel,
+            item.media_item_id,
+            media_version_id,
+            crate::audio_script::AudioScriptPreferences {
+                language: language.as_deref(),
+                title,
+                streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+            },
+            audio_streams,
+        )
+        .await
+    } else {
+        None
+    };
+    if script_audio.is_some() {
+        Ok(script_audio)
+    } else {
+        selected_audio(item, channel, preferences, custom, audio_streams)
     }
 }
 

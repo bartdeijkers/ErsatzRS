@@ -1474,6 +1474,32 @@ impl HlsSessionWorker {
                     }
                 }
             };
+            let script_audio = if !active.has_pinned_stream_selection
+                && custom_selection
+                    .as_ref()
+                    .and_then(|selection| selection.audio_stream_index)
+                    .is_none()
+            {
+                crate::audio_script::select(
+                    &pool,
+                    &channel_for_streams,
+                    active.media_item_id,
+                    active.media_version_id,
+                    crate::audio_script::AudioScriptPreferences {
+                        language: preferred_audio_language.as_deref(),
+                        title: preferred_audio_title,
+                        streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                    },
+                    if interval_playback.is_some() {
+                        &previous_audio_streams
+                    } else {
+                        &source_audio_streams
+                    },
+                )
+                .await
+            } else {
+                None
+            };
             let mut audio_selection = if active.has_pinned_stream_selection {
                 active
                     .audio_stream_index
@@ -1487,6 +1513,7 @@ impl HlsSessionWorker {
                 custom_selection
                     .as_ref()
                     .and_then(|selection| selection.audio_stream_index)
+                    .or(script_audio)
                     .or_else(|| {
                         select_playback_audio_stream_index(
                             &source_audio_streams,
@@ -1501,6 +1528,7 @@ impl HlsSessionWorker {
             };
             if interval_playback.is_some()
                 && (active.has_pinned_stream_selection
+                    || script_audio.is_some()
                     || custom_selection
                         .as_ref()
                         .is_some_and(|selection| selection.audio_stream_index.is_some()))

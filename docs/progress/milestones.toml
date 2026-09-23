@@ -6904,6 +6904,66 @@ or implementation has been added; row 21 and the pin remain unchanged.
 The proposed ADR and tests form an authorized local engineering checkpoint,
 not an upstream row landing or accepted architecture decision.
 
+2026-09-23 row 21 implementation after maintainer acceptance of ADR 0096:
+The maintainer explicitly accepted the bounded embedded JavaScript design and
+requested implementation. Pin/ledger/upstream HEAD agree at row 20 before work;
+fresh origin/main remains ee038ba4 and all 169 ledger SHA/subjects match.
+The shared infra adapter uses pinned rquickjs 0.14.0 with std only (MIT, MSRV
+1.87), the engine allocator, four-second admission/execution deadlines, a
+4,000,000-byte heap, 256 KiB stack/script/serialized-input limits and two workers.
+The worker retains its permit through real VM shutdown; caller cancellation
+interrupts execution. No CLR, filesystem/network/process/module-loader APIs
+are exposed. log accepts but discards arguments; errors use fixed diagnostics.
+Movie/episode metadata, GUID normalization and original audio codec/forced
+flags feed the upstream positional callbacks. Exact pins and YAML audio
+selection precede JavaScript; valid audio-only results precede built-in fallback.
+Native HLS/MPEG-TS and troubleshooting previews use the same adapter as Next.
+Health tracks redacted loading/execution failures since startup, with new text
+in all nine cultures. The selector reference explains paths, precedence,
+callbacks, limits and unsupported CLR usage. No new FFmpeg argument/filter
+shape, subtitle algorithm or provider transport behavior is introduced.
+Fifteen focused engine/metadata/selection/health-registration tests pass
+(0.469 seconds), including real timeout/cancellation capacity release and
+heap rejection before the deadline. Eighteen i18n tests pass (0.020 seconds).
+The isolated real-Next test passes (1.757 seconds): English preference versus
+JavaScript-selected Dutch 880 Hz decoded audio, unchanged burned subtitle,
+real YAML/pin/silence precedence and null/throw/invalid-index fallback.
+Dependency audit passes advisories, licenses, bans and sources. Windows MSVC
+and ARMv7 GNU compile the Rust/C dependency. Linked interpreter probes pass
+callback, heap-limit and interruption checks on native Windows and ARMv7 user
+emulation. This is not native six-platform application acceptance; that remains
+visible in the ADR/parity debt and existing program/platform gates.
+Final all-target Clippy passes for infra and web; the new health-message routing
+was extracted into a small helper to satisfy the existing function-size lint.
+Hydration lint has no new findings; architecture lint and formatting pass.
+Native smoke returns MPEG-TS data and HLS playlists/segments. Next smoke proves
+unauthorized media access is 401, MPEG-TS is refused with 404, normal/preview HLS
+segments contain 656872/650668 bytes, and both sessions disappear after idle.
+TSDuck reports GATE PASS (64 checks, zero failures), with no TS/HLS Segmenter
+continuity or clock breaks and a maximum audio-pip gap deviation of 10 ms.
+Its HLS Direct branch produced no segments within 20 seconds and was not covered;
+do not cite that result as HLS Direct acceptance. Full-window proof remains open.
+Direct Codex review checked audio-only index validation, original codec/forced
+metadata, exact silence and YAML precedence, fresh-transport index remapping,
+owned worker inputs, permit lifetime and timeout/cancellation. Resource failures
+are counted once at the awaiting boundary; cancellation does not fabricate a
+script failure. A final source review found the raw-HLS-Direct all-audio exception:
+without an effective language/title preference the JavaScript hook must not run.
+The adapter now receives the actual transport mode and resolved preferences.
+The final focused set passes 44 tests (2.179 seconds), including actual script
+bypass for raw Direct without preferences, explicit-language/title/original
+choices, existing Direct command/playlist regressions, current i18n routing,
+resource/cancellation/metadata tests and the decoded Next stream. The remaining
+Segmenter/Next paths retain their previous mode/preference inputs, so their
+smoke evidence is reused. The strengthened real-engine fixture also verifies
+that blocking Atomics.wait is rejected and falls back (1.747 seconds); the
+pinned engine starts with can_block=false and its regexp engine polls interrupts.
+The build cache exceeded 40 GiB during validation and was cleaned as required;
+no target-directory override was introduced.
+Row 21 lands as Adapt (ADR 0096), with pin/ledger advancement together. Full
+native six-platform execution remains an explicit program gate, not a waiver.
+No push or hosted CI; next ordered row is 22 (7e38297d).
+
 """
 
 [[milestone]]

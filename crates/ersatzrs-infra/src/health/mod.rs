@@ -19,19 +19,20 @@ mod checks;
 
 use checks::{
     AddonListDiskUsageHealthCheck, AddonMediaListHealthCheck, AddonPlatformHealthCheck,
-    ArtworkCardinalityHealthCheck, ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck,
-    DolbyVisionHealthCheck, DowngradeHealthCheck, DynamicTextGraphicsHealthCheck,
-    EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
-    FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
-    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
-    HlsDeliveryHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
-    MirrorChannelHealthCheck, MovieMetadataHealthCheck, NextRuntimeHealthCheck,
-    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
-    RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
-    ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    ArtworkCardinalityHealthCheck, AudioScriptHealthCheck, ClassicPlayoutStateHealthCheck,
+    DirtyMigrationHealthCheck, DolbyVisionHealthCheck, DowngradeHealthCheck,
+    DynamicTextGraphicsHealthCheck, EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck,
+    FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck,
+    FFmpegVersionHealthCheck, FileNotFoundHealthCheck, HardwareAccelerationHealthCheck,
+    HardwareGraphHealthCheck, HlsDeliveryHealthCheck, LocalTelevisionIdentityHealthCheck,
+    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
+    NextRuntimeHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
+    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
+    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, ScanRefreshStateHealthCheck,
+    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -55,7 +56,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 41] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 42] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -67,6 +68,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 41] = [
     "FFmpeg Reports",
     "Dynamic Text Graphics",
     "Next Runtime Availability",
+    "JavaScript Audio Selection",
     "Hardware Acceleration",
     "Hardware Graph Capability",
     "HLS Live Delivery",
@@ -235,6 +237,7 @@ fn registered_health_checks(
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
         Box::new(NextRuntimeHealthCheck::new(pool.clone())),
+        Box::new(AudioScriptHealthCheck),
         Box::new(HardwareAccelerationHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),

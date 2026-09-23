@@ -33,6 +33,7 @@ and [release bundle reference](reference/release-bundle.md).
 - [Remote Stream playlist manifest reference](reference/remote-stream-playlist-manifests.md)
 - [Connect a Jellyfin server](how-to/connect-a-jellyfin-server.md)
 - [Media source support](reference/media-source-support.md)
+- [JavaScript audio selectors](reference/javascript-audio-selectors.md)
 
 ## Extend ErsatzRS with add-ons
 

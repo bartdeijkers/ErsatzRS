@@ -720,3 +720,91 @@ async fn assert_preview_sessions(host: &std::sync::Arc<host::NextHost>, request:
     assert_eq!(active_transcode_snapshot(2).active, 0);
     assert!(!request.output.exists());
 }
+
+#[tokio::test]
+#[ignore = "requires real Next and FFmpeg 9; uses an isolated child application-data directory"]
+async fn real_next_javascript_selects_nondefault_audio() {
+    let root = tempfile::tempdir().unwrap();
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "next_engine::process::runtime_tests::fixture_child_javascript_audio",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(crate::file_system_layout::APP_DATA_DIR_ENV_VAR, root.path())
+        .env(
+            crate::file_system_layout::APP_STATE_DIR_ENV_VAR,
+            root.path().join("state"),
+        );
+    // Check the harness actually selected the child; an incorrect name otherwise
+    // silently succeeds with zero tests.
+    let output = tool(command).await;
+    let output = String::from_utf8(output).unwrap();
+    assert!(
+        output.contains("1 passed"),
+        "child fixture did not run: {output}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "child of real_next_javascript_selects_nondefault_audio; never run directly"]
+async fn fixture_child_javascript_audio() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let data = runtime_path(crate::file_system_layout::APP_DATA_DIR_ENV_VAR);
+    assert_eq!(crate::file_system_layout::app_data_folder(), data);
+    let scripts = data.join("scripts/audio-stream-selector");
+    tokio::fs::create_dir_all(&scripts).await.unwrap();
+    tokio::fs::write(scripts.join("movie.js"), "function selectMovieAudioStreamIndex(number,name,title,guids,languages,audio) { return audio.find(stream => stream.language === 'nld').index; }").await.unwrap();
+    selection::tests::assert_javascript_precedence().await;
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    tokio::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n",
+    )
+    .await
+    .unwrap();
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        video_bitrate: 1000,
+        video_buffer_size: 2000,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    };
+    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    // Built-in selection would choose the default 440 Hz English stream. Only
+    // JavaScript can cause the shared decoder assertion to observe 880 Hz Dutch.
+    sqlx::query(r#"UPDATE "Channel" SET "PreferredAudioLanguageCode" = 'eng'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let host = std::sync::Arc::new(host::NextHost::new(
+        pool,
+        locker,
+        root.path().join("playout"),
+    ));
+    assert_next_session(
+        &host,
+        host::NextStart {
+            channel_id: 1,
+            preview: false,
+            number: "1".into(),
+            executable: binary,
+            output: root.path().join("output"),
+            ffmpeg,
+            ffprobe,
+            replacements: Vec::new(),
+            idle_timeout: None,
+            deadline: Instant::now() + Duration::from_secs(30),
+        },
+        false,
+    )
+    .await;
+}
