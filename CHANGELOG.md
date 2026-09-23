@@ -98,7 +98,8 @@ release section when tagging a release.
   generation when sharing blocks replacement and allowing publication after release
   (upstream PR #2864).
   Add a separate Next engine check inside CI, with runtime provenance, decoded
-  playback tests and HTTP/preview smoke diagnostics.
+  playback tests and HTTP/preview smoke diagnostics. Use Python 3 explicitly
+  on Linux runners and propagate failures through diagnostic log pipelines.
   Remove the obsolete MySQL migration-directory build watch to prevent
   unnecessary recompilation on successive builds.
 

@@ -298,6 +298,9 @@ jobs:
 
   next_engine:
     name: Next engine
+    defaults:
+      run:
+        shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: fmt
     timeout-minutes: 45
@@ -333,7 +336,7 @@ jobs:
           fi
       - name: Stage Next and validated FFmpeg runtime
         run: |
-          python scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/next-engine/next-runtime.log
+          python3 scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/next-engine/next-runtime.log
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
           sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
           echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
@@ -349,7 +352,7 @@ jobs:
       - name: Collect Next diagnostics
         if: always()
         run: |
-          python - <<'PYCODE'
+          python3 - <<'PYCODE'
           import os, pathlib, shutil
           destination = pathlib.Path('ci-artifacts/next-engine')
           destination.mkdir(parents=True, exist_ok=True)

@@ -7788,6 +7788,23 @@ body bytes, HLS variant HTTP 200, and session playlist HTTP 200 with initial
 segments (ucu03-window-smoke.log). All local window gates are complete;
 authorized push and terminal exact-SHA CI remain pending. Existing CI successes
 belong to older commits and are not acceptance evidence for this candidate.
+
+The authorized candidate 79aedeba2c0bc4ebebffb811ae1079f309ab940c was pushed
+to origin/main; local HEAD, tracking reference and live remote agree. The first
+consolidated CI started automatically on this exact SHA:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/35875304077
+CI exposed a Next job setup failure before playback: the Linux runner has
+python3 but no python alias. Both staging and diagnostic collection used the
+missing alias. Corrected both calls to python3 and selected explicit Bash for
+the job so pipefail propagates failures through tee in staging, decoding and
+smoke. Workflow actionlint, six staging tests and a failing-pipeline propagation
+check pass. Real Python 3 staging also passes against the official develop
+artifact f2a981b (ucu03-next-ci-staging-proof.log); its archive digest and
+provenance are recorded by the staging script. This proves staging, not playback
+on that newer engine. Ordinary CI Test, Clippy, Format, Cargo deny and documentation checks
+are green; Chromium/Firefox remain pending. The corrected candidate still needs
+authorized push and terminal exact-SHA green CI. UCU-03 remains In progress;
+UCU-04 has not started.
 """
 
 [[milestone]]
