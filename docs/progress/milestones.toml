@@ -7646,7 +7646,7 @@ cache cleanup follows that gate and does not invalidate the recorded evidence.
 id         = 'ucu-03'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 637e6be8'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-02']
@@ -7664,7 +7664,82 @@ authorized this CI checkpoint on 2026-09-22; it must be green before closeout.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-23: UCU-02 local acceptance is Complete at a6f2e18b. Pin, row 31 and
+upstream checkout agree at 290f991b. Fresh fetch remains ee038ba4 and all 169
+ledger SHA/subjects match. Row 32 source audit identifies missing hourly and
+manual orphan actor/artwork cleanup; provider physical deletion and SQL logo
+lookup already exist and need regression coverage. Source map is in the plan.
+Implementation is in progress; row verdict/pin remain unchanged until checks
+and substantive review pass. No CI or push has started.
+
+2026-09-23 row 32 implementation checkpoint (pin remains row 31):
+Added database-only transactional 5,000-row cleanup batches with 100-ID chunks,
+actor-first order, original per-kind limit semantics and guarded deletes.
+Startup/hourly scheduling reuses persisted maintenance timestamps and records
+success only after cleanup completes. A bounded 16-entry manual queue and serial
+worker preserve asynchronous POST /api/maintenance/clean_artwork admission,
+signed limits/default 100,000, cancellation and host-owned shutdown. Health
+reuses exact predicates and reports aggregates with nine-language guidance.
+Existing provider physical actor deletion and Next SQL channel-logo resolution
+need no production changes; regressions cover shrinking/repeated real provider
+sync and selected logo wire projection. Source reviews found no actionable
+defect in database safety/cadence or manual production queue wiring.
+The five-crate focused check passes (ucu32-check.log). SQLite EXPLAIN confirms
+IX_Artwork_IsMetadataOrphan and covering IX_Actor_ArtworkId for the cleanup
+selection. Regression execution, scoped all-target Clippy and final review remain
+pending; no row verdict, pin advancement, commit, push or CI is claimed yet.
+
+Row 32 verification corrections: the initial test build exposed a new fixture
+using Jellyfin api_key instead of authorization_header; corrected without a
+product change. Fixture review also removed an impossible shared actor portrait
+(the schema requires unique Actor.ArtworkId) and disambiguated remote/library
+identities. The revised fixture proves preserved live portraits and cleanup of
+a removed actor's distinct portrait. Architecture lint found a deferred write
+transaction in the new cleanup helper; changed it to the existing begin_write
+BEGIN IMMEDIATE helper to serialize writers correctly before selection.
+Architecture lint now passes. The corrected focused test run is pending;
+no successful regression execution or row acceptance is claimed yet.
+
+Row 32 corrected regression evidence: ucu32-tests-fixed.log ran 83 selected
+checks: 82 passed and the Jellyfin-show fixture returned 404 because it used
+the Emby season route. The fixture now uses Jellyfin /Items with Season and
+parentId filters; all four real provider sync regressions pass in
+ucu32-provider-tests.log. The successful selection includes SQL ownership,
+limit/multi-batch/rollback, startup/hourly/failure retry, aggregate health,
+nine-culture localization, channel-logo projection, bounded admission, idle
+and active cancellation, and HTTP-to-worker-to-SQLite execution.
+All-target Clippy subsequently required Errors documentation, checked integer
+conversions, and extraction of the new Health message parser to keep the
+existing function within its line limit. These corrections retain the original
+limits and messages; final lint and focused conversion/localization checks
+remain pending. No row acceptance is claimed before those checks complete.
+
+Final scoped all-target Clippy now passes for app/core/infra/scheduler/web
+(ucu32-clippy-verified.log). No lint suppression or acceptance weakening was
+introduced. Cleanup-limit and both artwork-health localization regressions are
+being repeated after the checked-conversion/helper refactor; other successful
+row-32 tests retain unchanged behavior and inputs.
+
+2026-09-23 row 32 final reconciliation (a1036430; Port):
+The final seven cleanup-limit and both artwork-health localization regressions
+pass (ucu32-final-regressions.log), including all ten metadata owner kinds,
+channel logos/actor portraits, independent batch limits, multi-batch completion,
+nonpositive limits, repeated passes and both actor/artwork rollback cases.
+Combined with the earlier 82 successful selected checks and corrected four-provider
+run, all 83 selected behaviors are verified. The five-crate all-target Clippy
+passes; architecture lint confirms BEGIN IMMEDIATE and the application boundary.
+No source, threshold, assertion or acceptance requirement was weakened to pass.
+Substantive review covers reference safety, cancellation, queue/production wiring,
+scheduler retry cadence, real provider replacement and Next logo projection.
+Health changes are localized in every culture; no DOM/island interaction changed,
+and all-culture formatter regressions cover both artwork health messages.
+No production FFmpeg/Next pipeline or media-track selection changed in this row;
+window smoke remains required, with UCU-02 transport proof retained separately.
+The authorized commit `fix(infra): clean orphaned actor and artwork records`
+advances ledger and pin together to a1036430eebf1cd1082a393b63e933c83a0b1cd2;
+upstream checkout follows after commit. Thirty-two rows are reconciled and
+137 remain pending. Next is row 33 (54779e07); UCU-03 window gates, push and
+first consolidated exact-SHA CI remain open. No push or hosted CI yet.
 """
 
 [[milestone]]

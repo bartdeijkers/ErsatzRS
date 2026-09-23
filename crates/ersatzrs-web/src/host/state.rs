@@ -64,6 +64,7 @@ pub struct AppState {
     /// Storage-neutral application services built from native infrastructure
     /// ports by this composition root.
     pub application: Arc<ApplicationServices>,
+    pub artwork_cleanup: Arc<dyn ersatzrs_app::artwork_cleanup::ArtworkCleanupQueue>,
     pub repositories: Arc<Repositories>,
     pub pool: DbPool,
     pub database_backend: DatabaseBackend,
@@ -207,7 +208,10 @@ impl AppState {
             ersatzrs_infra::file_system_layout::data_folder().join("next-playouts"),
         ));
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
+        let (artwork_cleanup, _receiver) =
+            super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
         Self {
+            artwork_cleanup: Arc::new(artwork_cleanup),
             application,
             repositories,
             pool,

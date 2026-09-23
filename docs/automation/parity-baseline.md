@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `290f991ba70f3b99eea7909e0117d3efe0562c89` |
-| **Commit subject** | `prep for release v26.5.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/290f991ba70f3b99eea7909e0117d3efe0562c89 |
+| **Pinned commit** | `a1036430eebf1cd1082a393b63e933c83a0b1cd2` |
+| **Commit subject** | `fix: clean up orphan actor and artwork records (#2885)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a1036430eebf1cd1082a393b63e933c83a0b1cd2 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

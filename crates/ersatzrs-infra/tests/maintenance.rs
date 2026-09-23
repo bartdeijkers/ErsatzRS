@@ -133,8 +133,8 @@ async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
     .fetch_all(&pool)
     .await
     .unwrap();
-    // playout, library_refresh, provider_poll, cache_cleanup, search_index.
-    assert_eq!(rows.len(), 5);
+    // playout, library_refresh, provider_poll, cache_cleanup, artwork_cleanup, search_index.
+    assert_eq!(rows.len(), 6);
     assert!(rows
         .iter()
         .all(|row| !row.get::<String, _>("Value").is_empty()));
@@ -1216,4 +1216,47 @@ async fn maintenance_dispatch_marks_rejected_application_requests_failed() {
     assert_eq!(report.libraries_dispatched, 0);
     assert_eq!(report.libraries_failed, 1);
     assert_eq!(*library_scans.requests.lock().unwrap(), vec![43]);
+}
+
+#[tokio::test]
+async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure() {
+    let pool = common::test_db().await;
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+        )
+    };
+    sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('orphan')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let first = run().await.unwrap();
+    assert!(first.loops_ran.artwork_cleanup());
+    assert_eq!(first.artwork_cleanup.actors_deleted, 1);
+    sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('later orphan')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let second = run().await.unwrap();
+    assert!(!second.loops_ran.artwork_cleanup());
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = 'maintenance.loop.artwork_cleanup.last_run'"#)
+        .bind((Utc::now() - Duration::hours(2)).to_rfc3339())
+        .execute(&pool).await.unwrap();
+    sqlx::query(r#"CREATE TRIGGER "FailActorCleanup" BEFORE DELETE ON "Actor" BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END"#)
+        .execute(&pool).await.unwrap();
+    assert!(run().await.is_err());
+    sqlx::query(r#"DROP TRIGGER "FailActorCleanup""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let retry = run().await.unwrap();
+    assert!(retry.loops_ran.artwork_cleanup());
+    assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
 }

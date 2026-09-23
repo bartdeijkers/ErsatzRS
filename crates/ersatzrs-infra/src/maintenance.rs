@@ -5,8 +5,8 @@ use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
 use ersatzrs_core::maintenance::{
     scanner_library_refresh_interval, MaintenanceLoop, ScheduledLibraryScanRequester,
-    ScheduledScanRequestOutcome, CACHE_CLEANUP_INTERVAL, PLAYOUT_BUILD_INTERVAL,
-    PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
+    ScheduledScanRequestOutcome, ARTWORK_CLEANUP_INTERVAL, CACHE_CLEANUP_INTERVAL,
+    PLAYOUT_BUILD_INTERVAL, PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
 };
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
@@ -66,6 +66,8 @@ pub struct MaintenancePassReport {
     pub providers_polled: usize,
     /// Provider endpoints that responded with a reachable status.
     pub providers_reachable: usize,
+    /// Orphan actor/artwork database cleanup result.
+    pub artwork_cleanup: crate::artwork_cleanup::OrphanedArtworkCleanupReport,
     /// Cache cleanup result.
     pub cache_cleanup: CacheCleanupReport,
     /// Whether a search-index rebuild was dispatched.
@@ -86,6 +88,7 @@ impl MaintenanceLoopFlags {
     const PROVIDER_POLL: u8 = 1 << 2;
     const CACHE_CLEANUP: u8 = 1 << 3;
     const SEARCH_INDEX: u8 = 1 << 4;
+    const ARTWORK_CLEANUP: u8 = 1 << 5;
 
     fn set(&mut self, mask: u8) {
         self.0 |= mask;
@@ -117,6 +120,12 @@ impl MaintenanceLoopFlags {
     #[must_use]
     pub fn cache_cleanup(self) -> bool {
         self.contains(Self::CACHE_CLEANUP)
+    }
+
+    /// Whether orphan actor/artwork database cleanup ran.
+    #[must_use]
+    pub fn artwork_cleanup(self) -> bool {
+        self.contains(Self::ARTWORK_CLEANUP)
     }
 
     /// Whether the search-index dispatcher ran.
@@ -199,6 +208,13 @@ pub async fn run_maintenance_once(
         report.providers_reachable = provider_report.reachable;
         report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
         record_loop_run(&pool, "provider_poll", now).await?;
+    }
+
+    if loop_due(&pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
+        report.artwork_cleanup =
+            crate::artwork_cleanup::clean_orphaned_artwork(&pool, 100_000).await?;
+        report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
+        record_loop_run(&pool, "artwork_cleanup", now).await?;
     }
 
     if loop_due(&pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {

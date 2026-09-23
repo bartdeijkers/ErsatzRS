@@ -180,7 +180,7 @@ pub async fn run() {
         );
     }
 
-    let app_state = build_app_state(
+    let mut app_state = build_app_state(
         startup.pool,
         startup.database_backend,
         startup.schema_status,
@@ -191,6 +191,10 @@ pub async fn run() {
     )
     .await
     .expect("failed to build application state");
+
+    let (artwork_cleanup, artwork_cleanup_rx) =
+        super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
+    app_state.artwork_cleanup = std::sync::Arc::new(artwork_cleanup);
 
     scan_local_addon_repositories_on_startup(&app_state.pool).await;
 
@@ -226,6 +230,7 @@ pub async fn run() {
             pool: app_state.pool.clone(),
             playout_build_rx,
             scan_work_rx,
+            artwork_cleanup_rx,
             application: app_state.application.clone(),
             hls_sessions: app_state.hls_sessions.clone(),
         },

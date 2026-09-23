@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099']
 summary    = """
-The ledger registers 169 commits: thirty-one reconciled and 138 pending,
+The ledger registers 169 commits: thirty-two reconciled and 137 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 local gates prove repository links, channel-only packaging,
 provenance, six-RID staging and Docker startup.
@@ -121,3 +121,10 @@ discovered  = '2026-09-23'
 resolved    = true
 adr         = '0099'
 evidence    = 'UCU-02 owns the original zero-byte master/WebVTT failure, independent reproduction and maintainer acceptance of ADR 0099. The corrected input passes real Burn and Convert MPEG-TS, selected Dutch audio, positive HLS WebVTT and lifecycle smoke. Four Chromium/Firefox JS/no-JS cases and wrapper command/route regressions pass. All required UCU-02 local window gates now pass; this debt is resolved.'
+
+[[debt]]
+id          = 'row-32-orphan-artwork-maintenance'
+description = 'Port bounded hourly and manual orphan actor/artwork database cleanup, preserve referenced records, and expose aggregate health guidance.'
+discovered  = '2026-09-23'
+resolved    = true
+evidence    = 'UCU-03 owns row 32. Transactional cleanup, hourly cadence, manual queue and aggregate localized health are implemented. Focused database, real provider refresh, Next logo projection, HTTP-to-worker, shutdown, cadence and localization regressions pass, with scoped all-target Clippy and substantive review. Full UCU-03 window gates remain open.'

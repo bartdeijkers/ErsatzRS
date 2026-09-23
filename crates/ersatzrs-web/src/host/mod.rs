@@ -1,4 +1,5 @@
 pub mod addons;
+pub mod artwork_cleanup;
 pub mod assets;
 pub mod bootstrap;
 pub mod channels;

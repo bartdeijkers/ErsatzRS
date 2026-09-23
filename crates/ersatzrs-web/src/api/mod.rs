@@ -8,6 +8,7 @@ pub mod collections;
 pub mod decos;
 pub mod ffmpeg_profiles;
 pub mod filler;
+pub mod maintenance;
 pub mod media_actions;
 pub mod media_sources;
 pub mod playlists;

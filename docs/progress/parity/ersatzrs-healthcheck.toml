@@ -41,6 +41,10 @@ and projected show, season, and episode count mismatches without disclosing
 paths or provider identities. It links operators to the repaired television
 projection invariant while leaving distinct variants visible and intact.
 
+UCU-03 row 32 adds an aggregate-only Artwork Orphans check using the cleanup
+predicates, with hourly/manual guidance in all nine cultures. Focused aggregate, cleanup-recovery and all-culture tests pass; evidence
+belongs to UCU-03.
+
 Remote Stream and add-on-list health applies liveness, inclusion, and
 publication filters so valid live entries and retained excluded draft state do
 not inflate the actionable warning count.

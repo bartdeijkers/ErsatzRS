@@ -200,6 +200,11 @@ pub fn spawn_background_tasks(
     shutdown: CancellationToken,
 ) -> Vec<JoinHandle<()>> {
     vec![
+        tokio::spawn(super::artwork_cleanup::run_artwork_cleanup_worker(
+            maintenance.pool.clone(),
+            maintenance.artwork_cleanup_rx,
+            shutdown.clone(),
+        )),
         tokio::spawn(crate::transport::hdhr::run_udp_discovery(
             hdhr.device_uuid,
             hdhr.tuner_count,
@@ -392,6 +397,7 @@ pub struct HdhrTaskInputs {
 }
 
 pub struct MaintenanceTaskInputs {
+    pub artwork_cleanup_rx: mpsc::Receiver<ersatzrs_app::artwork_cleanup::ArtworkCleanupRequest>,
     pub pool: DbPool,
     pub playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
     pub scan_work_rx: mpsc::UnboundedReceiver<ersatzrs_app::commands::ScanWorkRequest>,

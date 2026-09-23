@@ -7,6 +7,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod addon_media_list_options;
+pub mod artwork_cleanup;
 pub mod commands;
 pub mod error;
 pub mod operations;

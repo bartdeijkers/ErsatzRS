@@ -222,3 +222,16 @@ fn source_content_placement_preserves_every_anchor_and_legacy_omission() {
     assert_eq!(restored.within_source_content, Some(false));
     assert_eq!(serde_json::to_value(restored).unwrap(), explicit_false);
 }
+
+#[test]
+fn channel_logo_watermark_projects_the_resolved_artwork_path() {
+    let mut selection = selected();
+    selection.watermark.image_source = ersatzrs_domain::ChannelWatermarkImageSource::ChannelLogo;
+    selection.watermark.image = None;
+    selection.image_path = "synthetic/iptv/logos/channel.png".into();
+    let projected = project(&[selection]).unwrap().unwrap();
+    assert_eq!(
+        serde_json::to_value(projected).unwrap()["source"],
+        json!({"source_type": "local", "path": "synthetic/iptv/logos/channel.png"})
+    );
+}

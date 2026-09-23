@@ -123,7 +123,9 @@ routing, decoded Burn/Convert and localized editor checks pass. Converted text
 remains on HLS; Burn provides MPEG-TS subtitles.
 Row 31 (290f991b) is N/A for upstream release-note publication. All 31 rows
 are reconciled. UCU-02 local window gates pass and the milestone is Complete.
-Next: review UCU-03 row 32 (a1036430). Supported-platform acceptance remains open; Remote Stream/add-on
+UCU-03 row 32 (a1036430) is Port: orphan cleanup, queued API and localized
+health pass focused verification. Next: row 33 (54779e07), upstream dependency pin.
+Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 

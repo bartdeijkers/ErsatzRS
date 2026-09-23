@@ -134,6 +134,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Clean orphaned actor and artwork database records at startup and hourly, with
+  a bounded manual cleanup API, while retaining referenced images and artwork
+  files (upstream PR #2885).
+
 - Preserve merged deco watermarks when combining them with item, channel or
   global watermarks, including a merged watermark with no fallback selection.
 

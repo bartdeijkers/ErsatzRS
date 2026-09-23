@@ -1993,6 +1993,9 @@ pub enum TextKey {
     ClassicPlayout,
     ClassicPlayoutState,
     ScanRefreshState,
+    ArtworkOrphans,
+    ArtworkOrphansMessage,
+    ArtworkOrphansBrief,
     ArtworkCardinality,
     HlsLiveDelivery,
     BlockPlayout,
@@ -3949,6 +3952,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
     TextKey::ScanRefreshState,
+    TextKey::ArtworkOrphans,
+    TextKey::ArtworkOrphansMessage,
+    TextKey::ArtworkOrphansBrief,
     TextKey::ArtworkCardinality,
     TextKey::HlsLiveDelivery,
     TextKey::BlockPlayout,
@@ -4497,6 +4503,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
+        "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
@@ -4744,23 +4751,8 @@ pub fn health_check_message_text(
             );
         }
     }
-    if title == ARTWORK_CARDINALITY_TITLE {
-        if let Some(counts) = artwork_cardinality_counts(displayed_message) {
-            return languages_for(language).artwork_cardinality_message(
-                [
-                    counts.duplicate_show_rows,
-                    counts.duplicate_season_rows,
-                    counts.duplicate_episode_rows,
-                ],
-                [
-                    counts.published_items,
-                    counts.projection_rows,
-                    counts.distinct_episodes,
-                    counts.complete_hierarchy_rows,
-                    counts.hierarchy_episodes,
-                ],
-            );
-        }
+    if let Some(localized) = artwork_health_message(language, title, message, brief_message) {
+        return localized;
     }
     if title == HLS_LIVE_DELIVERY_TITLE {
         if let Some((recent_under_runs, minutes, active_under_runs, fallbacks, fallback_hours)) =
@@ -4776,6 +4768,55 @@ pub fn health_check_message_text(
         }
     }
     displayed_message.to_owned()
+}
+
+fn artwork_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+    brief_message: &str,
+) -> Option<String> {
+    if title == ARTWORK_CARDINALITY_TITLE {
+        let displayed = if message.is_empty() {
+            brief_message
+        } else {
+            message
+        };
+        let counts = artwork_cardinality_counts(displayed)?;
+        return Some(languages_for(language).artwork_cardinality_message(
+            [
+                counts.duplicate_show_rows,
+                counts.duplicate_season_rows,
+                counts.duplicate_episode_rows,
+            ],
+            [
+                counts.published_items,
+                counts.projection_rows,
+                counts.distinct_episodes,
+                counts.complete_hierarchy_rows,
+                counts.hierarchy_episodes,
+            ],
+        ));
+    }
+    if title != "Artwork Orphans" {
+        return None;
+    }
+    let (actors, artwork) = brief_message.split_once(" orphan actor row(s) and ")?;
+    let actors = actors.parse::<u64>().ok()?;
+    let artwork = artwork
+        .strip_suffix(" orphan artwork row(s)")?
+        .parse::<u64>()
+        .ok()?;
+    let key = if message.is_empty() {
+        TextKey::ArtworkOrphansBrief
+    } else {
+        TextKey::ArtworkOrphansMessage
+    };
+    Some(
+        text(language, key)
+            .replace("{actors}", &actors.to_string())
+            .replace("{artwork}", &artwork.to_string()),
+    )
 }
 
 fn hls_live_delivery_counts(message: &str) -> Option<(u64, u64, u64, u64, u64)> {
@@ -5545,6 +5586,28 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, SCAN_REFRESH_STATE_TITLE);
                 assert!(!localized.starts_with(SCAN_REFRESH_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn artwork_orphans_health_text_is_localized_for_every_language() {
+        let message = "Orphan cleanup pending: 2 actor row(s) and 3 artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and cached image files are preserved.";
+        let brief = "2 orphan actor row(s) and 3 orphan artwork row(s)";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, "Artwork Orphans");
+            let localized = health_check_message_text(language, "Artwork Orphans", message, brief);
+            let localized_brief = health_check_message_text(language, "Artwork Orphans", "", brief);
+            for value in [&localized, &localized_brief] {
+                assert!(value.contains('2') && value.contains('3'));
+                assert!(!value.contains("{actors}") && !value.contains("{artwork}"));
+            }
+            assert!(localized.contains("POST /api/maintenance/clean_artwork"));
+            if language != UiLanguage::English {
+                assert_ne!(title, "Artwork Orphans");
+                assert_ne!(localized, message);
+                assert_ne!(localized_brief, brief);
             }
         }
     }
