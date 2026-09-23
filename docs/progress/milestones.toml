@@ -7775,6 +7775,19 @@ change in this window, so TSDuck's conditional gate is not newly triggered;
 UCU-02 transport evidence remains explicitly scoped to its captured pipelines.
 Do not start UCU-04 until UCU-03 local acceptance and terminal exact-SHA CI pass.
 No push, hosted CI or release is claimed by this row checkpoint.
+
+2026-09-23 UCU-03 window verification at bdf4abb8:
+Workspace all-target Clippy passes (ucu03-window-clippy.log). Full test-closeout
+passes: 3,047 tests passed, 49 standard skips, and workspace doctests passed
+(ucu03-window-tests.log). Managed-runtime override variables were unset,
+reusing the corrected UCU-02 environment contract. The matched Leptos
+SSR/WASM build passes (ucu03-window-leptos.log). Full parity-check passes,
+including 679 web tests with 6 standard skips and focused all-target Clippy
+(ucu03-window-parity.log). Native smoke passes: MPEG-TS HTTP 200 with 8,192
+body bytes, HLS variant HTTP 200, and session playlist HTTP 200 with initial
+segments (ucu03-window-smoke.log). All local window gates are complete;
+authorized push and terminal exact-SHA CI remain pending. Existing CI successes
+belong to older commits and are not acceptance evidence for this candidate.
 """
 
 [[milestone]]
