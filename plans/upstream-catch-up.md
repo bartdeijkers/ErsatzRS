@@ -16,6 +16,8 @@
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
 - Processed rows: **34**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- UCU-03 is Complete; milestone evidence records local acceptance and terminal
+  green CI on pushed candidate `8f722099`. Next: UCU-04, beginning with row 35.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)

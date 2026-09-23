@@ -6,7 +6,9 @@ adr        = ['0095', '0096', '0097', '0098', '0099']
 summary    = """
 The ledger registers 169 commits: thirty-four reconciled and 135 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
-Complete. UCU-01 local gates prove repository links, channel-only packaging,
+Complete. UCU-03 is Complete with local window gates and terminal green
+consolidated CI at 8f722099; UCU-04 starts with row 35. Milestone ucu-03 owns
+the evidence and preserved limitations. UCU-01 local gates prove repository links, channel-only packaging,
 provenance, six-RID staging and Docker startup.
 
 UCU-02 local acceptance is Complete. Rows 11-20 cover persisted optional-engine selection,
@@ -55,10 +57,8 @@ Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
 The official Next RGB opacity bug is explicitly accepted pending upstream correction, with visible unresolved debt.
 Remote Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Later endpoint/platform acceptance remains open. ADR 0095 retains the
-optional Next engine alongside native playback. The first consolidated CI follows
-UCU-03 smoke; only reviewed local row commits precede that boundary. Codex owns
-review; milestones own acceptance/evidence, and the pin document is authoritative.
-Refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
+optional Next engine alongside native playback. Milestones own acceptance;
+refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
 [[debt]]
@@ -127,4 +127,4 @@ id          = 'row-32-orphan-artwork-maintenance'
 description = 'Port bounded hourly and manual orphan actor/artwork database cleanup, preserve referenced records, and expose aggregate health guidance.'
 discovered  = '2026-09-23'
 resolved    = true
-evidence    = 'UCU-03 owns row 32. Transactional cleanup, hourly cadence, manual queue and aggregate localized health are implemented. Focused database, real provider refresh, Next logo projection, HTTP-to-worker, shutdown, cadence and localization regressions pass, with scoped all-target Clippy and substantive review. Full UCU-03 window gates remain open.'
+evidence    = 'UCU-03 owns row 32. Transactional cleanup, hourly cadence, manual queue and aggregate localized health are implemented. Focused database, real provider refresh, Next logo projection, HTTP-to-worker, shutdown, cadence and localization regressions pass, with scoped all-target Clippy and substantive review. UCU-03 window gates and terminal exact-SHA CI are complete; see milestone ucu-03.'

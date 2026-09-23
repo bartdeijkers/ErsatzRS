@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-03: reconcile orphan metadata cleanup and May patch release'
+current_focus = 'UCU-04: reconcile upstream through 0b44ad47'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -127,8 +127,9 @@ UCU-03 row 32 (a1036430) is Port: orphan cleanup, queued API and localized
 health pass focused verification. Row 33 (54779e07) is N/A for the upstream
 .NET wrapper pin. Row 34 (637e6be8) is N/A release preparation. UCU-03 local
 window gates pass: workspace Clippy, 3,047 tests plus doctests, matched Leptos
-build, parity-check and native MPEG-TS/HLS smoke. Next: authorized push and
-first consolidated exact-SHA CI; UCU-03 stays open until CI is green.
+build, parity-check and native MPEG-TS/HLS smoke. UCU-03 is Complete after
+push and terminal green consolidated CI at 8f722099. Next: UCU-04 row 35;
+continue ordered reconciliation and require green CI at its window boundary.
 Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

@@ -7646,7 +7646,7 @@ cache cleanup follows that gate and does not invalidate the recorded evidence.
 id         = 'ucu-03'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 637e6be8'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-02']
@@ -7824,6 +7824,52 @@ timeouts and retries. The actual generated Windows batch fixture also accepts
 delayed stdin and returns the expected JSON with exit 0
 (ucu03-options-windows-stdin-proof.json). No production code or hydration
 boundary changed. Full Firefox CI and a corrected exact-SHA run remain pending.
+
+The first CI run is terminal failure, with Firefox green (213 passed, 29
+standard browser skips; ucu03-ci-firefox.log). Its Chromium and Next failures
+remain explicitly failed evidence. After preserving both browser results,
+pushed the reviewed corrections d4b41eb0 and 8f722099. Local HEAD, origin/main
+and live remote agree at 8f722099d71c5801e92836b0aac44ca9667a4df4.
+The corrected exact-SHA CI started automatically:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/35880721503
+This run remains pending; UCU-03 is not Complete and UCU-04 has not started.
+
+The corrected run's dedicated Next engine job is green (job 107248292916;
+ucu03-ci-next-success.log). Official linux-x64 develop artifact f2a981b has
+archive SHA-256 e7e1d1aba793d6399431c3ef3b3aa1e44739ef55ad479f7d0ed6bfb56d702e2c.
+All 124 selected component and real-decoding tests pass; 904 unrelated tests
+are outside this job's selection. Both production-host smoke modes pass:
+H.264/AAC with selected Dutch 880 Hz audio, visible Burn subtitles (35 white
+pixels), Convert without burned pixels and a selected Dutch WebVTT cue on HLS.
+Capability rejection, preview, disconnect continuity, idle cleanup and wrapper
+restart pass. Diagnostics upload also passes. Chromium/Firefox, Clippy and the
+ordinary Test job still need terminal success before milestone closeout.
+
+Chromium on corrected candidate 8f722099 is green: 236 passed, 6 standard
+skips, including the previously failing no-JS access-check scenario
+(ucu03-ci-chromium-success.log; job 107248292913). Clippy is also green.
+Firefox and the ordinary Test job remain active; no milestone closure yet.
+
+The ordinary Test job is green (107248293322; ucu03-ci-test.log): 2,933 tests
+pass, with 163 excluded/standard skipped tests under the existing non-Next CI
+selection. Progress validation and architecture lint pass. Only Firefox remains
+active in corrected CI; no complete/green-run claim is made before it finishes.
+
+2026-09-23 acceptance closeout: corrected CI 35880721503 is terminal success
+at 8f722099d71c5801e92836b0aac44ca9667a4df4. Firefox passes 213 tests with 29
+standard browser skips (ucu03-ci-firefox-success.log). Format, Cargo deny,
+documentation, workspace Clippy/Test, Chromium, Firefox and the dedicated Next
+job are all green. Commit lint is PR-only; hosted test shards are inapplicable
+to this self-hosted run, not missing required test coverage. Local HEAD,
+origin/main and live remote were verified equal to that exact tested SHA.
+The 34 contiguous reconciled ledger rows end at 637e6be8; the authoritative pin
+and upstream checkout agree at 637e6be879d03649bedf9811ae5c3b13aac30b0d.
+All required local window gates remain valid: changes after bdf4abb8 are scoped
+to CI, the verified synthetic browser fixture and documentation. No production
+Rust or playback pipeline changed after those gates. Conditional TSDuck scope
+and explicit HLS Direct limitation remain as recorded above. UCU-03 is Complete;
+UCU-04 may begin with row 35. This records acceptance of candidate 8f722099,
+not a release or acceptance of later code.
 """
 
 [[milestone]]
