@@ -52,7 +52,8 @@ release section when tagging a release.
   retaining byte-range responses without buffering whole media files.
   Verify Plex identity before failover and preserve media redirects without
   forwarding credentials across origins. Graphics projection and full platform
-  playback acceptance remain open.
+  playback acceptance remain open. JavaScript movie/episode audio-selector
+  compatibility is unimplemented and tracked by proposed ADR 0096.
   Publish continued schedules to active Next channels and mirrors while preserving
   native playback continuity (upstream PR #2854). Verify existing mirror offsets,
   channel-update propagation and bundled runtime discovery against upstream PR #2855.

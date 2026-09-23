@@ -249,3 +249,66 @@ async fn stale_pins_fail_without_selecting_another_version_or_stream() {
         assert!(project(&pool, &Channel::default(), &item).await.is_err());
     }
 }
+
+#[tokio::test]
+async fn item_audio_title_overrides_channel_title_in_published_tracks() {
+    let pool = fixture_pool().await;
+    sqlx::query(r#"UPDATE "MediaStream" SET "Language"='eng' WHERE "MediaStreamKind"=2"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let channel = Channel {
+        preferred_audio_language_code: Some("eng".into()),
+        preferred_audio_title: Some("English".into()),
+        ..Default::default()
+    };
+    let mut item = item();
+    let channel_choice =
+        serde_json::to_value(project(&pool, &channel, &item).await.unwrap()).unwrap();
+    assert_eq!(channel_choice["tracks"]["audio"]["stream_index"], 1);
+    item.preferred_audio_title = Some("Dutch".into());
+    let item_choice = serde_json::to_value(project(&pool, &channel, &item).await.unwrap()).unwrap();
+    assert_eq!(item_choice["tracks"]["audio"]["stream_index"], 2);
+}
+
+#[tokio::test]
+async fn custom_audio_selection_precedes_preferences_but_never_explicit_pins() {
+    let pool = fixture_pool().await;
+    let channel = Channel {
+        stream_selector_mode: ChannelStreamSelectorMode::Custom,
+        preferred_audio_language_code: Some("nld".into()),
+        ..Default::default()
+    };
+    let mut item = item();
+    let streams = load_source_audio_streams(&pool, 100).await.unwrap();
+    let preferences = playback_language_preferences(&pool).await.unwrap();
+    let custom = CustomStreamSelection {
+        audio_stream_index: Some(1),
+        subtitle: None,
+    };
+    assert_eq!(
+        selected_audio(&item, &channel, &preferences, Some(&custom), &streams).unwrap(),
+        Some(1)
+    );
+    let no_match = CustomStreamSelection {
+        audio_stream_index: None,
+        subtitle: None,
+    };
+    assert_eq!(
+        selected_audio(&item, &channel, &preferences, Some(&no_match), &streams).unwrap(),
+        Some(2)
+    );
+    // Missing custom files must also fall back during actual item projection.
+    let published = serde_json::to_value(project(&pool, &channel, &item).await.unwrap()).unwrap();
+    assert_eq!(published["tracks"]["audio"]["stream_index"], 2);
+    item.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: None,
+    });
+    assert_eq!(
+        selected_audio(&item, &channel, &preferences, Some(&custom), &streams).unwrap(),
+        Some(2)
+    );
+}

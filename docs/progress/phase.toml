@@ -93,8 +93,9 @@ atomic Next JSON publication on Windows/NTFS, including sharing-denial recovery.
 Row 19 is Covered by existing immediate Next-to-Segmenter editor normalization.
 Row 20 (bb493670) is Port: scoped paths and current-credential media opens for
 Plex/Jellyfin/Emby pass decoded playback, Plex failover, Range/redirect checks
-and real-host Next HTTP/preview smoke. Next: review row 21 (e6496bbc), audio
-stream selection during Next playout build, before proceeding in ledger order.
+and real-host Next HTTP/preview smoke. Row 21 (e6496bbc) exposes missing
+JavaScript movie/episode audio hooks. Next: decide proposed ADR 0096, then
+implement and verify the shared bounded selector before advancing the row.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
