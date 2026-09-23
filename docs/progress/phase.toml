@@ -124,7 +124,8 @@ remains on HLS; Burn provides MPEG-TS subtitles.
 Row 31 (290f991b) is N/A for upstream release-note publication. All 31 rows
 are reconciled. UCU-02 local window gates pass and the milestone is Complete.
 UCU-03 row 32 (a1036430) is Port: orphan cleanup, queued API and localized
-health pass focused verification. Next: row 33 (54779e07), upstream dependency pin.
+health pass focused verification. Row 33 (54779e07) is N/A for the upstream
+.NET wrapper pin. Next: row 34 (637e6be8), release preparation, then window gates.
 Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

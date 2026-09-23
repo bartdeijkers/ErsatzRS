@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099']
 summary    = """
-The ledger registers 169 commits: thirty-two reconciled and 137 pending,
+The ledger registers 169 commits: thirty-three reconciled and 136 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 local gates prove repository links, channel-only packaging,
 provenance, six-RID staging and Docker startup.

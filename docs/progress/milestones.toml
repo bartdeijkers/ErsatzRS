@@ -7740,6 +7740,23 @@ advances ledger and pin together to a1036430eebf1cd1082a393b63e933c83a0b1cd2;
 upstream checkout follows after commit. Thirty-two rows are reconciled and
 137 remain pending. Next is row 33 (54779e07); UCU-03 window gates, push and
 first consolidated exact-SHA CI remain open. No push or hosted CI yet.
+
+2026-09-23 row 33 reconciliation (54779e07; N/A upstream tooling):
+Read full stat/diff, surrounding ErsatzTV.FFmpeg.csproj and unchanged NVIDIA
+import resolver/consumers. The sole change pins Lennox.NvEncSharp from 2.1.0
+to exact [2.0.0] for Linux compatibility. No source, test, changelog or workflow
+behavior changes. Native ersatzrs-hwprobe has no NuGet dependency and resolves
+CUDA/NVENC libraries directly behind Unix/Windows guards, with the documented
+macOS counterpart. Cargo does not consume NvEncSharp, so there is no matching
+package downgrade or ABI change to port. Existing capability behavior is
+unchanged; no new GPU runtime/platform acceptance is claimed. Direct source
+review found no missing Rust behavior in this one-line package correction.
+Fresh upstream fetch remains ee038ba4; all 169 ledger SHA/subjects match. Before
+advancement, pin/row 32/upstream checkout agree at a1036430. The authorized
+checkpoint `docs(porting): reconcile upstream NVENC wrapper pin` moves pin and
+ledger together to 54779e0775785cab99de200273918e5615e9b8ce, then checkout follows.
+Thirty-three rows are reconciled, 136 pending. Row 34 (637e6be8) is next; UCU-03
+window gates and first consolidated exact-SHA CI remain open. No push or CI.
 """
 
 [[milestone]]
