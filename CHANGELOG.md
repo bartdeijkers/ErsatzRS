@@ -47,8 +47,12 @@ release section when tagging a release.
   and cleanup; forward playout rebuilds to preview-only sessions as well.
   Add media-server input resolution with server-specific local paths and
   authenticated Plex/Jellyfin/Emby HTTP playback, preserving selected audio and
-  subtitles (upstream PR #2865). Connection refresh/failover acceptance, graphics
-  projection, complete HTTP playback and platform acceptance remain open.
+  subtitles (upstream PR #2865). Resolve current provider credentials through a
+  capability-protected internal media route when Next opens remote media,
+  retaining byte-range responses without buffering whole media files.
+  Verify Plex identity before failover and preserve media redirects without
+  forwarding credentials across origins. Graphics projection and full platform
+  playback acceptance remain open.
   Publish continued schedules to active Next channels and mirrors while preserving
   native playback continuity (upstream PR #2854). Verify existing mirror offsets,
   channel-update propagation and bundled runtime discovery against upstream PR #2855.

@@ -31,6 +31,7 @@ use tokio::{sync::Mutex, time::Instant};
 /// Keeping publishers alive prevents an old blocking publication from racing a
 /// replacement session after cancellation.
 pub struct NextHost {
+    pub media: super::media::MediaRelay,
     pool: DbPool,
     locker: EntityLocker,
     root: PathBuf,
@@ -55,6 +56,7 @@ impl NextHost {
     #[must_use]
     pub fn new(pool: DbPool, locker: EntityLocker, root: PathBuf) -> Self {
         Self {
+            media: super::media::MediaRelay::new(),
             pool,
             locker,
             root,
@@ -190,7 +192,13 @@ impl NextHost {
                         .ok_or_else(|| unavailable("profile unavailable"))?;
                     let mut items = Vec::with_capacity(media.len());
                     for media in media {
-                        let source = source::resolve(&self.pool, &media, replacements).await?;
+                        let source = source::resolve_published(
+                            &self.pool,
+                            &media,
+                            replacements,
+                            Some(&self.media),
+                        )
+                        .await?;
                         let selection_time =
                             crate::channel_playout::ChannelPlayoutContext::for_channel(&channel)
                                 .source_time(media.item.start)?;

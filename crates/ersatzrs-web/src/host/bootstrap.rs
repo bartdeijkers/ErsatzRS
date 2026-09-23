@@ -204,6 +204,11 @@ pub async fn run() {
         .await
         .unwrap_or_else(|e| panic!("failed to bind to {listen_addr}: {e}"));
     let listen_addr = listener.local_addr().expect("bound web listener address");
+    app_state
+        .next_engine
+        .media
+        .configure(listen_addr)
+        .expect("configure internal Next media listener");
 
     // Coordinated shutdown: the signal handler cancels this token, the axum
     // server drains in-flight requests, and every background task observes the

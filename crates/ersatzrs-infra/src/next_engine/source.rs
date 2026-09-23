@@ -1,9 +1,8 @@
 //! Media-server inputs from upstream `SyncNextPlayoutHandler::SourceForItem`.
 //!
-//! Resolve only the owning server's paths. Direct HTTP inputs use Next's typed
-//! transport contract and the existing provider connection configuration; neither
-//! errors nor Debug output expose connection values. Published playout files are
-//! private runtime state, like the database containing provider configuration.
+//! Resolve only the owning server's paths. Published remote inputs use the host's
+//! internal media route; provider connections and credentials are resolved when
+//! that route opens the media. Errors never expose connection values.
 
 use ersatzrs_core::{
     path_replacement::{replace_path, PathPlatform, PathReplacement},
@@ -21,10 +20,20 @@ use crate::{
 /// Prefer accessible local media, then resolve a media-server HTTP input.
 /// Remote Stream/add-on lifetimes are a separate adapter and remain unsupported.
 /// No provider HTTP work occurs while the caller holds the schedule's build locks.
+#[cfg(test)]
 pub(super) async fn resolve(
     pool: &DbPool,
     media: &ScheduledMedia,
+    replacements: &[PathReplacement],
+) -> Result<Source> {
+    resolve_published(pool, media, replacements, None).await
+}
+
+pub(super) async fn resolve_published(
+    pool: &DbPool,
+    media: &ScheduledMedia,
     local_replacements: &[PathReplacement],
+    relay: Option<&super::media::MediaRelay>,
 ) -> Result<Source> {
     if media.remote_stream_id.is_some() {
         return Err(unavailable("Remote Stream projection is not integrated"));
@@ -90,20 +99,35 @@ pub(super) async fn resolve(
     if tokio::fs::metadata(&path).await.is_ok_and(|m| m.is_file()) {
         return Ok(local_source(path));
     }
-    resolve_http(pool, media, source_id, kind).await
+    if let Some(relay) = relay {
+        return relay.source(media);
+    }
+    resolve_http(pool, media, source_id, kind, None).await
 }
 
-async fn resolve_http(
+pub(super) async fn resolve_http(
     pool: &DbPool,
     media: &ScheduledMedia,
     source_id: i64,
     kind: RemoteMediaSourceKind,
+    live: Option<(&super::connections::PlexConnections, tokio::time::Instant)>,
 ) -> Result<Source> {
     let (uri, header) = match kind {
         RemoteMediaSourceKind::Plex => {
-            let config = crate::plex::load_active_plex_connection_config(pool, source_id)
-                .await
-                .map_err(|_| unavailable("Plex connection is unavailable"))?;
+            let config = if let Some((connections, deadline)) = live {
+                let transport = connections
+                    .resolve(pool, source_id, deadline)
+                    .await
+                    .map_err(|_| unavailable("Plex connection is unavailable"))?;
+                crate::plex::PlexConnectionConfig {
+                    uri: transport.address,
+                    token: transport.token,
+                }
+            } else {
+                crate::plex::load_active_plex_connection_config(pool, source_id)
+                    .await
+                    .map_err(|_| unavailable("Plex connection is unavailable"))?
+            };
             let key: Option<String> = sqlx::query_scalar(
                 r#"SELECT p."Key"
                 FROM "PlexMediaFile" p JOIN "MediaFile" f ON f."Id" = p."Id"

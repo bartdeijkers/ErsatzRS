@@ -5,7 +5,7 @@ use ersatzrs_core::repositories::PathReplacementAdmin;
 use serde_json::Value;
 
 // Dynamic fixture table names come only from the closed provider enum.
-async fn fixture(kind: RemoteMediaSourceKind) -> (DbPool, ScheduledMedia) {
+pub(crate) async fn fixture(kind: RemoteMediaSourceKind) -> (DbPool, ScheduledMedia) {
     let (pool, locker, channel, start) = schedule::tests::fixture().await;
     seed_provider(&pool, kind).await;
     let mut read = schedule::read_locked(

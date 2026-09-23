@@ -30,14 +30,20 @@ silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
 one media file per item. Per-channel publication now serializes reads and writes,
 including cancellation during filesystem work. A Next HLS session adapter now
 handles readiness, heartbeat, idle expiry, refresh notification and shutdown.
-The row-20 checkpoint adds provider-scoped local paths and direct authenticated
-Plex/Jellyfin/Emby HTTP sources, with synthetic-server decoded Linux proof.
-It reuses Next HTTP headers rather than introducing another server process.
-Provider values are private runtime playout state, never diagnostic output;
-publication retains its restrictive temporary-file permissions on Unix and
-inherits the data directory ACL on Windows. Connection refresh/failover parity
-remains under review before row acceptance. Graphics projection and full
-playback acceptance remain open.
+The row-20 work adds provider-scoped local paths and authenticated
+Plex/Jellyfin/Emby HTTP sources. The initial direct-HTTP checkpoint has synthetic
+server decoded Linux proof. The current integration publishes a capability for
+an internal route on the existing web host instead of provider credentials.
+That route validates the persisted media binding and resolves current provider
+configuration at open time, using bounded identity-verified Plex failover and
+streaming byte-range responses. This avoids a second server process and keeps
+provider credentials out of Next playout JSON. The runtime playout files retain
+restrictive temporary-file permissions on Unix and inherit the data directory
+ACL on Windows. Focused credential-rotation, Range and web response tests pass,
+as does decoded Linux Next playback through the production media-open adapter.
+Decoded Plex failover, credential-isolating redirects and real-host HTTP/preview
+smoke also pass; row 20 is Port.
+Graphics projection and full playback acceptance remain open.
 
 ## Context
 

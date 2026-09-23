@@ -6808,7 +6808,72 @@ review confirms that no probe can activate a different source/URI/identity and
 that timeout/cancellation releases the source gate. Runtime smoke is not rerun
 for this unconnected component; the earlier d69d04fa playback evidence remains
 valid, and new smoke is required after media-open integration.
-Row 20 remains pending, UCU-02 In progress, with 19 reconciled / 150 pending.
+Row 20 media-open integration (working tree): the existing web listener now
+configures a process-capability-protected internal media route. Publication
+retains exact binding IDs and the capability, with provider credentials loaded
+at open time. The adapter verifies item/version/file ownership, calls the Plex
+selector outside schedule locks and preserves streaming Range responses.
+The initial Send-bound check exposed borrowed probe-iterator lifetimes; owning
+candidate values resolves that without changing concurrency or cancellation.
+The web consumer type-check passes. Nine focused relay/selector tests pass,
+including credential rotation after publication and invalid binding refusal.
+All 58 Next tests pass, including the real engine's decoded Plex/Jellyfin/Emby
+HTTP playback with alternate audio and external subtitles through media-open.
+That fixture exercises the production infra adapter behind a test HTTP bridge;
+it does not substitute for actual web-route and runtime smoke acceptance.
+Both focused web response tests pass: unauthorized requests are rejected before
+database access, and 206/416 responses preserve media headers/body while omitting
+provider-private headers. Outstanding: scoped Clippy, integrated Plex failover
+proof, redirect parity review and Next HTTP smoke. No row verdict or pin advancement.
+Final media-open review: the integrated Plex regression publishes first, then
+changes connection addresses and verifies that a wrong-server active endpoint
+fails over to the expected identity, persists only the correct active connection
+and serves the exact file/range without changing the published URL. Media HTTP
+redirects retain ranges, allow at most five hops and remove credentials when an
+origin changes, without restoring them on a later return hop. Plex identity
+probes continue to reject redirects. The redirect regression verifies same-origin,
+cross-origin, return-hop and loop-limit behavior. All 60 Next tests pass after
+these changes, including decoded Linux playback for all three provider types.
+Infra and web all-target Clippy pass with -D warnings (53.91 seconds).
+The full upstream row diff has been re-reviewed: only export selection and wire
+models change; no upstream tests, migrations, UI or changelog entries change.
+The existing source-scoped connectivity poll and Next runtime/profile checks
+remain valid: this route adds no executable, codec, schema or configuration
+requirement. Active Plex selection uses the existing persisted connection field.
+No generated native FFmpeg argv or browser UI changes; no new snapshot/browser
+gate is needed for this row. Later subtitle extraction/graphics rows and full
+platform/runtime acceptance remain owned by the ordered windows. Media-open
+errors are redacted; publication has no provider credentials and body streaming
+is cancellable without holding schedule locks. No serious review finding remains.
+The configured target exceeded 40 GiB; cargo clean removed 43.1 GiB after Clippy.
+The final two focused web response tests pass after the clean rebuild. The real
+Next regression was strengthened with a deliberately wrong active Plex server:
+it passes decoded failover with selected audio/subtitles (5.628 seconds), plus
+Jellyfin/Emby playback and preview isolation. The final Next smoke is running.
+2026-09-23 row 20 final acceptance: bb49367053caeaafa0999e96ce8c0f41ae7c6a8a,
+feat: support media server items in next streaming engine (#2865).
+Verdict Port, owner upstream-baseline-catch-up. The reviewed upstream export
+and wire-model behavior is implemented with provider-scoped local preference,
+exact persisted media binding, shared/per-track HTTP sources, finite silence,
+current-credential opens, bounded Plex failover and retained selected tracks.
+The native engine and later graphics/remote-subtitle rows remain unchanged.
+The final Next smoke passes against the actual rebuilt web host: unauthenticated
+media route HTTP 401; unsupported MPEG-TS HTTP 404; HLS variant/session HTTP 200;
+648412-byte HLS segment and 646908-byte preview segment; both working directories
+removed after idle expiry. No known runtime failure signature is found.
+The command was cargo xtask smoke --next --keep-temp with the same verified
+Next executable and managed FFmpeg 9 recorded above. The post-fixture-change
+infra/xtask all-target Clippy passes with -D warnings (1m 29s); unchanged web
+Clippy evidence remains valid. Formatting, architecture lint and progress
+validation pass. The 60-test Next suite, strengthened decoded failover test,
+two web response tests and smoke provide the row evidence; this is not the
+full-window or supported-platform closeout. CI is still deferred to UCU-03.
+Fresh fetch retains ee038ba4; all 169 SHA/subjects match the ordered ledger.
+Pin, row 19 and upstream HEAD agreed at 9882b008 before advancing. Landing:
+feat(infra): resolve Next media at playback time.
+Pin and ledger advance together to bb493670, then the upstream checkout follows.
+Twenty rows reconciled / 149 pending. Next row: e6496bbc, audio stream selection.
+UCU-02 remains In progress through row 31 and its local window gates.
 
 """
 

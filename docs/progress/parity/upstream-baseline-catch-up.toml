@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The ledger registers 169 commits: nineteen reconciled and 150 pending,
+The ledger registers 169 commits: twenty reconciled and 149 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
@@ -23,11 +23,11 @@ expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
 shared capacity, registry/output cleanup and rebuild notification wiring are now
 connected. Next previews use the browser-compatible profile override with separate
 capacity/output cleanup and shared rebuild publication. Normal AC3 and preview AAC retain selected tracks and the stored profile.
-Linux HTTP lifecycle smoke and 40 dedicated Next CI tests pass locally. Continue publishes appended schedules to dependent Next
+Linux HTTP lifecycle smoke and dedicated Next checks pass locally. Continue publishes appended schedules to dependent Next
 channels and previews while preserving native continuity;
 authenticated browser and platform proof remain open. Runtime/profile health
-checks cover enabled Next channels. Row 20 adds scoped local/HTTP media-server
-inputs with decoded proof; connection refresh/failover remains open. Remote
+checks cover enabled Next channels. Row 20 ports scoped local/HTTP media-server
+inputs with decoded failover and real-host HTTP smoke proof. Remote
 Stream/add-on and graphics inputs remain refused.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment. Row 14 is Covered: existing mirror
@@ -68,4 +68,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. A bounded identity-verified Plex selector now has focused failover, timeout, cache-invalidation and activation tests, but production still resolves at publication. Authenticated media-open integration remains required before row acceptance in UCU-02. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'

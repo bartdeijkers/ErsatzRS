@@ -8,6 +8,7 @@ pub mod config;
 pub mod connections;
 pub mod coordinator;
 pub mod host;
+pub mod media;
 pub mod process;
 pub mod protocol;
 pub mod publication;

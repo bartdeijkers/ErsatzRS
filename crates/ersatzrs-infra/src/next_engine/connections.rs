@@ -177,11 +177,13 @@ impl PlexConnections {
         let candidates = source
             .connections
             .iter()
-            .filter(|c| active.is_none_or(|a| a.id != c.id));
-        let mut probes = stream::iter(candidates.map(|connection| async move {
-            self.probe(connection, identity, token)
+            .filter(|c| active.is_none_or(|a| a.id != c.id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut probes = stream::iter(candidates.into_iter().map(|connection| async move {
+            self.probe(&connection, identity, token)
                 .await
-                .then(|| connection.clone())
+                .then_some(connection)
         }))
         .buffer_unordered(PROBE_CONCURRENCY);
         while let Some(result) = probes.next().await {

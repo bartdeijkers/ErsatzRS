@@ -93,6 +93,16 @@ fn run_inner(opts: Opts) -> Result<()> {
     )?;
 
     let deadline = Deadline::from_now(opts.timeout);
+    if opts.next {
+        let response = http_get_until_body("/ffmpeg/next-media/1/1/1", 0, deadline.remaining()?)?;
+        if response.status != 401 {
+            bail!(
+                "Next media route must reject missing capability, got {}",
+                response.status
+            );
+        }
+        println!("smoke evidence: Next media request without capability -> HTTP 401");
+    }
     for channel in &opts.channels {
         if opts.next && opts.check_ts {
             let path = format!("/iptv/channel/{channel}.ts?mode=ts");

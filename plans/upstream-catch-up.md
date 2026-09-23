@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-22): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
+- Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **150 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **149 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **19**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **20**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -130,20 +130,19 @@ silence track. Wire-model renames consolidate shared and per-track sources.
   complete sources for selected tracks and inserts finite silence without
   reconstructing the video source. The upstream no-audio branch copies only
   source type/path; do not lose the HTTP URI when applying that behavior.
-- Integration: `next_engine/source.rs` now resolves provider-scoped paths and
-  direct authenticated HTTP through existing provider connection readers; the
-  host invokes it during publication. The native web replacement list remains
-  for local libraries only. Scoped credentials take precedence; the legacy
-  global fallback is restricted to a single configured server of that kind.
-  Next consumes private runtime JSON, including transport headers. This avoids
-  adding a separate server process, but connection refresh/failover behavior
-  still needs reconciliation: upstream resolves its internal redirect when
-  opening an item and the Plex handler can select a new reachable connection.
-  The checkpoint resolves connection values at publication instead. Complete
-  that behavior and its acceptance before marking this row reconciled.
-  `next_engine/connections.rs` now provides identity-verified, bounded Plex
-  selection and transactional activation, with cache invalidation and focused
-  tests. The media-open integration still needs to call it outside build locks.
+- Integration: `next_engine/source.rs` resolves provider-scoped local paths;
+  remote publication uses a process-capability-protected route in the existing
+  web host. `next_engine/media.rs` validates the exact item/version/file binding,
+  loads current provider credentials at media-open time, and streams HTTP through
+  the web route with byte-range status and headers retained. Published Next JSON
+  contains the internal capability rather than provider credentials. Local
+  libraries retain the native replacement list. Scoped credentials take precedence;
+  legacy global fallback is restricted to one configured server of that kind.
+  `next_engine/connections.rs` supplies bounded identity-verified Plex selection
+  and transactional activation outside schedule build locks. The media-open
+  integration has type-check, focused credential/range/binding and web response
+  proof, decoded Next playback including Plex failover, bounded redirect review
+  and real-host HTTP/preview smoke. UCU-02 owns the row acceptance evidence.
 - Side effects and evidence: keep complete atomic schedule publication,
   mirror timing, exact stream pins, redacted errors, session ownership and
   cancellation. Test overlapping paths across servers, selected file/version
@@ -151,8 +150,8 @@ silence track. Wire-model renames consolidate shared and per-track sources.
   audio, seek and retained subtitle/audio sources, then decoded Next playback.
   Remote Stream/add-on lifetimes and later graphics rows are separate scope.
 - Intentional deviations: the optional engine and atomic publication remain
-  governed by ADR 0095. This preparatory map does not accept a new deviation or
-  close row 20. UCU-02 owns current evidence and outstanding acceptance.
+  governed by ADR 0095. Row 20 is Port; no new deviation or Next exemption is
+  introduced. Full-window and platform acceptance remain owned by UCU-02.
 
 ## Provisional triage and ledger
 
@@ -189,7 +188,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 17 | `6ea0a296` | fix: consistently apply playout offset when generating xmltv (#2863) | Port | xmltv-guide | `fix(infra): preserve signed mirror offsets on channel upsert` | ucu-02; retain existing four-timestamp projection and fix negative-offset persistence; actual/guide windows, both signs and unchanged source items verified. See ucu-02 evidence. |
 | 18 | `f2706f32` | feat: support playout json on windows (#2864) | Adapt (ADR 0095) | upstream-baseline-catch-up | `test(infra): verify Next publication on Windows` | ucu-02; accepted atomic-file publication passes seven native Windows/NTFS tests, including sharing-denial recovery, and six Linux tests. Full Windows Next playback remains open. See ucu-02 evidence. |
 | 19 | `9882b008` | tweak streaming engine editor | Covered | channels-admin-ui | `docs(web): reconcile Next editor mode normalization` | ucu-02; existing editor immediately selects HLS Segmenter for Next and retains server-side no-JS normalization. Unchanged row-11 Chromium/Firefox evidence covers the setter behavior. See ucu-02 evidence. |
-| 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | | | | ucu-02; provisional: Next behavior triage. |
+| 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | Port | upstream-baseline-catch-up | `feat(infra): resolve Next media at playback time` | ucu-02; provider-scoped paths, exact file binding, current credentials, bounded Plex failover and Range-preserving media opens. Decoded three-provider/failover proof and Next HTTP/preview smoke pass. See ucu-02 evidence. |
 | 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | | | | ucu-02; provisional: Next behavior triage. |
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | | | | ucu-02; provisional: Port candidate. |
 | 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | | | | ucu-02; provisional: Next behavior triage. |

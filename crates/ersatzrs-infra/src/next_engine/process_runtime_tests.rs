@@ -356,7 +356,7 @@ async fn assert_media_server_sessions(
 ) {
     use crate::next_engine::source;
     use ersatzrs_core::repositories::RemoteMediaSourceKind;
-    let server = httpmock::MockServer::start_async().await;
+    let server = fixture_media_server().await;
     let bytes = std::sync::Arc::new(tokio::fs::read(clip).await.unwrap());
     for kind in RemoteMediaSourceKind::ALL {
         eprintln!("checking Next {} HTTP playback", kind.provider_name());
@@ -399,32 +399,13 @@ async fn assert_media_server_sessions(
                 then.respond_with(move |request| fixture_range_response(request, &bytes));
             })
             .await;
-        let update = match kind {
-            RemoteMediaSourceKind::Plex => r#"UPDATE "PlexConnection" SET "Uri" = ?"#,
-            RemoteMediaSourceKind::Jellyfin => r#"UPDATE "JellyfinConnection" SET "Address" = ?"#,
-            RemoteMediaSourceKind::Emby => r#"UPDATE "EmbyConnection" SET "Address" = ?"#,
-        };
-        sqlx::query(update)
-            .bind(server.base_url())
-            .execute(&pool)
-            .await
-            .unwrap();
-        if kind != RemoteMediaSourceKind::Plex {
-            sqlx::query(r#"UPDATE "ConfigElement" SET "Key" = ? WHERE "Key" LIKE '%.api_key.%'"#)
-                .bind(format!(
-                    "{}.api_key.{}",
-                    kind.provider_name().to_lowercase(),
-                    server.base_url()
-                ))
-                .execute(&pool)
-                .await
-                .unwrap();
-        }
+        let _wrong_plex_server = fixture_provider_connection(&pool, kind, &server).await;
         let host = std::sync::Arc::new(host::NextHost::new(
-            pool,
+            pool.clone(),
             locker,
             root.join("remote-playout"),
         ));
+        let _relay_server = fixture_media_relay(host.clone(), pool).await;
         assert_next_session(
             &host,
             host::NextStart {
@@ -448,6 +429,121 @@ async fn assert_media_server_sessions(
         );
         mock.delete_async().await;
     }
+}
+
+async fn fixture_provider_connection(
+    pool: &crate::db::DbPool,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    server: &httpmock::MockServer,
+) -> Option<httpmock::MockServer> {
+    use ersatzrs_core::repositories::RemoteMediaSourceKind;
+    if kind == RemoteMediaSourceKind::Plex {
+        let wrong = httpmock::MockServer::start_async().await;
+        wrong
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::GET).path("/");
+                then.status(200)
+                    .body(r#"<MediaContainer machineIdentifier="wrong-server" />"#);
+            })
+            .await;
+        sqlx::query(r#"UPDATE "PlexConnection" SET "Uri"=? WHERE "Id"=1"#)
+            .bind(wrong.base_url())
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "PlexConnection" ("Id", "PlexMediaSourceId", "IsActive", "Uri") VALUES (2,1,0,?)"#)
+            .bind(server.base_url()).execute(pool).await.unwrap();
+        return Some(wrong);
+    }
+    let update = match kind {
+        RemoteMediaSourceKind::Jellyfin => r#"UPDATE "JellyfinConnection" SET "Address"=?"#,
+        RemoteMediaSourceKind::Emby => r#"UPDATE "EmbyConnection" SET "Address"=?"#,
+        RemoteMediaSourceKind::Plex => unreachable!("handled above"),
+    };
+    sqlx::query(update)
+        .bind(server.base_url())
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Key"=? WHERE "Key" LIKE '%.api_key.%'"#)
+        .bind(format!(
+            "{}.api_key.{}",
+            kind.provider_name().to_lowercase(),
+            server.base_url()
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+    None
+}
+
+async fn fixture_media_server() -> httpmock::MockServer {
+    let server = httpmock::MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/")
+                .header("X-Plex-Token", "<token>");
+            then.status(200)
+                .body(r#"<MediaContainer machineIdentifier="fixture-server" />"#);
+        })
+        .await;
+    server
+}
+
+async fn fixture_media_relay(
+    host: std::sync::Arc<host::NextHost>,
+    pool: crate::db::DbPool,
+) -> httpmock::MockServer {
+    let relay_server = httpmock::MockServer::start_async().await;
+    host.media.configure(*relay_server.address()).unwrap();
+    let relay_host = host.clone();
+    let runtime = tokio::runtime::Handle::current();
+    relay_server
+        .mock_async(|when, then| {
+            when.method(httpmock::Method::GET)
+                .path("/ffmpeg/next-media/10/100/1");
+            then.respond_with(move |request| {
+                use crate::next_engine::media::ACCESS_HEADER;
+                let headers = request.headers();
+                if !headers
+                    .get(ACCESS_HEADER)
+                    .and_then(|v| v.to_str().ok())
+                    .is_some_and(|v| relay_host.media.authorized(v))
+                {
+                    return httpmock::HttpMockResponse::builder().status(401).build();
+                }
+                let range = headers.get("range").map(|v| v.to_str().unwrap().to_owned());
+                let host = relay_host.clone();
+                let pool = pool.clone();
+                let runtime = runtime.clone();
+                // httpmock responders are synchronous. A separate fixture thread
+                // drives the real async media-open without blocking its runtime.
+                std::thread::spawn(move || {
+                    runtime.block_on(async move {
+                        let response = host
+                            .media
+                            .open(&pool, (10, 100, 1), range.as_deref())
+                            .await
+                            .unwrap();
+                        let mut builder = httpmock::HttpMockResponse::builder()
+                            .status(response.status().as_u16());
+                        for name in ["content-type", "content-range", "accept-ranges"] {
+                            if let Some(value) = response.headers().get(name) {
+                                builder = builder.header(name, value.to_str().unwrap());
+                            }
+                        }
+                        builder
+                            .body(response.bytes().await.unwrap().to_vec())
+                            .build()
+                    })
+                })
+                .join()
+                .unwrap()
+            });
+        })
+        .await;
+    relay_server
 }
 
 fn fixture_range_response(

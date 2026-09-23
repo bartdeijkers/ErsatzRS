@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `9882b008022bb78da8f312bacf094e4577678540` |
-| **Commit subject** | `tweak streaming engine editor` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9882b008022bb78da8f312bacf094e4577678540 |
+| **Pinned commit** | `bb49367053caeaafa0999e96ce8c0f41ae7c6a8a` |
+| **Commit subject** | `feat: support media server items in next streaming engine  (#2865)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/bb49367053caeaafa0999e96ce8c0f41ae7c6a8a |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,7 +59,7 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `ee038ba460a237e277c2ed2fbb413bfac13795f8` (fetched 2026-09-22),
+The latest fetched target is `ee038ba460a237e277c2ed2fbb413bfac13795f8` (fetched 2026-09-23),
 currently **169 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
