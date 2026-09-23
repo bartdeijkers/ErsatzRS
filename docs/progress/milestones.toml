@@ -7584,6 +7584,21 @@ advances pin and ledger together to d8955134f15b3c66087886abc24274ffb3f1d2bb.
 Thirty rows are reconciled, 139 remain pending. Row 31 (290f991b) is next;
 UCU-02 remains In progress through its full local window gates. No push or CI.
 
+2026-09-23 row 31 reconciliation (290f991b; N/A upstream tooling):
+Read the complete diff, stat and surrounding changelog. The only changed file
+adds the v26.5.0 release heading/date and updates two comparison links. The
+published notes describe existing rows 11-30; no runtime, tests, dependencies,
+workflow or new product behavior changes. ErsatzRS retains its own release
+history and does not copy an upstream release heading. No Rust change or new
+ADR is required. Substantive review found no missing behavior in this row.
+Fresh upstream fetch remains ee038ba4; all 169 ledger SHA/subjects match the
+reverse upstream log. Before advancement, pin/row 30/checkout agree at d8955134.
+The authorized checkpoint advances ledger and pin to 290f991b together, then
+checkout follows. Thirty-one rows are reconciled and 138 remain pending.
+Corrected stale plan-header counts against the actual contiguous ledger.
+UCU-02 remains In progress pending its mandatory full-window local gates;
+no UCU-03 row is processed and no hosted CI or push is claimed.
+
 """
 
 [[milestone]]

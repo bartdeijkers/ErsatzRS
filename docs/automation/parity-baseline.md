@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `d8955134f15b3c66087886abc24274ffb3f1d2bb` |
-| **Commit subject** | `feat: use amf and rkmpp hw accel with next engine (#2883)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/d8955134f15b3c66087886abc24274ffb3f1d2bb |
+| **Pinned commit** | `290f991ba70f3b99eea7909e0117d3efe0562c89` |
+| **Commit subject** | `prep for release v26.5.0 [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/290f991ba70f3b99eea7909e0117d3efe0562c89 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

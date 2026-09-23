@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **144 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **138 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **25**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **31**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -544,7 +544,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | Covered | upstream-baseline-catch-up | `test(infra): verify configured Next scaling output` | ucu-02; existing three-mode configuration confirmed by decoded production-host pad/stretch/crop with subtitle/audio preservation. Seven focused tests and scoped Clippy pass. Mixed dependency updates audited separately; no missing Rust hardware query or ABI bump required. See ucu-02 evidence. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | Port | upstream-baseline-catch-up | `feat(infra): complete Next provider subtitle projection` | ucu-02; provider EIA-608 eligibility, HTTP options and source-content watermarks. 167 focused tests including decoded authenticated provider Convert and geometry pass; scoped Clippy and substantive review pass. See ucu-02 evidence. |
 | 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | Adapt (ADR 0099) | upstream-baseline-catch-up | `feat(web): support Next MPEG-TS hybrid playback` | ucu-02; existing AMF/RKMPP mapping retained. Hybrid persistence/routing plus accepted media-playlist wrapper fix preserve audio and HLS Convert text. Seven focused tests, four Chromium/Firefox cases, command snapshot, real Burn/Convert lifecycle smoke and scoped Clippy pass. See ucu-02 evidence; window gates remain open. |
-| 31 | `290f991b` | prep for release v26.5.0 [no ci] | | | | ucu-02; provisional: Upstream tooling candidate. |
+| 31 | `290f991b` | prep for release v26.5.0 [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May release notes` | ucu-02; changelog release heading and comparison links only. No product, dependency or workflow changes; window acceptance gates remain open. |
 | 32 | `a1036430` | fix: clean up orphan actor and artwork records (#2885) | | | | ucu-03; provisional: Port candidate. |
 | 33 | `54779e07` | fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887) | | | | ucu-03; provisional: Upstream tooling candidate. |
 | 34 | `637e6be8` | prep for release v26.5.1 [no ci] | | | | ucu-03; provisional: Upstream tooling candidate. |
