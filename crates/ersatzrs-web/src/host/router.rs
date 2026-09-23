@@ -561,6 +561,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
             get(iptv::hls::get_preview_session_playlist),
         )
         .route(
+            "/iptv/preview/{channel_number}/live_sub.m3u8",
+            get(iptv::next_subtitles::get_preview_playlist),
+        )
+        .route(
             "/iptv/preview/{channel_number}/{filename}",
             get(iptv::hls::get_preview_session_segment),
         )
@@ -568,6 +572,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         .route(
             "/iptv/session/{channel_number}/hls.m3u8",
             get(iptv::hls::get_session_playlist),
+        )
+        .route(
+            "/iptv/session/{channel_number}/live_sub.m3u8",
+            get(iptv::next_subtitles::get_playlist),
         )
         .route(
             "/iptv/session/{channel_number}/{filename}",

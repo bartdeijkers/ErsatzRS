@@ -31,6 +31,7 @@ fn profile() -> PlaybackProfile {
 fn config(profile: &PlaybackProfile) -> Result<wire::ChannelConfig, ConfigError> {
     channel_config(
         profile,
+        NextEngineTextSubtitleMode::Burn,
         Path::new("playouts/1/current"),
         Path::new("ffmpeg"),
         Path::new("ffprobe"),
@@ -195,10 +196,30 @@ fn numeric_boundaries_and_inactive_loudness_follow_native_profile_semantics() {
     assert!(matches!(
         channel_config(
             &profile,
+            NextEngineTextSubtitleMode::Burn,
             Path::new(""),
             Path::new("ffmpeg"),
             Path::new("ffprobe")
         ),
         Err(ConfigError::RuntimePath)
     ));
+}
+
+#[test]
+fn text_subtitle_normalization_uses_explicit_channel_mode() {
+    for (mode, expected) in [
+        (NextEngineTextSubtitleMode::Burn, "burn"),
+        (NextEngineTextSubtitleMode::Convert, "convert"),
+    ] {
+        let config = channel_config(
+            &profile(),
+            mode,
+            Path::new("playout"),
+            Path::new("ffmpeg"),
+            Path::new("ffprobe"),
+        )
+        .unwrap();
+        let json = serde_json::to_value(config).unwrap();
+        assert_eq!(json["normalization"]["subtitle"]["mode"], expected);
+    }
 }

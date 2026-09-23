@@ -811,3 +811,6 @@ async fn fixture_child_javascript_audio() {
 
 #[path = "image_subtitle_runtime_tests.rs"]
 mod image_subtitle_runtime_tests;
+
+#[path = "text_subtitle_runtime_tests.rs"]
+mod text_subtitle_runtime_tests;

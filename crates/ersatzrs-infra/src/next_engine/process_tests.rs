@@ -20,6 +20,7 @@ pub(super) fn config() -> ChannelConfig {
                 ..Default::default()
             },
         },
+        ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
         Path::new("playouts/current"),
         Path::new("ffmpeg"),
         Path::new("ffprobe"),

@@ -100,6 +100,18 @@ Embedded bitmap selection has a separate synthetic PGS regression:
 ./run.sh test -p ersatzrs-infra real_next_hls_burns_preferred_embedded_bitmap_and_respects_subtitles_off --run-ignored ignored-only
 ```
 
+Text conversion and source timing have a separate generated SRT regression:
+
+```bash
+./run.sh test -p ersatzrs-infra real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off --run-ignored ignored-only
+```
+
+It checks embedded/external text, extracted-sidecar Burn, direct embedded
+Convert, source seeks, WebVTT timing, decoded glyphs, alternate audio and explicit
+subtitles-off. Automatic preparation of missing Burn sidecars remains a separate
+acceptance obligation; this fixture provides the Burn sidecar explicitly.
+The bitmap regression checks Burn and Convert, where images must still burn.
+
 It generates two embedded image tracks: default English draws a left-hand marker,
 preferred Dutch draws a right-hand marker. Decoded HLS must show only the selected
 marker; an explicit subtitles-off pin must show neither while retaining Dutch

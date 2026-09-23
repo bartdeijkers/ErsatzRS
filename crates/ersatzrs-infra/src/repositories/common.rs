@@ -25,9 +25,10 @@ use ersatzrs_domain::{
     GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind,
     ManagedLibraryOperationKind, ManagedLibraryOperationState, MarathonGroupBy, MediaItemState,
     MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
-    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind,
-    RemoteStreamLiveness, ScalingBehavior, StartType, StreamingEngine, StreamingMode, SubtitleKind,
-    TailMode, VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
+    NextEngineTextSubtitleMode, NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder,
+    PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness, ScalingBehavior, StartType,
+    StreamingEngine, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
+    WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -694,6 +695,10 @@ db_enum!(ScalingBehavior {
 db_enum!(StartType {
     1 => StartType::Dynamic,
     2 => StartType::Fixed,
+});
+db_enum!(NextEngineTextSubtitleMode {
+    0 => NextEngineTextSubtitleMode::Burn,
+    1 => NextEngineTextSubtitleMode::Convert,
 });
 db_enum!(StreamingEngine {
     0 => StreamingEngine::Legacy,

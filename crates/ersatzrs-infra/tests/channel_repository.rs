@@ -1122,3 +1122,88 @@ async fn channel_streaming_engine_editor_rejects_unknown_engine_without_creating
     assert_has_error(&result.validation_errors, "streaming_engine");
     assert!(repos.channel.get_by_number("82").await.is_err());
 }
+
+#[tokio::test]
+async fn channel_next_engine_text_subtitle_mode_round_trips_all_write_paths() {
+    use ersatzrs_domain::NextEngineTextSubtitleMode;
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+    let mut form = editor_form("83", "Text subtitle choice");
+    assert_eq!(form.next_engine_text_subtitle_mode, 0);
+    form.streaming_engine = 1;
+    form.next_engine_text_subtitle_mode = 1;
+    let saved = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(saved.validation_errors.is_empty());
+    let mut loaded = repos.channel.get_with_profile(saved.id).await.unwrap();
+    assert_eq!(
+        loaded.next_engine_text_subtitle_mode,
+        NextEngineTextSubtitleMode::Convert
+    );
+    let mut form = repos
+        .channel
+        .get_editor_state(Some(saved.id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    assert_eq!(form.next_engine_text_subtitle_mode, 1);
+    // Changing engines must retain the saved Next preference.
+    form.streaming_engine = 0;
+    let updated = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(updated.validation_errors.is_empty());
+    loaded = repos.channel.get_with_profile(saved.id).await.unwrap();
+    assert_eq!(
+        loaded.next_engine_text_subtitle_mode,
+        NextEngineTextSubtitleMode::Convert
+    );
+    loaded.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Burn;
+    repos.channel.upsert(&loaded).await.unwrap();
+    assert_eq!(
+        repos
+            .channel
+            .get_with_profile(saved.id)
+            .await
+            .unwrap()
+            .next_engine_text_subtitle_mode,
+        NextEngineTextSubtitleMode::Burn
+    );
+    let mut form = repos
+        .channel
+        .get_editor_state(Some(saved.id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    form.next_engine_text_subtitle_mode = 1;
+    assert!(repos
+        .channel
+        .save_editor_form(form)
+        .await
+        .unwrap()
+        .validation_errors
+        .is_empty());
+    assert_eq!(
+        repos
+            .channel
+            .get_with_profile(saved.id)
+            .await
+            .unwrap()
+            .next_engine_text_subtitle_mode,
+        NextEngineTextSubtitleMode::Convert
+    );
+}
+
+#[tokio::test]
+async fn channel_next_engine_text_subtitle_mode_rejects_invalid_editor_values() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+    for mode in [-1, 2] {
+        let mut form = editor_form("84", "Invalid text subtitle choice");
+        form.next_engine_text_subtitle_mode = mode;
+        let result = repos.channel.save_editor_form(form).await.unwrap();
+        assert_has_error(&result.validation_errors, "next_engine_text_subtitle_mode");
+        assert!(repos.channel.get_by_number("84").await.is_err());
+    }
+}

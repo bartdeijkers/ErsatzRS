@@ -27,10 +27,15 @@ pub fn ChannelEditorPage() -> impl IntoView {
             "" => String::new(),
             "save" => tr(TextKey::ChannelCouldNotBeSaved).to_string(),
             "upload" => tr(TextKey::ChannelLogoUploadFailed).to_string(),
-            message => message.replace(
-                "Invalid streaming engine",
-                tr(TextKey::InvalidStreamingEngine),
-            ),
+            message => message
+                .replace(
+                    "Invalid streaming engine",
+                    tr(TextKey::InvalidStreamingEngine),
+                )
+                .replace(
+                    "Invalid Next engine text subtitle mode",
+                    tr(TextKey::InvalidNextEngineTextSubtitleMode),
+                ),
         }
     });
 
@@ -76,6 +81,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let is_enabled = RwSignal::new(initial_form.is_enabled);
     let show_in_epg = RwSignal::new(initial_form.show_in_epg);
     let streaming_engine = RwSignal::new(initial_form.streaming_engine);
+    let next_engine_text_subtitle_mode = RwSignal::new(initial_form.next_engine_text_subtitle_mode);
     let streaming_mode = RwSignal::new(if initial_form.streaming_engine == 1 {
         4
     } else {
@@ -281,6 +287,19 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         None,
                         "",
                     )}
+                    <div data-next-subtitle-mode hidden=initial_form.streaming_engine != 1>
+                        {select_i32_field(
+                            tr(TextKey::NextEngineTextSubtitleMode),
+                            "next_engine_text_subtitle_mode",
+                            next_engine_text_subtitle_mode,
+                            Signal::derive(|| vec![
+                                (0, tr(TextKey::SubtitleBurn).to_owned()),
+                                (1, tr(TextKey::SubtitleConvertIfPossible).to_owned()),
+                            ]),
+                            None,
+                            "",
+                        )}
+                    </div>
                     <div class=style::field>
                         <label class=style::label>{tr(TextKey::StreamingMode)}</label>
                         <select
@@ -750,6 +769,8 @@ fn streaming_engine_dependency_script() -> &'static str {
   if (!engine || !mode) return;
   const sync = () => {
     const next = engine.value === "1";
+    const subtitles = form.querySelector("[data-next-subtitle-mode]");
+    if (subtitles) subtitles.hidden = !next;
     for (const option of mode.options) {
       option.disabled = next && option.value !== "4";
       option.hidden = option.disabled;

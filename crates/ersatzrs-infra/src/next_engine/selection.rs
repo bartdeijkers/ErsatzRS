@@ -8,8 +8,8 @@ use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePrefer
 use crate::playback::{
     load_source_audio_streams, load_source_video_stream_by_index,
     select_channel_playback_subtitle_for_version, select_custom_playback_streams_for_version,
-    select_pinned_playback_subtitle, select_playback_audio_stream_index, subtitle_input_for_stream,
-    CustomStreamSelection, PlaybackSubtitle,
+    select_next_pinned_playback_subtitle, select_playback_audio_stream_index,
+    subtitle_input_for_stream, CustomStreamSelection, PlaybackSubtitle,
 };
 use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
 
@@ -96,7 +96,7 @@ pub async fn project_item(
     };
     let subtitle = subtitle
         .as_ref()
-        .map(|subtitle| subtitle_track(subtitle, &source))
+        .map(|subtitle| subtitle_track(subtitle, &source, channel.next_engine_text_subtitle_mode))
         .transpose()?;
     Ok(wire::PlayoutItem {
         id: item.id.to_string(),
@@ -134,7 +134,38 @@ fn silent_audio(duration_ms: u64) -> wire::Track {
     }
 }
 
-fn subtitle_track(subtitle: &PlaybackSubtitle, source: &wire::Source) -> Result<wire::Track> {
+fn subtitle_track(
+    subtitle: &PlaybackSubtitle,
+    source: &wire::Source,
+    mode: ersatzrs_domain::NextEngineTextSubtitleMode,
+) -> Result<wire::Track> {
+    let embedded = subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED;
+    let burn_embedded_text = embedded
+        && !subtitle.is_image()
+        && mode == ersatzrs_domain::NextEngineTextSubtitleMode::Burn;
+    if burn_embedded_text
+        && (!subtitle.is_extracted
+            || subtitle
+                .path
+                .as_deref()
+                .is_none_or(|path| path.trim().is_empty()))
+    {
+        return Err(invalid(
+            "embedded text subtitles require an extracted sidecar for Next burn mode",
+        ));
+    }
+    if embedded && !burn_embedded_text {
+        return Ok(wire::Track {
+            source: Some(source.clone()),
+            stream_index: Some(
+                u32::try_from(subtitle.stream_index)
+                    .map_err(|_| invalid("invalid embedded subtitle index"))?,
+            ),
+        });
+    }
+    if !embedded && subtitle.is_image() {
+        return Err(invalid("external bitmap subtitles are unsupported by Next"));
+    }
     let (media_path, in_point_ms, out_point_ms) = match source {
         wire::Source::Local {
             path,
@@ -293,12 +324,11 @@ async fn selected_subtitle(
     let subtitle = if let Some(pin) = item.pinned_stream_selection {
         match pin.subtitle_stream_index {
             Some(index) => Some(
-                select_pinned_playback_subtitle(
+                select_next_pinned_playback_subtitle(
                     pool,
                     item.media_item_id,
                     media_version_id,
                     index,
-                    StreamingMode::HttpLiveStreamingSegmenter,
                 )
                 .await?,
             ),

@@ -107,7 +107,7 @@ async fn item_preferences_and_relative_sidecars_preserve_indices_and_seek() {
 }
 
 #[tokio::test]
-async fn channel_preferences_override_global_defaults_and_extracted_paths_use_cache() {
+async fn channel_preferences_override_global_defaults_and_burn_uses_extracted_sidecar() {
     let pool = fixture_pool().await;
     sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, 'nld')"#)
         .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE)
@@ -123,11 +123,14 @@ async fn channel_preferences_override_global_defaults_and_extracted_paths_use_ca
     channel.subtitle_mode = ChannelSubtitleMode::Default;
     let value = serde_json::to_value(project(&pool, &channel, &item()).await.unwrap()).unwrap();
     assert_eq!(value["tracks"]["audio"]["stream_index"], 1);
-    let expected = crate::file_system_layout::subtitle_cache_folder().join("synthetic/english.srt");
     assert_eq!(
         value["tracks"]["subtitle"]["source"]["path"],
-        expected.to_str().unwrap()
+        crate::file_system_layout::subtitle_cache_folder()
+            .join("synthetic/english.srt")
+            .to_str()
+            .unwrap()
     );
+    assert_eq!(value["tracks"]["subtitle"]["stream_index"], 0);
 }
 
 #[tokio::test]
@@ -576,4 +579,243 @@ async fn custom_image_subtitle_selection_scopes_candidates_and_preserves_pins_an
         .unwrap()
         .subtitle
         .is_some());
+}
+
+async fn unextracted_text_fixture() -> DbPool {
+    let pool = fixture_pool().await;
+    sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted"=0, "Path"=NULL WHERE "Id"=1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, 'false')"#)
+        .bind(crate::ffmpeg_config::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES)
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn next_embedded_text_bypasses_native_enable_and_extraction_restrictions() {
+    let pool = unextracted_text_fixture().await;
+    let channel = Channel {
+        next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+        preferred_subtitle_language_code: Some("eng".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let projected = project(&pool, &channel, &item()).await.unwrap();
+    let track = projected.tracks.unwrap().subtitle.unwrap();
+    assert_eq!(track.stream_index, Some(4));
+    assert!(
+        matches!(track.source, Some(wire::Source::Local { path, .. }) if path == "media/fixture.mkv")
+    );
+    assert!(crate::playback::select_playback_subtitle(
+        &pool,
+        10,
+        &["eng".into()],
+        ChannelSubtitleMode::Default,
+        StreamingMode::HttpLiveStreamingSegmenter
+    )
+    .await
+    .unwrap()
+    .is_none());
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value"='true' WHERE "Key"=?"#)
+        .bind(crate::ffmpeg_config::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(crate::playback::select_playback_subtitle(
+        &pool,
+        10,
+        &["eng".into()],
+        ChannelSubtitleMode::Default,
+        StreamingMode::HttpLiveStreamingSegmenter
+    )
+    .await
+    .unwrap()
+    .is_none());
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(4),
+    });
+    assert_eq!(
+        project(&pool, &channel, &pinned)
+            .await
+            .unwrap()
+            .tracks
+            .unwrap()
+            .subtitle
+            .unwrap()
+            .stream_index,
+        Some(4)
+    );
+    assert!(crate::playback::select_pinned_playback_subtitle(
+        &pool,
+        10,
+        100,
+        4,
+        StreamingMode::HttpLiveStreamingSegmenter
+    )
+    .await
+    .is_err());
+    pinned
+        .pinned_stream_selection
+        .as_mut()
+        .unwrap()
+        .subtitle_stream_index = None;
+    assert!(project(&pool, &channel, &pinned)
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
+}
+
+#[tokio::test]
+async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity() {
+    let pool = unextracted_text_fixture().await;
+    let channel = Channel {
+        next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+        preferred_subtitle_language_code: Some("eng".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let source = wire::Source::Http {
+        uri: "https://media.example.test/fixture.mkv".into(),
+        headers: vec!["X-Fixture: synthetic".into()],
+        user_agent: Some("fixture".into()),
+        reconnect: Some(true),
+        reconnect_delay_max: Some(2),
+        timeout_us: Some(5_000_000),
+        in_point_ms: None,
+        out_point_ms: None,
+    };
+    let projected = project_item(
+        &pool,
+        &channel,
+        &item(),
+        100,
+        source,
+        &Resolution::default(),
+    )
+    .await
+    .unwrap();
+    let tracks = projected.tracks.unwrap();
+    assert_eq!(
+        serde_json::to_value(tracks.video.unwrap().source).unwrap(),
+        serde_json::to_value(tracks.subtitle.unwrap().source).unwrap()
+    );
+    sqlx::query(r#"UPDATE "MediaStream" SET "Title"='Other version identity' WHERE "Id"=5"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
+}
+
+#[tokio::test]
+async fn next_custom_embedded_text_is_available_without_extraction_and_native_is_unchanged() {
+    use std::io::Write as _;
+    let pool = unextracted_text_fixture().await;
+    let folder = crate::file_system_layout::channel_stream_selectors_folder();
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut selector = tempfile::Builder::new()
+        .prefix("ucu24-")
+        .suffix(".yml")
+        .tempfile_in(folder)
+        .unwrap();
+    selector
+        .write_all(b"items:\n  - audio_language: [eng]\n    subtitle_language: [eng]\n")
+        .unwrap();
+    selector.flush().unwrap();
+    let channel = Channel {
+        next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+        stream_selector_mode: ChannelStreamSelectorMode::Custom,
+        stream_selector: Some(
+            selector
+                .path()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+        ),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    assert_eq!(
+        project(&pool, &channel, &item())
+            .await
+            .unwrap()
+            .tracks
+            .unwrap()
+            .subtitle
+            .unwrap()
+            .stream_index,
+        Some(4)
+    );
+    assert!(crate::playback::select_custom_playback_streams(
+        &pool,
+        100,
+        10,
+        &channel,
+        item().start,
+        StreamingMode::HttpLiveStreamingSegmenter
+    )
+    .await
+    .unwrap()
+    .is_none());
+}
+
+#[tokio::test]
+async fn next_excludes_external_bitmaps_and_rejects_their_exact_pins() {
+    let pool = fixture_pool().await;
+    sqlx::query(r#"UPDATE "Subtitle" SET "Codec"='hdmv_pgs_subtitle' WHERE "Id"=2"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let channel = Channel {
+        next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+        preferred_subtitle_language_code: Some("nld".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(9),
+    });
+    assert!(project(&pool, &channel, &pinned).await.is_err());
+}
+
+#[tokio::test]
+async fn next_burn_rejects_unextracted_embedded_text_before_publication() {
+    let pool = unextracted_text_fixture().await;
+    let channel = Channel {
+        preferred_subtitle_language_code: Some("eng".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let error = project(&pool, &channel, &item()).await.err().unwrap();
+    assert!(error.to_string().contains("require an extracted sidecar"));
+    assert!(!error.to_string().contains("media/"));
 }

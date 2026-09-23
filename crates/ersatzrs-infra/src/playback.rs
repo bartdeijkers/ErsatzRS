@@ -1268,12 +1268,13 @@ pub async fn select_custom_playback_streams(
         channel,
         content_start_time,
         streaming_mode,
-        false,
+        SubtitleSelectionEngine::Native,
     )
     .await
 }
 
-/// Select custom tracks while excluding embedded subtitles from other versions.
+/// Select Next custom tracks while excluding embedded subtitles from other versions.
+/// Next reads embedded text directly and excludes external bitmap subtitles.
 ///
 /// # Errors
 /// Returns selector, database and subtitle metadata errors.
@@ -1292,7 +1293,7 @@ pub async fn select_custom_playback_streams_for_version(
         channel,
         content_start_time,
         streaming_mode,
-        true,
+        SubtitleSelectionEngine::Next,
     )
     .await
 }
@@ -1305,7 +1306,7 @@ async fn select_custom_playback_streams_inner(
     channel: &Channel,
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
-    scope_subtitles: bool,
+    engine: SubtitleSelectionEngine,
 ) -> Result<Option<CustomStreamSelection>> {
     let Some(selector) = channel
         .stream_selector
@@ -1337,12 +1338,14 @@ async fn select_custom_playback_streams_inner(
         })?;
 
     let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = if scope_subtitles {
+    let mut subtitles = if engine == SubtitleSelectionEngine::Next {
         load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
     };
-    if streaming_mode != StreamingMode::HttpLiveStreamingDirect {
+    if engine == SubtitleSelectionEngine::Native
+        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
+    {
         subtitles.retain(|subtitle| {
             if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
                 return true;
@@ -1353,6 +1356,10 @@ async fn select_custom_playback_streams_inner(
                     .as_deref()
                     .is_some_and(|path| !path.trim().is_empty())
         });
+    }
+
+    if engine == SubtitleSelectionEngine::Next {
+        subtitles.retain(next_subtitle_supported);
     }
 
     for item in selector.items {
@@ -1643,6 +1650,13 @@ fn content_matches_condition(
     evaluate_condition(condition, &context)
 }
 
+/// Engine-specific subtitle eligibility; native extraction restrictions stay local.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SubtitleSelectionEngine {
+    Native,
+    Next,
+}
+
 /// Select the subtitle row for channel playback, porting the built-in branch of
 /// `FFmpegStreamSelector.SelectSubtitleStream`.
 ///
@@ -1663,10 +1677,12 @@ pub async fn select_playback_subtitle(
         preferred_languages,
         subtitle_mode,
         streaming_mode,
+        SubtitleSelectionEngine::Native,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn select_playback_subtitle_inner(
     pool: &DbPool,
     media_item_id: i64,
@@ -1674,6 +1690,7 @@ async fn select_playback_subtitle_inner(
     preferred_languages: &[String],
     subtitle_mode: ChannelSubtitleMode,
     streaming_mode: StreamingMode,
+    engine: SubtitleSelectionEngine,
 ) -> Result<Option<PlaybackSubtitle>> {
     if subtitle_mode == ChannelSubtitleMode::None {
         return Ok(None);
@@ -1684,11 +1701,13 @@ async fn select_playback_subtitle_inner(
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
     };
-    if !use_embedded_subtitles(pool).await? {
+    if engine == SubtitleSelectionEngine::Native && !use_embedded_subtitles(pool).await? {
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
 
-    if streaming_mode != StreamingMode::HttpLiveStreamingDirect {
+    if engine == SubtitleSelectionEngine::Native
+        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
+    {
         candidates.retain(|subtitle| {
             if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
                 return true;
@@ -1699,6 +1718,10 @@ async fn select_playback_subtitle_inner(
                     .as_deref()
                     .is_some_and(|path| !path.trim().is_empty())
         });
+    }
+
+    if engine == SubtitleSelectionEngine::Next {
+        candidates.retain(next_subtitle_supported);
     }
 
     if preferred_languages.is_empty() {
@@ -1733,6 +1756,46 @@ pub async fn select_pinned_playback_subtitle(
     media_version_id: i64,
     stream_index: i32,
     streaming_mode: StreamingMode,
+) -> Result<PlaybackSubtitle> {
+    select_pinned_playback_subtitle_inner(
+        pool,
+        media_item_id,
+        media_version_id,
+        stream_index,
+        streaming_mode,
+        SubtitleSelectionEngine::Native,
+    )
+    .await
+}
+
+/// Resolve a Next pin without requiring native embedded-text extraction.
+///
+/// # Errors
+/// Returns an error for stale identities or unsupported external bitmap sources.
+pub(crate) async fn select_next_pinned_playback_subtitle(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    stream_index: i32,
+) -> Result<PlaybackSubtitle> {
+    select_pinned_playback_subtitle_inner(
+        pool,
+        media_item_id,
+        media_version_id,
+        stream_index,
+        StreamingMode::HttpLiveStreamingSegmenter,
+        SubtitleSelectionEngine::Next,
+    )
+    .await
+}
+
+async fn select_pinned_playback_subtitle_inner(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    stream_index: i32,
+    streaming_mode: StreamingMode,
+    engine: SubtitleSelectionEngine,
 ) -> Result<PlaybackSubtitle> {
     let candidates = load_subtitles_for_media_item(pool, media_item_id).await?;
     let source_stream = sqlx::query(
@@ -1801,7 +1864,8 @@ pub async fn select_pinned_playback_subtitle(
             "media version {media_version_id} has no compatible subtitle row for stream {stream_index}"
         ),
     })?;
-    if streaming_mode != StreamingMode::HttpLiveStreamingDirect
+    if engine == SubtitleSelectionEngine::Native
+        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
         && subtitle.subtitle_kind == subtitle_kind::EMBEDDED
         && !subtitle.is_image()
         && (!subtitle.is_extracted
@@ -1817,7 +1881,17 @@ pub async fn select_pinned_playback_subtitle(
             ),
         });
     }
+    if engine == SubtitleSelectionEngine::Next && !next_subtitle_supported(&subtitle) {
+        return Err(RepositoryError::Decode {
+            kind: "pinned subtitle stream",
+            value: "external bitmap subtitles are unsupported by Next".to_owned(),
+        });
+    }
     Ok(subtitle)
+}
+
+fn next_subtitle_supported(subtitle: &PlaybackSubtitle) -> bool {
+    !subtitle.is_image() || subtitle.subtitle_kind == subtitle_kind::EMBEDDED
 }
 
 fn optional_stream_text_matches(expected: Option<&str>, actual: Option<&str>) -> bool {
@@ -1888,7 +1962,8 @@ pub async fn select_channel_playback_subtitle(
     .await
 }
 
-/// Select channel subtitles against the exact resolved version before ranking.
+/// Select Next channel subtitles against the exact resolved version before ranking.
+/// Native embedded-enabled and extraction restrictions do not apply.
 /// Generated credits and external subtitle sources preserve their existing behavior.
 ///
 /// # Errors
@@ -1923,6 +1998,7 @@ pub async fn select_channel_playback_subtitle_for_version(
         preferred_languages,
         subtitle_mode,
         streaming_mode,
+        SubtitleSelectionEngine::Next,
     )
     .await
 }

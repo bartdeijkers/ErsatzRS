@@ -63,6 +63,8 @@ pub struct ChannelSaveForm {
     playout_offset_hours: i32,
     #[serde(default)]
     streaming_engine: i32,
+    #[serde(default)]
+    next_engine_text_subtitle_mode: i32,
     streaming_mode: i32,
     #[serde(default)]
     watermark_id: i64,
@@ -346,6 +348,7 @@ impl ChannelSaveForm {
             mirror_source_channel_id: parse_i64(fields, "mirror_source_channel_id"),
             playout_offset_hours: parse_i32(fields, "playout_offset_hours"),
             streaming_engine: parse_i32(fields, "streaming_engine"),
+            next_engine_text_subtitle_mode: parse_i32(fields, "next_engine_text_subtitle_mode"),
             streaming_mode: parse_i32(fields, "streaming_mode"),
             watermark_id: parse_i64(fields, "watermark_id"),
             is_enabled: parse_bool(fields, "is_enabled"),
@@ -394,6 +397,7 @@ impl ChannelSaveForm {
             mirror_source_channel_id: self.mirror_source_channel_id,
             playout_offset_hours: self.playout_offset_hours,
             streaming_engine: self.streaming_engine,
+            next_engine_text_subtitle_mode: self.next_engine_text_subtitle_mode,
             streaming_mode: self.streaming_mode,
             watermark_id: self.watermark_id,
             is_enabled: self.is_enabled,
@@ -493,9 +497,20 @@ mod tests {
         assert_eq!(form.number, "101");
         assert_eq!(form.ffmpeg_profile_id, 3);
         assert_eq!(form.streaming_engine, 0);
+        assert_eq!(form.next_engine_text_subtitle_mode, 0);
         assert_eq!(form.streaming_mode, 5);
         assert!(!form.is_enabled);
         assert!(!form.show_in_epg);
+    }
+
+    #[test]
+    fn channel_save_form_preserves_next_text_subtitle_conversion() {
+        let fields = HashMap::from([
+            ("streaming_engine".to_owned(), "1".to_owned()),
+            ("next_engine_text_subtitle_mode".to_owned(), "1".to_owned()),
+        ]);
+        let form = ChannelSaveForm::from_fields(&fields).into_channel_form();
+        assert_eq!(form.next_engine_text_subtitle_mode, 1);
     }
 
     #[test]

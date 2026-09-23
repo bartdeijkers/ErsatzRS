@@ -375,6 +375,8 @@ mod tests {
         for path in [
             "/iptv/preview/12/master.m3u8",
             "/iptv/preview/12/hls.m3u8",
+            "/iptv/preview/12/live_sub.m3u8",
+            "/iptv/preview/12/live000001.vtt",
             "/iptv/preview/12/segment-1.ts",
         ] {
             let status =
@@ -387,6 +389,18 @@ mod tests {
         )
         .await;
         assert_eq!(other_channel, StatusCode::UNAUTHORIZED);
+        for path in [
+            "/iptv/preview/13/live_sub.m3u8",
+            "/iptv/preview/13/live000001.vtt",
+            "/iptv/session/12/live_sub.m3u8",
+            "/iptv/session/12/live000001.vtt",
+        ] {
+            assert_eq!(
+                protected_status(state.clone(), &format!("{path}?access_token={token}")).await,
+                StatusCode::UNAUTHORIZED,
+                "{path}"
+            );
+        }
         let normal_channel = protected_status(
             state.clone(),
             &format!("/iptv/channel/12.m3u8?access_token={token}"),

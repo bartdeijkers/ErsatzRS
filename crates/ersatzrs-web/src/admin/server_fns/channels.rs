@@ -181,6 +181,8 @@ pub struct ChannelForm {
     /// DB integer value: 0=native, 1=ErsatzTV Next.
     #[serde(default)]
     pub streaming_engine: i32,
+    #[serde(default)]
+    pub next_engine_text_subtitle_mode: i32,
     /// DB integer value: 1=TS, 2=HLSDirect, 4=HLSSegmenter, 5=TSHybrid.
     pub streaming_mode: i32,
     pub watermark_id: i64,
@@ -264,6 +266,7 @@ impl ChannelForm {
                 .map(|duration| i32::try_from(duration.num_hours()).unwrap_or(0))
                 .unwrap_or_default(),
             streaming_engine: form.streaming_engine,
+            next_engine_text_subtitle_mode: form.next_engine_text_subtitle_mode,
             streaming_mode: form.streaming_mode,
             watermark_id: form.watermark_id.unwrap_or_default(),
             is_enabled: form.is_enabled,
@@ -321,6 +324,7 @@ impl ChannelForm {
                 )))
             },
             streaming_engine: self.streaming_engine,
+            next_engine_text_subtitle_mode: self.next_engine_text_subtitle_mode,
             streaming_mode: self.streaming_mode,
             watermark_id: optional_id(self.watermark_id),
             fallback_filler_id: optional_id(self.fallback_filler_id),
@@ -901,6 +905,7 @@ mod tests {
                 ffmpeg_profile_id: 1,
                 streaming_mode: 5,
                 streaming_engine: 1,
+                next_engine_text_subtitle_mode: 1,
                 subtitle_mode: 3,
                 is_enabled: true,
                 show_in_epg: false,
@@ -917,6 +922,10 @@ mod tests {
         assert_eq!(
             saved.streaming_engine,
             ersatzrs_domain::StreamingEngine::Next
+        );
+        assert_eq!(
+            saved.next_engine_text_subtitle_mode,
+            ersatzrs_domain::NextEngineTextSubtitleMode::Convert
         );
         assert_eq!(normal.0.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(preview.0.load(std::sync::atomic::Ordering::SeqCst), 1);

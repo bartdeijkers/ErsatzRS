@@ -12,6 +12,14 @@ pub enum StreamingEngine {
     Next,
 }
 
+/// Persisted Next text-subtitle treatment, matching upstream Burn=0 and Convert=1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum NextEngineTextSubtitleMode {
+    #[default]
+    Burn,
+    Convert,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ChannelIdleBehavior {
     #[default]
@@ -125,6 +133,8 @@ pub struct Channel {
     pub fallback_filler: Option<FillerPreset>,
     #[serde(default)]
     pub streaming_engine: StreamingEngine,
+    #[serde(default)]
+    pub next_engine_text_subtitle_mode: NextEngineTextSubtitleMode,
     pub streaming_mode: StreamingMode,
     pub playout_ids: Vec<EntityId>,
     pub artwork_ids: Vec<EntityId>,
@@ -181,6 +191,7 @@ impl Default for Channel {
             fallback_filler_id: None,
             fallback_filler: None,
             streaming_engine: StreamingEngine::default(),
+            next_engine_text_subtitle_mode: NextEngineTextSubtitleMode::default(),
             streaming_mode: StreamingMode::default(),
             playout_ids: Vec::new(),
             artwork_ids: Vec::new(),
@@ -280,4 +291,33 @@ pub struct DecoWatermark {
 pub struct WatermarkGraphicsState {
     pub watermark_ids: Vec<EntityId>,
     pub graphics_elements: Vec<GraphicsElement>,
+}
+
+#[cfg(test)]
+mod next_engine_text_subtitle_tests {
+    use super::{Channel, NextEngineTextSubtitleMode};
+
+    #[test]
+    fn channel_next_engine_text_subtitle_mode_defaults_burn_for_legacy_serialized_channels() {
+        let mut serialized = serde_json::to_value(Channel::default()).unwrap();
+        serialized
+            .as_object_mut()
+            .unwrap()
+            .remove("next_engine_text_subtitle_mode");
+        let restored: Channel = serde_json::from_value(serialized).unwrap();
+        assert_eq!(
+            restored.next_engine_text_subtitle_mode,
+            NextEngineTextSubtitleMode::Burn
+        );
+        let channel = Channel {
+            next_engine_text_subtitle_mode: NextEngineTextSubtitleMode::Convert,
+            ..Channel::default()
+        };
+        let restored: Channel =
+            serde_json::from_str(&serde_json::to_string(&channel).unwrap()).unwrap();
+        assert_eq!(
+            restored.next_engine_text_subtitle_mode,
+            NextEngineTextSubtitleMode::Convert
+        );
+    }
 }

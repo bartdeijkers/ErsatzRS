@@ -180,6 +180,15 @@ pub fn ChannelPreviewPlayer(
                 <button
                     type="button"
                     class=style::control_button
+                    data-preview-captions
+                    aria-pressed="false"
+                    disabled
+                >
+                    {tr(TextKey::PreviewCaptions)}
+                </button>
+                <button
+                    type="button"
+                    class=style::control_button
                     disabled=move || !can_play() || start_action.pending().get()
                     on:click=move |_| {
                         let generation = request_generation.get_untracked().wrapping_add(1);

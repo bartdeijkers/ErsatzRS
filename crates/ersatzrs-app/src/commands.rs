@@ -5578,6 +5578,13 @@ fn validate_channel_form(
         ));
     }
 
+    if !matches!(form.next_engine_text_subtitle_mode, 0 | 1) {
+        errors.push(ChannelValidationError::new(
+            "next_engine_text_subtitle_mode",
+            "Invalid Next engine text subtitle mode",
+        ));
+    }
+
     if form.id > 0 && !state.channels.iter().any(|channel| channel.id == form.id) {
         errors.push(ChannelValidationError::new("id", "Channel does not exist."));
     }
@@ -10130,6 +10137,28 @@ mod tests {
             ffmpeg_profile_ids: vec![10],
             watermark_ids: vec![20],
             fallback_filler_ids: vec![30],
+        }
+    }
+
+    #[test]
+    fn channel_next_engine_text_subtitle_mode_validation_preserves_supported_choices() {
+        let state = channel_validation_state();
+        for mode in [0, 1, -1, 2] {
+            let form = normalize_channel_form(
+                ChannelEditorForm {
+                    next_engine_text_subtitle_mode: mode,
+                    ..ChannelEditorForm::default()
+                },
+                &state,
+            );
+            assert_eq!(form.next_engine_text_subtitle_mode, mode);
+            let errors = validate_channel_form(&form, &state);
+            assert_eq!(
+                errors
+                    .iter()
+                    .any(|error| error.field == "next_engine_text_subtitle_mode"),
+                !matches!(mode, 0 | 1)
+            );
         }
     }
 

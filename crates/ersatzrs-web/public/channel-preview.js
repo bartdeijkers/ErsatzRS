@@ -42,8 +42,53 @@ function removeNativeListeners(video, entry) {
   }
 }
 
+function attachCaptions(video, entry) {
+  const button = rootFor(video)?.querySelector("[data-preview-captions]");
+  if (!button) return;
+  const tracks = () => Array.from(video.textTracks)
+    .filter((track) => track.kind === "subtitles" || track.kind === "captions");
+  const sync = () => {
+    const hls = entry.hls;
+    const available = hls ? hls.subtitleTracks.length > 0 : tracks().length > 0;
+    const showing = hls
+      ? hls.subtitleDisplay && hls.subtitleTrack >= 0
+      : tracks().some((track) => track.mode === "showing");
+    button.disabled = !available;
+    button.setAttribute("aria-pressed", String(available && showing));
+  };
+  const toggle = () => {
+    const show = button.getAttribute("aria-pressed") !== "true";
+    if (entry.hls) {
+      if (show && entry.hls.subtitleTrack < 0) entry.hls.subtitleTrack = 0;
+      entry.hls.subtitleDisplay = show;
+    } else {
+      const available = tracks();
+      const selected = available.find((track) => track.mode === "showing") || available[0];
+      for (const track of available) {
+        track.mode = show && track === selected ? "showing" : "disabled";
+      }
+    }
+    sync();
+  };
+  button.addEventListener("click", toggle);
+  for (const event of ["addtrack", "removetrack", "change"]) {
+    video.textTracks.addEventListener(event, sync);
+  }
+  entry.syncCaptions = sync;
+  entry.removeCaptions = () => {
+    button.removeEventListener("click", toggle);
+    for (const event of ["addtrack", "removetrack", "change"]) {
+      video.textTracks.removeEventListener(event, sync);
+    }
+    button.disabled = true;
+    button.setAttribute("aria-pressed", "false");
+  };
+  sync();
+}
+
 function destroy(video) {
   const entry = players.get(video);
+  entry?.removeCaptions?.();
   if (entry?.hls) entry.hls.destroy();
   removeNativeListeners(video, entry);
   players.delete(video);
@@ -89,9 +134,11 @@ async function start(video, url) {
   };
   players.set(video, entry);
   attachVideoState(video, entry);
+  attachCaptions(video, entry);
 
   try {
     const module = await import("/public/vendor/hls/hls.mjs");
+    if (players.get(video) !== entry) return;
     const Hls = module.default;
     if (Hls?.isSupported()) {
       const root = rootFor(video);
@@ -104,6 +151,9 @@ async function start(video, url) {
         manifestLoadingTimeOut: 30000,
       });
       entry.hls = hls;
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, entry.syncCaptions);
+      hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, entry.syncCaptions);
+      entry.syncCaptions?.();
       hls.attachMedia(video);
       hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -125,6 +175,7 @@ async function start(video, url) {
           entry.failureState = true;
           setState(video, "media", httpStatus, data.details);
         }
+        entry.removeCaptions?.();
         hls.destroy();
         entry.hls = null;
       });
@@ -134,6 +185,7 @@ async function start(video, url) {
     // Fall through to native HLS only when Hls.js is unavailable.
   }
 
+  if (players.get(video) !== entry) return;
   if (video.canPlayType("application/vnd.apple.mpegurl")) {
     const root = rootFor(video);
     if (root) root.dataset.previewEngine = "native";

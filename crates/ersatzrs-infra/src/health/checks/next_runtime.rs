@@ -44,7 +44,7 @@ impl HealthCheck for NextRuntimeHealthCheck {
         let mut invalid = 0;
         for channel in channels {
             let profile = crate::playback::load_channel_playback_profile(&self.pool, channel).await;
-            let supported = matches!(profile, Ok(Some(ref profile)) if crate::next_engine::config::channel_config(profile,
+            let supported = matches!(profile, Ok(Some(ref profile)) if crate::next_engine::config::channel_config(profile, ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
                 Path::new("next-playouts"), Path::new("ffmpeg"), Path::new("ffprobe")).is_ok());
             if !supported {
                 invalid += 1;

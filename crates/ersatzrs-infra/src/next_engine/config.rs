@@ -7,8 +7,8 @@ use std::path::Path;
 
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
-    FFmpegProfileVideoFormat, HardwareAccelerationKind, NormalizeLoudnessMode, OutputDynamicRange,
-    ScalingBehavior, VaapiDriver,
+    FFmpegProfileVideoFormat, HardwareAccelerationKind, NextEngineTextSubtitleMode,
+    NormalizeLoudnessMode, OutputDynamicRange, ScalingBehavior, VaapiDriver,
 };
 
 use crate::playback::PlaybackProfile;
@@ -50,6 +50,7 @@ pub enum ConfigError {
 /// invalid dimensions/loudness, rate overflow or unrepresentable runtime paths.
 pub fn channel_config(
     playback: &PlaybackProfile,
+    subtitle_mode: NextEngineTextSubtitleMode,
     playout_folder: &Path,
     ffmpeg_path: &Path,
     ffprobe_path: &Path,
@@ -67,6 +68,12 @@ pub fn channel_config(
         normalization: wire::Normalization {
             audio: audio(&playback.profile)?,
             video: video(playback)?,
+            subtitle: wire::SubtitleNormalization {
+                mode: match subtitle_mode {
+                    NextEngineTextSubtitleMode::Burn => wire::SubtitleMode::Burn,
+                    NextEngineTextSubtitleMode::Convert => wire::SubtitleMode::Convert,
+                },
+            },
         },
     })
 }

@@ -24,7 +24,7 @@ use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::stream;
 use crate::transport::iptv::streaming_specs;
 use crate::transport::iptv::variant::{
-    build_multi_variant_playlist, build_preview_variant_playlist,
+    build_multi_variant_playlist, build_preview_variant_playlist, with_next_subtitles,
 };
 
 #[derive(Debug, Deserialize, Default)]
@@ -68,7 +68,7 @@ pub(crate) fn request_host(headers: &HeaderMap) -> String {
         )
 }
 
-fn hls_response(body: String) -> Response {
+pub(super) fn hls_response(body: String) -> Response {
     let mut response = body.into_response();
     response
         .headers_mut()
@@ -345,19 +345,19 @@ async fn wait_for_retained_startup(handle: &dyn HlsSessionHandle) -> bool {
     }
 }
 
-fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
+pub(super) fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
     std::env::temp_dir()
         .join("ersatzrs-hls")
         .join(channel_number)
 }
 
-fn preview_hls_working_dir(channel_number: &str) -> std::path::PathBuf {
+pub(super) fn preview_hls_working_dir(channel_number: &str) -> std::path::PathBuf {
     std::env::temp_dir()
         .join("ersatzrs-hls-preview")
         .join(channel_number)
 }
 
-fn is_safe_channel_number_path_component(value: &str) -> bool {
+pub(super) fn is_safe_channel_number_path_component(value: &str) -> bool {
     let mut parts = value.split('.');
     let Some(main) = parts.next() else {
         return false;
@@ -821,7 +821,7 @@ async fn serve_hls_segmenter_playlist(
 
     let body =
         build_multi_variant_playlist(&scheme, &host, channel_number, spec.as_ref(), access_token);
-    hls_response(body)
+    hls_response(with_next_subtitles(body, channel, false, access_token))
 }
 
 /// `GET /iptv/session/{number}/hls.m3u8` — trimmed variant playlist.
@@ -960,11 +960,16 @@ pub async fn get_preview_master_playlist(
         }
     }
 
-    hls_response(build_preview_variant_playlist(
-        &request_scheme(&headers),
-        &request_host(&headers),
-        &channel.number,
-        spec.as_ref(),
+    hls_response(with_next_subtitles(
+        build_preview_variant_playlist(
+            &request_scheme(&headers),
+            &request_host(&headers),
+            &channel.number,
+            spec.as_ref(),
+            &access_token,
+        ),
+        &channel,
+        true,
         &access_token,
     ))
 }
@@ -1025,7 +1030,10 @@ pub async fn get_preview_session_segment(
     .await
 }
 
-fn propagate_playlist_access_token(playlist: &str, access_token: &AccessToken) -> String {
+pub(super) fn propagate_playlist_access_token(
+    playlist: &str,
+    access_token: &AccessToken,
+) -> String {
     let query = access_token.query();
     if query.is_empty() {
         return playlist.to_owned();
@@ -1105,6 +1113,12 @@ async fn serve_hls_segment_file(
                     response.headers_mut().insert(
                         header::CONTENT_TYPE,
                         HeaderValue::from_static("video/iso.segment"),
+                    );
+                }
+                Some("vtt") => {
+                    response.headers_mut().insert(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("text/vtt; charset=utf-8"),
                     );
                 }
                 Some(_) | None => {}
@@ -1488,6 +1502,27 @@ mod tests {
         assert!(propagated.contains("segment-2.ts?part=1&access_token=preview-token"));
         assert!(!propagated.contains("#EXTM3U?"));
     }
+
+    #[tokio::test]
+    async fn converted_subtitle_segments_use_webvtt_content_type_and_no_store() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("live000001.vtt");
+        tokio::fs::write(&path, "WEBVTT\n\n00:00.000 --> 00:01.000\nSynthetic cue\n")
+            .await
+            .unwrap();
+        let response = serve_hls_segment_file(path, "1", "live000001.vtt").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "text/vtt; charset=utf-8"
+        );
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        let playlist = propagate_playlist_access_token(
+            "#EXTM3U\n#EXTINF:1.0,\nlive000001.vtt\n",
+            &AccessToken::new(Some("synthetic-token")),
+        );
+        assert!(playlist.contains("live000001.vtt?access_token=synthetic-token"));
+    }
     #[tokio::test]
     async fn next_engine_routes_force_hls_preserve_tokens_and_reject_transport_stream() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
@@ -1521,6 +1556,8 @@ mod tests {
                 name: "Synthetic".into(),
                 ffmpeg_profile_id: 1,
                 streaming_engine: StreamingEngine::Next,
+                next_engine_text_subtitle_mode:
+                    ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
                 streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
                 is_enabled: true,
                 ..Default::default()
@@ -1542,6 +1579,8 @@ mod tests {
             .unwrap();
         let text = std::str::from_utf8(&body).unwrap();
         assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
+        assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
+        assert!(text.contains("SUBTITLES=\"subs\""));
         let variant =
             get_session_playlist(State(state.clone()), Path("1".into()), Query(query)).await;
         assert_eq!(variant.status(), StatusCode::OK);

@@ -1,5 +1,6 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -171,6 +172,7 @@ DELETE FROM "Playout" WHERE "ChannelId" = ${id};
 DELETE FROM "Artwork" WHERE "ChannelId" = ${id};
 DELETE FROM "Channel" WHERE "Id" = ${id};
 DELETE FROM "FFmpegProfile" WHERE "Id" = ${previewProfileId};
+DELETE FROM "Subtitle" WHERE "MovieMetadataId" = ${metadataId};
 DELETE FROM "MediaStream" WHERE "MediaVersionId" = ${mediaVersionId};
 DELETE FROM "MediaFile" WHERE "MediaVersionId" = ${mediaVersionId};
 DELETE FROM "MediaVersion" WHERE "Id" = ${mediaVersionId};
@@ -756,6 +758,86 @@ WHERE "Id" = ${source.id + 3};
       expect(bounds!.height).toBeLessThanOrEqual(viewport.height * 0.72 + 1);
       expect(bounds!.width / bounds!.height).toBeCloseTo(16 / 9, 1);
     }
+  });
+
+  test('Next converted captions are authenticated and toggle real browser cues', async ({ page }, testInfo) => {
+    // Run the disposable host and this spec with ETV_NEXT_FOLDER and a synthetic
+    // JWT__IssuerSigningKey so tokenless media requests exercise authentication.
+    test.skip(!process.env.ETV_NEXT_FOLDER || !process.env.JWT__IssuerSigningKey,
+      'Requires the real Next engine and JWT authentication on the disposable host');
+    test.setTimeout(120_000);
+    const clipPath = makeCalibrationClip(testInfo);
+    const subtitlePath = testInfo.outputPath('next-preview.nl.srt');
+    writeFileSync(subtitlePath, '1\n00:00:00,000 --> 00:01:10,000\nNext browser caption proof\n');
+    const channel = seedChannel(testInfo, clipPath, 9);
+    sqlite(`
+UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=4,
+  "NextEngineTextSubtitleMode"=1, "SubtitleMode"=2,
+  "PreferredSubtitleLanguageCode"='nld' WHERE "Id"=${channel.id};
+INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
+  "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated")
+VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
+  ${sqlString(subtitlePath)}, '2026-09-23 00:00:00', '2026-09-23 00:00:00');
+`);
+    await forceEnglish(page);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const masterResponse = page.waitForResponse((response) =>
+      response.url().includes(`/iptv/preview/${channel.number}/master.m3u8`)
+      && response.status() === 200);
+    await page.goto(`/channels/${channel.id}/watch`);
+    await waitForHydration(page);
+    const master = await masterResponse;
+    const masterText = await master.text();
+    expect(masterText).toContain('SUBTITLES="subs"');
+    const rendition = masterText.split('\n').find((line) => line.startsWith('#EXT-X-MEDIA:TYPE=SUBTITLES'));
+    const renditionPath = rendition?.match(/URI="([^"]+)"/)?.[1];
+    expect(renditionPath).toBeTruthy();
+    const renditionUrl = new URL(renditionPath!, master.url());
+    expect(renditionUrl.searchParams.has('access_token')).toBe(true);
+    const unauthenticated = new URL(renditionUrl);
+    unauthenticated.search = '';
+    expect((await page.request.get(unauthenticated.href)).status()).toBe(401);
+    let subtitlePlaylist = '';
+    await expect.poll(async () => {
+      const response = await page.request.get(renditionUrl.href);
+      if (!response.ok()) return false;
+      subtitlePlaylist = await response.text();
+      return subtitlePlaylist.split('\n').some((line) => line.trim() && !line.startsWith('#'));
+    }, { timeout: 30_000 }).toBe(true);
+    const segment = subtitlePlaylist.split('\n').find((line) => line.trim() && !line.startsWith('#'))!;
+    const segmentUrl = new URL(segment.trim(), renditionUrl);
+    expect(segmentUrl.searchParams.has('access_token')).toBe(true);
+    const vtt = await page.request.get(segmentUrl.href);
+    expect(vtt.ok()).toBe(true);
+    expect(await vtt.text()).toContain('Next browser caption proof');
+    segmentUrl.search = '';
+    expect((await page.request.get(segmentUrl.href)).status()).toBe(401);
+
+    const root = page.locator('.channel-watch-js [data-channel-preview]');
+    const video = root.locator('video');
+    const captions = root.getByRole('button', { name: 'Captions', exact: true });
+    await expect(root).toHaveAttribute('data-preview-engine', 'hlsjs');
+    await expect(captions).toBeEnabled({ timeout: 30_000 });
+    if (await captions.getAttribute('aria-pressed') !== 'true') await captions.click();
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) =>
+      Array.from(element.textTracks).some((track) => track.mode === 'showing'
+        && Array.from(track.activeCues ?? []).some((cue) =>
+          (cue as VTTCue).text.includes('Next browser caption proof')))),
+    { timeout: 30_000 }).toBe(true);
+    await captions.click();
+    await expect(captions).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) =>
+      Array.from(element.textTracks).some((track) => track.mode === 'showing'))).toBe(false);
+    await captions.click();
+    await expect(captions).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) =>
+      Array.from(element.textTracks).some((track) => track.mode === 'showing'
+        && (track.activeCues?.length ?? 0) > 0))).toBe(true);
+    await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+    await expect(captions).toBeDisabled();
+    await expect(captions).toHaveAttribute('aria-pressed', 'false');
+    expect(errors).toEqual([]);
   });
 
   test('plays a real H.264/AAC preview derivative through Hls.js', async ({

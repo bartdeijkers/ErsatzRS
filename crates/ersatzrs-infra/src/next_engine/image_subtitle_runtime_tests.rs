@@ -217,9 +217,14 @@ async fn real_next_hls_burns_preferred_embedded_bitmap_and_respects_subtitles_of
         audio_channels: 1,
         ..Default::default()
     };
-    for subtitles_off in [false, true] {
+    for (convert, subtitles_off) in [(false, false), (true, false), (false, true), (true, true)] {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
         configure_bitmap_tracks(&pool, subtitles_off).await;
+        sqlx::query(r#"UPDATE "Channel" SET "NextEngineTextSubtitleMode" = ? WHERE "Id" = 1"#)
+            .bind(i32::from(convert))
+            .execute(&pool)
+            .await
+            .unwrap();
         let host = std::sync::Arc::new(host::NextHost::new(
             pool,
             locker,

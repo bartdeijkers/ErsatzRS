@@ -44,15 +44,33 @@ test.describe('channel streaming engine', () => {
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('1');
         await expect(mode).toHaveValue('4');
+        const subtitles = page.locator('select[name="next_engine_text_subtitle_mode"]');
+        await expect(subtitles).toBeVisible();
+        await expect(subtitles).toHaveValue('0');
+        for (const width of [1280, 375]) {
+          await page.setViewportSize({ width, height: 900 });
+          const bounds = await subtitles.boundingBox();
+          expect(bounds).not.toBeNull();
+          expect(bounds!.x).toBeGreaterThanOrEqual(0);
+          expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth))
+            .toBeLessThanOrEqual(width);
+        }
+        await subtitles.selectOption('1');
         await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
         await page.goto(`/channels/${id}`);
+        await expect(subtitles).toHaveValue('1');
+        expect(sqlite(`SELECT "NextEngineTextSubtitleMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('1');
         await engine.selectOption('0');
+        if (javaScriptEnabled) await expect(subtitles).toBeHidden();
         if (javaScriptEnabled) await mode.selectOption('5');
         await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('0');
+        await expect(subtitles).toHaveValue('1');
+        await expect(subtitles).toBeHidden();
         // Without JS, reloading after the engine change restores all native options.
         await mode.selectOption('5');
         await page.getByRole('button', { name: 'Save Channel' }).click();

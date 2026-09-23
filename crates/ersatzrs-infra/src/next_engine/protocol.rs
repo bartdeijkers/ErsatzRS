@@ -31,6 +31,21 @@ pub struct Ffmpeg {
 pub struct Normalization {
     pub audio: Audio,
     pub video: Video,
+    #[serde(default)]
+    pub subtitle: SubtitleNormalization,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct SubtitleNormalization {
+    pub mode: SubtitleMode,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubtitleMode {
+    #[default]
+    Burn,
+    Convert,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

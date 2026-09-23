@@ -108,6 +108,8 @@ pub struct ChannelEditorForm {
     pub playout_offset: Option<Duration>,
     #[serde(default)]
     pub streaming_engine: i32,
+    #[serde(default)]
+    pub next_engine_text_subtitle_mode: i32,
     pub streaming_mode: i32,
     pub watermark_id: Option<EntityId>,
     pub fallback_filler_id: Option<EntityId>,

@@ -4,6 +4,7 @@ pub mod hls;
 pub mod identifier;
 pub mod logos;
 pub mod next_media;
+pub mod next_subtitles;
 pub mod playlist;
 mod retained_stream_buffer;
 pub mod stream;

@@ -43,7 +43,10 @@ version before default/custom ranking. Generated two-track PGS playback proves
 preferred Dutch selection, explicit subtitles-off and retained alternate audio.
 Other Next components/runtime regressions and HTTP/preview lifecycle smoke pass.
 
-Next action is ordered row 24 (1b5d6af7), text subtitle conversion for Next. Remote
+Row 24 (1b5d6af7), text subtitle conversion for Next, is in progress with the
+pin unchanged. Burn/Convert persistence, configuration, selection and WebVTT
+transport are implemented but acceptance remains open; see the row-24 debt.
+Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Complete Next endpoint/browser/platform and full-window
 acceptance are not inferred from focused proof. ADR 0095 retains Next as an
@@ -62,6 +65,13 @@ discovered  = '2026-09-19'
 resolved    = true
 adr         = '0095'
 evidence    = '2026-09-22: maintainer rejected native-only exclusions and selected Next as an optional second engine. ADR 0095 records that accepted decision separately from its unimplemented state.'
+
+[[debt]]
+id          = 'row-24-next-text-subtitle-conversion'
+description = 'Complete Next Burn/Convert channel configuration, embedded and external text selection, authenticated WebVTT transport, preview captions and browser persistence. The available Next engine requires a sidecar to burn embedded text; prepare missing sidecars against the selected version with bounded cancellation-safe extraction before row acceptance.'
+discovered  = '2026-09-23'
+evidence    = 'Source map is in plans/upstream-catch-up.md. Existing extracted Burn sidecars are retained and Convert uses the original selected embedded index. Unprepared embedded Burn currently fails publication with a redacted error instead of being silently skipped by Next. This is an implementation checkpoint, not row acceptance. UCU-02 owns verification evidence and remaining gates.'
+resolved    = false
 
 [[debt]]
 id          = 'ucu-optional-next-engine-integration'

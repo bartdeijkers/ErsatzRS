@@ -21,7 +21,7 @@ use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionRegistry},
     locking::EntityLocker,
     path_replacement::PathReplacement,
-    repositories::RepositoryError,
+    repositories::{ChannelRepository, RepositoryError},
 };
 use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
@@ -64,6 +64,38 @@ impl NextHost {
         }
     }
 
+    async fn configuration(
+        &self,
+        request: &NextStart,
+    ) -> Result<super::protocol::ChannelConfig, ProcessError> {
+        let profile = load_channel_playback_profile(&self.pool, request.channel_id)
+            .await
+            .map_err(|_| ProcessError::Preparation("profile read"))?
+            .ok_or(ProcessError::Preparation("profile unavailable"))?;
+        let profile = if request.preview {
+            crate::hls_worker::apply_playback_profile_override(
+                profile,
+                crate::hls_worker::HlsPlaybackProfileOverride::BrowserCompatible,
+            )
+        } else {
+            profile
+        };
+        let channel = crate::repositories::make_repositories(self.pool.clone())
+            .channel
+            .get_with_profile(request.channel_id)
+            .await
+            .map_err(|_| ProcessError::Preparation("channel read"))?;
+        let playout_folder = self.root.join(request.channel_id.to_string());
+        config::channel_config(
+            &profile,
+            channel.next_engine_text_subtitle_mode,
+            &playout_folder,
+            &request.ffmpeg,
+            &request.ffprobe,
+        )
+        .map_err(|_| ProcessError::Preparation("profile conversion"))
+    }
+
     /// Reserve before spawning or touching the output folder. Concurrent starts
     /// reuse the existing handle. The returned task owns process cleanup, output
     /// cleanup and registry removal; normal shutdown must cancel, not abort it.
@@ -100,26 +132,7 @@ impl NextHost {
             drop(publishers);
             let mut reservation = None;
             let startup = async {
-                let profile = load_channel_playback_profile(&host.pool, request.channel_id)
-                    .await
-                    .map_err(|_| ProcessError::Preparation("profile read"))?
-                    .ok_or(ProcessError::Preparation("profile unavailable"))?;
-                let profile = if request.preview {
-                    crate::hls_worker::apply_playback_profile_override(
-                        profile,
-                        crate::hls_worker::HlsPlaybackProfileOverride::BrowserCompatible,
-                    )
-                } else {
-                    profile
-                };
-                let playout_folder = host.root.join(request.channel_id.to_string());
-                let config = config::channel_config(
-                    &profile,
-                    &playout_folder,
-                    &request.ffmpeg,
-                    &request.ffprobe,
-                )
-                .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+                let config = host.configuration(&request).await?;
                 host.refresh(&publisher, request.channel_id, &request.replacements)
                     .await
                     .map_err(|_| ProcessError::Preparation("playout publication"))?;

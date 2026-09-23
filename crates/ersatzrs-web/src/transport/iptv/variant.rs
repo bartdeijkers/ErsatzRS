@@ -64,6 +64,38 @@ fn build_variant_playlist(variant_url: &str, spec: Option<&ChannelStreamingSpec>
     out
 }
 
+/// Add Next's selected-text rendition to an existing channel or preview master.
+/// A linear channel can change subtitle language at every programme boundary;
+/// do not label that changing rendition with a guessed language.
+pub(crate) fn with_next_subtitles(
+    playlist: String,
+    channel: &ersatzrs_domain::Channel,
+    preview: bool,
+    access_token: &AccessToken,
+) -> String {
+    use ersatzrs_domain::{NextEngineTextSubtitleMode, StreamingEngine};
+    if channel.streaming_engine != StreamingEngine::Next
+        || channel.next_engine_text_subtitle_mode != NextEngineTextSubtitleMode::Convert
+    {
+        return playlist;
+    }
+    let scope = if preview { "preview" } else { "session" };
+    let url = format!(
+        "/iptv/{scope}/{}/live_sub.m3u8{}",
+        channel.number,
+        access_token.query()
+    );
+    let media = format!(
+        "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Selected subtitles\",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,URI=\"{url}\"\n"
+    );
+    playlist
+        .replace("#EXT-X-VERSION:3\n", &format!("#EXT-X-VERSION:6\n{media}"))
+        .replace(
+            "#EXT-X-STREAM-INF:",
+            "#EXT-X-STREAM-INF:SUBTITLES=\"subs\",",
+        )
+}
+
 /// Ports `Mapper.ProjectToSpecsViewModel`:
 /// `(VideoBitrate * 1000 + AudioBitrate * 1000) * 1.2`.
 ///
@@ -107,6 +139,43 @@ fn codec_inf(spec: &ChannelStreamingSpec) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn next_conversion_links_selected_rendition_for_channel_and_preview() {
+        use ersatzrs_domain::{Channel, NextEngineTextSubtitleMode, StreamingEngine};
+        let mut channel = Channel {
+            number: "42".into(),
+            streaming_engine: StreamingEngine::Next,
+            next_engine_text_subtitle_mode: NextEngineTextSubtitleMode::Convert,
+            preferred_subtitle_language_code: Some("nld".into()),
+            ..Default::default()
+        };
+        let token = AccessToken::new(Some("synthetic-token"));
+        let master = build_multi_variant_playlist("http", "example.test", "42", None, &token);
+        for (preview, scope) in [(false, "session"), (true, "preview")] {
+            let converted = with_next_subtitles(master.clone(), &channel, preview, &token);
+            assert!(converted.contains("#EXT-X-VERSION:6\n"));
+            assert!(converted.contains("TYPE=SUBTITLES,GROUP-ID=\"subs\""));
+            assert!(converted.contains("#EXT-X-STREAM-INF:SUBTITLES=\"subs\","));
+            assert!(converted.contains(&format!(
+                "/iptv/{scope}/42/live_sub.m3u8?access_token=synthetic-token"
+            )));
+            // Item language overrides can differ from channel preferences.
+            assert!(!converted.contains("LANGUAGE="));
+            assert!(!converted.contains("English"));
+        }
+        channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Burn;
+        assert_eq!(
+            with_next_subtitles(master.clone(), &channel, false, &token),
+            master
+        );
+        channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Convert;
+        channel.streaming_engine = StreamingEngine::Legacy;
+        assert_eq!(
+            with_next_subtitles(master.clone(), &channel, false, &token),
+            master
+        );
+    }
 
     fn h264_aac_1080p() -> ChannelStreamingSpec {
         ChannelStreamingSpec {

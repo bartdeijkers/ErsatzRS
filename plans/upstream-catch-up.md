@@ -233,6 +233,67 @@ Focused projection regressions and actual generated bitmap-subtitle Next
 playback proof pass, together with other Next consumers and HTTP/preview smoke.
 UCU-02 owns evidence and remaining platform gates.
 
+## Row 24 source map: Next text subtitle conversion
+
+Upstream `1b5d6af7` (#2869) adds `NextEngineTextSubtitleMode` (Burn=0,
+Convert=1) to Channel, create/update commands, mappings, editor and SQLite
+schema. `SyncNextPlayoutHandler` projects embedded text indices and local
+external text sources; `FFmpegStreamSelector` bypasses native embedded-enable
+and extraction restrictions for Next. `StartFFmpegNextSessionHandler` maps
+`normalization.subtitle.mode` and advertises the subtitle HLS rendition.
+`ChannelPreviewDialog` adds a captions control. No new upstream validator is
+introduced. Generated EF models and .NET-only dependency updates are reviewed
+separately; SQLite remains the supported persistence backend.
+Both new EF Designer method bodies equal their corresponding snapshots after
+whitespace normalization; snapshot changes add only the new integer property.
+The .NET package changes are Microsoft Extensions/ASP.NET 10.0.7, Test SDK
+18.5.1, DependencyModel 10.0.7, Elasticsearch 9.3.6, System.CommandLine 2.0.7,
+YamlDotNet 17.1.0, BlazorSortable 6.0.1, MudBlazor 9.4.0 and Scalar 2.14.6.
+They do not change Rust dependencies. Config DTO additions for optional
+`preferred_filters` and `deinterlace` have no producer in this commit;
+no active setting is discarded. Remaining selector changes gate logging only;
+Rust Next selection already omits per-choice logs. No upstream tests or
+changelog hunk change in this commit.
+
+Rust targets: domain/core/app channel contracts, infra channel repository and
+an additive migration; Next config/selection and shared playback policy;
+web channel forms/API, HLS master/session transport and channel preview.
+Preserve resolved-version filtering, exact pins, subtitles-off, external/provider
+text support, native playback policy and channel-edit invalidation. Required
+evidence includes persistence/defaults, burn/convert configuration and selection,
+real Next text conversion and image fallback, authenticated subtitle playlists
+and segments, and hydrated/no-JS channel editing and preview captions.
+
+Visual source map: `ChannelEditor.razor` inserts a Next-only responsive
+`MudStack` label/select row between Streaming Engine and Streaming Mode, using
+the existing `form-field-stack gap-md-8 mb-5` geometry. Options are Burn and
+Convert If Possible; new channels default to Burn. Reuse the Rust editor's
+form-row/select primitives and existing responsive CSS. Preview retains the
+video/control geometry with captions available alongside playback controls.
+No reference screenshot is available; browser comparison uses this Razor
+contract, desktop/mobile overflow checks and actual captions interaction.
+
+Hydration source map: `/channels/new` and `/channels/:id/edit` use the existing
+SSR editor and ordinary POST form, channel server DTO and `/api/channels`
+save boundary. Keep the subtitle-mode row mounted and reuse the streaming-engine
+dependency script for visibility. Localize every supported language. The preview
+player remains inside its existing island with the shared channel-preview JS
+adapter. Browser proof targets Chromium/Firefox save/reload with and without
+JavaScript, plus converted-subtitle discovery and captions toggling.
+
+Implementation and acceptance are in progress; row 24 and the pin remain pending.
+The available Next runtime explicitly skips multi-stream embedded text in Burn
+mode (`channel_session.rs`, `skip_embedded_text_subtitles`). Preserve extracted
+sidecar Burn behavior and prepare missing sidecars before claiming this row.
+Do not reuse item-wide native extraction blindly: it is gated by native settings,
+does not select the resolved version, and lacks bounded cancellation. Conversion
+must retain original media/index and its source timing and HTTP headers.
+The HLS rendition uses a truthful language-neutral name because programme/item
+language overrides can change within one linear channel. Link the rendition via
+`SUBTITLES` on `EXT-X-STREAM-INF`, as required by RFC 8216 section 4.3.4.2.1;
+upstream's fixed English label and unattached group cannot provide correct
+multilingual preview behavior. Existing subtitle selection remains authoritative.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).

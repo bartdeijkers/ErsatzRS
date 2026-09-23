@@ -53,6 +53,7 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
         "playout": {"folder": "playouts/1/current"},
         "ffmpeg": {"ffmpeg_path": "ffmpeg", "ffprobe_path": "ffprobe"},
         "normalization": {
+            "subtitle": {"mode": "burn"},
             "audio": {
                 "format": "ac3", "bitrate_kbps": 192, "buffer_kbps": 384,
                 "channels": 2, "sample_rate_hz": 48000, "normalize_loudness": true,

@@ -7191,6 +7191,45 @@ Pin and ledger advance from 7e38297d to 57f7dfa5 together: 23 reconciled and
 1b5d6af7. Full-window/browser/platform obligations remain open; no hosted CI or
 push occurs before the authorized UCU-03 smoke boundary.
 
+2026-09-23 row 24 implementation checkpoint (1b5d6af7; pin unchanged):
+Fresh fetch retains ee038ba4 and all 169 ledger SHA/subjects match the generated
+log; pin/row 23/upstream checkout remain 57f7dfa5. Source, visual and hydration
+maps are in the plan. Added default-Burn persisted channel mode, app/repository
+validation, all-language editor/DTO/API mapping, Next normalization mode,
+version-scoped direct embedded Convert selection, authenticated WebVTT playlist
+transport, rendition association and preview captions controls. Existing native
+selection is unchanged. Extracted embedded Burn preserves the local sidecar.
+The available Next source explicitly skips unextracted embedded text in Burn;
+publication currently rejects that case with a redacted error. Automatic bounded
+preparation is still required before row acceptance, with work outside schedule
+locks and selected-version identity preserved. Later upstream 4ffd775a confirms
+sidecar mapping and post-extraction Next refresh; this was read-only research,
+not processing or superseding that later ledger row.
+Fifty-two focused domain/app/infra configuration, selection, migration and native
+subtitle regressions pass. Real Next text and bitmap tests pass (4.629 seconds),
+covering nine scenarios: embedded/external Burn/Convert, seeked WebVTT cue timing,
+glyph presence/absence, image fallback and explicit subtitles-off, with retained
+880-Hz Dutch audio. These use synthetic fixtures and the existing tested Next
+binary identified above; local loopback access is required for its proxy.
+Forty-three focused web tests pass, covering channel DTO/API saves and Next
+invalidation, rendition association, bounded subtitle playlist reads, WebVTT
+content type, token propagation and preview-token scope. Scoped domain/app/infra/
+web all-target Clippy passes with warnings denied after factoring configuration
+out of startup and correcting test/documentation style. All 73 Next regressions
+have passing evidence on the final production code: the full run passed 72 and
+exposed one old JSON fixture missing subtitle.mode; updating that fixture to
+the reviewed wire contract makes all three protocol tests pass. Formatting,
+hydration-lint, architecture-lint and progress validation pass. Playwright lists
+24 tests in the two affected specs and JS syntax passes; this is discovery,
+not browser execution. Chromium/Firefox real captions/authentication and
+JS/no-JS persistence/geometry tests are prepared but remain unrun.
+Direct Codex review accepts this as an engineering checkpoint only. Review covers
+schema defaults and enum validation, native/Next policy separation, exact pins,
+source identity/timing, capability scope, bounded reads, captions cleanup and
+retained publication on errors. Missing Burn preparation and browser acceptance
+remain explicit row blockers; no final Port verdict is recorded yet.
+The row verdict, parity pin and upstream checkout have not advanced.
+
 
 
 
