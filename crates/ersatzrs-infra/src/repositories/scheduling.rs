@@ -1045,6 +1045,14 @@ impl SqliteSchedulingContentRepository {
             ..SchedulingCollectionKey::default()
         };
         let media_items = self.items_for_collection_key(&collection_key, 0).await?;
+        let media_items = if row
+            .try_get::<bool, _>("UseChaptersAsMediaItems")
+            .repository()?
+        {
+            self.filler_chapter_items(media_items).await?
+        } else {
+            media_items
+        };
 
         Ok(Some(SchedulingFillerPreset {
             id: filler_id,
@@ -1060,6 +1068,49 @@ impl SqliteSchedulingContentRepository {
             allow_watermarks: row.try_get("AllowWatermarks").repository()?,
             media_items,
         }))
+    }
+
+    async fn filler_chapter_items(
+        &self,
+        media: Vec<SchedulingMediaItem>,
+    ) -> Result<Vec<SchedulingMediaItem>> {
+        let mut result = Vec::new();
+        for item in media {
+            let chapters = sqlx::query(
+                r#"SELECT "StartTime", "EndTime", "Title" FROM "MediaChapter"
+                   WHERE "MediaVersionId" = (
+                       SELECT "Id" FROM "MediaVersion" WHERE ? IN (
+                           "MovieId", "EpisodeId", "MusicVideoId", "OtherVideoId",
+                           "SongId", "ImageId", "RemoteStreamId"
+                       ) ORDER BY "Id" LIMIT 1
+                   ) ORDER BY "StartTime", "ChapterId""#,
+            )
+            .bind(item.id)
+            .fetch_all(&self.0)
+            .await
+            .repository()?;
+            if chapters.is_empty() {
+                result.push(item);
+                continue;
+            }
+            for chapter in chapters {
+                let start =
+                    decode_duration_text(&chapter.try_get::<String, _>("StartTime").repository()?);
+                let finish =
+                    decode_duration_text(&chapter.try_get::<String, _>("EndTime").repository()?);
+                if finish <= start {
+                    continue;
+                }
+                let mut interval = item.clone();
+                interval.duration = finish - start;
+                interval.chapter = Some(ersatzrs_core::scheduling::SchedulingMediaChapter {
+                    start,
+                    title: chapter.try_get("Title").repository()?,
+                });
+                result.push(interval);
+            }
+        }
+        Ok(result)
     }
 
     async fn load_config_entity_id(&self, key: &str) -> Result<Option<EntityId>> {
@@ -3768,6 +3819,7 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
     Ok(SchedulingMediaItem {
         id: row.try_get("Id").repository()?,
         duration,
+        chapter: None,
         liveness: decode_optional_enum_column::<RemoteStreamLiveness>(
             "remote stream liveness",
             row,

@@ -131,3 +131,10 @@ discovered  = '2026-08-30'
 adr         = '0020'
 evidence    = 'Resolved on 2026-08-30: Classic anchor and checkpoint creation now floors `next_start`, `duration_finish`, and every nested Smart Shuffle `release_at` value to the same 100-nanosecond precision as persisted ErsatzTV timestamp columns, without changing the live in-memory scheduler state or the other scheduling engines. Production regression `classic_smart_shuffle_refresh_matches_uninterrupted_cooldown_across_round_trip` builds a sub-tick randomized playlist with an active duration cooldown, reopens its SQLite database at a populated daily checkpoint, Refreshes through the production maintenance/repository path, and proves tick-normalized checkpoint context plus matching future media identities and relative timestamps against uninterrupted scheduling.'
 resolved    = true
+
+[[debt]]
+id          = 'classic-fallback-gap-and-chapter-padding'
+description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, but mid-roll padding still follows the inherited post-roll placement and ignores chapter-point expressions.'
+discovered  = '2026-09-23'
+evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Row 22 remains pending until chapter-aware mid-roll/pad placement, relevant expression behavior, persistence and playback proof are complete.'
+resolved    = false

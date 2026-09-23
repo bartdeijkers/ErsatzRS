@@ -67,3 +67,10 @@ discovered  = '2026-09-23'
 resolved    = false
 adr         = '0096'
 evidence    = 'Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
+
+[[debt]]
+id          = 'row-22-classic-fallback-padding'
+description = 'Row 22 is in implementation: fallback clip boundaries and chapter-as-media loading are corrected locally, but chapter-aware mid-roll padding remains required before the upstream row can land.'
+discovered  = '2026-09-23'
+evidence    = 'See UCU-02 and classic-scheduling debt classic-fallback-gap-and-chapter-padding. The processed pin remains e6496bbc; no Covered/Port verdict is claimed for 7e38297d.'
+resolved    = false

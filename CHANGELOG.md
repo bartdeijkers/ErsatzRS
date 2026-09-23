@@ -103,6 +103,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
+  final clip instead of stretching one item. Honor chapter-as-media filler
+  offsets and titles (upstream PR #2867).
+
 - Preserve negative mirror playout offsets through channel repository upsert,
   keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
 

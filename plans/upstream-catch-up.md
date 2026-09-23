@@ -176,6 +176,29 @@ The row is an adaptation under ADR 0096; unsupported CLR interop and the
 statement-counter replacement are accepted decisions. UCU-02 owns local proof;
 full native execution on all six platforms remains an explicit program gate.
 
+## Row 22 source map: Classic fallback intervals
+
+Upstream `7e38297d` (#2867) changes `PlayoutModeSchedulerBase` and five scheduler
+test files. Gap fallback and padding fallback must emit as many real media
+intervals as needed, clamp the last interval, advance the filler enumerator for
+each interval and preserve chapter offsets, parent identity and chapter title.
+One, Multiple, Duration and Flood share this behavior. No UI, schema, FFmpeg
+builder, changelog or source-transport changes occur upstream.
+
+Rust targets are `core/scheduling/classic` (gap/pad generation and continuation)
+and the scheduling repository (chapter-as-media filler hydration). Existing
+Rust gap fallback stretches one item and clears its out-point; padding omits
+fallback, and filler hydration ignores the persisted chapter option. These are
+required parts of the row, not covered behavior. Tests must prove exact rows,
+clipping, watermark/guide metadata, chapter boundaries and continued filler order.
+Existing Refresh/Reset safety and audio/subtitle identity remain authoritative.
+The first checkpoint implements real clip intervals for gaps and post-roll pad,
+SQL chapter-as-media hydration, source offsets and serialized filler positions.
+The Duration overflow path must retain the real cursor so tail fallback sees
+its unfilled interval. Mid-roll padding still needs chapter-aware placement and
+`FillerExpression` semantics; the row remains pending. See the owning
+classic-scheduling debt and UCU-02 evidence.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).

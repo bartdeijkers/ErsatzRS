@@ -96,7 +96,9 @@ Plex/Jellyfin/Emby pass decoded playback, Plex failover, Range/redirect checks
 and real-host Next HTTP/preview smoke. Row 21 (e6496bbc) is Adapt under accepted
 ADR 0096: bounded JavaScript movie/episode audio hooks serve native and Next
 playback. Focused tests, decoded selection and native/Next smoke pass. Next:
-row 22 (7e38297d), Classic fallback filler. Full platform proof remains open.
+row 22 (7e38297d), Classic fallback filler. Gap/post-roll clipping and chapter
+filler hydration have a tested implementation checkpoint; chapter-aware mid-roll
+padding and its expressions remain before row acceptance. Full platform proof remains open.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

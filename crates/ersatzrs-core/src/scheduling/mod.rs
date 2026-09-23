@@ -66,6 +66,9 @@ pub struct PlayoutBuildRequest {
 pub struct SchedulingMediaItem {
     pub id: EntityId,
     pub duration: Duration,
+    /// Source interval for a filler chapter; absent for ordinary media.
+    #[serde(default)]
+    pub chapter: Option<SchedulingMediaChapter>,
     /// Present only for Remote Streams; unknown remains explicit so schedule
     /// validation can refuse it instead of treating zero duration as finite.
     #[serde(default)]
@@ -84,12 +87,20 @@ pub struct SchedulingMediaItem {
     pub pinned_stream_selection: Option<ersatzrs_domain::PinnedStreamSelection>,
 }
 
+/// Chapter metadata retained while Classic filler enumerates source intervals.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulingMediaChapter {
+    pub start: Duration,
+    pub title: Option<String>,
+}
+
 impl SchedulingMediaItem {
     #[must_use]
     pub fn new(id: EntityId, duration: Duration) -> Self {
         Self {
             id,
             duration,
+            chapter: None,
             liveness: None,
             title: None,
             show_id: None,
@@ -970,8 +981,19 @@ fn playout_item(
         start,
         finish: start + duration,
         guide_group,
-        in_point: Duration::zero(),
-        out_point: duration,
+        in_point: media_item
+            .chapter
+            .as_ref()
+            .map_or(Duration::zero(), |chapter| chapter.start),
+        out_point: media_item
+            .chapter
+            .as_ref()
+            .map_or(Duration::zero(), |chapter| chapter.start)
+            + duration,
+        chapter_title: media_item
+            .chapter
+            .as_ref()
+            .and_then(|chapter| chapter.title.clone()),
         filler_kind,
         custom_title,
         disable_watermarks,

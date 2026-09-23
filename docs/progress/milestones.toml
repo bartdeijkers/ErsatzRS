@@ -6964,6 +6964,36 @@ Row 21 lands as Adapt (ADR 0096), with pin/ledger advancement together. Full
 native six-platform execution remains an explicit program gate, not a waiver.
 No push or hosted CI; next ordered row is 22 (7e38297d).
 
+2026-09-23 row 22 implementation checkpoint (7e38297d; not reconciled):
+Pin/last processed row/upstream HEAD agree at e6496bbc. Fetch confirms the
+169-row ee038ba4 target, and every ledger SHA/subject matches the reverse log.
+The source map covers PlayoutModeSchedulerBase and its five changed test files,
+plus chapter-as-media hydration in PlayoutBuilder and FillerExpression.
+Rust had the same stretched-single-fallback defect, omitted pad fallback and
+ignored the persisted UseChaptersAsMediaItems option. The checkpoint emits
+complete fallback intervals with a clipped last out-point, preserves original
+chapter offsets/title and audio/subtitle preferences, and advances every clip.
+The SQL loader now expands chapters using the head media version and keeps the
+parent media ID. Zero/nonpositive fallback durations cannot spin forever.
+Filler positions are stored additively in the existing Classic anchor context;
+Continue and Refresh read them, while Reset and older absent fields start at
+zero. A serialized Continue regression matches uninterrupted selection.
+The four-mode regression exposed Duration advancing its cursor to the block
+end before tail/fallback could see the gap; the correction preserves the cursor
+for Offline/Filler handling. The focused core library plus SQL fixture selection
+passes 208 tests (0.558 seconds), including exact 2+2+1-minute gap fill,
+45-minute content plus eight fallback padding clips, chapter seek/title and
+track preservation, all four modes and existing Classic refresh regressions.
+Core/infra all-target Clippy passes with warnings denied after extracting the
+SQL chapter assertion into a focused helper. The web consumer check also passes
+(2m 15s); its preview-only SchedulingMediaItem initializer explicitly has no chapter.
+Remaining: chapter-aware mid-roll padding and chapter-point expressions still
+follow the inherited incomplete Rust path. Finish that path, prove persisted
+filler continuation/Refresh and membership behavior, review pre/post-roll
+placement, and run playback smoke before landing this row. No acceptance,
+pin advancement, push or hosted CI is claimed by this engineering checkpoint.
+
+
 """
 
 [[milestone]]

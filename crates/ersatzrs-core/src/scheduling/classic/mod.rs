@@ -351,6 +351,8 @@ struct ClassicAnchorContext {
     smart_shuffle: SchedulingSmartShuffleState,
     #[serde(default)]
     random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
+    #[serde(default)]
+    filler_indices: BTreeMap<EntityId, usize>,
 }
 
 fn classic_anchor_context_version() -> u32 {
@@ -522,6 +524,14 @@ impl ClassicContext {
                 .as_ref()
                 .map(|checkpoint| ClassicAnchorContext {
                     version: classic_anchor_context_version(),
+                    filler_indices: checkpoint
+                        .anchor
+                        .context
+                        .as_deref()
+                        .and_then(|context| {
+                            serde_json::from_str::<ClassicAnchorContext>(context).ok()
+                        })
+                        .map_or_else(BTreeMap::new, |context| context.filler_indices),
                     smart_shuffle: checkpoint.smart_shuffle.clone(),
                     random_rotation_cycle_predecessors: checkpoint
                         .random_rotation_cycle_predecessors
@@ -608,14 +618,17 @@ impl ClassicContext {
             .classic_filler_presets
             .iter()
             .map(|(id, preset)| {
-                (
-                    *id,
-                    MediaEnumerator::new(
-                        format!("classic-filler:{id}"),
-                        preset.media_items.clone(),
-                    )
-                    .with_playback_order(PlaybackOrder::Chronological),
+                let mut enumerator = MediaEnumerator::new(
+                    format!("classic-filler:{id}"),
+                    preset.media_items.clone(),
                 )
+                .with_playback_order(PlaybackOrder::Chronological);
+                enumerator.index = anchor_context
+                    .filler_indices
+                    .get(id)
+                    .copied()
+                    .unwrap_or_default();
+                (*id, enumerator)
             })
             .collect();
 
@@ -953,9 +966,16 @@ impl ClassicContext {
                 continue;
             }
             if item_start_time + media_item.duration > finish {
-                self.state.current_time = finish;
-                self.state.duration_finish = None;
-                self.advance_schedule_item();
+                // Preserve the real cursor for tail/fallback generation below.
+                // Advancing it first hides the remaining duration-block gap.
+                if !matches!(
+                    schedule_item.tail_mode,
+                    TailMode::Offline | TailMode::Filler
+                ) {
+                    self.state.current_time = finish;
+                    self.state.duration_finish = None;
+                    self.advance_schedule_item();
+                }
                 break;
             }
             let block_start_len = self.result.added_items.len();
@@ -1254,8 +1274,7 @@ impl ClassicContext {
                 let duration = item.finish - item.start;
                 item.start = current;
                 item.finish = current + duration;
-                item.in_point = Duration::zero();
-                item.out_point = duration;
+                item.out_point = item.in_point + duration;
                 current = item.finish;
             }
         }
@@ -1526,14 +1545,17 @@ impl ClassicContext {
         if remaining <= Duration::zero() {
             return Vec::new();
         }
-        self.add_duration_filler(
+        let mut items = self.add_duration_filler(
             schedule_item,
             filler_id,
             block_finish,
             Self::effective_filler_kind(schedule_item, preset.filler_kind),
             remaining,
             preset.allow_watermarks,
-        )
+        );
+        let current = items.last().map_or(block_finish, |item| item.finish);
+        items.extend(self.fallback_items(schedule_item, current, target));
+        items
     }
 
     fn current_filler_item(
@@ -1589,31 +1611,64 @@ impl ClassicContext {
     }
 
     fn add_fallback(&mut self, schedule_item: &ProgramScheduleItem, until: DateTime<Utc>) {
-        if self.state.current_time >= until {
-            return;
-        }
-        let Some(fallback_filler_id) = schedule_item.fallback_filler_id else {
-            return;
+        let items = self.fallback_items(schedule_item, self.state.current_time, until);
+        self.append_filler_items(schedule_item, items);
+    }
+
+    // Upstream #2867: consume complete clips, then trim only the final clip.
+    // An invalid-duration collection must terminate without manufacturing time.
+    fn fallback_items(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        start: DateTime<Utc>,
+        until: DateTime<Utc>,
+    ) -> Vec<PlayoutItem> {
+        let Some(id) = schedule_item.fallback_filler_id else {
+            return Vec::new();
         };
         let allow_watermarks = self
             .request
             .reference_data
             .classic_filler_presets
-            .get(&fallback_filler_id)
+            .get(&id)
             .is_none_or(|preset| preset.allow_watermarks);
-        let Some(mut item) = self.current_filler_item(
-            schedule_item,
-            fallback_filler_id,
-            self.state.current_time,
-            FillerKind::Fallback,
-            allow_watermarks,
-        ) else {
-            return;
-        };
-        item.finish = until;
-        item.out_point = Duration::zero();
-        self.advance_filler(fallback_filler_id);
-        self.append_filler_items(schedule_item, vec![item]);
+        let count = self
+            .request
+            .reference_data
+            .classic_filler_presets
+            .get(&id)
+            .map_or(0, |preset| preset.media_items.len());
+        let mut skipped = 0;
+        let mut current = start;
+        let mut result = Vec::new();
+        while current < until {
+            let Some(mut item) = self.current_filler_item(
+                schedule_item,
+                id,
+                current,
+                FillerKind::Fallback,
+                allow_watermarks,
+            ) else {
+                break;
+            };
+            self.advance_filler(id);
+            if item.finish <= current {
+                skipped += 1;
+                if skipped >= count {
+                    self.result.warnings.push(format!(
+                        "classic fallback filler {id} contains no positive-duration items"
+                    ));
+                    break;
+                }
+                continue;
+            }
+            skipped = 0;
+            item.finish = item.finish.min(until);
+            item.out_point = item.in_point + (item.finish - current);
+            current = item.finish;
+            result.push(item);
+        }
+        result
     }
 
     fn append_filler_items(
@@ -1739,10 +1794,16 @@ impl ClassicContext {
             in_duration_filler: self.state.in_duration_filler,
             next_guide_group: self.state.next_guide_group,
             context: (self.request.reference_data.has_active_smart_shuffle()
-                || !self.random_rotation_cycle_predecessors.is_empty())
+                || !self.random_rotation_cycle_predecessors.is_empty()
+                || !self.filler_media.is_empty())
             .then(|| {
                 serde_json::to_string(&ClassicAnchorContext {
                     version: classic_anchor_context_version(),
+                    filler_indices: self
+                        .filler_media
+                        .iter()
+                        .map(|(id, enumerator)| (*id, enumerator.current_index()))
+                        .collect(),
                     smart_shuffle: self.persisted_smart_shuffle_state(),
                     random_rotation_cycle_predecessors: self
                         .random_rotation_cycle_predecessors
@@ -5479,7 +5540,7 @@ mod tests {
             .is_some_and(|context| context.contains("\"FillerPresetId\":91")));
     }
 
-    fn schedule_item(
+    pub(super) fn schedule_item(
         id: EntityId,
         mode: PlayoutMode,
         collection_id: EntityId,
@@ -5498,7 +5559,7 @@ mod tests {
         }
     }
 
-    fn filler_preset(
+    pub(super) fn filler_preset(
         id: EntityId,
         filler_kind: FillerKind,
         filler_mode: FillerMode,
@@ -5551,3 +5612,6 @@ mod tests {
         })
     }
 }
+
+#[cfg(test)]
+mod fallback_tests;

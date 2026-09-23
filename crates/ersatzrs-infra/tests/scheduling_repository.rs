@@ -2124,6 +2124,48 @@ async fn scheduling_repository_loads_imported_classic_item_filler_from_sql() {
             (20, FillerKind::None, false)
         ]
     );
+
+    assert_classic_chapter_filler(&pool).await;
+}
+
+async fn assert_classic_chapter_filler(pool: &SqlitePool) {
+    let repos = make_repositories(pool.clone());
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    pool.execute(
+        r#"UPDATE "FillerPreset" SET "UseChaptersAsMediaItems" = 1, "Count" = 2 WHERE "Id" = 77"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "MediaChapter" ("Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title") VALUES
+        (9001, 120, 0, '00:00:00', '00:02:00', 'Intro'),
+        (9002, 120, 1, '00:10:00', '00:13:00', 'Second chapter')"#).await.unwrap();
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+    let filler = &reference_data.classic_filler_presets[&77];
+    assert_eq!(filler.media_items[0].duration, Duration::minutes(2));
+    assert_eq!(filler.media_items[1].duration, Duration::minutes(3));
+    let result = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 902,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+    let chapter = &result.added_items[1];
+    assert_eq!(chapter.media_item_id, 12);
+    assert_eq!(chapter.in_point, Duration::minutes(10));
+    assert_eq!(chapter.out_point, Duration::minutes(13));
+    assert_eq!(chapter.chapter_title.as_deref(), Some("Second chapter"));
+    assert_eq!(chapter.finish - chapter.start, Duration::minutes(3));
 }
 
 #[tokio::test]

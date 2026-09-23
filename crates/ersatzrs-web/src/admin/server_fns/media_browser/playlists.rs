@@ -349,6 +349,7 @@ pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_refere
                 .map(|media| ersatzrs_core::scheduling::SchedulingMediaItem {
                     id: media.id,
                     duration: media.duration,
+                    chapter: None,
                     liveness: None,
                     title: Some(media.title),
                     show_id: None,
