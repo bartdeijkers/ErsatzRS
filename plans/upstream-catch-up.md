@@ -394,6 +394,38 @@ publication identity changes, plus decoded visible/off behavior with retained
 subtitle/audio selection. Reuse unchanged row-26 native smoke and selector proof;
 record new runtime evidence and substantive review in UCU-02 before pin advance.
 
+## Row 28 source map: configured Next scaling
+
+Upstream `7869f165` maps the persisted scaling behavior to Next normalization:
+Stretch, Crop and the ScaleAndPad default, with exact snake-case JSON names.
+The remaining diff updates NUnit/analyzers, Scalar and Lennox.NvEncSharp packages;
+review their actual runtime use rather than treating the mixed commit as tooling.
+
+Rust already maps all three domain values in `next_engine/config.rs`; its existing
+configuration regression asserts all three wire values. `NextHost::configuration`
+loads the persisted profile and applies the shared browser-compatible override
+before the same converter, retaining scaling selection. The default wire enum is
+ScaleAndPad. No production change is indicated by this source comparison.
+
+Add decoded real-Next evidence for a mismatched input/output aspect ratio so pad,
+stretch and crop cannot pass as equivalent. Preserve selected audio and subtitle
+behavior, and retain existing profile rejection/normalization coverage. No native
+FFmpeg argv, schema, controls, translations or runtime-health requirement changes
+are implied. Reuse prior unchanged native and host/preview proof; record the mixed
+dependency review, focused tests and direct review in UCU-02 before pin advance.
+
+Dependency review: NvEncSharp 2.1 updates NVENC definitions from API 9.1 to 12.2
+and adds AV1/preset symbols, but this commit changes no capability caller/policy.
+ErsatzTV already supplies the same AV1 GUIDs and uses device, codec/profile,
+10-bit and B-frame queries. `ersatzrs-hwprobe` already implements that subset
+with API 12.1, followed by FFmpeg capability enrichment/fallback; no numerical
+ABI bump is justified. Its zero-initialized name buffer avoids the package's
+Linux `kernel32.dll` regression. See the [package change](https://github.com/jlennox/NvEncSharp/commit/d8f91647bb56)
+and [upstream report](https://github.com/jlennox/NvEncSharp/issues/19).
+NUnit/analyzers remain test-project-only dependencies; Scalar only updates the
+existing docs renderer dependency without changing configuration or API behavior.
+These dependency implementations have no required Rust package substitution.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -437,7 +469,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | Port | upstream-baseline-catch-up | `fix(infra): repair blank subtitle cache references` | ucu-02; rooted cache reuse already covered; NULL/blank/whitespace path repair and partial-extraction absolute-index regression verified. Later source confirms the pending-only ordinal bug. See ucu-02 evidence. |
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | Port | upstream-baseline-catch-up | `feat(infra): project permanent Next watermarks` | ucu-02; nine anchors, size/margins, shared Merge selection, independent watermark timeline and Dynamic Burn. Focused tests and native smoke pass. Official Next RGB opacity defect is explicitly accepted pending upstream correction; no local workaround. See ucu-02 evidence. |
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | Port | upstream-baseline-catch-up | `feat(infra): project intermittent Next watermarks` | ucu-02; wall-clock periodic timing, widened units, redacted invalid-timing rejection and unchanged Dynamic join timing. 31 focused tests include decoded visible/fade/hidden states with subtitle/audio preservation; scoped Clippy passes. See ucu-02 evidence. |
-| 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | | | | ucu-02; provisional: Next behavior triage. |
+| 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | Covered | upstream-baseline-catch-up | `test(infra): verify configured Next scaling output` | ucu-02; existing three-mode configuration confirmed by decoded production-host pad/stretch/crop with subtitle/audio preservation. Seven focused tests and scoped Clippy pass. Mixed dependency updates audited separately; no missing Rust hardware query or ABI bump required. See ucu-02 evidence. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | | | | ucu-02; provisional: Next behavior triage. |
 | 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 31 | `290f991b` | prep for release v26.5.0 [no ci] | | | | ucu-02; provisional: Upstream tooling candidate. |

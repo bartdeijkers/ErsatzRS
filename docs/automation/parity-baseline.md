@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `91b029e429b233b1f2c77e84ee6f100679686a98` |
-| **Commit subject** | `feat: overlay single intermittent watermarks using next engine (#2879)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/91b029e429b233b1f2c77e84ee6f100679686a98 |
+| **Pinned commit** | `7869f16573b9f8d29790a830f2bfc7960847170b` |
+| **Commit subject** | `feat: use configured scaling behavior with next engine (#2880)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7869f16573b9f8d29790a830f2bfc7960847170b |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-23","summary":"UCU-02 row 28 Covered: existing Next scaling verified through decoded production-host pad/stretch/crop with subtitles/audio; seven tests and Clippy pass, dependency audit complete, pin 7869f165 and row 29 next."}
 {"agent":"Codex","date":"2026-09-23","summary":"UCU-02 row 27 Port: intermittent Next wall-clock timing, default fade and joined visibility verified by 31 focused tests with subtitle/audio decoding and scoped Clippy; pin 91b029e4, row 28 next."}
 {"agent":"Codex","date":"2026-09-23","summary":"UCU-02 row 26 Port: permanent Next watermarks, shared Merge selection and decoded subtitle/audio/off behavior verified; RGB opacity explicitly left to upstream, pin e04a834e and row 27 next."}
 {"agent":"Codex","date":"2026-09-23","summary":"UCU-02 row 25 Port: rooted subtitle cache reuse, blank-path repair and absolute partial-extraction indices verified by 46 tests and scoped Clippy; pin cd298820, row 26 next."}

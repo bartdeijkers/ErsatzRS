@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-seven reconciled and 142 pending,
+The ledger registers 169 commits: twenty-eight reconciled and 141 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -43,19 +43,15 @@ version before default/custom ranking. Generated two-track PGS playback proves
 preferred Dutch selection, explicit subtitles-off and retained alternate audio.
 Other Next components/runtime regressions and HTTP/preview lifecycle smoke pass.
 
-Row 24 (1b5d6af7) is Port: Burn/Convert persistence, bounded version-bound
-embedded Burn preparation, authenticated WebVTT transport and preview captions
-pass focused runtime tests, eight Chromium/Firefox cases and native smoke.
-Row 25 (cd298820) is Port: rooted cache reuse is retained; blank saved paths
-now require repair, with SQL/cache-root and partial-extraction index regressions.
-A later upstream correction confirms preserving absolute input stream indices.
+Rows 24-25 port Burn/Convert, bounded version-bound preparation, authenticated
+WebVTT and preview captions, with browser/runtime/native smoke proof. Cache reuse,
+blank-path repair and absolute partial-extraction indices have SQL regressions.
 Rows 26-27 port permanent and wall-clock intermittent watermarks through shared
 selection. Decoded geometry, fade/hidden intervals, joined timing, audio and
 subtitles pass; Dynamic timing and merged deco fallback have regression coverage.
-The official Next RGB opacity bug
-is explicitly accepted pending upstream correction, with visible unresolved debt.
-Remote
-Stream/add-on and graphics integration belong to later rows and remain refused
+Row 28 confirms existing pad/stretch/crop scaling through decoded Next output.
+The official Next RGB opacity bug is explicitly accepted pending upstream correction, with visible unresolved debt.
+Remote Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Full endpoint/platform/window acceptance remains open. ADR 0095 retains the
 optional Next engine alongside native playback. The first consolidated CI follows
 UCU-03 smoke; only reviewed local row commits precede that boundary. Codex owns

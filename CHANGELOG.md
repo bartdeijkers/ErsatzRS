@@ -49,6 +49,8 @@ release section when tagging a release.
   Add profile-to-Next configuration and managed process startup with bounded
   readiness, heartbeat and process-tree cleanup; reject unsupported explicit
   output codecs and HDR settings instead of silently changing them.
+  Respect the profile's fit-with-bars, stretch and crop scaling choices while
+  retaining selected subtitles and audio (upstream PR #2880).
   Reuse persisted audio/subtitle selection for Next item projection, retaining
   preference precedence, exact pins, source seek points and explicit silence.
   Read persisted schedules with mirror offsets and deterministic media-file

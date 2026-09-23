@@ -114,7 +114,9 @@ The upstream RGB opacity defect is explicitly accepted pending a future Next fix
 no local patch or normalization is requested. Shared Merge selection is repaired.
 Row 27 (91b029e4) is Port: intermittent Next watermarks preserve wall-clock
 cycles, default fades and joined visibility, with subtitle/audio decoding proof.
-Next: review row 28 (7869f165), configured Next scaling behavior. Full-window and
+Row 28 (7869f165) is Covered: configured pad/stretch/crop output passes decoded
+production-host tests with selected subtitles/audio; mixed dependencies are audited.
+Next: review row 29 (b1ce607c), media-server subtitle conversion. Full-window and
 supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

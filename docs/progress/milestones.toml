@@ -7424,6 +7424,39 @@ advances pin and ledger together to 91b029e429b233b1f2c77e84ee6f100679686a98.
 Twenty-seven rows are reconciled, 142 remain pending. Row 28 (7869f165) is next;
 UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
 
+
+2026-09-23 row 28 reconciliation (7869f165; Covered):
+Fresh fetch retains ee038ba4; all 169 ledger SHA/subjects match upstream history.
+Read the complete nine-file diff. Next scaling mapping and snake-case wire values
+already match ScaleAndPad/Stretch/Crop through config::channel_config. The host
+loads the persisted profile; its browser-compatible override changes codecs and
+bit depth, preserving scaling. Existing configuration tests cover every mode.
+A new production NextHost regression uses a 320x180 blue source with red side
+stripes and a persisted 240x180 target. Decoded frames distinguish fitted black
+bars with preserved edges, stretched full-height content with preserved edges,
+and cropped full-frame content with removed edges. Each mode retains burned
+Dutch subtitle glyphs and the selected 880-Hz audio. Seven focused config/runtime
+tests pass in 2.851 seconds; scoped infra all-target Clippy passes. Independent
+Codex review confirms source parity and that the pixel checks distinguish modes.
+No production change, schema, UI, dependency or runtime-health change is needed.
+The dependency portion was audited separately, not dismissed as generic tooling.
+NvEncSharp 2.1 adds API 12.2/AV1/preset definitions, but upstream callers retain
+their existing codec/profile, 10-bit and B-frame queries and already supplied AV1
+GUIDs. Rust's direct ersatzrs-hwprobe API 12.1 implementation covers that used
+subset, with FFmpeg enrichment/fallback; a numerical ABI bump would add no proven
+requirement. Its initialized name buffer does not share the package's Linux
+kernel32.dll regression. The plan source map links the exact package change and
+maintainer report. NUnit/analyzers affect test projects only; Scalar updates its
+existing docs renderer dependency without caller/configuration/API changes.
+No Rust dependency substitution or unsupported capability claim is introduced.
+Unchanged row-26 native smoke and prior preview/transport evidence remain valid;
+new decoding proves the actual normal-host scaling path. The accepted Next RGB
+watermark opacity limitation is unchanged and unrelated to this geometry proof.
+The authorized local commit `test(infra): verify configured Next scaling output`
+advances pin and ledger together to 7869f16573b9f8d29790a830f2bfc7960847170b.
+Twenty-eight rows are reconciled, 141 remain pending. Row 29 (b1ce607c) is next;
+UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
+
 """
 
 [[milestone]]

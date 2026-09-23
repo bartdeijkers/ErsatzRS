@@ -814,3 +814,6 @@ mod image_subtitle_runtime_tests;
 
 #[path = "text_subtitle_runtime_tests.rs"]
 mod text_subtitle_runtime_tests;
+
+#[path = "scaling_runtime_tests.rs"]
+mod scaling_runtime_tests;
