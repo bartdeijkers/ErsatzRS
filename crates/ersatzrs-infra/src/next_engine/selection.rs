@@ -188,6 +188,7 @@ pub(crate) async fn project_deferred_item_with_audio(
     Ok(DeferredProjection {
         pending_burn,
         item: wire::PlayoutItem {
+            watermark: None,
             id: item.id.to_string(),
             start: item.start,
             finish: item.finish,

@@ -187,3 +187,32 @@ async fn dynamic_snapshot_rejects_missing_local_identity_and_stale_binding() {
     drop(schedule_snapshot);
     assert!(PlayoutLockGuard::try_acquire(&locker, 1).is_some());
 }
+
+#[tokio::test]
+async fn watermark_changes_fence_dynamic_publication_without_discarding_subtitle_cache() {
+    let (pool, locker, channel, start, _file) = fixture().await;
+    let mut projected = snapshot(&pool, &locker, start).await;
+    let schedule_snapshot = schedule::read_locked(
+        &pool,
+        &locker,
+        &channel,
+        start,
+        start + Duration::seconds(60),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let media = &schedule_snapshot.items[0];
+    projected.projection.item.watermark = Some(
+        serde_json::from_value(serde_json::json!({
+            "source": { "source_type": "local", "path": "synthetic/watermark.png" },
+            "stream_index": 0, "location": "bottom_right", "opacity_percent": 50.0
+        }))
+        .unwrap(),
+    );
+    let changed = fingerprint(&pool, media, &projected.projection, &channel)
+        .await
+        .unwrap();
+    assert_ne!(projected.identity.descriptor, changed.descriptor);
+    assert_eq!(projected.identity.cache_key, changed.cache_key);
+}

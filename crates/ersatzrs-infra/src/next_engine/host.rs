@@ -265,8 +265,7 @@ impl NextHost {
                             selection_time,
                         )
                         .await?;
-                        if !watermarks.is_empty()
-                            || !graphics.is_empty()
+                        if !graphics.is_empty()
                             || channel.music_video_credits_mode
                                 != ChannelMusicVideoCreditsMode::None
                         {
@@ -281,6 +280,7 @@ impl NextHost {
                             &profile.resolution,
                         )
                         .await?;
+                        projection.item.watermark = super::watermark::project(&watermarks)?;
                         if projection.pending_burn.is_some() {
                             let identity = super::dynamic_projection::fingerprint(
                                 &self.pool,

@@ -2038,14 +2038,16 @@ pub async fn select_playback_watermarks(
 
     let item_ids = load_playout_item_watermark_ids(pool, playout_item_id).await?;
     if !item_ids.is_empty() {
-        return resolve_playback_watermarks(pool, channel.id, item_ids).await;
+        watermark_ids.extend(item_ids);
+        return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
     }
 
     let fallback_id = match channel.watermark_id {
         Some(id) => Some(id),
         None => load_global_watermark_id(pool).await?,
     };
-    resolve_playback_watermarks(pool, channel.id, fallback_id.into_iter().collect()).await
+    watermark_ids.extend(fallback_id);
+    resolve_playback_watermarks(pool, channel.id, watermark_ids).await
 }
 
 /// Select graphics elements for channel playback, porting ErsatzTV's

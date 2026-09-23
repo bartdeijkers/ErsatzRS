@@ -651,6 +651,102 @@ async fn playback_watermarks_apply_deco_precedence() {
 }
 
 #[tokio::test]
+async fn playback_watermarks_preserve_merged_deco_with_item_channel_global_or_no_fallback() {
+    for template in [false, true] {
+        let pool = common::test_db().await;
+        seed_movie_with_subtitles(&pool).await;
+        let repos = make_repositories(pool.clone());
+        common::seed_profile_and_channel(&repos, 2300).await;
+        let merged = seed_custom_watermark(&pool, 2301, "merged", 20).await;
+        let fallback = seed_custom_watermark(&pool, 2302, "fallback", 10).await;
+        seed_deco(&pool, 2303, 3, true, 2301).await;
+        seed_playout_item(&pool, 2300, (!template).then_some(2303), 2304, 10).await;
+        if template {
+            seed_active_deco_template(&pool, 2300, 2303).await;
+        }
+        let mut channel = Channel {
+            id: 2300,
+            ..Channel::default()
+        };
+        // Upstream SelectWatermarksTestCases: a merge remains present without
+        // fallback, and appends to item/channel/global choices instead of replacing them.
+        for fallback_kind in 0..4 {
+            sqlx::query(r#"DELETE FROM "PlayoutItemWatermark" WHERE "PlayoutItemId"=2304"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+                .bind(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+                .execute(&pool)
+                .await
+                .unwrap();
+            channel.watermark_id = (fallback_kind == 2).then_some(2302);
+            match fallback_kind {
+                1 => {
+                    sqlx::query(r#"INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (2304,2302)"#)
+                        .execute(&pool).await.unwrap();
+                }
+                3 => repos
+                    .config
+                    .set(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID, "2302")
+                    .await
+                    .unwrap(),
+                _ => {}
+            }
+            let selected =
+                select_playback_watermarks(&pool, &channel, 2304, false, common::fixed_time())
+                    .await
+                    .unwrap();
+            let ids: Vec<_> = selected.iter().map(|value| value.watermark.id).collect();
+            assert_eq!(
+                ids,
+                if fallback_kind == 0 {
+                    vec![2301]
+                } else {
+                    vec![2302, 2301]
+                },
+                "template={template}, fallback={fallback_kind}; preserve z-index order"
+            );
+        }
+        cleanup_files([merged, fallback]);
+    }
+}
+
+#[tokio::test]
+async fn playback_watermark_merge_still_respects_item_disable_and_filler_exclusion() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 2310).await;
+    let merged = seed_custom_watermark(&pool, 2311, "merged-filler", 0).await;
+    let fallback = seed_custom_watermark(&pool, 2312, "fallback-filler", 0).await;
+    seed_deco(&pool, 2313, 3, false, 2311).await;
+    seed_playout_item(&pool, 2310, Some(2313), 2314, 10).await;
+    let channel = Channel {
+        id: 2310,
+        watermark_id: Some(2312),
+        ..Channel::default()
+    };
+    assert!(
+        select_playback_watermarks(&pool, &channel, 2314, true, common::fixed_time())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "FillerKind"=1 WHERE "Id"=2314"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        select_playback_watermarks(&pool, &channel, 2314, false, common::fixed_time())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    cleanup_files([merged, fallback]);
+}
+
+#[tokio::test]
 async fn playback_watermarks_match_deco_template_json_filters_and_year_range() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;

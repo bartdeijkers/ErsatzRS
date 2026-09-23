@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-five reconciled and 144 pending,
+The ledger registers 169 commits: twenty-six reconciled and 143 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -49,16 +49,17 @@ pass focused runtime tests, eight Chromium/Firefox cases and native smoke.
 Row 25 (cd298820) is Port: rooted cache reuse is retained; blank saved paths
 now require repair, with SQL/cache-root and partial-extraction index regressions.
 A later upstream correction confirms preserving absolute input stream indices.
+Row 26 (e04a834e) is Port: single permanent watermarks share native selection
+and preserve geometry, disabled state, independent timing, audio and Dynamic Burn.
+Merged deco selection now survives fallback. The official Next RGB opacity bug
+is explicitly accepted pending upstream correction, with visible unresolved debt.
 Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
-where unsupported. Complete Next endpoint/browser/platform and full-window
-acceptance are not inferred from focused proof. ADR 0095 retains Next as an
-optional second engine alongside native playback; no Next-specific exemption
-applies. The first consolidated CI follows UCU-03 smoke, as authorized. Only
-reviewed local row commits are made before that boundary. Direct Codex review
-replaces Claude review. Milestones own acceptance and evidence; the pin document
-is authoritative and the ledger target is refreshed each run. Teletext p9a-01
-also depends on ucu-09.
+where unsupported. Full endpoint/platform/window acceptance remains open. ADR 0095 retains the
+optional Next engine alongside native playback. The first consolidated CI follows
+UCU-03 smoke; only reviewed local row commits precede that boundary. Codex owns
+review; milestones own acceptance/evidence, and the pin document is authoritative.
+Refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
 [[debt]]
@@ -106,3 +107,10 @@ description = 'Row 23 embedded image selection constrains automatic/custom embed
 discovered  = '2026-09-23'
 evidence    = 'Resolved by version-scoped projection regressions, generated two-track PGS decoding with subtitles-off and retained Dutch audio, 39 focused native/selection tests, 65 other Next regressions, scoped all-target Clippy and real-host Next HLS/preview/idle cleanup smoke. See UCU-02 for exact evidence and remaining full-window/platform obligations.'
 resolved    = true
+
+[[debt]]
+id          = 'row-26-next-rgb-watermark-opacity'
+description = 'Official Next applies opacity before adding alpha to RGB watermark images, rendering a configured translucent overlay opaque. The maintainer explicitly accepts this upstream alpha-engine limitation pending a future Next fix; no source patch, host normalization or row-acceptance blocker is requested.'
+discovered  = '2026-09-23'
+resolved    = false
+evidence    = 'UCU-02 owns the row 26 checkpoint: 121 of 122 Next/audio tests and all eight selector tests pass; decoded 50-percent RGB watermark opacity fails. Independent FFmpeg bytes prove filter ordering is causal. Current public main and develop artifacts are still 946aa52. On 2026-09-23 the maintainer instructed us to ignore this defect and leave its correction to upstream. Keep the RGB fixture and recorded pixel diagnostic; assert geometry, disabled selection, subtitles and audio without claiming effective opacity parity.'

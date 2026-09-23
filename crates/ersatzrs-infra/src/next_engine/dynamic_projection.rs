@@ -73,14 +73,13 @@ pub(crate) async fn project_snapshot(
     .await?;
     let graphics =
         playback::select_playback_graphics(pool, &channel, media.item.id, selection_time).await?;
-    if !watermarks.is_empty()
-        || !graphics.is_empty()
+    if !graphics.is_empty()
         || channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::None
     {
         return Err(unavailable());
     }
     let source = source::resolve_published(pool, media, replacements, Some(relay)).await?;
-    let projection = selection::project_deferred_item_with_audio(
+    let mut projection = selection::project_deferred_item_with_audio(
         pool,
         &channel,
         &media.item,
@@ -90,6 +89,7 @@ pub(crate) async fn project_snapshot(
         selection::AudioDirective::Published(published_audio),
     )
     .await?;
+    projection.item.watermark = super::watermark::project(&watermarks)?;
     let identity = fingerprint(pool, media, &projection, &channel).await?;
     drop(schedule_snapshot);
     Ok(Snapshot {

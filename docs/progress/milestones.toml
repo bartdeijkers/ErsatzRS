@@ -6035,6 +6035,10 @@ CI for this window is deferred to the first consolidated exact-SHA CI after
 UCU-03 smoke. This milestone may close on its required local acceptance
 evidence and ordered ledger review without a separate CI run.
 Pin, last processed ledger row and upstream HEAD agree.
+Per explicit maintainer instruction on 2026-09-23, the upstream Next RGB-image
+opacity defect is accepted pending a future upstream fix: keep official engine
+artifacts and do not require a host workaround or translucent RGB runtime proof.
+All other watermark, subtitle/audio and window acceptance remains unchanged.
 """
 evidence = """
 2026-09-22: UCU-01 local acceptance is Complete under the amended CI cadence.
@@ -7326,6 +7330,67 @@ The authorized local commit `fix(infra): repair blank subtitle cache references`
 advances pin and ledger together to cd2988205d9baaeb9dda9b292997e05db2083d38.
 Twenty-five rows are reconciled, 144 remain pending. Row 26 (e04a834e) is next;
 UCU-02 full-window and supported-platform gates remain open. No push or CI.
+
+
+2026-09-23 row 26 implementation checkpoint (e04a834e; not accepted):
+Fresh upstream history still matches all 169 ledger entries and target ee038ba4.
+The plan source map covers single permanent Next watermarks, existing channel
+refresh forwarding and shared selection. Added the optional watermark JSON
+contract, all nine anchors, actual/scaled size, margins and opacity, and connected
+it to normal and Dynamic Burn projection before publication identity hashing.
+Programme joins preserve the independent watermark timeline. Corrected shared
+selection so merged template/playout deco IDs survive item/channel/global/no
+fallback branches; disable and filler exclusion retain their behavior.
+Eight SQL selector regressions pass. Of 122 selected Next/audio tests, 121 pass;
+the new real-engine RGB watermark regression fails at 50 percent opacity:
+decoded red is fully opaque. Actual/scaled geometry assertions pass before the
+failure; the final disabled scenario is not claimed passed. Scoped infra
+all-target Clippy passes. Independent source review found no adapter defect.
+The failure is in official Next 946aa528c3a44e1079c702901b32d4d817ca1a12:
+ColorChannelMixerFilter runs before the alpha-capable format conversion. A
+bounded FFmpeg 9 byte probe returns alpha 255 for that RGB chain and alpha 129
+when RGBA conversion precedes the same 0.5 mixer. Live upstream main and all
+current develop release artifacts still use 946aa52; no newer official fix
+exists. Preserve the failing RGB regression and resolve this packaging/runtime
+correction before acceptance. A patched local binary alone cannot establish
+release/Docker correctness. Pin and ledger remain at row 25, cd298820; no push
+or hosted CI and no UCU-02 completion claim.
+
+
+Maintainer acceptance amendment, 2026-09-23: explicitly ignore the Next opacity
+bug because Next is alpha and its maintainers will address it in a later version.
+Keep official artifacts; do not add a source patch or host image normalization.
+This supersedes the preceding opacity blocker only. The expectation of a future
+fix is the maintainer's rationale, not a claim that a released fix exists.
+The RGB runtime fixture remains, including geometry and recorded center-pixel
+values, but its failed 50-percent alpha assertion is withdrawn under this explicit
+instruction. The 100-percent case, selection/disable, subtitle and alternate-audio
+assertions remain. Open upstream-owned opacity debt remains visible; successful
+remaining tests do not establish effective opacity parity.
+
+
+Final row 26 review and acceptance (Port), under the explicit opacity amendment:
+The amended real-engine test passes all three scenarios in 3.444 seconds:
+actual-size top-right placement, scaled top-left Dynamic Burn, then disabled
+watermark with retained subtitles and Dutch 880-Hz audio. Configured opacity is
+preserved in JSON, but translucent RGB rendering is not claimed. The unchanged
+121 passing Next/audio regressions and all eight selector regressions remain
+valid. Native MPEG-TS/HLS smoke passes HTTP/playlist/initial-segment checks after
+building the current production code. Scoped infra all-target Clippy passed;
+the only subsequent Rust change withdraws the explicitly waived alpha assertion,
+retains its pixel diagnostic and renames the test. The final test compiles and
+passes; formatting and diff checks pass. No admin controls or generated native
+FFmpeg argv builders changed; existing channel refresh/preview forwarding and
+mirror/source selection evidence remain valid. Existing runtime/profile health
+requirements are unchanged. Direct Codex review finds no remaining row blocker.
+Cargo clean removed 46.5 GiB before the final focused test under the stale
+40-GiB instruction. The maintainer then clarified that the threshold is 60 GiB,
+matching the current build policy; use 60 GiB going forward. No custom target
+directory was used and no further cleanup is required.
+Pin and ledger advance together to e04a834edf896e150e74c73d13211c7a1f9dfa8b
+with the authorized local commit `feat(infra): project permanent Next watermarks`.
+Twenty-six rows are reconciled, 143 remain pending. Row 27 (91b029e4) is next.
+UCU-02 full-window/platform gates remain open; no push or hosted CI is performed.
 
 """
 

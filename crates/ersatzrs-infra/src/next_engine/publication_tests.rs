@@ -9,6 +9,7 @@ fn schedule(id: &str) -> Playout {
     Playout {
         version: PLAYOUT_VERSION.to_owned(),
         items: vec![PlayoutItem {
+            watermark: None,
             id: id.to_owned(),
             start: Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap(),
             finish: Utc.with_ymd_and_hms(2026, 9, 22, 12, 1, 0).unwrap(),

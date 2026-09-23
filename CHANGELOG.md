@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Display one permanent watermark with the optional Next engine, preserving
+  selected placement, actual or scaled size and margins, and forwarding configured
+  opacity (upstream PR #2878), including demand-time embedded subtitle Burn.
+  Next currently renders RGB images without an alpha channel fully opaque;
+  this accepted upstream limitation awaits a future Next fix.
+
 ### Changed
 
 - Add the optional Next engine's per-channel text subtitle mode: Burn or
@@ -109,6 +117,9 @@ release section when tagging a release.
   generated Clippy ledger now lives under `docs/reference/`.
 
 ### Fixed
+
+- Preserve merged deco watermarks when combining them with item, channel or
+  global watermarks, including a merged watermark with no fallback selection.
 
 - Repair empty or whitespace-only embedded-subtitle cache references while
   reusing completed cached tracks (upstream PR #2873). Partial extraction retains

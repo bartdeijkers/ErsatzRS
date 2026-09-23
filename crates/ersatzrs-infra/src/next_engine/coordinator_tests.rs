@@ -10,6 +10,7 @@ async fn project(
     Ok(items
         .into_iter()
         .map(|media| protocol::PlayoutItem {
+            watermark: None,
             id: format!("{}-{}", channel.name, media.item.id),
             start: media.item.start,
             finish: media.item.finish,

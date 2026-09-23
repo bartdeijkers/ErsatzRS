@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `cd2988205d9baaeb9dda9b292997e05db2083d38` |
-| **Commit subject** | `fix: don't extract embedded subtitles that have already been extracted (#2873)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cd2988205d9baaeb9dda9b292997e05db2083d38 |
+| **Pinned commit** | `e04a834edf896e150e74c73d13211c7a1f9dfa8b` |
+| **Commit subject** | `feat: overlay single permanent watermarks using next engine (#2878)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e04a834edf896e150e74c73d13211c7a1f9dfa8b |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

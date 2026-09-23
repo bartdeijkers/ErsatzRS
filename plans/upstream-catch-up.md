@@ -323,6 +323,50 @@ it does not process or supersede the later ledger row. Timing-only log changes
 have no selection or persistence contract. Focused candidate/argv regressions and
 scoped lint are required; unchanged decoded runtime evidence remains reusable.
 
+## Row 26 source map: single permanent Next watermarks
+
+Upstream `e04a834e` adds a watermark to the Next item wire contract, invokes
+existing watermark selection at each item's original start time, and refreshes
+Next publication after channel watermark/audio/subtitle preference changes.
+Selection still owns item disabling, template/playout deco precedence, filler
+eligibility, channel/global fallback and image resolution. Selector signature
+changes only suppress publication-time logs; generated-model changes describe
+source, absolute stream index, nine anchors, size, margins and opacity.
+No schema, editor layout or translations change in this row.
+
+Rust targets: `next_engine/protocol.rs`, a focused watermark projector, shared
+`playback::select_playback_watermarks`, `NextHost::refresh`, and Dynamic Burn
+reprojection. Preserve mirror source time for deco selection and target channel
+identity for its logo. Channel save already notifies the normal registry, whose
+forwarding adapter also notifies preview sessions. Both concrete and Dynamic
+items must include the same watermark before descriptor hashing; joining an
+item must not seek the independently looping watermark along with programme
+media. Reuse local custom/logo/resource resolution and existing image-stream
+index zero. Exactly one permanent watermark is this row's scope; intermittent,
+multiple layers, expressions and graphics remain owned by later ordered rows.
+Output-frame placement matches this upstream wire; later source-content placement
+semantics are not implicitly enabled.
+Source audit also exposes an existing shared-selector defect: Merge deco IDs are
+discarded when item or channel/global fallback is selected. Upstream retains them,
+including a single Merge-only watermark without fallback. Preserve the accumulated
+IDs and port those upstream regression cases before relying on this selector for
+Next. Channel-save forwarding is already present; watermark-definition/global
+settings handlers are unchanged upstream, so notification redesign is excluded.
+
+Required proof: stable serialized watermark fields, all anchors, actual/scaled
+size, margins/opacity, existing selection/disable/mirror precedence and channel
+refresh, plus decoded real Next overlay with retained audio/subtitles and Dynamic
+Burn. Existing UI controls remain unchanged; runtime and relevant focused checks
+own this integration's acceptance. Record gaps and evidence in UCU-02 before
+advancing the pin.
+
+Maintainer amendment (2026-09-23): the official Next RGB-image opacity defect
+is accepted pending upstream correction. Keep the official engine, RGB fixture
+and pixel diagnostic; do not require translucent RGB output for this row or add
+a local patch/normalization layer. Geometry, disabled selection, audio/subtitle
+proof and all other gates remain required. UCU-02 and the upstream-opacity debt
+own the failure evidence and this explicit acceptance exception.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -364,7 +408,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | Port | upstream-baseline-catch-up | `fix(infra): scope Next subtitle selection to resolved versions` | ucu-02; embedded image selection validates resolved-version candidates before default/custom ranking. Generated PGS proves preferred bitmap, subtitles-off and retained audio; other Next regressions and HTTP/preview smoke pass. See ucu-02 evidence. |
 | 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | Port | upstream-baseline-catch-up | `feat(infra): prepare Next embedded text on demand` | ucu-02; persisted Burn/Convert, bounded version-bound embedded Burn, authenticated WebVTT and preview captions. 133 focused tests, eight Chromium/Firefox cases and native MPEG-TS/HLS smoke pass. See ucu-02 evidence. |
 | 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | Port | upstream-baseline-catch-up | `fix(infra): repair blank subtitle cache references` | ucu-02; rooted cache reuse already covered; NULL/blank/whitespace path repair and partial-extraction absolute-index regression verified. Later source confirms the pending-only ordinal bug. See ucu-02 evidence. |
-| 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | | | | ucu-02; provisional: Next behavior triage. |
+| 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | Port | upstream-baseline-catch-up | `feat(infra): project permanent Next watermarks` | ucu-02; nine anchors, size/margins, shared Merge selection, independent watermark timeline and Dynamic Burn. Focused tests and native smoke pass. Official Next RGB opacity defect is explicitly accepted pending upstream correction; no local workaround. See ucu-02 evidence. |
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | | | | ucu-02; provisional: Next behavior triage. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | | | | ucu-02; provisional: Next behavior triage. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | | | | ucu-02; provisional: Next behavior triage. |

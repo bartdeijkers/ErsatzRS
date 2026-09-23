@@ -13,6 +13,7 @@ fn local(start: Option<u64>) -> Source {
 fn item() -> PlayoutItem {
     let start = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
     PlayoutItem {
+        watermark: None,
         id: "synthetic".into(),
         start,
         finish: start + Duration::seconds(60),
@@ -193,5 +194,27 @@ fn dynamic_source_wire_fields_match_next_and_omit_absent_options() {
     let decoded: Source = serde_json::from_value(serde_json::json!({ "source_type":"dynamic", "uri":"http://127.0.0.1:8409/synthetic-item", "headers":["X-Fixture: synthetic"], "user_agent":"fixture" })).unwrap();
     assert!(
         matches!(decoded, Source::Dynamic { headers: Some(headers), .. } if headers == ["X-Fixture: synthetic"])
+    );
+}
+
+#[test]
+fn joining_programme_does_not_seek_the_independent_watermark() {
+    let mut original = item();
+    original.watermark = Some(
+        serde_json::from_value(serde_json::json!({
+            "source": { "source_type": "local", "path": "synthetic/watermark.png" },
+            "stream_index": 0,
+            "location": "top_left",
+            "width_percent": 12.5,
+            "opacity_percent": 75.0
+        }))
+        .unwrap(),
+    );
+    let expected = serde_json::to_value(&original.watermark).unwrap();
+    let resolved = resolve_at(&original, original.start + Duration::seconds(15)).unwrap();
+    assert_eq!(serde_json::to_value(&resolved.watermark).unwrap(), expected);
+    assert_ne!(
+        serde_json::to_value(&resolved.tracks).unwrap(),
+        serde_json::to_value(&original.tracks).unwrap()
     );
 }

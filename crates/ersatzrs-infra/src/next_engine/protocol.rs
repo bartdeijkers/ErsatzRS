@@ -161,6 +161,39 @@ pub struct PlayoutItem {
     pub source: Option<Source>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tracks: Option<Tracks>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watermark: Option<Watermark>,
+}
+
+/// A single permanent image/video overlay on the primary content.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Watermark {
+    pub source: Source,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_index: Option<u32>,
+    pub location: WatermarkLocation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub horizontal_margin_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vertical_margin_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opacity_percent: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WatermarkLocation {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    CenterLeft,
+    Center,
+    CenterRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]

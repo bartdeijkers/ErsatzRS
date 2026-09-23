@@ -43,7 +43,11 @@ ACL on Windows. Focused credential-rotation, Range and web response tests pass,
 as does decoded Linux Next playback through the production media-open adapter.
 Decoded Plex failover, credential-isolating redirects and real-host HTTP/preview
 smoke also pass; row 20 is Port.
-Graphics projection and full playback acceptance remain open.
+Single permanent watermarks now use shared selection in both ordinary and
+Dynamic Burn item projection. The official Next build's RGB-image opacity defect
+is an explicitly accepted upstream limitation pending its fix; no host workaround
+or patched engine is introduced. UCU-02 owns the evidence and remaining gates.
+Other graphics projection and full playback acceptance remain open.
 
 ## Context
 
@@ -178,10 +182,12 @@ HTTP master playlists force the Next HLS path and preserve existing token
 propagation. MPEG-TS requests are rejected, matching the upstream engine split.
 The health engine checks executable availability and profile compatibility only
 when an enabled channel selects Next. These checks are not playback acceptance.
-Local-library sources reuse native path replacement and track selectors. Current
-provider sources and resolved graphics/watermarks fail projection explicitly
-until their integration is complete; they never silently lose tracks or graphics.
-These remain open parity requirements, not accepted permanent exclusions.
+Local-library sources reuse native path replacement and track selectors. Provider
+inputs use the authenticated media-open integration described above. Exactly one
+permanent watermark is projected with its own independent source timeline;
+unsupported graphics and active watermark combinations fail projection explicitly.
+Remaining graphics integration is open parity work. The accepted RGB opacity
+limitation is tracked separately in upstream catch-up debt.
 
 ## Consequences
 
