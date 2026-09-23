@@ -4,10 +4,10 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099']
 summary    = """
-The ledger registers 170 commits: thirty-seven reconciled and 133 pending,
+The ledger registers 170 commits: thirty-eight reconciled and 132 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-03 is Complete with terminal green
-consolidated CI at 8f722099; UCU-04 rows 35-37 are reconciled. Milestone ucu-03 owns
+consolidated CI at 8f722099; UCU-04 rows 35-38 are reconciled. Milestone ucu-03 owns
 the evidence and preserved limitations. UCU-01 local gates prove repository links, channel-only packaging,
 provenance, six-RID staging and Docker startup.
 

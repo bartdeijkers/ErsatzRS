@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `e8b7bb638831548e85a78992ba1b3b0ebf982aea`
   — fix: amd vaapi accel when driver is set to default (#3036).
-- Ledger: **170 commits**, **133 pending**. The original plan covered 152 through
+- Ledger: **170 commits**, **132 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -16,9 +16,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **37**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **38**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 38.
+  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 39.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -615,7 +615,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 35 | `0fc7ebb0` | fix: use jwt in hls direct playlist (#2889) | Covered | upstream-baseline-catch-up | `docs(porting): verify existing HLS Direct JWT propagation` | ucu-04; existing HlsQuery/AccessToken plumbing covers all seven raw media URLs, stable variant and segment URLs, including blank tokens. Thirteen relevant tests pass in green CI 35880721503 at unchanged source 8f722099; substantive Codex review agrees. NvEncSharp 2.1.1 is upstream-only tooling; no new hardware or JWT-enabled end-to-end playback claim. |
 | 36 | `64296597` | feat: add channel config overlays for next engine (#2891) | Port | upstream-baseline-catch-up | `feat(infra): apply Next channel configuration overlays` | ucu-04; ordered profile/default/channel overlays, startup directory, null omission and localized bounded health inspection. Existing deinterlace/tonemap mapping retained. 122 Next tests including decoded overlay playback, four health tests, all-culture localization, scoped Clippy, Burn/Convert HTTP smoke and substantive review pass. Window gates remain open. |
 | 37 | `fecce92e` | fix: use configured ffmpeg with all graphics elements (#2892) | Covered | drawvg-graphics-engine | `docs(porting): verify configured FFmpeg for native graphics` | ucu-04; ADR 0005 native motion/subtitle inputs share the resolved FFmpeg executable. Existing locator/snapshot CI proof plus decoded all-kinds graphics test with poisoned PATH pass; substantive review agrees. Next graphics projection remains separately open under ADR 0095. No Rust changes. |
-| 38 | `41bf22eb` | chore: dependency updates (#2893) | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 38 | `41bf22eb` | chore: dependency updates (#2893) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency updates` | ucu-04; eight project files plus ReSharper tool manifest, version-only changes. Exact packages are absent from Rust; ADRs 0009/0058/0076/0096 preserve existing search/template/JavaScript boundaries. No application, test, schema or runtime-artifact change and no new parity claim. Substantive review passes. |
 | 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | | | | ucu-04; provisional: Next behavior triage. |
 | 40 | `2c02561f` | chore: update dependencies (#2900) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | | | | ucu-04; provisional: Next behavior triage. |

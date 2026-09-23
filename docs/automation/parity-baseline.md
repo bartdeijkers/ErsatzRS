@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `fecce92e97523ab092f3019354bcc5797081dfe9` |
-| **Commit subject** | `fix: use configured ffmpeg with all graphics elements (#2892)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/fecce92e97523ab092f3019354bcc5797081dfe9 |
+| **Pinned commit** | `41bf22eb3191f86ab22d3aeb33de910c235fbd02` |
+| **Commit subject** | `chore: dependency updates (#2893)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/41bf22eb3191f86ab22d3aeb33de910c235fbd02 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

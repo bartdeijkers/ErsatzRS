@@ -132,7 +132,7 @@ push and terminal green consolidated CI at 8f722099. UCU-04 row 35 is Covered
 (existing HLS Direct JWT propagation). Row 36 ports Next configuration overlays
 with focused and HTTP smoke proof. Row 37 is Covered: native graphics share
 the configured FFmpeg executable (ADR 0005), with decoded PATH-isolation proof.
-Next: row 38;
+Row 38 is N/A for upstream .NET dependency/tool versions. Next: row 39;
 continue ordered reconciliation and require green CI at its window boundary.
 Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
