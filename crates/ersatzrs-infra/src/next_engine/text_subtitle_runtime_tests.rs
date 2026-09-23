@@ -33,13 +33,7 @@ async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     clip
 }
 
-async fn configure_text_tracks(
-    pool: &crate::db::DbPool,
-    folder: &Path,
-    embedded: bool,
-    convert: bool,
-    off: bool,
-) {
+async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert: bool, off: bool) {
     use ersatzrs_core::repositories::PlayoutRepository;
     for sql in [
         r#"DELETE FROM "Subtitle""#,
@@ -49,18 +43,13 @@ async fn configure_text_tracks(
     ] {
         sqlx::query(sql).execute(pool).await.unwrap();
     }
-    let extracted = embedded && !convert;
-    let path = if extracted {
-        Some(folder.join("fixture.nl.srt").to_string_lossy().into_owned())
-    } else if embedded {
-        None
-    } else {
-        Some("fixture.nl.srt".into())
-    };
+    // Both modes start with unextracted embedded metadata. Burn must use the
+    // production demand-time callback and extract the selected original stream.
+    let path = (!embedded).then_some("fixture.nl.srt");
     sqlx::query(r#"INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated")
         VALUES (20,?,'Dutch',?,'subrip',1,0,0,'nld',?,?,'2026-09-23','2026-09-23')"#)
         .bind(i32::from(!embedded)).bind(if embedded {3} else {0})
-        .bind(i32::from(extracted)).bind(path).execute(pool).await.unwrap();
+        .bind(0).bind(path).execute(pool).await.unwrap();
     sqlx::query(r#"UPDATE "Channel" SET "NextEngineTextSubtitleMode" = ? WHERE "Id" = 1"#)
         .bind(i32::from(convert))
         .execute(pool)
@@ -181,6 +170,78 @@ fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) {
     }
 }
 
+/// Keep only transport framing in the fixture; authentication, SQL selection,
+/// extraction, cache admission and callback timing use the production host.
+struct CallbackListener(tokio::task::JoinHandle<()>);
+
+impl CallbackListener {
+    async fn stop(&mut self) {
+        self.0.abort();
+        assert!((&mut self.0)
+            .await
+            .as_ref()
+            .is_err_and(tokio::task::JoinError::is_cancelled));
+    }
+}
+
+impl Drop for CallbackListener {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    host.media
+        .configure(listener.local_addr().unwrap())
+        .unwrap();
+    CallbackListener(tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            timeout(Duration::from_secs(35), async {
+                let mut bytes = Vec::new();
+                while !bytes.ends_with(b"\r\n\r\n") {
+                    assert!(bytes.len() < 16 * 1024, "callback headers exceed fixture limit");
+                    bytes.push(socket.read_u8().await.unwrap());
+                }
+                let request = std::str::from_utf8(&bytes).unwrap();
+                let mut lines = request.split("\r\n");
+                let target = lines.next().unwrap().strip_prefix("GET ").unwrap()
+                    .strip_suffix(" HTTP/1.1").unwrap();
+                let headers: Vec<_> = lines.filter_map(|line| line.split_once(':')).collect();
+                let header = |name: &str| headers.iter()
+                    .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                    .map(|(_, value)| value.trim());
+                let authorized = header(crate::next_engine::media::ACCESS_HEADER)
+                    .is_some_and(|value| host.media.authorized(value));
+                let (status, body) = if authorized {
+                    let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
+                        .split('/').collect();
+                    assert_eq!(parts.len(), 4);
+                    let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap())
+                        .unwrap().with_timezone(&chrono::Utc);
+                    let until = chrono::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap())
+                        .unwrap().with_timezone(&chrono::Utc);
+                    match host.resolve_dynamic(parts[0].parse().unwrap(), parts[1].parse().unwrap(),
+                        parts[2], if parts[3] == "off" { None } else { Some(parts[3].parse().unwrap()) }, header("x-etv-channel").unwrap(), now, until).await {
+                        Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
+                        Err(error) => panic!("production callback failed: {error}"),
+                    }
+                } else {
+                    ("401 Unauthorized", Vec::new())
+                };
+                let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                socket.write_all(response.as_bytes()).await.unwrap();
+                socket.write_all(&body).await.unwrap();
+                socket.shutdown().await.unwrap();
+            }).await.unwrap();
+        }
+    }))
+}
+
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off() {
@@ -206,12 +267,13 @@ async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off()
         (true, true, true),
     ] {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
-        configure_text_tracks(&pool, root.path(), embedded, convert, off).await;
+        configure_text_tracks(&pool, embedded, convert, off).await;
         let host = std::sync::Arc::new(host::NextHost::new(
             pool,
             locker,
             root.path().join("playout"),
         ));
+        let mut callback = callback_listener(host.clone()).await;
         let output = root.path().join("output");
         let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
         let task = host
@@ -278,6 +340,7 @@ async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off()
         assert_text_video_and_audio(&ffmpeg, &output.join(segment), !convert && !off).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
+        callback.stop().await;
         assert!(!output.exists());
     }
 }

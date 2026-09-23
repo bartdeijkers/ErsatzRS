@@ -4,9 +4,15 @@
 //! Runtime compatibility is checked against the separately packaged Next engine;
 //! these types do not replace the native `FFmpeg` pipeline or scheduler.
 
+pub(crate) mod burn_cache;
+mod burn_subtitles;
 pub mod config;
 pub mod connections;
 pub mod coordinator;
+mod dynamic_host;
+mod dynamic_item;
+mod dynamic_projection;
+mod dynamic_provider_identity;
 pub mod host;
 pub mod media;
 pub mod process;

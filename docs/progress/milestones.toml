@@ -7230,6 +7230,70 @@ retained publication on errors. Missing Burn preparation and browser acceptance
 remain explicit row blockers; no final Port verdict is recorded yet.
 The row verdict, parity pin and upstream checkout have not advanced.
 
+2026-09-23 row 24 browser and preparation checkpoint:
+The matched SSR/WASM build completes. The initial browser run demonstrates a
+synthetic fixture omission: the library lacked its LocalLibrary subtype, so
+Next correctly rejected publication. Correcting that fixture exposes a real
+preview cleanup defect: Hls.js emits a subtitle-switch event during destruction
+and re-enables the stopped captions button. Retired caption callbacks now ignore
+late events. The unchanged six Chromium/Firefox assertions pass in 22.3 seconds:
+JS/no-JS persistence, desktop/mobile geometry, real converted cues, authenticated
+subtitle playlist/segment access, on/off toggling and stopped-control cleanup.
+These results cover the committed Convert backend plus the focused JS correction;
+they do not establish acceptance of the new demand-time Burn backend.
+Demand-time preparation now uses Next's top-level Dynamic source callback.
+Projection retains exact selected tracks and original source offsets; callback
+resolution advances every seekable track when joining midway through an item.
+A bounded managed FFmpeg extraction prepares full-timeline ASS/SRT outside
+playout locks. Identity includes the selected version/file/stream, persisted
+revision fields and local size/mtime. Completion records and atomic promotion
+support restart reuse, with identity revalidation before admission/promotion and
+before returning tracks. Live cache leases are retained; incomplete artifacts
+never qualify as hits. Review corrected shared normal/preview callback ownership
+and reserved cleanup time inside the outer callback deadline. Provider identity
+now invalidates Emby/Jellyfin address/item changes while retaining verified Plex
+URI failover and credential rotation. Locally resolved provider files bind
+their owning source and local revision without requiring remote connection/item
+metadata; HTTP inputs retain the full provider identity check. Final scoped
+infra/web all-target Clippy passes with warnings denied after factoring subtitle
+projection and making the published-audio directive explicit.
+The authenticated callback retains the published audio choice rather than reevaluating Date/Math.random selectors;
+original pins, channel settings, relevant global preferences and bounded script
+content identity are validated separately. Invalid/unreadable audio scripts
+retain the accepted built-in fallback instead of becoming publication failures.
+The final combined selection passes all 133 focused Next/audio-selector and web
+transport tests (9.006 seconds after the final review corrections). This includes real unextracted
+Burn through the production callback, Convert, seeked WebVTT timing, image
+fallback, explicit Off, Dutch audio and a deliberately stalled HTTP extraction
+that confirms process termination and absence of partial cache publication.
+The runtime fixture now owns its authenticated callback listener; its previous
+standalone form could not exercise the new Dynamic path. The actual web-host
+Burn browser proof remains outstanding. The first final eight-case browser run
+passes seven scenarios; Firefox Burn succeeds alone (8.5 seconds) but reproduces
+a capacity refusal after two earlier previews. Retained trace responses explicitly
+report all HLS transcode slots in use; both prior Next processes remain alive
+during their normal preview idle period. The tests must stop their own transcodes
+through the existing watch-page action after their unchanged playback assertions,
+then rerun the combined order. This is test lifecycle isolation, not a timeout or
+capacity increase. The corrected combined run passes all eight Chromium/Firefox
+scenarios in 38.9 seconds. Burn samples white subtitle glyphs from decoded video
+pixels on a synthetic blue source while native embedded/extraction settings are
+disabled and Subtitle remains unextracted. Convert proves actual browser cues,
+authenticated rendition/segment access and on/off controls; JS/no-JS persistence
+and desktop/mobile geometry remain green. Both playback fixtures stop through
+the existing administration action and await removal of their owned preview
+folder, proving terminal cleanup without changing capacity or timeout settings.
+Native smoke passes: MPEG-TS returns HTTP 200 with 8,192 body bytes, and HLS
+returns a variant and media segments without known FFmpeg/segmenter signatures.
+Formatting, scoped infra/web all-target Clippy and module JS syntax pass.
+Direct Codex review accepts row 24 as Port after correcting local-provider
+availability, published audio stability, callback ownership, cleanup deadlines
+and browser fixture session isolation. Pin and ledger advance together to
+1b5d6af777aaed11829901ccab6b1e671fd25442 in the authorized local commit
+`feat(infra): prepare Next embedded text on demand`. UCU-02 remains In progress:
+row 25 is next, and full-window/six-platform gates remain open. No push or hosted
+CI is performed before the authorized UCU-03 boundary.
+
 
 
 

@@ -592,6 +592,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
 
     let internal_ffmpeg_routes = Router::new()
         .route(
+            "/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}",
+            get(iptv::next_media::get_item),
+        )
+        .route(
             "/ffmpeg/next-media/{item}/{version}/{file}",
             get(iptv::next_media::get_media),
         )

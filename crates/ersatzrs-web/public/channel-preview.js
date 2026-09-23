@@ -45,9 +45,11 @@ function removeNativeListeners(video, entry) {
 function attachCaptions(video, entry) {
   const button = rootFor(video)?.querySelector("[data-preview-captions]");
   if (!button) return;
+  let active = true;
   const tracks = () => Array.from(video.textTracks)
     .filter((track) => track.kind === "subtitles" || track.kind === "captions");
   const sync = () => {
+    if (!active) return;
     const hls = entry.hls;
     const available = hls ? hls.subtitleTracks.length > 0 : tracks().length > 0;
     const showing = hls
@@ -57,6 +59,7 @@ function attachCaptions(video, entry) {
     button.setAttribute("aria-pressed", String(available && showing));
   };
   const toggle = () => {
+    if (!active) return;
     const show = button.getAttribute("aria-pressed") !== "true";
     if (entry.hls) {
       if (show && entry.hls.subtitleTrack < 0) entry.hls.subtitleTrack = 0;
@@ -76,6 +79,9 @@ function attachCaptions(video, entry) {
   }
   entry.syncCaptions = sync;
   entry.removeCaptions = () => {
+    // Hls.destroy() can synchronously emit subtitle events after this cleanup.
+    // Retire their shared callback before resetting the stopped control.
+    active = false;
     button.removeEventListener("click", toggle);
     for (const event of ["addtrack", "removetrack", "change"]) {
       video.textTracks.removeEventListener(event, sync);

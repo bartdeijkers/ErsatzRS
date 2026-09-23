@@ -16,10 +16,11 @@ release section when tagging a release.
 ### Changed
 
 - Add the optional Next engine's per-channel text subtitle mode: Burn or
-  Convert If Possible, with authenticated WebVTT playlists and preview captions.
-  Conversion can read embedded text without native pre-extraction; Burn retains
-  existing extracted sidecars. Automatic preparation of missing Burn sidecars
-  and complete runtime/browser acceptance remain in progress under UCU-02.
+  Convert If Possible (upstream PR #2869), with authenticated WebVTT playlists
+  and preview captions.
+  Conversion can read embedded text without native pre-extraction. Burn prepares
+  the exact selected embedded track through a bounded, version-validated cache.
+  Preview captions stay disabled after stopping playback.
 
 - Report daily gap goal-prompts in routine output instead of maintaining a
   generated prompt file; use reconciliation commits to track the change window.

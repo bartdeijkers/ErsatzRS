@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **146 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **145 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **23**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **24**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -281,13 +281,20 @@ player remains inside its existing island with the shared channel-preview JS
 adapter. Browser proof targets Chromium/Firefox save/reload with and without
 JavaScript, plus converted-subtitle discovery and captions toggling.
 
-Implementation and acceptance are in progress; row 24 and the pin remain pending.
+Row 24 is Port with focused runtime, browser and native smoke acceptance.
 The available Next runtime explicitly skips multi-stream embedded text in Burn
 mode (`channel_session.rs`, `skip_embedded_text_subtitles`). Preserve extracted
 sidecar Burn behavior and prepare missing sidecars before claiming this row.
 Do not reuse item-wide native extraction blindly: it is gated by native settings,
 does not select the resolved version, and lacks bounded cancellation. Conversion
 must retain original media/index and its source timing and HTTP headers.
+The implementation uses the packaged Next runtime's top-level Dynamic callback
+for demand-time preparation. Re-read exact binding/selection around bounded
+extraction outside playout locks; atomically promote only validated completion.
+Advance all concrete track seeks by the callback join offset while preserving
+original finish/out-points. Cache identity is version/file/stream/revision scoped,
+with local size/mtime and bounded retained leases. The callback and real browser
+Burn proofs pass; canonical evidence is in the UCU-02 milestone.
 The HLS rendition uses a truthful language-neutral name because programme/item
 language overrides can change within one linear channel. Link the rendition via
 `SUBTITLES` on `EXT-X-STREAM-INF`, as required by RFC 8216 section 4.3.4.2.1;
@@ -333,7 +340,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | Adapt (ADR 0096) | upstream-baseline-catch-up | `feat(infra): embed bounded JavaScript audio selectors` | ucu-02; shared native/Next callbacks, metadata and YAML/pin precedence; bounded execution and fallback tests, decoded alternate audio, native/Next smoke. Full platform acceptance remains open. See ucu-02 evidence. |
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | Adapt (ADR 0098) | classic-scheduling | `fix(scheduling): complete Classic chapter filler reconciliation` | ucu-02; complete clipped fallback, chapter/version identity, Continue/Refresh safety, accepted ADR 0097 no-match preservation and ADR 0098 deterministic expressions. Focused tests and decoded Unicode playback pass; full platform acceptance remains open. See ucu-02 evidence. |
 | 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | Port | upstream-baseline-catch-up | `fix(infra): scope Next subtitle selection to resolved versions` | ucu-02; embedded image selection validates resolved-version candidates before default/custom ranking. Generated PGS proves preferred bitmap, subtitles-off and retained audio; other Next regressions and HTTP/preview smoke pass. See ucu-02 evidence. |
-| 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | | | | ucu-02; provisional: Next behavior triage. |
+| 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | Port | upstream-baseline-catch-up | `feat(infra): prepare Next embedded text on demand` | ucu-02; persisted Burn/Convert, bounded version-bound embedded Burn, authenticated WebVTT and preview captions. 133 focused tests, eight Chromium/Firefox cases and native MPEG-TS/HLS smoke pass. See ucu-02 evidence. |
 | 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | | | | ucu-02; provisional: Port candidate. |
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | | | | ucu-02; provisional: Next behavior triage. |
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | | | | ucu-02; provisional: Next behavior triage. |

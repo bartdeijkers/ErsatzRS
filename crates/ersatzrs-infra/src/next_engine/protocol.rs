@@ -210,6 +210,17 @@ pub enum Source {
         #[serde(skip_serializing_if = "Option::is_none")]
         out_point_ms: Option<u64>,
     },
+    /// Resolve one complete concrete item before Next probes its media inputs.
+    /// Dynamic is only supported at the item's top-level source, not on a track.
+    Dynamic {
+        uri: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        headers: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        user_agent: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        timeout_us: Option<u64>,
+    },
     Lavfi {
         params: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -106,10 +106,13 @@ Text conversion and source timing have a separate generated SRT regression:
 ./run.sh test -p ersatzrs-infra real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off --run-ignored ignored-only
 ```
 
-It checks embedded/external text, extracted-sidecar Burn, direct embedded
-Convert, source seeks, WebVTT timing, decoded glyphs, alternate audio and explicit
-subtitles-off. Automatic preparation of missing Burn sidecars remains a separate
-acceptance obligation; this fixture provides the Burn sidecar explicitly.
+It checks embedded/external text, demand-time extraction of unextracted embedded
+Burn, direct embedded Convert, source seeks, WebVTT timing, decoded glyphs,
+alternate audio and explicit subtitles-off. Its authenticated loopback callback
+invokes the production host resolver; the fixture does not provide a Burn cache.
+The separate `real_ffmpeg_extraction_deadline_closes_http_and_never_commits_cache`
+regression stalls a real FFmpeg input and verifies process cleanup and absence of
+partial cache publication. Both require the runtime environment above.
 The bitmap regression checks Burn and Convert, where images must still burn.
 
 It generates two embedded image tracks: default English draws a left-hand marker,

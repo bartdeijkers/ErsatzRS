@@ -380,6 +380,12 @@ pub(crate) async fn assert_javascript_precedence() {
     let script_path =
         crate::file_system_layout::scripts_folder().join("audio-stream-selector/movie.js");
     let original = tokio::fs::read(&script_path).await.unwrap();
+    // Real JavaScript exposes clock/random APIs, but a published choice must
+    // survive callbacks without evaluating the selector a second time.
+    tokio::fs::write(&script_path,
+        "function selectMovieAudioStreamIndex(){if(typeof Date.now !== 'function' || typeof Math.random !== 'function') throw Error('intrinsics');return 2}")
+        .await.unwrap();
+    assert_published_audio_bypasses_script(&pool, &channel, &item).await;
     for script in [
         "function selectMovieAudioStreamIndex(){return null}",
         "function selectMovieAudioStreamIndex(){throw Error('fixture')}",
@@ -397,6 +403,37 @@ pub(crate) async fn assert_javascript_precedence() {
         );
     }
     tokio::fs::write(&script_path, original).await.unwrap();
+}
+
+async fn assert_published_audio_bypasses_script(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+) {
+    let ordinary = project(pool, channel, item).await.unwrap();
+    assert_eq!(
+        ordinary.tracks.unwrap().audio.unwrap().stream_index,
+        Some(2)
+    );
+    let overridden = project_deferred_item_with_audio(
+        pool,
+        channel,
+        item,
+        100,
+        wire::Source::Local {
+            path: "media/fixture.mkv".into(),
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        &Resolution::default(),
+        AudioDirective::Published(Some(1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        overridden.item.tracks.unwrap().audio.unwrap().stream_index,
+        Some(1)
+    );
 }
 
 async fn assert_direct_audio_policy(pool: &DbPool, channel: &Channel) {
@@ -818,4 +855,108 @@ async fn next_burn_rejects_unextracted_embedded_text_before_publication() {
     let error = project(&pool, &channel, &item()).await.err().unwrap();
     assert!(error.to_string().contains("require an extracted sidecar"));
     assert!(!error.to_string().contains("media/"));
+}
+
+#[tokio::test]
+async fn deferred_burn_preserves_exact_pin_and_seek_without_restoring_subtitles_off() {
+    let pool = unextracted_text_fixture().await;
+    let channel = Channel {
+        preferred_subtitle_language_code: Some("nld".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(4),
+    });
+    for subtitles_on in [true, false] {
+        pinned
+            .pinned_stream_selection
+            .as_mut()
+            .unwrap()
+            .subtitle_stream_index = subtitles_on.then_some(4);
+        let projected = project_deferred_item(
+            &pool,
+            &channel,
+            &pinned,
+            100,
+            wire::Source::Local {
+                path: "media/fixture.mkv".into(),
+                in_point_ms: None,
+                out_point_ms: None,
+            },
+            &Resolution {
+                width: 320,
+                height: 180,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let tracks = projected.item.tracks.unwrap();
+        assert_eq!(tracks.audio.unwrap().stream_index, Some(2));
+        if subtitles_on {
+            let pending = projected.pending_burn.unwrap();
+            assert_eq!(pending.subtitle.id, 1);
+            assert_eq!(pending.subtitle.stream_index, 4);
+            let source = serde_json::to_value(&pending.source).unwrap();
+            assert_eq!(source["in_point_ms"], 1000);
+            assert_eq!(source["out_point_ms"], 61_000);
+            let track = tracks.subtitle.unwrap();
+            assert_eq!(track.stream_index, Some(4));
+            assert_eq!(serde_json::to_value(track.source.unwrap()).unwrap(), source);
+            assert!(project(&pool, &channel, &pinned).await.is_err());
+        } else {
+            assert!(projected.pending_burn.is_none());
+            assert!(tracks.subtitle.is_none());
+        }
+    }
+}
+
+#[tokio::test]
+async fn published_audio_override_preserves_silence_and_rejects_stale_or_conflicting_pins() {
+    let pool = fixture_pool().await;
+    let channel = Channel::default();
+    let mut item = item();
+    for (published, pin, succeeds) in [
+        (None, None, true),
+        (Some(2), None, true),
+        (Some(99), None, false),
+        (Some(1), Some(2), false),
+        (None, Some(2), false),
+        (Some(2), Some(2), true),
+    ] {
+        item.pinned_stream_selection = pin.map(|index| PinnedStreamSelection {
+            media_version_id: 100,
+            video_stream_index: 0,
+            audio_stream_index: Some(index),
+            subtitle_stream_index: None,
+        });
+        let result = project_deferred_item_with_audio(
+            &pool,
+            &channel,
+            &item,
+            100,
+            wire::Source::Local {
+                path: "media/fixture.mkv".into(),
+                in_point_ms: None,
+                out_point_ms: None,
+            },
+            &Resolution::default(),
+            AudioDirective::Published(published),
+        )
+        .await;
+        assert_eq!(result.is_ok(), succeeds);
+        if let Ok(projected) = result {
+            let track = projected.item.tracks.unwrap().audio.unwrap();
+            if let Some(index) = published {
+                assert_eq!(track.stream_index, Some(u32::try_from(index).unwrap()));
+            } else {
+                assert!(matches!(track.source, Some(wire::Source::Lavfi { .. })));
+            }
+        }
+    }
 }

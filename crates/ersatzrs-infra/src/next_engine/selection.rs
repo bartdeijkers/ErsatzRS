@@ -15,6 +15,19 @@ use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
 
 use super::protocol as wire;
 
+/// Projection requiring sidecar preparation before it can be published.
+/// Deliberately no Debug: source paths and subtitle metadata may be private.
+pub(crate) struct DeferredProjection {
+    pub item: wire::PlayoutItem,
+    pub pending_burn: Option<PendingBurn>,
+}
+
+/// Exact selected embedded track and its original, sought media source.
+pub(crate) struct PendingBurn {
+    pub subtitle: PlaybackSubtitle,
+    pub source: wire::Source,
+}
+
 /// Project one persisted item's timing and tracks using its resolved media version/source.
 ///
 /// The caller resolves source access and applies mirror timestamps before this
@@ -33,9 +46,69 @@ pub async fn project_item(
     channel: &Channel,
     item: &PlayoutItem,
     media_version_id: i64,
-    mut source: wire::Source,
+    source: wire::Source,
     resolution: &Resolution,
 ) -> Result<wire::PlayoutItem> {
+    let mut projected =
+        project_deferred_item(pool, channel, item, media_version_id, source, resolution).await?;
+    if let Some(pending) = projected.pending_burn {
+        let track = subtitle_track(
+            &pending.subtitle,
+            &pending.source,
+            channel.next_engine_text_subtitle_mode,
+        )?;
+        projected
+            .item
+            .tracks
+            .as_mut()
+            .ok_or_else(|| invalid("missing tracks"))?
+            .subtitle = Some(track);
+    }
+    Ok(projected.item)
+}
+
+/// Select tracks without running extraction. Pending projections must not be
+/// published until their exact embedded text track has a prepared sidecar.
+/// Legacy extraction metadata does not establish version-scoped cache identity;
+/// the preparation caller must validate that separately.
+pub(crate) async fn project_deferred_item(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+    media_version_id: i64,
+    source: wire::Source,
+    resolution: &Resolution,
+) -> Result<DeferredProjection> {
+    project_deferred_item_with_audio(
+        pool,
+        channel,
+        item,
+        media_version_id,
+        source,
+        resolution,
+        AudioDirective::Select,
+    )
+    .await
+}
+
+/// Whether this projection selects audio or preserves an authenticated choice.
+pub(crate) enum AudioDirective {
+    Select,
+    Published(Option<usize>),
+}
+
+/// Reuse an authenticated publication's audio choice without reexecuting JavaScript.
+/// `Published(None)` preserves silence; `Select` performs ordinary selection.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn project_deferred_item_with_audio(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+    media_version_id: i64,
+    mut source: wire::Source,
+    resolution: &Resolution,
+    audio_directive: AudioDirective,
+) -> Result<DeferredProjection> {
     let duration_ms = u64::try_from((item.finish - item.start).num_milliseconds())
         .ok()
         .filter(|duration| *duration > 0)
@@ -67,16 +140,29 @@ pub async fn project_item(
         } else {
             None
         };
-    let audio_index = selected_audio_with_script(
-        pool,
-        channel,
-        item,
-        media_version_id,
-        &preferences,
-        custom.as_ref(),
-        &audio_streams,
-    )
-    .await?;
+    let audio_index = if let AudioDirective::Published(audio) = audio_directive {
+        let pinned_audio = audio
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|_| invalid("published audio index is invalid"))?;
+        if pin.is_some_and(|pin| pin.audio_stream_index != pinned_audio)
+            || audio.is_some_and(|index| !audio_streams.iter().any(|stream| stream.index == index))
+        {
+            return Err(invalid("published audio binding changed"));
+        }
+        audio
+    } else {
+        selected_audio_with_script(
+            pool,
+            channel,
+            item,
+            media_version_id,
+            &preferences,
+            custom.as_ref(),
+            &audio_streams,
+        )
+        .await?
+    };
     let subtitle = selected_subtitle(
         pool,
         channel,
@@ -94,24 +180,59 @@ pub async fn project_item(
         },
         None => silent_audio(duration_ms),
     };
-    let subtitle = subtitle
-        .as_ref()
-        .map(|subtitle| subtitle_track(subtitle, &source, channel.next_engine_text_subtitle_mode))
-        .transpose()?;
-    Ok(wire::PlayoutItem {
-        id: item.id.to_string(),
-        start: item.start,
-        finish: item.finish,
-        source: None,
-        tracks: Some(wire::Tracks {
-            video: Some(wire::Track {
-                source: Some(source),
-                stream_index: video.map(|stream| index_u32(stream.index)).transpose()?,
+    let (subtitle, pending_burn) = project_subtitle(
+        subtitle.as_ref(),
+        &source,
+        channel.next_engine_text_subtitle_mode,
+    )?;
+    Ok(DeferredProjection {
+        pending_burn,
+        item: wire::PlayoutItem {
+            id: item.id.to_string(),
+            start: item.start,
+            finish: item.finish,
+            source: None,
+            tracks: Some(wire::Tracks {
+                video: Some(wire::Track {
+                    source: Some(source),
+                    stream_index: video.map(|stream| index_u32(stream.index)).transpose()?,
+                }),
+                audio: Some(audio),
+                subtitle,
             }),
-            audio: Some(audio),
-            subtitle,
-        }),
+        },
     })
+}
+
+fn project_subtitle(
+    subtitle: Option<&PlaybackSubtitle>,
+    source: &wire::Source,
+    mode: ersatzrs_domain::NextEngineTextSubtitleMode,
+) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
+    let pending_burn = subtitle
+        .filter(|subtitle| {
+            subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED
+                && !subtitle.is_image()
+                && mode == ersatzrs_domain::NextEngineTextSubtitleMode::Burn
+        })
+        .map(|subtitle| PendingBurn {
+            subtitle: subtitle.clone(),
+            source: source.clone(),
+        });
+    let subtitle = if let Some(pending) = &pending_burn {
+        Some(wire::Track {
+            source: Some(pending.source.clone()),
+            stream_index: Some(
+                u32::try_from(pending.subtitle.stream_index)
+                    .map_err(|_| invalid("invalid embedded subtitle index"))?,
+            ),
+        })
+    } else {
+        subtitle
+            .map(|subtitle| subtitle_track(subtitle, source, mode))
+            .transpose()?
+    };
+    Ok((subtitle, pending_burn))
 }
 
 fn silent_audio(duration_ms: u64) -> wire::Track {
@@ -134,6 +255,20 @@ fn silent_audio(duration_ms: u64) -> wire::Track {
     }
 }
 
+fn needs_burn_preparation(
+    subtitle: &PlaybackSubtitle,
+    mode: ersatzrs_domain::NextEngineTextSubtitleMode,
+) -> bool {
+    subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED
+        && !subtitle.is_image()
+        && mode == ersatzrs_domain::NextEngineTextSubtitleMode::Burn
+        && (!subtitle.is_extracted
+            || subtitle
+                .path
+                .as_deref()
+                .is_none_or(|path| path.trim().is_empty()))
+}
+
 fn subtitle_track(
     subtitle: &PlaybackSubtitle,
     source: &wire::Source,
@@ -143,13 +278,7 @@ fn subtitle_track(
     let burn_embedded_text = embedded
         && !subtitle.is_image()
         && mode == ersatzrs_domain::NextEngineTextSubtitleMode::Burn;
-    if burn_embedded_text
-        && (!subtitle.is_extracted
-            || subtitle
-                .path
-                .as_deref()
-                .is_none_or(|path| path.trim().is_empty()))
-    {
+    if needs_burn_preparation(subtitle, mode) {
         return Err(invalid(
             "embedded text subtitles require an extracted sidecar for Next burn mode",
         ));
@@ -178,7 +307,9 @@ fn subtitle_track(
             out_point_ms,
             ..
         } => (uri, *in_point_ms, *out_point_ms),
-        wire::Source::Lavfi { .. } => return Err(invalid("subtitle requires a media source")),
+        wire::Source::Lavfi { .. } | wire::Source::Dynamic { .. } => {
+            return Err(invalid("subtitle requires a media source"));
+        }
     };
     let input = subtitle_input_for_stream(
         subtitle,
@@ -380,6 +511,9 @@ fn apply_item_seek(source: &mut wire::Source, item: &PlayoutItem) -> Result<()> 
             *out_point_ms = (finish != 0).then_some(finish);
         }
         wire::Source::Lavfi { .. } => {}
+        wire::Source::Dynamic { .. } => {
+            return Err(invalid("dynamic source requires concrete resolution"));
+        }
     }
     Ok(())
 }

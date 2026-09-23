@@ -22,6 +22,57 @@ pub async fn get_media(
     serve(&state.next_engine.media, &state.pool, binding, &headers).await
 }
 
+/// Next sends the requested programme time in authenticated internal headers.
+pub async fn get_item(
+    State(state): State<AppState>,
+    Path((channel, item, digest, audio)): Path<(i64, i64, String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    if !headers
+        .get(ACCESS_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| state.next_engine.media.authorized(value))
+    {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let Some((number, now, until)) = dynamic_headers(&headers) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let audio = if audio == "off" {
+        None
+    } else {
+        let Ok(index) = audio.parse::<u32>() else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        Some(index)
+    };
+    match state
+        .next_engine
+        .resolve_dynamic(channel, item, &digest, audio, number, now, until)
+        .await
+    {
+        Ok(item) => ([(header::CACHE_CONTROL, "no-store")], axum::Json(item)).into_response(),
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
+fn dynamic_headers(
+    headers: &HeaderMap,
+) -> Option<(
+    &str,
+    chrono::DateTime<chrono::Utc>,
+    chrono::DateTime<chrono::Utc>,
+)> {
+    let number = headers.get("x-etv-channel")?.to_str().ok()?;
+    let now = chrono::DateTime::parse_from_rfc3339(headers.get("x-etv-now")?.to_str().ok()?)
+        .ok()?
+        .with_timezone(&chrono::Utc);
+    let until = chrono::DateTime::parse_from_rfc3339(headers.get("x-etv-until")?.to_str().ok()?)
+        .ok()?
+        .with_timezone(&chrono::Utc);
+    (until > now).then_some((number, now, until))
+}
+
 async fn serve(
     relay: &MediaRelay,
     pool: &DbPool,
@@ -76,6 +127,22 @@ fn relay_response(upstream: reqwest::Response) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dynamic_callback_headers_require_a_valid_positive_interval() {
+        let mut headers = HeaderMap::new();
+        assert!(dynamic_headers(&headers).is_none());
+        headers.insert("x-etv-channel", "preview-1".parse().unwrap());
+        headers.insert("x-etv-now", "2026-09-23T12:00:00Z".parse().unwrap());
+        headers.insert("x-etv-until", "2026-09-23T12:01:00Z".parse().unwrap());
+        let (channel, start, finish) = dynamic_headers(&headers).unwrap();
+        assert_eq!(channel, "preview-1");
+        assert_eq!((finish - start).num_seconds(), 60);
+        headers.insert("x-etv-until", "2026-09-23T12:00:00Z".parse().unwrap());
+        assert!(dynamic_headers(&headers).is_none());
+        headers.insert("x-etv-now", "invalid".parse().unwrap());
+        assert!(dynamic_headers(&headers).is_none());
+    }
 
     #[tokio::test]
     async fn range_responses_preserve_media_headers_without_forwarding_provider_headers() {

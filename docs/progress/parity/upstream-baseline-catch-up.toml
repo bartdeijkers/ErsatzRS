@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-three reconciled and 146 pending,
+The ledger registers 169 commits: twenty-four reconciled and 145 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -43,9 +43,9 @@ version before default/custom ranking. Generated two-track PGS playback proves
 preferred Dutch selection, explicit subtitles-off and retained alternate audio.
 Other Next components/runtime regressions and HTTP/preview lifecycle smoke pass.
 
-Row 24 (1b5d6af7), text subtitle conversion for Next, is in progress with the
-pin unchanged. Burn/Convert persistence, configuration, selection and WebVTT
-transport are implemented but acceptance remains open; see the row-24 debt.
+Row 24 (1b5d6af7) is Port: Burn/Convert persistence, bounded version-bound
+embedded Burn preparation, authenticated WebVTT transport and preview captions
+pass focused runtime tests, eight Chromium/Firefox cases and native smoke.
 Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Complete Next endpoint/browser/platform and full-window
@@ -70,8 +70,8 @@ evidence    = '2026-09-22: maintainer rejected native-only exclusions and select
 id          = 'row-24-next-text-subtitle-conversion'
 description = 'Complete Next Burn/Convert channel configuration, embedded and external text selection, authenticated WebVTT transport, preview captions and browser persistence. The available Next engine requires a sidecar to burn embedded text; prepare missing sidecars against the selected version with bounded cancellation-safe extraction before row acceptance.'
 discovered  = '2026-09-23'
-evidence    = 'Source map is in plans/upstream-catch-up.md. Existing extracted Burn sidecars are retained and Convert uses the original selected embedded index. Unprepared embedded Burn currently fails publication with a redacted error instead of being silently skipped by Next. This is an implementation checkpoint, not row acceptance. UCU-02 owns verification evidence and remaining gates.'
-resolved    = false
+evidence    = 'Row 24 is Port. Source map is in plans/upstream-catch-up.md; UCU-02 owns canonical evidence. 133 focused tests prove exact selection, bounded extraction/cache lifecycle, provider identity, published audio and decoded Next playback. Eight Chromium/Firefox cases prove persistence, authenticated captions and unextracted embedded Burn independently of native settings; native MPEG-TS/HLS smoke passes. Full-window and supported-platform acceptance remain separate.'
+resolved    = true
 
 [[debt]]
 id          = 'ucu-optional-next-engine-integration'

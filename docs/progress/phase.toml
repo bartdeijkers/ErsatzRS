@@ -103,13 +103,12 @@ Native smoke and decoded production-builder playback confirm Unicode-selected
 breaks and preserved fractional source offsets. Full platform proof remains open.
 Row 23 (57f7dfa5) is Port: resolved-version embedded image selection passes
 stale-metadata/default/custom/pin regressions and actual two-track PGS decoding.
-Next HTTP/preview and idle cleanup smoke passes. Next: row 24 (1b5d6af7),
-text subtitle conversion for Next. Its Burn/Convert persistence, config,
-selection, WebVTT transport and preview controls are implemented; focused
-domain/app/infra and synthetic decoded playback tests pass. Complete bounded
-preparation for unextracted embedded Burn subtitles, browser/transport proof
-and final row review before advancing the pin.
-Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
+Next HTTP/preview and idle cleanup smoke passes. Row 24 (1b5d6af7) is Port:
+Burn/Convert persistence, bounded version-bound embedded Burn, authenticated
+WebVTT and preview captions pass 133 focused tests, eight Chromium/Firefox
+scenarios and native MPEG-TS/HLS smoke. Next: review row 25 (cd298820), avoiding
+repeat extraction of already extracted embedded subtitles. Full-window and
+supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 

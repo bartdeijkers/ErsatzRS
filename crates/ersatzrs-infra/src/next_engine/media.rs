@@ -89,6 +89,26 @@ impl MediaRelay {
         })
     }
 
+    pub(super) fn dynamic_source(
+        &self,
+        channel: i64,
+        item: i64,
+        digest: &str,
+        audio: Option<u32>,
+    ) -> Result<Source> {
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        let audio = audio.map_or_else(|| "off".to_owned(), |index| index.to_string());
+        Ok(Source::Dynamic {
+            uri: format!("http://{address}/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}"),
+            headers: Some(vec![format!("{ACCESS_HEADER}: {}", self.capability)]),
+            user_agent: None,
+            timeout_us: Some(35_000_000),
+        })
+    }
+
     /// Open one exact persisted binding with current credentials. Call only after
     /// authenticating the internal capability. No schedule locks are acquired.
     /// The caller streams the response; dropping it cancels the upstream body.

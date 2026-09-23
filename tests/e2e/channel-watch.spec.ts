@@ -1,6 +1,8 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -87,7 +89,35 @@ async function expectStepScrollsTimeline(page: Page, button: string): Promise<vo
     .toBeGreaterThan(before);
 }
 
-function makeCalibrationClip(testInfo: TestInfo): string {
+async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<void> {
+  const workingDirectory = join(tmpdir(), 'ersatzrs-hls-preview', channelNumber);
+  expect(existsSync(workingDirectory)).toBe(true);
+  // Stop Preview releases the browser, while the server keeps its idle lease.
+  // Explicitly stop this fixture through the real administration action so the
+  // next browser's channel does not wait behind the previous fixture's lease.
+  await page.getByRole('button', { name: 'Stop Transcode Session', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Stop Transcode Session', exact: true });
+  await expect(dialog).toBeVisible();
+  const stopped = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname.includes('/api/stop_channel_session'));
+  await dialog.getByRole('button', { name: 'Stop Transcode Session', exact: true }).click();
+  const response = await stopped;
+  expect(response.ok()).toBe(true);
+  expect(await response.json()).toBe(true);
+  // The response acknowledges cancellation. Directory removal follows process
+  // shutdown and proves this fixture no longer occupies a transcode slot.
+  await expect.poll(() => existsSync(workingDirectory)).toBe(false);
+  await expect(dialog).not.toBeVisible();
+  const preview = page.locator('.channel-watch-js [data-channel-preview]');
+  await expect(preview).toHaveAttribute('data-preview-state', 'stopped');
+  await expect(preview.locator('video')).not.toHaveAttribute('src');
+}
+
+function makeCalibrationClip(
+  testInfo: TestInfo,
+  videoSource = 'testsrc2=size=640x360:rate=30',
+): string {
   const clipPath = testInfo.outputPath('channel-preview-calibration.mp4');
   const ffmpegPath =
     process.env.ErsatzRS_FFMPEG__PATH ??
@@ -104,7 +134,7 @@ function makeCalibrationClip(testInfo: TestInfo): string {
       '-f',
       'lavfi',
       '-i',
-      'testsrc2=size=640x360:rate=30',
+      videoSource,
       '-f',
       'lavfi',
       '-i',
@@ -180,6 +210,7 @@ DELETE FROM "MovieMetadata" WHERE "MovieId" = ${mediaItemId};
 DELETE FROM "Movie" WHERE "Id" = ${mediaItemId};
 DELETE FROM "MediaItem" WHERE "Id" = ${mediaItemId};
 DELETE FROM "LibraryPath" WHERE "Id" = ${libraryPathId};
+DELETE FROM "LocalLibrary" WHERE "Id" = ${libraryId};
 DELETE FROM "Library" WHERE "Id" = ${libraryId};
 DELETE FROM "MediaSource" WHERE "Id" = ${mediaSourceId};
 
@@ -207,6 +238,7 @@ FROM "FFmpegProfile" WHERE "Id" = ${sourceProfileId};
 INSERT INTO "MediaSource" ("Id") VALUES (${mediaSourceId});
 INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
 VALUES (${libraryId}, 1, ${mediaSourceId}, 'E2E Channel Preview Library');
+INSERT INTO "LocalLibrary" ("Id") VALUES (${libraryId});
 INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId")
 VALUES (${libraryPathId}, '/e2e/channel-preview', ${libraryId});
 INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
@@ -760,6 +792,82 @@ WHERE "Id" = ${source.id + 3};
     }
   });
 
+  test('Next burns unextracted embedded text independently of native extraction settings', async ({ page }, testInfo) => {
+    test.skip(!process.env.ETV_NEXT_FOLDER, 'Requires the real Next engine');
+    test.setTimeout(120_000);
+    const clipPath = makeCalibrationClip(testInfo, 'color=c=blue:size=640x360:rate=30');
+    const subtitlePath = testInfo.outputPath('next-burn.nl.srt');
+    const embeddedPath = testInfo.outputPath('next-burn.mkv');
+    writeFileSync(subtitlePath, '1\n00:00:00,000 --> 00:01:10,000\nNEXT BURN GLYPH PROOF\n');
+    const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
+      ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-i', clipPath, '-i', subtitlePath,
+      '-map', '0:v:0', '-map', '0:a:0', '-map', '1:0', '-c', 'copy',
+      '-metadata:s:s:0', 'language=nld', '-metadata:s:s:0', 'title=Dutch',
+      '-disposition:s:0', 'default', embeddedPath], { stdio: 'inherit', timeout: 30_000 });
+    const channel = seedChannel(testInfo, embeddedPath, 10);
+    const keys = ['ffmpeg.use_embedded_subtitles', 'ffmpeg.extract_embedded_subtitles'];
+    const restoreSettings = sqlite(`SELECT 'INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('
+      || quote("Key") || ',' || quote("Value") || ');' FROM "ConfigElement"
+      WHERE "Key" IN (${keys.map(sqlString).join(',')});`);
+    sqlite(`
+UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=4,
+  "NextEngineTextSubtitleMode"=0, "SubtitleMode"=2,
+  "PreferredSubtitleLanguageCode"='nld' WHERE "Id"=${channel.id};
+UPDATE "PlayoutItem" SET "OutPoint"='00:01:00' WHERE "PlayoutId"=${channel.id + 1};
+INSERT INTO "MediaStream" ("MediaVersionId", "Index", "MediaStreamKind", "Codec",
+  "Language", "Title", "Default", "Forced", "Channels")
+VALUES (${channel.id + 105}, 2, 3, 'subrip', 'nld', 'Dutch', 1, 0, 0);
+INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
+  "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "DateAdded", "DateUpdated")
+VALUES (${channel.id + 104}, 0, 'Dutch', 2, 'subrip', 1, 0, 0, 'nld', 0,
+  '2026-09-23 00:00:00', '2026-09-23 00:00:00');
+${keys.map((key) => `INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (${sqlString(key)}, 'false');`).join('\n')}
+`);
+    try {
+      await forceEnglish(page);
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      const masterResponse = page.waitForResponse((response) =>
+        response.url().includes(`/iptv/preview/${channel.number}/master.m3u8`)
+        && response.status() === 200);
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      expect(await (await masterResponse).text()).not.toContain('TYPE=SUBTITLES');
+      const root = page.locator('.channel-watch-js [data-channel-preview]');
+      const video = root.locator('video');
+      await expect(root).toHaveAttribute('data-preview-engine', 'hlsjs');
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState),
+        { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+      const time = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime),
+        { timeout: 20_000 }).toBeGreaterThan(time + 1);
+      // drawImage samples decoded video pixels, not DOM text-track overlays.
+      // The synthetic blue source contains no white pixels; white glyphs prove burn-in.
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 360;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(element, 0, 0, 640, 360);
+        const pixels = context.getImageData(0, 240, 640, 120).data;
+        let white = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+          if (pixels[i] > 180 && pixels[i + 1] > 180 && pixels[i + 2] > 180) white++;
+        }
+        return white;
+      }), { timeout: 20_000 }).toBeGreaterThan(20);
+      await expect(root.getByRole('button', { name: 'Captions', exact: true })).toBeDisabled();
+      expect(sqlite(`SELECT "IsExtracted", "Path" IS NULL FROM "Subtitle"
+        WHERE "MovieMetadataId"=${channel.id + 104};`)).toBe('0|1');
+      await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+      await stopFixtureTranscode(page, channel.number);
+      expect(errors).toEqual([]);
+    } finally {
+      sqlite(`DELETE FROM "ConfigElement" WHERE "Key" IN (${keys.map(sqlString).join(',')});\n${restoreSettings}`);
+    }
+  });
+
   test('Next converted captions are authenticated and toggle real browser cues', async ({ page }, testInfo) => {
     // Run the disposable host and this spec with ETV_NEXT_FOLDER and a synthetic
     // JWT__IssuerSigningKey so tokenless media requests exercise authentication.
@@ -774,6 +882,7 @@ WHERE "Id" = ${source.id + 3};
 UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=4,
   "NextEngineTextSubtitleMode"=1, "SubtitleMode"=2,
   "PreferredSubtitleLanguageCode"='nld' WHERE "Id"=${channel.id};
+UPDATE "PlayoutItem" SET "OutPoint"='00:01:00' WHERE "PlayoutId"=${channel.id + 1};
 INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex",
   "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated")
 VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
@@ -837,6 +946,7 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
     await expect(captions).toBeDisabled();
     await expect(captions).toHaveAttribute('aria-pressed', 'false');
+    await stopFixtureTranscode(page, channel.number);
     expect(errors).toEqual([]);
   });
 

@@ -203,6 +203,80 @@ pub async fn select(
 
 type Request = (String, &'static str, Vec<Json>);
 
+/// Bind a publication to the current bounded selector file without executing it.
+pub(crate) async fn script_identity(
+    pool: &DbPool,
+    item: i64,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    script_identity_in_folder(
+        pool,
+        item,
+        &crate::file_system_layout::scripts_folder().join("audio-stream-selector"),
+    )
+    .await
+}
+
+async fn script_identity_in_folder(
+    pool: &DbPool,
+    item: i64,
+    folder: &std::path::Path,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    use sha2::{Digest as _, Sha256};
+    use std::fmt::Write as _;
+    let error = || {
+        ersatzrs_core::repositories::RepositoryError::unavailable(
+            "Next audio selector identity",
+            "selector unavailable",
+        )
+    };
+    let kind: Option<String> = sqlx::query_scalar(
+        r#"SELECT CASE WHEN EXISTS(SELECT 1 FROM "Movie" WHERE "Id"=?) THEN 'movie'
+        WHEN EXISTS(SELECT 1 FROM "Episode" WHERE "Id"=?) THEN 'episode' END"#,
+    )
+    .bind(item)
+    .bind(item)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| error())?;
+    let Some(kind) = kind else { return Ok(None) };
+    let bytes = match read_script_bytes(&folder.join(format!("{kind}.js"))).await {
+        Ok(None) => return Ok(None),
+        Ok(Some(bytes)) if bytes.len() > SCRIPT_BYTES => b"invalid:oversized".to_vec(),
+        Ok(Some(bytes)) => {
+            let mut identity = b"content:".to_vec();
+            identity.extend(bytes);
+            identity
+        }
+        // Selection already falls back for inaccessible/non-file scripts. Bind
+        // that state without converting the fallback into a publication error.
+        Err(error) => format!("unavailable:{:?}", error.kind()).into_bytes(),
+    };
+    let mut identity = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(identity, "{byte:02x}").map_err(|_| error())?;
+    }
+    Ok(Some(identity))
+}
+
+async fn read_script_bytes(path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> {
+    match tokio::fs::metadata(path).await {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => return Err(std::io::Error::other("selector is not a regular file")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    }
+    let file = match tokio::fs::File::open(path).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::new();
+    file.take((SCRIPT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .await?;
+    Ok(Some(bytes))
+}
+
 async fn request(
     pool: &DbPool,
     channel: &Channel,
@@ -236,21 +310,10 @@ async fn request_in_folder(
         return Ok(None);
     };
     let path = folder.join(format!("{kind}.js"));
-    match tokio::fs::metadata(&path).await {
-        Ok(metadata) if metadata.is_file() => {}
-        Ok(_) => return Err("selector is not a regular file".into()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.into()),
-    }
-    let file = match tokio::fs::File::open(path).await {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.into()),
+    let Some(bytes) = read_script_bytes(&path).await? else {
+        return Ok(None);
     };
-    let mut script = String::new();
-    file.take((SCRIPT_BYTES + 1) as u64)
-        .read_to_string(&mut script)
-        .await?;
+    let script = String::from_utf8(bytes)?;
     if script.len() > SCRIPT_BYTES {
         return Err("script size limit exceeded".into());
     }
@@ -490,6 +553,79 @@ mod tests {
 #[cfg(test)]
 mod metadata_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn script_identity_tracks_content_changes_without_execution() {
+        let pool = crate::next_engine::selection::tests::fixture_pool().await;
+        let root = tempfile::tempdir().unwrap();
+        assert!(script_identity_in_folder(&pool, 10, root.path())
+            .await
+            .unwrap()
+            .is_none());
+        let path = root.path().join("movie.js");
+        tokio::fs::write(
+            &path,
+            "function selectMovieAudioStreamIndex(){return Date.now()%2+1}",
+        )
+        .await
+        .unwrap();
+        let first = script_identity_in_folder(&pool, 10, root.path())
+            .await
+            .unwrap();
+        assert_eq!(
+            first,
+            script_identity_in_folder(&pool, 10, root.path())
+                .await
+                .unwrap()
+        );
+        tokio::fs::write(
+            &path,
+            "function selectMovieAudioStreamIndex(){return Math.random()<0.5?1:2}",
+        )
+        .await
+        .unwrap();
+        assert_ne!(
+            first,
+            script_identity_in_folder(&pool, 10, root.path())
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn script_identity_preserves_invalid_and_unavailable_selector_fallback() {
+        let pool = crate::next_engine::selection::tests::fixture_pool().await;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("movie.js");
+        tokio::fs::write(&path, vec![b'x'; SCRIPT_BYTES + 1])
+            .await
+            .unwrap();
+        let oversized = script_identity_in_folder(&pool, 10, root.path())
+            .await
+            .unwrap();
+        assert!(oversized.is_some());
+        assert!(
+            request_in_folder(&pool, &Channel::default(), 10, 100, None, root.path())
+                .await
+                .is_err()
+        );
+        tokio::fs::remove_file(&path).await.unwrap();
+        tokio::fs::create_dir(&path).await.unwrap();
+        let unavailable = script_identity_in_folder(&pool, 10, root.path())
+            .await
+            .unwrap();
+        assert!(unavailable.is_some());
+        assert_ne!(oversized, unavailable);
+        tokio::fs::remove_dir(&path).await.unwrap();
+        tokio::fs::write(&path, "function selectMovieAudioStreamIndex(){return 1}")
+            .await
+            .unwrap();
+        let valid = script_identity_in_folder(&pool, 10, root.path())
+            .await
+            .unwrap();
+        assert_ne!(valid, oversized);
+        assert_ne!(valid, unavailable);
+    }
 
     #[tokio::test]
     async fn movie_file_metadata_guids_and_original_audio_flags_reach_callback() {

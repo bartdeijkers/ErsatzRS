@@ -32,10 +32,41 @@ use tokio::{sync::Mutex, time::Instant};
 /// replacement session after cancellation.
 pub struct NextHost {
     pub media: super::media::MediaRelay,
-    pool: DbPool,
-    locker: EntityLocker,
+    pub(super) pool: DbPool,
+    pub(super) locker: EntityLocker,
     root: PathBuf,
     publishers: Mutex<HashMap<i64, ChannelPublisher>>,
+    pub(super) dynamic_contexts: Mutex<HashMap<String, DynamicContext>>,
+    pub(super) burn_cache: super::burn_cache::BurnCache,
+}
+
+/// Normal playback and browser preview share callback source configuration.
+/// Their independent registry lifetimes must retain it until both have stopped.
+pub(super) struct DynamicContext {
+    pub request: NextStart,
+    owners: usize,
+}
+
+fn retain_dynamic_context(contexts: &mut HashMap<String, DynamicContext>, request: &NextStart) {
+    contexts
+        .entry(request.number.clone())
+        .and_modify(|context| context.owners += 1)
+        .or_insert_with(|| DynamicContext {
+            request: request.clone(),
+            owners: 1,
+        });
+}
+
+fn release_dynamic_context(contexts: &mut HashMap<String, DynamicContext>, number: &str) {
+    if let std::collections::hash_map::Entry::Occupied(mut entry) =
+        contexts.entry(number.to_owned())
+    {
+        if entry.get().owners > 1 {
+            entry.get_mut().owners -= 1;
+        } else {
+            entry.remove();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -59,7 +90,9 @@ impl NextHost {
             media: super::media::MediaRelay::new(),
             pool,
             locker,
+            burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),
             root,
+            dynamic_contexts: Mutex::new(HashMap::new()),
             publishers: Mutex::new(HashMap::new()),
         }
     }
@@ -117,6 +150,7 @@ impl NextHost {
         }
         let host = self.clone();
         Some(tokio::spawn(async move {
+            retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request);
             let mut publishers = host.publishers.lock().await;
             let publisher = publishers
                 .entry(request.channel_id)
@@ -181,6 +215,7 @@ impl NextHost {
                     tracing::warn!(channel_id = request.channel_id, kind = ?error.kind(), "Next output cleanup failed");
                 }
             }
+            release_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request.number);
             drop(reservation);
             registry.remove(&request.number).await;
         }))
@@ -237,17 +272,44 @@ impl NextHost {
                         {
                             return Err(unavailable("graphics projection is not integrated"));
                         }
-                        items.push(
-                            selection::project_item(
+                        let mut projection = selection::project_deferred_item(
+                            &self.pool,
+                            &channel,
+                            &media.item,
+                            media.media_version_id,
+                            source,
+                            &profile.resolution,
+                        )
+                        .await?;
+                        if projection.pending_burn.is_some() {
+                            let identity = super::dynamic_projection::fingerprint(
                                 &self.pool,
+                                &media,
+                                &projection,
                                 &channel,
-                                &media.item,
-                                media.media_version_id,
-                                source,
-                                &profile.resolution,
                             )
-                            .await?,
-                        );
+                            .await?;
+                            let audio = projection
+                                .item
+                                .tracks
+                                .as_ref()
+                                .and_then(|tracks| tracks.audio.as_ref())
+                                .filter(|track| {
+                                    !matches!(
+                                        track.source,
+                                        Some(super::protocol::Source::Lavfi { .. })
+                                    )
+                                })
+                                .and_then(|track| track.stream_index);
+                            projection.item.source = Some(self.media.dynamic_source(
+                                channel_id,
+                                media.item.id,
+                                &identity.descriptor,
+                                audio,
+                            )?);
+                            projection.item.tracks = None;
+                        }
+                        items.push(projection.item);
                     }
                     Ok(items)
                 })
@@ -280,3 +342,7 @@ pub fn channel_binary() -> std::io::Result<PathBuf> {
             .as_deref(),
     )
 }
+
+#[cfg(test)]
+#[path = "host_tests.rs"]
+mod tests;
