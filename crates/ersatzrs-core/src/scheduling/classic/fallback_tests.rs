@@ -240,7 +240,7 @@ fn mid_roll_pad_distributes_fallback_clips_between_chapters_before_post_roll() {
     ctx.request
         .reference_data
         .classic_chapters_by_media_id
-        .insert(100, chapters);
+        .insert((100, None), chapters);
     let start = ctx.state.current_time;
     let mut media = SchedulingMediaItem::new(100, Duration::minutes(45));
     media.preferred_audio_language_code = Some("nld".into());
@@ -303,7 +303,7 @@ fn chapter_slices_are_one_smart_shuffle_selection_unit() {
         .reference_data
         .classic_chapters_by_media_id
         .insert(
-            100,
+            (100, None),
             [(0, 10), (10, 20), (20, 30)]
                 .into_iter()
                 .map(|(start, end)| ersatzrs_domain::MediaChapter {
@@ -328,4 +328,260 @@ fn chapter_slices_are_one_smart_shuffle_selection_unit() {
     assert!(buckets
         .values()
         .all(|bucket| bucket["completed_items"] == 1));
+}
+
+#[test]
+fn duration_filler_accepts_more_than_sixty_four_valid_clips() {
+    let (mut ctx, item) = context();
+    let start = ctx.state.current_time;
+    let rows = ctx.add_duration_filler(
+        &item,
+        94,
+        start,
+        FillerKind::PreRoll,
+        Duration::minutes(140),
+        false,
+    );
+    assert_eq!(rows.len(), 70);
+    assert_eq!(rows.last().unwrap().finish, start + Duration::minutes(140));
+    assert!(ctx.result.warnings.is_empty());
+}
+
+#[test]
+fn duration_filler_stops_after_one_unusable_cycle() {
+    let (mut ctx, item) = context();
+    let start = ctx.state.current_time;
+    let rows = ctx.add_duration_filler(
+        &item,
+        94,
+        start,
+        FillerKind::PreRoll,
+        Duration::seconds(1),
+        false,
+    );
+    assert!(rows.is_empty());
+    assert_eq!(ctx.filler_media[&94].current_index(), 0);
+    assert_eq!(ctx.result.warnings.len(), 1);
+}
+
+#[test]
+fn preroll_pad_places_fallback_before_regular_filler() {
+    let (mut ctx, mut item) = context();
+    item.pre_roll_filler_id = Some(95);
+    let mut pad = filler_preset(95, FillerKind::PreRoll, FillerMode::Pad, None, None);
+    pad.pad_to_nearest_minute = Some(60);
+    pad.media_items = vec![SchedulingMediaItem::new(8, Duration::minutes(4))];
+    ctx.filler_media
+        .insert(95, MediaEnumerator::new("pad", pad.media_items.clone()));
+    ctx.request
+        .reference_data
+        .classic_filler_presets
+        .insert(95, pad);
+    let start = ctx.state.current_time;
+    let rows = ctx
+        .build_media_item_block(
+            &item,
+            &SchedulingMediaItem::new(1, Duration::minutes(53)),
+            start,
+            None,
+            "One",
+        )
+        .unwrap();
+    assert_eq!(
+        rows.iter().map(|row| row.media_item_id).collect::<Vec<_>>(),
+        [5, 6, 8, 1]
+    );
+    assert_eq!(rows[0].start, start);
+    assert_eq!(rows[2].start, start + Duration::minutes(3));
+    assert_eq!(rows[3].start, start + Duration::minutes(7));
+    assert_eq!(rows[3].finish, start + Duration::hours(1));
+    assert_eq!(rows[1].out_point, Duration::minutes(1));
+}
+
+#[test]
+fn unsplit_midroll_pad_follows_regular_postroll() {
+    let (mut ctx, mut item) = context();
+    item.mid_roll_filler_id = Some(95);
+    item.post_roll_filler_id = Some(96);
+    let mut pad = filler_preset(95, FillerKind::MidRoll, FillerMode::Pad, None, None);
+    pad.pad_to_nearest_minute = Some(60);
+    let mut post = filler_preset(96, FillerKind::PostRoll, FillerMode::Count, Some(1), None);
+    post.media_items = vec![SchedulingMediaItem::new(8, Duration::minutes(4))];
+    ctx.filler_media
+        .insert(96, MediaEnumerator::new("post", post.media_items.clone()));
+    ctx.request
+        .reference_data
+        .classic_filler_presets
+        .extend([(95, pad), (96, post)]);
+    let start = ctx.state.current_time;
+    let rows = ctx
+        .build_media_item_block(
+            &item,
+            &SchedulingMediaItem::new(1, Duration::minutes(53)),
+            start,
+            None,
+            "One",
+        )
+        .unwrap();
+    assert_eq!(
+        rows.iter().map(|row| row.media_item_id).collect::<Vec<_>>(),
+        [1, 8, 5, 6]
+    );
+    assert_eq!(rows.last().unwrap().finish, start + Duration::hours(1));
+}
+
+#[test]
+fn chapter_expression_selects_breaks_and_preserves_unsplit_content_without_matches() {
+    for mode in [FillerMode::Count, FillerMode::Pad] {
+        for expression in ["num = 2", "false"] {
+            let (mut ctx, mut item) = context();
+            item.mid_roll_filler_id = Some(95);
+            let mut mid = filler_preset(95, FillerKind::MidRoll, mode, Some(1), None);
+            mid.expression = Some(expression.into());
+            mid.pad_to_nearest_minute = Some(60);
+            mid.media_items = vec![SchedulingMediaItem::new(8, Duration::minutes(5))];
+            ctx.filler_media
+                .insert(95, MediaEnumerator::new("mid", mid.media_items.clone()));
+            ctx.request
+                .reference_data
+                .classic_filler_presets
+                .insert(95, mid);
+            ctx.request
+                .reference_data
+                .classic_chapters_by_media_id
+                .insert(
+                    (100, None),
+                    [(0, 10), (10, 20), (20, 45)]
+                        .into_iter()
+                        .map(|(start, end)| ersatzrs_domain::MediaChapter {
+                            start_time: Duration::minutes(start),
+                            end_time: Duration::minutes(end),
+                            ..ersatzrs_domain::MediaChapter::default()
+                        })
+                        .collect(),
+                );
+            let start = ctx.state.current_time;
+            let rows = ctx
+                .build_media_item_block(
+                    &item,
+                    &SchedulingMediaItem::new(100, Duration::minutes(45)),
+                    start,
+                    None,
+                    "One",
+                )
+                .unwrap();
+            let primary = rows
+                .iter()
+                .filter(|row| row.media_item_id == 100)
+                .collect::<Vec<_>>();
+            if expression == "false" {
+                assert_eq!(primary.len(), 1);
+                assert_eq!(
+                    (primary[0].in_point, primary[0].out_point),
+                    (Duration::zero(), Duration::minutes(45))
+                );
+                assert_eq!(rows[0].media_item_id, 100);
+                assert_eq!(rows.len(), if mode == FillerMode::Count { 1 } else { 4 });
+            } else {
+                assert_eq!(primary.len(), 2);
+                assert_eq!(primary[0].out_point, Duration::minutes(20));
+                assert_eq!(primary[1].in_point, Duration::minutes(20));
+                assert_eq!(primary[1].out_point, Duration::minutes(45));
+                assert_eq!(rows[1].media_item_id, 8);
+            }
+            assert!(rows.windows(2).all(|pair| pair[0].finish == pair[1].start));
+        }
+    }
+}
+
+#[test]
+fn invalid_chapter_expression_refuses_build_instead_of_returning_partial_replacement() {
+    let (ctx, mut item) = context();
+    item.mid_roll_filler_id = Some(95);
+    let mut request = ctx.request;
+    let mut mid = filler_preset(95, FillerKind::MidRoll, FillerMode::Count, Some(1), None);
+    mid.expression = Some("private chapter title (".into());
+    request
+        .reference_data
+        .classic_filler_presets
+        .insert(95, mid);
+    request.reference_data.media_by_key.insert(
+        item_key(&item),
+        vec![SchedulingMediaItem::new(100, Duration::minutes(20))],
+    );
+    request.reference_data.classic_schedule_items = vec![item.clone()];
+    request.reference_data.classic_chapters_by_media_id.insert(
+        (100, None),
+        [(0, 10), (10, 20)]
+            .into_iter()
+            .map(|(start, end)| ersatzrs_domain::MediaChapter {
+                start_time: Duration::minutes(start),
+                end_time: Duration::minutes(end),
+                ..ersatzrs_domain::MediaChapter::default()
+            })
+            .collect(),
+    );
+    request.mode = PlayoutBuildMode::Reset;
+    let error = ClassicSchedulingEngine.schedule(request).unwrap_err();
+    assert!(matches!(error, SchedulingError::InvalidClassicFillerExpression(id) if id == item.id));
+    assert!(!error.to_string().contains("private chapter title"));
+}
+
+#[test]
+fn preroll_pad_expression_controls_placement_only_when_midroll_exposes_chapters() {
+    for (with_midroll, expression, expected_first) in [
+        (true, "false", Some(100)),
+        (true, "(", None),
+        (false, "(", Some(5)),
+    ] {
+        let (mut ctx, mut item) = context();
+        item.pre_roll_filler_id = Some(95);
+        let mut pad = filler_preset(95, FillerKind::PreRoll, FillerMode::Pad, None, None);
+        pad.expression = Some(expression.into());
+        pad.pad_to_nearest_minute = Some(60);
+        ctx.request
+            .reference_data
+            .classic_filler_presets
+            .insert(95, pad);
+        if with_midroll {
+            item.mid_roll_filler_id = Some(96);
+            ctx.request.reference_data.classic_filler_presets.insert(
+                96,
+                filler_preset(96, FillerKind::MidRoll, FillerMode::Count, Some(0), None),
+            );
+        }
+        ctx.request
+            .reference_data
+            .classic_chapters_by_media_id
+            .insert(
+                (100, None),
+                [(0, 20), (20, 45)]
+                    .into_iter()
+                    .map(|(start, end)| ersatzrs_domain::MediaChapter {
+                        start_time: Duration::minutes(start),
+                        end_time: Duration::minutes(end),
+                        ..ersatzrs_domain::MediaChapter::default()
+                    })
+                    .collect(),
+            );
+        let start = ctx.state.current_time;
+        let rows = ctx.build_media_item_block(
+            &item,
+            &SchedulingMediaItem::new(100, Duration::minutes(45)),
+            start,
+            None,
+            "One",
+        );
+        if let Some(first) = expected_first {
+            let rows = rows.unwrap();
+            assert_eq!(rows.first().unwrap().media_item_id, first);
+            assert_eq!(rows.last().unwrap().finish, start + Duration::hours(1));
+        } else {
+            assert!(rows.is_none());
+            assert!(matches!(
+                ctx.error,
+                Some(SchedulingError::InvalidClassicFillerExpression(_))
+            ));
+        }
+    }
 }

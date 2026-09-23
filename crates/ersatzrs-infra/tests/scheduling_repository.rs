@@ -2174,11 +2174,74 @@ async fn assert_classic_chapter_filler(pool: &SqlitePool) {
         .classic_reference_data(902, start, Duration::hours(1))
         .await
         .unwrap();
-    let boundaries = &reference_data.classic_chapters_by_media_id[&12];
+    let boundaries = &reference_data.classic_chapters_by_media_id[&(12, None)];
     assert_eq!(boundaries.len(), 2);
     assert_eq!(boundaries[1].start_time, Duration::minutes(10));
     assert_eq!(boundaries[1].end_time, Duration::minutes(13));
     assert_eq!(boundaries[1].title, "Second chapter");
+    assert_classic_pinned_chapter_versions(pool).await;
+}
+
+async fn assert_classic_pinned_chapter_versions(pool: &SqlitePool) {
+    pool.execute(r#"INSERT INTO "MediaVersion" ("Id", "EpisodeId", "Name", "Duration", "VideoScanKind", "DateAdded", "DateUpdated", "Width", "Height")
+        VALUES (121, 12, 'alternate', '00:20:00', 'Progressive', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 1920, 1080)"#).await.unwrap();
+    pool.execute(r#"INSERT INTO "MediaChapter" ("Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title") VALUES
+        (9003, 121, 0, '00:00:00', '00:04:00', 'Alternate intro'),
+        (9004, 121, 1, '00:04:00', '00:20:00', 'Alternate end')"#).await.unwrap();
+    pool.execute(r#"UPDATE "PlaylistItem" SET "MediaVersionId" = 121, "VideoStreamIndex" = 0 WHERE "Id" = 401"#).await.unwrap();
+    pool.execute(r#"UPDATE "ProgramScheduleItem" SET "CollectionType" = 'Playlist', "CollectionId" = NULL, "PlaylistId" = 4 WHERE "Id" = 402"#).await.unwrap();
+    pool.execute(r#"UPDATE "FillerPreset" SET "CollectionType" = 'Playlist', "CollectionId" = NULL, "PlaylistId" = 4 WHERE "Id" = 77"#).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        data.classic_chapters_by_media_id[&(12, Some(121))][1].start_time,
+        Duration::minutes(4)
+    );
+    let filler = &data.classic_filler_presets[&77].media_items;
+    let alternate = filler
+        .iter()
+        .find(|item| {
+            item.id == 12
+                && item
+                    .chapter
+                    .as_ref()
+                    .is_some_and(|chapter| chapter.title.as_deref() == Some("Alternate end"))
+        })
+        .unwrap();
+    assert_eq!(
+        alternate.chapter.as_ref().unwrap().start,
+        Duration::minutes(4)
+    );
+    assert_eq!(
+        alternate.pinned_stream_selection.unwrap().media_version_id,
+        121
+    );
+    // The schedule's exact pin overrides a playlist-row pin.
+    pool.execute(r#"UPDATE "ProgramScheduleItem" SET "MediaVersionId" = 120, "VideoStreamIndex" = 0 WHERE "Id" = 402"#).await.unwrap();
+    let data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        data.classic_chapters_by_media_id[&(12, Some(120))][1].start_time,
+        Duration::minutes(10)
+    );
+    // A version belonging to another item cannot supply chapter seeks.
+    pool.execute(r#"UPDATE "ProgramScheduleItem" SET "MediaVersionId" = 200 WHERE "Id" = 402"#)
+        .await
+        .unwrap();
+    let data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+    assert!(data.classic_chapters_by_media_id[&(12, Some(200))].is_empty());
 }
 
 #[tokio::test]

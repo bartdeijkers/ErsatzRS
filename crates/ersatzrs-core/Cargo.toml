@@ -8,6 +8,10 @@ license.workspace = true
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+pest = "=2.8.6"
+pest_derive = "=2.8.6"
+regex = "1"
+uuid = "1"
 mlua = { version = "0.12", features = ["lua54", "vendored"] }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }

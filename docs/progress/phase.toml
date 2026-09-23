@@ -98,8 +98,10 @@ ADR 0096: bounded JavaScript movie/episode audio hooks serve native and Next
 playback. Focused tests, decoded selection and native/Next smoke pass. Next:
 row 22 (7e38297d), Classic fallback filler. Gap/post-roll clipping and chapter
 filler hydration have tested checkpoints. Mid-roll now uses chapter boundaries
-and wall-clock padding; expression filtering and persisted/runtime evidence
-remain before row acceptance. Full platform proof remains open.
+and wall-clock padding. Pinned-version chapters and persisted filler identity
+reconciliation pass focused SQL tests. NCalc-compatible expression filtering
+is in differential review; locale semantics and runtime proof remain before
+row acceptance. Full platform proof remains open.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

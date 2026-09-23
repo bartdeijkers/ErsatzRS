@@ -94,7 +94,24 @@ pub struct SchedulingMediaChapter {
     pub title: Option<String>,
 }
 
+/// Media identity and optional exact version used for chapter boundaries.
+pub type SchedulingChapterKey = (EntityId, Option<EntityId>);
+
 impl SchedulingMediaItem {
+    /// Schedule pins override playlist-item pins, as in playback selection.
+    #[must_use]
+    pub fn chapter_key(
+        &self,
+        schedule_pin: Option<ersatzrs_domain::PinnedStreamSelection>,
+    ) -> SchedulingChapterKey {
+        (
+            self.id,
+            schedule_pin
+                .or(self.pinned_stream_selection)
+                .map(|pin| pin.media_version_id),
+        )
+    }
+
     #[must_use]
     pub fn new(id: EntityId, duration: Duration) -> Self {
         Self {
@@ -287,7 +304,8 @@ pub struct SchedulingReferenceData {
     pub global_fallback: Option<SchedulingFallbackPreset>,
     pub classic_filler_presets: BTreeMap<EntityId, SchedulingFillerPreset>,
     /// Source chapter boundaries for Classic mid-roll placement.
-    pub classic_chapters_by_media_id: BTreeMap<EntityId, Vec<ersatzrs_domain::MediaChapter>>,
+    pub classic_chapters_by_media_id:
+        BTreeMap<SchedulingChapterKey, Vec<ersatzrs_domain::MediaChapter>>,
 }
 
 /// Configured fallback filler media available to the playout post-processor.
@@ -301,6 +319,7 @@ pub struct SchedulingFallbackPreset {
 /// Schedule-item filler preset resolved from an imported `FillerPreset` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchedulingFillerPreset {
+    pub expression: Option<String>,
     pub id: EntityId,
     pub filler_kind: FillerKind,
     pub filler_mode: FillerMode,
@@ -670,6 +689,8 @@ pub enum SchedulingError {
     Script(String),
     #[error("{0}")]
     UnsafeClassicRefresh(String),
+    #[error("invalid chapter filler expression for Classic schedule item {0}")]
+    InvalidClassicFillerExpression(EntityId),
     #[error("unsupported playout schedule kind: {0:?}")]
     UnsupportedScheduleKind(PlayoutScheduleKind),
 }

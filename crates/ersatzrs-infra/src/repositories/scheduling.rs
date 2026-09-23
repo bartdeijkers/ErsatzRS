@@ -1060,6 +1060,7 @@ impl SqliteSchedulingContentRepository {
         };
 
         Ok(Some(SchedulingFillerPreset {
+            expression: row.try_get("Expression").repository()?,
             id: filler_id,
             filler_kind: decode_enum_column("schedule item filler kind", &row, "FillerKind")?,
             filler_mode: decode_enum_column("schedule item filler mode", &row, "FillerMode")?,
@@ -1079,17 +1080,29 @@ impl SqliteSchedulingContentRepository {
         &self,
         schedule_items: &[ersatzrs_domain::ProgramScheduleItem],
         media_by_key: &BTreeMap<String, Vec<SchedulingMediaItem>>,
-    ) -> Result<BTreeMap<EntityId, Vec<ersatzrs_domain::MediaChapter>>> {
+    ) -> Result<
+        BTreeMap<
+            ersatzrs_core::scheduling::SchedulingChapterKey,
+            Vec<ersatzrs_domain::MediaChapter>,
+        >,
+    > {
         let ids: BTreeSet<_> = schedule_items
             .iter()
             .filter(|item| item.mid_roll_filler_id.is_some())
-            .filter_map(|item| media_by_key.get(&classic_schedule_item_key(item)))
-            .flatten()
-            .map(|item| item.id)
+            .flat_map(|schedule| {
+                media_by_key
+                    .get(&classic_schedule_item_key(schedule))
+                    .into_iter()
+                    .flatten()
+                    .map(move |media| media.chapter_key(schedule.pinned_stream_selection))
+            })
             .collect();
         let mut result = BTreeMap::new();
-        for id in ids {
-            result.insert(id, self.classic_media_chapters(id).await?);
+        for (id, version) in ids {
+            result.insert(
+                (id, version),
+                self.classic_media_chapters(id, version).await?,
+            );
         }
         Ok(result)
     }
@@ -1097,12 +1110,13 @@ impl SqliteSchedulingContentRepository {
     async fn classic_media_chapters(
         &self,
         media_id: EntityId,
+        version_id: Option<EntityId>,
     ) -> Result<Vec<ersatzrs_domain::MediaChapter>> {
         let rows = sqlx::query(r#"SELECT * FROM "MediaChapter" WHERE "MediaVersionId" = (
             SELECT "Id" FROM "MediaVersion" WHERE ? IN (
                 "MovieId", "EpisodeId", "MusicVideoId", "OtherVideoId", "SongId", "ImageId", "RemoteStreamId"
-            ) ORDER BY "Id" LIMIT 1
-        ) ORDER BY "StartTime", "ChapterId""#).bind(media_id).fetch_all(&self.0).await.repository()?;
+            ) AND (? IS NULL OR "Id" = ?) ORDER BY "Id" LIMIT 1
+        ) ORDER BY "StartTime", "ChapterId""#).bind(media_id).bind(version_id).bind(version_id).fetch_all(&self.0).await.repository()?;
         rows.iter()
             .map(|row| {
                 Ok(ersatzrs_domain::MediaChapter {
@@ -1136,10 +1150,12 @@ impl SqliteSchedulingContentRepository {
                        SELECT "Id" FROM "MediaVersion" WHERE ? IN (
                            "MovieId", "EpisodeId", "MusicVideoId", "OtherVideoId",
                            "SongId", "ImageId", "RemoteStreamId"
-                       ) ORDER BY "Id" LIMIT 1
+                       ) AND (? IS NULL OR "Id" = ?) ORDER BY "Id" LIMIT 1
                    ) ORDER BY "StartTime", "ChapterId""#,
             )
             .bind(item.id)
+            .bind(item.chapter_key(None).1)
+            .bind(item.chapter_key(None).1)
             .fetch_all(&self.0)
             .await
             .repository()?;

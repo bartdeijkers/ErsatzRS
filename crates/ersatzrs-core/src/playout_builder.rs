@@ -851,6 +851,7 @@ mod tests {
                     classic_filler_presets: [(
                         8,
                         SchedulingFillerPreset {
+                            expression: None,
                             id: 8,
                             filler_kind: FillerKind::PostRoll,
                             filler_mode: FillerMode::Count,

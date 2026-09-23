@@ -82,8 +82,9 @@ impl ClassicContext {
             );
         } else if let Some(pad_id) = self.pad_filler_id(schedule) {
             let duration = total_duration(&pre) + total_duration(&content) + total_duration(&post);
-            let pad = self.add_pad_filler(schedule, pad_id, start, start + duration);
-            if Some(pad_id) == schedule.pre_roll_filler_id {
+            let kind = self.effective_pad_kind(schedule, media, pad_id)?;
+            let pad = self.add_pad_filler(schedule, pad_id, start, start + duration, kind);
+            if kind == FillerKind::PreRoll {
                 pre.splice(0..0, pad);
             } else {
                 post.extend(pad);

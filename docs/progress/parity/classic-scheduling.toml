@@ -2,7 +2,7 @@ feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
 status     = 'In progress'
-adr        = ['0010', '0020']
+adr        = ['0010', '0020', '0097']
 
 summary    = '''
 The Classic baseline covers engine dispatch, SQL loading, typed items,
@@ -134,7 +134,16 @@ resolved    = true
 
 [[debt]]
 id          = 'classic-fallback-gap-and-chapter-padding'
-description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, mid-roll padding now follows source chapter boundaries, while chapter-point expression filtering remains unimplemented.'
+description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, mid-roll padding now follows source chapter boundaries, and chapter-point expression filtering is in differential review against NCalc 5.12. Persisted filler identities preserve source offsets across membership changes; legacy destructive Refresh without identity evidence is refused.'
 discovered  = '2026-09-23'
-evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Row 22 remains pending until expression filtering, exact-version chapter boundaries for pinned media, remaining pre/post-roll edge behavior, persistence and playback proof are complete.'
+evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Focused SQL tests now cover schedule-over-playlist pin precedence, chapter membership insertion/removal, persisted Continue/Refresh, and legacy checkpoint refusal. Row 22 remains pending until full expression semantics (including ambient-culture comparisons and resource-limit policy), remaining placement review and playback proof are complete.'
+resolved    = false
+
+
+[[debt]]
+id          = 'classic-padding-no-matches-primary-preservation'
+description = 'Accepted ADR 0097 requires preserving the primary programme when a mid-roll Pad expression matches no chapter points. Upstream row 22 can omit it; the remaining row 22 runtime acceptance is still open.'
+discovered  = '2026-09-23'
+adr         = '0097'
+evidence    = 'Source comparison at 7e38297d and the native chapter_expression_selects_breaks_and_preserves_unsplit_content_without_matches regression. The maintainer accepted ADR 0097 on 2026-09-23; remaining row 22 acceptance is required before landing the upstream row.'
 resolved    = false

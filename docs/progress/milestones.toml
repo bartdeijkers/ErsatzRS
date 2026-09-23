@@ -7027,6 +7027,49 @@ Core/infra/web all-target Clippy passes with warnings denied (2m 24s), including
 all consumers of the added reference-data field. Pin/ledger remain at row 21;
 no push or CI is claimed.
 
+2026-09-23 row 22 identity and expression review (not row acceptance):
+Classic chapter lookup now keys media identity plus effective media-version pin;
+schedule pins override playlist pins and a version belonging to another media
+item cannot supply chapter boundaries. The SQL fixture covers both versions,
+pin precedence and cross-item rejection. Filler checkpoints now include ordered
+identities with chapter source offset/duration, preserving unconsumed surviving
+chapters ahead of new and consumed items after membership insertion/removal.
+Production SQLite tests compare persisted Continue and dated Refresh with an
+uninterrupted two-day oracle, including source seeks and audio/subtitle overrides.
+Older destructive Refresh is refused when retained cursor/items/history establish
+prior filler use but its identity checkpoint is absent; new/removed presets are
+not blanket-rejected. These four persistence tests pass.
+Pre-roll fallback precedes regular pre-roll filler; unsplit mid-roll padding
+follows ordinary post-roll. Duration filler can emit more than 64 valid clips,
+while one full cycle without a fitting positive-duration item terminates.
+The exact NCalcSync 5.12.0 oracle is backed by source tag
+bd0afe72c1b5a5679255e91f902f35021acbb48a. A dedicated pest grammar and evaluator
+match 119 captured invariant-culture outcomes, plus upstream chapter-filter
+fixtures. This is not full NCalc acceptance: ambient-culture collation,
+Unicode/.NET UTF-16 edge behavior and localized conversions remain open.
+The first parser complexity test found a stack overflow. Replacing recursive
+precedence layers with a flat Pratt parse and iterative binary evaluation passes
+the unchanged 32-level nesting boundary and 4,001-term addition test. The focused
+24-test core selection passes; final integration/lint checks remain required.
+Expression errors must refuse the build instead of publishing partial results.
+A separate source audit found that pre/post Pad expressions also affect placement,
+and that upstream can omit the entire programme when MidRoll Pad matches no
+chapters. ADR 0097 records retaining primary content with post-roll padding. The maintainer
+accepted this decision on 2026-09-23 after the following upstream-history audit.
+At the maintainer request, a fresh fetch and subsequent-history audit checks
+for an upstream fix first. The tip remains ee038ba4; AddFiller is byte-identical
+to row 22, FillerExpression and its tests have no later changes. Later changes
+a7ecc5f9/b0f313ee concern midnight handling and invalid-duration termination,
+not no-match padding. No existing upstream fix is available in the fetched range.
+Pin and ledger remain at row 21. No row landing, playback acceptance, push or CI
+is claimed. The consolidated core library and focused SQL regression selection passes
+230 tests (3.094 seconds), including malformed expressions, pre-roll expression
+placement/bypass, parser limits, the exact-version fixture and persistence.
+Core/infra/web all-target Clippy passes with warnings denied (2m 47s).
+Remaining: ambient-culture/UTF-16 expression parity and resource-limit policy,
+complete placement review and playback smoke. ADR 0097 does not waive those requirements.
+
+
 
 """
 

@@ -1,0 +1,580 @@
+[
+  {
+    "expression": "title like \"%here%\"",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "num = 2 or num = 4",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1 + 2 * 3 = 7",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "-2 ** 2 = -4",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "2 ** 3 ** 2 = 512",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "5 / 2 = 2.5",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "3! = 6",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "false and MissingFunction() or true",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "true or MissingFunction()",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "true ? 1 = 1 : MissingFunction()",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "if(true, 1, MissingFunction()) = 1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "ifs(false,MissingFunction(),true,2,MissingFunction()) = 2",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "(5 & 3) = 1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "(1 << 3) = 8",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0x10 + 0o10 + 0b10 = 26",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "[num] = 2 and {point} = 600",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "unknown = other_unknown",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "unknown + 1 = missing",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "2147483647 + 1 = -2147483648",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "9007199254740993 <> 9007199254740992",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "title like 'h_re'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "title not like 'no%'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "title in ('else', 'HERE')",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "num in (1,2,3)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "num not in (1,3)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'Here' in 'Something Here'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "not ('here' in 'Something Here')",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Round(2.5,0) = 2",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Round(3.5,0) = 4",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Abs(-2) = 2",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Floor(2.9) = 2 and Ceiling(2.1) = 3",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Pow(3,2) = 9 and Sqrt(9) = 3",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Min(2,3) = 2 and Max(2,3) = 3",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Sign(-2) = -1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'hello ' + 'WORLD' = 'HELLO world'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'1' + '2' = 3",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "title = 'héré'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'a-b' < 'ab'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'a' < 'Z'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'ı' = 'I'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'ß' = 'ss'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'01' = 1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'1.5' = 2",
+    "error": "FormatException"
+  },
+  {
+    "expression": "'2.5' = 2",
+    "error": "FormatException"
+  },
+  {
+    "expression": "'1.0' = 1",
+    "error": "FormatException"
+  },
+  {
+    "expression": "true + 1",
+    "error": "InvalidOperationException"
+  },
+  {
+    "expression": "1 = true",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "~0",
+    "value": "18446744073709551615",
+    "type": "UInt64"
+  },
+  {
+    "expression": "(~0) + 1",
+    "value": "0",
+    "type": "UInt64"
+  },
+  {
+    "expression": "2 ** 3 ** 2 ** 1",
+    "value": "512",
+    "type": "Double"
+  },
+  {
+    "expression": "'\\q' = '\\q'",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "'\\u0061' = 'a'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "#25:00:00# > #01:00:00#",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1 in (1.0,2.0)",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1.0 in (1,2)",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Min(0/0,1)",
+    "value": "NaN",
+    "type": "Double"
+  },
+  {
+    "expression": "Max(1,0/0)",
+    "value": "NaN",
+    "type": "Double"
+  },
+  {
+    "expression": "IEEERemainder(1,1/0)",
+    "value": "1",
+    "type": "Double"
+  },
+  {
+    "expression": "5 % 0",
+    "error": "DivideByZeroException"
+  },
+  {
+    "expression": "5.0 % 0",
+    "value": "NaN",
+    "type": "Double"
+  },
+  {
+    "expression": "(-2147483648) % -1",
+    "value": "0",
+    "type": "Int64"
+  },
+  {
+    "expression": "unknown = ''",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "unknown = ' '",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "notitle = 0",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "' ' = ''",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "in(unknown,'')",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "in(num,2.0)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Sign(0/0)",
+    "error": "ArithmeticException"
+  },
+  {
+    "expression": "(~0) > 0",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "(1 << -1) = 9223372036854775808",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1 + 'abc'",
+    "error": "FormatException"
+  },
+  {
+    "expression": "2 ** 3 ** 2 ** 4",
+    "value": "512",
+    "type": "Double"
+  },
+  {
+    "expression": "Max(2,1.0)",
+    "value": "2",
+    "type": "Double"
+  },
+  {
+    "expression": "Min(2.0,1)",
+    "value": "1",
+    "type": "Double"
+  },
+  {
+    "expression": "Max('2',1)",
+    "value": "2",
+    "type": "Double"
+  },
+  {
+    "expression": "Min(true,false)",
+    "value": null,
+    "type": null
+  },
+  {
+    "expression": "(~0) > 2147483648",
+    "error": "OverflowException"
+  },
+  {
+    "expression": "(~0) = 2147483648",
+    "error": "OverflowException"
+  },
+  {
+    "expression": "(1 << 63) > 0",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1.0 in (1.0,2.0)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "1 in ('1',2)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'1' in (1,2)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "unknown in (unknown,1)",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "unknown in ()",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0.0! = 1",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "34! = 0",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "66! = 0",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "#25:00:00# = #1:00:00#",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "#25:00:00# > #24:00:00#",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "#1/2/2020 12:30:00# < #1/2/2020 13:00:00#",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "#1/2/2020# = #1/2/2020 00:00:00#",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "01234567-89ab-cdef-0123-456789abcdef = 0123456789abcdef0123456789abcdef",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'\\uD83D\\uDE00' = '😀'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'\\a' = 'a'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'\\v' = 'v'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'\\0' = '0'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'\\/' = '/'",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "'\\x61' = 'a'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Round(2.675,2)",
+    "value": "2.68",
+    "type": "Double"
+  },
+  {
+    "expression": "IEEERemainder(-0.0,3)",
+    "value": "0",
+    "type": "Double"
+  },
+  {
+    "expression": "0/0 = 0/0",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0/0 < -1/0",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "(-1) ** 0.5 = 0/0",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0xFFFFFFFF = 4294967295",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0xFFFFFFFFFFFFFFFF = -1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0o1777777777777777777777 = -1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0b1111111111111111111111111111111111111111111111111111111111111111 = -1",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "false ? MissingFunction() : 4",
+    "value": "4",
+    "type": "Int32"
+  },
+  {
+    "expression": "+1",
+    "value": "1",
+    "type": "Int32"
+  },
+  {
+    "expression": "true ? false ? 1 : 2 : 3",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "1; 2",
+    "error": "NCalcParserException"
+  },
+  {
+    "expression": "not(true)",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "0/0 in (0/0,1)",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'😀' like '_'",
+    "value": "False",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'😀' like '__'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "'here\\n' like 'here'",
+    "value": "True",
+    "type": "Boolean"
+  },
+  {
+    "expression": "Min(true,1)",
+    "value": null,
+    "type": null
+  },
+  {
+    "expression": "Min(true,'1')",
+    "value": null,
+    "type": null
+  },
+  {
+    "expression": "Abs(true)",
+    "value": "1",
+    "type": "Double"
+  }
+]

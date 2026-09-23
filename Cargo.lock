@@ -1145,12 +1145,16 @@ dependencies = [
  "ersatzrs-domain",
  "insta",
  "mlua",
+ "pest",
+ "pest_derive",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

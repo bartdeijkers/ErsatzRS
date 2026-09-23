@@ -202,6 +202,33 @@ pub fn audit_classic_refresh_checkpoint(
         );
     }
 
+    let filler_context = context
+        .anchor
+        .context
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<ClassicAnchorContext>(value).ok())
+        .unwrap_or_default();
+    for id in reference_data.classic_filler_presets.keys() {
+        let previously_used = filler_context.filler_indices.contains_key(id)
+            || reference_data.existing_items.iter().any(|item| {
+                item.scheduling_context
+                    .as_deref()
+                    .and_then(filler_id_from_context)
+                    == Some(*id)
+            })
+            || reference_data
+                .existing_history
+                .iter()
+                .any(|history| history.key == format!("classic-filler:{id}"));
+        if previously_used && !filler_context.filler_sources.contains_key(id) {
+            return fail(
+                Some(checkpoint.checkpoint_date),
+                context.sources.len(),
+                format!("filler identity checkpoint is missing for preset {id}"),
+            );
+        }
+    }
+
     let expected_schedule_item_ids = reference_data
         .classic_schedule_items
         .iter()
@@ -353,6 +380,8 @@ struct ClassicAnchorContext {
     random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
     #[serde(default)]
     filler_indices: BTreeMap<EntityId, usize>,
+    #[serde(default)]
+    filler_sources: BTreeMap<EntityId, ClassicMediaCheckpoint>,
 }
 
 fn classic_anchor_context_version() -> u32 {
@@ -385,6 +414,9 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         context.apply_existing_collection_anchors();
         context.restore_checkpoint_sources();
         context.schedule();
+        if let Some(error) = context.error.take() {
+            return Err(error);
+        }
         Ok(context.into_result())
     }
 }
@@ -447,6 +479,10 @@ struct ClassicMediaIdentity {
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
     pinned_stream_selection: Option<PinnedStreamSelection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    chapter_start: Option<Duration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    chapter_duration: Option<Duration>,
 }
 
 impl ClassicSchedulingEngine {
@@ -494,6 +530,7 @@ struct ClassicContext {
     generated_dated_anchors: Vec<PlayoutProgramScheduleAnchor>,
     generated_checkpoints: Vec<PlayoutClassicCheckpoint>,
     result: SchedulingResult,
+    error: Option<SchedulingError>,
 }
 
 impl ClassicContext {
@@ -524,18 +561,18 @@ impl ClassicContext {
                 .as_ref()
                 .map(|checkpoint| ClassicAnchorContext {
                     version: classic_anchor_context_version(),
-                    filler_indices: checkpoint
+                    smart_shuffle: checkpoint.smart_shuffle.clone(),
+                    random_rotation_cycle_predecessors: checkpoint
+                        .random_rotation_cycle_predecessors
+                        .clone(),
+                    ..checkpoint
                         .anchor
                         .context
                         .as_deref()
                         .and_then(|context| {
                             serde_json::from_str::<ClassicAnchorContext>(context).ok()
                         })
-                        .map_or_else(BTreeMap::new, |context| context.filler_indices),
-                    smart_shuffle: checkpoint.smart_shuffle.clone(),
-                    random_rotation_cycle_predecessors: checkpoint
-                        .random_rotation_cycle_predecessors
-                        .clone(),
+                        .unwrap_or_default()
                 })
                 .unwrap_or_default(),
             PlayoutBuildMode::Reset => ClassicAnchorContext::default(),
@@ -623,11 +660,17 @@ impl ClassicContext {
                     preset.media_items.clone(),
                 )
                 .with_playback_order(PlaybackOrder::Chronological);
-                enumerator.index = anchor_context
-                    .filler_indices
-                    .get(id)
-                    .copied()
-                    .unwrap_or_default();
+                if let Some(source) = anchor_context.filler_sources.get(id) {
+                    restore_media_checkpoint(&mut enumerator, source);
+                } else {
+                    enumerator.set_index(
+                        anchor_context
+                            .filler_indices
+                            .get(id)
+                            .copied()
+                            .unwrap_or_default(),
+                    );
+                }
                 (*id, enumerator)
             })
             .collect();
@@ -674,6 +717,7 @@ impl ClassicContext {
             restored_checkpoint,
             generated_dated_anchors: Vec::new(),
             generated_checkpoints: Vec::new(),
+            error: None,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
@@ -793,7 +837,7 @@ impl ClassicContext {
         let final_finish = self.request.finish;
         self.capture_checkpoint();
         let mut chunk_finish = midnight(self.state.current_time) + Duration::days(1);
-        while chunk_finish < final_finish {
+        while chunk_finish < final_finish && self.error.is_none() {
             self.request.finish = chunk_finish;
             self.schedule_until_finish();
             self.capture_checkpoint();
@@ -805,7 +849,7 @@ impl ClassicContext {
 
     fn schedule_until_finish(&mut self) {
         let mut time_count = BTreeMap::<DateTime<Utc>, usize>::new();
-        while self.state.current_time < self.request.finish {
+        while self.state.current_time < self.request.finish && self.error.is_none() {
             let count = time_count.entry(self.state.current_time).or_default();
             *count += 1;
             if *count > 6 {
@@ -1216,13 +1260,43 @@ impl ClassicContext {
         guide_finish: Option<DateTime<Utc>>,
         scheduler: &'static str,
     ) -> Option<Vec<PlayoutItem>> {
-        let chapters = self
+        let mut chapters = self
             .request
             .reference_data
             .classic_chapters_by_media_id
-            .get(&media_item.id)
+            .get(&media_item.chapter_key(schedule_item.pinned_stream_selection))
             .cloned()
             .unwrap_or_default();
+        if chapters.len() > 1 {
+            if let Some(preset) = schedule_item
+                .mid_roll_filler_id
+                .and_then(|id| self.request.reference_data.classic_filler_presets.get(&id))
+            {
+                if let Ok(filtered) = chapter_expression::filter_chapters(
+                    preset.expression.as_deref().unwrap_or_default(),
+                    &chapters,
+                    media_item.duration,
+                ) {
+                    chapters = filtered;
+                } else {
+                    self.error = Some(SchedulingError::InvalidClassicFillerExpression(
+                        schedule_item.id,
+                    ));
+                    return None;
+                }
+                if chapters.len() <= 1 && preset.filler_mode != FillerMode::Pad {
+                    let mut without_midroll = schedule_item.clone();
+                    without_midroll.mid_roll_filler_id = None;
+                    return self.build_unsplit_block(
+                        &without_midroll,
+                        media_item,
+                        start,
+                        guide_finish,
+                        scheduler,
+                    );
+                }
+            }
+        }
         if schedule_item.mid_roll_filler_id.is_some() && chapters.len() > 1 {
             return self.build_chapter_block(
                 schedule_item,
@@ -1294,32 +1368,12 @@ impl ClassicContext {
             )]);
         }
         if let Some(pad_filler_id) = self.pad_filler_id(schedule_item) {
-            let pad = self.add_pad_filler(schedule_item, pad_filler_id, start, current);
-            let Some(insert_after_primary) = items.iter().rposition(|item| {
-                item.scheduling_context
-                    .as_deref()
-                    .and_then(filler_id_from_context)
-                    .is_none()
-            }) else {
-                items.extend(pad);
-                current = items.last().map_or(current, |item| item.finish);
-                if guide_finish.is_some_and(|finish| current > finish) {
-                    self.filler_media = before_filler_media;
-                    return None;
-                }
-                return Some(items);
-            };
-            if self
-                .request
-                .reference_data
-                .classic_filler_presets
-                .get(&pad_filler_id)
-                .is_some_and(|preset| preset.filler_kind == FillerKind::PreRoll)
-            {
+            let kind = self.effective_pad_kind(schedule_item, media_item, pad_filler_id)?;
+            let pad = self.add_pad_filler(schedule_item, pad_filler_id, start, current, kind);
+            if kind == FillerKind::PreRoll {
                 items.splice(0..0, pad);
             } else {
-                let insert_at = insert_after_primary + 1;
-                items.splice(insert_at..insert_at, pad);
+                items.extend(pad);
             }
             current = start;
             for item in &mut items {
@@ -1525,10 +1579,13 @@ impl ClassicContext {
         let mut items = Vec::new();
         let mut current = start;
         let mut remaining = duration;
-        let mut attempts = 0usize;
+        let mut consecutive_skips = 0usize;
+        let candidate_count = self
+            .filler_media
+            .get(&filler_id)
+            .map_or(0, MediaEnumerator::len);
         while remaining > Duration::zero() {
-            attempts += 1;
-            if attempts > 64 {
+            if consecutive_skips >= candidate_count {
                 self.result.warnings.push(format!(
                     "classic schedule item {} stopped filler {} after repeated skips",
                     schedule_item.id, filler_id
@@ -1544,6 +1601,7 @@ impl ClassicContext {
                 break;
             };
             if media_item.duration <= Duration::zero() || media_item.duration > remaining {
+                consecutive_skips += 1;
                 self.advance_filler(filler_id);
                 continue;
             }
@@ -1556,6 +1614,7 @@ impl ClassicContext {
             ) else {
                 break;
             };
+            consecutive_skips = 0;
             remaining -= item.finish - item.start;
             current = item.finish;
             items.push(item);
@@ -1564,12 +1623,47 @@ impl ClassicContext {
         items
     }
 
+    fn effective_pad_kind(
+        &mut self,
+        schedule: &ProgramScheduleItem,
+        media: &SchedulingMediaItem,
+        filler_id: EntityId,
+    ) -> Option<FillerKind> {
+        let preset = self
+            .request
+            .reference_data
+            .classic_filler_presets
+            .get(&filler_id)?;
+        let chapters = schedule.mid_roll_filler_id.and_then(|_| {
+            self.request
+                .reference_data
+                .classic_chapters_by_media_id
+                .get(&media.chapter_key(schedule.pinned_stream_selection))
+        });
+        if let Some(chapters) = chapters.filter(|chapters| chapters.len() > 1) {
+            match chapter_expression::filter_chapters(
+                preset.expression.as_deref().unwrap_or_default(),
+                chapters,
+                media.duration,
+            ) {
+                Ok(filtered) if filtered.len() <= 1 => return Some(FillerKind::PostRoll),
+                Ok(_) => {}
+                Err(_) => {
+                    self.error = Some(SchedulingError::InvalidClassicFillerExpression(schedule.id));
+                    return None;
+                }
+            }
+        }
+        Some(preset.filler_kind)
+    }
+
     fn add_pad_filler(
         &mut self,
         schedule_item: &ProgramScheduleItem,
         filler_id: EntityId,
         block_start: DateTime<Utc>,
         block_finish: DateTime<Utc>,
+        kind: FillerKind,
     ) -> Vec<PlayoutItem> {
         let Some(preset) = self
             .request
@@ -1600,13 +1694,19 @@ impl ClassicContext {
             schedule_item,
             filler_id,
             block_finish,
-            Self::effective_filler_kind(schedule_item, preset.filler_kind),
+            Self::effective_filler_kind(schedule_item, kind),
             remaining,
             preset.allow_watermarks,
         );
         let current = items.last().map_or(block_finish, |item| item.finish);
-        items.extend(self.fallback_items(schedule_item, current, target));
-        items
+        let mut fallback = self.fallback_items(schedule_item, current, target);
+        if kind == FillerKind::PreRoll {
+            fallback.extend(items);
+            fallback
+        } else {
+            items.extend(fallback);
+            items
+        }
     }
 
     fn current_filler_item(
@@ -1854,6 +1954,24 @@ impl ClassicContext {
                         .filler_media
                         .iter()
                         .map(|(id, enumerator)| (*id, enumerator.current_index()))
+                        .collect(),
+                    filler_sources: self
+                        .filler_media
+                        .iter()
+                        .map(|(id, enumerator)| {
+                            (
+                                *id,
+                                ClassicMediaCheckpoint {
+                                    playback_order: enumerator.playback_order,
+                                    current_index: enumerator.current_index(),
+                                    ordered_items: enumerator
+                                        .items
+                                        .iter()
+                                        .map(media_identity)
+                                        .collect(),
+                                },
+                            )
+                        })
                         .collect(),
                     smart_shuffle: self.persisted_smart_shuffle_state(),
                     random_rotation_cycle_predecessors: self
@@ -2658,6 +2776,8 @@ fn media_identity(item: &SchedulingMediaItem) -> ClassicMediaIdentity {
         preferred_subtitle_language_code: item.preferred_subtitle_language_code.clone(),
         subtitle_mode: item.subtitle_mode,
         pinned_stream_selection: item.pinned_stream_selection,
+        chapter_start: item.chapter.as_ref().map(|chapter| chapter.start),
+        chapter_duration: item.chapter.as_ref().map(|_| item.duration),
     }
 }
 
@@ -5618,6 +5738,7 @@ mod tests {
         duration: Option<Duration>,
     ) -> SchedulingFillerPreset {
         SchedulingFillerPreset {
+            expression: None,
             id,
             filler_kind,
             filler_mode,
@@ -5668,3 +5789,5 @@ mod tests {
 mod fallback_tests;
 
 mod mid_roll;
+
+mod chapter_expression;

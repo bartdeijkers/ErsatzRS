@@ -843,3 +843,355 @@ async fn assert_build_succeeded(pool: &SqlitePool, playout_id: EntityId, stage: 
         row.try_get::<String, _>("Message").expect("message")
     );
 }
+
+#[tokio::test]
+async fn classic_filler_chapters_survive_persisted_continue_and_refresh() {
+    for mode in [PlayoutBuildMode::Continue, PlayoutBuildMode::Refresh] {
+        assert_persisted_filler_chapters(mode).await;
+    }
+}
+
+async fn assert_persisted_filler_chapters(mode: PlayoutBuildMode) {
+    let directory = tempfile::tempdir().expect("temporary filler database");
+    let path = directory.path().join("filler.sqlite");
+    let pool = open_database(&path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    seed_continuity_filler_chapters(&pool).await;
+    let start = common::fixed_time();
+    let first_finish = start + Duration::days(1);
+    let finish = start + Duration::days(2);
+    let oracle = build_filler_window(&pool, PlayoutBuildMode::Reset, start, finish, false).await;
+    let first =
+        build_filler_window(&pool, PlayoutBuildMode::Reset, start, first_finish, true).await;
+    let seam = if mode == PlayoutBuildMode::Continue {
+        first.anchor.as_ref().expect("first anchor").next_start
+    } else {
+        first
+            .classic_checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.checkpoint_date > start)
+            .map(|checkpoint| checkpoint.checkpoint_date)
+            .min()
+            .expect("generated day checkpoint")
+    };
+    assert!(oracle
+        .added_items
+        .iter()
+        .any(|item| item.filler_kind == ersatzrs_domain::FillerKind::Fallback));
+    assert!(oracle
+        .added_items
+        .iter()
+        .any(|item| item.chapter_title.as_deref() == Some("Middle")));
+    pool.close().await;
+    let reopened = open_database(&path, false).await;
+    let result = build_filler_window(&reopened, mode, seam, finish, true).await;
+    let actual = make_repositories(reopened.clone())
+        .playout
+        .items_in_range(RELATED_PLAYOUT_ID, seam, finish)
+        .await
+        .expect("persisted filler rows")
+        .into_iter()
+        .filter(|item| item.start >= seam && item.start < finish)
+        .map(|mut item| {
+            item.id = 0;
+            item
+        })
+        .collect::<Vec<_>>();
+    let expected = oracle
+        .added_items
+        .iter()
+        .filter(|item| item.start >= seam && item.start < finish)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(!expected.is_empty());
+    assert_eq!(
+        actual, expected,
+        "{mode:?} must preserve chapter seeks, contexts, track overrides and timeline"
+    );
+    let persisted = make_repositories(reopened.clone())
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .expect("reloaded filler anchor")
+        .anchor
+        .expect("persisted filler anchor");
+    assert_eq!(persisted.context, result.anchor.as_ref().unwrap().context);
+    assert_eq!(persisted.context, oracle.anchor.as_ref().unwrap().context);
+    let filler = actual
+        .iter()
+        .find(|item| item.media_item_id == UNRELATED_MEDIA_ID)
+        .unwrap();
+    assert_eq!(filler.preferred_audio_language_code.as_deref(), Some("nld"));
+    assert_eq!(
+        filler.preferred_subtitle_language_code.as_deref(),
+        Some("eng")
+    );
+    reopened.close().await;
+}
+
+async fn build_filler_window(
+    pool: &SqlitePool,
+    mode: PlayoutBuildMode,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    persist: bool,
+) -> ersatzrs_core::scheduling::SchedulingResult {
+    let repositories = make_repositories(pool.clone());
+    let playout = repositories
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .expect("load filler playout");
+    let reference_data = repositories
+        .scheduling
+        .classic_reference_data(RELATED_PLAYOUT_ID, start, Duration::zero())
+        .await
+        .expect("load filler reference data");
+    let result = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: playout.clone(),
+            start,
+            finish,
+            mode,
+            reference_data,
+        })
+        .expect("build filler window");
+    if persist {
+        repositories
+            .playout
+            .apply_build_result(&result, &playout, Duration::zero())
+            .await
+            .expect("atomically persist filler window and checkpoints");
+    }
+    result
+}
+
+async fn seed_continuity_filler_chapters(pool: &SqlitePool) {
+    pool.execute(r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+        VALUES (91, 'Chapter filler', 1), (92, 'Empty padding', 1);
+        INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex",
+            "PreferredAudioLanguageCode", "PreferredSubtitleLanguageCode")
+        VALUES (91, 201, 0, 'nld', 'eng');
+        INSERT INTO "MediaChapter" ("Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title")
+        VALUES (9101, 2010, 0, '00:00:00', '00:02:00', 'Opening'),
+               (9102, 2010, 1, '00:03:00', '00:06:00', 'Middle'),
+               (9103, 2010, 2, '00:07:00', '00:09:00', 'Ending');
+        INSERT INTO "FillerPreset" ("Id", "Name", "FillerMode", "FillerKind", "CollectionType",
+            "CollectionId", "Count", "PadToNearestMinute", "AllowWatermarks", "UseChaptersAsMediaItems")
+        VALUES (77, 'Chapter fallback', 'Count', 'Fallback', 'Collection', 91, 1, NULL, 0, 1),
+               (78, 'Clock padding', 'Pad', 'PostRoll', 'Collection', 92, NULL, 15, 0, 0);
+        UPDATE "ProgramScheduleItem" SET "PreRollFillerId" = 77, "PostRollFillerId" = 78,
+            "FallbackFillerId" = 77 WHERE "Id" = 401;"#).await.expect("seed chapter filler continuity fixture");
+}
+
+#[tokio::test]
+async fn classic_filler_chapter_membership_preserves_unconsumed_identity_after_restart() {
+    for remove_consumed in [false, true] {
+        let directory = tempfile::tempdir().expect("temporary membership database");
+        let path = directory.path().join("membership.sqlite");
+        let pool = open_database(&path, true).await;
+        seed_acceptance_fixture(&pool).await;
+        seed_continuity_filler_chapters(&pool).await;
+        pool.execute(
+            r#"UPDATE "ProgramScheduleItem" SET "PostRollFillerId" = NULL WHERE "Id" = 401"#,
+        )
+        .await
+        .expect("isolate chapter cursor from padding");
+        let start = common::fixed_time();
+        let first = build_filler_window(
+            &pool,
+            PlayoutBuildMode::Reset,
+            start,
+            start + Duration::minutes(1),
+            true,
+        )
+        .await;
+        assert_eq!(
+            first.added_items[0].chapter_title.as_deref(),
+            Some("Opening")
+        );
+        let seam = first.anchor.unwrap().next_start;
+        if remove_consumed {
+            pool.execute(r#"DELETE FROM "MediaChapter" WHERE "Id" = 9101"#)
+                .await
+                .expect("remove consumed chapter before cursor");
+        } else {
+            pool.execute(
+                r#"INSERT INTO "MediaChapter"
+                ("Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title")
+                VALUES (9104, 2010, 3, '00:02:00', '00:02:30', 'New chapter')"#,
+            )
+            .await
+            .expect("insert chapter before unconsumed cursor");
+        }
+        pool.close().await;
+        let reopened = open_database(&path, false).await;
+        let continued = build_filler_window(
+            &reopened,
+            PlayoutBuildMode::Continue,
+            seam,
+            seam + Duration::minutes(1),
+            true,
+        )
+        .await;
+        let next = &continued.added_items[0];
+        assert_eq!(
+            next.chapter_title.as_deref(),
+            Some("Middle"),
+            "membership mutation must preserve next surviving chapter (remove={remove_consumed})"
+        );
+        assert_eq!(next.in_point, Duration::minutes(3));
+        assert_eq!(next.out_point, Duration::minutes(6));
+        assert_eq!(next.preferred_audio_language_code.as_deref(), Some("nld"));
+        let persisted = make_repositories(reopened.clone())
+            .playout
+            .items_in_range(RELATED_PLAYOUT_ID, seam, seam + Duration::minutes(1))
+            .await
+            .expect("load continued chapter");
+        assert_eq!(persisted[0].chapter_title, next.chapter_title);
+        assert_eq!(persisted[0].in_point, next.in_point);
+        reopened.close().await;
+    }
+}
+
+#[tokio::test]
+async fn classic_filler_legacy_refresh_refuses_missing_identity_without_clearing_rows() {
+    for remove_indices in [false, true] {
+        let directory = tempfile::tempdir().expect("legacy filler database");
+        let path = directory.path().join("legacy.sqlite");
+        let pool = open_database(&path, true).await;
+        seed_acceptance_fixture(&pool).await;
+        seed_continuity_filler_chapters(&pool).await;
+        let start = common::fixed_time();
+        build_filler_window(
+            &pool,
+            PlayoutBuildMode::Reset,
+            start,
+            start + Duration::minutes(30),
+            true,
+        )
+        .await;
+        remove_filler_identity_checkpoints(&pool, remove_indices).await;
+        let before = persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await;
+        let repositories = make_repositories(pool.clone());
+        let reference_data = repositories
+            .scheduling
+            .classic_reference_data(RELATED_PLAYOUT_ID, start, Duration::zero())
+            .await
+            .expect("load legacy filler checkpoint");
+        let playout = repositories
+            .playout
+            .get_with_anchor(RELATED_PLAYOUT_ID)
+            .await
+            .expect("load legacy filler playout");
+        let error = PlayoutBuilder::default()
+            .build(SchedulingRequest {
+                playout,
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect_err("legacy filler ordinal cannot prove identity continuity");
+        assert!(
+            error.to_string().contains("filler identity checkpoint"),
+            "{error}"
+        );
+        assert!(
+            before == persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await,
+            "refused Refresh must preserve all persisted rows"
+        );
+        pool.close().await;
+    }
+}
+
+async fn remove_filler_identity_checkpoints(pool: &SqlitePool, remove_indices: bool) {
+    let rows = sqlx::query(
+        r#"SELECT "CheckpointDate", "Context" FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .fetch_all(pool)
+    .await
+    .expect("load produced checkpoints");
+    assert!(!rows.is_empty());
+    for row in rows {
+        let mut checkpoint: serde_json::Value =
+            serde_json::from_str(&row.get::<String, _>("Context"))
+                .expect("produced checkpoint JSON");
+        let mut anchor_context: serde_json::Value = serde_json::from_str(
+            checkpoint["Anchor"]["context"]
+                .as_str()
+                .expect("produced anchor context"),
+        )
+        .expect("produced filler context JSON");
+        let object = anchor_context.as_object_mut().unwrap();
+        assert!(object.remove("filler_sources").is_some());
+        if remove_indices {
+            assert!(object.remove("filler_indices").is_some());
+        }
+        checkpoint["Anchor"]["context"] = serde_json::Value::String(anchor_context.to_string());
+        sqlx::query(r#"UPDATE "PlayoutClassicCheckpoint" SET "Context" = ? WHERE "PlayoutId" = ? AND "CheckpointDate" = ?"#)
+            .bind(checkpoint.to_string())
+            .bind(RELATED_PLAYOUT_ID)
+            .bind(row.get::<String, _>("CheckpointDate"))
+            .execute(pool)
+            .await
+            .expect("persist legacy checkpoint shape");
+    }
+}
+
+#[tokio::test]
+async fn classic_filler_refresh_allows_new_and_removed_presets() {
+    for add_preset in [false, true] {
+        let directory = tempfile::tempdir().expect("changed filler database");
+        let path = directory.path().join("changed.sqlite");
+        let pool = open_database(&path, true).await;
+        seed_acceptance_fixture(&pool).await;
+        seed_continuity_filler_chapters(&pool).await;
+        let start = common::fixed_time();
+        build_filler_window(
+            &pool,
+            PlayoutBuildMode::Reset,
+            start,
+            start + Duration::minutes(30),
+            true,
+        )
+        .await;
+        if add_preset {
+            pool.execute(r#"INSERT INTO "FillerPreset" ("Id", "Name", "FillerMode", "FillerKind",
+                "CollectionType", "CollectionId", "Count", "AllowWatermarks", "UseChaptersAsMediaItems")
+                VALUES (79, 'New preroll', 'Count', 'PreRoll', 'Collection', 91, 1, 0, 1);
+                UPDATE "ProgramScheduleItem" SET "PreRollFillerId" = 79 WHERE "Id" = 401;"#)
+                .await.expect("configure previously unused preset");
+        } else {
+            pool.execute(
+                r#"UPDATE "ProgramScheduleItem" SET "PreRollFillerId" = NULL,
+                "PostRollFillerId" = NULL, "FallbackFillerId" = NULL WHERE "Id" = 401"#,
+            )
+            .await
+            .expect("remove filler references from schedule");
+        }
+        let refreshed = build_filler_window(
+            &pool,
+            PlayoutBuildMode::Refresh,
+            start,
+            start + Duration::hours(1),
+            true,
+        )
+        .await;
+        assert!(!refreshed.added_items.is_empty());
+        let new_preset_used = refreshed.added_items.iter().any(|item| {
+            item.scheduling_context
+                .as_deref()
+                .is_some_and(|context| context.contains("\"FillerPresetId\":79"))
+        });
+        assert_eq!(new_preset_used, add_preset);
+        if !add_preset {
+            assert!(refreshed
+                .added_items
+                .iter()
+                .all(|item| item.filler_kind == ersatzrs_domain::FillerKind::None));
+        }
+        pool.close().await;
+    }
+}

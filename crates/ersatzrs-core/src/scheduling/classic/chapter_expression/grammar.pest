@@ -1,0 +1,36 @@
+// NCalcSync 5.12 default parser precedence (LogicalExpressionParser).
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+root = { SOI ~ expression ~ EOI }
+expression = { binary ~ ("?" ~ binary ~ ":" ~ binary)? }
+// Pratt precedence is applied after parsing this flat sequence. Avoid one
+// recursive parser layer per precedence tier for every nested parenthesis.
+binary = { unary ~ ((or_op | and_op | bor_op | xor_op | band_op | eq_op | shift_op | rel_op | add_op | mul_op) ~ unary)* }
+or_op = @{ "||" | ^"or" ~ !ident_char }
+and_op = @{ "&&" | ^"and" ~ !ident_char }
+bor_op = @{ "|" ~ !"|" }
+xor_op = { "^" }
+band_op = @{ "&" ~ !"&" }
+eq_op = { "==" | "=" | "!=" | "<>" }
+rel_op = @{ ">=" | "<=" | "<" ~ !("<" | ">") | ">" ~ !">" | ^"not in" ~ !ident_char | ^"not like" ~ !ident_char | ^"in" ~ !ident_char | ^"like" ~ !ident_char }
+shift_op = { "<<" | ">>" }
+add_op = { "+" | "-" }
+mul_op = @{ "/" | "*" ~ !"*" | "%" }
+unary = { unary_op* ~ exponential }
+unary_op = @{ "!" | "-" | "~" | ^"not" ~ !ident_char }
+exponential = { factorial ~ (power_op ~ primary)* }
+power_op = { "**" }
+factorial = { primary ~ factorial_op* }
+factorial_op = @{ "!" ~ !(WHITESPACE* ~ "=") }
+primary = _{ guid | number | boolean | temporal | string | function | collection | parameter }
+collection = { "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+function = { identifier ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
+parameter = { bracketed | braced | identifier }
+bracketed = @{ "[" ~ (!"]" ~ ANY)* ~ "]" }
+braced = @{ "{" ~ (!"}" ~ ANY)* ~ "}" }
+identifier = @{ (ASCII_ALPHA | "_") ~ ident_char* }
+ident_char = _{ ASCII_ALPHANUMERIC | "_" }
+boolean = @{ (^"true" | ^"false") ~ !ident_char }
+number = @{ "+"? ~ ("0x" ~ ASCII_HEX_DIGIT+ | "0o" ~ ('0'..'7')+ | "0b" ~ ('0'..'1')+ | (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? | "." ~ ASCII_DIGIT+) ~ (("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+)? ) }
+string = @{ "'" ~ ("\\" ~ ANY | !("'" | "\r" | "\n") ~ ANY)* ~ "'" | "\"" ~ ("\\" ~ ANY | !("\"" | "\r" | "\n") ~ ANY)* ~ "\"" }
+temporal = @{ "#" ~ (!"#" ~ ANY)+ ~ "#" }
+guid = @{ ASCII_HEX_DIGIT{8} ~ "-" ~ ASCII_HEX_DIGIT{4} ~ "-" ~ ASCII_HEX_DIGIT{4} ~ "-" ~ ASCII_HEX_DIGIT{4} ~ "-" ~ ASCII_HEX_DIGIT{12} | ASCII_HEX_DIGIT{32} ~ !ASCII_DIGIT }

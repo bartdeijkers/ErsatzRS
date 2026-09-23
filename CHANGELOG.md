@@ -107,7 +107,10 @@ release section when tagging a release.
   final clip instead of stretching one item. Honor chapter-as-media filler
   offsets and titles (upstream PR #2867). Place mid-roll filler between source
   chapters, keep post-roll after the final chapter, and align padding to clock
-  boundaries. Chapter-point expression filtering remains under UCU-02 review.
+  boundaries. Preserve chapter identity and track preferences across filler
+  membership changes and database restarts; honor exact media-version pins.
+  Refuse destructive Refresh when older filler checkpoints cannot establish
+  identity. Chapter-point expression filtering remains under UCU-02 review.
 
 - Preserve negative mirror playout offsets through channel repository upsert,
   keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
