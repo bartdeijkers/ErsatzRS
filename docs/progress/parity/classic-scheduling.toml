@@ -134,7 +134,7 @@ resolved    = true
 
 [[debt]]
 id          = 'classic-fallback-gap-and-chapter-padding'
-description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, but mid-roll padding still follows the inherited post-roll placement and ignores chapter-point expressions.'
+description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, mid-roll padding now follows source chapter boundaries, while chapter-point expression filtering remains unimplemented.'
 discovered  = '2026-09-23'
-evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Row 22 remains pending until chapter-aware mid-roll/pad placement, relevant expression behavior, persistence and playback proof are complete.'
+evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Row 22 remains pending until expression filtering, exact-version chapter boundaries for pinned media, remaining pre/post-roll edge behavior, persistence and playback proof are complete.'
 resolved    = false

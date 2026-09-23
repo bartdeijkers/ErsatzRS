@@ -208,3 +208,124 @@ fn fallback_all_classic_modes_fill_fixed_start_gap() {
         assert_eq!(filler.last().unwrap().finish.hour(), 9);
     }
 }
+
+#[test]
+fn mid_roll_pad_distributes_fallback_clips_between_chapters_before_post_roll() {
+    let (mut ctx, mut item) = context();
+    item.mid_roll_filler_id = Some(95);
+    item.post_roll_filler_id = Some(96);
+    let mut mid = filler_preset(95, FillerKind::MidRoll, FillerMode::Pad, None, None);
+    mid.pad_to_nearest_minute = Some(60);
+    ctx.request
+        .reference_data
+        .classic_filler_presets
+        .insert(95, mid);
+    let post_media = SchedulingMediaItem::new(10, Duration::minutes(5));
+    let mut post = filler_preset(96, FillerKind::PostRoll, FillerMode::Count, Some(1), None);
+    post.media_items = vec![post_media.clone()];
+    ctx.request
+        .reference_data
+        .classic_filler_presets
+        .insert(96, post);
+    ctx.filler_media
+        .insert(96, MediaEnumerator::new("post", vec![post_media]));
+    let chapters = [(0, 6), (6, 20), (20, 45)]
+        .into_iter()
+        .map(|(start, end)| ersatzrs_domain::MediaChapter {
+            start_time: Duration::minutes(start),
+            end_time: Duration::minutes(end),
+            ..ersatzrs_domain::MediaChapter::default()
+        })
+        .collect();
+    ctx.request
+        .reference_data
+        .classic_chapters_by_media_id
+        .insert(100, chapters);
+    let start = ctx.state.current_time;
+    let mut media = SchedulingMediaItem::new(100, Duration::minutes(45));
+    media.preferred_audio_language_code = Some("nld".into());
+    let rows = ctx
+        .build_media_item_block(&item, &media, start, None, "One")
+        .unwrap();
+    assert_eq!(rows.len(), 10);
+    assert_eq!(
+        rows.iter().map(|row| row.media_item_id).collect::<Vec<_>>(),
+        [100, 5, 6, 5, 100, 6, 5, 6, 100, 10]
+    );
+    assert!(rows.windows(2).all(|pair| pair[0].finish == pair[1].start));
+    for (index, offset, finish) in [(0, 0, 6), (4, 6, 20), (8, 20, 45)] {
+        assert_eq!(rows[index].in_point, Duration::minutes(offset));
+        assert_eq!(rows[index].out_point, Duration::minutes(finish));
+        assert_eq!(
+            rows[index].preferred_audio_language_code.as_deref(),
+            Some("nld")
+        );
+    }
+    assert_eq!(rows[3].out_point, Duration::minutes(1));
+    assert_eq!(rows[7].out_point, Duration::minutes(1));
+    assert_eq!(rows[9].start, start + Duration::minutes(55));
+    assert_eq!(rows[9].finish, start + Duration::hours(1));
+}
+
+#[test]
+fn pad_rounds_wall_clock_and_always_adds_at_exact_boundary() {
+    let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 7, 30).unwrap();
+    assert_eq!(
+        super::mid_roll::pad_budget(start, Duration::minutes(5), Some(15)),
+        Duration::seconds(150)
+    );
+    assert_eq!(
+        super::mid_roll::pad_budget(start, Duration::seconds(450), Some(15)),
+        Duration::minutes(15)
+    );
+}
+
+#[test]
+fn chapter_slices_are_one_smart_shuffle_selection_unit() {
+    let (mut ctx, mut item) = context();
+    item.mid_roll_filler_id = Some(95);
+    item.playback_order = PlaybackOrder::Shuffle;
+    let mid = filler_preset(95, FillerKind::MidRoll, FillerMode::Count, Some(0), None);
+    ctx.request
+        .reference_data
+        .classic_filler_presets
+        .insert(95, mid);
+    ctx.request
+        .reference_data
+        .smart_shuffle_policies_by_unit
+        .insert(
+            item.id.to_string(),
+            super::super::SchedulingSmartShufflePolicy::for_preset(
+                super::super::SchedulingSmartShufflePreset::Light,
+            ),
+        );
+    ctx.request
+        .reference_data
+        .classic_chapters_by_media_id
+        .insert(
+            100,
+            [(0, 10), (10, 20), (20, 30)]
+                .into_iter()
+                .map(|(start, end)| ersatzrs_domain::MediaChapter {
+                    start_time: Duration::minutes(start),
+                    end_time: Duration::minutes(end),
+                    ..ersatzrs_domain::MediaChapter::default()
+                })
+                .collect(),
+        );
+    let start = ctx.state.current_time;
+    assert!(ctx.schedule_media_item(
+        &item,
+        &SchedulingMediaItem::new(100, Duration::minutes(30)),
+        start,
+        None,
+        "One"
+    ));
+    assert_eq!(ctx.result.added_items.len(), 3);
+    let state = serde_json::to_value(&ctx.smart_shuffle_state).unwrap();
+    let buckets = state["buckets"].as_object().unwrap();
+    assert!(!buckets.is_empty());
+    assert!(buckets
+        .values()
+        .all(|bucket| bucket["completed_items"] == 1));
+}

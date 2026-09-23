@@ -195,8 +195,10 @@ Existing Refresh/Reset safety and audio/subtitle identity remain authoritative.
 The first checkpoint implements real clip intervals for gaps and post-roll pad,
 SQL chapter-as-media hydration, source offsets and serialized filler positions.
 The Duration overflow path must retain the real cursor so tail fallback sees
-its unfilled interval. Mid-roll padding still needs chapter-aware placement and
-`FillerExpression` semantics; the row remains pending. See the owning
+its unfilled interval. A second checkpoint supplies source chapter boundaries,
+places mid-roll before the following chapter and post-roll after the final one,
+and rounds padding on wall-clock boundaries. `FillerExpression` semantics and
+remaining persistence/runtime proof still prevent row landing. See the owning
 classic-scheduling debt and UCU-02 evidence.
 
 ## Provisional triage and ledger

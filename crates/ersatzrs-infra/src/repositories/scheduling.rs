@@ -526,6 +526,10 @@ impl SqliteSchedulingContentRepository {
             }
         }
 
+        let classic_chapters_by_media_id = self
+            .classic_schedule_chapters(&schedule_items, &media_by_key)
+            .await?;
+
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
@@ -544,6 +548,7 @@ impl SqliteSchedulingContentRepository {
                 existing_history: self.playout_history(playout_id).await?,
                 max_playout_offset,
                 classic_filler_presets,
+                classic_chapters_by_media_id,
                 ..SchedulingReferenceData::default()
             })
             .await?;
@@ -1068,6 +1073,55 @@ impl SqliteSchedulingContentRepository {
             allow_watermarks: row.try_get("AllowWatermarks").repository()?,
             media_items,
         }))
+    }
+
+    async fn classic_schedule_chapters(
+        &self,
+        schedule_items: &[ersatzrs_domain::ProgramScheduleItem],
+        media_by_key: &BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<BTreeMap<EntityId, Vec<ersatzrs_domain::MediaChapter>>> {
+        let ids: BTreeSet<_> = schedule_items
+            .iter()
+            .filter(|item| item.mid_roll_filler_id.is_some())
+            .filter_map(|item| media_by_key.get(&classic_schedule_item_key(item)))
+            .flatten()
+            .map(|item| item.id)
+            .collect();
+        let mut result = BTreeMap::new();
+        for id in ids {
+            result.insert(id, self.classic_media_chapters(id).await?);
+        }
+        Ok(result)
+    }
+
+    async fn classic_media_chapters(
+        &self,
+        media_id: EntityId,
+    ) -> Result<Vec<ersatzrs_domain::MediaChapter>> {
+        let rows = sqlx::query(r#"SELECT * FROM "MediaChapter" WHERE "MediaVersionId" = (
+            SELECT "Id" FROM "MediaVersion" WHERE ? IN (
+                "MovieId", "EpisodeId", "MusicVideoId", "OtherVideoId", "SongId", "ImageId", "RemoteStreamId"
+            ) ORDER BY "Id" LIMIT 1
+        ) ORDER BY "StartTime", "ChapterId""#).bind(media_id).fetch_all(&self.0).await.repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ersatzrs_domain::MediaChapter {
+                    id: row.try_get("Id").repository()?,
+                    media_version_id: row.try_get("MediaVersionId").repository()?,
+                    chapter_id: row.try_get("ChapterId").repository()?,
+                    title: row
+                        .try_get::<Option<String>, _>("Title")
+                        .repository()?
+                        .unwrap_or_default(),
+                    start_time: decode_duration_text(
+                        &row.try_get::<String, _>("StartTime").repository()?,
+                    ),
+                    end_time: decode_duration_text(
+                        &row.try_get::<String, _>("EndTime").repository()?,
+                    ),
+                })
+            })
+            .collect()
     }
 
     async fn filler_chapter_items(

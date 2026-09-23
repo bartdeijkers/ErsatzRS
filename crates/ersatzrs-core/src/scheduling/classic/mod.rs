@@ -1154,6 +1154,17 @@ impl ClassicContext {
         else {
             return false;
         };
+        let primary_finish = items
+            .iter()
+            .filter(|item| {
+                item.scheduling_context
+                    .as_deref()
+                    .and_then(filler_id_from_context)
+                    .is_none()
+            })
+            .map(|item| item.finish)
+            .max();
+        let mut recorded_primary = false;
         let key = item_key(schedule_item);
         for item in items.drain(..) {
             let history_key = item
@@ -1178,13 +1189,54 @@ impl ClassicContext {
                 history_details_for_media_item(&history_media),
                 false,
             ));
-            self.record_smart_shuffle_item(schedule_item, &item);
+            if item
+                .scheduling_context
+                .as_deref()
+                .and_then(filler_id_from_context)
+                .is_some()
+            {
+                self.record_smart_shuffle_item(schedule_item, &item);
+            } else if !recorded_primary {
+                // Chapter slices are one selection unit, not repeated selections.
+                let mut unit = item.clone();
+                unit.finish = primary_finish.unwrap_or(item.finish);
+                self.record_smart_shuffle_item(schedule_item, &unit);
+                recorded_primary = true;
+            }
             self.result.added_items.push(item);
         }
         true
     }
 
     fn build_media_item_block(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        media_item: &SchedulingMediaItem,
+        start: DateTime<Utc>,
+        guide_finish: Option<DateTime<Utc>>,
+        scheduler: &'static str,
+    ) -> Option<Vec<PlayoutItem>> {
+        let chapters = self
+            .request
+            .reference_data
+            .classic_chapters_by_media_id
+            .get(&media_item.id)
+            .cloned()
+            .unwrap_or_default();
+        if schedule_item.mid_roll_filler_id.is_some() && chapters.len() > 1 {
+            return self.build_chapter_block(
+                schedule_item,
+                media_item,
+                &chapters,
+                start,
+                guide_finish,
+                scheduler,
+            );
+        }
+        self.build_unsplit_block(schedule_item, media_item, start, guide_finish, scheduler)
+    }
+
+    fn build_unsplit_block(
         &mut self,
         schedule_item: &ProgramScheduleItem,
         media_item: &SchedulingMediaItem,
@@ -1535,13 +1587,12 @@ impl ClassicContext {
             ));
             return Vec::new();
         };
-        let elapsed = block_finish - block_start;
-        let elapsed_minutes = elapsed.num_minutes();
-        let target_minutes = ((elapsed_minutes + i64::from(nearest_minute))
-            / i64::from(nearest_minute))
-            * i64::from(nearest_minute);
-        let target = block_start + Duration::minutes(target_minutes);
-        let remaining = target - block_finish;
+        let remaining = mid_roll::pad_budget(
+            block_start,
+            block_finish - block_start,
+            Some(nearest_minute),
+        );
+        let target = block_finish + remaining;
         if remaining <= Duration::zero() {
             return Vec::new();
         }
@@ -5615,3 +5666,5 @@ mod tests {
 
 #[cfg(test)]
 mod fallback_tests;
+
+mod mid_roll;

@@ -286,6 +286,8 @@ pub struct SchedulingReferenceData {
     pub global_watermark_id: Option<EntityId>,
     pub global_fallback: Option<SchedulingFallbackPreset>,
     pub classic_filler_presets: BTreeMap<EntityId, SchedulingFillerPreset>,
+    /// Source chapter boundaries for Classic mid-roll placement.
+    pub classic_chapters_by_media_id: BTreeMap<EntityId, Vec<ersatzrs_domain::MediaChapter>>,
 }
 
 /// Configured fallback filler media available to the playout post-processor.

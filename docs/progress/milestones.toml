@@ -6994,6 +6994,40 @@ placement, and run playback smoke before landing this row. No acceptance,
 pin advancement, push or hosted CI is claimed by this engineering checkpoint.
 
 
+2026-09-23 row 22 chapter-placement checkpoint:
+The SQL Classic reference loader now supplies source chapter boundaries for
+items with mid-roll presets. A separate chapter-block builder emits source
+intervals with their in/out points, count/duration filler between chapters,
+and post-roll after the last chapter. Mid-roll padding apportions the required
+budget between chapter gaps and consumes multiple fallback clips per gap,
+trimming each final fallback interval to the remaining break budget.
+Padding now rounds the wall clock, including seconds, using upstream's next
+interval when content already ends exactly on a boundary. The maintainer asked
+which rule is preferable; the implementation retains upstream clock semantics,
+without adding a relative-to-program-start mode or changing acceptance.
+The full core library plus chapter SQL fixture passes 210 tests (0.566 seconds).
+The final 49-test Classic/SQL selection passes (0.430 seconds), including a new
+Smart Shuffle regression: source chapter slices count as one selection unit,
+so splitting a program does not artificially advance its spacing history.
+The three-chapter fixture proves six fallback clips across two breaks, preserved
+source seeks/audio preference, contiguous output and post-roll at minute 55.
+Expression research did not identify a drop-in NCalc-compatible Rust engine:
+evalexpr 13.1.0 declares AGPL-3.0-only, outside the current dependency allowlist;
+fasteval 0.2.4 is numeric and does not establish the required string/boolean
+contract. No dependency or substitute expression language was introduced.
+Sources: https://github.com/ISibboI/evalexpr/blob/main/Cargo.toml and
+https://docs.rs/crate/fasteval/0.2.4. Continue with a faithful NCalc grammar/evaluator
+mapping using a maintained parser framework, plus upstream chapter-filter tests.
+Expression filtering, exact-version chapter boundaries for pinned media,
+additional pre/post-roll ordering review, persisted filler Refresh/membership
+evidence and playback smoke still prevent row landing. The current loader uses
+the head version, matching upstream; ADR 0056 pin precedence needs a targeted
+multi-version fixture before this broader native path can be accepted.
+Core/infra/web all-target Clippy passes with warnings denied (2m 24s), including
+all consumers of the added reference-data field. Pin/ledger remain at row 21;
+no push or CI is claimed.
+
+
 """
 
 [[milestone]]

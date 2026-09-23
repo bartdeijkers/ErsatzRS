@@ -2166,6 +2166,19 @@ async fn assert_classic_chapter_filler(pool: &SqlitePool) {
     assert_eq!(chapter.out_point, Duration::minutes(13));
     assert_eq!(chapter.chapter_title.as_deref(), Some("Second chapter"));
     assert_eq!(chapter.finish - chapter.start, Duration::minutes(3));
+    pool.execute(r#"UPDATE "ProgramScheduleItem" SET "MidRollFillerId" = 77 WHERE "Id" = 402"#)
+        .await
+        .unwrap();
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+    let boundaries = &reference_data.classic_chapters_by_media_id[&12];
+    assert_eq!(boundaries.len(), 2);
+    assert_eq!(boundaries[1].start_time, Duration::minutes(10));
+    assert_eq!(boundaries[1].end_time, Duration::minutes(13));
+    assert_eq!(boundaries[1].title, "Second chapter");
 }
 
 #[tokio::test]
