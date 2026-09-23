@@ -7805,6 +7805,25 @@ on that newer engine. Ordinary CI Test, Clippy, Format, Cargo deny and documenta
 are green; Chromium/Firefox remain pending. The corrected candidate still needs
 authorized push and terminal exact-SHA green CI. UCU-03 remains In progress;
 UCU-04 has not started.
+
+Chromium CI completed with 235 passed, 6 skipped and one failed no-JS access
+check in addon-list-options.spec.ts. The trace shows the generic access error
+on the first access-test POST after saving the browser option. The fixture and
+production access path are unchanged from the previous green baseline. A
+bounded reproduction proves the synthetic runtime-info command can exit before
+its request writer: 5/5 delayed writes fail with BrokenPipe despite exit 0;
+consuming stdin first gives 5/5 successful writes with identical output.
+The trace does not prove that this was the historical CI error; that causal
+attribution remains a hypothesis, and full CI is still required.
+Corrected only the synthetic fixture to drain stdin before runtime-info output
+on POSIX and Windows. Provider operations still fail closed. Independent review
+found no blocking issue. The original local no-JS scenario passes, consistent
+with a race; after correction all four no-JS option scenarios pass across
+Chromium and Firefox (ucu03-options-after.log), with unchanged assertions,
+timeouts and retries. The actual generated Windows batch fixture also accepts
+delayed stdin and returns the expected JSON with exit 0
+(ucu03-options-windows-stdin-proof.json). No production code or hydration
+boundary changed. Full Firefox CI and a corrected exact-SHA run remain pending.
 """
 
 [[milestone]]

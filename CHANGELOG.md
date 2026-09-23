@@ -135,6 +135,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Make the synthetic add-on option test provider consume runtime requests before
+  replying on Unix and Windows, preventing a process-input race in browser tests.
+
 - Clean orphaned actor and artwork database records at startup and hourly, with
   a bounded manual cleanup API, while retaining referenced images and artwork
   files (upstream PR #2885).

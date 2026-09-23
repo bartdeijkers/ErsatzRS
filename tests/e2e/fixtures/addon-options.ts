@@ -48,7 +48,9 @@ export function seedOptions(access = false) {
   mkdirSync(packageRoot, { recursive: true });
   // Only local readiness and runtime identity checks succeed. Provider operations fail
   // closed; this fixture never opens browser profiles or performs network work.
-  writeFileSync(join(packageRoot, 'addon.sh'), `#!/bin/sh\nif [ "\${1:-}" = "check" ]; then\n  printf '%s\\n' '{"status":"ready","code":"ready","message":"Synthetic option fixture is ready."}'\n  exit 0\nfi\nif [ \"\${1:-}\" = \"runtime-info\" ]; then\n  printf '%s\\n' '{\"tool_version\":\"1.0\"}'\n  exit 0\nfi\nexit 1\n`);
+  // Consume the runtime request before exiting so the host stdin writer cannot
+  // race a successful response and fail with a broken pipe.
+  writeFileSync(join(packageRoot, 'addon.sh'), `#!/bin/sh\nif [ "\${1:-}" = "check" ]; then\n  printf '%s\\n' '{"status":"ready","code":"ready","message":"Synthetic option fixture is ready."}'\n  exit 0\nfi\nif [ \"\${1:-}\" = \"runtime-info\" ]; then\n  cat >/dev/null\n  printf '%s\\n' '{\"tool_version\":\"1.0\"}'\n  exit 0\nfi\nexit 1\n`);
   chmodSync(join(packageRoot, 'addon.sh'), 0o755);
   writeFileSync(join(packageRoot, 'addon.cmd'), [
     '@echo off',
@@ -57,6 +59,7 @@ export function seedOptions(access = false) {
     '  exit /b 0',
     ')',
     'if /i "%~1"=="runtime-info" (',
+    '  more >nul',
     '  echo {"tool_version":"1.0"}',
     '  exit /b 0',
     ')',
