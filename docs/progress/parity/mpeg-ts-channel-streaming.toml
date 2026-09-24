@@ -32,25 +32,26 @@ The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
 `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed the default
 script without overwriting user edits; custom script YAML uses the ErsatzTV
 field names and renders `HlsUrl`, `ChannelName`, `FFmpegPath`, `MuxRate`, and
-`PcrPeriod`. Invalid scripts warn and fall back to the built-in wrapper.
+`PcrPeriod`. Configured script IDs match folder names without regard to case,
+including Unicode one-character case mappings. Invalid scripts warn and fall
+back to the built-in wrapper.
 
 Mirror channels resolve active media from their generated source at
 `wall clock - PlayoutOffset`, then project item times back onto the target
 timeline. FFmpeg profile, branding, selectors, watermarks, and language choices
 continue to come from the requested target channel.
 
-Runtime proof: On 2026-06-29, after broadening the MPEG-TS mux timing helper to
-direct `.ts`, legacy concat, HLS-direct, and the configured/fallback hybrid
-wrapper, `scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks. The
-legacy concat path reported 875 PCR samples, zero
+Runtime proof: The 2026-06-29 TSDuck gate passed all 86 checks across direct,
+legacy, HLS-direct and hybrid paths after mux timing was unified. Legacy concat
+reported 875 PCR samples, zero
 continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 874 OK / 0 jitter
 faults; the hybrid wrapper path reported 1,030 PCR samples, zero
 continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 1,029 OK / 0 jitter
 faults; HLS-direct reported 904 PCR samples, zero
 continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 903 OK / 0 jitter
 faults. HLS Segmenter also had zero continuity-counter/PTS/DTS/PCR-leap faults;
-its HLS-stitched `pcrverify` jitter remains informational per the manual gate
-because the playlist contains real discontinuity markers.
+its stitched `pcrverify` jitter remains informational because of real
+discontinuity markers.
 
 Live add-on proof: On 2026-08-17, the transport-mode resolver was corrected so
 channels configured for Transport Stream Hybrid and explicit `mode=ts`

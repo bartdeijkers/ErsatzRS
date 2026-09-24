@@ -13,6 +13,11 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Match configured MPEG-TS script IDs without regard to case, including Unicode
+  letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
+
 ### Added
 
 - Scheduled Next playback preserves in/out points across selected tracks,

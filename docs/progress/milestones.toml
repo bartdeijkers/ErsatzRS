@@ -8560,6 +8560,27 @@ pass; runtime evidence is reused without rerunning unchanged tests. Advance the
 pin with the local checkpoint, then continue at row 47. UCU-04 window gates,
 push and terminal exact-SHA CI remain open.
 
+Row 47 (aa639375, PR #2916) is Port. Accepted row 46, pin and clean upstream
+checkout agreed before work; a fresh fetch leaves main at 27f9d217 and the
+ledger prefix unchanged. The complete three-file upstream diff lowercases
+settings and troubleshooting defaults and uses OrdinalIgnoreCase when selecting
+an MPEG-TS script. Rust's settings seed and wrapper fallback already use
+lowercase default; the folder lookup was case-sensitive and troubleshooting
+still defaulted to Default. Native-only ICU4X 2.2.0 simple uppercase mapping
+now compares script IDs one character at a time, preserving accents and avoiding
+full case folding. The built-in ID remains a quiet fallback for any casing.
+No schema, UI structure, generated FFmpeg argv or health policy changes.
+
+Focused nextest 2707c892-adcc-4806-9287-56dea9ebde2b passes all 12 MPEG-TS
+script tests, including mixed-case and Unicode folder discovery, accent
+distinction, YAML parsing, rendering and seed preservation. Web all-target
+Clippy, formatting, hydration lint (no new findings), ICU4X license audit and
+diff checks pass. Temporary HTTP smoke passes MPEG-TS Hybrid and HLS segmenter
+endpoints with HTTP 200 and initial output. Substantive Codex diff review finds
+no row-specific blocker. This does not claim six-platform runtime proof or
+UCU-04 window acceptance; workspace gates, push and exact-SHA CI remain open.
+Continue at row 48 after pin/ledger/checkpoint alignment.
+
 """
 
 [[milestone]]

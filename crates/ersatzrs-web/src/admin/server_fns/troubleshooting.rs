@@ -1145,7 +1145,7 @@ async fn load_ffmpeg_settings(
         default_mpeg_ts_script: load_string(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT,
-            "Default",
+            "default",
         )
         .await?,
     })

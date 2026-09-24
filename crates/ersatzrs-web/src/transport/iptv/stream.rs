@@ -2118,7 +2118,16 @@ async fn find_mpegts_script(script_id: &str) -> Option<MpegTsScript> {
 }
 
 fn should_warn_missing_mpegts_script(script_id: &str) -> bool {
-    script_id != DEFAULT_MPEG_TS_SCRIPT_ID
+    !mpegts_script_id_eq(script_id, DEFAULT_MPEG_TS_SCRIPT_ID)
+}
+
+fn mpegts_script_id_eq(left: &str, right: &str) -> bool {
+    let case_mapper = icu_casemap::CaseMapper::new();
+    left.chars()
+        .map(|character| case_mapper.simple_uppercase(character))
+        .eq(right
+            .chars()
+            .map(|character| case_mapper.simple_uppercase(character)))
 }
 
 async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Option<MpegTsScript> {
@@ -2131,7 +2140,7 @@ async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Optio
             continue;
         }
         let id = entry.file_name().to_string_lossy().into_owned();
-        if id != script_id {
+        if !mpegts_script_id_eq(&id, script_id) {
             continue;
         }
         let folder = entry.path();
@@ -5428,7 +5437,16 @@ mod tests {
     #[test]
     fn missing_builtin_mpegts_script_falls_back_quietly() {
         assert!(!should_warn_missing_mpegts_script("default"));
+        assert!(!should_warn_missing_mpegts_script("Default"));
+        assert!(!should_warn_missing_mpegts_script("DEFAULT"));
         assert!(should_warn_missing_mpegts_script("custom"));
+    }
+
+    #[test]
+    fn mpegts_script_ids_compare_without_culture_or_full_folding() {
+        assert!(mpegts_script_id_eq("Ähnliche", "ähnliche"));
+        assert!(!mpegts_script_id_eq("resume", "résumé"));
+        assert!(!mpegts_script_id_eq("Straße", "STRASSE"));
     }
 
     #[test]
@@ -5452,13 +5470,33 @@ mod tests {
         )
         .expect("write script yaml");
 
-        let script = find_mpegts_script_in(root.path(), "custom")
+        let script = find_mpegts_script_in(root.path(), "CUSTOM")
             .await
             .expect("script discovered");
 
         assert_eq!(script.id, "custom");
         assert_eq!(script.definition.name, "Custom");
         assert_eq!(script.definition.linux_script.as_deref(), Some("run.sh"));
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_discovery_matches_unicode_case_without_accent_folding() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("Ähnliche");
+        std::fs::create_dir_all(&folder).expect("create script folder");
+        std::fs::write(
+            folder.join("mpegts.yml"),
+            "name: Similar\nlinux_script: run.sh\n",
+        )
+        .expect("write script yaml");
+
+        let script = find_mpegts_script_in(root.path(), "ähnliche")
+            .await
+            .expect("Unicode case variant discovered");
+        assert_eq!(script.id, "Ähnliche");
+        assert!(find_mpegts_script_in(root.path(), "ahnliche")
+            .await
+            .is_none());
     }
 
     #[tokio::test]
