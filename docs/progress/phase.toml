@@ -139,7 +139,9 @@ catch-up after its local checkpoint. Row 40 is N/A for .NET dependency versions;
 row 41 ports automatic Next error reports with real failure-dossier proof.
 Row 42 is N/A for the ImageSharp dependency constraint. Row 43 ports cached
 Next version discovery and the localized drawer footer, with installed/missing
-Chromium/Firefox and no-JS proof. Next is row 44.
+Chromium/Firefox and no-JS proof. Row 44 is Covered: existing image bindings
+and silence projection pass persisted/real Next PNG regressions and routed smoke.
+Next is row 45.
 UCU-04 window gates and exact-SHA CI remain open.
 Supported-platform acceptance and later graphics capabilities remain open. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

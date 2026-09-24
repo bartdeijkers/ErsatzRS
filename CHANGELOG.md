@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Added
 
+- Explicitly scheduled still images are supported by the optional Next engine,
+  retaining the scheduled display interval and supplying silent audio (upstream PR #2911).
 - Show the optional Next engine version in the admin navigation drawer, with
   a localized unavailable fallback when startup discovery fails (upstream PR #2910).
 

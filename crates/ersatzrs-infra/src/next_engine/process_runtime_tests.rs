@@ -821,6 +821,9 @@ mod scaling_runtime_tests;
 #[path = "reports_runtime_tests.rs"]
 mod reports_runtime_tests;
 
+#[path = "scheduled_image_tests.rs"]
+mod scheduled_image_tests;
+
 #[tokio::test]
 #[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
 async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tracks() {

@@ -8482,6 +8482,40 @@ playback evidence remains applicable. Pin and ledger advance with the local
 checkpoint; continue at row 44. UCU-04 window gates, push and exact-SHA CI remain
 open.
 
+
+Row 44 (577983af, PR #2911) is Covered. Live AMM-N-03/UCU-00 queries remain
+Complete; fresh upstream main remains 27f9d217. Accepted row 43, pin and clean
+upstream checkout agreed before work. The complete upstream diff adds Image
+versions/files/streams/metadata includes and admits Image into the existing
+SyncNextPlayoutHandler loop. Source/path and no-audio silence handling remain
+unchanged. Rust already includes ImageId in its deterministic version/file
+binding; ordinary projection supplies the selected video and finite silence.
+No production correction, dependency, schema, UI or health-policy change is
+needed. Scheduled images are distinct from later graphics-element projection.
+
+The new scheduled_image_tests fixture removes Movie ownership and audio/subtitle
+streams, creates Image/ImageMetadata, and uses a PNG stream with zero stored
+media duration. The persisted binding regression retains one logical item/file,
+the exact 60-second schedule interval and finite silence without a subtitle.
+The real Next 0.1.0-f6350a0 host fixture uses a generated solid-blue PNG without
+a mute pin, decodes H.264 video beyond two seconds, confirms blue pixels and
+48 kHz silent AAC, then awaits session shutdown and verifies output/registry
+cleanup. Final nextest 94d8cfe1-8d48-40cb-abfe-fcd4b2a129d9 passes both tests
+(1,502 outside selection; ucu44-tests-verified.log). Initial fixture compilation
+corrected the Pending enum pattern; Clippy drove setup extraction and the
+existing case-insensitive segment-extension convention. Infrastructure all-target
+Clippy and formatting pass. No assertions, deadlines or acceptance were weakened.
+PNG is the decoded-format evidence; no new cross-platform or all-format matrix
+is claimed. Scoped substantive Codex review finds no remaining row-specific gap.
+
+Routed cargo xtask smoke --next passes with the same staged runtime and explicit
+FFmpeg/ffprobe 9 paths (ucu44-smoke.log): unauthorized media opens return 401;
+HLS and Hybrid MPEG-TS decode selected Dutch 879 Hz audio and 35 white subtitle
+pixels; preview, wrapper disconnect/restart and idle cleanup pass. Production
+playback and generated FFmpeg output are unchanged, so no new TSDuck pipeline
+claim is made. Pin and ledger advance with the authorized local checkpoint.
+Continue at row 45; UCU-04 window gates, push and terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]
