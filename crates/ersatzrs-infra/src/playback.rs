@@ -2948,6 +2948,17 @@ async fn load_active_template_deco(
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<PlaybackDeco>> {
+    match active_template_deco_id(pool, playout_id, now).await? {
+        Some(id) => load_playback_deco(pool, id).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn active_template_deco_id(
+    pool: &DbPool,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<i64>> {
     let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
     else {
         return Ok(None);
@@ -2969,9 +2980,7 @@ async fn load_active_template_deco(
         let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime").repository()?);
         let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime").repository()?);
         if start <= time_seconds && (finish == 0 || finish > time_seconds) {
-            let deco_id = row.try_get("DecoId").repository()?;
-            let deco = load_playback_deco(pool, deco_id).await?;
-            return Ok(Some(deco));
+            return row.try_get("DecoId").repository().map(Some);
         }
     }
 
@@ -2983,34 +2992,10 @@ async fn load_active_template_graphics_deco(
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<PlaybackGraphicsDeco>> {
-    let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
-    else {
-        return Ok(None);
-    };
-
-    let time_seconds = i64::from(now.time().num_seconds_from_midnight());
-    let rows = sqlx::query(
-        r#"SELECT "dti"."DecoId", "dti"."StartTime", "dti"."EndTime"
-           FROM "DecoTemplateItem" AS "dti"
-           WHERE "dti"."DecoTemplateId" = ?
-           ORDER BY "dti"."StartTime", "dti"."Id""#,
-    )
-    .bind(deco_template_id)
-    .fetch_all(pool)
-    .await
-    .repository()?;
-
-    for row in rows {
-        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime").repository()?);
-        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime").repository()?);
-        if start <= time_seconds && (finish == 0 || finish > time_seconds) {
-            let deco_id = row.try_get("DecoId").repository()?;
-            let deco = load_playback_graphics_deco(pool, deco_id).await?;
-            return Ok(Some(deco));
-        }
+    match active_template_deco_id(pool, playout_id, now).await? {
+        Some(id) => load_playback_graphics_deco(pool, id).await.map(Some),
+        None => Ok(None),
     }
-
-    Ok(None)
 }
 
 async fn active_playout_template_deco_id(

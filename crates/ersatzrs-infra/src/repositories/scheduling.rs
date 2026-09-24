@@ -3131,7 +3131,7 @@ impl SqliteSchedulingContentRepository {
         Ok(items)
     }
 
-    async fn items_for_collection_key(
+    pub(crate) async fn items_for_collection_key(
         &self,
         collection_key: &SchedulingCollectionKey,
         depth: usize,

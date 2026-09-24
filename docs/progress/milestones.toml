@@ -8606,6 +8606,26 @@ startup log identifies the broken system ffprobe dependency, and the corrected
 run passes with both managed paths. The official Next and synthetic media were
 used in disposable runtime tests; no six-platform or full-window claim follows.
 
+2026-09-24 row 49 implementation checkpoint (not reconciled):
+Pin, ledger and clean upstream HEAD agree at row 48. Fresh origin/main remains
+27f9d217; all 172 ledger SHA/subject pairs match the fetched ordered history.
+The row-49 source map records gap placeholders, the extracted converter and
+shared DynamicPlayoutItemService. Added the shared read-only fallback candidate
+selector: active template/playout decoration, channel/global preset precedence,
+explicit Disable, empty-collection handling, source-time mirror selection and
+clipping at the next programme. Materialization preserves exact track pins and
+does not insert filler or change enumerator state. Watermark and graphics
+selection now share the unchanged active-template decoration ID lookup.
+Five focused tests pass (b771f190), including actual template end-boundary and
+mirror-time SQL selection. The five affected native watermark/graphics decoration
+tests pass (4977c414) with disposable data roots; the initial sandbox run failed
+three fixture writes to the read-only default data directory. Infra all-target
+Clippy passes. This component is
+not connected to live Next playback yet. Complete authenticated gap publication
+and ephemeral callback projection, source/subtitle/credits preparation and
+decoded gap-to-programme playback next. Row 49 and its visible debt stay open;
+the pin remains at row 48. UCU-04 push and CI await full window acceptance.
+
 """
 
 [[milestone]]

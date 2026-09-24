@@ -31,6 +31,33 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 49 source map: dynamic fallback filler in Next
+
+Upstream `294a2ff1` (PR #2919) inserts Dynamic placeholders only between
+persisted programmes in `SyncNextPlayoutHandler`. `PlayoutItemConverter`
+extracts the existing media/track/watermark conversion and adds a Dynamic
+source. `/media/fallback` reads the injected channel/time headers, invokes
+`DynamicPlayoutItemService`, and converts one ephemeral fallback item to JSON.
+The native process handler delegates its existing fallback/path logic to that
+same service. There are no UI, validator, schema or dependency changes.
+
+Fallback precedence is active template decoration, playout decoration, channel
+preset, then global preset. Decoration Disable suppresses inheritance. A
+nonempty configured collection supplies a random item, limited to its media
+duration and the next programme. Empty selected collections do not cascade to
+another preset. Existing source resolution, audio/subtitle selection, fallback
+watermark policy and mirror source/target time conversion must be retained.
+
+Rust targets are the scheduling collection loader and playback decoration
+queries, plus Next schedule publication, authenticated session callbacks and
+existing local/provider/Remote Stream projection/preparation. Ephemeral filler
+must not be written into the persisted programme timeline or reset enumerators.
+Callbacks must reject expired sessions, changed gaps and mismatched channel or
+time headers. The current persisted-item callback cannot directly represent an
+ephemeral filler item; row acceptance requires completing that boundary,
+including subtitle preparation, credits, source lifecycle and real gap-to-next
+programme playback. ADR 0095 owns the existing authenticated callback adaptation.
+
 ## Row 48 source map: generated music-video credits in Next
 
 Upstream `14ee8063` (PR #2917) adds a playout-item query and internal ASS

@@ -62,6 +62,14 @@ refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
 [[debt]]
+id          = 'ucu-next-dynamic-fallback'
+description = 'Row 49: publish bounded gap placeholders and resolve ephemeral fallback media through the configured decoration/channel/global policy and existing Next track/source lifecycle.'
+discovered  = '2026-09-24'
+resolved    = false
+adr         = '0095'
+evidence    = 'Source map is in plans/upstream-catch-up.md. Next currently publishes persisted items only; its authenticated callback requires a persisted item identity. Complete ephemeral selection/projection and decoded gap playback without writing filler into the persisted timeline before reconciling row 49. UCU-04 remains the acceptance owner; pin and ledger remain at row 48.'
+
+[[debt]]
 id          = 'ucu-next-live-remote-subtitles'
 description = 'Track accepted official Next alpha limitations for live embedded text Burn/Convert and ordinary one-shot producer embedded text without an independent source-bound caption artifact.'
 discovered  = '2026-09-23'
