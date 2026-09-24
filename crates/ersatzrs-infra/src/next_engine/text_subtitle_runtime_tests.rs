@@ -271,7 +271,7 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                         uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)
                             .expect("official Next must expand the session header")).unwrap(), now, until).await {
                         Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
-                        Err(error) => panic!("production callback failed: {error}"),
+                        Err(error) => panic!("production callback for item {} failed: {error}", parts[1]),
                     }
                 } else {
                     ("401 Unauthorized", Vec::new())

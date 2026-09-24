@@ -6,6 +6,8 @@ pub(super) const PRODUCER: &str = r#"#!/bin/sh
 set -eu
 printf '%s\n' "$1" >> ../producer-starts
 cat > ../request.json
+cat ../request.json >> ../requests.ndjson
+printf '\n' >> ../requests.ndjson
 exec python3 -c '
 import json, os
 with open("../request.json", encoding="utf-8") as stream:

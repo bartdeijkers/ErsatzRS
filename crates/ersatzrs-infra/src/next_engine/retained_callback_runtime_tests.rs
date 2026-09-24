@@ -79,7 +79,16 @@ async fn install_producer(pool: &crate::db::DbPool, root: &Path) -> String {
     digest
 }
 
-async fn publish_retained(pool: &crate::db::DbPool, root: &Path, nut: &Path, convert: bool) {
+pub(super) async fn generate_fallback_source(ffmpeg: &Path, root: &Path) -> PathBuf {
+    timeline_fixture::generate_source(ffmpeg, root).await
+}
+
+pub(super) async fn publish_retained(
+    pool: &crate::db::DbPool,
+    root: &Path,
+    nut: &Path,
+    convert: bool,
+) {
     prepared_artifact_runtime::publish_fixture(pool, nut).await;
     let digest = install_producer(pool, root).await;
     sqlx::raw_sql(r#"

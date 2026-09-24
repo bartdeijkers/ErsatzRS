@@ -50,7 +50,13 @@ pub(super) struct Occurrence {
     item: PlayoutItem,
     audio: Option<usize>,
     descriptor: String,
-    concrete: protocol::PlayoutItem,
+    concrete: Option<protocol::PlayoutItem>,
+}
+
+struct Projection {
+    snapshot: dynamic_projection::Snapshot,
+    credits: Option<String>,
+    remote: bool,
 }
 
 /// Fill only internal gaps, retaining overlapping programmes and outer bounds.
@@ -124,79 +130,67 @@ impl NextHost {
             .map(|context| (context.request.clone(), context.fallback.clone()))
             .ok_or_else(unavailable)?;
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
-        timeout_at(deadline, async {
-            let mut state = state.lock().await;
-            let channel = make_repositories(self.pool.clone())
-                .channel
-                .get_with_profile(channel_id)
-                .await?;
-            if channel.streaming_engine != StreamingEngine::Next {
-                return Err(unavailable());
-            }
-            let locked = self.validate_gap(&channel, gap).await?;
-            let candidates =
-                fallback_playback::load_candidates(&self.pool, &channel, now, gap.finish)
-                    .await?
-                    .ok_or_else(unavailable)?;
-            if let Some(current) = state.as_ref().filter(|current| {
-                current.gap == gap && now >= current.item.start && now < current.item.finish
-            }) {
-                if !candidate_matches(&candidates, &current.item) {
+        timeout_at(
+            deadline,
+            Box::pin(async {
+                let mut state = state.lock().await;
+                let channel = make_repositories(self.pool.clone())
+                    .channel
+                    .get_with_profile(channel_id)
+                    .await?;
+                if channel.streaming_engine != StreamingEngine::Next {
                     return Err(unavailable());
                 }
-                let resolved = self
-                    .resolve_fallback_occurrence(&channel, current, &request, instance, now)
+                let locked = self.validate_gap(&channel, gap).await?;
+                let candidates =
+                    fallback_playback::load_candidates(&self.pool, &channel, now, gap.finish)
+                        .await?
+                        .ok_or_else(unavailable)?;
+                if let Some(current) = state.as_ref().filter(|current| {
+                    current.gap == gap && now >= current.item.start && now < current.item.finish
+                }) {
+                    if !candidate_matches(&candidates, &current.item) {
+                        return Err(unavailable());
+                    }
+                    drop(locked);
+                    let resolved = Box::pin(self.resolve_fallback_occurrence(
+                        &channel, current, &request, instance, now, deadline,
+                    ))
                     .await?;
+                    return Ok(resolved);
+                }
+                let seed = usize::try_from(ersatzrs_core::scheduling::next_playout_seed())
+                    .map_err(|_| unavailable())?;
+                let item = candidates
+                    .materialize(seed % candidates.items.len())
+                    .ok_or_else(unavailable)?;
+                let projected = self
+                    .project_fallback(
+                        &channel,
+                        &item,
+                        &request,
+                        selection::AudioDirective::Select,
+                        gap,
+                    )
+                    .await?;
+                let audio = selected_audio(&projected.snapshot.projection.item)?;
+                let descriptor = projected.snapshot.identity.descriptor.clone();
+                let remote = projected.remote;
                 drop(locked);
-                return Ok(resolved);
-            }
-            let seed = usize::try_from(ersatzrs_core::scheduling::next_playout_seed())
-                .map_err(|_| unavailable())?;
-            let item = candidates
-                .materialize(seed % candidates.items.len())
-                .ok_or_else(unavailable)?;
-            let (mut projected, identity, credits) = self
-                .project_fallback(&channel, &item, &request, selection::AudioDirective::Select)
+                let concrete = Box::pin(self.prepare_fallback(
+                    projected, &channel, &item, &request, gap, instance, audio, now, deadline,
+                ))
                 .await?;
-            let audio = selected_audio(&projected.item)?;
-            drop(locked);
-            self.prepare_fallback_tracks(
-                &mut projected,
-                &identity,
-                credits,
-                &channel,
-                &item,
-                &request,
-                gap,
-                instance,
-                audio,
-                deadline,
-            )
-            .await?;
-            if !self
-                .fallback_unchanged(
-                    &channel,
-                    &item,
-                    &request,
+                *state = Some(Occurrence {
                     gap,
-                    instance,
+                    item,
                     audio,
-                    &identity.descriptor,
-                )
-                .await
-            {
-                return Err(unavailable());
-            }
-            let concrete = projected.item;
-            *state = Some(Occurrence {
-                gap,
-                item,
-                audio,
-                descriptor: identity.descriptor,
-                concrete: concrete.clone(),
-            });
-            Ok(concrete)
-        })
+                    descriptor,
+                    concrete: (!remote).then(|| concrete.clone()),
+                });
+                Ok(concrete)
+            }),
+        )
         .await
         .map_err(|_| unavailable())?
     }
@@ -208,6 +202,7 @@ impl NextHost {
         request: &super::host::NextStart,
         instance: Uuid,
         now: DateTime<Utc>,
+        deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
         let projected = self
             .project_fallback(
@@ -215,14 +210,119 @@ impl NextHost {
                 &current.item,
                 request,
                 selection::AudioDirective::Published(current.audio),
+                current.gap,
             )
             .await?;
-        if projected.1.descriptor != current.descriptor
+        if projected.snapshot.identity.descriptor != current.descriptor
             || !self.dynamic_contexts.lock().await.contains_key(&instance)
         {
             return Err(unavailable());
         }
-        dynamic_item::resolve_at(&current.concrete, now).map_err(|_| unavailable())
+        if let Some(concrete) = &current.concrete {
+            if !self
+                .fallback_unchanged(
+                    channel,
+                    &current.item,
+                    request,
+                    current.gap,
+                    instance,
+                    current.audio,
+                    &current.descriptor,
+                )
+                .await
+            {
+                return Err(unavailable());
+            }
+            return dynamic_item::resolve_at(concrete, now).map_err(|_| unavailable());
+        }
+        Box::pin(self.prepare_fallback(
+            projected,
+            channel,
+            &current.item,
+            request,
+            current.gap,
+            instance,
+            current.audio,
+            now,
+            deadline,
+        ))
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn prepare_fallback(
+        &self,
+        projected: Projection,
+        channel: &Channel,
+        item: &PlayoutItem,
+        request: &super::host::NextStart,
+        gap: Gap,
+        instance: Uuid,
+        audio: Option<usize>,
+        now: DateTime<Utc>,
+        deadline: Instant,
+    ) -> Result<protocol::PlayoutItem> {
+        let mut snapshot = super::remote_projection::materialize_prepared(
+            &self.pool,
+            &self.locker,
+            projected.snapshot,
+            audio,
+            &crate::file_system_layout::addon_processed_media_folder(),
+        )
+        .await?;
+        super::live_subtitles::prepare(&self.burn_cache, &mut snapshot, now, deadline).await?;
+        if !Box::pin(self.fallback_preparation_unchanged(
+            channel,
+            item,
+            request,
+            gap,
+            instance,
+            audio,
+            &snapshot.identity,
+        ))
+        .await
+        {
+            return Err(unavailable());
+        }
+        if let Some(context) = snapshot.retained_remote.take() {
+            return Box::pin(
+                self.resolve_retained(snapshot, context, request, instance, audio, now, deadline),
+            )
+            .await;
+        }
+        if let Some(context) = snapshot.producer_remote.take() {
+            return Box::pin(
+                self.resolve_producer(snapshot, context, request, instance, audio, now, deadline),
+            )
+            .await;
+        }
+        Box::pin(self.prepare_fallback_tracks(
+            &mut snapshot.projection,
+            &snapshot.identity,
+            projected.credits,
+            channel,
+            item,
+            request,
+            gap,
+            instance,
+            audio,
+            deadline,
+        ))
+        .await?;
+        if !Box::pin(self.fallback_preparation_unchanged(
+            channel,
+            item,
+            request,
+            gap,
+            instance,
+            audio,
+            &snapshot.identity,
+        ))
+        .await
+        {
+            return Err(unavailable());
+        }
+        dynamic_item::resolve_at(&snapshot.projection.item, now).map_err(|_| unavailable())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -244,15 +344,9 @@ impl NextHost {
             let path = self
                 .burn_cache
                 .prepare_text(&key, "ass", &content, item.finish, deadline, || async {
-                    self.fallback_unchanged(
-                        channel,
-                        item,
-                        request,
-                        gap,
-                        instance,
-                        audio,
-                        &identity.descriptor,
-                    )
+                    Box::pin(self.fallback_preparation_unchanged(
+                        channel, item, request, gap, instance, audio, identity,
+                    ))
                     .await
                 })
                 .await
@@ -289,15 +383,9 @@ impl NextHost {
                     item.finish,
                     deadline - std::time::Duration::from_secs(6),
                     || async {
-                        self.fallback_unchanged(
-                            channel,
-                            item,
-                            request,
-                            gap,
-                            instance,
-                            audio,
-                            &identity.descriptor,
-                        )
+                        Box::pin(self.fallback_preparation_unchanged(
+                            channel, item, request, gap, instance, audio, identity,
+                        ))
                         .await
                     },
                 )
@@ -310,35 +398,7 @@ impl NextHost {
     }
 
     async fn validate_gap(&self, channel: &Channel, gap: Gap) -> Result<schedule::LockedSchedule> {
-        let start = gap
-            .start
-            .checked_sub_signed(Duration::microseconds(1))
-            .ok_or_else(unavailable)?;
-        let finish = gap
-            .finish
-            .checked_add_signed(Duration::microseconds(1))
-            .ok_or_else(unavailable)?;
-        let locked = schedule::read_locked(&self.pool, &self.locker, channel, start, finish)
-            .await?
-            .ok_or_else(unavailable)?;
-        let before = locked
-            .items
-            .iter()
-            .any(|media| media.item.finish == gap.start);
-        let after = locked
-            .items
-            .iter()
-            .any(|media| media.item.start == gap.finish);
-        if !before
-            || !after
-            || locked
-                .items
-                .iter()
-                .any(|media| media.item.start < gap.finish && media.item.finish > gap.start)
-        {
-            return Err(unavailable());
-        }
-        Ok(locked)
+        validate_gap(&self.pool, &self.locker, channel, gap).await
     }
 
     async fn project_fallback(
@@ -347,19 +407,27 @@ impl NextHost {
         item: &PlayoutItem,
         request: &super::host::NextStart,
         audio: selection::AudioDirective,
-    ) -> Result<(
-        selection::DeferredProjection,
-        dynamic_projection::Identity,
-        Option<String>,
-    )> {
+        gap: Gap,
+    ) -> Result<Projection> {
         let media = schedule::bind_media(&self.pool, item.clone()).await?;
-        // Ephemeral Remote Stream lifecycle is the remaining row-49 integration.
-        if media.remote_stream_id.is_some() {
-            return Err(unavailable());
-        }
         let profile = playback::load_channel_playback_profile(&self.pool, channel.id)
             .await?
             .ok_or_else(unavailable)?;
+        if media.remote_stream_id.is_some() {
+            return Ok(Projection {
+                snapshot: super::remote_projection::project_publishable_for_origin(
+                    &self.pool,
+                    channel,
+                    &media,
+                    &profile.resolution,
+                    audio,
+                    super::remote_projection::Origin::Fallback(gap),
+                )
+                .await?,
+                credits: None,
+                remote: true,
+            });
+        }
         let source =
             source::resolve_published(&self.pool, &media, &request.replacements, Some(&self.media))
                 .await?;
@@ -421,7 +489,70 @@ impl NextHost {
                 &serde_json::json!({"projection": identity.descriptor, "credits": content}),
             )?;
         }
-        Ok((projected, identity, credits))
+        Ok(Projection {
+            snapshot: dynamic_projection::Snapshot {
+                projection: projected,
+                identity,
+                prepared_remote: None,
+                producer_remote: None,
+                retained_remote: None,
+            },
+            credits,
+            remote: false,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn fallback_preparation_unchanged(
+        &self,
+        channel: &Channel,
+        item: &PlayoutItem,
+        request: &super::host::NextStart,
+        gap: Gap,
+        instance: Uuid,
+        audio: Option<usize>,
+        identity: &dynamic_projection::Identity,
+    ) -> bool {
+        if !self
+            .fallback_unchanged(
+                channel,
+                item,
+                request,
+                gap,
+                instance,
+                audio,
+                &identity.descriptor,
+            )
+            .await
+        {
+            return false;
+        }
+        let Ok(projected) = self
+            .project_fallback(
+                channel,
+                item,
+                request,
+                selection::AudioDirective::Published(audio),
+                gap,
+            )
+            .await
+        else {
+            return false;
+        };
+        let Ok(current) = super::remote_projection::materialize_prepared(
+            &self.pool,
+            &self.locker,
+            projected.snapshot,
+            audio,
+            &crate::file_system_layout::addon_processed_media_folder(),
+        )
+        .await
+        else {
+            return false;
+        };
+        current.identity.descriptor == identity.descriptor
+            && current.identity.cache_key == identity.cache_key
+            && self.dynamic_contexts.lock().await.contains_key(&instance)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -457,11 +588,86 @@ impl NextHost {
                     item,
                     request,
                     selection::AudioDirective::Published(audio),
+                    gap,
                 )
                 .await
-                .is_ok_and(|(_, identity, _)| identity.descriptor == descriptor)
+                .is_ok_and(|projected| projected.snapshot.identity.descriptor == descriptor)
             && self.dynamic_contexts.lock().await.contains_key(&instance)
     }
+}
+
+async fn validate_gap(
+    pool: &crate::db::DbPool,
+    locker: &ersatzrs_core::locking::EntityLocker,
+    channel: &Channel,
+    gap: Gap,
+) -> Result<schedule::LockedSchedule> {
+    let start = gap
+        .start
+        .checked_sub_signed(Duration::microseconds(1))
+        .ok_or_else(unavailable)?;
+    let finish = gap
+        .finish
+        .checked_add_signed(Duration::microseconds(1))
+        .ok_or_else(unavailable)?;
+    let snapshot = schedule::read_locked(pool, locker, channel, start, finish)
+        .await?
+        .ok_or_else(unavailable)?;
+    let before = snapshot
+        .items
+        .iter()
+        .any(|media| media.item.finish == gap.start);
+    let after = snapshot
+        .items
+        .iter()
+        .any(|media| media.item.start == gap.finish);
+    if !before
+        || !after
+        || snapshot
+            .items
+            .iter()
+            .any(|media| media.item.start < gap.finish && media.item.finish > gap.start)
+    {
+        return Err(unavailable());
+    }
+    Ok(snapshot)
+}
+
+pub(super) async fn remote_snapshot(
+    pool: &crate::db::DbPool,
+    locker: &ersatzrs_core::locking::EntityLocker,
+    channel_id: i64,
+    item: &PlayoutItem,
+    gap: Gap,
+    audio: Option<usize>,
+) -> Result<super::remote_projection::Snapshot> {
+    let channel = make_repositories(pool.clone())
+        .channel
+        .get_with_profile(channel_id)
+        .await?;
+    if channel.streaming_engine != StreamingEngine::Next {
+        return Err(unavailable());
+    }
+    let _locked = validate_gap(pool, locker, &channel, gap).await?;
+    let candidates = fallback_playback::load_candidates(pool, &channel, item.start, gap.finish)
+        .await?
+        .ok_or_else(unavailable)?;
+    if !candidate_matches(&candidates, item) {
+        return Err(unavailable());
+    }
+    let media = schedule::bind_media(pool, item.clone()).await?;
+    let profile = playback::load_channel_playback_profile(pool, channel_id)
+        .await?
+        .ok_or_else(unavailable)?;
+    super::remote_projection::project_for_origin(
+        pool,
+        &channel,
+        &media,
+        &profile.resolution,
+        selection::AudioDirective::Published(audio),
+        super::remote_projection::Origin::Fallback(gap),
+    )
+    .await
 }
 
 fn selected_audio(item: &protocol::PlayoutItem) -> Result<Option<usize>> {

@@ -290,3 +290,102 @@ async fn ephemeral_credits_use_bound_cache_and_reject_changed_metadata() {
         .unwrap();
     assert!(resolve(&host, instance, start, 100).await.is_err());
 }
+
+async fn remote_fixture(host: &NextHost) {
+    for sql in [
+        r#"INSERT INTO "RemoteStream" ("Id","Url","Liveness","IsLive") VALUES (10,'https://example.test/finite',1,0)"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL,"RemoteStreamId"=10 WHERE "Id"=100"#,
+        r#"INSERT INTO "RemoteStreamMetadata" ("Id","RemoteStreamId","MetadataKind","Title","DateAdded","DateUpdated") VALUES (30,10,0,'Synthetic','2026-09-24','2026-09-24')"#,
+        r#"UPDATE "Subtitle" SET "MovieMetadataId"=NULL,"RemoteStreamMetadataId"=30"#,
+        r#"DELETE FROM "MovieMetadata" WHERE "MovieId"=10"#,
+        r#"DELETE FROM "Movie" WHERE "Id"=10"#,
+    ] {
+        sqlx::query(sql).execute(&host.pool).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn remote_callbacks_keep_occurrence_selection_but_refresh_concrete_sources() {
+    let (host, instance, start, _root) = fixture().await;
+    remote_fixture(&host).await;
+    let first = resolve(&host, instance, start, 90).await.unwrap();
+    assert_eq!(first.finish, start + Duration::seconds(150));
+    assert_eq!(
+        first
+            .tracks
+            .as_ref()
+            .unwrap()
+            .audio
+            .as_ref()
+            .unwrap()
+            .stream_index,
+        Some(2)
+    );
+    let again = resolve(&host, instance, start, 105).await.unwrap();
+    let value = serde_json::to_value(&again).unwrap();
+    assert_eq!(value["tracks"]["video"]["source"]["in_point_ms"], 15_000);
+    let state = host
+        .dynamic_contexts
+        .lock()
+        .await
+        .get(&instance)
+        .unwrap()
+        .fallback
+        .clone();
+    let guard = state.lock().await;
+    let current = guard.as_ref().unwrap();
+    assert!(
+        current.concrete.is_none(),
+        "remote transfers must not reuse a claimed concrete URL"
+    );
+    let current_snapshot = super::super::remote_projection::Origin::Fallback(current.gap)
+        .snapshot(&host.pool, &host.locker, 1, &current.item, current.audio)
+        .await
+        .unwrap();
+    assert_eq!(current_snapshot.identity.descriptor, current.descriptor);
+    assert!(super::super::remote_projection::Origin::Persisted
+        .snapshot(&host.pool, &host.locker, 1, &current.item, current.audio)
+        .await
+        .is_err());
+    drop(guard);
+    sqlx::query(r#"UPDATE "RemoteStream" SET "Url"='https://example.test/replaced' WHERE "Id"=10"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(resolve(&host, instance, start, 110).await.is_err());
+}
+
+#[tokio::test]
+async fn ephemeral_remote_validation_refuses_schedule_changes_after_preparation() {
+    let (host, instance, start, _root) = fixture().await;
+    remote_fixture(&host).await;
+    resolve(&host, instance, start, 90).await.unwrap();
+    let state = host
+        .dynamic_contexts
+        .lock()
+        .await
+        .get(&instance)
+        .unwrap()
+        .fallback
+        .clone();
+    let guard = state.lock().await;
+    let current = guard.as_ref().unwrap();
+    make_repositories(host.pool.clone())
+        .playout
+        .upsert_item(&PlayoutItem {
+            id: 3,
+            playout_id: 1,
+            media_item_id: 10,
+            start: start + Duration::seconds(100),
+            finish: start + Duration::seconds(120),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(
+        super::super::remote_projection::Origin::Fallback(current.gap)
+            .snapshot(&host.pool, &host.locker, 1, &current.item, current.audio)
+            .await
+            .is_err()
+    );
+}

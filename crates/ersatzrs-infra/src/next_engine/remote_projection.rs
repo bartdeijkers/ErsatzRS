@@ -37,7 +37,44 @@ pub(crate) struct Snapshot {
     pub retained: bool,
 }
 
+/// Distinguishes persisted programmes from session-owned filler without fake SQL rows.
+#[derive(Clone, Copy)]
+pub(super) enum Origin {
+    Persisted,
+    Fallback(super::fallback::Gap),
+}
+
+impl Origin {
+    pub(super) async fn snapshot(
+        self,
+        pool: &DbPool,
+        locker: &EntityLocker,
+        channel_id: i64,
+        item: &ersatzrs_domain::PlayoutItem,
+        audio: Option<usize>,
+    ) -> Result<Snapshot> {
+        match self {
+            Self::Persisted => {
+                snapshot(
+                    pool,
+                    locker,
+                    channel_id,
+                    item.id,
+                    item.start,
+                    item.finish,
+                    audio,
+                )
+                .await
+            }
+            Self::Fallback(gap) => {
+                super::fallback::remote_snapshot(pool, locker, channel_id, item, gap, audio).await
+            }
+        }
+    }
+}
+
 pub(crate) struct RetainedContext {
+    pub(super) origin: Origin,
     pub media: ScheduledMedia,
     pub previous_audio: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
     pub max_height: Option<u32>,
@@ -46,6 +83,7 @@ pub(crate) struct RetainedContext {
 pub(crate) type ProducerContext = RetainedContext;
 
 pub(crate) struct PreparedContext {
+    origin: Origin,
     media: ScheduledMedia,
     channel: Channel,
     resolution: Resolution,
@@ -91,13 +129,11 @@ pub(crate) async fn materialize_prepared(
     )
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
-    let current = Box::pin(snapshot(
+    let current = Box::pin(context.origin.snapshot(
         pool,
         locker,
         context.channel.id,
-        context.media.item.id,
-        context.media.item.start,
-        context.media.item.finish,
+        &context.media.item,
         audio,
     ))
     .await?;
@@ -137,6 +173,17 @@ pub(crate) async fn project_publishable(
     resolution: &Resolution,
     audio: selection::AudioDirective,
 ) -> Result<super::dynamic_projection::Snapshot> {
+    project_publishable_for_origin(pool, channel, media, resolution, audio, Origin::Persisted).await
+}
+
+pub(super) async fn project_publishable_for_origin(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &ScheduledMedia,
+    resolution: &Resolution,
+    audio: selection::AudioDirective,
+    origin: Origin,
+) -> Result<super::dynamic_projection::Snapshot> {
     let binding = load_binding(pool, media.remote_stream_id.ok_or_else(unavailable)?).await?;
     if binding.script.is_some() {
         return Err(unavailable());
@@ -161,12 +208,13 @@ pub(crate) async fn project_publishable(
         )
         .map_err(|_| unavailable())?;
     }
-    let snapshot = project(pool, channel, media, resolution, audio).await?;
+    let snapshot = project_for_origin(pool, channel, media, resolution, audio, origin).await?;
     validate_live_subtitles(&snapshot)?;
     validate_producer_subtitles(&snapshot, managed)?;
     let producer = managed && !snapshot.prepared && !snapshot.retained;
     let mut owned_remote = if snapshot.retained || producer {
         Some(RetainedContext {
+            origin,
             previous_audio: playback::load_source_audio_streams(pool, media.media_version_id)
                 .await?,
             media: ScheduledMedia {
@@ -187,6 +235,7 @@ pub(crate) async fn project_publishable(
         retained_remote: if producer { None } else { owned_remote.take() },
         producer_remote: if producer { owned_remote } else { None },
         prepared_remote: snapshot.prepared.then(|| PreparedContext {
+            origin,
             media: snapshot.media,
             channel: channel.clone(),
             resolution: resolution.clone(),
@@ -308,6 +357,17 @@ pub(crate) async fn project(
     resolution: &Resolution,
     audio: selection::AudioDirective,
 ) -> Result<Snapshot> {
+    project_for_origin(pool, channel, media, resolution, audio, Origin::Persisted).await
+}
+
+pub(super) async fn project_for_origin(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &ScheduledMedia,
+    resolution: &Resolution,
+    audio: selection::AudioDirective,
+    origin: Origin,
+) -> Result<Snapshot> {
     let remote_id = media
         .remote_stream_id
         .filter(|id| *id == media.item.media_item_id)
@@ -330,20 +390,28 @@ pub(crate) async fn project(
     .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
-    if !playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
-        .await?
-        .is_empty()
-    {
+    let (graphics, watermarks) = match origin {
+        Origin::Persisted => (
+            playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
+                .await?,
+            playback::select_playback_watermarks(
+                pool,
+                channel,
+                media.item.id,
+                media.item.disable_watermarks,
+                selection_time,
+            )
+            .await?,
+        ),
+        Origin::Fallback(_) => (
+            playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
+            playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
+                .await?,
+        ),
+    };
+    if !graphics.is_empty() {
         return Err(unavailable());
     }
-    let watermarks = playback::select_playback_watermarks(
-        pool,
-        channel,
-        media.item.id,
-        media.item.disable_watermarks,
-        selection_time,
-    )
-    .await?;
     projection.item.watermark = super::watermark::project(&watermarks)?;
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;

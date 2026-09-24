@@ -8660,6 +8660,54 @@ all-target Clippy, formatting and diff checks pass. Scoped Codex review correcte
 precision loss and incomplete cached-preference validation. General graphics
 and accepted Next alpha subtitle limitations keep their existing owners.
 
+2026-09-24 row 49 finite Remote Stream checkpoint (not reconciled):
+Live prerequisites remain Complete; pin, clean upstream checkout and row 48
+remain aligned. Fresh upstream main remains 27f9d217. Remote Stream projection
+now carries an explicit persisted/fallback origin into prepared-artifact,
+ordinary-producer and retained-interval validation. Ephemeral validation checks
+the current gap and complete selected candidate instead of querying a fake
+playout row. Source ownership, fresh audio mapping, bounded preparation,
+single-use HTTP readers and awaited session cleanup reuse the existing paths.
+Repeated remote callbacks retain occurrence selection while obtaining a fresh
+concrete source for the requested seek. Prepared subtitle cache validation also
+compares the actual artifact identity after opening. Existing unsupported
+live/one-shot embedded text and general graphics refusals remain in force.
+
+The eight fallback regressions pass (d7d16961), including Remote Stream seeking,
+changed source rejection and schedule mutation during preparation. Thirteen
+existing fallback/Remote Stream projection tests pass (dd97bb9f). Real Next
+0.1.0-f6350a0 direct HTTP and prepared-artifact Burn gap/handoff cases pass
+(98971687). The ordinary producer Burn case passes (58334555), and retained
+Burn passes with exact requested cuts 0..12000 and 18000..30000 (e5a33a10).
+Each producer fixture proves one start for each of two programmes and one filler,
+plus decoded Dutch fallback, English programme return and session/output cleanup.
+Initial fixture failures corrected subtitle insertion order, fresh-media audio
+titles and a programme duration exceeding the retained source's 24 seconds.
+
+The first Convert matrix observed four ordinary starts. The isolated diagnostic
+f0e0016e proves the fourth seeks exactly 44 seconds, matching official Next's
+work-ahead continuation of the 60-second following programme. Bounding that
+programme to 30 seconds makes the unchanged three-start assertion deterministic;
+the retained programme remains bounded to its published 24 seconds. Final
+057a6a9d passes the serial five-source Convert matrix (local, direct, prepared,
+ordinary, retained; 65.7 seconds) and ordinary Burn rerun. Matching-segment VTT
+contains timed selected captions without burned pixels or removed-cut captions,
+and playback returns to the uncaptioned English programme. No assertion,
+readiness deadline or timeout was weakened. POSIX installed-producer fixtures
+remain explicitly Unix-only; production preparation remains platform-neutral.
+
+Final focused nextest 3b4947b3 passes all 17 fallback, Remote Stream projection
+and prepared-artifact regressions. Infrastructure all-target Clippy passes after
+boxing the preparation futures at the existing async boundaries and correcting
+two naming/style findings. Current code preserves the tested selection, timing,
+reader ownership and cancellation paths; the runtime matrix remains applicable.
+Formatting and diff checks pass. Scoped Codex review includes cache identity,
+source locks, current policy and producer/retained context propagation.
+
+Remaining row 49 acceptance: live/provider, pin/off and generated-credits matrix,
+routed smoke and final row review. The ledger verdict stays pending and the pin
+stays at row 48. UCU-04 window gates, push and terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]

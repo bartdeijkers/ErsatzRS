@@ -8,7 +8,7 @@ use super::{
     dynamic_projection::Snapshot,
     host::{NextHost, NextStart},
     protocol,
-    remote_projection::{self, ProducerContext},
+    remote_projection::ProducerContext,
     retained_host::{install_fresh_tracks, PendingClaim},
     session_transfers::{PreparedTransferMedia, TransferBinding},
 };
@@ -78,13 +78,11 @@ impl NextHost {
         };
         let result = async {
             let (remaining_seek, liveness) = timing_rx.await.map_err(|_| unavailable())?;
-            let after = Box::pin(remote_projection::snapshot(
+            let after = Box::pin(context.origin.snapshot(
                 &self.pool,
                 &self.locker,
                 request.channel_id,
-                context.media.item.id,
-                before.projection.item.start,
-                before.projection.item.finish,
+                &context.media.item,
                 audio,
             ))
             .await?;

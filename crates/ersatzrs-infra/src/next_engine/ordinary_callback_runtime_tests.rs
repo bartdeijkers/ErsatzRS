@@ -9,7 +9,7 @@ async fn real_next_ordinary_producer_preserves_seek_audio_and_single_start() {
     prepared_artifact_runtime::run_isolated_test("next_engine::process::runtime_tests::text_subtitle_runtime_tests::ordinary_callback_runtime::fixture_child_ordinary_callback").await;
 }
 
-async fn generate_source(ffmpeg: &Path, root: &Path) -> PathBuf {
+pub(super) async fn generate_source(ffmpeg: &Path, root: &Path) -> PathBuf {
     let original = root.join("original.mkv");
     generate_clip(ffmpeg, &original).await;
     let source = root.join("source.mkv");
@@ -24,7 +24,7 @@ async fn generate_source(ffmpeg: &Path, root: &Path) -> PathBuf {
     source
 }
 
-async fn install(pool: &crate::db::DbPool, root: &Path, live: bool) {
+pub(super) async fn install(pool: &crate::db::DbPool, root: &Path, live: bool) {
     let script = r#"#!/bin/sh
 set -eu
 printf '%s\n' "$1" >> ../producer-starts
