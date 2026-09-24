@@ -1,9 +1,9 @@
 use super::*;
-use ersatzrs_core::repositories::FfmpegProfileRepository;
+use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat};
 
 #[tokio::test]
-async fn persisted_reports_setting_controls_generated_next_configuration() {
+async fn next_error_reports_ignore_native_report_setting() {
     let (pool, locker, _, _) = super::super::schedule::tests::fixture().await;
     crate::repositories::make_repositories(pool.clone())
         .ffmpeg_profile
@@ -37,38 +37,27 @@ async fn persisted_reports_setting_controls_generated_next_configuration() {
         .await
         .unwrap();
     let initial = serde_json::to_value(host.configuration(&request).await.unwrap()).unwrap();
-    assert!(initial["ffmpeg"].get("reports_folder").is_none());
-    for (raw, enabled) in [
-        ("False", false),
-        ("0", false),
-        ("invalid", false),
-        (" true ", false),
-        ("True", true),
-        ("TRUE", true),
-        ("1", true),
-        ("false", false),
+    assert!(initial["ffmpeg"]["reports_folder"].is_string());
+    for raw in [
+        "False", "0", "invalid", " true ", "True", "TRUE", "1", "false",
     ] {
         crate::repositories::make_repositories(pool.clone())
             .config
             .set(key, raw)
             .await
             .unwrap();
-        // Normal sessions and browser previews share the same persisted opt-in.
+        // Normal sessions and browser previews always retain error reports.
         for preview in [false, true] {
             let mut request = request.clone();
             request.preview = preview;
             let config = host.configuration(&request).await.unwrap();
             let value = serde_json::to_value(config).unwrap();
-            if enabled {
-                assert_eq!(
-                    value["ffmpeg"]["reports_folder"],
-                    crate::file_system_layout::ffmpeg_reports_folder()
-                        .to_str()
-                        .unwrap()
-                );
-            } else {
-                assert!(value["ffmpeg"].get("reports_folder").is_none());
-            }
+            assert_eq!(
+                value["ffmpeg"]["reports_folder"],
+                crate::file_system_layout::ffmpeg_reports_folder()
+                    .to_str()
+                    .unwrap()
+            );
             assert!(value["ffmpeg"].get("save_reports").is_none());
         }
     }

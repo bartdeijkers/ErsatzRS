@@ -3,7 +3,7 @@ use ersatzrs_core::repositories::ConfigRepository;
 
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9; isolates report files in a child process"]
-async fn real_next_reports_follow_persisted_opt_in() {
+async fn real_next_error_reports_ignore_native_opt_in() {
     let root = tempfile::tempdir().unwrap();
     let mut command = Command::new(std::env::current_exe().unwrap());
     command
@@ -40,6 +40,9 @@ async fn real_next_reports_follow_persisted_opt_in() {
         }
         panic!("isolated reports fixture timed out");
     };
+    if !status.success() {
+        eprintln!("reports fixture retained at {}", root.keep().display());
+    }
     assert!(
         status.success(),
         "isolated reports fixture failed: {output}"
@@ -51,7 +54,7 @@ async fn real_next_reports_follow_persisted_opt_in() {
 }
 
 #[tokio::test]
-#[ignore = "child of real_next_reports_follow_persisted_opt_in; never run directly"]
+#[ignore = "child of real_next_error_reports_ignore_native_opt_in; never run directly"]
 #[allow(clippy::disallowed_methods)] // Guard the isolated fixture before filesystem writes.
 async fn fixture_child_reports() {
     assert_eq!(
@@ -81,8 +84,10 @@ async fn fixture_child_reports() {
         ..Default::default()
     };
     let reports = crate::file_system_layout::ffmpeg_reports_folder();
-    // Fresh sessions prove both enabling and disabling after an enabled run.
-    for enabled in [false, true, false] {
+    // Native opt-in never suppresses Next diagnostics. The last case selects
+    // an odd output size that the H.264 encoder must refuse.
+    for (enabled, failing) in [(false, false), (true, false), (false, false), (false, true)] {
+        println!("report case: native_enabled={enabled}, failing={failing}");
         if reports.exists() {
             tokio::fs::remove_dir_all(&reports).await.unwrap();
         }
@@ -95,6 +100,12 @@ async fn fixture_child_reports() {
             )
             .await
             .unwrap();
+        if failing {
+            sqlx::query(r#"UPDATE "Resolution" SET "Width"=321,"Height"=181 WHERE "Id"=1"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
         let host = std::sync::Arc::new(host::NextHost::new(pool, locker, data.join("playout")));
         let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
         let request = host::NextStart {
@@ -113,13 +124,19 @@ async fn fixture_child_reports() {
         let handle = registry.try_get("1").await.unwrap();
         let observed = timeout(Duration::from_secs(30), async {
             loop {
-                if handle.startup_readiness() == HlsStartupReadiness::Failed {
-                    return false;
-                }
-                if handle.startup_readiness() == HlsStartupReadiness::Ready {
-                    let report_exists = has_nonempty_report(&reports).await;
-                    if !enabled || report_exists {
-                        return report_exists == enabled && handle.trim_playlist().await.is_some();
+                if failing {
+                    if retained_error(&reports).await {
+                        return true;
+                    }
+                } else {
+                    if handle.startup_readiness() == HlsStartupReadiness::Failed {
+                        return false;
+                    }
+                    if handle.startup_readiness() == HlsStartupReadiness::Ready
+                        && has_nonempty_report(&reports).await
+                    {
+                        return handle.trim_playlist().await.is_some()
+                            && !retained_error(&reports).await;
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -135,12 +152,10 @@ async fn fixture_child_reports() {
         assert_eq!(
             observed,
             Ok(true),
-            "report opt-in did not match active playback"
+            "Next report lifecycle did not match playback outcome"
         );
         assert!(!request.output.exists());
-        if !enabled {
-            assert!(!reports.exists(), "disabled reports created a directory");
-        }
+        assert_eq!(retained_error(&reports).await, failing);
     }
 }
 
@@ -158,6 +173,40 @@ async fn has_nonempty_report(folder: &Path) -> bool {
                 .await
                 .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
         {
+            return true;
+        }
+    }
+    false
+}
+
+async fn retained_error(folder: &Path) -> bool {
+    let Ok(mut files) = tokio::fs::read_dir(folder).await else {
+        return false;
+    };
+    while let Some(file) = files.next_entry().await.unwrap() {
+        if !file.file_type().await.unwrap().is_dir() {
+            continue;
+        }
+        let Ok(outcome) = tokio::fs::read_to_string(file.path().join("outcome.txt")).await else {
+            continue;
+        };
+        if outcome.contains("ffmpeg exited with code") && !outcome.contains("successfully") {
+            for name in [
+                "channel_config.json",
+                "pipeline.json",
+                "playout_item.json",
+                "media_info.json",
+            ] {
+                let bytes = tokio::fs::read(file.path().join(name)).await.unwrap();
+                assert!(serde_json::from_slice::<serde_json::Value>(&bytes).is_ok());
+            }
+            assert!(
+                tokio::fs::metadata(file.path().join("ffreport.log"))
+                    .await
+                    .unwrap()
+                    .len()
+                    > 0
+            );
             return true;
         }
     }

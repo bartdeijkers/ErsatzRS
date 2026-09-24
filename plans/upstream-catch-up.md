@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **132 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **131 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **40**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **41**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-40 are accepted; resumed catch-up continues with row 41.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-41 are accepted; catch-up continues with row 42.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 41 source map: automatic Next error reports
+
+Upstream `cc9880c2` (PR #2907) always supplies `ReportsFolder` in
+`StartFFmpegNextSessionHandler` and removes the unused `SaveReports` wire field.
+Three additional project-file changes only update .NET dependency versions.
+Next owns temporary report cleanup and failure dossier promotion; ErsatzRS
+must preserve overlays and normal/preview routing. The Rust change belongs in
+`next_engine::host::configuration` and its configuration/runtime report tests.
+There are no schema, route, UI, or selection changes. Native report opt-in and
+its disk-use health warning retain their existing meaning. Required evidence:
+setting-independent configuration, real Next failure dossiers with reports off,
+normal playback, scoped review/tests/Clippy, and documentation of retained data.
+These checks pass; UCU-04 owns the evidence and the corrupt-input fixture finding.
 
 ## Row 40 source map: .NET dependency refresh
 
@@ -112,6 +126,7 @@ and opt-in FFmpeg reports. No test, migration, UI or changelog file changes.
 - Reports: official Next f2a981b enables diagnostics by `reports_folder` presence;
   it has no operative `save_reports` field. Map the existing persisted opt-in to
   the application-data `ffmpeg-reports` directory, preserving overlay priority.
+  Row 41 supersedes the opt-in rule with automatic Next error diagnostics.
 - Acceptance evidence: source/protocol/timing regressions, finite/live HTTP,
   RTSP and managed-producer runtime proof, selected tracks and subtitles,
   disconnect/cancellation cleanup, reports, focused review and HTTP smoke.
@@ -720,7 +735,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 38 | `41bf22eb` | chore: dependency updates (#2893) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency updates` | ucu-04; eight project files plus ReSharper tool manifest, version-only changes. Exact packages are absent from Rust; ADRs 0009/0058/0076/0096 preserve existing search/template/JavaScript boundaries. No application, test, schema or runtime-artifact change and no new parity claim. Substantive review passes. |
 | 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | Adapt (ADRs 0066/0100) | upstream-baseline-catch-up | `feat(infra): support Next remote streams and reports` | ucu-04; authenticated direct/prepared/retained/ordinary sources, fresh selected tracks, finite/live timing and supported captions, opt-in reports and independent normal/preview ownership. Real routed disconnect/stop cleanup, scoped review/tests/Clippy and Next Burn/Convert plus native lifecycle smoke pass. Accepted embedded-text limits remain visible debt. Local checkpoint complete; window gates remain open. |
 | 40 | `2c02561f` | chore: update dependencies (#2900) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May dependency refresh` | ucu-04; version-only .NET updates in eleven project files. Updated packages are absent from Rust; hardware diagnostics and ADR 0096 JavaScript boundaries remain unchanged. Source review finds no application, schema, asset or runtime-artifact changes. |
-| 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | | | | ucu-04; provisional: Next behavior triage. |
+| 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | Port | upstream-baseline-catch-up | `feat(infra): always retain Next error reports` | ucu-04; report directory always supplied for normal/preview, independent of native report opt-in. Real Next failure retains FFmpeg log and diagnostic JSON; normal playback, setting matrix, scoped Clippy/review and docs pass. Native health setting and overlay priority preserved; window gates remain open. |
 | 42 | `822c7547` | pin imagesharp dependency (#2909) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 43 | `9c5d86a1` | feat: show next version in ui (#2910) | | | | ucu-04; provisional: Next integration candidate under Accepted ADR 0095. |
 | 44 | `577983af` | feat: support explicitly scheduled images using next engine (#2911) | | | | ucu-04; provisional: Next behavior triage. |

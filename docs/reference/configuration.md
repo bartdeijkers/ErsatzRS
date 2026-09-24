@@ -272,13 +272,15 @@ merged configuration at session startup.
 
 ## Next FFmpeg reports
 
-The existing FFmpeg reports setting also applies to Next sessions. When enabled,
-ErsatzRS passes the application-data `ffmpeg-reports` directory to Next. When
-unset or disabled, the generated configuration omits the report directory.
-Configuration overlays retain their later precedence. The setting is read at
-session startup and applies to ordinary playback and preview.
+Next sessions always receive the application-data `ffmpeg-reports` directory,
+including when the native FFmpeg reports setting is unset or disabled. Next
+uses temporary in-flight reports and retains diagnostic dossiers for failures;
+normal successful completion removes the temporary report. This applies to
+ordinary playback and preview. Configuration overlays retain their later
+precedence, including an explicit report-directory override.
 
-Next reports may include FFmpeg arguments, source URLs, playout items and channel
-configuration. Treat these opt-in diagnostics as potentially containing private
-media paths or credentials. Next owns report generation; the existing FFmpeg
-Reports health warning remains applicable.
+Next error dossiers may include FFmpeg arguments, source URLs, playout items and
+channel configuration, including private media paths or credentials. Review
+these files before sharing them. Next owns report generation and retention.
+The existing FFmpeg Reports health warning continues to describe the native
+opt-in setting, which can retain reports for all native transcodes.

@@ -8400,6 +8400,38 @@ inventory claim. Jint remains replaced by QuickJS under ADR 0096. No actionable
 Rust change or new parity deviation follows from this commit. Progress
 validation and diff hygiene own the documentation-only verification; unchanged
 runtime tests are not rerun. Continue at row 41; window gates and CI remain open.
+
+Row 41 (cc9880c2, PR #2907): port automatic Next error reports. The upstream
+handler always supplies ReportsFolder and deletes the unused SaveReports wire
+field; Rust already omitted that unused field and now unconditionally supplies
+the same application-data reports path for normal/preview. Overlay priority and
+native FFmpeg report opt-in are unchanged. The native disk-use health warning
+still describes that native setting; configuration docs explicitly distinguish
+Next diagnostics and their potentially private retained contents. Ancillary
+YamlDotNet, Hardware.Info and Elasticsearch package bumps have no Rust consumers.
+Source review of official Next f6350a0 confirms normal successful completion
+removes the in-flight report and nonzero FFmpeg exits promote a dossier. The
+staged linux-x64 archive digest is
+178ce2d4f9c60d7f07b852bd7f2a5b11fb913abcfbd7b566f9fd4065b42013b8.
+An initial corrupt-input fixture exercised fallback, not FFmpeg failure, and
+created no matching dossier; this is not evidence for automatic probe-error
+reports. The corrected fixture uses valid media with an invalid H.264 output
+size and verifies the actual nonzero FFmpeg outcome. The added log assertion was
+corrected to inspect dossier directories, not in-flight files; no timeout or
+acceptance requirement was relaxed. Final focused nextest run
+e5fdfe62-271a-4ad2-abf8-76685042f46c passes both selected tests
+(ucu41-reports-verified.log; 1,498 outside selection): unset/false/true/malformed
+native settings cannot suppress normal/preview report configuration; three
+successful playback cases produce no error dossier; failure with native reports
+off retains a nonempty ffreport.log plus valid channel_config, pipeline,
+playout_item and media_info JSON after awaited session cleanup.
+This changes diagnostic configuration only, not media selection, FFmpeg pipeline
+construction or HTTP routing. The row-39 endpoint/track smoke evidence remains
+applicable to those unchanged paths; the real Next report fixture owns this row's
+new runtime evidence. Scoped Codex review finds no remaining blocking issue.
+Infrastructure all-target Clippy, formatting, progress validation and diff checks
+pass. Row 41 is Port; advance the pin with its authorized local checkpoint.
+Continue at row 42; UCU-04 window gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]

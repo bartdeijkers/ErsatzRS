@@ -21,7 +21,7 @@ use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionRegistry},
     locking::EntityLocker,
     path_replacement::PathReplacement,
-    repositories::{ChannelRepository, ConfigRepository, RepositoryError},
+    repositories::{ChannelRepository, RepositoryError},
 };
 use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
@@ -174,20 +174,13 @@ impl NextHost {
             &request.ffprobe,
         )
         .map_err(|_| ProcessError::Preparation("profile conversion"))?;
-        let save_reports = crate::repositories::make_repositories(self.pool.clone())
-            .config
-            .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_SAVE_REPORTS)
-            .await
-            .map_err(|_| ProcessError::Preparation("reports setting read"))?
-            .is_some_and(|raw| raw.eq_ignore_ascii_case("true") || raw == "1");
-        if save_reports {
-            configuration.ffmpeg.reports_folder = Some(
-                crate::file_system_layout::ffmpeg_reports_folder()
-                    .to_str()
-                    .ok_or(ProcessError::Preparation("reports path encoding"))?
-                    .to_owned(),
-            );
-        }
+        // Next retains error dossiers independently of native FFmpeg report opt-in.
+        configuration.ffmpeg.reports_folder = Some(
+            crate::file_system_layout::ffmpeg_reports_folder()
+                .to_str()
+                .ok_or(ProcessError::Preparation("reports path encoding"))?
+                .to_owned(),
+        );
         Ok(configuration)
     }
 

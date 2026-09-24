@@ -25,9 +25,10 @@ release section when tagging a release.
   text captions across cuts. Independently readable live text sidecars use bounded,
   publication-validated preparation to preserve caption timing when joining a programme.
 
-- Honor the persisted FFmpeg reports setting for Next sessions, writing opt-in
-  diagnostics under the application-data `ffmpeg-reports` directory (upstream
-  PR #2899). The existing Next configuration overlays retain precedence.
+- Retain Next error reports under the application-data `ffmpeg-reports`
+  directory even when native FFmpeg reports are disabled (upstream PR #2907).
+  Successful Next transcodes discard temporary reports; configuration overlays
+  retain precedence.
 - Apply optional Next channel configuration overlays after the FFmpeg profile:
   `next/channel-config-overlays/default.json` followed by `{channel_number}.json`
   under the application data root (upstream PR #2891). Next owns the merge and
