@@ -31,6 +31,24 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 54 source map: local subtitle identity and repair
+
+Upstream `7032cfc8` (PR #2924) separates embedded subtitle identity (stream
+index) from sidecar identity (case-insensitive filename), deduplicates both,
+updates sidecar paths independently of extraction state, and preserves cached
+embedded extractions when metadata is unchanged. Maintenance recognizes all
+metadata owners and removes sidecars with null/empty paths. SQLite and MySQL
+data migrations clear affected local folder etags so the next scan repairs
+collisions. Generated EF model files add no schema change.
+
+Rust already separates kinds and normally uses complete sidecar paths, but
+duplicate rows survive, empty local paths fall back to stream indexes, and
+sidecar moves do not update paths unless extraction state changes. The shared
+metadata writer owns reconciliation; local filename matching must not merge
+distinct provider URLs. Scanner invalidation, automatic orphan cleanup and
+health visibility require separate review before this row can be accepted.
+The baseline stays at row 53 until repair and verification are complete.
+
 ## Row 53 source map: image graphics EPG context
 
 Upstream `dbdf3dff` (PR #2923) adds `epg_entries` to ImageGraphicsElement,

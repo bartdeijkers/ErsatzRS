@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-24 UCU-04 row 54 is partially implemented. Local subtitle identity
+reconciliation and repeated-rescan regression tests pass; automatic folder
+invalidation, orphan/blank-path cleanup, health visibility and playback proof
+remain. Continue this row before advancing the pin from row 53.
+
 2026-09-24 UCU-04 row 53 ports epg_entries import for image graphics. Stored
 EPG context renders the image path even without its original YAML; focused
 and decoded graphics regressions pass. Continue with row 54 (7032cfc8,

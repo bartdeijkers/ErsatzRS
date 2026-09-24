@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reconcile local sidecar subtitles by filename without colliding with embedded
+  stream zero; rescans remove duplicate identities and update moved sidecar paths
+  while preserving unchanged embedded extraction caches.
 - Match configured MPEG-TS script IDs without regard to case, including Unicode
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 

@@ -243,3 +243,99 @@ async fn sidecar_rows(pool: &sqlx::SqlitePool) -> Vec<(i64, Option<String>, Opti
     })
     .collect()
 }
+
+#[tokio::test]
+async fn provider_sidecars_with_equal_filenames_keep_distinct_url_identities() {
+    let pool = common::test_db().await;
+    seed_local_movie(&pool).await;
+    let streams: Vec<_> = [("one", "eng"), ("two", "spa")]
+        .into_iter()
+        .map(|(directory, language)| MediaStream {
+            index: 0,
+            kind: MediaStreamKind::ExternalSubtitle,
+            codec: Some("subrip".into()),
+            language: Some(language.into()),
+            file_name: Some(format!("https://example.test/{directory}/captions.srt")),
+            ..MediaStream::default()
+        })
+        .collect();
+    for _ in 0..2 {
+        let mut tx = pool.begin().await.unwrap();
+        ersatzrs_infra::metadata::update_metadata_subtitles(
+            &mut tx,
+            SubtitleMetadataOwner::Movie(10),
+            &streams,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let rows = sidecar_rows(&pool).await;
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].1.as_deref(), Some("eng"));
+        assert_eq!(rows[1].1.as_deref(), Some("spa"));
+        assert_ne!(rows[0].2, rows[1].2);
+    }
+}
+
+#[tokio::test]
+async fn local_rescan_repairs_duplicates_blank_sidecars_and_preserves_embedded_zero_cache() {
+    let pool = common::test_db().await;
+    seed_local_movie(&pool).await;
+    let temp = tempdir().unwrap();
+    let movie = temp.path().join("movie.mkv");
+    for name in ["movie.en.srt", "movie.nl.srt"] {
+        std::fs::write(temp.path().join(name), b"captions").unwrap();
+    }
+    for (id, kind, language, path, extracted) in [
+        (1, 0, "eng", "cached.srt", 1),
+        (2, 0, "eng", "", 0),
+        (3, 1, "wrong", "", 0),
+        (4, 1, "eng", "old/MOVIE.EN.SRT", 0),
+        (5, 1, "eng", "old/movie.en.srt", 0),
+        (6, 99, "eng", "generated.ass", 0),
+    ] {
+        sqlx::query(r#"INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (?,10,?,0,'subrip',0,0,0,?,?,?,'2026-09-24','2026-09-24')"#)
+            .bind(id).bind(kind).bind(language).bind(extracted).bind(path)
+            .execute(&pool).await.unwrap();
+    }
+    let stream = MediaStream {
+        index: 0,
+        kind: MediaStreamKind::Subtitle,
+        codec: Some("subrip".into()),
+        language: Some("eng".into()),
+        ..MediaStream::default()
+    };
+    let mut previous = None;
+    for _ in 0..2 {
+        let mut tx = pool.begin().await.unwrap();
+        update_local_file_subtitles(
+            &mut tx,
+            SubtitleMetadataOwner::Movie(10),
+            std::slice::from_ref(&stream),
+            &movie,
+            true,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let rows: Vec<(i64, i32, String, Option<String>, bool)> = sqlx::query_as(
+            r#"SELECT "Id","SubtitleKind","Language","Path","IsExtracted" FROM "Subtitle" ORDER BY "Id""#,
+        ).fetch_all(&pool).await.unwrap();
+        assert_eq!(rows.len(), 4);
+        assert_eq!(
+            rows[0],
+            (1, 0, "eng".into(), Some("cached.srt".into()), true)
+        );
+        assert_eq!(rows[1].0, 4);
+        assert_eq!(
+            rows[1].3.as_deref(),
+            temp.path().join("movie.en.srt").to_str()
+        );
+        assert_eq!(rows[2].1, 99);
+        assert_eq!(rows[3].2, "dut");
+        if let Some(previous) = previous.as_ref() {
+            assert_eq!(&rows, previous);
+        }
+        previous = Some(rows);
+    }
+}

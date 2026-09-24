@@ -8822,6 +8822,29 @@ serves bytes and HLS publishes its variant, playlist and initial segments.
 Progress validation and the scoped source/test review pass. Ledger and pin
 advance together with the local checkpoint; no window acceptance is claimed.
 
+2026-09-24 row 54 reconciliation checkpoint (not accepted):
+Prerequisites remain Complete; fetched origin/main stays 27f9d217 and all
+172 ledger entries match. The upstream source map identifies kind-separated
+merging, duplicate cleanup, sidecar path updates, all-owner orphan cleanup and
+folder-etag repair. Rust already distinguished kinds but retained duplicates
+and could match blank local sidecar paths by index. The local writer now keys
+sidecars by case-insensitive filename while provider inputs keep complete URL
+identity. Ordered existing IDs choose the survivor; duplicate incoming keys
+are ignored, stale/excess rows are removed, generated rows are preserved, and
+sidecar paths update independently of embedded extraction state. Regression
+19d612ab passes all four metadata subtitle tests, including embedded index
+zero, two sidecar languages, invalid/duplicate old rows, moved/case-changed
+paths, extraction-cache reuse and stable rows across a second rescan. The
+initial new test expected nld, but existing filename parsing uses dut; its
+corrected assertion preserves the current language contract.
+Automatic scan invalidation, all-owner orphan/blank-path maintenance, health
+coverage and playback acceptance remain. Pin and ledger stay at row 53;
+UCU-04 and row 54 are not complete.
+
+Final focused regression 0b09bb2c passes all five metadata tests, including
+two provider URLs with the same filename remaining distinct across repeat
+updates. Infrastructure all-target Clippy and progress/diff checks pass.
+
 """
 
 [[milestone]]

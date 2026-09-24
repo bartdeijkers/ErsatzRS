@@ -62,6 +62,13 @@ refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
 [[debt]]
+id          = 'ucu-local-subtitle-collision-repair'
+description = 'Complete row 54 local subtitle collision repair, including automatic scan invalidation, orphan/blank-path maintenance, health visibility and full regression proof.'
+discovered  = '2026-09-24'
+resolved    = false
+evidence    = 'The local merge now separates embedded indexes from case-insensitive sidecar filenames, removes duplicates deterministically, updates moved paths and preserves unchanged embedded caches. Four focused metadata tests pass, including repeated rescan identity stability. UCU-04 owns the remaining scan invalidation, all-owner maintenance, health and playback acceptance. Pin and ledger remain at row 53.'
+
+[[debt]]
 id          = 'ucu-next-probe-hints-leading-gap'
 description = 'Row 50: publish Next schema 0.0.2, safe persisted source probe hints and initial gap fallback.'
 discovered  = '2026-09-24'

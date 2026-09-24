@@ -516,7 +516,7 @@ async fn load_existing_subtitles(
         r#"SELECT "Id", "StreamIndex", "Codec", "Default", "Forced", "SDH",
                   "Language", "IsExtracted", "Path", "SubtitleKind"
            FROM "Subtitle"
-           WHERE "{}" = ?"#,
+           WHERE "{}" = ? ORDER BY "Id""#,
         owner.column()
     );
     let rows = sqlx::query(crate::db::assert_sql_safe(&sql))
@@ -586,7 +586,11 @@ async fn update_subtitle(
     let mut is_extracted = existing.is_extracted;
     let mut path = existing.path.clone();
 
-    if existing.is_extracted {
+    if inc.subtitle_kind == subtitle_kind::SIDECAR {
+        path = inc.path.clone();
+    }
+
+    if existing.is_extracted && inc.subtitle_kind == subtitle_kind::EMBEDDED {
         let different_kind = existing.subtitle_kind != inc.subtitle_kind;
         let different_codec = existing.codec != inc.codec;
         let different_language = existing.language != inc.language;
@@ -632,8 +636,7 @@ async fn update_subtitle(
     Ok(())
 }
 
-/// Port of `MetadataRepository.UpdateSubtitles` (`MetadataRepository.cs`
-/// lines 626/666-717) scoped to `EpisodeMetadata`.
+/// Port of `MetadataRepository.UpdateSubtitles` scoped to `EpisodeMetadata`.
 ///
 /// Diffs the just-written subtitle/external-subtitle `MediaStream`s for the
 /// episode's media version against existing `Subtitle` rows keyed by subtitle
@@ -681,10 +684,12 @@ pub async fn update_metadata_subtitles(
         .map(IncomingSubtitle::from_media_stream)
         .collect();
 
-    update_subtitle_rows(tx, owner, incoming).await
+    update_subtitle_rows(tx, owner, incoming, false).await
 }
 
 /// Update embedded and discovered sidecar subtitle rows for a local media item.
+/// Embedded rows use stream indexes; sidecars use case-insensitive filenames
+/// independently of their directory or stream index (upstream PR #2924).
 ///
 /// # Errors
 ///
@@ -704,61 +709,89 @@ pub async fn update_local_file_subtitles(
         .collect();
     incoming.extend(locate_external_subtitles(media_item_path, save_full_path));
 
-    update_subtitle_rows(tx, owner, incoming).await
+    update_subtitle_rows(tx, owner, incoming, true).await
 }
 
 async fn update_subtitle_rows(
     tx: &mut Transaction<'_, Db>,
     owner: SubtitleMetadataOwner,
     incoming: Vec<IncomingSubtitle>,
+    local: bool,
 ) -> Result<()> {
     let existing = load_existing_subtitles(tx, owner).await?;
     let now = encode_datetime(Utc::now());
 
-    // remove: existing rows whose stable identity is not in the incoming set
-    for existing_row in &existing {
-        if !incoming
-            .iter()
-            .any(|inc| subtitle_identity_matches(existing_row, inc))
+    let mut seen = HashSet::new();
+    let mut retained = HashSet::new();
+    for inc in &incoming {
+        let Some(key) = subtitle_identity(
+            inc.subtitle_kind,
+            inc.stream_index,
+            inc.path.as_deref(),
+            local,
+        ) else {
+            continue;
+        };
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        match existing.iter().find(|row| {
+            subtitle_identity(
+                row.subtitle_kind,
+                row.stream_index,
+                row.path.as_deref(),
+                local,
+            )
+            .as_ref()
+                == Some(&key)
+        }) {
+            None => insert_subtitle(tx, owner, inc, &now).await?,
+            Some(existing_row) => {
+                retained.insert(existing_row.id);
+                update_subtitle(tx, existing_row, inc, &now).await?;
+            }
+        }
+    }
+
+    for row in &existing {
+        if matches!(
+            row.subtitle_kind,
+            subtitle_kind::EMBEDDED | subtitle_kind::SIDECAR
+        ) && !retained.contains(&row.id)
         {
             sqlx::query(r#"DELETE FROM "Subtitle" WHERE "Id" = ?"#)
-                .bind(existing_row.id)
+                .bind(row.id)
                 .execute(&mut **tx)
                 .await
                 .repository()?;
         }
     }
 
-    for inc in &incoming {
-        match existing
-            .iter()
-            .find(|existing_row| subtitle_identity_matches(existing_row, inc))
-        {
-            None => insert_subtitle(tx, owner, inc, &now).await?,
-            Some(existing_row) => update_subtitle(tx, existing_row, inc, &now).await?,
-        }
-    }
-
     Ok(())
 }
 
-fn subtitle_identity_matches(existing: &ExistingSubtitle, incoming: &IncomingSubtitle) -> bool {
-    if existing.subtitle_kind != incoming.subtitle_kind {
-        return false;
-    }
-
-    if incoming.subtitle_kind == subtitle_kind::SIDECAR {
-        match (existing.path.as_deref(), incoming.path.as_deref()) {
-            (Some(existing_path), Some(incoming_path))
-                if !existing_path.is_empty() && !incoming_path.is_empty() =>
-            {
-                return existing_path == incoming_path;
-            }
-            _ => {}
+fn subtitle_identity(
+    kind: i32,
+    index: i32,
+    path: Option<&str>,
+    local: bool,
+) -> Option<(i32, String)> {
+    if kind == subtitle_kind::SIDECAR {
+        if let Some(path) = path.filter(|path| !path.is_empty()) {
+            // Local identities follow the filename across moves and platform
+            // separators; provider URLs retain their complete identity.
+            let path = if local {
+                path.rsplit(['/', '\\']).next()?.to_lowercase()
+            } else {
+                path.to_owned()
+            };
+            return Some((kind, format!("file:{path}")));
+        }
+        if local {
+            return None;
         }
     }
-
-    existing.stream_index == incoming.stream_index
+    Some((kind, format!("idx:{index}")))
 }
 
 fn locate_external_subtitles(
