@@ -191,6 +191,16 @@
     margin-top: 0.5rem;
 }
 
+.next-version {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
+}
+
 .nav-group-header {
     width: 100%;
     display: flex;

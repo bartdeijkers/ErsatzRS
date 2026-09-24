@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `822c754712fae1c43a7f0ff7dc1baf59f4f9428f` |
-| **Commit subject** | `pin imagesharp dependency (#2909)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/822c754712fae1c43a7f0ff7dc1baf59f4f9428f |
+| **Pinned commit** | `9c5d86a16140461fda40eed7f52ea6a9c9544d5e` |
+| **Commit subject** | `feat: show next version in ui (#2910)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9c5d86a16140461fda40eed7f52ea6a9c9544d5e |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

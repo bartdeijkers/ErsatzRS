@@ -86,6 +86,12 @@ enabled after background preparation without reloading or replacing unsaved form
 input. Restart, NSF live, subtitle and SponsorBlock workflows use the same native
 task routes and retain their persistence and actual-media assertions.
 
+Run `next-version.spec.ts` through the wrapper for the startup-cached Next
+version in the shared navigation drawer. It covers desktop/no-JS HTML, mobile
+navigation and hydration diagnostics in both browsers. The default expects no
+Next installation; for a staged engine set `ETV_NEXT_FOLDER` and
+`ERSATZRS_E2E_NEXT_VERSION` to its expected version without the executable prefix.
+
 Run `addon-list-preparation-feedback.spec.ts` on its own wrapper database for
 untouched-default preparation, failure/retry guidance, legacy schema adoption
 with retained unsaved input, and partial Add recovery. Its isolated add-on

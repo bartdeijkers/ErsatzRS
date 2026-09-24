@@ -71,9 +71,26 @@ pub(super) fn NavDrawer() -> impl IntoView {
                         icon=IconName::Settings
                         match_prefix="/settings/"
                     />
+                    <NextVersion/>
                 </div>
             </nav>
         </aside>
+    }
+}
+
+#[component]
+fn NextVersion() -> impl IntoView {
+    #[cfg(feature = "ssr")]
+    let version =
+        use_context::<crate::host::state::AppState>().and_then(|state| state.next_version);
+    #[cfg(not(feature = "ssr"))]
+    let version: Option<String> = None;
+
+    view! {
+        <div class=style::next_version data-next-version>
+            <span>{tr(TextKey::NextVersion)}</span>
+            <span>{version.unwrap_or_else(|| tr(TextKey::NotAvailable).to_owned())}</span>
+        </div>
     }
 }
 

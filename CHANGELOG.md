@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Show the optional Next engine version in the admin navigation drawer, with
+  a localized unavailable fallback when startup discovery fails (upstream PR #2910).
+
 - Resolve direct Remote Streams and ready published local artifacts through
   session-bound Next callbacks, preserving track selection and rejecting changed
   publications. Ordinary and retained-interval add-ons use a session-owned

@@ -8445,6 +8445,43 @@ overlays. No Rust correction or new image-format/Next graphics acceptance follow
 from this .NET constraint. Documentation-only progress validation and diff checks
 pass; unchanged runtime checks are reused. Continue at row 43. UCU-04 remains
 In progress, with window gates, push and exact-SHA CI still outstanding.
+
+Row 43 (9c5d86a1, PR #2910) is Port. Fresh upstream main remains 27f9d217;
+pin, accepted row 42 and the clean upstream checkout agreed before work.
+Review covers all seven changed upstream files: the GetNextVersion request and
+handler, shared NextChannelHandlerBase resolver, startup cache/service, playback
+handler refactor and MainLayout footer. The existing Rust playback resolver
+already owns platform suffixes and override precedence. The new startup probe
+reuses it, bounds stdout at 4 KiB and execution at five seconds, and uses managed
+process-tree cleanup with a further five-second deadline. Missing, failed,
+malformed, oversized or stalled probes return unavailable without blocking
+optional-engine startup indefinitely. AppState caches the result; the localized
+static SSR footer adds no island, API, per-request process or database setting.
+Existing Next availability/profile health checks retain their ownership.
+
+Focused nextest 22151098-8d80-412b-945b-6df5af13c349 passes both version tests,
+including real missing/nonzero/oversized/stalled shell processes and output
+parsing; Unix fixtures intentionally use the existing cross-platform managed
+process boundary whose Windows counterpart is a Job Object. The all-nine-culture
+translation test passes in db74904a-f00a-4111-9f5f-07ee41c7be97. Infrastructure/web
+all-target Clippy passes after fixing a 32-bit size-conversion lint and retaining
+the state constructor's line limit. Formatting and hydration lint pass (no new
+findings; 32 existing suppressions). No new native Windows acceptance is claimed.
+
+The matched cargo-leptos build passes. The new next-version.spec.ts passes in
+Chromium and Firefox against two isolated wrapper databases: staged Next
+0.1.0-f6350a0 (2 tests, 9.8 seconds) and an explicit missing engine folder
+(2 tests, 9.4 seconds). Both runs prove cached text, desktop/no-JS rendering,
+served footer CSS, 390-pixel drawer open/navigation, no horizontal overflow,
+hydration readiness and no console/page errors. The unavailable mobile capture
+was inspected. Commands/results are recorded in ucu43-browser-available.log and
+ucu43-browser-unavailable.log; the repeat uses the unchanged matched bundle.
+No browser assertion or timeout was weakened. Scoped substantive Codex review
+finds no remaining blocker. Playback selection/routing is unchanged, so earlier
+playback evidence remains applicable. Pin and ledger advance with the local
+checkpoint; continue at row 44. UCU-04 window gates, push and exact-SHA CI remain
+open.
+
 """
 
 [[milestone]]

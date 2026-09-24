@@ -62,6 +62,8 @@ impl SystemStartup {
 
 #[derive(Clone)]
 pub struct AppState {
+    /// Optional Next version discovered once during host startup.
+    pub next_version: Option<String>,
     /// Storage-neutral application services built from native infrastructure
     /// ports by this composition root.
     pub application: Arc<ApplicationServices>,
@@ -212,9 +214,9 @@ impl AppState {
             .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
         );
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
-        let (artwork_cleanup, _receiver) =
-            super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
+        let (artwork_cleanup, _) = super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
         Self {
+            next_version: None,
             artwork_cleanup: Arc::new(artwork_cleanup),
             application,
             repositories,

@@ -192,6 +192,12 @@ pub async fn run() {
     .await
     .expect("failed to build application state");
 
+    app_state.next_version = ersatzrs_infra::next_engine::version::discover().await;
+    tracing::info!(
+        version = app_state.next_version.as_deref().unwrap_or("n/a"),
+        "Next engine version"
+    );
+
     let (artwork_cleanup, artwork_cleanup_rx) =
         super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
     app_state.artwork_cleanup = std::sync::Arc::new(artwork_cleanup);

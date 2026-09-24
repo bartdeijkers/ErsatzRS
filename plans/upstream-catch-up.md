@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **130 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **129 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **42**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **43**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-42 are accepted; catch-up continues with row 43.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-43 are accepted; catch-up continues with row 44.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,30 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 43 source and hydration map: Next version
+
+Upstream `9c5d86a1` (PR #2910) adds `GetNextVersion` and its handler,
+extracts the executable locator into `NextChannelHandlerBase`, caches the
+startup result in `NextVersion`, and displays it in `MainLayout.razor`.
+The existing Rust `next_engine::host::channel_binary` already shares the
+locator with playback. Probe that executable once with `--version`, with
+bounded output, a deadline and managed process cleanup; cache the optional
+result in host state. Missing or failed probes remain nonfatal.
+
+- Route/page: every admin route using the navigation drawer.
+- Visual source: upstream drawer footer, a small Next version label and value;
+  retain the Rust drawer spacing and typography. No assets or validators change.
+- SSR wrapper: `AppShell` / `NavDrawer`; static version footer component.
+- Islands: existing drawer controls and badges unchanged.
+- Data boundary: startup-cached `AppState` value, no per-request process.
+- Server functions/API endpoints: none added.
+- Fallback/no-JS: identical localized label/value, localized unavailable text.
+- Shared primitives touched: navigation footer CSS only.
+- Browser proof target: available/unavailable version, desktop/mobile drawer,
+  no-JS rendering, existing drawer interaction and clean hydration diagnostics.
+- Health: optional version discovery does not change engine availability or
+  profile validation; existing Next runtime health checks retain that ownership.
 
 ## Row 42 source map: ImageSharp dependency constraint
 
@@ -748,7 +772,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 40 | `2c02561f` | chore: update dependencies (#2900) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May dependency refresh` | ucu-04; version-only .NET updates in eleven project files. Updated packages are absent from Rust; hardware diagnostics and ADR 0096 JavaScript boundaries remain unchanged. Source review finds no application, schema, asset or runtime-artifact changes. |
 | 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | Port | upstream-baseline-catch-up | `feat(infra): always retain Next error reports` | ucu-04; report directory always supplied for normal/preview, independent of native report opt-in. Real Next failure retains FFmpeg log and diagnostic JSON; normal playback, setting matrix, scoped Clippy/review and docs pass. Native health setting and overlay priority preserved; window gates remain open. |
 | 42 | `822c7547` | pin imagesharp dependency (#2909) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream ImageSharp constraint` | ucu-04; single .NET PackageReference constraint adds a below-4 upper bound. ImageElementBase and all application behavior are unchanged. Rust has no ImageSharp dependency and uses native FFmpeg image inputs under ADR 0005. Scoped review and progress validation pass; no new graphics acceptance claim. |
-| 43 | `9c5d86a1` | feat: show next version in ui (#2910) | | | | ucu-04; provisional: Next integration candidate under Accepted ADR 0095. |
+| 43 | `9c5d86a1` | feat: show next version in ui (#2910) | Port | upstream-baseline-catch-up | `feat(web): display cached Next engine version` | ucu-04; shared playback resolver, bounded startup probe and localized static drawer footer. Missing/failing/stalled/oversized probe tests, all-nine-culture coverage, scoped Clippy and hydration lint pass. Matched bundle passes Chromium/Firefox installed and unavailable cases, desktop/no-JS and mobile navigation. Scoped review passes; window gates remain open. |
 | 44 | `577983af` | feat: support explicitly scheduled images using next engine (#2911) | | | | ucu-04; provisional: Next behavior triage. |
 | 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | | | | ucu-04; provisional: Next behavior triage. |
 | 46 | `99a1ecee` | chore: update dependencies (#2915) | | | | ucu-04; provisional: Upstream tooling candidate. |

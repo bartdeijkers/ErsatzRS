@@ -29,5 +29,6 @@ pub mod selection;
 pub mod session;
 pub mod session_transfers;
 mod source;
+pub mod version;
 
 mod watermark;
