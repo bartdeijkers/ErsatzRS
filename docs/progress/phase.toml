@@ -142,7 +142,8 @@ Next version discovery and the localized drawer footer, with installed/missing
 Chromium/Firefox and no-JS proof. Row 44 is Covered: existing image bindings
 and silence projection pass persisted/real Next PNG regressions and routed smoke.
 Row 45 is Covered: existing source timing and silence splitting pass boundary,
-selection and decoded seek/subtitle/audio tests. Next is row 46.
+selection and decoded seek/subtitle/audio tests. Row 46 is N/A for upstream
+SkiaSharp/Scriban patch versions. Next is row 47.
 UCU-04 window gates and exact-SHA CI remain open.
 Supported-platform acceptance and later graphics capabilities remain open. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 45 reconciled, 127 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-45 are
+Ledger: 172 commits, 46 reconciled, 126 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-46 are
 reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 

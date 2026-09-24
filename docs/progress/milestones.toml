@@ -8545,6 +8545,21 @@ no duplicate smoke or TSDuck gate is required for this test-only checkpoint.
 Continue at row 46 after pin/ledger/checkpoint alignment. UCU-04 window gates,
 push and terminal exact-SHA CI remain open.
 
+
+Row 46 (99a1ecee, PR #2915) is N/A (upstream tooling). Accepted row 45, pin and
+clean upstream checkout agree; latest fetched main remains 27f9d217. The full
+diff changes only Core.csproj and Infrastructure.csproj: SkiaSharp and Linux
+native assets 3.119.2 to 3.119.4, Scriban.Signed 7.2.0 to 7.2.1. Source review
+traces unchanged image/logo/graphics consumers and channel-guide, MPEG-TS,
+credits, graphics and subtitle template consumers. Cargo manifests/lock contain
+neither package. ADRs 0005/0058/0076 retain the native graphics/minijinja
+boundaries; these .NET patch versions do not require a Rust dependency update.
+No handler, schema, asset or runtime artifact changes occur, and no new graphics
+or image-format acceptance is claimed. Documentation-only progress/diff checks
+pass; runtime evidence is reused without rerunning unchanged tests. Advance the
+pin with the local checkpoint, then continue at row 47. UCU-04 window gates,
+push and terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]
