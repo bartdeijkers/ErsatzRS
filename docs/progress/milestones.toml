@@ -8382,6 +8382,24 @@ scoped Clippy/review, workflow lint and Next/native smoke have evidence above.
 The pin advances to 7c4a5e3a with this row's authorized local checkpoint.
 Stop before row 40 as requested. UCU-04 remains In progress; its full window
 gates, push and exact-SHA CI are not claimed or triggered by this row checkpoint.
+
+2026-09-24 resumed catch-up: current AMM-N-03 and UCU-00 are Complete;
+pin, ledger row 39 and clean upstream checkout agree. Fresh upstream fetch
+still resolves main to 27f9d217, with no additional ledger tail.
+Row 40 (2c02561f, PR #2900) is N/A (upstream tooling). Full diff review covers
+39 version substitutions across eleven project files: Microsoft extensions and
+AspNetCore 10.0.7 to 10.0.8; Hardware.Info 101.1.1.1 to 110.0.0; Jint 4.9.1 to
+4.9.2; BlazorSortable 8.0.0 to 8.1.0; Scalar 2.14.10 to 2.14.14; NUnit 4.6.0
+to 4.6.1; Testably 6.3.0 to 6.4.0; coverlet 10.0.0 to 10.0.1. No source,
+schema, asset, application test or runtime artifact changes occur.
+The updated packages are absent from Cargo manifests and Cargo.lock. Review
+traced HardwareCapabilitiesFactory CPU/video-controller consumers: their
+calls are unchanged, while ErsatzRS cpu_summary uses available_parallelism
+and hardware_report uses detected FFmpeg capabilities. This is no new hardware
+inventory claim. Jint remains replaced by QuickJS under ADR 0096. No actionable
+Rust change or new parity deviation follows from this commit. Progress
+validation and diff hygiene own the documentation-only verification; unchanged
+runtime tests are not rerun. Continue at row 41; window gates and CI remain open.
 """
 
 [[milestone]]
