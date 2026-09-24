@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `679fb17224cec7f10e2b6c924985835a5293d810` |
-| **Commit subject** | `chore: update refit to work around cert revocation (#2921)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/679fb17224cec7f10e2b6c924985835a5293d810 |
+| **Pinned commit** | `dca93717a5d46b873145f1750db5ae53956d60b1` |
+| **Commit subject** | `fix: improve speed of motion graphics element compositing (#2922)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/dca93717a5d46b873145f1750db5ae53956d60b1 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

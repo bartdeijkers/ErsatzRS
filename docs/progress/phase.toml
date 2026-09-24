@@ -61,10 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-24 UCU-04 row 51 is N/A: upstream changes only four Refit NuGet
-package references in two C# manifests. ErsatzRS has no Refit dependency or
-source contract to change. Continue with row 52 (dca93717, motion graphics
-compositing). Row 50 Next probe hints and leading fallback retain their
+2026-09-24 UCU-04 row 52 is Covered under ADR 0005: native FFmpeg motion
+overlays already compose at the input frame's dimensions and coordinates.
+Loop/Disappear/Hold snapshots and decoded graphics playback pass. Continue
+with row 53 (dbdf3dff, image graphics EPG entries). Row 51's Refit NuGet
+update was N/A; row 50's Next probe hints and leading fallback retain their
 focused, decoded playback, Clippy and routed smoke evidence.
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 

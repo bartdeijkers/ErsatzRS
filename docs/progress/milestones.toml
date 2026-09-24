@@ -8782,6 +8782,24 @@ product checks are invalidated by this documentation-only row. Advance the
 pin, ledger and clean upstream checkout together, then continue at row 52,
 dca93717. UCU-04 window gates, push and exact-SHA CI remain open.
 
+2026-09-24 row 52 reconciliation (Covered, ADR 0005):
+Fresh origin/main remains 27f9d217; all 172 ledger SHA/subject pairs match
+ordered upstream history. Pin, ledger and clean upstream HEAD began at row 51.
+Upstream dca93717 (PR #2922) replaces the Skia motion element's full-frame
+canvas copy with its scaled motion bitmap and placement point, including Hold
+and pending frames. ErsatzRS already decodes the motion source as a separate
+FFmpeg input, scales only the overlay when requested, and positions it by its
+own width/height in the overlay filter. There is no full-frame application
+canvas or per-frame copy to remove. Three loop, Disappear and Hold pipeline
+snapshots pass (3f4fd9f4); the Hold renderer plan passes (fea945b6); the
+ignored managed-FFmpeg runtime test decodes the selected top-right motion
+pixel alongside Image, Text and Subtitle (08067c09). This proof covers the
+native graphics path; ADR 0095's separately refused Next general graphics
+projection stays open. No Rust output changed, so existing snapshots remain
+valid and no product or health gate is invalidated. Advance pin, ledger and
+clean upstream checkout together; continue at row 53, dbdf3dff. UCU-04
+window gates, push and terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]
