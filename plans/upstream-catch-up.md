@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **123 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **122 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **49**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **50**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-49 are reconciled; catch-up continues with row 50.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-50 are reconciled; catch-up continues with row 51.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,26 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 50 source map: Next probe hints and initial gaps
+
+Upstream `387da2b8` (PR #2920) changes three files. The schedule exporter
+starts gap insertion at the current time, including a leading gap before the
+first programme, and increments the playout schema to `0.0.2`. The converter
+supplies video and audio probe hints from the selected head version and a
+finite PCM hint for generated silence. Next's wire DTO adds optional hints for
+local, HTTP, RTSP and lavfi sources; its dynamic callback accepts a resolved
+item carrying the same hints. No UI, schema migration or dependency changes.
+
+ErsatzRS already supplies fresh typed hints for one-shot ordinary/retained
+sources and generated silence. Scheduled local and media-server sources still
+require persisted stream hints. The Rust source resolver, wire schema,
+publication, gap builder and callback validation own this row. Embedded
+subtitle hints must remain available to Next's subtitle selection; invalid or
+incomplete stored metadata must retain normal probing rather than inventing a
+stream. Still images need their container identity to remain recognized. Source
+fingerprints and playback tests must cover metadata changes, leading gaps and
+one-shot producer ownership. ADR 0095 owns the native host adaptation.
 
 ## Row 49 source map: dynamic fallback filler in Next
 
@@ -878,7 +898,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 47 | `aa639375` | fix: use case-insensitive lookup for mpeg-ts script (#2916) | Port | mpeg-ts-channel-streaming | `fix(web): resolve MPEG-TS scripts without case sensitivity` | ucu-04; Unicode simple-uppercase script-ID matching, lowercase troubleshooting fallback and quiet built-in fallback. Twelve focused tests, scoped Clippy, hydration lint, license audit and HTTP smoke pass; substantive review finds no row blocker. Window gates remain open. |
 | 48 | `14ee8063` | feat: sync generated music video credits to next engine (#2917) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(next): render music video credits on demand` | ucu-04; scoped ticket for libass URL, active-session/persisted-binding checks, template fallback and decoded Burn/Convert with sought Dutch audio. Window gates remain open. |
 | 49 | `294a2ff1` | feat: support dynamic fallback filler when using next engine (#2919) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(next): reconcile dynamic fallback filler` | ucu-04; authenticated ephemeral gap callbacks preserve policy, tracks, credits and source lifecycles; decoded local/provider/Remote Stream Burn/Convert handoff, exact pins/silence, focused regressions and routed smoke pass. Accepted ADR 0100 limitations remain explicit. |
-| 50 | `387da2b8` | feat: use probe hints with next engine (#2920) | | | | ucu-04; provisional: Next behavior triage. |
+| 50 | `387da2b8` | feat: use probe hints with next engine (#2920) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(next): reconcile probe hints and leading gaps` | ucu-04; schema 0.0.2, guarded stored local/provider hints, leading gap publication and authenticated shared-manifest callbacks pass focused, decoded Next and routed smoke proof. |
 | 51 | `679fb172` | chore: update refit to work around cert revocation (#2921) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 52 | `dca93717` | fix: improve speed of motion graphics element compositing (#2922) | | | | ucu-04; provisional: Adapt candidate. |
 | 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | | | | ucu-04; provisional: Adapt candidate. |

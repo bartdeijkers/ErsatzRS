@@ -250,6 +250,8 @@ async fn producer_subtitle(
         path,
         in_point_ms,
         out_point_ms,
+
+        probe_hint: None,
     });
     Ok(Some(track))
 }
@@ -394,6 +396,8 @@ mod tests {
                             path: path.into(),
                             in_point_ms: Some(6000),
                             out_point_ms: Some(36000),
+
+                            probe_hint: None,
                         }),
                         stream_index: Some(0),
                     }),
@@ -445,6 +449,7 @@ mod tests {
             path: actual,
             in_point_ms,
             out_point_ms,
+            ..
         }) = subtitle.source
         else {
             panic!("sidecar source lost")

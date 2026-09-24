@@ -83,6 +83,18 @@ from source stream zero when retaining the published selection. Focused
 regressions and routed HLS/Hybrid/preview smoke pass. Row 49 is reconciled;
 window-wide and supported-platform acceptance remains owned by UCU-04.
 
+Row 50 publishes Next schema `0.0.2` and supplies stored video, audio and
+embedded-subtitle probe hints for local and provider inputs. Existing one-shot
+sources keep fresh producer-owned hints. If persisted stream metadata cannot
+describe every selectable track, normal Next probing remains available; sending
+an unverified hint would hide a changed stream layout. Still-image hints carry
+their image container identity when that metadata is complete. Leading gap
+placeholders start at a 100-nanosecond publication boundary and are admitted
+against the exact active process instance, so normal and preview callbacks
+can use only exact intervals published to their shared channel manifest while
+retaining separate session authentication. This is the scoped validation
+adaptation to upstream's unvalidated stored hints and initial filler callbacks.
+
 ## Context
 
 The upstream catch-up backlog introduces ErsatzTV Next, a separately

@@ -44,6 +44,8 @@ pub(super) fn project(
             path: path.to_owned(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         stream_index: Some(0),
         within_source_content: watermark.place_within_source_content.then_some(true),

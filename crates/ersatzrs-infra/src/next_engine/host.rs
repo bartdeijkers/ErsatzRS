@@ -49,6 +49,7 @@ pub(super) struct DynamicContext {
     pub request: NextStart,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
     pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
+    pub gaps: Arc<Mutex<Vec<super::fallback::Gap>>>,
 }
 
 fn retain_dynamic_context(
@@ -62,6 +63,7 @@ fn retain_dynamic_context(
             request: request.clone(),
             transfers: Arc::default(),
             fallback: Arc::default(),
+            gaps: Arc::default(),
         },
     );
     instance
@@ -189,6 +191,7 @@ impl NextHost {
     /// Reserve before spawning or touching the output folder. Concurrent starts
     /// reuse the existing handle. The returned task owns process cleanup, output
     /// cleanup and registry removal; normal shutdown must cancel, not abort it.
+    #[allow(clippy::too_many_lines)] // Keep the supervised start and cleanup lifecycle together.
     pub async fn start(
         self: &Arc<Self>,
         registry: Arc<dyn HlsSessionRegistry>,
@@ -306,6 +309,33 @@ impl NextHost {
         true
     }
 
+    /// Next sessions read one channel manifest, including publications made by
+    /// the other session. Admit its exact gaps to every active process reader.
+    pub(super) async fn register_published_gaps(
+        &self,
+        channel_id: i64,
+        published: &[super::fallback::Gap],
+    ) {
+        let registries: Vec<_> = self
+            .dynamic_contexts
+            .lock()
+            .await
+            .values()
+            .filter(|context| context.request.channel_id == channel_id)
+            .map(|context| context.gaps.clone())
+            .collect();
+        let now = Utc::now();
+        for registry in registries {
+            let mut current = registry.lock().await;
+            current.retain(|gap| gap.finish > now);
+            for gap in published {
+                if !current.contains(gap) {
+                    current.push(*gap);
+                }
+            }
+        }
+    }
+
     fn defer_item(
         &self,
         channel_id: i64,
@@ -337,8 +367,18 @@ impl NextHost {
         loop {
             let finish =
                 chrono::DateTime::from_timestamp(253_402_300_799, 0).ok_or(RefreshError::Read)?;
+            let now = Utc::now();
+            // Callback bounds are 100 ns ticks; preserve every representable
+            // bit of the publication boundary without moving it into the future.
+            let start = chrono::DateTime::from_timestamp(
+                now.timestamp(),
+                now.timestamp_subsec_nanos() / 100 * 100,
+            )
+            .ok_or(RefreshError::Read)?;
+            let publication_gaps = Arc::new(Mutex::new(Vec::new()));
+            let projected_gaps = publication_gaps.clone();
             let outcome = publisher
-                .refresh(Utc::now(), finish, |channel, media| async move {
+                .refresh(start, finish, |channel, media| async move {
                     if channel.streaming_engine != StreamingEngine::Next {
                         return Err(unavailable("engine changed"));
                     }
@@ -427,10 +467,15 @@ impl NextHost {
                         }
                         items.push(projection.item);
                     }
-                    super::fallback::insert_gaps(&self.media, channel_id, items)
+                    let (items, gaps) =
+                        super::fallback::insert_gaps(&self.media, channel_id, start, items)?;
+                    *projected_gaps.lock().await = gaps;
+                    Ok(items)
                 })
                 .await?;
             if matches!(outcome, RefreshOutcome::Published { .. }) {
+                self.register_published_gaps(channel_id, &publication_gaps.lock().await)
+                    .await;
                 return Ok(());
             }
             // Rebuild notification can precede release of its scheduler guard.

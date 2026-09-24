@@ -47,6 +47,8 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
                             path: path.to_str().unwrap().into(),
                             in_point_ms: Some(1000),
                             out_point_ms: None,
+
+                            probe_hint: None,
                         }),
                         stream_index: Some(0),
                     }),
@@ -91,6 +93,8 @@ async fn live_caption_cache_binds_content_and_fractional_join_without_second_see
         path: artifact,
         in_point_ms: Some(0),
         out_point_ms: None,
+
+        probe_hint: None,
     }) = &track.source
     else {
         panic!("rebased source must start at zero");

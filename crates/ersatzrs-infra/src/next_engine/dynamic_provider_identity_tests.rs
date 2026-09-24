@@ -132,6 +132,8 @@ fn local_source() -> Source {
         path: "synthetic.mkv".into(),
         in_point_ms: None,
         out_point_ms: None,
+
+        probe_hint: None,
     }
 }
 

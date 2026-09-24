@@ -2,6 +2,14 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn probe_hint_publication_uses_upstream_schema_version() {
+    assert_eq!(
+        PLAYOUT_VERSION,
+        "https://ersatztv.org/playout/version/0.0.2"
+    );
+}
+
+#[test]
 fn wire_playout_retains_timing_seek_and_explicit_track_indices() {
     let wire = json!({
         "version": PLAYOUT_VERSION,

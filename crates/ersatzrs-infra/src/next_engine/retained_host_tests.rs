@@ -75,6 +75,8 @@ fn fixture() -> (
             path: "old-source.mkv".into(),
             in_point_ms: Some(12_000),
             out_point_ms: Some(62_000),
+
+            probe_hint: None,
         }),
         tracks: None,
         watermark: None,

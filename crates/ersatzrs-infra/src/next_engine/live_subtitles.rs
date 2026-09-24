@@ -106,6 +106,8 @@ pub(super) async fn prepare(
         path: path.clone(),
         in_point_ms: Some(0),
         out_point_ms: None,
+
+        probe_hint: None,
     });
     track.stream_index = Some(0);
     let selected = snapshot

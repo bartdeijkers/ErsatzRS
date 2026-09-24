@@ -7,6 +7,8 @@ fn local(start: Option<u64>) -> Source {
         path: "synthetic/fixture.mkv".into(),
         in_point_ms: start,
         out_point_ms: Some(90_000),
+
+        probe_hint: None,
     }
 }
 
@@ -169,6 +171,8 @@ fn callbacks_reject_interval_boundaries_and_source_seek_overflow() {
         path: "synthetic".into(),
         in_point_ms: Some(u64::MAX),
         out_point_ms: None,
+
+        probe_hint: None,
     });
     assert!(matches!(
         resolve_at(&overflow, original.start + Duration::milliseconds(1)),
@@ -179,6 +183,8 @@ fn callbacks_reject_interval_boundaries_and_source_seek_overflow() {
         path: "synthetic".into(),
         in_point_ms: Some(2_000),
         out_point_ms: Some(3_000),
+
+        probe_hint: None,
     });
     assert!(matches!(
         resolve_at(&exhausted, original.start + Duration::seconds(1)),

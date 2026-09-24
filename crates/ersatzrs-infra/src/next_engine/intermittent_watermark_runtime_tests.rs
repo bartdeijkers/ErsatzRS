@@ -128,6 +128,8 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
             path: clip.to_str().unwrap().to_owned(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         &profile.resolution,
     )

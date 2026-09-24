@@ -20,6 +20,11 @@ release section when tagging a release.
 
 ### Added
 
+- Supply stored video, alternate-audio and embedded-subtitle probe hints to
+  optional Next playback when media metadata is complete. This avoids an extra
+  probe before local or provider playback; Next still probes incomplete sources.
+  A configured fallback can now fill the interval before the first programme
+  (upstream PR #2920).
 - Fill internal gaps in optional Next playback with ephemeral local, provider
   and Remote Stream fallback using decoration, channel and global policy.
   Direct HTTP, ready artifacts, ordinary producers and retained intervals preserve

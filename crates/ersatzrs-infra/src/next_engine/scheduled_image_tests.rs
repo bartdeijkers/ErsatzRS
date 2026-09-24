@@ -37,6 +37,8 @@ async fn scheduled_image_keeps_interval_and_supplies_silence() {
             path: "synthetic.png".into(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         &Resolution {
             width: 320,

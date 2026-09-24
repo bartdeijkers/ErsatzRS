@@ -68,6 +68,9 @@ async fn all_providers_fall_back_to_their_authenticated_http_source() {
         let (pool, media) = fixture(kind).await;
         let value = serde_json::to_value(resolve(&pool, &media, &[]).await.unwrap()).unwrap();
         assert_eq!(value["source_type"], "http");
+        assert_eq!(value["probe_hint"]["video"][0]["stream_index"], 0);
+        assert_eq!(value["probe_hint"]["audio"][1]["stream_index"], 2);
+        assert_eq!(value["probe_hint"]["subtitle"][1]["stream_index"], 4);
         assert_eq!(value["keep_alive"], false);
         assert_eq!(value["reconnect"], true);
         let (uri, header) = match kind {
@@ -133,6 +136,7 @@ async fn local_preference_uses_only_the_owning_servers_replacements() {
             .unwrap();
         let value = serde_json::to_value(resolve(&pool, &media, &[]).await.unwrap()).unwrap();
         assert_eq!(value["source_type"], "local");
+        assert_eq!(value["probe_hint"]["audio"][1]["stream_index"], 2);
         assert_eq!(
             value["path"],
             own.path().join("first.mkv").to_str().unwrap()

@@ -123,6 +123,8 @@ pub(crate) async fn materialize_prepared(
             path: path.to_str().ok_or_else(unavailable)?.to_owned(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         &context.resolution,
         selection::AudioDirective::Published(audio),
@@ -565,6 +567,8 @@ fn selection_source(
             path: media.path.clone(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         });
     }
     let uri = binding

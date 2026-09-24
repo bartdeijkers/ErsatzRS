@@ -18,6 +18,8 @@ async fn project(
                 path: media.path,
                 in_point_ms: None,
                 out_point_ms: None,
+
+                probe_hint: None,
             }),
             tracks: None,
         })

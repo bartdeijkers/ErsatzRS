@@ -224,6 +224,8 @@ mod tests {
                 path: "media/first.mkv".into(),
                 in_point_ms: None,
                 out_point_ms: None,
+
+                probe_hint: None,
             },
             &Resolution {
                 width: 320,
@@ -308,6 +310,7 @@ mod tests {
                 },
                 transfers: Arc::default(),
                 fallback: Arc::default(),
+                gaps: Arc::default(),
             },
         );
         let rendered = host

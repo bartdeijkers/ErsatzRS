@@ -315,6 +315,7 @@ fn subtitle_track(
             path,
             in_point_ms,
             out_point_ms,
+            ..
         } => (path, *in_point_ms, *out_point_ms),
         wire::Source::Http {
             uri,
@@ -355,6 +356,7 @@ fn subtitle_track(
             path: input.path,
             in_point_ms,
             out_point_ms,
+            probe_hint: None,
         }
     };
     Ok(wire::Track {

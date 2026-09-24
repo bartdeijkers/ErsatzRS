@@ -61,10 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-24 UCU-04 row 49 is reconciled as Adapt under ADR 0095. Local,
-finite/live Remote Stream, provider, generated credits and pinned silence/off
-fallback have decoded Burn/Convert handoff proof; focused regressions, Clippy
-and routed smoke pass. Continue with row 50 (387da2b8, Next probe hints).
+2026-09-24 UCU-04 row 50 is reconciled as Adapt under ADR 0095. Next schema
+0.0.2, guarded stored probe hints, still-image identity and leading fallback
+pass focused regressions, decoded Next playback, Clippy and routed smoke.
+Continue with row 51 (679fb172, Refit certificate workaround).
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of

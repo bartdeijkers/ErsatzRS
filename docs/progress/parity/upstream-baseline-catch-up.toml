@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 49 reconciled, 123 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-49 are
+Ledger: 172 commits, 50 reconciled, 122 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-50 are
 reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 
@@ -60,6 +60,14 @@ explicitly refused. Unsupported graphics integration remains refused. Later endp
 optional Next engine alongside native playback. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id          = 'ucu-next-probe-hints-leading-gap'
+description = 'Row 50: publish Next schema 0.0.2, safe persisted source probe hints and initial gap fallback.'
+discovered  = '2026-09-24'
+resolved    = true
+adr         = '0095'
+evidence    = 'The row-50 source map, scoped regressions and official Next playback cover stored local/provider video, alternate audio and embedded subtitles, complete image identity, unchanged one-shot hints, and leading Dutch fallback to the first English programme. Incomplete persisted metadata retains normal probing. Shared channel publications register exact gap intervals for active normal and preview process callbacks without weakening session authentication. Infrastructure Clippy and routed Next smoke pass; UCU-04 owns remaining window and platform acceptance.'
 
 [[debt]]
 id          = 'ucu-next-dynamic-fallback'

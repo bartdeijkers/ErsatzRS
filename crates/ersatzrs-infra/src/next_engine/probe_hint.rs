@@ -2,9 +2,13 @@
 
 use std::collections::HashSet;
 
+use ersatzrs_core::repositories::Result as RepositoryResult;
 use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use sqlx::Row;
 
+use crate::db::DbPool;
 use crate::ffprobe::FfprobeMediaVersion;
+use crate::repositories::{common::try_decode_duration_text, SqlxResultExt as _};
 
 use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHint};
 
@@ -12,6 +16,161 @@ use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHi
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[error("Next producer input metadata is incomplete or unsupported")]
 pub struct ProbeHintError;
+
+/// Describe a persisted local or media-server version without opening the
+/// source. Incomplete stream metadata leaves Next's ordinary probe in control.
+/// One-shot producers use fresh metadata through `producer` instead.
+#[allow(clippy::too_many_lines)] // Keep one version and its ordered stream projection together.
+pub(crate) async fn persisted(
+    pool: &DbPool,
+    version_id: i64,
+) -> RepositoryResult<Option<ProbeHint>> {
+    let version = sqlx::query(
+        r#"SELECT "Duration", "Width", "Height", "RFrameRate", "SampleAspectRatio",
+                  "DisplayAspectRatio", "VideoScanKind", "ImageId"
+           FROM "MediaVersion" WHERE "Id"=?"#,
+    )
+    .bind(version_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    let Some(version) = version else {
+        return Ok(None);
+    };
+    let width: i32 = version.try_get("Width").repository()?;
+    let height: i32 = version.try_get("Height").repository()?;
+    let frame_rate: Option<String> = version.try_get("RFrameRate").repository()?;
+    let duration: String = version.try_get("Duration").repository()?;
+    let duration_ms = try_decode_duration_text(&duration)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.num_milliseconds()).ok())
+        .filter(|duration| *duration > 0);
+    let image: Option<i64> = version.try_get("ImageId").repository()?;
+    let scan_kind: i64 = version.try_get("VideoScanKind").repository()?;
+    let mut hint = ProbeHint {
+        video: Vec::new(),
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        format_name: None,
+        duration_ms,
+    };
+    let rows = sqlx::query(
+        r#"SELECT "Index", "MediaStreamKind", "Codec", "Profile", "Channels",
+                  "PixelFormat", "BitsPerRawSample", "AttachedPic", "ColorPrimaries",
+                  "ColorRange", "ColorSpace", "ColorTransfer", "Rotation",
+                  "DolbyVisionProfile", "MasteringDisplay", "MaxCll", "MaxFall"
+           FROM "MediaStream" WHERE "MediaVersionId"=? ORDER BY "Index", "Id""#,
+    )
+    .bind(version_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let mut indexes = HashSet::new();
+    for row in rows {
+        let kind: i64 = row.try_get("MediaStreamKind").repository()?;
+        if !matches!(kind, 1..=3) {
+            continue;
+        }
+        let raw_index: i32 = row.try_get("Index").repository()?;
+        let Some(index) = u32::try_from(raw_index)
+            .ok()
+            .filter(|index| indexes.insert(*index))
+        else {
+            return Ok(None);
+        };
+        let codec: Option<String> = row.try_get("Codec").repository()?;
+        let Some(codec) = codec.filter(|value| !value.trim().is_empty()) else {
+            return Ok(None);
+        };
+        match kind {
+            1 => {
+                let attached: i64 = row.try_get("AttachedPic").repository()?;
+                if attached != 0 {
+                    continue;
+                }
+                let (Ok(width), Ok(height)) = (u32::try_from(width), u32::try_from(height)) else {
+                    return Ok(None);
+                };
+                if width == 0 || height == 0 {
+                    return Ok(None);
+                }
+                let pixel_format: Option<String> = row.try_get("PixelFormat").repository()?;
+                let bit_depth: i32 = row.try_get("BitsPerRawSample").repository()?;
+                if image.is_some() && pixel_format.as_deref().is_none_or(str::is_empty) {
+                    return Ok(None);
+                }
+                let pix_fmt = pixel_format
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if bit_depth == 10 {
+                            "yuv420p10le"
+                        } else {
+                            "yuv420p"
+                        }
+                        .into()
+                    });
+                if image.is_some() {
+                    hint.format_name = Some(
+                        match codec.as_str() {
+                            "png" => "png_pipe",
+                            "mjpeg" => "jpeg_pipe",
+                            _ => return Ok(None),
+                        }
+                        .into(),
+                    );
+                }
+                let dv_profile: Option<i32> = row.try_get("DolbyVisionProfile").repository()?;
+                let mastering: Option<String> = row.try_get("MasteringDisplay").repository()?;
+                let max_cll: Option<i32> = row.try_get("MaxCll").repository()?;
+                let max_fall: Option<i32> = row.try_get("MaxFall").repository()?;
+                hint.video.push(VideoProbeHint {
+                    codec,
+                    width,
+                    height,
+                    pix_fmt,
+                    stream_index: index,
+                    frame_rate: frame_rate.clone(),
+                    profile: row.try_get("Profile").repository()?,
+                    field_order: Some(if scan_kind == 2 { "tt" } else { "progressive" }.into()),
+                    sample_aspect_ratio: version.try_get("SampleAspectRatio").repository()?,
+                    display_aspect_ratio: version.try_get("DisplayAspectRatio").repository()?,
+                    color_range: row.try_get("ColorRange").repository()?,
+                    color_space: row.try_get("ColorSpace").repository()?,
+                    color_transfer: row.try_get("ColorTransfer").repository()?,
+                    color_primaries: row.try_get("ColorPrimaries").repository()?,
+                    dv_profile: dv_profile.and_then(|value| u32::try_from(value).ok()),
+                    has_hdr10_metadata: Some(
+                        mastering.is_some() || max_cll.is_some() || max_fall.is_some(),
+                    ),
+                    rotation: row.try_get("Rotation").repository()?,
+                });
+            }
+            2 => {
+                let channels: i32 = row.try_get("Channels").repository()?;
+                let Ok(channels) = u32::try_from(channels) else {
+                    return Ok(None);
+                };
+                if channels == 0 {
+                    return Ok(None);
+                }
+                hint.audio.push(AudioProbeHint {
+                    stream_index: index,
+                    codec,
+                    channels,
+                });
+            }
+            3 => hint.subtitle.push(SubtitleProbeHint {
+                stream_index: index,
+                codec,
+            }),
+            _ => unreachable!(),
+        }
+    }
+    if hint.video.is_empty() && hint.audio.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(hint))
+}
 
 /// Describe the fresh rawvideo/PCM stream produced by retained-interval playback.
 ///

@@ -63,6 +63,12 @@ async fn real_next_dynamic_fallback_preserves_tracks_and_returns_to_programme() 
 }
 
 #[tokio::test]
+#[ignore = "requires official Next and FFmpeg; leading ephemeral fallback playback"]
+async fn real_next_leading_fallback_returns_to_first_programme() {
+    fallback_case(FallbackSource::Leading, false).await;
+}
+
+#[tokio::test]
 #[ignore = "requires official Next and FFmpeg; disposable Remote Stream gap playback"]
 async fn real_next_remote_fallback_preserves_tracks_and_returns_to_programme() {
     fallback_case(FallbackSource::Direct, false).await;
@@ -188,6 +194,7 @@ async fn real_next_pinned_fallback_preserves_silence_and_subtitles_off() {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FallbackSource {
     Local,
+    Leading,
     Credits,
     PinnedOff,
     Provider(RemoteMediaSourceKind),
@@ -210,6 +217,7 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
     let root = if matches!(
         source,
         FallbackSource::Local
+            | FallbackSource::Leading
             | FallbackSource::Provider(_)
             | FallbackSource::Credits
             | FallbackSource::PinnedOff
@@ -349,7 +357,11 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
         );
         wrong_provider = fixture_provider_connection(&pool, kind, server).await;
     }
-    let start = chrono::Utc::now() - chrono::Duration::seconds(2);
+    let start = if source == FallbackSource::Leading {
+        chrono::Utc::now() + chrono::Duration::seconds(4)
+    } else {
+        chrono::Utc::now() - chrono::Duration::seconds(2)
+    };
     let repos = crate::repositories::make_repositories(pool.clone());
     let last_finish = match source {
         #[cfg(unix)]

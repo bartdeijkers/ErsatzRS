@@ -8750,6 +8750,26 @@ no fallback rows or enumerator resets are persisted. Pin and ledger advance
 from row 48 to row 49 with this coherent commit. Continue at row 50, 387da2b8.
 UCU-04 window gates, push and terminal exact-SHA CI remain open.
 
+2026-09-24 row 50 reconciliation (Adapt, ADR 0095):
+Upstream 387da2b8 (PR #2920) publishes Next playout schema 0.0.2, adds source
+probe hints, and inserts a leading gap from publication time. Rust publishes
+guarded stored local/provider video, audio and embedded-subtitle hints while
+preserving fresh one-shot and finite silence hints. Incomplete stored metadata
+uses Next's normal probe; complete PNG/JPEG images retain format identity.
+The 100 ns publication boundary and exact gap registry support leading filler.
+Because normal and preview Next processes reread one channel manifest, each
+active process receives the published channel gaps and still authenticates its
+own callback. ADR 0095 records this bounded adaptation.
+
+Focused source, hint, callback and shared-manifest regressions pass. Official
+Next decodes leading Dutch fallback into the first English programme, still
+images, retained one-shot source, authenticated provider Convert and the six
+case provider fallback Burn/Convert handoff matrix. Infrastructure all-target
+Clippy, formatting and routed Next smoke pass. This is Linux row evidence;
+the UCU-04 window gates, push, terminal exact-SHA CI and all-platform
+acceptance remain open. Advance pin and ledger together to row 50 and continue
+with row 51, 679fb172.
+
 """
 
 [[milestone]]

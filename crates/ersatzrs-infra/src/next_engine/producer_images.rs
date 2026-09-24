@@ -78,6 +78,8 @@ mod tests {
             path: "fixture.mkv".into(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         };
         for alias in ["pgs", "pgssub", "hdmv_pgs_subtitle"] {
             selected.codec = Some(alias.into());

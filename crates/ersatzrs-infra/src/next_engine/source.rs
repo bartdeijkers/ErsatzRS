@@ -11,7 +11,7 @@ use ersatzrs_core::{
 use sqlx::Row;
 use url::Url;
 
-use super::{protocol::Source, schedule::ScheduledMedia};
+use super::{probe_hint, protocol::Source, schedule::ScheduledMedia};
 use crate::{
     db::DbPool,
     repositories::{SqliteMediaSourceRepository, SqlxResultExt as _},
@@ -67,11 +67,12 @@ pub(super) async fn resolve_published(
         ));
     }
     if local {
-        return Ok(local_source(replace_path(
-            local_replacements,
-            &media.path,
-            platform(),
-        )));
+        return with_persisted_hint(
+            pool,
+            media,
+            local_source(replace_path(local_replacements, &media.path, platform())),
+        )
+        .await;
     }
     let kind = if plex {
         RemoteMediaSourceKind::Plex
@@ -97,10 +98,10 @@ pub(super) async fn resolve_published(
         .collect::<Vec<_>>();
     let path = replace_path(&replacements, &media.path, platform());
     if tokio::fs::metadata(&path).await.is_ok_and(|m| m.is_file()) {
-        return Ok(local_source(path));
+        return with_persisted_hint(pool, media, local_source(path)).await;
     }
     if let Some(relay) = relay {
-        return relay.source(media);
+        return with_persisted_hint(pool, media, relay.source(media)?).await;
     }
     resolve_http(pool, media, source_id, kind, None).await
 }
@@ -209,7 +210,20 @@ pub(super) async fn resolve_http(
             )
         }
     };
-    http_source(&uri, header)
+    with_persisted_hint(pool, media, http_source(&uri, header)?).await
+}
+
+async fn with_persisted_hint(
+    pool: &DbPool,
+    media: &ScheduledMedia,
+    mut source: Source,
+) -> Result<Source> {
+    let hint = probe_hint::persisted(pool, media.media_version_id).await?;
+    match &mut source {
+        Source::Local { probe_hint, .. } | Source::Http { probe_hint, .. } => *probe_hint = hint,
+        Source::Rtsp { .. } | Source::Dynamic { .. } | Source::Lavfi { .. } => {}
+    }
+    Ok(source)
 }
 
 fn http_source(uri: &Url, header: String) -> Result<Source> {
@@ -324,6 +338,8 @@ fn local_source(path: String) -> Source {
         path,
         in_point_ms: None,
         out_point_ms: None,
+
+        probe_hint: None,
     }
 }
 

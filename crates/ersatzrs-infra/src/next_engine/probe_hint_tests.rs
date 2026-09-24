@@ -164,6 +164,55 @@ fn ordinary_producer_preserves_detected_container_codecs_and_subtitles_without_d
     );
 }
 
+#[tokio::test]
+async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_incomplete_metadata() {
+    let pool = super::super::selection::tests::fixture_pool().await;
+    let hint = persisted(&pool, 100).await.unwrap().unwrap();
+    assert_eq!(hint.duration_ms, Some(60_000));
+    assert_eq!(
+        (hint.video[0].stream_index, hint.video[0].codec.as_str()),
+        (0, "h264")
+    );
+    assert_eq!(
+        hint.audio
+            .iter()
+            .map(|track| track.stream_index)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(
+        hint.subtitle
+            .iter()
+            .map(|track| track.stream_index)
+            .collect::<Vec<_>>(),
+        vec![3, 4]
+    );
+    sqlx::query(
+        r#"UPDATE "MediaStream" SET "Codec"=NULL WHERE "MediaVersionId"=100 AND "Index"=2"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(persisted(&pool, 100).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn persisted_still_image_keeps_image_container_identity() {
+    let pool = super::super::selection::tests::fixture_pool().await;
+    for sql in [
+        r#"INSERT INTO "Image" ("Id") VALUES (10)"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL,"ImageId"=10,"Duration"='00:00:00' WHERE "Id"=100"#,
+        r#"UPDATE "MediaStream" SET "Codec"='png',"PixelFormat"='rgb24' WHERE "MediaVersionId"=100 AND "Index"=0"#,
+        r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100 AND "Index"<>0"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    let hint = persisted(&pool, 100).await.unwrap().unwrap();
+    assert_eq!(hint.format_name.as_deref(), Some("png_pipe"));
+    assert_eq!(hint.duration_ms, None);
+    assert_eq!(hint.video[0].pix_fmt, "rgb24");
+}
+
 #[test]
 fn ordinary_producer_rejects_incomplete_and_ambiguous_prefix_metadata() {
     for case in 0..8 {

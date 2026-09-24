@@ -11,10 +11,10 @@ use super::{
 };
 use crate::{fallback_playback, playback, repositories::make_repositories};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Gap {
-    start: DateTime<Utc>,
-    finish: DateTime<Utc>,
+    pub(super) start: DateTime<Utc>,
+    pub(super) finish: DateTime<Utc>,
 }
 
 impl Gap {
@@ -63,11 +63,13 @@ struct Projection {
 pub(super) fn insert_gaps(
     relay: &super::media::MediaRelay,
     channel_id: i64,
+    start: DateTime<Utc>,
     mut items: Vec<protocol::PlayoutItem>,
-) -> Result<Vec<protocol::PlayoutItem>> {
+) -> Result<(Vec<protocol::PlayoutItem>, Vec<Gap>)> {
     items.sort_by_key(|item| item.start);
     let mut result = Vec::with_capacity(items.len());
-    let mut last_finish = None;
+    let mut gaps = Vec::new();
+    let mut last_finish = Some(start);
     for item in items {
         if let Some(finish) = last_finish {
             if finish < item.start {
@@ -75,6 +77,7 @@ pub(super) fn insert_gaps(
                     start: finish,
                     finish: item.start,
                 };
+                gaps.push(gap);
                 result.push(protocol::PlayoutItem {
                     id: gap.id(),
                     start: gap.start,
@@ -92,7 +95,7 @@ pub(super) fn insert_gaps(
         last_finish = Some(last_finish.map_or(item.finish, |finish| finish.max(item.finish)));
         result.push(item);
     }
-    Ok(result)
+    Ok((result, gaps))
 }
 
 impl NextHost {
@@ -119,7 +122,7 @@ impl NextHost {
         if gap.id() != dynamic_id || now < gap.start || now >= gap.finish || until != gap.finish {
             return Err(unavailable());
         }
-        let (request, state) = self
+        let (request, state, published_gaps) = self
             .dynamic_contexts
             .lock()
             .await
@@ -127,8 +130,17 @@ impl NextHost {
             .filter(|context| {
                 context.request.channel_id == channel_id && context.request.number == number
             })
-            .map(|context| (context.request.clone(), context.fallback.clone()))
+            .map(|context| {
+                (
+                    context.request.clone(),
+                    context.fallback.clone(),
+                    context.gaps.clone(),
+                )
+            })
             .ok_or_else(unavailable)?;
+        if !published_gaps.lock().await.contains(&gap) {
+            return Err(unavailable());
+        }
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
         timeout_at(
             deadline,
@@ -367,6 +379,8 @@ impl NextHost {
                         u64::try_from(item.out_point.num_milliseconds())
                             .map_err(|_| unavailable())?,
                     ),
+
+                    probe_hint: None,
                 }),
                 stream_index: Some(0),
             });
@@ -613,16 +627,11 @@ async fn validate_gap(
     let snapshot = schedule::read_locked(pool, locker, channel, start, finish)
         .await?
         .ok_or_else(unavailable)?;
-    let before = snapshot
-        .items
-        .iter()
-        .any(|media| media.item.finish == gap.start);
     let after = snapshot
         .items
         .iter()
         .any(|media| media.item.start == gap.finish);
-    if !before
-        || !after
+    if !after
         || snapshot
             .items
             .iter()

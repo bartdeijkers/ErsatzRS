@@ -243,6 +243,8 @@ pub(super) fn install_prepared_track(
             .to_owned(),
         in_point_ms,
         out_point_ms,
+
+        probe_hint: None,
     });
     track.stream_index = Some(0);
     Ok(item)

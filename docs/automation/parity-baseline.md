@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `294a2ff10e5e03911b6efa299dd84993d8e5db5b` |
-| **Commit subject** | `feat: support dynamic fallback filler when using next engine (#2919)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/294a2ff10e5e03911b6efa299dd84993d8e5db5b |
+| **Pinned commit** | `387da2b8f7c27abeb3eabd0b815aa79af77932c4` |
+| **Commit subject** | `feat: use probe hints with next engine (#2920)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/387da2b8f7c27abeb3eabd0b815aa79af77932c4 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.1";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.2";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -258,6 +258,8 @@ pub struct Track {
 pub enum Source {
     Local {
         path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        probe_hint: Option<ProbeHint>,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_point_ms: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]

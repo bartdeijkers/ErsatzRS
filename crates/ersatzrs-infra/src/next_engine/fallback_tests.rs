@@ -34,13 +34,15 @@ fn gaps_preserve_overlap_union_and_have_stable_authenticated_sources() {
     let result = insert_gaps(
         &relay,
         1,
+        start,
         vec![
             wire(start, 90, 120),
             wire(start, 0, 60),
             wire(start, 10, 20),
         ],
     )
-    .unwrap();
+    .unwrap()
+    .0;
     assert_eq!(result.len(), 4);
     let gap = &result[2];
     assert_eq!(
@@ -58,9 +60,85 @@ fn gaps_preserve_overlap_union_and_have_stable_authenticated_sources() {
     let ticket = headers[0].as_str().unwrap().split_once(": ").unwrap().1;
     assert!(relay.authorized(ticket));
     assert!(!super::super::media::MediaRelay::new().authorized(ticket));
-    let again = insert_gaps(&relay, 1, vec![wire(start, 0, 60), wire(start, 90, 120)]).unwrap();
+    let again = insert_gaps(
+        &relay,
+        1,
+        start,
+        vec![wire(start, 0, 60), wire(start, 90, 120)],
+    )
+    .unwrap()
+    .0;
     assert_eq!(again[1].id, gap.id);
-    assert!(insert_gaps(&relay, 1, Vec::new()).unwrap().is_empty());
+    assert!(insert_gaps(&relay, 1, start, Vec::new())
+        .unwrap()
+        .0
+        .is_empty());
+}
+
+#[test]
+fn initial_gap_starts_at_publication_time_without_outer_gap_for_empty_schedule() {
+    let relay = super::super::media::MediaRelay::new();
+    relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let start = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+    let (items, gaps) = insert_gaps(&relay, 1, start, vec![wire(start, 20, 40)]).unwrap();
+    assert_eq!(
+        gaps,
+        vec![Gap {
+            start,
+            finish: start + Duration::seconds(20)
+        }]
+    );
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].id, gaps[0].id());
+    assert_eq!(items[1].start, start + Duration::seconds(20));
+    assert!(insert_gaps(&relay, 1, start, Vec::new())
+        .unwrap()
+        .0
+        .is_empty());
+}
+
+#[tokio::test]
+async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_channel() {
+    let (host, normal, start, _root) = fixture().await;
+    let published = Gap {
+        start: start + Duration::seconds(20),
+        finish: start + Duration::seconds(40),
+    };
+    let preview = Uuid::new_v4();
+    let other_channel = Uuid::new_v4();
+    {
+        let mut contexts = host.dynamic_contexts.lock().await;
+        let normal_request = contexts.get(&normal).unwrap().request.clone();
+        for (instance, channel_id) in [(preview, 1), (other_channel, 2)] {
+            let mut request = normal_request.clone();
+            request.channel_id = channel_id;
+            request.preview = true;
+            contexts.insert(
+                instance,
+                super::super::host::DynamicContext {
+                    request,
+                    transfers: Arc::default(),
+                    fallback: Arc::default(),
+                    gaps: Arc::default(),
+                },
+            );
+        }
+    }
+    host.register_published_gaps(1, &[published]).await;
+    host.register_published_gaps(1, &[published]).await;
+    let contexts = host.dynamic_contexts.lock().await;
+    for instance in [normal, preview] {
+        let gaps = contexts.get(&instance).unwrap().gaps.lock().await;
+        assert!(gaps.contains(&published));
+        assert_eq!(gaps.iter().filter(|gap| **gap == published).count(), 1);
+    }
+    assert!(contexts
+        .get(&other_channel)
+        .unwrap()
+        .gaps
+        .lock()
+        .await
+        .is_empty());
 }
 
 pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::TempDir) {
@@ -131,6 +209,10 @@ pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::
             },
             transfers: Arc::default(),
             fallback: Arc::default(),
+            gaps: Arc::new(tokio::sync::Mutex::new(vec![Gap {
+                start: start + Duration::seconds(60),
+                finish: start + Duration::seconds(180),
+            }])),
         },
     );
     (host, instance, start, root)
@@ -183,6 +265,43 @@ async fn repeated_callbacks_seek_one_occurrence_and_clip_the_next() {
     assert!(resolve(&host, instance, start, 180).await.is_err());
     host.dynamic_contexts.lock().await.remove(&instance);
     assert!(resolve(&host, instance, start, 160).await.is_err());
+}
+
+#[tokio::test]
+async fn leading_gap_callback_requires_the_exact_published_interval() {
+    let (host, instance, start, _root) = fixture().await;
+    let gap = Gap {
+        start: start - Duration::seconds(20),
+        finish: start,
+    };
+    let dynamic_id = gap.id();
+    let resolve_leading = || {
+        host.resolve_fallback(
+            1,
+            timestamp_ticks(gap.start).unwrap(),
+            timestamp_ticks(gap.finish).unwrap(),
+            "1",
+            instance,
+            &dynamic_id,
+            start - Duration::seconds(10),
+            gap.finish,
+        )
+    };
+    assert!(resolve_leading().await.is_err());
+    let gaps = host
+        .dynamic_contexts
+        .lock()
+        .await
+        .get(&instance)
+        .unwrap()
+        .gaps
+        .clone();
+    *gaps.lock().await = vec![gap];
+    let item = resolve_leading().await.unwrap();
+    assert_eq!(item.start, start - Duration::seconds(10));
+    assert_eq!(item.finish, start);
+    gaps.lock().await.clear();
+    assert!(resolve_leading().await.is_err());
 }
 
 #[tokio::test]

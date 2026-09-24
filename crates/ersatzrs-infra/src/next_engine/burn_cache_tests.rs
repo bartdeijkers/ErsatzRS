@@ -9,6 +9,8 @@ fn source() -> Source {
         path: "synthetic/source.mkv".into(),
         in_point_ms: None,
         out_point_ms: None,
+
+        probe_hint: None,
     }
 }
 

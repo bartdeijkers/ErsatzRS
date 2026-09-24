@@ -63,6 +63,8 @@ async fn project(
             path: "media/fixture.mkv".to_owned(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         &Resolution {
             width: 320,
@@ -427,6 +429,8 @@ async fn assert_published_audio_bypasses_script(
             path: "media/fixture.mkv".into(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         },
         &Resolution::default(),
         AudioDirective::Published(Some(1)),
@@ -893,6 +897,8 @@ async fn deferred_burn_preserves_exact_pin_and_seek_without_restoring_subtitles_
                 path: "media/fixture.mkv".into(),
                 in_point_ms: None,
                 out_point_ms: None,
+
+                probe_hint: None,
             },
             &Resolution {
                 width: 320,
@@ -950,6 +956,8 @@ async fn published_audio_override_preserves_silence_and_rejects_stale_or_conflic
                 path: "media/fixture.mkv".into(),
                 in_point_ms: None,
                 out_point_ms: None,
+
+                probe_hint: None,
             },
             &Resolution::default(),
             AudioDirective::Published(published),
@@ -1029,6 +1037,8 @@ fn local_source_seek_preserves_milliseconds_and_open_ended_intervals() {
             path: "synthetic.mkv".into(),
             in_point_ms: None,
             out_point_ms: None,
+
+            probe_hint: None,
         };
         let item = PlayoutItem {
             in_point: Duration::milliseconds(start),

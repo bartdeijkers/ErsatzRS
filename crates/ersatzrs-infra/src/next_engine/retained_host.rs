@@ -270,6 +270,8 @@ pub(super) fn install_fresh_tracks(
                 path,
                 in_point_ms: None,
                 out_point_ms: None,
+
+                probe_hint: None,
             }),
             stream_index: Some(0),
         }),

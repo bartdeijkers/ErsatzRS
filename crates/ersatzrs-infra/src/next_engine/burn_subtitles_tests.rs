@@ -5,6 +5,8 @@ fn local() -> Source {
         path: "synthetic/source.mkv".into(),
         in_point_ms: Some(12_000),
         out_point_ms: Some(60_000),
+
+        probe_hint: None,
     }
 }
 
