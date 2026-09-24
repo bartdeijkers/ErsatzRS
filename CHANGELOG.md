@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Added
 
+- Support `epg_entries` in imported image graphics definitions so image paths
+  can use programme guide template variables (upstream PR #2923).
 - Supply stored video, alternate-audio and embedded-subtitle probe hints to
   optional Next playback when media metadata is complete. This avoids an extra
   probe before local or provider playback; Next still probes incomplete sources.

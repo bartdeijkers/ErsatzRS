@@ -8800,6 +8800,28 @@ valid and no product or health gate is invalidated. Advance pin, ledger and
 clean upstream checkout together; continue at row 53, dbdf3dff. UCU-04
 window gates, push and terminal exact-SHA CI remain open.
 
+2026-09-24 row 53 reconciliation (Port):
+Fresh origin/main remains 27f9d217 and all 172 ledger SHA/subject pairs match.
+Upstream dbdf3dff (PR #2923) adds Image epg_entries, includes images in EPG
+discovery, and catches unavailable YAML during discovery. Rust's common model,
+EPG query and image template renderer already support the context; ImageYaml
+rejected the field. The importer now persists it, preserving default zero and
+the other graphics kinds' alias convention. Existing ADR 0005 reads persisted
+definitions at playback, so missing source YAML does not prevent rendering.
+Regression 7e8f59b9 proves default/import/update/reload and EPG-selected image
+input with no source YAML. Managed FFmpeg runtime 605c1261 decodes the image
+chosen through Epg[0].Title alongside text, subtitle and motion graphics.
+Infra/domain all-target Clippy passes after removing the redundant struct
+default now that all image fields are assigned. Formatting and diff checks
+pass. No schema, UI, runtime prerequisite or health rule changes; Next general
+graphics remains separately open under ADR 0095. UCU-04 window gates, push
+and exact-SHA CI remain open; continue at row 54, 7032cfc8.
+
+Final row-53 native cargo xtask smoke passes (ucu53-smoke.log): MPEG-TS
+serves bytes and HLS publishes its variant, playlist and initial segments.
+Progress validation and the scoped source/test review pass. Ledger and pin
+advance together with the local checkpoint; no window acceptance is claimed.
+
 """
 
 [[milestone]]

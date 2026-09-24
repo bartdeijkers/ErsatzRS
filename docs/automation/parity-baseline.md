@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `dca93717a5d46b873145f1750db5ae53956d60b1` |
-| **Commit subject** | `fix: improve speed of motion graphics element compositing (#2922)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/dca93717a5d46b873145f1750db5ae53956d60b1 |
+| **Pinned commit** | `dbdf3dff200d0d7afdff0f705cdc0c19fa7f96b9` |
+| **Commit subject** | `feat: add epg_entries support to image graphics elements (#2923)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/dbdf3dff200d0d7afdff0f705cdc0c19fa7f96b9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

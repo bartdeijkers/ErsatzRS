@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **120 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **119 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **52**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **53**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-52 are reconciled; catch-up continues with row 53.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-53 are reconciled; catch-up continues with row 54.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,19 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 53 source map: image graphics EPG context
+
+Upstream `dbdf3dff` (PR #2923) adds `epg_entries` to ImageGraphicsElement,
+makes its context implement ITemplateDataContext, and includes Image in the
+loader's EPG count discovery. Unreadable source YAML is now caught during that
+discovery. GraphicsEngine consumes the renamed image context; no schema or UI
+change occurs. Under ADR 0005, ErsatzRS persists imported graphics definitions
+and renders from the database without rereading their YAML source. Its common
+EPG query and image path templating already use the stored `epg_entries` field,
+but ImageYaml omits that field and rejects such imports. The importer and its
+persisted image-to-playback regression own the correction. The existing
+database-authoritative behavior covers unavailable source YAML at playback.
 
 ## Row 52 source map: motion graphics compositing
 
@@ -929,7 +942,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 50 | `387da2b8` | feat: use probe hints with next engine (#2920) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(next): reconcile probe hints and leading gaps` | ucu-04; schema 0.0.2, guarded stored local/provider hints, leading gap publication and authenticated shared-manifest callbacks pass focused, decoded Next and routed smoke proof. |
 | 51 | `679fb172` | chore: update refit to work around cert revocation (#2921) | N/A (NuGet-only update) | upstream-baseline-catch-up | `docs(parity): classify Refit update as upstream-only` | ucu-04; four Refit package references in two C# manifests change version only; Rust has no Refit/NuGet dependency or affected source contract. |
 | 52 | `dca93717` | fix: improve speed of motion graphics element compositing (#2922) | Covered (ADR 0005) | drawvg-graphics-engine | `docs(porting): verify native motion graphics compositing` | ucu-04; native FFmpeg motion input is placed at its own dimensions without a Skia full-frame copy. Loop/Disappear/Hold snapshots, Hold renderer plan and decoded four-kind compositing pass; Next graphics debt remains open. |
-| 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | | | | ucu-04; provisional: Adapt candidate. |
+| 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | Port | drawvg-graphics-engine | `feat(graphics): import image EPG template context` | ucu-04; import and persist Image epg_entries, render its EPG-selected path without rereading YAML under ADR 0005; focused import/render and decoded graphics proof pass. |
 | 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | | | | ucu-04; provisional: Port candidate. |
 | 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | | | | ucu-04; provisional: Port candidate. |
 | 56 | `6b74da3c` | chore: update docker image (#2926) | | | | ucu-04; provisional: Upstream tooling candidate. |

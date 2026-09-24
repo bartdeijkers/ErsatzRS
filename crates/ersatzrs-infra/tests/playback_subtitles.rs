@@ -1017,6 +1017,66 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
 }
 
 #[tokio::test]
+async fn imported_image_graphics_use_persisted_epg_context_without_source_yaml() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 110).await;
+    seed_playout_item(&pool, 110, None, 1009, 10).await;
+    let temp = tempfile::tempdir().unwrap();
+    let missing_yaml = temp.path().join("missing-image.yml");
+    let yaml = "name: Guide image\nimage: '{{ Epg[0].Title }}.ppm'\n";
+    let initial = upsert_graphics_element_from_yaml(
+        &repos.graphics,
+        702,
+        GraphicsElementKind::Image,
+        missing_yaml.to_str().unwrap(),
+        yaml,
+    )
+    .await
+    .unwrap();
+    assert_eq!(initial.epg_entries, 0);
+    upsert_graphics_element_from_yaml(
+        &repos.graphics,
+        702,
+        GraphicsElementKind::Image,
+        missing_yaml.to_str().unwrap(),
+        &format!("{yaml}epg_entries: 1\n"),
+    )
+    .await
+    .unwrap();
+    let element = repos.graphics.get_element(702).await.unwrap();
+    assert_eq!(element.epg_entries, 1);
+    assert!(!missing_yaml.exists());
+    let context = PlaybackGraphicsRenderContext {
+        channel_id: 110,
+        channel_number: "110".to_owned(),
+        media_item_id: 10,
+        media_path: "/media/movie.mkv".to_owned(),
+        channel_start_time: common::fixed_time(),
+        content_start_time: common::fixed_time(),
+        stream_seek_seconds: 0.0,
+        duration_seconds: 3600.0,
+        frame_size: FrameSize::new(320, 180),
+        square_pixel_frame_size: FrameSize::new(320, 180),
+        frame_rate: Some(FrameRate::DEFAULT),
+    };
+    let graphics = [ResolvedPlaybackGraphicsElement {
+        element,
+        variables: None,
+    }];
+    let artifacts =
+        render_playback_graphics_overlays(&pool, &graphics, &context, temp.path().join("rendered"))
+            .await
+            .unwrap();
+    let [GraphicsPipelineOverlay::NativeImage { input, .. }] = artifacts.overlays.as_slice() else {
+        panic!("expected one image overlay");
+    };
+    assert_eq!(input.path, "Movie.ppm");
+    artifacts.shutdown().await;
+}
+
+#[tokio::test]
 async fn render_playback_graphics_overlays_uses_per_element_variables() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;
@@ -1369,7 +1429,7 @@ struct ScheduledGraphicsAssets {
 impl ScheduledGraphicsAssets {
     async fn create(ffmpeg: &str, dir: &Path) -> Self {
         let input = dir.join("black.mp4");
-        let image = dir.join("red.ppm");
+        let image = dir.join("Movie.ppm");
         let motion = dir.join("blue.mp4");
         let subtitle_template = dir.join("subtitle-template.ass");
 
@@ -1464,8 +1524,8 @@ async fn import_scheduled_graphics_yaml(
         GraphicsElementKind::Image,
         "graphics/image.yml",
         &format!(
-            "name: image\nimage: '{}'\nlocation: TopLeft\nscale: false\nzIndex: 10\n",
-            assets.image.display()
+            "name: image\nimage: '{}'\nepg_entries: 1\nlocation: TopLeft\nscale: false\nzIndex: 10\n",
+            assets.image.with_file_name("{{ Epg[0].Title }}.ppm").display()
         ),
     )
     .await

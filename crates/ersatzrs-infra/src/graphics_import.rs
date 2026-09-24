@@ -108,6 +108,8 @@ struct ImageYaml {
     location_y: Option<f64>,
     #[serde(default, alias = "zIndex")]
     z_index: Option<i32>,
+    #[serde(default, alias = "epgEntries")]
+    epg_entries: i32,
     #[serde(default)]
     scale: bool,
     #[serde(default, alias = "scaleWidthPercent")]
@@ -124,6 +126,7 @@ impl ImageYaml {
             kind: GraphicsElementKind::Image,
             path: Some(path),
             z_index: self.z_index.unwrap_or_default(),
+            epg_entries: self.epg_entries,
             opacity_percent: self.opacity_percent,
             opacity_expression: self.opacity_expression,
             location: self.location,
@@ -135,7 +138,6 @@ impl ImageYaml {
             scale_width_percent: self.scale_width_percent,
             place_within_source_content: self.place_within_source_content,
             config: GraphicsElementConfig::Image(ImageGraphicsConfig { image: self.image }),
-            ..GraphicsElement::default()
         }
     }
 }

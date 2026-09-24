@@ -43,7 +43,7 @@ pub struct GraphicsElement {
     pub scale: bool,
     pub scale_width_percent: Option<f64>,
     pub place_within_source_content: bool,
-    /// Number of EPG entries to expose to the template (`Text`/`Subtitle`/`Motion`/`Script`).
+    /// Number of EPG entries to expose to the template for any element kind.
     pub epg_entries: i32,
     /// Kind-specific configuration, persisted as JSON in the `Config` column.
     pub config: GraphicsElementConfig,
