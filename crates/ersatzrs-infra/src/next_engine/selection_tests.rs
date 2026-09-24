@@ -1021,3 +1021,27 @@ fn finite_http_projection_keeps_programme_in_and_out_points() {
         assert_eq!(json["out_point_ms"], 61000);
     }
 }
+
+#[test]
+fn local_source_seek_preserves_milliseconds_and_open_ended_intervals() {
+    for (start, finish) in [(0, 0), (0, 60_000), (1250, 58_750), (1250, 0)] {
+        let mut source = wire::Source::Local {
+            path: "synthetic.mkv".into(),
+            in_point_ms: None,
+            out_point_ms: None,
+        };
+        let item = PlayoutItem {
+            in_point: Duration::milliseconds(start),
+            out_point: Duration::milliseconds(finish),
+            ..item()
+        };
+        apply_item_seek(&mut source, &item).unwrap();
+        let json = serde_json::to_value(source).unwrap();
+        assert_eq!(json["in_point_ms"], start);
+        if finish == 0 {
+            assert!(json.get("out_point_ms").is_none());
+        } else {
+            assert_eq!(json["out_point_ms"], finish);
+        }
+    }
+}

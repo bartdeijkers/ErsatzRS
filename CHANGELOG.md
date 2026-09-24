@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Added
 
+- Scheduled Next playback preserves in/out points across selected tracks,
+  including video-only media with generated silence (upstream PR #2912).
 - Explicitly scheduled still images are supported by the optional Next engine,
   retaining the scheduled display interval and supplying silent audio (upstream PR #2911).
 - Show the optional Next engine version in the admin navigation drawer, with

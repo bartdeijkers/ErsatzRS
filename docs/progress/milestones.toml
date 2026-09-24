@@ -8516,6 +8516,35 @@ playback and generated FFmpeg output are unchanged, so no new TSDuck pipeline
 claim is made. Pin and ledger advance with the authorized local checkpoint.
 Continue at row 45; UCU-04 window gates, push and terminal exact-SHA CI remain open.
 
+
+Row 45 (b1c7702a, PR #2912) is Covered. Fresh upstream main remains 27f9d217;
+accepted row 44, pin and clean checkout agreed before work. The full upstream
+diff sets source in/out points and retains the complete video source when audio
+is replaced with silence. Existing Rust apply_item_seek already sets millisecond
+bounds before cloning explicit video/audio/subtitle sources; no-audio HTTP
+projection retains URI, headers, timeouts, reconnect options and those bounds.
+Source review of official Next input_timing confirms omitted zero/full-interval
+bounds have the same meaning as explicit values for valid persisted intervals.
+The accepted live and producer-owned seek contract is unchanged.
+
+A new regression covers zero, 1,250/58,750 ms and open-ended local bounds.
+Nextest 38a57484-57fe-417d-90bc-2081b8599bc4 passes all 22 selection tests
+(ucu45-selection-verified.log). An initial run failed three existing custom
+selector fixtures because their default app-data directory was read-only in the
+sandbox; repeating the unchanged selection with disposable app-data/state roots
+passes. No production profile writes or assertions were changed.
+Real Next 0.1.0-f6350a0 verification 48a27c52-5808-47f0-a3aa-dc45c44f3a03 passes
+the existing five-case embedded/external Burn/Convert/subtitles-off test with
+scheduled seek, selected alternate audio, rendered/converted cues and awaited
+session cleanup (ucu45-runtime.log). The runtime proof observes selected segments;
+serialized boundary tests own the exact out-point-field evidence. Infrastructure
+all-target Clippy, formatting and scoped substantive Codex review pass.
+No production code, UI, schema or health-policy correction is needed. Row 44's
+routed Next smoke remains valid for the unchanged production code and runtime;
+no duplicate smoke or TSDuck gate is required for this test-only checkpoint.
+Continue at row 46 after pin/ledger/checkpoint alignment. UCU-04 window gates,
+push and terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]

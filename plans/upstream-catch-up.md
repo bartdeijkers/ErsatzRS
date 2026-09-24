@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **128 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **127 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **44**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **45**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-44 are accepted; catch-up continues with row 45.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-45 are accepted; catch-up continues with row 46.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,22 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 45 source map: Next in/out-point synchronization
+
+Upstream `b1c7702a` (PR #2912) changes only `SyncNextPlayoutHandler`: copy
+positive in-points and clipped out-points onto the source, then preserve that
+complete source when splitting video from generated silence. No UI, schema,
+validation, dependency or asset changes occur. Rust `selection::apply_item_seek`
+already projects millisecond bounds before cloning concrete video/audio/subtitle
+sources; the no-audio branch retains the original video source and transport
+options. Next's `input_timing` defaults an omitted in-point to zero and an omitted
+out-point to in-point plus scheduled duration. Rust's explicit full-interval
+values therefore retain that timing for valid persisted intervals.
+Verify zero/fractional/open-ended bounds, existing no-audio HTTP projection,
+and existing decoded Burn/Convert seek/audio/off cases. Live and producer-owned
+seek remain governed by the accepted row-39 contract. No new production change
+is proposed; row-44 routed smoke remains applicable to unchanged playback code.
 
 ## Row 44 source map: explicitly scheduled images
 
@@ -789,7 +805,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 42 | `822c7547` | pin imagesharp dependency (#2909) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream ImageSharp constraint` | ucu-04; single .NET PackageReference constraint adds a below-4 upper bound. ImageElementBase and all application behavior are unchanged. Rust has no ImageSharp dependency and uses native FFmpeg image inputs under ADR 0005. Scoped review and progress validation pass; no new graphics acceptance claim. |
 | 43 | `9c5d86a1` | feat: show next version in ui (#2910) | Port | upstream-baseline-catch-up | `feat(web): display cached Next engine version` | ucu-04; shared playback resolver, bounded startup probe and localized static drawer footer. Missing/failing/stalled/oversized probe tests, all-nine-culture coverage, scoped Clippy and hydration lint pass. Matched bundle passes Chromium/Firefox installed and unavailable cases, desktop/no-JS and mobile navigation. Scoped review passes; window gates remain open. |
 | 44 | `577983af` | feat: support explicitly scheduled images using next engine (#2911) | Covered | upstream-baseline-catch-up | `test(infra): verify scheduled Next images` | ucu-04; existing ImageId binding and video/finite-silence projection already cover the upstream query/filter change. Persisted image-only regression and real Next PNG output prove scheduled duration, held colour, silent AAC and cleanup. Scoped Clippy/review and routed Next smoke pass; no production playback change. |
-| 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | | | | ucu-04; provisional: Next behavior triage. |
+| 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | Covered | upstream-baseline-catch-up | `test(infra): verify Next source timing boundaries` | ucu-04; existing projection retains millisecond bounds and complete sources across explicit tracks and generated silence. Boundary/no-audio HTTP regressions, all 22 selection tests and five decoded seek/Burn/Convert/audio/off scenarios pass; scoped Clippy/review pass. Unchanged routed smoke evidence is reused. |
 | 46 | `99a1ecee` | chore: update dependencies (#2915) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 47 | `aa639375` | fix: use case-insensitive lookup for mpeg-ts script (#2916) | | | | ucu-04; provisional: Port candidate. |
 | 48 | `14ee8063` | feat: sync generated music video credits to next engine (#2917) | | | | ucu-04; provisional: Next behavior triage. |
