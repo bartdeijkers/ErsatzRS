@@ -8432,6 +8432,19 @@ new runtime evidence. Scoped Codex review finds no remaining blocking issue.
 Infrastructure all-target Clippy, formatting, progress validation and diff checks
 pass. Row 41 is Port; advance the pin with its authorized local checkpoint.
 Continue at row 42; UCU-04 window gates, push and exact-SHA CI remain open.
+
+Row 42 (822c7547, PR #2909) is N/A (upstream tooling). Fresh upstream main
+remains 27f9d217; accepted row 41, pin and clean checkout agreed before work.
+The complete diff is one PackageReference constraint in Infrastructure.csproj:
+SixLabors.ImageSharp 3.1.12 becomes [3.1.12, 4), retaining the lower bound while
+excluding version 4. Review traced the unchanged ImageElementBase consumer
+(local/HTTP image loading, image-format/frame processing). No source, schema,
+asset or runtime artifact changes occur. Cargo manifests and Cargo.lock contain
+no ImageSharp dependency; accepted ADR 0005 uses native FFmpeg image inputs and
+overlays. No Rust correction or new image-format/Next graphics acceptance follows
+from this .NET constraint. Documentation-only progress validation and diff checks
+pass; unchanged runtime checks are reused. Continue at row 43. UCU-04 remains
+In progress, with window gates, push and exact-SHA CI still outstanding.
 """
 
 [[milestone]]

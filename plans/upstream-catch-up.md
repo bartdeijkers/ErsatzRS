@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **131 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **130 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **41**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **42**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-41 are accepted; catch-up continues with row 42.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-42 are accepted; catch-up continues with row 43.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,17 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 42 source map: ImageSharp dependency constraint
+
+Upstream `822c7547` (PR #2909) changes one `PackageReference` in
+`ErsatzTV.Infrastructure.csproj`: ImageSharp `3.1.12` becomes `[3.1.12, 4)`.
+This retains the lower bound and excludes the next major version. Its
+`ImageElementBase` consumer, UI, validators, image assets, handlers and schema
+are unchanged. Rust Cargo manifests/lockfile do not include ImageSharp;
+ADR 0005 routes image graphics through native FFmpeg inputs and overlays.
+Verdict: N/A (upstream tooling). This row neither changes that accepted
+architecture nor claims new image-format or Next graphics support.
 
 ## Row 41 source map: automatic Next error reports
 
@@ -736,7 +747,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | Adapt (ADRs 0066/0100) | upstream-baseline-catch-up | `feat(infra): support Next remote streams and reports` | ucu-04; authenticated direct/prepared/retained/ordinary sources, fresh selected tracks, finite/live timing and supported captions, opt-in reports and independent normal/preview ownership. Real routed disconnect/stop cleanup, scoped review/tests/Clippy and Next Burn/Convert plus native lifecycle smoke pass. Accepted embedded-text limits remain visible debt. Local checkpoint complete; window gates remain open. |
 | 40 | `2c02561f` | chore: update dependencies (#2900) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May dependency refresh` | ucu-04; version-only .NET updates in eleven project files. Updated packages are absent from Rust; hardware diagnostics and ADR 0096 JavaScript boundaries remain unchanged. Source review finds no application, schema, asset or runtime-artifact changes. |
 | 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | Port | upstream-baseline-catch-up | `feat(infra): always retain Next error reports` | ucu-04; report directory always supplied for normal/preview, independent of native report opt-in. Real Next failure retains FFmpeg log and diagnostic JSON; normal playback, setting matrix, scoped Clippy/review and docs pass. Native health setting and overlay priority preserved; window gates remain open. |
-| 42 | `822c7547` | pin imagesharp dependency (#2909) | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 42 | `822c7547` | pin imagesharp dependency (#2909) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream ImageSharp constraint` | ucu-04; single .NET PackageReference constraint adds a below-4 upper bound. ImageElementBase and all application behavior are unchanged. Rust has no ImageSharp dependency and uses native FFmpeg image inputs under ADR 0005. Scoped review and progress validation pass; no new graphics acceptance claim. |
 | 43 | `9c5d86a1` | feat: show next version in ui (#2910) | | | | ucu-04; provisional: Next integration candidate under Accepted ADR 0095. |
 | 44 | `577983af` | feat: support explicitly scheduled images using next engine (#2911) | | | | ucu-04; provisional: Next behavior triage. |
 | 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | | | | ucu-04; provisional: Next behavior triage. |

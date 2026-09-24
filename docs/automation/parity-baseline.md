@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `cc9880c2f05941009cb5ec73ea895cd940ddcfd4` |
-| **Commit subject** | `feat: always save error reports with next engine (#2907)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cc9880c2f05941009cb5ec73ea895cd940ddcfd4 |
+| **Pinned commit** | `822c754712fae1c43a7f0ff7dc1baf59f4f9428f` |
+| **Commit subject** | `pin imagesharp dependency (#2909)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/822c754712fae1c43a7f0ff7dc1baf59f4f9428f |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

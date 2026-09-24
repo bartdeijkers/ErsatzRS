@@ -137,7 +137,8 @@ Streams and reports under ADRs 0066/0100, with supported subtitle/audio, routed
 lifecycle, scoped review and Next/native smoke proof. The maintainer resumed
 catch-up after its local checkpoint. Row 40 is N/A for .NET dependency versions;
 row 41 ports automatic Next error reports with real failure-dossier proof.
-Next is row 42. UCU-04 window gates and exact-SHA CI remain open.
+Row 42 is N/A for the ImageSharp dependency constraint. Next is row 43.
+UCU-04 window gates and exact-SHA CI remain open.
 Supported-platform acceptance and later graphics capabilities remain open. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
