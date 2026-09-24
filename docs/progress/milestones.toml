@@ -8770,6 +8770,18 @@ the UCU-04 window gates, push, terminal exact-SHA CI and all-platform
 acceptance remain open. Advance pin and ledger together to row 50 and continue
 with row 51, 679fb172.
 
+2026-09-24 row 51 reconciliation (N/A):
+The fetched upstream target remains 27f9d217 and all 172 ledger SHA/subject
+pairs match ordered origin/main history. Pin, ledger and clean upstream HEAD
+began at row 50. Upstream 679fb172 (PR #2921) changes only Refit,
+Refit.Newtonsoft.Json, Refit.Xml and Refit.HttpClientFactory package versions
+from 10.1.6 to 10.2.0 in two C# project manifests. There is no C# source,
+protocol, configuration or test delta, and Rust has no Refit/NuGet dependency.
+Substantive source and dependency review finds no Rust behavior to port; no
+product checks are invalidated by this documentation-only row. Advance the
+pin, ledger and clean upstream checkout together, then continue at row 52,
+dca93717. UCU-04 window gates, push and exact-SHA CI remain open.
+
 """
 
 [[milestone]]

@@ -61,10 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-24 UCU-04 row 50 is reconciled as Adapt under ADR 0095. Next schema
-0.0.2, guarded stored probe hints, still-image identity and leading fallback
-pass focused regressions, decoded Next playback, Clippy and routed smoke.
-Continue with row 51 (679fb172, Refit certificate workaround).
+2026-09-24 UCU-04 row 51 is N/A: upstream changes only four Refit NuGet
+package references in two C# manifests. ErsatzRS has no Refit dependency or
+source contract to change. Continue with row 52 (dca93717, motion graphics
+compositing). Row 50 Next probe hints and leading fallback retain their
+focused, decoded playback, Clippy and routed smoke evidence.
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of

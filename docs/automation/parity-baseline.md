@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `387da2b8f7c27abeb3eabd0b815aa79af77932c4` |
-| **Commit subject** | `feat: use probe hints with next engine (#2920)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/387da2b8f7c27abeb3eabd0b815aa79af77932c4 |
+| **Pinned commit** | `679fb17224cec7f10e2b6c924985835a5293d810` |
+| **Commit subject** | `chore: update refit to work around cert revocation (#2921)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/679fb17224cec7f10e2b6c924985835a5293d810 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
