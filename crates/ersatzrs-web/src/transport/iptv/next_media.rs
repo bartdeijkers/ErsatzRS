@@ -173,6 +173,46 @@ fn dynamic_headers(
     (until > now).then_some((number, instance, now, until))
 }
 
+pub async fn get_fallback(
+    State(state): State<AppState>,
+    Path((channel, start, finish)): Path<(i64, i64, i64)>,
+    headers: HeaderMap,
+) -> Response {
+    serve_fallback(&state.next_engine, (channel, start, finish), &headers).await
+}
+
+async fn serve_fallback(
+    host: &ersatzrs_infra::next_engine::host::NextHost,
+    (channel, start, finish): (i64, i64, i64),
+    headers: &HeaderMap,
+) -> Response {
+    if !headers
+        .get(ACCESS_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| host.media.authorized(value))
+    {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let Some((number, instance, now, until)) = dynamic_headers(headers) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let Some(dynamic_id) = headers
+        .get("x-etv-dynamic-id")
+        .and_then(|value| value.to_str().ok())
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    match host
+        .resolve_fallback(
+            channel, start, finish, number, instance, dynamic_id, now, until,
+        )
+        .await
+    {
+        Ok(item) => ([(header::CACHE_CONTROL, "no-store")], axum::Json(item)).into_response(),
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
 async fn serve(
     relay: &MediaRelay,
     pool: &DbPool,
@@ -339,6 +379,73 @@ mod tests {
                 body.as_bytes()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn fallback_transport_rejects_missing_auth_headers_and_expired_sessions() {
+        use ersatzrs_infra::next_engine::protocol::{ProbeHint, Source};
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect_lazy("sqlite::memory:")
+            .unwrap();
+        pool.close().await;
+        let root = tempfile::tempdir().unwrap();
+        let host = ersatzrs_infra::next_engine::host::NextHost::new(
+            pool,
+            ersatzrs_core::locking::EntityLocker::default(),
+            root.path().join("playout"),
+        );
+        host.media
+            .configure("127.0.0.1:8409".parse().unwrap())
+            .unwrap();
+        let mut headers = HeaderMap::new();
+        let bounds = (1, 0, 10_000_000);
+        assert_eq!(
+            serve_fallback(&host, bounds, &headers).await.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let Source::Http {
+            headers: source_headers,
+            ..
+        } = host
+            .media
+            .prepared_source(
+                uuid::Uuid::new_v4(),
+                uuid::Uuid::new_v4(),
+                ProbeHint {
+                    video: Vec::new(),
+                    audio: Vec::new(),
+                    subtitle: Vec::new(),
+                    format_name: None,
+                    duration_ms: None,
+                },
+                false,
+            )
+            .unwrap()
+        else {
+            panic!("HTTP capability source required")
+        };
+        let token = source_headers[0].split_once(": ").unwrap().1;
+        headers.insert(ACCESS_HEADER, token.parse().unwrap());
+        assert_eq!(
+            serve_fallback(&host, bounds, &headers).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+        headers.insert(
+            SESSION_HEADER,
+            uuid::Uuid::new_v4().to_string().parse().unwrap(),
+        );
+        headers.insert("x-etv-channel", "1".parse().unwrap());
+        headers.insert("x-etv-now", "1970-01-01T00:00:00Z".parse().unwrap());
+        headers.insert("x-etv-until", "1970-01-01T00:00:01Z".parse().unwrap());
+        assert_eq!(
+            serve_fallback(&host, bounds, &headers).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+        headers.insert("x-etv-dynamic-id", "fallback-0-0-1-0".parse().unwrap());
+        assert_eq!(
+            serve_fallback(&host, bounds, &headers).await.status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
     }
 
     #[tokio::test]

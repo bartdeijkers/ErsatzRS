@@ -48,6 +48,7 @@ pub struct NextHost {
 pub(super) struct DynamicContext {
     pub request: NextStart,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
+    pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
 }
 
 fn retain_dynamic_context(
@@ -60,6 +61,7 @@ fn retain_dynamic_context(
         DynamicContext {
             request: request.clone(),
             transfers: Arc::default(),
+            fallback: Arc::default(),
         },
     );
     instance
@@ -425,7 +427,7 @@ impl NextHost {
                         }
                         items.push(projection.item);
                     }
-                    Ok(items)
+                    super::fallback::insert_gaps(&self.media, channel_id, items)
                 })
                 .await?;
             if matches!(outcome, RefreshOutcome::Published { .. }) {

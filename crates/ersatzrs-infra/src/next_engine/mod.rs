@@ -14,6 +14,7 @@ mod dynamic_host;
 mod dynamic_item;
 mod dynamic_projection;
 mod dynamic_provider_identity;
+mod fallback;
 pub mod host;
 mod live_subtitles;
 pub mod media;

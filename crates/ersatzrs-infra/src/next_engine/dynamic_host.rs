@@ -212,7 +212,7 @@ impl NextHost {
     }
 }
 
-fn install_prepared_track(
+pub(super) fn install_prepared_track(
     mut item: protocol::PlayoutItem,
     prepared: &std::path::Path,
 ) -> Result<protocol::PlayoutItem> {

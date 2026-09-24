@@ -1,0 +1,292 @@
+use super::*;
+use ersatzrs_core::repositories::PlayoutRepository as _;
+use ersatzrs_domain::ChannelSubtitleMode;
+use std::{path::PathBuf, sync::Arc};
+
+fn wire(start: DateTime<Utc>, a: i64, b: i64) -> protocol::PlayoutItem {
+    protocol::PlayoutItem {
+        id: format!("{a}"),
+        start: start + Duration::seconds(a),
+        finish: start + Duration::seconds(b),
+        source: None,
+        tracks: None,
+        watermark: None,
+    }
+}
+
+#[test]
+fn callback_bounds_preserve_persisted_fractional_precision() {
+    for seconds in [-1_700_000_000, -1, 0, 1_700_000_000] {
+        let time = DateTime::from_timestamp(seconds, 123_456_700).unwrap();
+        assert_eq!(
+            from_timestamp_ticks(timestamp_ticks(time).unwrap()).unwrap(),
+            time
+        );
+    }
+    assert!(timestamp_ticks(DateTime::from_timestamp(0, 123_456_789).unwrap()).is_err());
+}
+
+#[test]
+fn gaps_preserve_overlap_union_and_have_stable_authenticated_sources() {
+    let relay = super::super::media::MediaRelay::new();
+    relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let start = DateTime::from_timestamp(1_700_000_000, 123_456_700).unwrap();
+    let result = insert_gaps(
+        &relay,
+        1,
+        vec![
+            wire(start, 90, 120),
+            wire(start, 0, 60),
+            wire(start, 10, 20),
+        ],
+    )
+    .unwrap();
+    assert_eq!(result.len(), 4);
+    let gap = &result[2];
+    assert_eq!(
+        (gap.start, gap.finish),
+        (start + Duration::seconds(60), start + Duration::seconds(90))
+    );
+    let value = serde_json::to_value(gap).unwrap();
+    assert_eq!(value["source"]["source_type"], "dynamic");
+    assert!(value["source"]["uri"]
+        .as_str()
+        .unwrap()
+        .contains("/next-fallback/1/"));
+    let headers = value["source"]["headers"].as_array().unwrap();
+    assert_eq!(headers.len(), 2);
+    let ticket = headers[0].as_str().unwrap().split_once(": ").unwrap().1;
+    assert!(relay.authorized(ticket));
+    assert!(!super::super::media::MediaRelay::new().authorized(ticket));
+    let again = insert_gaps(&relay, 1, vec![wire(start, 0, 60), wire(start, 90, 120)]).unwrap();
+    assert_eq!(again[1].id, gap.id);
+    assert!(insert_gaps(&relay, 1, Vec::new()).unwrap().is_empty());
+}
+
+pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::TempDir) {
+    let root = tempfile::tempdir().unwrap();
+    let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
+    let start = DateTime::from_timestamp(Utc::now().timestamp(), 123_456_700).unwrap();
+    let path = root.path().join("fixture.mkv");
+    std::fs::write(&path, b"synthetic identity fixture").unwrap();
+    sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path"=? WHERE "Id"=1"#)
+        .bind(path.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "FillerPreset" ("Id","AllowWatermarks","CollectionType","MediaItemId","FillerKind","FillerMode","UseChaptersAsMediaItems") VALUES (1,0,10,10,4,0,0)"#).execute(&pool).await.unwrap();
+    channel.streaming_engine = StreamingEngine::Next;
+    channel.subtitle_mode = ChannelSubtitleMode::None;
+    channel.preferred_audio_language_code = Some("nld".into());
+    channel.fallback_filler_id = Some(1);
+    let repos = make_repositories(pool.clone());
+    repos.channel.upsert(&channel).await.unwrap();
+    repos
+        .playout
+        .upsert_item(&PlayoutItem {
+            id: 1,
+            playout_id: 1,
+            media_item_id: 10,
+            start,
+            finish: start + Duration::seconds(60),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    repos
+        .playout
+        .upsert_item(&PlayoutItem {
+            id: 2,
+            playout_id: 1,
+            media_item_id: 10,
+            start: start + Duration::seconds(180),
+            finish: start + Duration::seconds(240),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let host = Arc::new(NextHost::new(pool, locker, root.path().join("playout")));
+    host.media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let instance = Uuid::new_v4();
+    host.dynamic_contexts.lock().await.insert(
+        instance,
+        super::super::host::DynamicContext {
+            request: super::super::host::NextStart {
+                channel_id: 1,
+                preview: false,
+                number: "1".into(),
+                executable: PathBuf::from("fixture-next"),
+                output: root.path().join("output"),
+                ffmpeg: PathBuf::from("fixture-ffmpeg"),
+                ffprobe: PathBuf::from("fixture-ffprobe"),
+                replacements: Vec::new(),
+                idle_timeout: None,
+                deadline: Instant::now() + std::time::Duration::from_secs(30),
+            },
+            transfers: Arc::default(),
+            fallback: Arc::default(),
+        },
+    );
+    (host, instance, start, root)
+}
+
+async fn resolve(
+    host: &NextHost,
+    instance: Uuid,
+    start: DateTime<Utc>,
+    seconds: i64,
+) -> Result<protocol::PlayoutItem> {
+    let gap = Gap {
+        start: start + Duration::seconds(60),
+        finish: start + Duration::seconds(180),
+    };
+    host.resolve_fallback(
+        1,
+        timestamp_ticks(gap.start)?,
+        timestamp_ticks(gap.finish)?,
+        "1",
+        instance,
+        &gap.id(),
+        start + Duration::seconds(seconds),
+        gap.finish,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn repeated_callbacks_seek_one_occurrence_and_clip_the_next() {
+    let (host, instance, start, _root) = fixture().await;
+    let initial = resolve(&host, instance, start, 90).await.unwrap();
+    assert_eq!(initial.finish, start + Duration::seconds(150));
+    let json = serde_json::to_value(&initial).unwrap();
+    assert_eq!(json["tracks"]["audio"]["stream_index"], 2);
+    assert!(json["tracks"].get("subtitle").is_none());
+    let again = resolve(&host, instance, start, 105).await.unwrap();
+    assert_eq!(again.finish, initial.finish);
+    assert_eq!(
+        serde_json::to_value(again).unwrap()["tracks"]["video"]["source"]["in_point_ms"],
+        15_000
+    );
+    let next = resolve(&host, instance, start, 155).await.unwrap();
+    assert_eq!(next.finish, start + Duration::seconds(180));
+    let rows: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&host.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 2);
+    assert!(resolve(&host, instance, start, 180).await.is_err());
+    host.dynamic_contexts.lock().await.remove(&instance);
+    assert!(resolve(&host, instance, start, 160).await.is_err());
+}
+
+#[tokio::test]
+async fn changed_gap_or_policy_rejects_cached_occurrence() {
+    let (host, instance, start, _root) = fixture().await;
+    resolve(&host, instance, start, 90).await.unwrap();
+    sqlx::query(r#"UPDATE "FillerPreset" SET "AllowWatermarks"=1 WHERE "Id"=1"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(resolve(&host, instance, start, 95).await.is_err());
+    sqlx::query(r#"UPDATE "FillerPreset" SET "AllowWatermarks"=0 WHERE "Id"=1"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    make_repositories(host.pool.clone())
+        .playout
+        .upsert_item(&PlayoutItem {
+            id: 3,
+            playout_id: 1,
+            media_item_id: 10,
+            start: start + Duration::seconds(120),
+            finish: start + Duration::seconds(130),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(resolve(&host, instance, start, 95).await.is_err());
+}
+
+#[tokio::test]
+async fn cached_occurrence_rejects_changed_track_preferences_and_media_cut() {
+    let (host, _instance, start, _root) = fixture().await;
+    let channel = make_repositories(host.pool.clone())
+        .channel
+        .get_with_profile(1)
+        .await
+        .unwrap();
+    let mut candidates = fallback_playback::load_candidates(
+        &host.pool,
+        &channel,
+        start + Duration::seconds(90),
+        start + Duration::seconds(180),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let item = candidates.materialize(0).unwrap();
+    candidates.start += Duration::seconds(15);
+    assert!(candidate_matches(&candidates, &item));
+    candidates.items[0].preferred_audio_language_code = Some("eng".into());
+    assert!(!candidate_matches(&candidates, &item));
+    candidates.items[0].preferred_audio_language_code = item.preferred_audio_language_code.clone();
+    candidates.items[0].subtitle_mode = Some(ChannelSubtitleMode::None);
+    assert!(!candidate_matches(&candidates, &item));
+    candidates.items[0].subtitle_mode = item.subtitle_mode;
+    candidates.items[0].duration -= Duration::seconds(1);
+    assert!(!candidate_matches(&candidates, &item));
+}
+
+#[tokio::test]
+async fn ephemeral_credits_use_bound_cache_and_reject_changed_metadata() {
+    let (host, instance, start, _root) = fixture().await;
+    for sql in [
+        r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (31, 1, 0)"#,
+        r#"INSERT INTO "Artist" ("Id") VALUES (31)"#,
+        r#"INSERT INTO "ArtistMetadata" ("Id", "ArtistId", "Title", "MetadataKind", "DateAdded", "DateUpdated") VALUES (32, 31, 'Synthetic Artist', 0, '2026-09-24', '2026-09-24')"#,
+        r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (10, 31)"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL, "MusicVideoId"=10 WHERE "Id"=100"#,
+        r#"DELETE FROM "Movie" WHERE "Id"=10"#,
+        r#"INSERT INTO "MusicVideoMetadata" ("Id", "MusicVideoId", "Title", "MetadataKind", "DateAdded", "DateUpdated") VALUES (33, 10, 'Synthetic Credit Song', 0, '2026-09-24', '2026-09-24')"#,
+    ] {
+        sqlx::query(sql).execute(&host.pool).await.unwrap();
+    }
+    let repos = make_repositories(host.pool.clone());
+    let mut channel = repos.channel.get_with_profile(1).await.unwrap();
+    channel.subtitle_mode = ChannelSubtitleMode::Default;
+    channel.music_video_credits_mode =
+        ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles;
+    repos.channel.upsert(&channel).await.unwrap();
+    let first = resolve(&host, instance, start, 90).await.unwrap();
+    let tracks = first.tracks.unwrap();
+    assert_eq!(tracks.audio.unwrap().stream_index, Some(2));
+    let Some(protocol::Source::Local { path, .. }) = tracks.subtitle.unwrap().source else {
+        panic!("ephemeral credits require a cache artifact, not a persisted-item route")
+    };
+    assert!(tokio::fs::read_to_string(&path)
+        .await
+        .unwrap()
+        .contains("Synthetic Credit Song"));
+    let again = resolve(&host, instance, start, 95).await.unwrap();
+    let Some(protocol::Source::Local {
+        path: reused,
+        in_point_ms,
+        ..
+    }) = again.tracks.unwrap().subtitle.unwrap().source
+    else {
+        panic!("cached credits source must remain local")
+    };
+    assert_eq!(path, reused);
+    assert_eq!(in_point_ms, Some(5000));
+    sqlx::query(r#"UPDATE "MusicVideoMetadata" SET "Title"='Changed Credit Song' WHERE "Id"=33"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(resolve(&host, instance, start, 100).await.is_err());
+}

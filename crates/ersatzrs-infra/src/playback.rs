@@ -2031,6 +2031,41 @@ pub async fn select_playback_watermarks(
     }
 
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
+    select_context_watermarks(pool, channel, context, Some(playout_item_id), now).await
+}
+
+/// Select decoration and channel watermarks for an ephemeral fallback item.
+pub(crate) async fn select_fallback_watermarks(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &ersatzrs_domain::PlayoutItem,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackWatermark>> {
+    if item.disable_watermarks {
+        return Ok(Vec::new());
+    }
+    let playout_deco_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "DecoId" FROM "Playout" WHERE "Id"=?"#)
+            .bind(item.playout_id)
+            .fetch_optional(pool)
+            .await
+            .repository()?
+            .flatten();
+    let context = PlaybackWatermarkContext {
+        playout_id: item.playout_id,
+        filler_kind: item.filler_kind,
+        playout_deco_id,
+    };
+    select_context_watermarks(pool, channel, context, None, now).await
+}
+
+async fn select_context_watermarks(
+    pool: &DbPool,
+    channel: &Channel,
+    context: PlaybackWatermarkContext,
+    playout_item_id: Option<i64>,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackWatermark>> {
     let mut watermark_ids = Vec::new();
 
     if let Some(template_deco) = load_active_template_deco(pool, context.playout_id, now).await? {
@@ -2046,7 +2081,10 @@ pub async fn select_playback_watermarks(
         }
     }
 
-    let item_ids = load_playout_item_watermark_ids(pool, playout_item_id).await?;
+    let item_ids = match playout_item_id {
+        Some(id) => load_playout_item_watermark_ids(pool, id).await?,
+        None => Vec::new(),
+    };
     if !item_ids.is_empty() {
         watermark_ids.extend(item_ids);
         return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
@@ -2073,6 +2111,40 @@ pub async fn select_playback_graphics(
     now: DateTime<Utc>,
 ) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
+    select_context_graphics(pool, context, Some(playout_item_id), now).await
+}
+
+pub(crate) async fn select_fallback_graphics(
+    pool: &DbPool,
+    item: &ersatzrs_domain::PlayoutItem,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
+    let playout_deco_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "DecoId" FROM "Playout" WHERE "Id"=?"#)
+            .bind(item.playout_id)
+            .fetch_optional(pool)
+            .await
+            .repository()?
+            .flatten();
+    select_context_graphics(
+        pool,
+        PlaybackWatermarkContext {
+            playout_id: item.playout_id,
+            filler_kind: item.filler_kind,
+            playout_deco_id,
+        },
+        None,
+        now,
+    )
+    .await
+}
+
+async fn select_context_graphics(
+    pool: &DbPool,
+    context: PlaybackWatermarkContext,
+    playout_item_id: Option<i64>,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let mut graphics = Vec::new();
 
     if let Some(template_deco) =
@@ -2090,7 +2162,9 @@ pub async fn select_playback_graphics(
         }
     }
 
-    graphics.extend(load_playout_item_graphics(pool, playout_item_id).await?);
+    if let Some(id) = playout_item_id {
+        graphics.extend(load_playout_item_graphics(pool, id).await?);
+    }
     resolve_playback_graphics(pool, graphics).await
 }
 

@@ -244,6 +244,21 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                     return;
                 }
                 let (status, body) = if authorized {
+                    if let Some(binding) = target.strip_prefix("/ffmpeg/next-fallback/") {
+                        let parts: Vec<_> = binding.split('/').collect();
+                        assert_eq!(parts.len(), 3);
+                        let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap()).unwrap().with_timezone(&chrono::Utc);
+                        let until = chrono::DateTime::parse_from_rfc3339(header("x-etv-until").unwrap()).unwrap().with_timezone(&chrono::Utc);
+                        let item = host.resolve_fallback(parts[0].parse().unwrap(), parts[1].parse().unwrap(), parts[2].parse().unwrap(),
+                            header("x-etv-channel").unwrap(), uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER).unwrap()).unwrap(),
+                            header("x-etv-dynamic-id").unwrap(), now, until).await.expect("production fallback callback");
+                        let body = serde_json::to_vec(&item).unwrap();
+                        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                        socket.write_all(response.as_bytes()).await.unwrap();
+                        socket.write_all(&body).await.unwrap();
+                        socket.shutdown().await.unwrap();
+                        return;
+                    }
                     let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
                         .split('/').collect();
                     assert_eq!(parts.len(), 4);
@@ -408,6 +423,9 @@ mod provider_text_runtime_tests;
 
 #[path = "credits_runtime_tests.rs"]
 mod credits_runtime_tests;
+
+#[path = "fallback_runtime_tests.rs"]
+mod fallback_runtime_tests;
 
 #[path = "prepared_artifact_runtime_tests.rs"]
 mod prepared_artifact_runtime;

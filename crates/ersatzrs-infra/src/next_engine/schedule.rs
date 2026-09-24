@@ -123,7 +123,7 @@ const MEDIA_QUERY: &str = r#"
     LIMIT 1
 "#;
 
-async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMedia> {
+pub(crate) async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMedia> {
     let mut query = sqlx::query(MEDIA_QUERY);
     for _ in 0..7 {
         query = query.bind(item.media_item_id);

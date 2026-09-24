@@ -121,6 +121,23 @@ impl MediaRelay {
         })
     }
 
+    /// Resolve one published gap through the exact Next process session.
+    pub(super) fn fallback_source(&self, channel: i64, start: i64, finish: i64) -> Result<Source> {
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        Ok(Source::Dynamic {
+            uri: format!("http://{address}/ffmpeg/next-fallback/{channel}/{start}/{finish}"),
+            headers: Some(vec![
+                format!("{ACCESS_HEADER}: {}", self.capability),
+                format!("{SESSION_HEADER}: {{{{{SESSION_ENV}}}}}"),
+            ]),
+            user_agent: None,
+            timeout_us: Some(35_000_000),
+        })
+    }
+
     /// A generated ASS track scoped to this host process and persisted item.
     pub(super) fn credits_source(
         &self,

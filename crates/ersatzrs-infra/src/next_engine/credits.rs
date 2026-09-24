@@ -307,6 +307,7 @@ mod tests {
                     deadline: tokio::time::Instant::now() + std::time::Duration::from_secs(30),
                 },
                 transfers: Arc::default(),
+                fallback: Arc::default(),
             },
         );
         let rendered = host

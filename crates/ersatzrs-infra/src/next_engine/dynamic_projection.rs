@@ -215,7 +215,7 @@ pub(crate) async fn fingerprint(
     })
 }
 
-fn digest(value: &serde_json::Value) -> Result<String> {
+pub(super) fn digest(value: &serde_json::Value) -> Result<String> {
     let bytes = serde_json::to_vec(value).map_err(|_| unavailable())?;
     let mut digest = String::with_capacity(64);
     for byte in Sha256::digest(bytes) {

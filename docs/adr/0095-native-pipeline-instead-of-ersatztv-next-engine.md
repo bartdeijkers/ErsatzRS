@@ -63,6 +63,17 @@ transport adaptation to upstream's unauthenticated loopback credits endpoint;
 ordinary media remains header-authenticated. The URL may appear in local
 FFmpeg reports, so it grants only generated credits for that exact binding.
 
+The row-49 implementation adds authenticated Dynamic placeholders for internal
+programme gaps. Each active Next session owns at most one selected ephemeral
+fallback occurrence, revalidates its current gap, policy, media and track
+selection, and discards it when the session ends. Callback bounds retain the
+persisted schedule's 100-nanosecond precision. Filler never becomes a persisted
+playout row. Embedded Burn preparation and ephemeral generated ASS credits use
+the existing bounded subtitle cache; credits are keyed by rendered content and
+validated against the selected occurrence before publication. Local gap playback
+has decoded Linux evidence. Ephemeral Remote Stream lifecycle integration and
+the remaining track/source matrix are still pending; row 49 is not reconciled.
+
 ## Context
 
 The upstream catch-up backlog introduces ErsatzTV Next, a separately

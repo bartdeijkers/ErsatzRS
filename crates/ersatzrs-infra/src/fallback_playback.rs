@@ -34,16 +34,20 @@ impl FallbackCandidates {
     /// Zero-length media cannot fill a gap. Exact playlist track pins survive.
     #[must_use]
     pub fn materialize(&self, index: usize) -> Option<PlayoutItem> {
+        self.materialize_at(index, self.start)
+    }
+
+    pub(crate) fn materialize_at(&self, index: usize, start: DateTime<Utc>) -> Option<PlayoutItem> {
         let media = self.items.get(index)?;
-        let duration = media.duration.min(self.finish - self.start);
+        let duration = media.duration.min(self.finish - start);
         if duration <= Duration::zero() {
             return None;
         }
         let in_point = media.chapter.as_ref().map_or(Duration::zero(), |c| c.start);
         Some(PlayoutItem {
             media_item_id: media.id,
-            start: self.start,
-            finish: self.start.checked_add_signed(duration)?,
+            start,
+            finish: start.checked_add_signed(duration)?,
             playout_id: self.playout_id,
             filler_kind: FillerKind::Fallback,
             in_point,

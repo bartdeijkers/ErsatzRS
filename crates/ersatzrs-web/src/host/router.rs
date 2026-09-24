@@ -596,6 +596,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
 
     let internal_ffmpeg_routes = Router::new()
         .route(
+            "/ffmpeg/next-fallback/{channel}/{start}/{finish}",
+            get(iptv::next_media::get_fallback),
+        )
+        .route(
             "/ffmpeg/next-credits/{channel}/{item}/{media}/{in_point}/{out_point}",
             get(iptv::next_media::get_credits),
         )

@@ -20,6 +20,11 @@ release section when tagging a release.
 
 ### Added
 
+- Fill internal gaps in optional Next playback with ephemeral local-library
+  fallback items using decoration, channel and global fallback policy. Preserve
+  selected audio and embedded Burn captions, then return to the next programme
+  without changing the persisted timeline. Remote Stream fallback remains under
+  implementation (upstream PR #2919).
 - Generate music-video credits for optional Next playback in Burn and Convert
   subtitle modes, preserving playout in-points and selected alternate audio
   (upstream PR #2917).

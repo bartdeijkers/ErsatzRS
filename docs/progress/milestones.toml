@@ -8626,6 +8626,40 @@ and ephemeral callback projection, source/subtitle/credits preparation and
 decoded gap-to-programme playback next. Row 49 and its visible debt stay open;
 the pin remains at row 48. UCU-04 push and CI await full window acceptance.
 
+2026-09-24 row 49 local-playback checkpoint (not reconciled):
+Next publication now inserts capability-protected placeholders between persisted
+programmes, preserving overlap unions and outer bounds. The callback admits an
+exact channel/session/gap and keeps one ephemeral occurrence per session.
+Current policy, materialized track preferences/cuts, media identity and gap
+membership are revalidated; no filler rows or enumerator changes are written.
+Local/provider projection uses existing source and track selectors. Embedded
+Burn and generated credits reuse the bounded cache with current-binding checks.
+Native decoration queries now accept an explicit ephemeral context instead of
+looking up a fake persisted item ID. Ephemeral Remote Streams are still refused
+pending lifecycle integration; this checkpoint does not claim row acceptance.
+
+The first real gap test exposed callback microsecond truncation of database
+100-nanosecond timestamps. Exact tick bounds fix it; fractional and pre-epoch
+roundtrips are covered. Official Next 0.1.0-f6350a0 then passes decoded fallback
+Dutch audio/embedded Burn captions followed by the scheduled English programme
+without captions (8e568a7f, 13.6 seconds), with only two persisted rows and awaited
+session/output cleanup. Five native decoration regressions pass (55005d69).
+The focused fallback selection passes 41 tests (b6026169), including changed
+track preferences and media cuts; no assertions or timeouts were weakened.
+Final nextest dca89702 passes all six fallback regressions and the real Next
+playback test after the validation/refactoring changes. This includes actual
+cached ASS creation/reuse, Dutch audio preservation, seek timing and rejection
+of changed music-video metadata. All seven HTTP transport tests pass (81331df4),
+including unauthorized, malformed and expired-session fallback requests before
+database access. The first web test compile corrected an HTTP headers Vec
+pattern; a warm rerun passes. The final row still needs ephemeral Remote Stream
+lifecycle integration, the remaining provider/Convert/external-caption/pin/credits
+matrix, routed smoke and substantive row closeout. UCU-04 window gates, push and
+exact-SHA CI remain open; pin/ledger stay at row 48. Final infrastructure/web
+all-target Clippy, formatting and diff checks pass. Scoped Codex review corrected
+precision loss and incomplete cached-preference validation. General graphics
+and accepted Next alpha subtitle limitations keep their existing owners.
+
 """
 
 [[milestone]]
