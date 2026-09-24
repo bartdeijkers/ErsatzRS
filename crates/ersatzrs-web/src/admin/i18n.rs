@@ -1997,6 +1997,9 @@ pub enum TextKey {
     ClassicPlayout,
     ClassicPlayoutState,
     ScanRefreshState,
+    SubtitleCleanup,
+    SubtitleCleanupMessage,
+    SubtitleCleanupBrief,
     ArtworkOrphans,
     ArtworkOrphansMessage,
     ArtworkOrphansBrief,
@@ -3960,6 +3963,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
     TextKey::ScanRefreshState,
+    TextKey::SubtitleCleanup,
+    TextKey::SubtitleCleanupMessage,
+    TextKey::SubtitleCleanupBrief,
     TextKey::ArtworkOrphans,
     TextKey::ArtworkOrphansMessage,
     TextKey::ArtworkOrphansBrief,
@@ -4511,6 +4517,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
+        "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
@@ -4820,6 +4827,18 @@ fn artwork_health_message(
                 counts.hierarchy_episodes,
             ],
         ));
+    }
+    if title == "Subtitle Cleanup" {
+        let count = brief_message
+            .strip_suffix(" subtitle row(s) awaiting cleanup")?
+            .parse::<u64>()
+            .ok()?;
+        let key = if message.is_empty() {
+            TextKey::SubtitleCleanupBrief
+        } else {
+            TextKey::SubtitleCleanupMessage
+        };
+        return Some(text(language, key).replace("{count}", &count.to_string()));
     }
     if title != "Artwork Orphans" {
         return None;
@@ -5650,6 +5669,28 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, SCAN_REFRESH_STATE_TITLE);
                 assert!(!localized.starts_with(SCAN_REFRESH_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn subtitle_cleanup_health_text_is_localized_for_every_language() {
+        let message = "Subtitle cleanup pending: 3 ownerless subtitle or empty-path sidecar row(s). Automatic cleanup runs hourly. Cached subtitle files are preserved.";
+        let brief = "3 subtitle row(s) awaiting cleanup";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, "Subtitle Cleanup");
+            let localized = health_check_message_text(language, "Subtitle Cleanup", message, brief);
+            let localized_brief =
+                health_check_message_text(language, "Subtitle Cleanup", "", brief);
+            for value in [&localized, &localized_brief] {
+                assert!(value.contains('3'));
+                assert!(!value.contains("{count}"));
+            }
+            if language != UiLanguage::English {
+                assert_ne!(title, "Subtitle Cleanup");
+                assert_ne!(localized, message);
+                assert_ne!(localized_brief, brief);
             }
         }
     }

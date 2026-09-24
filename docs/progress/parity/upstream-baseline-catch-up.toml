@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 53 reconciled, 119 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-53 are
+Ledger: 172 commits, 54 reconciled, 118 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-54 are
 reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 
@@ -65,8 +65,8 @@ refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 id          = 'ucu-local-subtitle-collision-repair'
 description = 'Complete row 54 local subtitle collision repair, including automatic scan invalidation, orphan/blank-path maintenance, health visibility and full regression proof.'
 discovered  = '2026-09-24'
-resolved    = false
-evidence    = 'The local merge now separates embedded indexes from case-insensitive sidecar filenames, removes duplicates deterministically, updates moved paths and preserves unchanged embedded caches. Four focused metadata tests pass, including repeated rescan identity stability. UCU-04 owns the remaining scan invalidation, all-owner maintenance, health and playback acceptance. Pin and ledger remain at row 53.'
+resolved    = true
+evidence    = 'Deterministic local filename/embedded index reconciliation preserves provider URL identity and embedded caches. The four-owner migration invalidates folder etags once; hourly bounded cleanup recognizes all ten metadata owners and reports pending rows through localized health. Migration, merge and maintenance regressions pass (f762fd49); health/localization pass (af1f484b); actual scanner upgrade restores two language sidecars, native/Next selection and FFmpeg-decoded captions (eb77611f). Scoped all-target Clippy, health registration, hydration lint and native MPEG-TS/HLS smoke pass. UCU-04 owns the remaining window gates; paused after row 54 at maintainer request.'
 
 [[debt]]
 id          = 'ucu-next-probe-hints-leading-gap'

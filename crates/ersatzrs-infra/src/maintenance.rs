@@ -7,6 +7,7 @@ use ersatzrs_core::maintenance::{
     scanner_library_refresh_interval, MaintenanceLoop, ScheduledLibraryScanRequester,
     ScheduledScanRequestOutcome, ARTWORK_CLEANUP_INTERVAL, CACHE_CLEANUP_INTERVAL,
     PLAYOUT_BUILD_INTERVAL, PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
+    SUBTITLE_CLEANUP_INTERVAL,
 };
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
@@ -68,6 +69,8 @@ pub struct MaintenancePassReport {
     pub providers_reachable: usize,
     /// Orphan actor/artwork database cleanup result.
     pub artwork_cleanup: crate::artwork_cleanup::OrphanedArtworkCleanupReport,
+    /// Ownerless subtitle and invalid sidecar rows removed.
+    pub subtitles_deleted: u64,
     /// Cache cleanup result.
     pub cache_cleanup: CacheCleanupReport,
     /// Whether a search-index rebuild was dispatched.
@@ -89,6 +92,7 @@ impl MaintenanceLoopFlags {
     const CACHE_CLEANUP: u8 = 1 << 3;
     const SEARCH_INDEX: u8 = 1 << 4;
     const ARTWORK_CLEANUP: u8 = 1 << 5;
+    const SUBTITLE_CLEANUP: u8 = 1 << 6;
 
     fn set(&mut self, mask: u8) {
         self.0 |= mask;
@@ -126,6 +130,12 @@ impl MaintenanceLoopFlags {
     #[must_use]
     pub fn artwork_cleanup(self) -> bool {
         self.contains(Self::ARTWORK_CLEANUP)
+    }
+
+    /// Whether subtitle database cleanup ran.
+    #[must_use]
+    pub fn subtitle_cleanup(self) -> bool {
+        self.contains(Self::SUBTITLE_CLEANUP)
     }
 
     /// Whether the search-index dispatcher ran.
@@ -208,6 +218,13 @@ pub async fn run_maintenance_once(
         report.providers_reachable = provider_report.reachable;
         report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
         record_loop_run(&pool, "provider_poll", now).await?;
+    }
+
+    if loop_due(&pool, "subtitle_cleanup", SUBTITLE_CLEANUP_INTERVAL, now).await? {
+        report.subtitles_deleted =
+            crate::subtitle_cleanup::clean_orphaned_subtitles(&pool, 100_000).await?;
+        report.loops_ran.set(MaintenanceLoopFlags::SUBTITLE_CLEANUP);
+        record_loop_run(&pool, "subtitle_cleanup", now).await?;
     }
 
     if loop_due(&pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {

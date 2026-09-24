@@ -17,7 +17,9 @@ release section when tagging a release.
 
 - Reconcile local sidecar subtitles by filename without colliding with embedded
   stream zero; rescans remove duplicate identities and update moved sidecar paths
-  while preserving unchanged embedded extraction caches.
+  while preserving unchanged embedded extraction caches. Existing collisions trigger
+  a local folder rescan after upgrade; hourly cleanup removes ownerless subtitles
+  and empty-path sidecars, with pending cleanup reported in health checks.
 - Match configured MPEG-TS script IDs without regard to case, including Unicode
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 

@@ -76,6 +76,7 @@ pub mod repositories;
 pub(crate) mod runtime_identity;
 pub mod scan_refresh;
 pub mod startup_config;
+pub mod subtitle_cleanup;
 pub mod subtitles;
 pub mod transcode_capacity;
 pub mod tsduck;

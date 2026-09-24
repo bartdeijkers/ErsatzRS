@@ -8,6 +8,8 @@ pub const PLAYOUT_BUILD_INTERVAL: Duration = Duration::minutes(30);
 pub const PROVIDER_POLL_INTERVAL: Duration = Duration::minutes(5);
 /// Orphan actor/artwork database cleanup cadence (upstream PR #2885).
 pub const ARTWORK_CLEANUP_INTERVAL: Duration = Duration::hours(1);
+/// Orphan and invalid sidecar subtitle cleanup cadence (upstream PR #2924).
+pub const SUBTITLE_CLEANUP_INTERVAL: Duration = Duration::hours(1);
 /// Default cache cleanup cadence.
 pub const CACHE_CLEANUP_INTERVAL: Duration = Duration::hours(24);
 /// Default search index dispatcher cadence.

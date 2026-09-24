@@ -61,16 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-24 UCU-04 row 54 is partially implemented. Local subtitle identity
-reconciliation and repeated-rescan regression tests pass; automatic folder
-invalidation, orphan/blank-path cleanup, health visibility and playback proof
-remain. Continue this row before advancing the pin from row 53.
-
-2026-09-24 UCU-04 row 53 ports epg_entries import for image graphics. Stored
-EPG context renders the image path even without its original YAML; focused
-and decoded graphics regressions pass. Continue with row 54 (7032cfc8,
-local subtitle handling). Row 52's native motion composition is Covered
-under ADR 0005; row 51's Refit NuGet update was N/A.
+2026-09-25 UCU-04 row 54 is reconciled: local subtitle identity repair,
+one-time folder invalidation, all-owner hourly cleanup and localized health.
+Upgrade/rescan, native and Next language selection, decoded captions, scoped
+Clippy and native MPEG-TS/HLS smoke pass. Paused at the maintainer's request
+after row 54; next on resumption is row 55 (32e54828, local subtitle und tag).
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of

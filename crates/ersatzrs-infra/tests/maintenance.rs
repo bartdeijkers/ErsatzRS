@@ -133,8 +133,8 @@ async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
     .fetch_all(&pool)
     .await
     .unwrap();
-    // playout, library_refresh, provider_poll, cache_cleanup, artwork_cleanup, search_index.
-    assert_eq!(rows.len(), 6);
+    // playout, library_refresh, provider_poll, cache_cleanup, artwork_cleanup, subtitle_cleanup, search_index.
+    assert_eq!(rows.len(), 7);
     assert!(rows
         .iter()
         .all(|row| !row.get::<String, _>("Value").is_empty()));
@@ -1259,4 +1259,47 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let retry = run().await.unwrap();
     assert!(retry.loops_ran.artwork_cleanup());
     assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
+}
+
+#[tokio::test]
+async fn orphan_subtitle_maintenance_runs_on_startup_hourly_and_retries_failure() {
+    let pool = common::test_db().await;
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+        )
+    };
+    sqlx::query(r#"INSERT INTO "Subtitle" ("SubtitleKind","StreamIndex","Default","Forced","DateAdded","DateUpdated") VALUES (0,0,0,0,'2026-09-24','2026-09-24')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let first = run().await.unwrap();
+    assert!(first.loops_ran.subtitle_cleanup());
+    assert_eq!(first.subtitles_deleted, 1);
+    sqlx::query(r#"INSERT INTO "Subtitle" ("SubtitleKind","StreamIndex","Default","Forced","DateAdded","DateUpdated") VALUES (0,0,0,0,'2026-09-24','2026-09-24')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let second = run().await.unwrap();
+    assert!(!second.loops_ran.subtitle_cleanup());
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = 'maintenance.loop.subtitle_cleanup.last_run'"#)
+        .bind((Utc::now() - Duration::hours(2)).to_rfc3339())
+        .execute(&pool).await.unwrap();
+    sqlx::query(r#"CREATE TRIGGER "FailSubtitleCleanup" BEFORE DELETE ON "Subtitle" BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END"#)
+        .execute(&pool).await.unwrap();
+    assert!(run().await.is_err());
+    sqlx::query(r#"DROP TRIGGER "FailSubtitleCleanup""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let retry = run().await.unwrap();
+    assert!(retry.loops_ran.subtitle_cleanup());
+    assert_eq!(retry.subtitles_deleted, 1);
 }

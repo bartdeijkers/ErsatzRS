@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `dbdf3dff200d0d7afdff0f705cdc0c19fa7f96b9` |
-| **Commit subject** | `feat: add epg_entries support to image graphics elements (#2923)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/dbdf3dff200d0d7afdff0f705cdc0c19fa7f96b9 |
+| **Pinned commit** | `7032cfc866e40162f02b8bbef61167004de1111d` |
+| **Commit subject** | `fix: better handling of local subtitles (#2924)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7032cfc866e40162f02b8bbef61167004de1111d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

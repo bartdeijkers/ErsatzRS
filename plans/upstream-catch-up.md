@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **119 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **118 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **53**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **54**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-53 are reconciled; catch-up continues with row 54.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-54 are reconciled. Paused after row 54 at the maintainer's request; row 55 is next on resumption.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -41,13 +41,17 @@ metadata owners and removes sidecars with null/empty paths. SQLite and MySQL
 data migrations clear affected local folder etags so the next scan repairs
 collisions. Generated EF model files add no schema change.
 
-Rust already separates kinds and normally uses complete sidecar paths, but
-duplicate rows survive, empty local paths fall back to stream indexes, and
-sidecar moves do not update paths unless extraction state changes. The shared
-metadata writer owns reconciliation; local filename matching must not merge
-distinct provider URLs. Scanner invalidation, automatic orphan cleanup and
-health visibility require separate review before this row can be accepted.
-The baseline stays at row 53 until repair and verification are complete.
+The shared metadata writer now reconciles local filenames deterministically;
+provider inputs retain their existing complete URL identity so equal filenames
+on distinct URLs are not merged. The data migration follows the upstream four
+local-video-owner etag predicates without deleting subtitle rows. The existing
+maintenance dispatcher runs database-only subtitle cleanup hourly, in bounded
+atomic batches, preserving all ten owner types and cached files. Its aggregate
+health warning is localized by the existing health-message formatter. Scanner
+upgrade, language selection and decoded-caption regressions own runtime proof.
+The migration, cleanup, health, scanner upgrade and decoded-caption regressions
+pass, together with scoped all-target Clippy, hydration lint and native playback
+smoke. The baseline advances to this row; UCU-04 window acceptance remains open.
 
 ## Row 53 source map: image graphics EPG context
 
@@ -961,7 +965,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 51 | `679fb172` | chore: update refit to work around cert revocation (#2921) | N/A (NuGet-only update) | upstream-baseline-catch-up | `docs(parity): classify Refit update as upstream-only` | ucu-04; four Refit package references in two C# manifests change version only; Rust has no Refit/NuGet dependency or affected source contract. |
 | 52 | `dca93717` | fix: improve speed of motion graphics element compositing (#2922) | Covered (ADR 0005) | drawvg-graphics-engine | `docs(porting): verify native motion graphics compositing` | ucu-04; native FFmpeg motion input is placed at its own dimensions without a Skia full-frame copy. Loop/Disappear/Hold snapshots, Hold renderer plan and decoded four-kind compositing pass; Next graphics debt remains open. |
 | 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | Port | drawvg-graphics-engine | `feat(graphics): import image EPG template context` | ucu-04; import and persist Image epg_entries, render its EPG-selected path without rereading YAML under ADR 0005; focused import/render and decoded graphics proof pass. |
-| 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | | | | ucu-04; provisional: Port candidate. |
+| 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | Port | upstream-baseline-catch-up | `fix(subtitles): complete local collision repair` | ucu-04; kind-separated deterministic merge, one-time folder invalidation, all-owner hourly cleanup and localized health; upgrade rescan, native/Next language selection, decoded captions and native smoke pass. |
 | 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | | | | ucu-04; provisional: Port candidate. |
 | 56 | `6b74da3c` | chore: update docker image (#2926) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | | | | ucu-04; provisional: Upstream tooling candidate. |

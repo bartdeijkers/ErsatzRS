@@ -8845,6 +8845,28 @@ Final focused regression 0b09bb2c passes all five metadata tests, including
 two provider URLs with the same filename remaining distinct across repeat
 updates. Infrastructure all-target Clippy and progress/diff checks pass.
 
+
+2026-09-25 row 54 repair verification:
+The four-owner data migration preserves subtitles and extraction caches while
+invalidating affected local folder etags once. Fresh/upgrade/repeat migration,
+metadata merge, all-ten-owner cleanup, bounded deletion, failure rollback and
+hourly maintenance/retry coverage pass (28 tests, f762fd49). Aggregate health
+and all-language formatter regressions pass (af1f484b). The real scanner upgrade
+test eb77611f proves an unchanged season skips work before migration, rescans
+after migration, and retains exactly two repaired language sidecars on the
+following unchanged scan. Native and Next selectors resolve the same English
+and Dutch rows; managed FFmpeg decodes their expected captions to WebVTT.
+All-target Clippy passes for core, infra, scanner and web; health registry
+regression 5fa0a7c4 and hydration lint pass. Native cargo xtask smoke passes
+(ucu54-smoke.log): MPEG-TS returns HTTP 200 with 8192 bytes, and HLS returns
+the variant and segment playlists. Its first sandboxed invocation was unable
+to reach localhost (Operation not permitted); the same command passes with
+localhost access, without changing acceptance. Substantive review confirms
+the upstream migration predicates, all ten owners, atomic cleanup, bounded
+work and unchanged provider URL identities. Advance pin and ledger to row 54.
+The maintainer requested a pause after this row; row 55 is not started.
+UCU-04 window acceptance, push and exact-SHA CI remain open.
+
 """
 
 [[milestone]]

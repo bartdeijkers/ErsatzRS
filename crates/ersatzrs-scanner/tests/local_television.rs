@@ -361,6 +361,146 @@ async fn second_scan_skips_unchanged_season_via_etag() {
     );
 }
 
+/// A legacy collision survives an unchanged-folder scan, then the upgrade
+/// invalidates the folder and the ordinary scanner repairs it without a file touch.
+#[tokio::test]
+#[ignore = "requires FFmpeg 9, ffprobe and the Big Buck Bunny fixture"]
+#[allow(clippy::too_many_lines)]
+async fn subtitle_collision_upgrade_reenters_scan_and_restores_language_selection() {
+    let ffprobe = ffprobe_binary().expect("ffprobe is required for this acceptance test");
+    let fixture = big_buck_bunny_fixture().expect("Big Buck Bunny fixture is required");
+    let temp = TempDir::new("ersatzrs-subtitle-collision-upgrade");
+    let season = temp
+        .path()
+        .join("library")
+        .join("Synthetic Show")
+        .join("Season 01");
+    std::fs::create_dir_all(&season).unwrap();
+    std::fs::copy(fixture, season.join("Synthetic Show - S01E01.mkv")).unwrap();
+    for (language, caption) in [
+        ("en", "English caption"),
+        ("nl", "Nederlandse ondertiteling"),
+    ] {
+        std::fs::write(
+            season.join(format!("Synthetic Show - S01E01.{language}.srt")),
+            format!("1\n00:00:00,000 --> 00:00:02,000\n{caption}\n"),
+        )
+        .unwrap();
+    }
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|m| m.version < 202_609_241_530)
+            .cloned()
+            .collect(),
+    )
+    .run(&pool)
+    .await
+    .unwrap();
+    seed_local_library(&pool, &temp.path().join("library"), 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    // Reproduce the old blank-path collision without changing the directory etag.
+    pool.execute(r#"UPDATE "Subtitle" SET "Path" = NULL WHERE "Language" = 'dut';
+        INSERT INTO "Subtitle" ("EpisodeMetadataId","SubtitleKind","StreamIndex","Path","Language","Codec","Default","Forced","DateAdded","DateUpdated")
+        SELECT "EpisodeMetadataId","SubtitleKind","StreamIndex","Path","Language","Codec","Default","Forced","DateAdded","DateUpdated"
+        FROM "Subtitle" WHERE "Language" = 'eng'"#).await.unwrap();
+    assert_eq!(count(&pool, "Subtitle").await, 3);
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    migrations.run(&pool).await.unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    let episode: i64 = sqlx::query_scalar(r#"SELECT "Id" FROM "Episode""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let version: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "MediaVersion" WHERE "EpisodeId" = ?"#)
+            .bind(episode)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    for (language, caption) in [
+        ("en", "English caption"),
+        ("nl", "Nederlandse ondertiteling"),
+    ] {
+        let selected = ersatzrs_infra::playback::select_playback_subtitle(
+            &pool,
+            episode,
+            &[language.to_owned()],
+            ersatzrs_domain::ChannelSubtitleMode::Any,
+            ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect,
+        )
+        .await
+        .unwrap()
+        .expect("repaired sidecar must be selectable");
+        let next = ersatzrs_infra::playback::select_next_playback_subtitle_for_version(
+            &pool,
+            episode,
+            version,
+            &[language.to_owned()],
+            ersatzrs_domain::ChannelSubtitleMode::Any,
+            ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect,
+        )
+        .await
+        .unwrap()
+        .expect("Next must select the repaired sidecar");
+        assert_eq!(next.id, selected.id);
+        let path = selected.path.expect("selected sidecar must have a path");
+        let mut command = tokio::process::Command::new(ersatzrs_ffmpeg::ffmpeg_path());
+        command
+            .kill_on_drop(true)
+            .args(["-hide_banner", "-loglevel", "error", "-i"])
+            .arg(&path)
+            .args(["-map", "0:s:0", "-c:s", "webvtt", "-f", "webvtt", "pipe:1"]);
+        let output = tokio::time::timeout(std::time::Duration::from_secs(30), command.output())
+            .await
+            .expect("subtitle conversion must finish")
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8(output.stdout).unwrap().contains(caption));
+    }
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+}
+
 /// Step 6 parity: a previously trashed (`State IN (1,2)`) episode under an
 /// otherwise unchanged season disables the etag fast path so the episode is
 /// re-probed and restored to `Normal` (State 0).
