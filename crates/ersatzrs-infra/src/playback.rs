@@ -1987,35 +1987,20 @@ pub async fn select_channel_playback_subtitle(
     .await
 }
 
-/// Select Next channel subtitles against the exact resolved version before ranking.
-/// Native embedded-enabled and extraction restrictions do not apply.
-/// Generated credits and external subtitle sources preserve their existing behavior.
+/// Select persisted Next subtitles against the exact resolved version before
+/// ranking. Generated credits are attached as a session-bound HTTP source by
+/// the Next host, after this selection and only for `MusicVideo` items.
 ///
 /// # Errors
-/// Returns database or generated-subtitle file errors.
-#[allow(clippy::too_many_arguments)]
-pub async fn select_channel_playback_subtitle_for_version(
+/// Returns database errors from persisted subtitle lookup.
+pub async fn select_next_playback_subtitle_for_version(
     pool: &DbPool,
     media_item_id: i64,
     media_version_id: i64,
     preferred_languages: &[String],
     subtitle_mode: ChannelSubtitleMode,
     streaming_mode: StreamingMode,
-    channel: &Channel,
-    resolution: &Resolution,
-    stream_seek_seconds: i64,
 ) -> Result<Option<PlaybackSubtitle>> {
-    if let Some(subtitle) = generate_music_video_credits_subtitle(
-        pool,
-        media_item_id,
-        channel,
-        resolution,
-        stream_seek_seconds,
-    )
-    .await?
-    {
-        return Ok(Some(subtitle));
-    }
     select_playback_subtitle_inner(
         pool,
         media_item_id,

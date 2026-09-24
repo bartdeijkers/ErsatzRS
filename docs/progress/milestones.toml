@@ -8581,6 +8581,31 @@ no row-specific blocker. This does not claim six-platform runtime proof or
 UCU-04 window acceptance; workspace gates, push and exact-SHA CI remain open.
 Continue at row 48 after pin/ledger/checkpoint alignment.
 
+2026-09-24 row 48 reconciliation (14ee8063; Adapt under ADR 0095):
+Upstream adds demand-time ASS credits for MusicVideo items in Next. Rust now
+reuses the native template renderer without a temporary file and attaches an
+HTTP subtitle track only to eligible Next MusicVideo projections. Libass opens
+its own subtitle URL without Next's source headers: an initial real run returned
+401. The corrected route uses a process-local, binding-scoped ticket, checks an
+active channel session and current persisted media/in/out/mode/pin binding,
+and grants no ordinary media access. ADR 0095 records this transport adaptation.
+Focused nextest credits regressions verify explicit off, alternate audio index,
+ticket scope/isolation, seek timing, changed pin and expired session. The
+disposable real Next HLS test 6406a687 proves Burn video pixels, Convert WebVTT
+without burned pixels, five-second seek, selected Dutch audio and session/output
+cleanup. This is one row checkpoint, not UCU-04 window acceptance. Continue at
+row 49; workspace gates, push and exact-SHA CI remain open.
+
+Final focused nextest 86eee1f9 passes both credits regressions after the
+fallback/pin checks. Infra/web all-target Clippy, formatting, diff and progress
+validation pass. Correctly configured routed Next smoke passes HLS, Hybrid
+MPEG-TS, selected Dutch audio, Burn subtitles, preview, unauthorized media
+rejection, wrapper restart and idle cleanup. An earlier smoke attempt did not
+reach /healthz because the local override omitted managed ffprobe; its retained
+startup log identifies the broken system ffprobe dependency, and the corrected
+run passes with both managed paths. The official Next and synthetic media were
+used in disposable runtime tests; no six-platform or full-window claim follows.
+
 """
 
 [[milestone]]

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `aa639375a36f17f2041756ec77a0b11ed459800a` |
-| **Commit subject** | `fix: use case-insensitive lookup for mpeg-ts script (#2916)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/aa639375a36f17f2041756ec77a0b11ed459800a |
+| **Pinned commit** | `14ee8063d9b964832e0b03365c8ce35323347698` |
+| **Commit subject** | `feat: sync generated music video credits to next engine (#2917)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/14ee8063d9b964832e0b03365c8ce35323347698 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

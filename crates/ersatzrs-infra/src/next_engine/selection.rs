@@ -7,8 +7,8 @@ use crate::db::DbPool;
 use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePreferences};
 use crate::playback::{
     load_source_audio_streams, load_source_video_stream_by_index,
-    select_channel_playback_subtitle_for_version, select_custom_playback_streams_for_version,
-    select_next_pinned_playback_subtitle, select_playback_audio_stream_index,
+    select_custom_playback_streams_for_version, select_next_pinned_playback_subtitle,
+    select_next_playback_subtitle_for_version, select_playback_audio_stream_index,
     subtitle_input_for_stream, CustomStreamSelection, PlaybackSubtitle,
 };
 use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
@@ -107,7 +107,7 @@ pub(crate) async fn project_deferred_item_with_audio(
     item: &PlayoutItem,
     media_version_id: i64,
     mut source: wire::Source,
-    resolution: &Resolution,
+    _resolution: &Resolution,
     audio_directive: AudioDirective,
 ) -> Result<DeferredProjection> {
     let duration_ms = u64::try_from((item.finish - item.start).num_milliseconds())
@@ -169,7 +169,6 @@ pub(crate) async fn project_deferred_item_with_audio(
         channel,
         item,
         media_version_id,
-        resolution,
         custom.as_ref(),
         &preferences,
     )
@@ -468,7 +467,6 @@ async fn selected_subtitle(
     channel: &Channel,
     item: &PlayoutItem,
     media_version_id: i64,
-    resolution: &Resolution,
     custom: Option<&CustomStreamSelection>,
     preferences: &PlaybackLanguagePreferences,
 ) -> Result<Option<PlaybackSubtitle>> {
@@ -492,16 +490,13 @@ async fn selected_subtitle(
             item.preferred_subtitle_language_code.as_deref(),
             channel.preferred_subtitle_language_code.as_deref(),
         );
-        select_channel_playback_subtitle_for_version(
+        select_next_playback_subtitle_for_version(
             pool,
             item.media_item_id,
             media_version_id,
             &languages,
             item.subtitle_mode.unwrap_or(channel.subtitle_mode),
             StreamingMode::HttpLiveStreamingSegmenter,
-            channel,
-            resolution,
-            item.in_point.num_seconds(),
         )
         .await?
     };

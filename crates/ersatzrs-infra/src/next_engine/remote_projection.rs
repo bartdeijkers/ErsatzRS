@@ -9,9 +9,7 @@ use ersatzrs_core::{
         AddonMediaListLifecycleRepository as _, ChannelRepository as _, RepositoryError, Result,
     },
 };
-use ersatzrs_domain::{
-    Channel, ChannelMusicVideoCreditsMode, RemoteStreamLiveness, Resolution, StreamingEngine,
-};
+use ersatzrs_domain::{Channel, RemoteStreamLiveness, Resolution, StreamingEngine};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
@@ -332,10 +330,9 @@ pub(crate) async fn project(
     .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
-    if channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::None
-        || !playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
-            .await?
-            .is_empty()
+    if !playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
+        .await?
+        .is_empty()
     {
         return Err(unavailable());
     }

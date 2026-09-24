@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Added
 
+- Generate music-video credits for optional Next playback in Burn and Convert
+  subtitle modes, preserving playout in-points and selected alternate audio
+  (upstream PR #2917).
 - Scheduled Next playback preserves in/out points across selected tracks,
   including video-only media with generated silence (upstream PR #2912).
 - Explicitly scheduled still images are supported by the optional Next engine,

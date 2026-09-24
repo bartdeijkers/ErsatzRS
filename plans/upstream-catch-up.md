@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **125 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **124 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **47**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **48**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-47 are accepted; catch-up continues with row 48.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-48 are reconciled; catch-up continues with row 49.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,22 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 48 source map: generated music-video credits in Next
+
+Upstream `14ee8063` (PR #2917) adds a playout-item query and internal ASS
+endpoint, emits a generated subtitle URL for MusicVideo items, sends the
+playout in-point to the renderer, and lets Next use that URL as an HTTP subtitle
+source. The existing native credits generator remains the rendering authority.
+Rust blocked every Next channel with credits enabled in host and callback
+projection, although native playback already rendered the templates. The row
+uses demand-time rendering and a binding-scoped URL ticket because libass does
+not forward Next's source headers; ADR 0095 records the transport adaptation.
+The route checks an active channel session and persisted item/media/in/out
+binding. Explicit subtitle-off and pinned selections stay in control; no
+publication-time temporary file is needed. Focused tests and decoded Next
+Burn/Convert runtime prove in-point timing and selected alternate audio.
+Generated credits remain distinct from unsupported general graphics elements.
 
 ## Row 47 source map: MPEG-TS script lookup
 
@@ -833,7 +849,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | Covered | upstream-baseline-catch-up | `test(infra): verify Next source timing boundaries` | ucu-04; existing projection retains millisecond bounds and complete sources across explicit tracks and generated silence. Boundary/no-audio HTTP regressions, all 22 selection tests and five decoded seek/Burn/Convert/audio/off scenarios pass; scoped Clippy/review pass. Unchanged routed smoke evidence is reused. |
 | 46 | `99a1ecee` | chore: update dependencies (#2915) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile graphics dependency patches` | ucu-04; two .NET manifests update SkiaSharp/native assets and Scriban patch versions. Unchanged graphics/template consumers and no matching Cargo dependency. Existing ADR 0005/0058/0076 boundaries apply; scoped source review and progress validation pass. |
 | 47 | `aa639375` | fix: use case-insensitive lookup for mpeg-ts script (#2916) | Port | mpeg-ts-channel-streaming | `fix(web): resolve MPEG-TS scripts without case sensitivity` | ucu-04; Unicode simple-uppercase script-ID matching, lowercase troubleshooting fallback and quiet built-in fallback. Twelve focused tests, scoped Clippy, hydration lint, license audit and HTTP smoke pass; substantive review finds no row blocker. Window gates remain open. |
-| 48 | `14ee8063` | feat: sync generated music video credits to next engine (#2917) | | | | ucu-04; provisional: Next behavior triage. |
+| 48 | `14ee8063` | feat: sync generated music video credits to next engine (#2917) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(next): render music video credits on demand` | ucu-04; scoped ticket for libass URL, active-session/persisted-binding checks, template fallback and decoded Burn/Convert with sought Dutch audio. Window gates remain open. |
 | 49 | `294a2ff1` | feat: support dynamic fallback filler when using next engine (#2919) | | | | ucu-04; provisional: Next behavior triage. |
 | 50 | `387da2b8` | feat: use probe hints with next engine (#2920) | | | | ucu-04; provisional: Next behavior triage. |
 | 51 | `679fb172` | chore: update refit to work around cert revocation (#2921) | | | | ucu-04; provisional: Upstream tooling candidate. |

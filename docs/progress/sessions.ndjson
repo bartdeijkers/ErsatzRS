@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-24","summary":"Reconciled upstream row 48: demand-time Next music-video credits, scoped libass ticket, decoded Burn/Convert and routed Next smoke; UCU-04 window gates remain open"}
 {"agent":"Codex","date":"2026-09-24","summary":"UCU-04 row 47 ports case-insensitive MPEG-TS script lookup; focused tests, scoped Clippy, license audit, hydration lint and HTTP smoke pass; continue row 48"}
 {"agent":"Codex","date":"2026-09-24","summary":"UCU-04 row 46 is N/A: SkiaSharp/Scriban patch updates affect only two .NET manifests; Rust dependency and graphics/template boundaries are unchanged. Continue at row 47; window gates and push/CI remain open."}
 {"agent":"Codex","date":"2026-09-24","summary":"UCU-04 row 45 is Covered: existing Next bounds and complete-source silence splitting pass 22 selection tests, five decoded seek/subtitle/audio scenarios and Clippy. Continue at row 46; window gates and push/CI remain open."}

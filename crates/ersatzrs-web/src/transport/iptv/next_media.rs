@@ -2,7 +2,7 @@
 
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, Method, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -21,6 +21,41 @@ pub async fn get_media(
     headers: HeaderMap,
 ) -> Response {
     serve(&state.next_engine.media, &state.pool, binding, &headers).await
+}
+
+pub async fn get_credits(
+    State(state): State<AppState>,
+    Path((channel, item, media, in_point, out_point)): Path<(i64, i64, i64, u64, u64)>,
+    Query(ticket): Query<CreditsTicket>,
+) -> Response {
+    if !state
+        .next_engine
+        .media
+        .authorized_credits((channel, item, media, in_point, out_point), &ticket.ticket)
+    {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    match state
+        .next_engine
+        .render_credits(channel, item, media, in_point, out_point)
+        .await
+    {
+        Ok(Some(credits)) => (
+            [
+                (header::CONTENT_TYPE, "text/x-ssa; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
+            credits,
+        )
+            .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::GONE.into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct CreditsTicket {
+    ticket: String,
 }
 
 /// One GET consumes one producer; HEAD and seeks must not claim its reader.

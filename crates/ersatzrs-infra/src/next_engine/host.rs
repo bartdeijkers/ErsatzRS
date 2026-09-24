@@ -23,7 +23,7 @@ use ersatzrs_core::{
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError},
 };
-use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
+use ersatzrs_domain::StreamingEngine;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, time::Instant};
 
@@ -325,6 +325,7 @@ impl NextHost {
         Ok(item)
     }
 
+    #[allow(clippy::too_many_lines)] // Keep the atomic publication steps together.
     async fn refresh(
         &self,
         publisher: &ChannelPublisher,
@@ -386,10 +387,7 @@ impl NextHost {
                             selection_time,
                         )
                         .await?;
-                        if !graphics.is_empty()
-                            || channel.music_video_credits_mode
-                                != ChannelMusicVideoCreditsMode::None
-                        {
+                        if !graphics.is_empty() {
                             return Err(unavailable("graphics projection is not integrated"));
                         }
                         let mut projection = selection::project_deferred_item(
@@ -399,6 +397,14 @@ impl NextHost {
                             media.media_version_id,
                             source,
                             &profile.resolution,
+                        )
+                        .await?;
+                        super::credits::attach(
+                            &self.pool,
+                            &self.media,
+                            &channel,
+                            &media.item,
+                            &mut projection,
                         )
                         .await?;
                         projection.item.watermark = super::watermark::project(&watermarks)?;

@@ -3,8 +3,10 @@
 use ersatzrs_core::repositories::{RemoteMediaSourceKind, RepositoryError, Result};
 use ersatzrs_domain::PlayoutItem;
 use reqwest::{Client, Response};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::{
+    fmt::Write as _,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::OnceLock,
     time::Duration,
@@ -117,6 +119,68 @@ impl MediaRelay {
             user_agent: None,
             timeout_us: Some(35_000_000),
         })
+    }
+
+    /// A generated ASS track scoped to this host process and persisted item.
+    pub(super) fn credits_source(
+        &self,
+        channel: i64,
+        item: i64,
+        media: i64,
+        in_point_ms: u64,
+        out_point_ms: u64,
+    ) -> Result<Source> {
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        Ok(Source::Http {
+            uri: format!(
+                "http://{address}/ffmpeg/next-credits/{channel}/{item}/{media}/{in_point_ms}/{out_point_ms}?ticket={}",
+                self.credits_ticket(channel, item, media, in_point_ms, out_point_ms)
+            ),
+            probe_hint: None,
+            is_live: Some(false),
+            // libass opens this URL independently of Next and does not forward
+            // the source headers. The URL ticket grants credits for one binding.
+            headers: Vec::new(),
+            user_agent: None,
+            keep_alive: Some(false),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(20_000_000),
+            in_point_ms: Some(in_point_ms),
+            out_point_ms: (out_point_ms != 0).then_some(out_point_ms),
+        })
+    }
+
+    #[must_use]
+    pub fn authorized_credits(&self, binding: (i64, i64, i64, u64, u64), ticket: &str) -> bool {
+        let (channel, item, media, in_point_ms, out_point_ms) = binding;
+        ticket == self.credits_ticket(channel, item, media, in_point_ms, out_point_ms)
+    }
+
+    fn credits_ticket(
+        &self,
+        channel: i64,
+        item: i64,
+        media: i64,
+        in_point_ms: u64,
+        out_point_ms: u64,
+    ) -> String {
+        let mut digest = Sha256::new();
+        digest.update(b"ersatzrs-next-credits-v1");
+        digest.update(self.capability.as_bytes());
+        for value in [channel, item, media] {
+            digest.update(value.to_le_bytes());
+        }
+        digest.update(in_point_ms.to_le_bytes());
+        digest.update(out_point_ms.to_le_bytes());
+        let mut ticket = String::with_capacity(64);
+        for byte in digest.finalize() {
+            write!(ticket, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        ticket
     }
 
     /// Address one prepared producer without exposing its command or provider URL.

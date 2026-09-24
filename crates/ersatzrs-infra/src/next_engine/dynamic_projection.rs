@@ -6,7 +6,7 @@ use ersatzrs_core::{
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError, Result},
 };
-use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
+use ersatzrs_domain::StreamingEngine;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -95,9 +95,7 @@ pub(crate) async fn project_snapshot(
     .await?;
     let graphics =
         playback::select_playback_graphics(pool, &channel, media.item.id, selection_time).await?;
-    if !graphics.is_empty()
-        || channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::None
-    {
+    if !graphics.is_empty() {
         return Err(unavailable());
     }
     let source = source::resolve_published(pool, media, replacements, Some(relay)).await?;
@@ -111,6 +109,7 @@ pub(crate) async fn project_snapshot(
         selection::AudioDirective::Published(published_audio),
     )
     .await?;
+    super::credits::attach(pool, relay, &channel, &media.item, &mut projection).await?;
     projection.item.watermark = super::watermark::project(&watermarks)?;
     let identity = fingerprint(pool, media, &projection, &channel).await?;
     drop(schedule_snapshot);

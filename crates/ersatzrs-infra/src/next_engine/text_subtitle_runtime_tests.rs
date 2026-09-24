@@ -226,6 +226,23 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                     let _ = socket.shutdown().await;
                     return;
                 }
+                if target.starts_with("/ffmpeg/next-credits/") {
+                    let (path, ticket) = target.split_once("?ticket=").unwrap();
+                    let parts: Vec<_> = path.trim_start_matches("/ffmpeg/next-credits/")
+                        .split('/').collect();
+                    assert_eq!(parts.len(), 5);
+                    let binding = (parts[0].parse().unwrap(), parts[1].parse().unwrap(),
+                        parts[2].parse().unwrap(), parts[3].parse().unwrap(), parts[4].parse().unwrap());
+                    assert!(host.media.authorized_credits(binding, ticket));
+                    let credits = host.render_credits(binding.0, binding.1, binding.2,
+                        binding.3, binding.4).await
+                        .unwrap().expect("current music-video credits");
+                    let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/x-ssa\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", credits.len());
+                    socket.write_all(response.as_bytes()).await.unwrap();
+                    socket.write_all(credits.as_bytes()).await.unwrap();
+                    socket.shutdown().await.unwrap();
+                    return;
+                }
                 let (status, body) = if authorized {
                     let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
                         .split('/').collect();
@@ -388,6 +405,9 @@ mod watermark_runtime_tests;
 
 #[path = "provider_text_runtime_tests.rs"]
 mod provider_text_runtime_tests;
+
+#[path = "credits_runtime_tests.rs"]
+mod credits_runtime_tests;
 
 #[path = "prepared_artifact_runtime_tests.rs"]
 mod prepared_artifact_runtime;

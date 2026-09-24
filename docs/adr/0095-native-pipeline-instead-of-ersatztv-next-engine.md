@@ -51,6 +51,18 @@ is an explicitly accepted upstream limitation pending its fix; no host workaroun
 or patched engine is introduced. UCU-02 owns the evidence and remaining gates.
 Other graphics projection and full playback acceptance remain open.
 
+The row-48 music-video credits integration renders the existing native ASS
+template on demand for a persisted playout binding. The optional Next process
+uses an HTTP subtitle source. FFmpeg's libass opens that URL itself and does
+not forward Next's source headers, so this one route uses a process-local,
+binding-scoped ticket in the URL. The route also requires an active channel
+session and rechecks the persisted media, in/out points, credits mode and
+subtitle selection before rendering. Tickets are separate from the general
+media-open capability and expire with the host process. This is the scoped
+transport adaptation to upstream's unauthenticated loopback credits endpoint;
+ordinary media remains header-authenticated. The URL may appear in local
+FFmpeg reports, so it grants only generated credits for that exact binding.
+
 ## Context
 
 The upstream catch-up backlog introduces ErsatzTV Next, a separately

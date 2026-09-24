@@ -129,6 +129,45 @@ pub async fn generate_music_video_credits_subtitle(
     resolution: &Resolution,
     stream_seek_seconds: i64,
 ) -> Result<Option<PlaybackSubtitle>> {
+    let Some(rendered) = render_music_video_credits_subtitle(
+        pool,
+        media_item_id,
+        channel,
+        resolution,
+        stream_seek_seconds,
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let path = write_generated_subtitle(&rendered).await?;
+    Ok(Some(PlaybackSubtitle {
+        id: 0,
+        subtitle_kind: subtitle_kind::GENERATED,
+        title: Some("Music Video Credits".to_owned()),
+        stream_index: 0,
+        codec: Some("ass".to_owned()),
+        default: true,
+        forced: true,
+        sdh: false,
+        language: None,
+        is_extracted: false,
+        path: Some(path),
+    }))
+}
+
+/// Render ASS credits without creating a temporary file for Next's internal
+/// HTTP source. The native path writes the same rendered content to disk.
+///
+/// # Errors
+/// Returns database or template read failures.
+pub(crate) async fn render_music_video_credits_subtitle(
+    pool: &DbPool,
+    media_item_id: i64,
+    channel: &Channel,
+    resolution: &Resolution,
+    stream_seek_seconds: i64,
+) -> Result<Option<String>> {
     if channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::GenerateSubtitles {
         return Ok(None);
     }
@@ -157,20 +196,7 @@ pub async fn generate_music_video_credits_subtitle(
     } else {
         render_builtin_default(&data)
     };
-    let path = write_generated_subtitle(&rendered).await?;
-    Ok(Some(PlaybackSubtitle {
-        id: 0,
-        subtitle_kind: subtitle_kind::GENERATED,
-        title: Some("Music Video Credits".to_owned()),
-        stream_index: 0,
-        codec: Some("ass".to_owned()),
-        default: true,
-        forced: true,
-        sdh: false,
-        language: None,
-        is_extracted: false,
-        path: Some(path),
-    }))
+    Ok(Some(rendered))
 }
 
 async fn load_music_video_credits_data(
