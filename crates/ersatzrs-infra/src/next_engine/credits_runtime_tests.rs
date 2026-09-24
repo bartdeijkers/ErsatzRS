@@ -3,7 +3,7 @@
 use super::*;
 use ersatzrs_core::repositories::PlayoutRepository;
 
-async fn configure_credits(pool: &crate::db::DbPool, convert: bool) {
+pub(super) async fn configure_credits(pool: &crate::db::DbPool, convert: bool) {
     for sql in [
         r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (31, 1, 0)"#,
         r#"INSERT INTO "Artist" ("Id") VALUES (31)"#,
@@ -37,7 +37,7 @@ async fn configure_credits(pool: &crate::db::DbPool, convert: bool) {
         .unwrap();
 }
 
-async fn top_white_pixels(ffmpeg: &Path, segment: &Path) -> usize {
+pub(super) async fn top_white_pixels(ffmpeg: &Path, segment: &Path) -> usize {
     let mut command = Command::new(ffmpeg);
     command
         .args(["-v", "error", "-nostdin", "-i"])

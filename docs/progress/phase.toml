@@ -61,11 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-24 UCU-04 row 49: local and finite Remote Stream fallback have decoded
-Dutch-audio/Burn/Convert gap-to-programme proof, including prepared artifacts,
-ordinary producers and retained cuts. Finish live/provider, pin/off, generated
-credits and remaining row closeout evidence before reconciliation. Pin and ledger
-remain at row 48; full UCU-04 acceptance precedes the authorized push and CI.
+2026-09-24 UCU-04 row 49 is reconciled as Adapt under ADR 0095. Local,
+finite/live Remote Stream, provider, generated credits and pinned silence/off
+fallback have decoded Burn/Convert handoff proof; focused regressions, Clippy
+and routed smoke pass. Continue with row 50 (387da2b8, Next probe hints).
+Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of
 AMM-P-01 on the published v1.0.37-beta archive; automatic publication, complete

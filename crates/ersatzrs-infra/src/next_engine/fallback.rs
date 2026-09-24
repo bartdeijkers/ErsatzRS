@@ -674,6 +674,7 @@ fn selected_audio(item: &protocol::PlayoutItem) -> Result<Option<usize>> {
     item.tracks
         .as_ref()
         .and_then(|tracks| tracks.audio.as_ref())
+        .filter(|track| !matches!(track.source, Some(protocol::Source::Lavfi { .. })))
         .and_then(|audio| audio.stream_index)
         .map(usize::try_from)
         .transpose()

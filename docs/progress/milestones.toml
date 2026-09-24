@@ -8704,9 +8704,51 @@ reader ownership and cancellation paths; the runtime matrix remains applicable.
 Formatting and diff checks pass. Scoped Codex review includes cache identity,
 source locks, current policy and producer/retained context propagation.
 
-Remaining row 49 acceptance: live/provider, pin/off and generated-credits matrix,
-routed smoke and final row review. The ledger verdict stays pending and the pin
-stays at row 48. UCU-04 window gates, push and terminal exact-SHA CI remain open.
+2026-09-24 continuation: direct and ordinary live fallback external captions pass
+Burn/Convert and English-programme handoff (9015c974, 56 seconds). Generated
+credits pass Burn/Convert and the following programme's explicit subtitle-off
+setting (2b18c9c4, 27 seconds). The synthetic music-video duration is 20 seconds
+so its native closing credits occur inside the gap; Convert waits for a segment
+inside that interval instead of requiring cues before the credits begin.
+
+A persisted-playlist regression exposed generated silence being mistaken for
+source stream zero during fallback revalidation. The correction mirrors normal
+Next publication's Lavfi exclusion. Exact English pins override Dutch channel
+preferences, subtitle-off is retained, changed pins reject the cached occurrence,
+and the following occurrence can select explicit silence. Decoded pinned-off
+Burn/Convert playback returns to the audible English programme (c8ae00aa).
+
+The same c8ae00aa run passes all six authenticated Plex/Jellyfin/Emby Burn/Convert
+fallback cases (80 seconds). Selected Dutch captions/audio and programme handoff
+are decoded; unselected English cues are absent from Convert output. Provider
+Burn initially exposed a serial fixture-listener deadlock during nested media
+opens. The test listener now owns concurrent connections in a JoinSet, preserving
+cancellation and surfacing child failures. Production transport is unchanged.
+Every runtime fixture keeps only two persisted programmes and awaits session
+cleanup. No readiness timeout or acceptance assertion was weakened.
+
+Final focused nextest afacb8ba passes all 15 policy/callback regressions and the
+pinned-off Burn/Convert runtime test, including decoded PCM peak at most one.
+Infrastructure all-target Clippy passes after extracting fixture connection and
+media-response helpers. Formatting, progress validation and diff checks pass.
+Scoped Codex review covers authenticated routing, current gap/policy validation,
+mirror time conversion, source ownership, cache identity, selected silence and
+cleanup. No new runtime prerequisite, schema or health-check rule is introduced;
+existing Next runtime and pinned-stream health checks retain their meaning.
+
+Routed cargo xtask smoke --next passes (ucu49-smoke-final.log): unauthenticated
+media is refused with 401; HLS and Hybrid TS serve playable H.264/AAC; decoded
+Dutch audio is 880 Hz with 35 white subtitle pixels; preview, wrapper restart,
+disconnect continuity and idle session cleanup pass. These are Linux runtime
+results, not new all-platform or native-profile acceptance. Prior finite-source
+and HTTP transport evidence remains applicable; accepted ADR 0100 embedded-text
+limitations and unsupported general graphics stay explicit.
+
+Row 49 (294a2ff1, PR #2919) is Adapt under ADR 0095. Native fallback policy is
+retained while Next receives authenticated session-bound ephemeral callbacks;
+no fallback rows or enumerator resets are persisted. Pin and ledger advance
+from row 48 to row 49 with this coherent commit. Continue at row 50, 387da2b8.
+UCU-04 window gates, push and terminal exact-SHA CI remain open.
 
 """
 

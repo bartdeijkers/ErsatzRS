@@ -76,8 +76,12 @@ correct current-occurrence validation into ready-artifact, ordinary-producer and
 retained-interval preparation. Existing bounded probing, fresh track mapping,
 one-shot readers and session cleanup retain ownership. Finite direct HTTP,
 prepared, ordinary and retained fallback have decoded Burn/Convert handoff
-proof. Live/provider, pin/off and generated-credits acceptance remains pending;
-row 49 is not reconciled.
+proof. Direct and ordinary live external captions, authenticated Plex/Jellyfin/
+Emby inputs, generated credits and explicit audio/subtitle-off selections also
+have decoded Burn/Convert handoff evidence. Generated silence is distinguished
+from source stream zero when retaining the published selection. Focused
+regressions and routed HLS/Hybrid/preview smoke pass. Row 49 is reconciled;
+window-wide and supported-platform acceptance remains owned by UCU-04.
 
 ## Context
 

@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 48 reconciled, 124 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-48 are
+Ledger: 172 commits, 49 reconciled, 123 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-49 are
 reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 
@@ -65,9 +65,9 @@ refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 id          = 'ucu-next-dynamic-fallback'
 description = 'Row 49: publish bounded gap placeholders and resolve ephemeral fallback media through the configured decoration/channel/global policy and existing Next track/source lifecycle.'
 discovered  = '2026-09-24'
-resolved    = false
+resolved    = true
 adr         = '0095'
-evidence    = 'Source map is in plans/upstream-catch-up.md. Authenticated session-owned fallback now uses explicit persisted/fallback origins for source validation, prepared artifacts and producer lifecycles. Real Next proves finite direct HTTP, prepared, ordinary and retained fallback Burn/Convert, selected Dutch audio, unchanged persisted rows and return to the English programme. Producer fixtures verify single ownership and actual retained cuts. Complete live/provider, pin/off, generated-credits and remaining row closeout evidence before reconciling row 49. UCU-04 owns acceptance; pin and ledger remain at row 48.'
+evidence    = 'Source map is in plans/upstream-catch-up.md. Authenticated session-owned fallback now uses explicit persisted/fallback origins for source validation, prepared artifacts and producer lifecycles. Real Next proves finite direct HTTP, prepared, ordinary and retained fallback Burn/Convert, selected Dutch audio, unchanged persisted rows and return to the English programme. Producer fixtures verify single ownership and actual retained cuts. Live external captions, authenticated Plex/Jellyfin/Emby fallback, generated credits and pinned silence/subtitles-off now have Burn/Convert handoff proof. Final policy/callback regressions, decoded PCM silence, infrastructure all-target Clippy and routed Next smoke pass. Row 49 is Adapt under ADR 0095; UCU-04 owns evidence and remaining window/platform acceptance.'
 
 [[debt]]
 id          = 'ucu-next-live-remote-subtitles'

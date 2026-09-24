@@ -186,6 +186,47 @@ async fn repeated_callbacks_seek_one_occurrence_and_clip_the_next() {
 }
 
 #[tokio::test]
+async fn playlist_fallback_pins_override_language_and_preserve_explicit_off() {
+    let (host, instance, start, _root) = fixture().await;
+    for sql in [
+        r#"INSERT INTO "PlaylistGroup" ("Id","Name","IsSystem") VALUES (1,'Fixture',0)"#,
+        r#"INSERT INTO "Playlist" ("Id","Name","PlaylistGroupId","IsSystem") VALUES (1,'Pinned fallback',1,0)"#,
+        r#"INSERT INTO "PlaylistItem" ("Id","Index","PlaylistId","CollectionType","MediaItemId","MediaVersionId","VideoStreamIndex","AudioStreamIndex","SubtitleStreamIndex") VALUES (1,0,1,10,10,100,0,1,NULL)"#,
+        r#"UPDATE "FillerPreset" SET "CollectionType"=6,"MediaItemId"=NULL,"PlaylistId"=1 WHERE "Id"=1"#,
+        r#"UPDATE "Channel" SET "SubtitleMode"=2 WHERE "Id"=1"#,
+    ] {
+        sqlx::query(sql).execute(&host.pool).await.unwrap();
+    }
+    let initial = resolve(&host, instance, start, 90).await.unwrap();
+    let json = serde_json::to_value(initial).unwrap();
+    assert_eq!(json["tracks"]["video"]["stream_index"], 0);
+    assert_eq!(json["tracks"]["audio"]["stream_index"], 1);
+    assert!(json["tracks"].get("subtitle").is_none());
+
+    sqlx::query(r#"UPDATE "PlaylistItem" SET "AudioStreamIndex"=NULL WHERE "Id"=1"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    assert!(
+        resolve(&host, instance, start, 95).await.is_err(),
+        "changed pins must invalidate the cached occurrence"
+    );
+    let silent = resolve(&host, instance, start, 155).await.unwrap();
+    let json = serde_json::to_value(silent).unwrap();
+    assert!(
+        json["tracks"]["audio"]["source"]["params"]
+            == "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "an explicit audio-off pin must remain silent"
+    );
+    assert!(json["tracks"].get("subtitle").is_none());
+    let rows: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&host.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 2);
+}
+
+#[tokio::test]
 async fn changed_gap_or_policy_rejects_cached_occurrence() {
     let (host, instance, start, _root) = fixture().await;
     resolve(&host, instance, start, 90).await.unwrap();

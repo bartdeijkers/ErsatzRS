@@ -2,7 +2,7 @@
 use super::*;
 use ersatzrs_core::repositories::RemoteMediaSourceKind;
 
-async fn bilingual_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
+pub(super) async fn bilingual_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     let dutch = generate_text_clip(ffmpeg, folder).await;
     let english = folder.join("english.srt");
     tokio::fs::write(
@@ -36,7 +36,7 @@ async fn bilingual_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     output
 }
 
-async fn provider_text_pool(
+pub(super) async fn provider_text_pool(
     clip: &Path,
     profile: &FFmpegProfile,
     kind: RemoteMediaSourceKind,

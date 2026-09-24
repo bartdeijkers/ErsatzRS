@@ -191,7 +191,6 @@ impl Drop for CallbackListener {
 }
 
 async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
         .unwrap();
@@ -199,9 +198,56 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
         .configure(listener.local_addr().unwrap())
         .unwrap();
     CallbackListener(tokio::spawn(async move {
+        let mut connections = tokio::task::JoinSet::new();
         loop {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            timeout(Duration::from_secs(35), async {
+            let (socket, _) = tokio::select! {
+                connection = listener.accept() => connection.unwrap(),
+                Some(result) = connections.join_next(), if !connections.is_empty() => {
+                    result.unwrap();
+                    continue;
+                }
+            };
+            let host = host.clone();
+            connections.spawn(async move {
+                callback_connection(socket, host).await;
+            });
+        }
+    }))
+}
+
+async fn callback_media(
+    socket: &mut tokio::net::TcpStream,
+    host: &host::NextHost,
+    range: Option<&str>,
+) {
+    use std::fmt::Write as _;
+    use tokio::io::AsyncWriteExt as _;
+    let response = host
+        .media
+        .open(&host.pool, (10, 100, 1), range)
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let mut response_headers = String::new();
+    for name in ["content-type", "content-range", "accept-ranges"] {
+        if let Some(value) = response.headers().get(name) {
+            write!(response_headers, "{name}: {}\r\n", value.to_str().unwrap()).unwrap();
+        }
+    }
+    let body = response.bytes().await.unwrap();
+    let response = format!("HTTP/1.1 {status} Media\r\n{response_headers}Content-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+    socket.write_all(response.as_bytes()).await.unwrap();
+    // FFmpeg may close a range early after probing.
+    let _ = socket.write_all(&body).await;
+    let _ = socket.shutdown().await;
+}
+
+async fn callback_connection(
+    mut socket: tokio::net::TcpStream,
+    host: std::sync::Arc<host::NextHost>,
+) {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    timeout(Duration::from_secs(35), async {
                 let mut bytes = Vec::new();
                 while !bytes.ends_with(b"\r\n\r\n") {
                     assert!(bytes.len() < 16 * 1024, "callback headers exceed fixture limit");
@@ -217,6 +263,10 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                     .map(|(_, value)| value.trim());
                 let authorized = header(crate::next_engine::media::ACCESS_HEADER)
                     .is_some_and(|value| host.media.authorized(value));
+                if target == "/ffmpeg/next-media/10/100/1" && authorized {
+                    callback_media(&mut socket, &host, header("range")).await;
+                    return;
+                }
                 if authorized && target.starts_with("/ffmpeg/next-prepared/") {
                     let parts: Vec<_> = target.trim_start_matches("/ffmpeg/next-prepared/").split('/').collect();
                     assert_eq!(parts.len(), 2);
@@ -281,8 +331,6 @@ async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackList
                 socket.write_all(&body).await.unwrap();
                 socket.shutdown().await.unwrap();
             }).await.unwrap();
-        }
-    }))
 }
 
 #[tokio::test]

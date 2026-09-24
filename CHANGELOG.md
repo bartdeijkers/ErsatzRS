@@ -20,12 +20,13 @@ release section when tagging a release.
 
 ### Added
 
-- Fill internal gaps in optional Next playback with ephemeral local-library and
-  finite Remote Stream fallback using decoration, channel and global policy.
+- Fill internal gaps in optional Next playback with ephemeral local, provider
+  and Remote Stream fallback using decoration, channel and global policy.
   Direct HTTP, ready artifacts, ordinary producers and retained intervals preserve
-  selected audio and Burn/Convert captions, then return to the next programme
-  without changing the persisted timeline. The remaining fallback acceptance
-  matrix is tracked under upstream PR #2919.
+  selected audio and supported Burn/Convert captions, then return to the next
+  programme without changing the persisted timeline. Generated credits and exact
+  playlist selections, including audio/subtitles off, remain in control
+  (upstream PR #2919).
 - Generate music-video credits for optional Next playback in Burn and Convert
   subtitle modes, preserving playout in-points and selected alternate audio
   (upstream PR #2917).

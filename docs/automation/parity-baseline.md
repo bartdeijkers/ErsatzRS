@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `14ee8063d9b964832e0b03365c8ce35323347698` |
-| **Commit subject** | `feat: sync generated music video credits to next engine (#2917)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/14ee8063d9b964832e0b03365c8ce35323347698 |
+| **Pinned commit** | `294a2ff10e5e03911b6efa299dd84993d8e5db5b` |
+| **Commit subject** | `feat: support dynamic fallback filler when using next engine (#2919)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/294a2ff10e5e03911b6efa299dd84993d8e5db5b |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
