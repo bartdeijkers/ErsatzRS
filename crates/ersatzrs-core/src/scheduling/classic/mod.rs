@@ -1,3 +1,8 @@
+mod clock;
+#[cfg(test)]
+mod fixed_start_tests;
+pub use clock::ClassicClock;
+
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
@@ -551,14 +556,17 @@ struct ClassicMediaIdentity {
 }
 
 impl ClassicSchedulingEngine {
-    #[must_use]
+    /// Calculate a fixed start using an explicit UTC clock.
+    ///
+    /// # Errors
+    /// Returns an error if the civil date is outside the clock's supported range.
     pub fn get_start_time_after(
         current_time: DateTime<Utc>,
         schedule_item: &ProgramScheduleItem,
         schedule_fixed_start_time_behavior: FixedStartTimeBehavior,
         state: &PlayoutAnchor,
         is_peek: bool,
-    ) -> DateTime<Utc> {
+    ) -> Result<DateTime<Utc>, SchedulingError> {
         get_start_time_after(
             current_time,
             schedule_item,
@@ -573,6 +581,7 @@ impl ClassicSchedulingEngine {
                 next_guide_group: state.next_guide_group,
             },
             is_peek,
+            &ClassicClock::default(),
         )
     }
 }
@@ -1055,7 +1064,8 @@ impl ClassicContext {
                 .added_items
                 .last()
                 .map_or(item_start_time, |item| item.finish);
-            self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+            let filler_start = self.filler_start_after(next_schedule_item);
+            self.add_tail_and_fallback(schedule_item, filler_start);
             self.state.current_time = self
                 .state
                 .current_time
@@ -1114,7 +1124,8 @@ impl ClassicContext {
             self.advance_fill_group(schedule_item);
         }
 
-        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+        let filler_start = self.filler_start_after(next_schedule_item);
+        self.add_tail_and_fallback(schedule_item, filler_start);
         self.state.current_time = self
             .state
             .current_time
@@ -1255,7 +1266,12 @@ impl ClassicContext {
                     self.schedule_fixed_start_time_behavior(),
                     &peek_state,
                     true,
+                    &self.request.reference_data.classic_clock,
                 )
+                .unwrap_or_else(|error| {
+                    self.error = Some(error);
+                    self.request.finish
+                })
             } else {
                 DateTime::<Utc>::MAX_UTC
             };
@@ -1311,7 +1327,8 @@ impl ClassicContext {
             self.advance_fill_group(schedule_item);
         }
         self.decrement_guide_group_if_advanced(start_len, schedule_item);
-        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+        let filler_start = self.filler_start_after(next_schedule_item);
+        self.add_tail_and_fallback(schedule_item, filler_start);
         self.state.next_guide_group += 1;
     }
 
@@ -2644,7 +2661,7 @@ impl ClassicContext {
     }
 
     fn start_time_after(
-        &self,
+        &mut self,
         schedule_item: &ProgramScheduleItem,
         is_peek: bool,
     ) -> DateTime<Utc> {
@@ -2654,10 +2671,15 @@ impl ClassicContext {
             self.schedule_fixed_start_time_behavior(),
             &self.state,
             is_peek,
+            &self.request.reference_data.classic_clock,
         )
+        .unwrap_or_else(|error| {
+            self.error = Some(error);
+            self.request.finish
+        })
     }
 
-    fn filler_start_after(&self, schedule_item: &ProgramScheduleItem) -> DateTime<Utc> {
+    fn filler_start_after(&mut self, schedule_item: &ProgramScheduleItem) -> DateTime<Utc> {
         self.start_time_after(schedule_item, false)
             .min(self.request.finish)
     }
@@ -2721,19 +2743,11 @@ impl ClassicContext {
     }
 }
 
-fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
+fn start_state(request: &SchedulingRequest, _items: &[ProgramScheduleItem]) -> ClassicState {
     let index = 0;
-    let next_start = items
-        .first()
-        .map_or(request.start, |item| match item.start_type {
-            StartType::Fixed => {
-                midnight(request.start) + item.start_time.unwrap_or_else(Duration::zero)
-            }
-            StartType::Dynamic => midnight(request.start),
-        });
 
     ClassicState {
-        current_time: next_start.max(request.start),
+        current_time: request.start,
         schedule_state: CollectionEnumeratorState {
             seed: request.playout.seed,
             index,
@@ -2878,7 +2892,8 @@ fn get_start_time_after(
     schedule_fixed_start_time_behavior: FixedStartTimeBehavior,
     state: &ClassicState,
     is_peek: bool,
-) -> DateTime<Utc> {
+    clock: &ClassicClock,
+) -> Result<DateTime<Utc>, SchedulingError> {
     let mut start_time = current_time;
     let is_incomplete = !is_peek
         && ((schedule_item.playout_mode == ersatzrs_domain::PlayoutMode::Multiple
@@ -2892,22 +2907,30 @@ fn get_start_time_after(
 
     if schedule_item.start_type == StartType::Fixed && !is_incomplete {
         let item_start_time = schedule_item.start_time.unwrap_or_else(Duration::zero);
-        let result = midnight(start_time) + item_start_time;
+        let (result, tomorrow) = clock.occurrences(start_time, item_start_time)?;
         let behavior = schedule_item
             .fixed_start_time_behavior
             .unwrap_or(schedule_fixed_start_time_behavior);
         match behavior {
             FixedStartTimeBehavior::Flexible => {
                 if is_peek && state.in_flood && start_time > result {
-                    start_time = result + Duration::days(1);
-                } else if result.date_naive() == start_time.date_naive()
-                    && result.time() > start_time.time()
-                {
-                    start_time = result;
+                    start_time = tomorrow;
+                } else {
+                    let next = if result >= start_time {
+                        result
+                    } else {
+                        tomorrow
+                    };
+                    if next - start_time <= Duration::hours(12) {
+                        start_time = next;
+                    }
                 }
             }
             FixedStartTimeBehavior::Strict => {
-                start_time = if seconds_since_midnight(start_time) > item_start_time {
+                let local = clock.local_time(start_time)?;
+                let time_of_day = Duration::seconds(i64::from(local.num_seconds_from_midnight()))
+                    + Duration::nanoseconds(i64::from(local.nanosecond()));
+                start_time = if time_of_day > item_start_time {
                     result + Duration::days(1)
                 } else {
                     result
@@ -2916,7 +2939,7 @@ fn get_start_time_after(
         }
     }
 
-    start_time
+    Ok(start_time)
 }
 
 fn midnight(value: DateTime<Utc>) -> DateTime<Utc> {
@@ -2925,10 +2948,6 @@ fn midnight(value: DateTime<Utc>) -> DateTime<Utc> {
         - Duration::minutes(i64::from(value.minute()))
         - Duration::seconds(i64::from(value.second()))
         - Duration::nanoseconds(i64::from(value.nanosecond()))
-}
-
-fn seconds_since_midnight(value: DateTime<Utc>) -> Duration {
-    Duration::seconds(i64::from(value.time().num_seconds_from_midnight()))
 }
 
 fn multiple_count(schedule_item: &ProgramScheduleItem, enumerator_len: usize, seed: u64) -> i32 {
@@ -3922,7 +3941,8 @@ mod tests {
             FixedStartTimeBehavior::Strict,
             &anchor,
             false,
-        );
+        )
+        .unwrap();
 
         assert_eq!(next, Utc.with_ymd_and_hms(2026, 4, 27, 8, 0, 0).unwrap());
     }

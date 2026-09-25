@@ -9549,13 +9549,24 @@ Core/infra/web all-target Clippy passes. Review confirms full identity grouping,
 unchanged absent-field JSON, and preflight before destructive persistence.
 Verdict: Adapt under ADR 0020. Pin/ledger/checkout advance to ecf6c2c1;
 row 86 follows. Formatting, progress and staged lint policy pass.
-Row 86 (a7ecc5f9) is under audit. Its nearest-occurrence flexible wait rule
-also requires independently resolved tomorrow local offsets across DST.
-Native Classic currently uses UTC midnight/time-of-day, and its SQL loader
-performs no local conversion. Existing YAML timing preserves the current offset
-by an earlier upstream contract, so reusing it would miss this row's correction.
-The source map and Classic parity debt record both requirements. No row-86
-implementation, verdict, time-zone deviation or pin advance is claimed.
+Row 86 (a7ecc5f9) is Port. ClassicClock makes the civil zone explicit;
+the production loader resolves the host zone once per build. Jiff 0.2.23 supplies
+transition offsets unavailable from Chrono LocalResult alone; license policy passes.
+Flexible starts use the next occurrence within 12 hours, tomorrow resolves its
+own local offset, and active Flood peek retains its next-day rule. Strict keeps
+upstream's wall-time comparison and carried offset. Initial state applies the
+flexible rule before advancing; clock failures abort publication.
+The clock matrix covers midnight, ties, incomplete modes, Flood peek, 365 dates
+in four zones, and the real three-item builder sequence. A .NET 10.0.12 oracle
+(SDK 10.0.112) verifies gap/fold offsets in Amsterdam, Dublin, Lord Howe and
+Casablanca and political seams in Apia/Moscow. UTC complete checkpoints remain
+unchanged. A real SQLite build/reopen/Continue/reopen/Refresh across spring and
+autumn DST preserves media, UTC times, track preferences and contexts (d7019ea3).
+The final core plus full scan-refresh-continuity selection passes 295 tests
+(ccc204b9); the final first-item regression passes separately (8aa5dab9).
+Core/infra/web all-target strict Clippy, architecture lint, licenses, format and
+diff checks pass. No browser behavior changes. Pin/ledger/checkout advance to
+a7ecc5f9; row 87 follows. Window runtime/build gates remain required.
 No UCU-05 window gates, push or CI are claimed.
 """
 

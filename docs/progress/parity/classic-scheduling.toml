@@ -189,7 +189,7 @@ resolved    = true
 
 [[debt]]
 id = 'ucu86-flexible-fixed-start-clock'
-description = 'Row 86 requires nearest flexible fixed-start occurrence within 12 hours, local wall-clock interpretation and an independently resolved next-day offset. Classic currently compares UTC dates/times and can start early before midnight or wait almost a day after a missed late start.'
+description = 'Row 86 requires nearest flexible fixed-start occurrence within 12 hours, local wall-clock interpretation and an independently resolved next-day offset.'
 discovered = '2026-09-25'
-resolved = false
-evidence = 'Upstream a7ecc5f9 changes PlayoutModeSchedulerBase.GetStartTimeAfter and adds clock/builder tests. Native classic::get_start_time_after, midnight and seconds_since_midnight still use UTC; the loader has no local conversion. Existing YAML timing intentionally retains its current offset and cannot substitute for the required next-day DST resolution. Row 86 source map and UCU-05 own the correction and acceptance; no verdict or pin advance.'
+resolved = true
+evidence = 'Row 86 Port: explicit ClassicClock with production system-zone loading and Jiff transition offsets; flexible tomorrow resolution and 12-hour bound, preserved Strict semantics and UTC complete checkpoints. Core and SQLite restart DST Continue/Refresh tests pass (ccc204b9, 8aa5dab9); Clippy, architecture and license checks pass. UCU-05 owns detailed evidence and remaining window gates.'

@@ -2,6 +2,8 @@ mod common;
 
 #[path = "scan_refresh_continuity/collection_identity.rs"]
 mod collection_identity;
+#[path = "scan_refresh_continuity/fixed_start_clock.rs"]
+mod fixed_start_clock;
 
 use std::collections::BTreeSet;
 use std::path::Path;

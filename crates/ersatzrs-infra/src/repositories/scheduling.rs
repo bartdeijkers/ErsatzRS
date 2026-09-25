@@ -537,6 +537,8 @@ impl SqliteSchedulingContentRepository {
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
                 playlist_items_by_key,
+                classic_clock: ersatzrs_core::scheduling::ClassicClock::system()
+                    .map_err(|error| decode_message("Classic clock", &error.to_string()))?,
                 classic_schedule_id: Some(schedule.id),
                 classic_schedule_name: Some(schedule.name),
                 classic_schedule_items: schedule_items,

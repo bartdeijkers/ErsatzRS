@@ -61,10 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-25: UCU-05 row 86 audit identified both the 12-hour flexible wait
-rule and local/DST clock resolution. Classic still calculates fixed starts in
-UTC. Resolve and verify that boundary before any row-86 verdict or pin advance;
-UCU-05 and Classic parity own the open requirement.
+2026-09-25: UCU-05 row 86 is Port. Flexible local starts resolve tomorrow's
+DST offset and wait at most 12 hours; Strict and UTC complete checkpoints retain
+their contracts. Core and persisted Continue/Refresh proof, strict consumer
+Clippy and dependency license checks pass. Continue at row 87 (3d24c3f0).
+UCU-05 window gates, push and exact-SHA CI remain open.
 
 2026-09-25: UCU-05 row 85 is Adapt under ADR 0020. Complete collection
 identities include rerun IDs; playlist and synthetic keys retain existing

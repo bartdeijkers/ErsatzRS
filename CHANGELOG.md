@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Resolve Classic fixed starts in local wall time, including tomorrow's DST
+  offset. Flexible starts wait at most 12 hours across midnight (upstream PR #2967).
+
 - Keep distinct rerun collections separate in Classic scheduling progress and
   Refresh checkpoints. Ambiguous legacy state is reported by Classic Playout
   State health and requires Reset before rebuilding (upstream PR #2966).

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **88 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **87 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **85**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **86**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-85; the next upstream row is 86 (`a7ecc5f9`).
+  processed rows 68-86; the next upstream row is 87 (`3d24c3f0`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -46,17 +46,26 @@ The matrix covers midnight, early morning, recently missed starts on either
 side of midnight, same-day future starts, all calendar dates and a real
 three-item builder sequence around midnight.
 
-Native `classic::get_start_time_after` still uses same-UTC-day comparison.
-Its `midnight` and `seconds_since_midnight` helpers also use UTC, while persisted
-schedule start times are wall-clock durations. The host reports CEST; no
-Classic time-zone conversion is present in its reference-data loader. The
-existing Sequential YAML local-clock helper deliberately retains the current
-offset, so it cannot supply row 86's independently resolved tomorrow semantics.
-Targets: Classic fixed-start occurrence calculation, explicit clock boundary,
-core matrix and persisted production-builder proof including DST. Preserve
-complete Refresh checkpoints and legacy refusal under ADR 0020. Row 86 stays
-pending until both the wait rule and local/DST behavior are proven; pin remains
-at row 85. No new architecture or behavior deviation is accepted by this audit.
+Classic now carries an explicit civil clock in reference data. The SQL loader
+resolves the host zone once per build; deterministic core fixtures use UTC or
+an explicit named zone. Jiff 0.2.23 supplies real transition offsets, including
+platform system-zone discovery. Chrono's `LocalResult::None` alone cannot expose
+both sides of a missing civil time, and the existing YAML helper deliberately
+retains the current offset. No new parser or OS-specific implementation is added.
+Jiff's MIT license passes repository policy. UTC checkpoint dates and complete
+Refresh state remain unchanged under ADR 0020.
+
+The flexible rule and Flood peek resolve tomorrow independently; Strict retains
+upstream's wall-time comparison and offset-preserving AddDays behavior. Initial
+state no longer pre-advances a flexible late-night start before applying the
+12-hour rule. Clock resolution errors propagate before publishing a build.
+Tests cover the upstream clock matrix, the inclusive 12-hour bound, incomplete
+modes, Flood peek, every 2026 date in four zones, and the real three-item builder.
+A .NET runtime 10.0.12 oracle (SDK 10.0.112) checks gap/fold offsets in Amsterdam,
+Dublin, Lord Howe and Casablanca, plus political clock changes in Apia/Moscow.
+SQLite restart Continue and Refresh across both DST transitions preserve future
+identities, UTC timestamps, track preferences and scheduling contexts. UCU-05
+owns final evidence. Row 86 is Port; row 87 follows.
 
 ## Row 85 source map: complete Classic collection identities
 
@@ -1631,7 +1640,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.0 release metadata` | ucu-05; only CHANGELOG release heading and comparison links change. ErsatzRS retains its own release history; no runtime contract changes. Source and progress checks pass. |
 | 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | Port | upstream-baseline-catch-up | `fix(streaming): render generated channel-logo watermarks` | ucu-05; checkpoint 876ed514 preserves external URLs; cached PNG fallback now preserves generated logos. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. See UCU-05 evidence; window gates remain open. |
 | 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | Adapt (ADR 0020) | classic-scheduling; ersatzrs-healthcheck | `fix(scheduling): preserve complete Classic collection identities` | ucu-05; complete source keys now include RerunCollectionId. Existing earliest complete checkpoints preserve playlist/fake keys. Three-week playlist and rerun restart/Refresh, legacy refusal, actual health reporting and core regressions pass; see UCU-05 evidence. |
-| 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | | | | ucu-05; provisional: Port candidate. |
+| 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | Port | classic-scheduling | `fix(scheduling): resolve flexible starts across local midnight` | ucu-05; explicit local civil clock, independent tomorrow offsets and inclusive 12-hour wait. Core clock/builder and persisted DST Continue/Refresh proof pass; Strict and complete UTC checkpoints retain their contracts. See UCU-05 evidence. |
 | 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | | | | ucu-05; provisional: Port candidate. |
 | 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | | | | ucu-05; provisional: Adapt candidate. |

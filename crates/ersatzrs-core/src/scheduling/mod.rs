@@ -28,7 +28,7 @@ pub use block::{
 pub use classic::{
     audit_classic_refresh_checkpoint, audit_classic_runtime_state,
     classic_playlist_continuation_is_complete, classic_schedule_item_key,
-    classic_schedule_item_policy_key, truncate_to_persisted_precision,
+    classic_schedule_item_policy_key, truncate_to_persisted_precision, ClassicClock,
     ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
     ClassicSchedulingEngine,
 };
@@ -300,6 +300,8 @@ pub trait BlockPreviewRepository: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
+    /// Production Classic loaders supply the host civil clock; pure inputs default to UTC.
+    pub classic_clock: ClassicClock,
     pub channel_playout_mode: ChannelPlayoutMode,
     /// Legacy schedule/playout-wide policy used only when an item has not yet
     /// materialized its own Smart Shuffle attachment.
