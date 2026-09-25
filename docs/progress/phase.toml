@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 72 (16e341d9) is N/A. Upstream only re-keys its
+Windows global singleton mutex by configuration folder. ErsatzRS has no
+equivalent mutex; ADR 0080 excludes multiple active server deployments.
+Pin, ledger and checkout advance together. Continue at row 73 (5855deb8);
+UCU-05 window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 71 (4fb42f69) ports every-build Classic playlist
 offsets and saved-index replay. A 6+6 item Continue build matches the
 uninterrupted 12-item timeline; all 248 core tests and scoped Clippy pass.

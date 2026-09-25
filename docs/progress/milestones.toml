@@ -9312,6 +9312,13 @@ with an uninterrupted 12-item run and matches identities and timestamps.
 All 248 core tests (a34829bc), scoped core Clippy, format and progress checks
 pass. Pin, ledger and checkout advance together to row 71. Row 85 retains the
 broader playlist progress repair; UCU-05 window gates, push and CI remain open.
+Row 72 (16e341d9) is N/A (upstream singleton mutex; ADR 0080). Upstream only
+changes its Windows process mutex name to a hash of AppDataFolder and updates
+its changelog. ErsatzRS has no process-wide singleton mutex to re-key, and
+multiple active server instances remain outside ADR 0080's supported
+deployment contract. Pin, ledger and checkout advance together; row 73 is
+next. Source and progress checks pass; no UCU-05 window gates, push or CI are
+claimed.
 No UCU-05 window gates, push or CI are claimed.
 """
 

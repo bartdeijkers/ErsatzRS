@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `4fb42f6956224601d9a3c5528aa5e8dc7727c181` |
-| **Commit subject** | `fix: random start point is needed with every playlist build (#2950)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/4fb42f6956224601d9a3c5528aa5e8dc7727c181 |
+| **Pinned commit** | `16e341d9b5feb436a9e4ac47bec671c864fbb15d` |
+| **Commit subject** | `fix: key singleton mutex on config folder (#2946)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/16e341d9b5feb436a9e4ac47bec671c864fbb15d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
