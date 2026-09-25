@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 60 is N/A (NuGet-only build override). Upstream adds a
+direct Microsoft.OpenApi package reference without changing the OpenAPI
+registration or endpoints. ErsatzRS has no matching dependency; this row
+does not establish API documentation parity. Source and package-graph review
+pass. Next is row 61 (42937ac3, YAML Scheduled Playouts). UCU-04 window
+gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 59 is Port. Continuous scripted builds now trim items
 older than four hours before the build start while retaining the delayed-mirror
 offset. On-demand time shifting removes only items finished strictly before

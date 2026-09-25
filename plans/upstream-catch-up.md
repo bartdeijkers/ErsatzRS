@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **113 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **112 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **59**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **60**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-59 are reconciled; the next row is 60 (c8bd9766).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-60 are reconciled; the next row is 61 (42937ac3).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,21 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 60 source map: upstream OpenAPI package build override
+
+Upstream `c8bd9766` (PR #2936) changes only
+`$ERSATZTV_SRC/ErsatzTV/ErsatzTV.csproj`: it adds a direct
+`Microsoft.OpenApi` 2.7.5 package reference to override the transitive 2.0.0
+version from `Microsoft.AspNetCore.OpenApi`. The adjacent project reference and
+`Startup.cs` OpenAPI registration are unchanged. No C# handler, endpoint,
+schema, media or UI behavior changes in this commit.
+
+ErsatzRS has neither a `Microsoft.OpenApi`/NuGet dependency nor a matching
+OpenAPI generation dependency in `Cargo.lock`; its Rust web host uses Axum.
+There is no Rust package substitution or application change for this build
+override. This verdict makes no claim about broader OpenAPI endpoint parity.
+The row requires source, package-graph and progress validation only.
 
 ## Row 59 source map: remove already-played playout items
 
@@ -1079,7 +1094,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | Port | upstream-baseline-catch-up | `fix(deps): reconcile SQLite and NCalc 6.2` | ucu-04; bundled SQLite 3.51.3 closes CVE-2025-6965; NCalc 6.2 saved-expression NaN and signed-zero behavior follows exact-version oracle. Opacity helper and NuGet-only updates are covered; focused regressions, dependency audit, scoped Clippy and native smoke pass. |
 | 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | Port | hls-variant-playlists-segmenter | `fix(hls): retain stale segments until replacement` | ucu-04; no-limit append trim keeps the prior MPEG-TS/fMP4 playlist when every segment predates the cutoff. Red-then-green stale-window and referenced-file cleanup regressions, native smoke and TSDuck transport gate pass. Empty source playlists already avoid a minimum-operation failure. |
 | 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | Port | scripted-scheduling; hls-variant-playlists-segmenter | `fix(scheduling): trim played playout items by channel mode` | ucu-04; continuous scripted builds retain four hours plus mirror offset; on-demand time shifting removes only items finished before the saved checkpoint in its shift transaction. Focused scheduler, on-demand SQLite and delayed-mirror persistence tests, scoped Clippy and native smoke pass. |
-| 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | N/A (NuGet-only build override) | upstream-baseline-catch-up | `docs(porting): classify OpenAPI build override as upstream-only` | ucu-04; single `.csproj` package reference overrides transitive Microsoft.OpenApi 2.0.0 with 2.7.5. Startup registration and endpoint code do not change; Rust has no matching NuGet or OpenAPI generation dependency. Source/package-graph review and progress validation pass; no API endpoint parity claim. |
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | | | | ucu-04; provisional: Port candidate. |
 | 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | | | | ucu-04; provisional: Next behavior triage. |
 | 63 | `620bc0bc` | fix: properly delete manual collections from search index (#2939) | | | | ucu-04; provisional: Adapt candidate. |

@@ -1,3 +1,4 @@
+{"agent":"codex","date":"2026-09-25","summary":"UCU-04 row 60: classify upstream Microsoft.OpenApi NuGet override as not applicable to Rust; source/package graph and progress checks pass; window gates remain open"}
 {"agent":"codex","date":"2026-09-25","summary":"UCU-04 row 59: port played-item cleanup for continuous scripted and on-demand playout; focused tests, Clippy and native smoke pass; window gates remain open"}
 {"agent":"Codex","date":"2026-09-25","summary":"Reconciled UCU-04 row 58: preserve stale HLS segments and fMP4 map during append; red-then-green tests, native smoke, 64-check TSDuck gate and scoped Clippy pass; row 59 next."}
 {"agent":"Codex","date":"2026-09-25","summary":"Reconciled UCU-04 row 57: bundled SQLite 3.51.3 security fix and NCalc 6.2 chapter-expression parity; focused tests, dependency audit, scoped Clippy, and native smoke passed; row 58 next."}

@@ -9022,6 +9022,17 @@ strict cutoff, transaction ordering, cascade constraints and unaffected
 channels. UCU-04 window gates, push and exact-SHA CI remain open; continue at
 row 60 (c8bd9766).
 
+2026-09-25: row 60 (c8bd9766, PR #2936) is N/A (NuGet-only build
+override). The single upstream `.csproj` edit directly references
+Microsoft.OpenApi 2.7.5 to override the transitive 2.0.0 version from
+Microsoft.AspNetCore.OpenApi. Existing `Startup.cs` registration and API
+endpoints are unchanged. ErsatzRS has no NuGet packages or Rust OpenAPI
+generation dependency in Cargo.lock, so no Rust package or code change
+corresponds to this upstream build fix. The verdict does not assert broader
+OpenAPI endpoint parity. Source and package-graph review pass; progress
+validation records the row. UCU-04 window gates, push and exact-SHA CI
+remain open; continue at row 61 (42937ac3).
+
 """
 
 [[milestone]]

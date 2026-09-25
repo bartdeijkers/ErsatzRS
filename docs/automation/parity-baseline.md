@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `2b7531ca2da521873f9b7c9857cb558cda33cd10` |
-| **Commit subject** | `fix: remove already-played playout items (#2934)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2b7531ca2da521873f9b7c9857cb558cda33cd10 |
+| **Pinned commit** | `c8bd97664694292f51733238a26c82c1dca59d97` |
+| **Commit subject** | `chore: update openapi to fix build (#2936)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c8bd97664694292f51733238a26c82c1dca59d97 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
