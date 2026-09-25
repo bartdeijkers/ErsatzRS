@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `9cc771beb8118148acbf34e69d1429bee9232304` |
-| **Commit subject** | `feat: show next and ffmpeg version in troubleshooting (#2958)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9cc771beb8118148acbf34e69d1429bee9232304 |
+| **Pinned commit** | `3f2efcd4ffc423eb654d747e3ccc8be3d1266a64` |
+| **Commit subject** | `fix: discover tests in ErsatzTV.Tests (#2959)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3f2efcd4ffc423eb654d747e3ccc8be3d1266a64 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

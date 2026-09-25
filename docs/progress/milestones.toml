@@ -9458,6 +9458,12 @@ Next engine; populated Next values are covered by the shared serializer tests.
 Hydration lint reports no new findings, scoped web all-target Clippy passes,
 and formatting/diff checks pass. Pin, ledger and upstream checkout advance
 together to 9cc771be; row 81 (3f2efcd4) is next.
+Row 81 (3f2efcd4) is N/A (upstream .NET test tooling). Its entire diff adds
+Microsoft.NET.Test.Sdk 18.8.1 to ErsatzTV.Tests.csproj. ErsatzRS discovers
+Rust tests through Cargo/Nextest in run.sh and has no equivalent dependency
+on that adapter. No product or test behavior changes here. Source inspection,
+diff and progress checks pass; pin, ledger and checkout advance together.
+Row 82 (4ffd775a) is next.
 No UCU-05 window gates, push or CI are claimed.
 """
 
