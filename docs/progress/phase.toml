@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 82 is Adapt under ADRs 0095/0100. Next receives
+the subtitle font cache; runtime checks prove font selection, decoded captions,
+end-of-cue playback and retained alternate audio. UCU-05 owns focused evidence.
+Continue at row 83 (05dd6cbe); window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 82 audit found missing Next subtitle font-cache
 configuration. The partial correction has a red/green normal/preview regression
 and passing infra Clippy. Continue with extraction/publication ordering and

@@ -9474,6 +9474,27 @@ save_channel_with_state notifies the shared HLS registry, which forwards to
 NextSession and previews. Continue auditing extraction/publication ordering,
 mode changes and empty-caption playback. Font rendering and seeking beyond
 the final cue still need runtime evidence. No row verdict or pin advance.
+Row 82 is now Adapt under ADRs 0095/0100. Checkpoint 7b5ef28f supplies the
+font cache. Final serialized runtime tests pass 3/3 (adc0b7d3): cached Sen
+selection is observed in libass's report and captions/audio are decoded;
+embedded/external Burn/Convert retain captions and selected audio during normal
+seek, and continue with no cues or glyphs after the final cue. The font fixture
+uses a child with isolated app data and the repository font. Runtime identity is
+official Next 802f2d8 (archive SHA256 f4f06196f7ecb751ee973d6754cf3292f22ab1a7f92e85e836ee490056631808)
+and FFmpeg n9.0-20260805 on Linux x64. These runs do not claim other platforms.
+The focused selection/cache/credits/session/extraction suite passes 43/43
+(6305bb93). Its first run had three filesystem-permission failures; redirecting
+application state/data to temporary roots passes without assertion changes.
+Disabled credits preserve the projected tracks. Existing channel-save source
+and regression save_channel_notifies_next_consumers_without_rebuilding_playouts
+cover registry notification to normal and preview consumers. The demand-time
+adapter prepares exact-version text before returning a sidecar and revalidates
+its binding; it does not depend on legacy extraction metadata. Playout builds
+extract before notification. Absolute stream mapping avoids the upstream
+partial-subtitle ordinal bug. Only fonts_folder is new in the upstream wire
+field sets. Accepted ADR 0100 live/one-shot limitations remain unchanged.
+Final infra all-target Clippy, formatting, diff and progress checks pass.
+Pin, ledger and checkout advance together to 4ffd775a; row 83 follows.
 No UCU-05 window gates, push or CI are claimed.
 """
 

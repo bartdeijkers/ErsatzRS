@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **92 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **91 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **81**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **82**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-81; the next upstream row is 82 (`4ffd775a`).
+  processed rows 68-82; the next upstream row is 83 (`05dd6cbe`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -55,8 +55,16 @@ preparation must not be replaced with an unvalidated legacy cache path.
 The initial audit found the `fonts_folder` wire field and host configuration
 missing; the partial correction and red/green test are recorded in UCU-05.
 The web save wrapper already notifies the shared registry, including Next and
-preview sessions. Extraction/publication timing and empty-cue runtime proof
-remain under audit. Row 82 has no verdict and the pin remains at row 81.
+preview sessions. Existing exact-version demand preparation validates the source
+before publishing a sidecar, so Next does not depend on legacy background cache
+completion. Playout builds also extract before notifying consumers. Native
+extraction maps absolute stream indexes, preserving partially extracted sets.
+The new runtime matrix proves continued video/audio after the final text cue in
+embedded/external Burn/Convert; a separate isolated fixture proves cached Sen
+font selection and decoded captions. Disabled credits leave the projected tracks
+unchanged. Generated wire-model comparison adds only `fonts_folder` to the field
+set; existing typed serialization retains the other names. Verdict: Adapt under
+ADRs 0095/0100. UCU-05 owns test identities and remaining window acceptance.
 
 ## Row 80 source and hydration map
 
@@ -1560,7 +1568,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 79 | `a2f54ef1` | fix: block playout build loop (#2957) | Port | block-scheduling | `fix(scheduling): rebuild Block filler safely and observe shutdown` | ucu-05; checkpoint ee8f7c34 plus Reset filler/history replacement, retained primary repositioning, and cooperative cancellation through scheduler ownership. Core and SQLite evidence in UCU-05; row 80 follows. |
 | 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | Adapt (ADR 0095) | support-pages | `feat(troubleshooting): report detected engine versions` | ucu-05; shared detected versions in General and playback archives, startup-only Next cache, in-order SSR. 26 library tests and four Chromium/Firefox JavaScript/no-JS checks pass; see UCU-05 evidence. |
 | 81 | `3f2efcd4` | fix: discover tests in ErsatzTV.Tests (#2959) | N/A (upstream .NET test tooling) | upstream-baseline-catch-up | `docs(porting): classify upstream test discovery fix` | ucu-05; sole diff adds Microsoft.NET.Test.Sdk 18.8.1 to ErsatzTV.Tests. Cargo/Nextest has no dependency on that discovery adapter. No runtime or test behavior is changed in ErsatzRS; source and progress checks pass. |
-| 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | | | | ucu-05; provisional: Next behavior triage. |
+| 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | Adapt (ADRs 0095/0100) | upstream-baseline-catch-up | `test(streaming): verify Next subtitle font and empty-cue playback` | ucu-05; checkpoint 7b5ef28f supplies the font cache; official Next runtime proves selected font rendering, end-of-cue playback and alternate audio. Exact-version preparation and native absolute extraction indexes preserve existing safety; see UCU-05 evidence. |
 | 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
 | 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | | | | ucu-05; provisional: Port candidate. |
 | 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | | | | ucu-05; provisional: Port candidate. |

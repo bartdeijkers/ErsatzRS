@@ -4,10 +4,14 @@ use super::*;
 const CUES: &str = "1\n00:00:00,000 --> 00:00:05,000\nBEFORE SEEK\n\n2\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n\n3\n00:00:55,000 --> 00:01:00,000\nAFTER SEEK\n";
 
 async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
+    generate_text_clip_with_cues(ffmpeg, folder, CUES).await
+}
+
+async fn generate_text_clip_with_cues(ffmpeg: &Path, folder: &Path, cues: &str) -> PathBuf {
     let source = folder.join("source.mkv");
     generate_clip(ffmpeg, &source).await;
     let subtitle = folder.join("fixture.nl.srt");
-    std::fs::write(&subtitle, CUES).unwrap();
+    std::fs::write(&subtitle, cues).unwrap();
     let clip = folder.join("text.mkv");
     let mut mux = Command::new(ffmpeg);
     mux.args(["-v", "error", "-nostdin", "-y", "-i"])
@@ -336,7 +340,13 @@ async fn callback_connection(
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off() {
-    text_runtime_cases(false).await;
+    text_runtime_cases(false, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; uses disposable synthetic media"]
+async fn real_next_text_subtitles_seek_beyond_final_cue_preserves_playback() {
+    text_runtime_cases(false, true).await;
 }
 
 #[tokio::test]
@@ -348,7 +358,7 @@ async fn real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek() {
 #[tokio::test]
 #[ignore = "child of real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek"]
 async fn fixture_child_prepared_artifacts() {
-    text_runtime_cases(true).await;
+    text_runtime_cases(true, false).await;
 }
 
 fn text_profile() -> FFmpegProfile {
@@ -363,7 +373,7 @@ fn text_profile() -> FFmpegProfile {
     }
 }
 
-async fn text_runtime_cases(prepared_artifact: bool) {
+async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -372,8 +382,12 @@ async fn text_runtime_cases(prepared_artifact: bool) {
     } else {
         tempfile::tempdir().unwrap()
     };
-    let clip = generate_text_clip(&ffmpeg, root.path()).await;
-    let profile = text_profile();
+    let cues = if after_final_cue {
+        "1\n00:00:00,000 --> 00:00:01,000\nBEFORE SEEK\n\n"
+    } else {
+        CUES
+    };
+    let clip = generate_text_clip_with_cues(&ffmpeg, root.path(), cues).await;
     for (embedded, convert, off) in [
         (true, false, false),
         (true, true, false),
@@ -381,7 +395,7 @@ async fn text_runtime_cases(prepared_artifact: bool) {
         (false, true, false),
         (true, true, true),
     ] {
-        let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+        let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
         configure_text_tracks(&pool, embedded, convert, off).await;
         if prepared_artifact {
             prepared_artifact_runtime::publish_fixture(&pool, &clip).await;
@@ -444,23 +458,32 @@ async fn text_runtime_cases(prepared_artifact: bool) {
             .parse()
             .unwrap();
         let vtt_path = output.join(segment).with_extension("vtt");
-        let body = timeout(Duration::from_secs(5), async {
-            loop {
-                if let Ok(body) = tokio::fs::read_to_string(&vtt_path).await {
-                    break body;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
-        assert_text_vtt(&body, convert && !off, segment_duration);
-        assert_text_video_and_audio(&ffmpeg, &output.join(segment), !convert && !off).await;
+        let body = read_vtt_segment(&vtt_path).await;
+        assert_text_vtt(&body, convert && !off && !after_final_cue, segment_duration);
+        assert_text_video_and_audio(
+            &ffmpeg,
+            &output.join(segment),
+            !convert && !off && !after_final_cue,
+        )
+        .await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         callback.stop().await;
         assert!(!output.exists());
     }
+}
+
+async fn read_vtt_segment(path: &Path) -> String {
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(body) = tokio::fs::read_to_string(path).await {
+                break body;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap()
 }
 
 #[path = "watermark_runtime_tests.rs"]
@@ -471,6 +494,9 @@ mod provider_text_runtime_tests;
 
 #[path = "credits_runtime_tests.rs"]
 mod credits_runtime_tests;
+
+#[path = "font_runtime_tests.rs"]
+mod font_runtime_tests;
 
 #[path = "fallback_runtime_tests.rs"]
 mod fallback_runtime_tests;
