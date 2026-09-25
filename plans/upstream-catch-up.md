@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **110 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **109 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **62**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **63**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-62 are reconciled; the next row is 63 (620bc0bc).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-63 are reconciled; the next row is 64 (075649ad).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -675,6 +675,28 @@ satisfy that prerequisite or authorize a later implementation commit.
 10. Report upstream SHA/subject, verdict and rationale, changed files, evidence,
     old/new pin, row count, next commit and remaining blocker.
 
+## Row 63 source map: deleted manual collections in search
+
+- ErsatzTV UI, view models, validators: unchanged by PR #2939; the existing
+  manual-collection delete action supplies the collection id.
+- ErsatzTV handler: `ErsatzTV.Application/MediaCollections/Commands/DeleteCollectionHandler.cs`
+  loads the collection's media item ids before deletion, deletes the collection,
+  rebuilds those items in Lucene, commits the index, and refreshes search targets.
+- ErsatzTV repository/query path: `IMediaCollectionRepository.GetItems` supplies
+  the affected ids; `ISearchIndex.RebuildItems` removes the deleted membership
+  from persisted search documents.
+- ErsatzRS targets: `ersatzrs-app::commands::delete_collection` calls
+  `SqliteCollectionRepository::delete_admin`; both scheduling search and admin
+  `/search` use `SqliteSchedulingContentRepository::search_documents_page`.
+  It loads documents from SQLite for each query, and `collection_values` joins
+  `CollectionItem` to the extant `Collection` rows at query time.
+- Side effect and deviation: ADR 0009 chooses SQL-backed search. SQLite
+  foreign-key cascade removes collection membership on delete; there is no
+  persisted Lucene document to rebuild and no intentional change to the
+  user-visible result. A focused test verifies immediate search invalidation
+  through the real delete and query repositories. No schema, UI, or translation
+  change is needed.
+
 ## Row 20 source map: media-server inputs
 
 Upstream `bb493670` changes `Application/Playouts/Commands/SyncNextPlayoutHandler.cs`
@@ -1145,7 +1167,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | N/A (NuGet-only build override) | upstream-baseline-catch-up | `docs(porting): classify OpenAPI build override as upstream-only` | ucu-04; single `.csproj` package reference overrides transitive Microsoft.OpenApi 2.0.0 with 2.7.5. Startup registration and endpoint code do not change; Rust has no matching NuGet or OpenAPI generation dependency. Source/package-graph review and progress validation pass; no API endpoint parity claim. |
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | Port | yaml-scheduling | `feat(scheduling): port YAML scheduled playouts` | ucu-04; named annual/specific date overrides select by local date and priority, with per-list state and persisted continuation indices. Scheduled sequences expand, repeat and shuffle in the active list; local wait/pad timing and editor schema align. Core YAML, SQLite restart, web validation, scoped Clippy and native smoke pass. Window gates remain open. |
 | 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | Port | library-management; upstream-baseline-catch-up | `fix(infra): include custom selectors in subtitle extraction` | ucu-04; Next subtitle probe hints, version-scoped custom selection and native extraction split were already ported. Playout extraction now admits custom-selector channels with general subtitles off. Red-then-green SQL eligibility, 8 probe-hint, 22 selection, 2 extraction, decoded official Next Burn/Convert and routed Next Convert smoke pass. ADR 0100 live/one-shot text limits stay open. |
-| 63 | `620bc0bc` | fix: properly delete manual collections from search index (#2939) | | | | ucu-04; provisional: Adapt candidate. |
+| 63 | `620bc0bc` | fix: properly delete manual collections from search index (#2939) | Covered | collections-smart-collections; search-index | `test(search): verify manual collection deletion invalidates queries` | ucu-04; live SQLite search documents re-read collection names for each query, while foreign-key cascade removes deleted membership. A focused integration test proves immediate search removal and continued media search. No persisted index needs rebuilding. |
 | 64 | `075649ad` | fix: synchronize subtitle titles from plex libraries (#2940) | | | | ucu-04; provisional: Port candidate. |
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | | | | ucu-04; provisional: Adapt candidate. |
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | | | | ucu-04; provisional: Upstream tooling candidate. |

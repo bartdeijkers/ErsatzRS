@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
 use ersatzrs_core::repositories::{
-    AdminMediaRepository, AdminSearchKind, AdminSearchRepository, FillerRepository,
-    ProgramScheduleRepository,
+    AdminMediaRepository, AdminSearchKind, AdminSearchRepository, CollectionRepository,
+    FillerRepository, ProgramScheduleRepository,
 };
 use ersatzrs_core::scheduling::{
     block_item_smart_shuffle_config_key, classic_schedule_item_key,
@@ -671,6 +671,36 @@ async fn scheduling_repository_searches_documented_lucene_smart_collection_field
             .collect::<Vec<_>>(),
         vec![31]
     );
+}
+
+#[tokio::test]
+async fn deleting_manual_collection_removes_search_membership_immediately() {
+    let pool = common::test_db().await;
+    seed_scheduling_fixture(&pool).await;
+    let repos = make_repositories(pool.clone());
+
+    let (before, _, _) = repos
+        .scheduling
+        .search_documents_page("collection:prime", 0, 0)
+        .await
+        .unwrap();
+    assert!(before.iter().any(|document| document.media_item_id == 20));
+
+    repos.collection.delete_admin(1).await.unwrap();
+
+    let (after, total, _) = repos
+        .scheduling
+        .search_documents_page("collection:prime", 0, 0)
+        .await
+        .unwrap();
+    assert!(after.is_empty());
+    assert_eq!(total, 0);
+    let (media, _, _) = repos
+        .scheduling
+        .search_documents_page("title:Feature", 0, 0)
+        .await
+        .unwrap();
+    assert!(media.iter().any(|document| document.media_item_id == 20));
 }
 
 #[tokio::test]

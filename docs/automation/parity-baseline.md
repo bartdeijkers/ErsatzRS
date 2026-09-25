@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0036fc5cc81429008ef7136efc14b88ec018e561` |
-| **Commit subject** | `fix: subtitles with next engine (#2938)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0036fc5cc81429008ef7136efc14b88ec018e561 |
+| **Pinned commit** | `620bc0bc0e7a529afa8266b848489937fed8349c` |
+| **Commit subject** | `fix: properly delete manual collections from search index (#2939)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/620bc0bc0e7a529afa8266b848489937fed8349c |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

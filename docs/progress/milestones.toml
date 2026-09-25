@@ -9086,6 +9086,24 @@ and the unchanged native rules. UCU-04 window gates, push and terminal
 exact-SHA CI remain open; continue at row 63 (620bc0bc). No intermediate
 push or CI was launched.
 
+2026-09-25: row 63 (620bc0bc, PR #2939) is Covered. Upstream deletes the
+manual collection, rebuilds each former member's Lucene document, commits the
+index and refreshes search targets so deleted collection terms vanish at once.
+ErsatzRS has no persisted Lucene documents: `search_documents_page` builds its
+projection from SQLite on every query, `collection_values` joins only current
+`CollectionItem` and `Collection` rows, and deleting the collection cascades
+its membership rows. The admin search and scheduling search share this path.
+The new integration regression uses the real collection-delete and search
+repositories: a member matches `collection:prime` before deletion, that query
+has zero results immediately afterward, and the media item remains searchable
+by title (nextest cb758844). No UI, schema or production-code change is needed.
+The fetched upstream target still has 172 ledger rows in exact SHA/subject
+order with no new tail. Scoped infrastructure all-target Clippy, formatting,
+Clippy allow policy and progress validation pass. Substantive review checked
+deletion cascade, live collection hydration and the shared admin/scheduling
+query path. UCU-04 window gates, push and terminal exact-SHA CI remain open;
+continue at row 64 (075649ad). No intermediate push or CI was launched.
+
 """
 
 [[milestone]]
