@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-25","summary":"UCU-04 CI Firefox timeout traced to combined numbering scenario; split without changing timeout or assertions; focused browser proof passes"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 first exact-SHA CI failed Clippy allow policy; item-level reasons fixed and scoped checks pass"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 rows 35-67 reconciled; local window gates pass on 9208e381; exact-SHA CI pending"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 67 reconciled as upstream-only 26.6.0 changelog preparation; rows 35-67 complete, window acceptance gates and exact-SHA publication next."}

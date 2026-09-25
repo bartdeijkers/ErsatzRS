@@ -9205,6 +9205,19 @@ base, cargo fmt and scoped infrastructure/scanner all-target Clippy pass.
 The earlier runtime/window evidence remains applicable. Push the corrected
 candidate and require a new terminal green exact-SHA run.
 
+The corrected candidate fb803e8e reached terminal red CI 36126442913: Format,
+documentation, Cargo deny, Next engine, Chromium, workspace Clippy and Test
+pass, while Firefox has one failure (213 passed, 30 skipped). Its hydrated
+add-on-list numbering scenario exhausts the unchanged 30-second test budget
+across seven page loads/hydration waits; the final wait is interrupted by the
+overall timeout. The trace's final page shows the retained draft season 3 and
+saved S07E05, so this evidence does not establish a product persistence defect.
+The two original assertions now run as separate isolated scenarios, with a
+direct SQLite seed of the already-tested S05E05 starting state for the conflict
+case. No timeout, retry or assertion is weakened. A matched SSR/WASM Firefox
+run passes all four hydrated/no-JS cases; Chromium passes the same four cases.
+The full corrected exact-SHA CI remains required before UCU-04 completion.
+
 """
 
 [[milestone]]

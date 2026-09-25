@@ -23,8 +23,10 @@
   green CI on pushed candidate `8f722099`. UCU-04 rows 35-67 and all local
   window gates are complete on source candidate `9208e381`; push and terminal
   green exact-SHA CI remain open. First pushed candidate `889ed11b` failed the
-  new Clippy allow policy; the corrected candidate awaits CI. The next upstream
-  row is 68 (18137832) in UCU-05.
+  new Clippy allow policy; candidate `fb803e8e` passed all jobs except one
+  Firefox test that exhausted its fixed budget across repeated hydration. Its
+  preserved assertions now pass as two isolated tests in both browsers; a new
+  exact-SHA CI run remains required. The next upstream row is 68 (18137832) in UCU-05.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)

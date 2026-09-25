@@ -282,7 +282,7 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await context.close();
     });
 
-    test('keeps clean rows current and rejects conflicting retained numbering',async({browser,baseURL},info)=>{
+    test('keeps clean rows current after saving item numbering',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
       const base=`/media/addon-lists/${seed.listId}`;
       await page.goto(base);await settled(page);
@@ -290,6 +290,16 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await page.locator('[name="numbering_mode"][value="numbered"]').check();
       await page.locator('[name="season"]').fill('5');await page.locator('[name="episode"]').fill('5');await submit(page,'save');
       await page.locator(`.item-navigation button[formaction="${base}#item-${seed.firstItemId}"]`).click();await settled(page);
+      await expect(page.locator(`[name="season_${seed.firstItemId}"]`)).toHaveValue('5');
+      await context.close();
+    });
+
+    test('rejects conflicting retained numbering',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);
+      sqlite(`UPDATE "AddonMediaListItem" SET "Season"=5,"Episode"=5,"MetadataOverrideJson"='{"season":5,"episode":5}' WHERE "Id"=${seed.firstItemId};`);
+      const context=await browser.newContext({baseURL,javaScriptEnabled});const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      const base=`/media/addon-lists/${seed.listId}`;
+      await page.goto(base);await settled(page);
       await expect(page.locator(`[name="season_${seed.firstItemId}"]`)).toHaveValue('5');
       await page.locator(`[name="season_${seed.firstItemId}"]`).fill('3');
       await page.locator(`button[formaction$="/items/${seed.firstItemId}"]`).click();await settled(page);

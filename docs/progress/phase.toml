@@ -61,6 +61,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: Corrected CI fb803e8e is terminal red only in Firefox: 213 pass,
+30 skip, one timeout in a combined add-on-list numbering scenario. The trace
+shows repeated hydration waits consuming the fixed test budget and the final
+page retaining the expected draft and saved value. The scenario is split into
+two isolated tests with the same assertions and unchanged timeout/retry policy;
+focused matched Firefox and Chromium proof passes four cases each. Push the
+corrected candidate and require terminal green exact-SHA CI.
+
 2026-09-25: The first UCU-04 pushed candidate 889ed11b failed CI's new
 Clippy allow policy before downstream jobs. Thirteen item-level suppressions
 now carry explicit reasons; local policy, formatting and scoped all-target
