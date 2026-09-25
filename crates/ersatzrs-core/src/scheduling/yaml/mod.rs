@@ -7,8 +7,6 @@ use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor, PlayoutItem};
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use super::history_key_for_collection_key;
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_content,
     lookup_media_source, parse_duration, parse_hhmm, playout_item, shuffle_with_seed,
@@ -300,6 +298,7 @@ impl YamlRepeat {
 
 mod expressions;
 mod instructions;
+mod playlist_history;
 mod schedules;
 mod sequences;
 
@@ -480,7 +479,7 @@ impl YamlPlayoutEngine {
                 context.restore(anchor)?;
             }
         }
-        context.apply_history(&definition, &result.history_to_remove);
+        context.apply_history(&definition, &result.history_to_remove, request.mode)?;
 
         if request.mode == PlayoutBuildMode::Reset {
             for instruction in &definition.reset {
@@ -507,11 +506,13 @@ impl YamlPlayoutEngine {
         result.added_items = context.added_items;
         result.added_history = context.added_history;
         result.added_gaps = context.gaps;
-        result.history_to_remove.extend(cleanup_history(
-            &request.reference_data.existing_history,
-            request.start,
-            request.reference_data.max_playout_offset,
-        ));
+        result
+            .history_to_remove
+            .extend(playlist_history::cleanup_with_playlist_snapshots(
+                &request.reference_data.existing_history,
+                request.start,
+                request.reference_data.max_playout_offset,
+            ));
         result.history_to_remove.sort_unstable();
         result.history_to_remove.dedup();
         Ok(result)
@@ -695,6 +696,7 @@ struct YamlContext {
     enumerators: BTreeMap<String, MediaEnumerator>,
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
     restored_playlist_states: BTreeMap<String, super::classic::ClassicPlaylistCheckpoint>,
+    playlist_history_positions: BTreeMap<String, (u64, usize)>,
     content_sources: BTreeMap<String, ResolvedYamlContent>,
     smart_shuffle_state: super::SchedulingSmartShuffleState,
 }
@@ -763,6 +765,7 @@ impl YamlContext {
             enumerators: BTreeMap::new(),
             playlist_enumerators: BTreeMap::new(),
             restored_playlist_states: BTreeMap::new(),
+            playlist_history_positions: BTreeMap::new(),
             content_sources,
             smart_shuffle_state: super::SchedulingSmartShuffleState::default(),
         }
@@ -922,7 +925,13 @@ impl YamlContext {
         let resolved = self.content_sources.get(content)?;
 
         self.reference_data
-            .playlist_items_for_source(&resolved.source)
+            .playlist_items_by_key
+            .get(content)
+            .cloned()
+            .or_else(|| {
+                self.reference_data
+                    .playlist_items_for_source(&resolved.source)
+            })
     }
 
     fn history_key(&self, content: &str) -> String {
@@ -936,13 +945,16 @@ impl YamlContext {
         &mut self,
         definition: &YamlPlayoutDefinition,
         history_to_remove: &[EntityId],
-    ) {
+        mode: PlayoutBuildMode,
+    ) -> Result<(), SchedulingError> {
         let ignored = history_to_remove.iter().copied().collect::<BTreeSet<_>>();
         for content in &definition.content {
             let history_key = content.history_key();
             if self.playlist_items(&content.key).is_some() {
-                if !self.restored_playlist_states.contains_key(&content.key) {
-                    self.apply_playlist_history(&content.key, &history_key, &ignored);
+                if mode != PlayoutBuildMode::Reset
+                    && !self.restored_playlist_states.contains_key(&content.key)
+                {
+                    self.restore_playlist_history(&content.key, &history_key, &ignored)?;
                 }
                 continue;
             }
@@ -961,40 +973,7 @@ impl YamlContext {
             };
             self.enumerator(&content.key).apply_history(&history);
         }
-    }
-
-    fn apply_playlist_history(
-        &mut self,
-        content: &str,
-        history_key: &str,
-        ignored: &BTreeSet<EntityId>,
-    ) {
-        let Some(latest_when) = self
-            .reference_data
-            .existing_history
-            .iter()
-            .filter(|history| !ignored.contains(&history.id))
-            .filter(|history| history.key == history_key)
-            .filter(|history| history.when < self.current_time)
-            .map(|history| history.when)
-            .max()
-        else {
-            return;
-        };
-        let history = self
-            .reference_data
-            .existing_history
-            .iter()
-            .filter(|history| !ignored.contains(&history.id))
-            .filter(|history| history.key == history_key)
-            .filter(|history| history.when == latest_when)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let Some(playlist) = self.playlist_enumerator(content) else {
-            return;
-        };
-        playlist.apply_history(&history);
+        Ok(())
     }
 
     fn current_media_for_content(
@@ -1013,6 +992,7 @@ impl YamlContext {
         let scope_key = policy.scope_key(self.playout.id, None, Some(content));
         let scheduled_at = self.current_time;
         if let Some(playlist) = self.playlist_enumerator(content) {
+            let before = playlist.current().cloned();
             playlist.select_with_smart_shuffle(
                 &policy,
                 &smart_shuffle_state,
@@ -1020,10 +1000,15 @@ impl YamlContext {
                 scheduled_at,
                 &tags_by_media_id,
             );
-            playlist
+            let selected = playlist
                 .current()
                 .cloned()
-                .map(|media_item| (media_item, playlist.current_history_context()))
+                .map(|media_item| (media_item, playlist.current_history_context()));
+            // A Smart Shuffle swap cannot be reconstructed by ordinary advance.
+            if selected.as_ref().map(|(item, _)| item) != before.as_ref() {
+                self.playlist_history_positions.remove(content);
+            }
+            selected
         } else {
             let enumerator = self.enumerator(content);
             enumerator.select_with_smart_shuffle(

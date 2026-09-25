@@ -28,7 +28,11 @@ release section when tagging a release.
   YAML playback no longer exhausts the empty-loop guard while adding content. Repeated playlist sources share playback progress. Legacy Classic Continue
   requires complete state or a safe Refresh checkpoint; Refresh refuses older
   playlist checkpoints without cycle state before clearing items; Reset creates a
-  complete checkpoint (upstream PR #2956, reconciliation in progress).
+  complete checkpoint (upstream PR #2956).
+- Restore YAML playlist and Marathon progress after history cleanup and a
+  restart. Structured SQL loading now preserves playlist children. Versioned
+  snapshots retain cycle state without copying the full playlist on every
+  item; incompatible legacy history refuses Refresh and requires Reset.
 - Honor Classic Marathon grouping by show, season, artist, album or first
   director, including batch size and group/item shuffle settings. Split builds
   retain the same playback order and guide groups as uninterrupted builds.

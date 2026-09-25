@@ -61,11 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-25: UCU-05 row 78 is in progress. Structured SQL playlist loading,
-playable cycles, complete Continue state and legacy Refresh refusal have
-focused proof. Legacy Continue refusal and repeated-child restart proof now pass. Continue
-with YAML Refresh/history; grouped Classic Marathon now has core and SQL proof; see UCU-05 evidence. The
-pin remains row 77; no window gates, push or CI are claimed.
+2026-09-25: UCU-05 row 78 (16b71569) is reconciled. Structured playlist
+loading, all Classic Marathon groups/batches, complete Continue state and
+versioned YAML history restoration have core and restarted SQLite proof.
+Legacy state refuses unsafe builds before clearing; Reset recovers. Continue
+at row 79 (a2f54ef1). UCU-05 window gates, push and CI remain open.
 
 2026-09-25: UCU-05 row 77 (6ff44cf5) adapts upstream shuffled-progress
 validation to the flat Classic media enumerator. A saved high valid index

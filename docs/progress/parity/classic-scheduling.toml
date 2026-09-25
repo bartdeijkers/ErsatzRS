@@ -175,8 +175,8 @@ resolved    = false
 
 [[debt]]
 id          = 'classic-playlist-production-cycle-continuity'
-description = 'Row 78 exposed a flattened SQL playlist path and incomplete cycle reconstruction. Structured loading, full Continue state and legacy Refresh refusal are implemented; legacy flattened Continue now requires complete state or a safe Refresh checkpoint, and repeated child sources share progress. Grouped Marathon now uses the same tested path. Row 78 remains open for YAML restoration.'
+description = 'Row 78 exposed a flattened SQL playlist path and incomplete cycle reconstruction. Structured loading, full Continue state and legacy Refresh refusal are implemented; legacy flattened Continue now requires complete state or a safe Refresh checkpoint, and repeated child sources share progress. Grouped Marathon now uses the same tested path. Row 78 also completes YAML restoration; see UCU-05 evidence.'
 discovered  = '2026-09-25'
 adr         = '0020'
 evidence    = 'UCU-05 row 78 evidence. The restarted production fixture now exercises structured playlist children and Random Start Point; earlier flattened-path comparisons are not playlist-enumerator acceptance. All five Marathon grouping modes and batches have core coverage; director grouping and restart/Refresh have SQL proof.'
-resolved    = false
+resolved    = true

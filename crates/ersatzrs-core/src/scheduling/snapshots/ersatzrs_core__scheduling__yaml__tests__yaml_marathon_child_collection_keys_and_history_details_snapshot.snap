@@ -1,12 +1,13 @@
 ---
-source: crates/ersatzrs-core/src/scheduling/yaml.rs
+source: crates/ersatzrs-core/src/scheduling/yaml/tests.rs
+assertion_line: 1269
 expression: "serde_json::json!({\n    \"history\":\n    result.added_history.iter().map(|history|\n    serde_json::json!({\n        \"key\": history.key, \"child_key\": history.child_key, \"index\":\n        history.index, \"details\": history.details, \"is_current_child\":\n        history.is_current_child,\n    })).collect::<Vec<_>>(),\n})"
 ---
 {
   "history": [
     {
       "child_key": null,
-      "details": "{\"MediaItemId\":1,\"SeasonNumber\":1,\"EpisodeNumber\":1}",
+      "details": "{\"version\":1,\"cycle\":0,\"index\":0,\"seed\":null,\"media_details\":\"{\\\"MediaItemId\\\":1,\\\"SeasonNumber\\\":1,\\\"EpisodeNumber\\\":1}\",\"snapshot\":{\"cycle\":0,\"index\":0,\"child_index\":0,\"children\":[{\"playlist_index\":0,\"collection_key\":{\"collection_type\":\"TelevisionShow\",\"collection_id\":null,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":10,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null},\"play_all\":false,\"count\":null,\"items_taken_from_current\":0,\"enumerator\":{\"items\":[{\"id\":1,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":10,\"season_id\":1001,\"artist_id\":null,\"season\":1,\"episode\":1,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null},{\"id\":2,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":10,\"season_id\":1001,\"artist_id\":null,\"season\":1,\"episode\":2,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null}],\"index\":0,\"playback_order\":\"SeasonEpisode\"}},{\"playlist_index\":1,\"collection_key\":{\"collection_type\":\"TelevisionShow\",\"collection_id\":null,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":20,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null},\"play_all\":false,\"count\":null,\"items_taken_from_current\":0,\"enumerator\":{\"items\":[{\"id\":3,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":20,\"season_id\":2001,\"artist_id\":null,\"season\":1,\"episode\":1,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null}],\"index\":0,\"playback_order\":\"SeasonEpisode\"}}],\"all_media_ids\":[1,2,3],\"remaining_media_ids\":[1,2,3],\"shuffle_seed\":null}}",
       "index": 0,
       "is_current_child": false,
       "key": "{\"GroupBy\":\"show\",\"ItemOrder\":\"SeasonEpisode\",\"Key\":\"by_show\",\"Order\":\"None\"}"

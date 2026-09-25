@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6ff44cf5ec3bb763a5fb6a0429b5b14baf1ba1d9` |
-| **Commit subject** | `fix: don't prematurely reset shuffled collection progress (#2955)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6ff44cf5ec3bb763a5fb6a0429b5b14baf1ba1d9 |
+| **Pinned commit** | `16b715699649fa787bbf0aa033a6139f2a44c7b6` |
+| **Commit subject** | `fix: playlist enumerator consistency fixes (#2956)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/16b715699649fa787bbf0aa033a6139f2a44c7b6 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

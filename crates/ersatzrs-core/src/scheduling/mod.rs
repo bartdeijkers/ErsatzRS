@@ -218,6 +218,29 @@ pub enum SchedulingContentSource {
 }
 
 impl SchedulingContentSource {
+    /// Group already-resolved Marathon media using the shared playlist rules.
+    #[must_use]
+    pub fn marathon_playlist_items(
+        &self,
+        media_items: Vec<SchedulingMediaItem>,
+    ) -> Option<Vec<SchedulingPlaylistItem>> {
+        match self {
+            Self::Marathon {
+                group_by,
+                item_order,
+                play_all_items,
+                ..
+            } => Some(group_marathon_media(
+                media_items,
+                group_by,
+                *item_order,
+                *play_all_items,
+                None,
+            )),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub fn direct(key: impl Into<String>) -> Self {
         Self::DirectKey(key.into())
@@ -774,7 +797,7 @@ pub enum SchedulingError {
     UnsupportedScheduleKind(PlayoutScheduleKind),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct MediaEnumerator {
     items: Vec<SchedulingMediaItem>,
     index: usize,
@@ -1188,7 +1211,7 @@ pub(super) enum CurrentHistoryContext {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct PlaylistChildEnumerator {
     playlist_index: usize,
     pub collection_key: SchedulingCollectionKey,
@@ -1198,8 +1221,9 @@ pub(super) struct PlaylistChildEnumerator {
     pub enumerator: MediaEnumerator,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct PlaylistEnumerator {
+    pub cycle: u64,
     pub index: usize,
     pub child_index: usize,
     pub children: Vec<PlaylistChildEnumerator>,
@@ -1248,6 +1272,7 @@ impl PlaylistEnumerator {
             .flat_map(|child| child.enumerator.items.iter().map(|media| media.id))
             .collect::<BTreeSet<_>>();
         Self {
+            cycle: 0,
             index: 0,
             child_index: 0,
             children,
@@ -1465,6 +1490,7 @@ impl PlaylistEnumerator {
                 .is_some_and(|child| child.enumerator.current_index() == 0)
         {
             self.index = 0;
+            self.cycle = self.cycle.saturating_add(1);
             self.remaining_media_ids.clone_from(&self.all_media_ids);
             if let Some(seed) = self.shuffle_seed {
                 self.shuffle_groups(classic::next_i32_seed(seed));

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **95 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **94 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **77**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **78**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-77; the next upstream row is 78 (`16b71569`).
+  processed rows 68-78; the next upstream row is 79 (`a2f54ef1`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -35,7 +35,7 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
-## Row 78 source map: playlist enumeration consistency (in progress)
+## Row 78 source map: playlist enumeration consistency
 
 Upstream `16b71569` changes `PlaylistEnumerator` and the shared playable-item
 filter in `SeasonEpisodeMediaCollectionEnumerator`. `PlayoutBuilder` passes
@@ -46,8 +46,16 @@ a shuffled cycle, and complete restoration after a rejected filler candidate.
 No UI or schema changes occur in the upstream row. Rust targets are the shared
 `scheduling::PlaylistEnumerator`, Classic construction/checkpoints, YAML
 marathons and SQL-backed restart regressions. Existing audio/subtitle override
-identities must survive ordering and reconstruction. Row 78 remains pending
-until its production paths and continuity evidence are complete.
+identities survive ordering and reconstruction. Production tests exposed
+flattened Classic/YAML SQL loaders; both now supply structured children.
+Classic Marathon honors all five group types, batches and shuffle flags.
+YAML history stores versioned snapshots at build/cycle boundaries and candidate
+swaps, replays the saved membership before reconciling current media, and keeps
+the required baseline during cleanup. Incompatible history refuses an unsafe
+build before clearing rows; explicit Reset establishes compatible state.
+Verdict: Adapt under ADRs 0010/0020, using Rust identity checkpoints and the
+existing safe-rebuild contract. Core, SQL restart/Refresh, failure/Reset and
+scoped Clippy evidence is recorded in UCU-05; window gates remain open.
 
 ## Row 77 source map: shuffled collection index retention
 
@@ -1475,7 +1483,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | Port | ffmpeg-command-generation | `fix(ffmpeg): remove obsolete green-line crop filters` | ucu-05; upstream deletes NVIDIA H.264 and radeonsi HEVC crop metadata filters after FFmpeg 8.1.2. ErsatzRS FFmpeg 9.0 uses the same affected encode paths. Removed both filters and their applicability gate; two argv snapshots and all 344 FFmpeg tests pass. A local FFmpeg 9 NVENC overlay encode preserves 1080 bottom-row colors without crop metadata. AMD live hardware proof remains unavailable here; window playback gates remain open. |
 | 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | Port | classic-scheduling | `fix(scheduling): retain Classic daily checkpoint prefix` | ucu-05; captures day seams inside all build passes. A seven-day shuffled hourly Continue regression failed before the fix, then passed. Restarted SQLite Refresh preserves the crossing item and appends the matching future. All 249 core tests, scoped Clippy and progress checks pass. |
 | 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | Adapt (ADR 0010) | classic-scheduling | `fix(scheduling): retain inactive alternate progress` | ucu-05; Rust's flat enumerator already validates against the full item count. A core regression proves index 9 of ten remains valid. Corrected Continue publication and active-source audit to retain dormant alternate anchors; restarted SQLite proof preserves the inactive source seed/index. Existing multipart grouping debt remains visible in the owning parity record; no grouped parity is claimed. |
-| 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | | | | ucu-05; provisional: Port candidate. |
+| 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | Adapt (ADRs 0010/0020) | classic-scheduling; yaml-scheduling | `fix(scheduling): restore YAML playlist history safely` | ucu-05; checkpoint 1eb06d15 plus versioned YAML history restore. Playable cycles, canonical shuffle, candidate rollback, repeated sources, all Classic Marathon groups/batches and structured SQL loaders have core and restart/Refresh proof. Legacy state refuses before clearing; explicit Reset recovers. See UCU-05 evidence. |
 | 79 | `a2f54ef1` | fix: block playout build loop (#2957) | | | | ucu-05; provisional: Port candidate. |
 | 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | | | | ucu-05; provisional: Adapt candidate. |
 | 81 | `3f2efcd4` | fix: discover tests in ErsatzTV.Tests (#2959) | | | | ucu-05; provisional: Upstream tooling candidate. |

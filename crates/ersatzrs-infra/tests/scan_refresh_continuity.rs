@@ -1669,3 +1669,156 @@ async fn classic_filler_expression_rejection_preserves_persisted_playout_and_red
     }
     pool.close().await;
 }
+
+#[tokio::test]
+async fn yaml_marathon_history_survives_restart_cleanup_and_refresh() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("yaml-history.sqlite");
+    let pool = open_database(&path, true).await;
+    seed_grouped_playlist_fixture(&pool, true).await;
+    common::seed_media_item(&pool, 103, 1).await;
+    seed_movie(&pool, 103, "Third group").await;
+    pool.execute(
+        r#"INSERT INTO "Director" ("MovieMetadataId", "Name") VALUES (103, 'Third Director')"#,
+    )
+    .await
+    .unwrap();
+    let yaml = "content:\n  - key: marathon\n    marathon: Movies\n    searches: ['type:movie']\n    group_by: director\n    item_order: chronological\n    shuffle_groups: true\nplayout:\n  - count: '1'\n    content: marathon\n  - repeat: true\n";
+    sqlx::query(r#"UPDATE "Playout" SET "ScheduleKind" = 'Sequential', "ScheduleFile" = ?, "Seed" = 12345 WHERE "Id" = ?"#)
+        .bind(yaml).bind(RELATED_PLAYOUT_ID).execute(&pool).await.unwrap();
+    let start = common::fixed_time();
+    let finish = start + Duration::hours(4);
+    let full = build_yaml_history_window(&pool, yaml, PlayoutBuildMode::Reset, start, finish).await;
+    let first = build_yaml_history_window(
+        &pool,
+        yaml,
+        PlayoutBuildMode::Reset,
+        start,
+        start + Duration::minutes(110),
+    )
+    .await;
+    persist_yaml_history_result(&pool, &first).await;
+    pool.close().await;
+    let pool = open_database(&path, false).await;
+    let seam = first.anchor.as_ref().unwrap().next_start;
+    let continued =
+        build_yaml_history_window(&pool, yaml, PlayoutBuildMode::Continue, seam, finish).await;
+    assert_eq!(
+        continued.added_items,
+        full.added_items[first.added_items.len()..]
+    );
+    persist_yaml_history_result(&pool, &continued).await;
+    pool.close().await;
+    let pool = open_database(&path, false).await;
+    let refreshed =
+        build_yaml_history_window(&pool, yaml, PlayoutBuildMode::Refresh, seam, finish).await;
+    let timeline = |items: &[ersatzrs_domain::PlayoutItem]| {
+        items
+            .iter()
+            .map(|item| (item.media_item_id, item.start, item.finish))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        timeline(&refreshed.added_items),
+        timeline(&continued.added_items)
+    );
+    persist_yaml_history_result(&pool, &refreshed).await;
+    assert_eq!(
+        playlist_timeline(&pool).await.len(),
+        refreshed.added_items.len()
+    );
+    assert_yaml_legacy_history_refusal(&pool, seam).await;
+    pool.close().await;
+}
+
+async fn build_yaml_history_window(
+    pool: &SqlitePool,
+    yaml: &str,
+    mode: PlayoutBuildMode,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> ersatzrs_core::scheduling::SchedulingResult {
+    let repos = make_repositories(pool.clone());
+    let playout = repos
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .unwrap();
+    let reference_data = repos
+        .scheduling
+        .yaml_reference_data(RELATED_PLAYOUT_ID, yaml, Duration::zero())
+        .await
+        .unwrap();
+    PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout,
+            start,
+            finish,
+            mode,
+            reference_data,
+        })
+        .expect("build YAML history window")
+}
+
+async fn persist_yaml_history_result(
+    pool: &SqlitePool,
+    result: &ersatzrs_core::scheduling::SchedulingResult,
+) {
+    let repos = make_repositories(pool.clone());
+    let playout = repos
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .unwrap();
+    repos
+        .playout
+        .apply_build_result(result, &playout, Duration::zero())
+        .await
+        .unwrap();
+}
+
+async fn assert_yaml_legacy_history_refusal(pool: &SqlitePool, start: DateTime<Utc>) {
+    sqlx::query(r#"UPDATE "PlayoutHistory" SET "Details" = json_extract("Details", '$.media_details') WHERE "PlayoutId" = ? AND "ChildKey" IS NULL"#)
+        .bind(RELATED_PLAYOUT_ID).execute(pool).await.unwrap();
+    let before = playlist_timeline(pool).await;
+    let error = run_requested_playout_build(
+        pool,
+        &EntityLocker::new(),
+        PlayoutBuildRequest {
+            playout_id: RELATED_PLAYOUT_ID,
+            mode: PlayoutBuildMode::Refresh,
+        },
+        start,
+        None,
+    )
+    .await
+    .expect_err("legacy YAML history must refuse Refresh");
+    assert!(error.to_string().contains("cannot safely restore"));
+    assert_eq!(
+        playlist_timeline(pool).await,
+        before,
+        "refusal must not clear scheduled items"
+    );
+    let status: (i64, String) = sqlx::query_as(
+        r#"SELECT "Success", "Message" FROM "PlayoutBuildStatus" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(status.0, 0);
+    assert!(status.1.contains("Reset Playout"));
+    run_requested_playout_build(
+        pool,
+        &EntityLocker::new(),
+        PlayoutBuildRequest {
+            playout_id: RELATED_PLAYOUT_ID,
+            mode: PlayoutBuildMode::Reset,
+        },
+        start,
+        None,
+    )
+    .await
+    .expect("explicit Reset rebuilds compatible YAML history");
+    assert_build_succeeded(pool, RELATED_PLAYOUT_ID, "YAML Reset").await;
+}

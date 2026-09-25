@@ -738,9 +738,23 @@ impl SqliteSchedulingContentRepository {
             media_by_key.insert(item.key.clone(), items);
         }
 
+        let mut playlist_items_by_key = BTreeMap::new();
+        for item in &definition.content {
+            let source = item.source();
+            let children = if matches!(source, SchedulingContentSource::Marathon { .. }) {
+                source.marathon_playlist_items(media_by_key[&item.key].clone())
+            } else {
+                self.playlist_items_for_source(&source).await?
+            };
+            if let Some(children) = children {
+                playlist_items_by_key.insert(item.key.clone(), children);
+            }
+        }
+
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
+                playlist_items_by_key,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
                 max_playout_offset,

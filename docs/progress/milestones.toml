@@ -9361,7 +9361,7 @@ A production SQLite build preserves the inactive alternate's saved seed and
 index. Multipart grouping remains explicit Classic parity debt. Pin, ledger
 and checkout advance together; row 78 is next. UCU-05 window gates, push and
 exact-SHA CI remain open.
-Row 78 (16b71569) is in progress; no verdict or pin advance. Shared playlist
+Row 78 (16b71569) began with local checkpoint 1eb06d15 before its verdict and pin advance. Shared playlist
 cycles now track playable membership and reconstruct canonical shuffled group
 order. Classic loads MarathonShuffleGroups, persists complete playlist Continue
 state, and uses structured SQL playlist children. The latter was absent:
@@ -9396,8 +9396,20 @@ exposed a single-item Flood guide-group increment mismatch, now corrected.
 All 262 core tests pass (65ba8679); 46 Classic/scheduling/typed-repository tests
 pass (891694a7), including actual grouped SQL output, duplicate directors,
 restarted Continue and Refresh, track preferences and album projection.
-Remaining row-78 work: YAML Refresh and legacy playlist-history reconstruction.
-No row acceptance is inferred from the focused green tests.
+Row 78 is now Adapt under ADRs 0010/0020. YAML Refresh initially diverged
+after a shuffled cycle (267ac375). Versioned history now records full state at
+build/cycle boundaries and candidate swaps, replays original membership, then
+reconciles current candidates. Cleanup retains the baseline for the oldest
+surviving position. Core proof covers cleanup, sparse storage, legacy refusal,
+explicit Reset and membership additions; all 262 core tests pass (f895d126).
+SQL restart proof exposed a second flattened loader: YAML Marathon could not
+materialize groups. YAML reference data now loads structured playlist/Marathon
+children. Eight focused infra tests pass (97897ce3), including real-builder
+Continue and Refresh across SQLite reopen and history cleanup, scheduler-owned
+legacy refusal without clearing scheduled rows, and successful explicit Reset.
+The environment-gated real-world DB test in that selection is not claimed as
+live-profile proof. Source review and scoped Clippy pass. Pin, ledger and
+upstream checkout advance together to row 78; row 79 is next.
 No UCU-05 window gates, push or CI are claimed.
 """
 
