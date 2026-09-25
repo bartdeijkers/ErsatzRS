@@ -359,6 +359,10 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
     }
     let start = if source == FallbackSource::Leading {
         chrono::Utc::now() + chrono::Duration::seconds(4)
+    } else if source == FallbackSource::PinnedOff {
+        // Exercise joining at a programme boundary: the opening segment is
+        // shorter than the audio/video sampling window used for handoff proof.
+        chrono::Utc::now() - chrono::Duration::milliseconds(5800)
     } else {
         chrono::Utc::now() - chrono::Duration::seconds(2)
     };
@@ -435,12 +439,27 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
         let mut saw_fallback = false;
         loop {
             if let Some(playlist) = handle.trim_playlist().await {
-                for name in playlist.lines().filter(|line| {
-                    !line.starts_with('#')
-                        && Path::new(line)
+                let mut duration = None;
+                for name in playlist.lines() {
+                    if let Some(value) = name.strip_prefix("#EXTINF:") {
+                        duration = Some(value.trim_end_matches(',').parse::<f64>().unwrap());
+                        continue;
+                    }
+                    if name.starts_with('#')
+                        || !Path::new(name)
                             .extension()
                             .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-                }) {
+                    {
+                        continue;
+                    }
+                    let duration = duration.take().expect("segment must declare its duration");
+                    assert!(duration.is_finite() && duration > 0.0);
+                    // Joining near a boundary can yield a valid short segment.
+                    // Select a complete one-second observation window; keep all
+                    // decoded audio, caption and subsequent programme assertions.
+                    if duration < 1.0 {
+                        continue;
+                    }
                     if checked.contains(name) {
                         continue;
                     }

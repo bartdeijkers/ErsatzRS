@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Sample complete observation windows in Next fallback playback tests so short
+  programme-boundary segments do not cause false audio/video decoding failures.
 - Keep excluded add-on list items individually selectable for bulk inclusion;
   select-visible still skips them and the on-page selection count stays accurate.
 - Choose a free loopback port for each Next CI smoke run so an existing local

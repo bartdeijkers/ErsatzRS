@@ -9650,7 +9650,33 @@ boots that server against disposable state and serves both referenced JS/WASM
 assets successfully. The full push-range Clippy suppression-policy check passes.
 Reuse the earlier native smoke result for unchanged hybrid/HLS routing, alongside
 the post-correction four-path TSDuck proof. All local UCU-05 window requirements
-pass; authorized milestone push and terminal green exact-SHA CI remain open.
+pass. The authorized milestone push reached remote main at
+62ab8edf15421973d87c32a53bc74a5a4b0f0666; local HEAD, origin/main and live
+ls-remote agreed at that push. CI run 36187170368 was cancelled when the
+maintainer merged PR #102 onto main; it is not passing evidence. The checkout
+fast-forwards to merge 862feeba0fe1db178b15d4421cb2b41a83f1b6c2, which retains
+all UCU-05 commits. CI run 36187470626 owns acceptance of that integrated SHA.
+The earlier local results retain their tested revision. Integrated Test
+passes 3047 tests with 297 skipped (5563638b, CI profile); this selection
+excludes Next components for the dedicated Next engine job. Its progress and
+architecture checks pass. Format, Preflight and Documentation links also pass.
+Next engine fails four fallback runtime scenarios (116a86fa: 238 passed,
+4 failed): provider, credits, Convert matrix and pinned-silent fallback.
+Assertions report empty sampled video frames or fewer than 7000 decoded audio
+samples. The four scenarios pass locally (a09b7755), and all 231 infra Next
+tests pass using CI's exact Next/FFmpeg binaries (92.822 seconds). A controlled
+boundary join then reproduces the empty-frame failure (56e2a143): the playlist
+advertises a 0.2-second opening segment, shorter than the sampler's 0.5-second
+video seek and one-second audio window. The test correction selects segments
+with at least a one-second declared duration, retaining the decoded frame,
+audio, caption, fallback and following-programme assertions and deadlines.
+Pinned-silent fallback keeps the short opening occurrence as a regression case.
+This demonstrates the sampling defect; the original CI run did not retain
+segment durations. All 11 fallback scenarios pass after correction (b80d9231,
+90.361 seconds), including provider/Convert matrices, credits, live sources,
+retained/prepared/ordinary media and pinned silence. Strict infra library/test
+Clippy, format and progress validation pass. UCU-05 stays In progress and UCU-06
+is unopened until integrated exact-SHA CI is proven.
 """
 
 [[milestone]]
