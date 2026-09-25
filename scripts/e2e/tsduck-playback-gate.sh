@@ -110,9 +110,9 @@ redact_stream_url() {
 
 capture_stream() {
   local kind="$1" url="$2" secs="$3" out="$4"
-  local started finished safe_url
+  local started finished safe_url capture_status
   safe_url="$(redact_stream_url "$url")"
-  CAPTURE_MONITOR_LOG="${WORKDIR:-/tmp}/delivery-monitor.log"
+  CAPTURE_MONITOR_LOG="${out}.delivery.log"
   started=$(date +%s)
   info "capturing ${secs}s from $safe_url"
   case "$kind" in
@@ -128,8 +128,17 @@ capture_stream() {
       -P until --seconds "$secs" -O file "$out" > /dev/null 2>"$CAPTURE_MONITOR_LOG" ;;
     *) die "unknown capture kind $kind" ;;
   esac
+  capture_status=$?
   finished=$(date +%s)
   CAPTURE_TOTAL_SECONDS=$((finished - started))
+  if [ "$capture_status" -ne 0 ]; then
+    warn "capture failed (tsp exit $capture_status; log: $CAPTURE_MONITOR_LOG)"
+    return 1
+  fi
+  if [ "$CAPTURE_TOTAL_SECONDS" -lt "$secs" ]; then
+    warn "capture ended after ${CAPTURE_TOTAL_SECONDS}s of requested ${secs}s (log: $CAPTURE_MONITOR_LOG)"
+    return 1
+  fi
   [ "$CAPTURE_TOTAL_SECONDS" -gt 0 ] || CAPTURE_TOTAL_SECONDS=1
   [ -s "$out" ]
 }
@@ -293,9 +302,9 @@ mode_url() {
   safe_url="$(redact_stream_url "$url")"
   if [[ "$url" == *.m3u8* ]]; then
     check_hls_playlist "$url" "live HLS"
-    capture_stream hls "$url" "$secs" "$cap" || die "HLS capture produced no data from $safe_url"
+    capture_stream hls "$url" "$secs" "$cap" || die "HLS capture failed or ended early from $safe_url"
   else
-    capture_stream http "$url" "$secs" "$cap" || die "TS capture produced no data from $safe_url"
+    capture_stream http "$url" "$secs" "$cap" || die "TS capture failed or ended early from $safe_url"
   fi
   label="live $safe_url"
   printf '\n=== live: %s ===\n' "$safe_url"
@@ -424,7 +433,7 @@ mode_gate() {
       validate_ts "$cap" "ts-$mode"
       [ "$mode" = "ts-legacy" ] && grab_frames "$cap" "$WORKDIR/frame_tslegacy"
     else
-      fail "ts-$mode · capture" "no data from ?mode=$mode"
+      fail "ts-$mode · capture" "failed, empty, or incomplete capture from ?mode=$mode"
     fi
   done
 
@@ -441,7 +450,7 @@ mode_gate() {
       check_audio_pip_cadence "$cap" "hls-segmenter"
       grab_frames "$cap" "$WORKDIR/frame_hls_segmenter"
     else
-      fail "hls-segmenter · capture" "tsp -I hls produced no data"
+      fail "hls-segmenter · capture" "failed, empty, or incomplete capture"
     fi
   else
     fail "hls-segmenter · segments" "session playlist had no #EXTINF within 45s (log: $log)"
@@ -449,22 +458,27 @@ mode_gate() {
 
   # --- HLS direct ---
   printf '\n=== pipeline: HLS direct (?mode=hls-direct) ===\n'
-  local direct_pl="$BASE_URL/iptv/channel/$channel.m3u8?mode=hls-direct"
+  curl -fsS --max-time 10 "$BASE_URL/iptv/channel/$channel.m3u8?mode=hls-direct" >/dev/null 2>&1 \
+    && pass "hls-direct · variant playlist served" || fail "hls-direct · variant playlist"
+  # The public direct mode uses the stable segmenter-backed delivery contract;
+  # its channel URL is a master playlist, just like mode=segmenter above.
+  local direct_pl="$BASE_URL/iptv/session/$channel/hls.m3u8"
   if wait_for "$direct_pl" "#EXTINF" 20; then
     check_hls_playlist "$direct_pl" "hls-direct"
     cap="$WORKDIR/hls_direct.ts"
     if capture_stream hls "$direct_pl" "$CAPTURE_SECONDS" "$cap"; then
       validate_ts "$cap" "hls-direct"
     else
-      fail "hls-direct · capture" "tsp -I hls produced no data"
+      fail "hls-direct · capture" "failed, empty, or incomplete capture"
     fi
   else
-    warn "hls-direct · no segments within 20s — channel may not support direct mode for this source"
+    fail "hls-direct · segments" "session playlist had no #EXTINF within 20s (log: $log)"
   fi
 
   # --- server log must be free of known runtime-failure signatures ---
   printf '\n=== server log scan ===\n'
   local sigs=(
+    "ffmpeg channel stream exited unsuccessfully"
     "ffmpeg hls segmenter exited unsuccessfully" "failed to spawn ffmpeg hls segmenter"
     "hls segmenter did not produce initial playlist segments before timeout"
     "Impossible to convert between the formats" "Error submitting packet to decoder"

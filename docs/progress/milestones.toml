@@ -9608,7 +9608,34 @@ subject's 26.7.0 wording does not match that diff. ErsatzRS keeps its own releas
 history. Source/progress/diff checks pass; pin/ledger/checkout advance to
 35b5a259. All UCU-05 rows are reconciled, but the milestone remains In progress
 until full window acceptance, authorized push and terminal green exact-SHA CI.
-No UCU-05 window gates, push or CI are claimed.
+Window acceptance started at 61f373ba: workspace all-target Clippy passes
+(3m35s), and cargo deny passes advisories, bans, licenses and sources. Full ./run.sh test-closeout passes: Nextest 366af9c7 reports 3230 passed and
+107 skipped; the Cargo doctest phase completes successfully (0 doctests). The configured target cache reached
+74 GiB, requiring cleanup under the 60-GiB repository policy before subsequent
+heavy gates. After cleanup, cargo xtask smoke passes with FFmpeg n9.0-20260805:
+MPEG-TS returns HTTP 200 with stream bytes, and HLS provides both a variant
+playlist and initial session segments. Parity, TSDuck and final bundle consistency
+remain open, followed by the authorized push and exact-SHA CI.
+The first TSDuck runs exposed invalid gate evidence: HLS direct was skipped
+because its master playlist was treated as a media playlist, and a nonempty
+legacy capture was accepted despite ending after about five seconds. The gate
+now follows the session playlist, rejects failed/early captures, retains each
+capture's diagnostics and scans channel-worker failure signatures. Synthetic
+capture checks cover early EOF, nonzero exit with bytes, and a complete window;
+the existing delivery regressions pass. A standalone chunked HTTP fixture with
+FFmpeg n9.0-20260805 reproduces legacy concat's EIO/ENOSYS failure. Declaring
+seekable=0 does not fix it; per-entry multiple_requests=1 preserves normal EOF
+and crosses five requests successfully. The playlist now sets that option for
+both entries. Three focused concat tests pass (da26145b), including the reviewed
+playlist snapshot. The strengthened real-server TSDuck gate passes all four
+paths with 87 checks and zero failures. Legacy delivers 141,215 packets and
+20.497 seconds of media reported by ffprobe, with zero continuity, PTS/DTS/PCR-leap,
+sync or transport errors. HLS segmenter pip cadence deviates by at most 30 ms.
+The server log is free of known failure signatures. The original provider-specific
+debt remains visible pending confirmation; no live-provider acceptance is inferred.
+Post-correction workspace all-target strict Clippy passes (3m59s), along with
+format, diff and progress checks. Test closeout, parity and matched-bundle
+verification remain open before the authorized milestone push and exact-SHA CI.
 """
 
 [[milestone]]

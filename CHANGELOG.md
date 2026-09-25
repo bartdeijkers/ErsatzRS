@@ -20,6 +20,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve normal chunked HTTP end-of-stream handling between legacy MPEG-TS
+  programmes, preventing FFmpeg 9 from aborting the channel at the first item.
+- Make the playback validation gate follow HLS direct's session playlist,
+  reject failed or prematurely ended captures, and report channel-worker failures.
+
 - Publish playout gap rows with their completed build and move them with
   on-demand playback, so the detail table keeps gaps aligned with scheduled items
   (upstream PR #2968).

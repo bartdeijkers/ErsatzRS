@@ -30,7 +30,14 @@ impl ConcatPlaylist {
             "{}://{}/ffmpeg/stream/{}?mode={}",
             self.scheme, self.host, self.channel_number, self.mode
         );
-        format!("ffconcat version 1.0\nfile {url}\nfile {url}\n")
+        // Programme responses are bounded, chunked HTTP streams. FFmpeg 9's
+        // single-request reader closes the connection on the terminal chunk,
+        // then reports EIO on its next read. Persistent request handling keeps
+        // that normal EOF available to the concat demuxer so it opens the next
+        // programme instead of aborting the channel.
+        format!(
+            "ffconcat version 1.0\nfile {url}\noption multiple_requests 1\nfile {url}\noption multiple_requests 1\n"
+        )
     }
 
     /// Writes this playlist to `path`.
@@ -50,8 +57,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn internal_programme_playlist_is_unchanged() {
+    fn internal_programme_playlist_preserves_chunked_eof_for_each_entry() {
         assert_eq!(ConcatPlaylist::new("http", "localhost", "1", "hybrid").render(),
-            "ffconcat version 1.0\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\n");
+            "ffconcat version 1.0\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\n");
     }
 }

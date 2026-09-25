@@ -6,7 +6,7 @@ adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
 Ledger: 173 commits, 90 reconciled, 83 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 has processed
-rows 68-90; window gates and push/CI remain open before UCU-06 row 91.
+rows 68-90; window gates/push/CI precede UCU-06 row 91.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next

@@ -62,16 +62,15 @@ PCR samples, and zero continuity-counter, PTS, DTS, PCR-leap, sync, or
 transport errors.
 
 ParityDebt:
-- FFmpeg 9 legacy concat still treats the normal EOF of a bounded chunked
-  Remote Stream input as an I/O error before opening the next concat entry.
-  Hybrid channels no longer reach that branch accidentally, but an explicit
-  `mode=ts-legacy` request for provider media needs a dedicated supervisor or
-  another FFmpeg-9-safe handoff design.
+- FFmpeg 9's single-request HTTP reader mishandles chunked EOF in legacy concat.
+  Per-entry multiple_requests=1 fixes the synthetic handoff: five HTTP requests
+  and 20.497 seconds of real-server calibration playback without transport faults.
+  The original provider case remains unconfirmed; hybrid routing is unchanged.
 '''
 
 [[debt]]
 id          = 'ffmpeg9-legacy-concat-remote-stream-eof'
-description = 'An accelerated two-item Beeld & Geluid proof showed that explicit `mode=ts-legacy` exits at the first chunked Remote Stream EOF before opening concat entry two. The configured Teleac channel is Transport Stream Hybrid and now dispatches the stable segmenter wrapper, so normal profile playback is fixed; preserve explicit legacy semantics while replacing its FFmpeg 9 remote-item handoff.'
+description = 'An accelerated two-item provider proof showed explicit `mode=ts-legacy` exiting at the first chunked EOF. Per-entry persistent HTTP handling now fixes the same failure on local synthetic media while preserving legacy concat semantics. Confirmation against the original bounded provider scenario remains open; normal Hybrid playback continues using the stable segmenter wrapper.'
 discovered  = '2026-08-17'
-evidence    = 'Bounded debug proof reported `Error during demuxing: Input/output error` and `Illegal seek` after file 0, while the corrected 45-second Hybrid capture crossed the same two provider items with 307,772 packets and zero TSDuck faults.'
+evidence    = 'Original bounded provider proof reported EIO and Illegal seek after file 0; Hybrid crossed two items with 307,772 packets and zero faults. UCU-05 reproduced legacy EIO/ENOSYS using local synthetic media. Per-entry multiple_requests=1 fixes the isolated chunked HTTP fixture and yields a 20.497-second real-server legacy capture with 141,215 packets and zero transport faults. Focused concat tests and the reviewed snapshot pass (da26145b). Confirmation of the original provider case remains open.'
 resolved    = false
