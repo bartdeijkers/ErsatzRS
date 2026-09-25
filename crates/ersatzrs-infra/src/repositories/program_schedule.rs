@@ -1351,6 +1351,7 @@ async fn upsert_program_schedule_item(
                "MarathonGroupBy" = ?,
                "MarathonShuffleGroups" = ?,
                "MarathonShuffleItems" = ?,
+               "MarathonBatchSize" = ?,
                "Index" = ?,
                "StartTime" = ?,
                "FixedStartTimeBehavior" = ?,
@@ -1365,7 +1366,6 @@ async fn upsert_program_schedule_item(
                "SubtitleStreamIndex" = ?,
                "SearchTitle" = NULL,
                "FakeCollectionKey" = NULL,
-               "MarathonBatchSize" = NULL,
                "PreRollFillerId" = ?,
                "MidRollFillerId" = ?,
                "PostRollFillerId" = ?,
@@ -1386,8 +1386,9 @@ async fn upsert_program_schedule_item(
     .bind(encode_enum(item.fill_with_group_mode))
     .bind(encode_enum(item.guide_mode))
     .bind(encode_enum(item.marathon_group_by))
-    .bind(false)
+    .bind(item.marathon_shuffle_groups)
     .bind(item.marathon_shuffle_items)
+    .bind(item.marathon_batch_size)
     .bind(item.sort_order)
     .bind(start_time.as_deref())
     .bind(item.fixed_start_time_behavior.map(encode_enum))
@@ -1429,14 +1430,14 @@ async fn upsert_program_schedule_item(
                 "MediaItemId", "MultiCollectionId", "SmartCollectionId",
                 "RerunCollectionId", "PlaylistId", "SearchQuery",
                 "PlaybackOrder", "FillWithGroupMode", "GuideMode",
-                "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
+                "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems", "MarathonBatchSize",
                 "Index", "StartTime", "FixedStartTimeBehavior", "CustomTitle",
                 "PreferredAudioLanguageCode", "PreferredAudioTitle",
                 "PreferredSubtitleLanguageCode", "SubtitleMode", "PreRollFillerId",
                 "MidRollFillerId", "PostRollFillerId", "TailFillerId", "FallbackFillerId",
                 "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
                 "SubtitleStreamIndex"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.program_schedule_id)
@@ -1452,8 +1453,9 @@ async fn upsert_program_schedule_item(
         .bind(encode_enum(item.fill_with_group_mode))
         .bind(encode_enum(item.guide_mode))
         .bind(encode_enum(item.marathon_group_by))
-        .bind(false)
+        .bind(item.marathon_shuffle_groups)
         .bind(item.marathon_shuffle_items)
+        .bind(item.marathon_batch_size)
         .bind(item.sort_order)
         .bind(start_time.as_deref())
         .bind(item.fixed_start_time_behavior.map(encode_enum))
@@ -1701,7 +1703,9 @@ async fn map_program_schedule_item(
             "FillWithGroupMode",
         )?,
         marathon_group_by: decode_enum_column("program schedule item marathon_group_by", row, "MarathonGroupBy")?,
+        marathon_shuffle_groups: decode_bool_column(row, "MarathonShuffleGroups")?,
         marathon_shuffle_items: decode_bool_column(row, "MarathonShuffleItems")?,
+        marathon_batch_size: row.try_get("MarathonBatchSize").repository()?,
         custom_title: row.try_get("CustomTitle").repository()?,
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
         preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,

@@ -9361,6 +9361,43 @@ A production SQLite build preserves the inactive alternate's saved seed and
 index. Multipart grouping remains explicit Classic parity debt. Pin, ledger
 and checkout advance together; row 78 is next. UCU-05 window gates, push and
 exact-SHA CI remain open.
+Row 78 (16b71569) is in progress; no verdict or pin advance. Shared playlist
+cycles now track playable membership and reconstruct canonical shuffled group
+order. Classic loads MarathonShuffleGroups, persists complete playlist Continue
+state, and uses structured SQL playlist children. The latter was absent:
+earlier restart comparisons exercised flattened media, so those runs are not
+structured-playlist acceptance. The revised production restart/Refresh test
+passes with unequal children, random start and track preferences after wiring
+the structured loader (Nextest 324761a4). The legacy checkpoint test then
+proves scheduler-owned Refresh refuses missing cycle state, records failure,
+and preserves persisted rows across SQLite reopen (769f696f).
+A random-start Continue regression failed at split 9 (becf821f), then passed
+with full child/cycle persistence (cc5d42a2). YAML Continue now retains the same
+state across midnight. A repeating marathon exposed a guard that accumulated
+across successful instructions (b8fa6eb7); resetting it on successful playback
+passes all 260 core tests (f19f6800), including empty-loop rejection.
+The final playlist-focused selection passes 63/63 (3f170497); scoped
+core/domain/infra all-target Clippy passes.
+Legacy Classic Continue admission now checks complete active-playlist context
+through the same runtime audit used by maintenance and health. A restarted
+legacy Continue previously succeeded unsafely (4cee0720); it now requires a
+valid Refresh checkpoint or records refusal without clearing rows. All 22
+Classic infra tests pass (cecd3426). Repeated child-source references also
+shared no cursor: the red sequence 10,10,20 is now 10,11,20. All 17 core
+playlist tests pass (3e683d22), and the production shuffled/random-start
+restart-to-Refresh test passes with repeated collection children (86d2caac).
+Classic Marathon now constructs shared playlists for show, season, artist,
+album and first-director groups, preserves MarathonBatchSize through typed SQL
+insert/update, and applies group/item shuffle flags. SQL loads album and first
+director without multiplying media rows; EXPLAIN on a freshly migrated SQLite
+database uses all four Director metadata indexes. The core matrix covers all
+five groups, play-all/batch, shuffled/unshuffled Continue across midnight. It
+exposed a single-item Flood guide-group increment mismatch, now corrected.
+All 262 core tests pass (65ba8679); 46 Classic/scheduling/typed-repository tests
+pass (891694a7), including actual grouped SQL output, duplicate directors,
+restarted Continue and Refresh, track preferences and album projection.
+Remaining row-78 work: YAML Refresh and legacy playlist-history reconstruction.
+No row acceptance is inferred from the focused green tests.
 No UCU-05 window gates, push or CI are claimed.
 """
 

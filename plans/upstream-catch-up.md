@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **98 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **95 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -34,6 +34,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 78 source map: playlist enumeration consistency (in progress)
+
+Upstream `16b71569` changes `PlaylistEnumerator` and the shared playable-item
+filter in `SeasonEpisodeMediaCollectionEnumerator`. `PlayoutBuilder` passes
+the Classic item's `MarathonShuffleGroups` to playlists; `MarathonHelper`
+constructs a playlist from grouped media. The regression contract covers
+cycle completion with season-zero specials, deterministic reconstruction after
+a shuffled cycle, and complete restoration after a rejected filler candidate.
+No UI or schema changes occur in the upstream row. Rust targets are the shared
+`scheduling::PlaylistEnumerator`, Classic construction/checkpoints, YAML
+marathons and SQL-backed restart regressions. Existing audio/subtitle override
+identities must survive ordering and reconstruction. Row 78 remains pending
+until its production paths and continuity evidence are complete.
 
 ## Row 77 source map: shuffled collection index retention
 

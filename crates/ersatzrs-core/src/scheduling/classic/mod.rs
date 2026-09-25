@@ -201,6 +201,19 @@ pub fn audit_classic_refresh_checkpoint(
             "checkpoint sources are partial, stale, or duplicated".to_owned(),
         );
     }
+    if context.sources.iter().any(|(key, source)| {
+        reference_data.playlist_items_by_key.contains_key(key)
+            && source
+                .playlist
+                .as_ref()
+                .is_none_or(|playlist| playlist.remaining_media_ids.is_none())
+    }) {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            "playlist checkpoint is missing playable-cycle state".to_owned(),
+        );
+    }
 
     let filler_context = context
         .anchor
@@ -386,20 +399,64 @@ struct ClassicAnchorContext {
     filler_indices: BTreeMap<EntityId, usize>,
     #[serde(default)]
     filler_sources: BTreeMap<EntityId, ClassicMediaCheckpoint>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    playlist_sources: BTreeMap<String, ClassicPlaylistCheckpoint>,
 }
 
 fn classic_anchor_context_version() -> u32 {
     2
 }
 
+/// Check that persisted Continue context contains every active playlist's
+/// complete cycle state. Legacy flattened collection indices cannot restore it.
+#[must_use]
+pub fn classic_playlist_continuation_is_complete(
+    reference_data: &SchedulingReferenceData,
+    context: Option<&str>,
+) -> bool {
+    if reference_data.playlist_items_by_key.is_empty() {
+        return true;
+    }
+    let Some(context) =
+        context.and_then(|value| serde_json::from_str::<ClassicAnchorContext>(value).ok())
+    else {
+        return false;
+    };
+    context.version == classic_anchor_context_version()
+        && reference_data.playlist_items_by_key.keys().all(|key| {
+            context
+                .playlist_sources
+                .get(key)
+                .is_some_and(|source| source.remaining_media_ids.is_some())
+        })
+}
+
 impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
-    fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+    fn schedule(
+        &self,
+        mut request: SchedulingRequest,
+    ) -> Result<SchedulingResult, SchedulingError> {
         let mut items = request.reference_data.classic_schedule_items.clone();
         if items.is_empty() {
             return Ok(SchedulingResult::default());
         }
 
         items.sort_by_key(|item| (item.sort_order, item.id));
+        for item in &items {
+            if item.playback_order == PlaybackOrder::Marathon {
+                let key = item_key(item);
+                let media = request
+                    .reference_data
+                    .media_by_key
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_default();
+                request
+                    .reference_data
+                    .playlist_items_by_key
+                    .insert(key, super::classic_marathon_playlist_items(item, media));
+            }
+        }
         if request.mode == PlayoutBuildMode::Refresh
             && !request.reference_data.existing_items.is_empty()
         {
@@ -459,9 +516,13 @@ struct ClassicMediaCheckpoint {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct ClassicPlaylistCheckpoint {
+pub(super) struct ClassicPlaylistCheckpoint {
     index: usize,
     child_index: usize,
+    #[serde(default)]
+    shuffle_seed: Option<i32>,
+    #[serde(default)]
+    remaining_media_ids: Option<BTreeSet<EntityId>>,
     children: Vec<ClassicPlaylistChildCheckpoint>,
 }
 
@@ -523,6 +584,7 @@ struct ClassicContext {
     state: ClassicState,
     media: BTreeMap<String, MediaEnumerator>,
     playlists: BTreeMap<String, PlaylistEnumerator>,
+    retained_playlist_sources: BTreeMap<String, ClassicPlaylistCheckpoint>,
     media_states: BTreeMap<String, CollectionEnumeratorState>,
     collection_anchors: Vec<PlayoutProgramScheduleAnchor>,
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
@@ -605,40 +667,46 @@ impl ClassicContext {
             let started = retained_state.is_some_and(|state| state.started);
             if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
                 let mut playlist = PlaylistEnumerator::new(playlist_items.clone());
-                if request.reference_data.classic_random_start_point {
-                    for (child_index, child) in playlist.children.iter_mut().enumerate() {
-                        let order = child.enumerator.playback_order;
-                        if matches!(
+                let mut prepared_children =
+                    Vec::<(SchedulingCollectionKey, MediaEnumerator)>::new();
+                for (child_index, child) in playlist.children.iter_mut().enumerate() {
+                    if let Some((_, enumerator)) = prepared_children
+                        .iter()
+                        .find(|(key, _)| *key == child.collection_key)
+                    {
+                        child.enumerator.clone_from(enumerator);
+                        continue;
+                    }
+                    let order = child.enumerator.playback_order;
+                    let child_seed = seed_to_u64(seed).wrapping_add(child_index as u64);
+                    prepare_enumerator_items(&mut child.enumerator, order, child_seed, None);
+                    if request.reference_data.classic_random_start_point
+                        && item.playback_order != PlaybackOrder::Marathon
+                        && matches!(
                             order,
                             PlaybackOrder::Chronological
                                 | PlaybackOrder::SeasonEpisode
                                 | PlaybackOrder::ShuffleInOrder
-                        ) {
-                            let child_seed = seed_to_u64(seed).wrapping_add(child_index as u64);
-                            prepare_enumerator_items(
-                                &mut child.enumerator,
-                                order,
-                                child_seed,
-                                None,
-                            );
-                            child.enumerator.set_index(
-                                usize::try_from(child_seed % child.enumerator.len() as u64)
-                                    .unwrap_or_default(),
-                            );
-                        }
+                        )
+                        && !child.enumerator.is_empty()
+                    {
+                        child.enumerator.set_index(
+                            usize::try_from(child_seed % child.enumerator.len() as u64)
+                                .unwrap_or_default(),
+                        );
                     }
+                    prepared_children
+                        .push((child.collection_key.clone(), child.enumerator.clone()));
                 }
-                if request.mode == PlayoutBuildMode::Continue
-                    && request.reference_data.classic_random_start_point
-                {
-                    if let Some(state) = retained_state.filter(|state| state.started) {
+                if item.marathon_shuffle_groups {
+                    playlist.shuffle_groups(seed);
+                }
+                if request.mode == PlayoutBuildMode::Continue {
+                    if let Some(checkpoint) = anchor_context.playlist_sources.get(&key) {
+                        restore_playlist_checkpoint(&mut playlist, checkpoint);
+                    } else if let Some(state) = retained_state.filter(|state| state.started) {
                         let target = usize::try_from(state.index).unwrap_or_default();
-                        while playlist.index < target {
-                            playlist.advance();
-                            if playlist.index == 0 {
-                                break;
-                            }
-                        }
+                        playlist.replay_to(target);
                     }
                 }
                 playlists.insert(key.clone(), playlist);
@@ -782,6 +850,7 @@ impl ClassicContext {
             state,
             media,
             playlists,
+            retained_playlist_sources: anchor_context.playlist_sources,
             media_states,
             collection_anchors,
             filler_media,
@@ -1059,7 +1128,7 @@ impl ClassicContext {
             .state
             .current_time
             .min(self.filler_start_after(next_schedule_item));
-        self.decrement_guide_group_if_multi_item_group(start_len);
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
         self.state.next_guide_group += 1;
     }
 
@@ -1163,7 +1232,7 @@ impl ClassicContext {
                 self.state.current_time = until;
             }
         }
-        self.decrement_guide_group_if_multi_item_group(start_len);
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
         self.state.next_guide_group += 1;
     }
 
@@ -1250,7 +1319,7 @@ impl ClassicContext {
             self.advance_schedule_item();
             self.advance_fill_group(schedule_item);
         }
-        self.decrement_guide_group_if_multi_item_group(start_len);
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
         self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
         self.state.next_guide_group += 1;
     }
@@ -2054,10 +2123,19 @@ impl ClassicContext {
             next_guide_group: self.state.next_guide_group,
             context: (self.request.reference_data.has_active_smart_shuffle()
                 || !self.random_rotation_cycle_predecessors.is_empty()
+                || !self.playlists.is_empty()
+                || !self.retained_playlist_sources.is_empty()
                 || !self.filler_media.is_empty())
             .then(|| {
+                let mut playlist_sources = self.retained_playlist_sources.clone();
+                playlist_sources.extend(
+                    self.playlists
+                        .iter()
+                        .map(|(key, playlist)| (key.clone(), playlist_checkpoint(playlist))),
+                );
                 serde_json::to_string(&ClassicAnchorContext {
                     version: classic_anchor_context_version(),
+                    playlist_sources,
                     filler_indices: self
                         .filler_media
                         .iter()
@@ -2170,28 +2248,7 @@ impl ClassicContext {
                     current_index: enumerator.current_index(),
                     ordered_items: enumerator.items.iter().map(media_identity).collect(),
                 });
-            let playlist = self
-                .playlists
-                .get(&key)
-                .map(|playlist| ClassicPlaylistCheckpoint {
-                    index: playlist.index,
-                    child_index: playlist.child_index,
-                    children: playlist
-                        .children
-                        .iter()
-                        .map(|child| ClassicPlaylistChildCheckpoint {
-                            collection_key: child.collection_key.clone(),
-                            items_taken_from_current: child.items_taken_from_current,
-                            current_index: child.enumerator.current_index(),
-                            ordered_items: child
-                                .enumerator
-                                .items
-                                .iter()
-                                .map(media_identity)
-                                .collect(),
-                        })
-                        .collect(),
-                });
+            let playlist = self.playlists.get(&key).map(playlist_checkpoint);
             result.insert(
                 key,
                 ClassicCheckpointSource {
@@ -2289,6 +2346,9 @@ impl ClassicContext {
             });
         if let Some(playlist) = self.playlists.get(key) {
             state.index = i32::try_from(playlist.index).unwrap_or_default();
+            if let Some(seed) = playlist.shuffle_seed {
+                state.seed = seed;
+            }
         } else if let Some(enumerator) = self.media.get(key) {
             if enumerator.playback_order != PlaybackOrder::Random {
                 state.index = i32::try_from(enumerator.current_index()).unwrap_or_default();
@@ -2517,6 +2577,9 @@ impl ClassicContext {
             playlist.advance();
             if let Some(state) = self.media_states.get_mut(&key) {
                 state.index = i32::try_from(playlist.index).unwrap_or_default();
+                if let Some(seed) = playlist.shuffle_seed {
+                    state.seed = seed;
+                }
                 state.started = true;
             }
             return;
@@ -2646,12 +2709,22 @@ impl ClassicContext {
         }
     }
 
-    fn decrement_guide_group_if_multi_item_group(&mut self, start_len: usize) {
+    fn decrement_guide_group_if_advanced(
+        &mut self,
+        start_len: usize,
+        schedule_item: &ProgramScheduleItem,
+    ) {
         let groups = self.result.added_items[start_len..]
             .iter()
             .map(|item| item.guide_group)
             .collect::<BTreeSet<_>>();
-        if groups.len() > 1 {
+        if groups.len() > 1
+            || (!groups.is_empty()
+                && schedule_item
+                    .custom_title
+                    .as_deref()
+                    .is_none_or(str::is_empty))
+        {
             self.state.next_guide_group -= 1;
         }
     }
@@ -2990,10 +3063,44 @@ fn restore_media_checkpoint(
     true
 }
 
-fn restore_playlist_checkpoint(
+pub(super) fn playlist_checkpoint(playlist: &PlaylistEnumerator) -> ClassicPlaylistCheckpoint {
+    ClassicPlaylistCheckpoint {
+        index: playlist.index,
+        child_index: playlist.child_index,
+        shuffle_seed: playlist.shuffle_seed,
+        remaining_media_ids: Some(playlist.remaining_media_ids.clone()),
+        children: playlist
+            .children
+            .iter()
+            .map(|child| ClassicPlaylistChildCheckpoint {
+                collection_key: child.collection_key.clone(),
+                items_taken_from_current: child.items_taken_from_current,
+                current_index: child.enumerator.current_index(),
+                ordered_items: child.enumerator.items.iter().map(media_identity).collect(),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn restore_playlist_checkpoint(
     playlist: &mut PlaylistEnumerator,
     checkpoint: &ClassicPlaylistCheckpoint,
 ) {
+    if playlist.shuffle_seed.is_some() {
+        playlist.shuffle_seed = checkpoint.shuffle_seed.or(playlist.shuffle_seed);
+    }
+    let old_media_ids = checkpoint
+        .children
+        .iter()
+        .flat_map(|child| child.ordered_items.iter().map(|item| item.media_item_id))
+        .collect::<BTreeSet<_>>();
+    if let Some(remaining) = &checkpoint.remaining_media_ids {
+        playlist.remaining_media_ids = remaining
+            .intersection(&playlist.all_media_ids)
+            .copied()
+            .chain(playlist.all_media_ids.difference(&old_media_ids).copied())
+            .collect();
+    }
     let mut available = std::mem::take(&mut playlist.children)
         .into_iter()
         .map(Some)
@@ -3418,7 +3525,7 @@ fn seed_to_u64(seed: i32) -> u64 {
     seed as u64
 }
 
-fn next_i32_seed(seed: i32) -> i32 {
+pub(super) fn next_i32_seed(seed: i32) -> i32 {
     let next = next_random_state(seed_to_u64(seed));
     (next >> 33) as i32
 }
@@ -4190,9 +4297,17 @@ mod tests {
             PlaybackOrder::SeasonEpisode,
             PlaybackOrder::ShuffleInOrder,
         ] {
-            assert_eq!(build(order, false, 4, None), 101, "{order:?}");
+            // ShuffleInOrder prepares its seeded group order even without a
+            // random starting offset; chronological orders begin at 101.
+            let expected = if order == PlaybackOrder::ShuffleInOrder {
+                102
+            } else {
+                101
+            };
+            assert_eq!(build(order, false, 4, None), expected, "{order:?}");
             assert!(
-                (1..=16).any(|seed| build(order, true, seed, None) != 101),
+                (1..=16)
+                    .any(|seed| build(order, true, seed, None) != build(order, false, seed, None)),
                 "{order:?} should permit a nonzero start"
             );
         }
@@ -6322,5 +6437,7 @@ mod tests {
 mod fallback_tests;
 
 mod mid_roll;
+#[cfg(test)]
+mod playlist_tests;
 
 mod chapter_expression;

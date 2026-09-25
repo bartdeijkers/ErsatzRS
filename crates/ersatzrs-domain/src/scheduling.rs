@@ -108,7 +108,11 @@ pub struct ProgramScheduleItem {
     pub tail_mode: TailMode,
     pub fill_with_group_mode: FillWithGroupMode,
     pub marathon_group_by: MarathonGroupBy,
+    #[serde(default)]
+    pub marathon_shuffle_groups: bool,
     pub marathon_shuffle_items: bool,
+    #[serde(default)]
+    pub marathon_batch_size: Option<i32>,
     pub custom_title: Option<String>,
     pub preferred_audio_language_code: Option<String>,
     pub preferred_audio_title: Option<String>,

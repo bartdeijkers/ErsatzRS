@@ -115,7 +115,7 @@ resolved    = true
 id          = 'playback-order-shuffle-modes-aliased'
 description = 'Shuffle, ShuffleInOrder, and MultiEpisodeShuffle were byte-for-byte identical (all ran the same artist-distance shuffle); Random, RandomRotation, and Marathon were also identical (all ran a plain seeded shuffle). Users picking different playback orders got no behavioral difference.'
 discovered  = '2026-07-27'
-evidence    = 'Resolved for Shuffle/ShuffleInOrder/Random/RandomRotation: Shuffle is a flat exhaustive permutation; ShuffleInOrder/MultiEpisodeShuffle keep show/artist distance; Random performs deterministic draws with replacement; and RandomRotation randomizes within groups while preserving group separation across cycles and persisted Continue seams. Regressions include classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_draws_with_replacement_and_differs_from_shuffle, classic_random_continue_matches_uninterrupted_draws, and the classic_random_rotation_* family (classic/mod.rs). Remaining: Marathon stays aliased to its existing seeded order pending marathon_group_by/marathon_shuffle_items wiring; MultiEpisodeShuffle awaits part-number metadata; and persisted schedule flags keep_multi_part_episodes_together/treat_collections_as_shows still do not reach SchedulingReferenceData.'
+evidence    = 'Resolved for Shuffle/ShuffleInOrder/Random/RandomRotation: Shuffle is a flat exhaustive permutation; ShuffleInOrder/MultiEpisodeShuffle keep show/artist distance; Random performs deterministic draws with replacement; and RandomRotation randomizes within groups while preserving group separation across cycles and persisted Continue seams. Regressions include classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_draws_with_replacement_and_differs_from_shuffle, classic_random_continue_matches_uninterrupted_draws, and the classic_random_rotation_* family (classic/mod.rs). Row 78 wires Marathon show/season/artist/album/first-director groups, group/item shuffle and batch settings into shared playlists with core and restarted SQL proof (UCU-05 evidence). Remaining: MultiEpisodeShuffle awaits part-number metadata; and persisted schedule flags keep_multi_part_episodes_together/treat_collections_as_shows still do not reach SchedulingReferenceData.'
 resolved    = true
 
 [[debt]]
@@ -171,4 +171,12 @@ description = 'Accepted ADR 0098 defines deterministic collation, numeric conver
 discovered  = '2026-09-23'
 adr         = '0098'
 evidence    = 'Exact NCalcSync 5.12.0 probes across invariant/en-US/nl-NL/tr-TR demonstrate deployment-sensitive string comparisons and numeric/date conversions. The maintainer accepted ADR 0098 on 2026-09-23; 238 focused core/SQL tests passed, followed by 19 expression/atomic-failure tests after eager literal validation was added. Eight profile regressions passed in each of four separate language-environment processes. Dependency audit passed. Native MPEG-TS/HLS smoke and decoded Unicode-selected chapter playback pass, including persisted fractional fallback intervals. All-six-platform application evidence remains required. See ADR 0098 and UCU-02.'
+resolved    = false
+
+[[debt]]
+id          = 'classic-playlist-production-cycle-continuity'
+description = 'Row 78 exposed a flattened SQL playlist path and incomplete cycle reconstruction. Structured loading, full Continue state and legacy Refresh refusal are implemented; legacy flattened Continue now requires complete state or a safe Refresh checkpoint, and repeated child sources share progress. Grouped Marathon now uses the same tested path. Row 78 remains open for YAML restoration.'
+discovered  = '2026-09-25'
+adr         = '0020'
+evidence    = 'UCU-05 row 78 evidence. The restarted production fixture now exercises structured playlist children and Random Start Point; earlier flattened-path comparisons are not playlist-enumerator acceptance. All five Marathon grouping modes and batches have core coverage; director grouping and restart/Refresh have SQL proof.'
 resolved    = false

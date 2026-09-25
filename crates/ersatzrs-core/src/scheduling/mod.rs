@@ -1,5 +1,7 @@
 mod block;
 mod classic;
+#[cfg(test)]
+mod playlist_tests;
 mod scripted;
 mod smart_shuffle;
 mod yaml;
@@ -10,8 +12,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
     ChannelPlayoutMode, CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior,
-    PlaybackOrder, Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap, PlayoutHistory,
-    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    MarathonGroupBy, PlaybackOrder, Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap,
+    PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
     PlayoutScheduleKind, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
@@ -24,7 +26,8 @@ pub use block::{
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
 pub use classic::{
-    audit_classic_refresh_checkpoint, audit_classic_runtime_state, classic_schedule_item_key,
+    audit_classic_refresh_checkpoint, audit_classic_runtime_state,
+    classic_playlist_continuation_is_complete, classic_schedule_item_key,
     classic_schedule_item_policy_key, truncate_to_persisted_precision,
     ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
     ClassicSchedulingEngine,
@@ -78,6 +81,10 @@ pub struct SchedulingMediaItem {
     pub show_id: Option<EntityId>,
     pub season_id: Option<EntityId>,
     pub artist_id: Option<EntityId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_director: Option<String>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
     pub release_date: Option<DateTime<Utc>>,
@@ -124,6 +131,8 @@ impl SchedulingMediaItem {
             show_id: None,
             season_id: None,
             artist_id: None,
+            album: None,
+            first_director: None,
             season: None,
             episode: None,
             release_date: None,
@@ -425,36 +434,7 @@ impl SchedulingReferenceData {
             }
         }
 
-        let mut groups: Vec<(SchedulingCollectionKey, Vec<SchedulingMediaItem>)> = Vec::new();
-        for media_item in media_items {
-            let Some(collection_key) = marathon_collection_key(&media_item, group_by) else {
-                continue;
-            };
-
-            if let Some((_, group_items)) = groups
-                .iter_mut()
-                .find(|(existing_key, _)| *existing_key == collection_key)
-            {
-                group_items.push(media_item);
-            } else {
-                groups.push((collection_key, vec![media_item]));
-            }
-        }
-
-        groups
-            .into_iter()
-            .map(|(collection_key, mut group_items)| {
-                sort_media_items_for_playback_order(&mut group_items, item_order);
-
-                SchedulingPlaylistItem {
-                    collection_key,
-                    playback_order: item_order,
-                    play_all: play_all_items,
-                    count: None,
-                    media_items: group_items,
-                }
-            })
-            .collect()
+        group_marathon_media(media_items, group_by, item_order, play_all_items, None)
     }
 }
 
@@ -563,25 +543,120 @@ fn append_unique_items(
     }
 }
 
+/// Build the grouped playlist used by Classic Marathon, matching ErsatzTV's
+/// `MarathonHelper`. A batch replaces play-all with a per-group item count.
+#[must_use]
+pub fn classic_marathon_playlist_items(
+    item: &ProgramScheduleItem,
+    media_items: Vec<SchedulingMediaItem>,
+) -> Vec<SchedulingPlaylistItem> {
+    let group_by = match item.marathon_group_by {
+        MarathonGroupBy::None => return Vec::new(),
+        MarathonGroupBy::Show => "show",
+        MarathonGroupBy::Season => "season",
+        MarathonGroupBy::Artist => "artist",
+        MarathonGroupBy::Album => "album",
+        MarathonGroupBy::Director => "director",
+    };
+    let order = if item.marathon_shuffle_items {
+        PlaybackOrder::Shuffle
+    } else if matches!(
+        item.marathon_group_by,
+        MarathonGroupBy::Show | MarathonGroupBy::Season
+    ) {
+        PlaybackOrder::SeasonEpisode
+    } else {
+        PlaybackOrder::Chronological
+    };
+    let count = item
+        .marathon_batch_size
+        .and_then(|count| usize::try_from(count).ok())
+        .filter(|count| *count > 0);
+    group_marathon_media(media_items, group_by, order, count.is_none(), count)
+}
+
+fn group_marathon_media(
+    media_items: Vec<SchedulingMediaItem>,
+    group_by: &str,
+    item_order: PlaybackOrder,
+    play_all_items: bool,
+    count: Option<usize>,
+) -> Vec<SchedulingPlaylistItem> {
+    let mut groups: Vec<(SchedulingCollectionKey, Vec<SchedulingMediaItem>)> = Vec::new();
+    for media_item in media_items {
+        let Some(collection_key) = marathon_collection_key(&media_item, group_by) else {
+            continue;
+        };
+
+        if let Some((_, group_items)) = groups
+            .iter_mut()
+            .find(|(existing_key, _)| *existing_key == collection_key)
+        {
+            group_items.push(media_item);
+        } else {
+            groups.push((collection_key, vec![media_item]));
+        }
+    }
+
+    groups
+        .into_iter()
+        .map(|(collection_key, mut group_items)| {
+            sort_media_items_for_playback_order(&mut group_items, item_order);
+
+            SchedulingPlaylistItem {
+                collection_key,
+                playback_order: item_order,
+                play_all: play_all_items,
+                count,
+                media_items: group_items,
+            }
+        })
+        .collect()
+}
+
 fn marathon_collection_key(
     media_item: &SchedulingMediaItem,
     group_by: &str,
 ) -> Option<SchedulingCollectionKey> {
-    match group_by.to_ascii_lowercase().as_str() {
-        "show" => media_item.show_id.map(|show_id| SchedulingCollectionKey {
-            collection_type: CollectionType::TelevisionShow,
-            media_item_id: Some(show_id),
-            ..SchedulingCollectionKey::default()
-        }),
-        "season" => media_item
-            .season_id
-            .map(|season_id| SchedulingCollectionKey {
-                collection_type: CollectionType::TelevisionSeason,
-                media_item_id: Some(season_id),
-                ..SchedulingCollectionKey::default()
-            }),
-        _ => None,
-    }
+    let (collection_type, media_item_id, fake_collection_key) =
+        match group_by.to_ascii_lowercase().as_str() {
+            "show" => (
+                CollectionType::TelevisionShow,
+                Some(media_item.show_id.unwrap_or(0)),
+                None,
+            ),
+            "season" => (
+                CollectionType::TelevisionSeason,
+                Some(media_item.season_id.unwrap_or(0)),
+                None,
+            ),
+            "artist" => (
+                CollectionType::Artist,
+                Some(media_item.artist_id.unwrap_or(0)),
+                None,
+            ),
+            // Stable textual keys avoid collisions between album or director names.
+            "album" => (
+                CollectionType::FakePlaylistItem,
+                None,
+                Some(format!(
+                    "marathon:album:{:?}:{:?}",
+                    media_item.artist_id, media_item.album
+                )),
+            ),
+            "director" => (
+                CollectionType::FakePlaylistItem,
+                None,
+                Some(format!("marathon:director:{:?}", media_item.first_director)),
+            ),
+            _ => return None,
+        };
+    Some(SchedulingCollectionKey {
+        collection_type,
+        media_item_id,
+        fake_collection_key,
+        ..SchedulingCollectionKey::default()
+    })
 }
 
 fn sort_media_items_for_playback_order(
@@ -1115,6 +1190,7 @@ pub(super) enum CurrentHistoryContext {
 
 #[derive(Debug, Clone)]
 pub(super) struct PlaylistChildEnumerator {
+    playlist_index: usize,
     pub collection_key: SchedulingCollectionKey,
     pub play_all: bool,
     pub count: Option<usize>,
@@ -1127,30 +1203,84 @@ pub(super) struct PlaylistEnumerator {
     pub index: usize,
     pub child_index: usize,
     pub children: Vec<PlaylistChildEnumerator>,
+    all_media_ids: BTreeSet<EntityId>,
+    pub remaining_media_ids: BTreeSet<EntityId>,
+    pub shuffle_seed: Option<i32>,
 }
 
 impl PlaylistEnumerator {
     pub fn new(playlist_items: Vec<SchedulingPlaylistItem>) -> Self {
-        let children = playlist_items
+        let mut children = playlist_items
             .into_iter()
             .enumerate()
-            .map(|(index, item)| PlaylistChildEnumerator {
-                collection_key: item.collection_key,
-                play_all: item.play_all,
-                count: item.count,
-                items_taken_from_current: 0,
-                enumerator: MediaEnumerator::new(
-                    format!("playlist-child-{index}"),
-                    item.media_items,
-                )
-                .with_playback_order(item.playback_order),
+            .map(|(index, mut item)| {
+                if item.playback_order == PlaybackOrder::SeasonEpisode {
+                    item.media_items.retain(|media| {
+                        media.show_id.is_none() || media.season.is_some_and(|season| season > 0)
+                    });
+                }
+                sort_media_items_for_playback_order(&mut item.media_items, item.playback_order);
+                PlaylistChildEnumerator {
+                    playlist_index: index,
+                    collection_key: item.collection_key,
+                    play_all: item.play_all,
+                    count: item.count,
+                    items_taken_from_current: 0,
+                    enumerator: MediaEnumerator::new(
+                        format!("playlist-child-{index}"),
+                        item.media_items,
+                    )
+                    .with_playback_order(item.playback_order),
+                }
             })
             .filter(|child| !child.enumerator.is_empty())
-            .collect();
+            .collect::<Vec<_>>();
+        for index in 0..children.len() {
+            if let Some(previous) = children[..index]
+                .iter()
+                .find(|child| child.collection_key == children[index].collection_key)
+            {
+                children[index].enumerator = previous.enumerator.clone();
+            }
+        }
+        let all_media_ids = children
+            .iter()
+            .flat_map(|child| child.enumerator.items.iter().map(|media| media.id))
+            .collect::<BTreeSet<_>>();
         Self {
             index: 0,
             child_index: 0,
             children,
+            remaining_media_ids: all_media_ids.clone(),
+            all_media_ids,
+            shuffle_seed: None,
+        }
+    }
+
+    pub fn shuffle_groups(&mut self, seed: i32) {
+        self.shuffle_seed = Some(seed);
+        // Reconstruct from definition order, never from the previous shuffle.
+        self.children.sort_by_key(|child| child.playlist_index);
+        if self.children.len() >= 3 {
+            let last = self.children.last().map(|child| child.playlist_index);
+            shuffle_with_seed(&mut self.children, i64::from(seed).cast_unsigned());
+            if self.children.first().map(|child| child.playlist_index) == last {
+                self.children.rotate_left(1);
+            }
+        }
+    }
+
+    pub fn replay_to(&mut self, index: usize) {
+        if self.children.is_empty() {
+            return;
+        }
+        while self.index < index {
+            self.advance();
+            // Membership can shrink between builds, making the saved index
+            // unreachable in the current cycle.
+            if self.index == 0 {
+                break;
+            }
         }
     }
 
@@ -1192,6 +1322,30 @@ impl PlaylistEnumerator {
         }
     }
 
+    // ErsatzTV shares one enumerator for repeated collection references. Keep
+    // our owned copies synchronized so candidate snapshots stay independent.
+    fn synchronize_current_source(&mut self) {
+        let Some(current) = self.children.get(self.child_index) else {
+            return;
+        };
+        let duplicates = self
+            .children
+            .iter()
+            .enumerate()
+            .filter_map(|(index, child)| {
+                (index != self.child_index && child.collection_key == current.collection_key)
+                    .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        if duplicates.is_empty() {
+            return;
+        }
+        let enumerator = current.enumerator.clone();
+        for index in duplicates {
+            self.children[index].enumerator.clone_from(&enumerator);
+        }
+    }
+
     fn current_playback_order(&self) -> PlaybackOrder {
         self.current_child().map_or(PlaybackOrder::None, |child| {
             child.enumerator.playback_order()
@@ -1223,6 +1377,7 @@ impl PlaylistEnumerator {
                 tags_by_media_id,
             );
         }
+        self.synchronize_current_source();
     }
 
     fn smart_shuffle_unit(
@@ -1276,6 +1431,9 @@ impl PlaylistEnumerator {
     }
 
     pub fn advance(&mut self) {
+        if let Some(id) = self.current().map(|media| media.id) {
+            self.remaining_media_ids.remove(&id);
+        }
         let Some(child) = self.current_child_mut() else {
             return;
         };
@@ -1290,6 +1448,8 @@ impl PlaylistEnumerator {
             true
         };
 
+        self.synchronize_current_source();
+
         if should_switch {
             self.child_index = (self.child_index + 1) % self.children.len();
             if let Some(next_child) = self.current_child_mut() {
@@ -1297,13 +1457,18 @@ impl PlaylistEnumerator {
             }
         }
         self.index = self.index.saturating_add(1);
-        if self.child_index == 0
+        if self.remaining_media_ids.is_empty()
+            && self.child_index == 0
             && self
                 .children
                 .first()
                 .is_some_and(|child| child.enumerator.current_index() == 0)
         {
             self.index = 0;
+            self.remaining_media_ids.clone_from(&self.all_media_ids);
+            if let Some(seed) = self.shuffle_seed {
+                self.shuffle_groups(classic::next_i32_seed(seed));
+            }
         }
     }
 

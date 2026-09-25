@@ -1911,6 +1911,74 @@ playout:
 // ── playlist batch/count child semantics tests ────────────────────────────
 
 #[test]
+fn yaml_shuffled_marathon_continue_preserves_cycles_across_midnight() {
+    let mut data = SchedulingReferenceData::default();
+    data.searches_by_query.insert(
+        "episodes".to_owned(),
+        vec![
+            episode_item(1, 10, 1001, 1, 1),
+            episode_item(2, 10, 1001, 1, 2),
+            episode_item(3, 20, 2001, 1, 1),
+            episode_item(4, 20, 2001, 1, 2),
+            episode_item(5, 30, 3001, 1, 1),
+            episode_item(6, 30, 3001, 1, 2),
+            episode_item(99, 10, 1000, 0, 1),
+        ],
+    );
+    let definition = YamlPlayoutEngine::definition_from_str(
+        r#"
+content:
+  - key: marathon
+    marathon: Shows
+    searches: [episodes]
+    group_by: show
+    item_order: season_episode
+    shuffle_groups: true
+playout:
+  - count: "1"
+    content: marathon
+  - repeat: true
+"#,
+    )
+    .unwrap();
+    let start = DateTime::parse_from_rfc3339("2026-04-15T23:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let request = SchedulingRequest {
+        playout: Playout {
+            id: 100,
+            seed: 12345,
+            ..Playout::default()
+        },
+        start,
+        finish: start + Duration::hours(3),
+        mode: PlayoutBuildMode::Continue,
+        reference_data: data,
+    };
+    let full = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), request.clone())
+        .unwrap();
+    assert!(full.added_items.iter().all(|item| item.media_item_id != 99));
+    let mut first_request = request.clone();
+    first_request.finish = start + Duration::minutes(70);
+    let first = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), first_request)
+        .unwrap();
+    let mut next = request;
+    next.start = first.anchor.as_ref().unwrap().next_start;
+    next.playout.anchor = first.anchor;
+    next.reference_data.existing_items = first.added_items.clone();
+    next.reference_data.existing_history = first.added_history;
+    let continued = YamlPlayoutEngine
+        .schedule_definition(definition, next)
+        .unwrap();
+    assert_eq!(
+        continued.added_items,
+        full.added_items[first.added_items.len()..]
+    );
+}
+
+#[test]
 fn yaml_playlist_count_child_takes_n_items_before_switching_snapshot() {
     // A playlist child with count=2 takes 2 items before moving to the
     // next child, matching ErsatzTV's PlaylistEnumerator batch semantics.

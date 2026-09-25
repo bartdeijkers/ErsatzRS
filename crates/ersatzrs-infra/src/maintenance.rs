@@ -12,9 +12,9 @@ use ersatzrs_core::maintenance::{
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{
-    audit_classic_refresh_checkpoint, audit_classic_runtime_state, PlayoutBuildMode,
-    PlayoutBuildRequest, SchedulingError, SchedulingReferenceData, SchedulingRequest,
-    SchedulingResult,
+    audit_classic_refresh_checkpoint, audit_classic_runtime_state,
+    classic_playlist_continuation_is_complete, PlayoutBuildMode, PlayoutBuildRequest,
+    SchedulingError, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
 use ersatzrs_domain::{
     ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind, StreamingEngine,
@@ -774,6 +774,19 @@ pub(crate) async fn classic_runtime_state_is_complete(
     let audit = audit_classic_runtime_state(reference_data);
     if !audit.is_complete() {
         return Ok(false);
+    }
+
+    if !reference_data.playlist_items_by_key.is_empty() {
+        let context = sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "Context" FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_optional(pool)
+        .await?
+        .flatten();
+        if !classic_playlist_continuation_is_complete(reference_data, context.as_deref()) {
+            return Ok(false);
+        }
     }
 
     let missing_child_states: i64 = sqlx::query_scalar(

@@ -1,8 +1,15 @@
 feature    = 'YAML scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/YamlScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
 Ported: sequential dispatch, resolver-backed content sources, SQL-backed collection/multi-collection/smart collection/playlist/search/show/watermark/graphics lookups, show-name/show-GUID resolution, detail-based history resume, structured playlist and marathon child history, show/season marathon grouping, `play_all_items`, cleanup/reset, YAML imports (content/sequence merge with case-insensitive deduplication), expression-driven count (`count`/`random` variables and arithmetic), deterministic marathon shuffle-groups, and playlist batch/count child semantics. Named, priority-ordered date-range schedules select the active instruction list using the local calendar date, resume each list's position and ambient state, and persist list indices for Continue across a database restart. `wait_until` and `pad_until` use the local clock consistently with schedule selection. Scheduled sequences support integer repetition and active-list shuffle. The admin YAML validator accepts the scheduled structure. Driven through `PlayoutBuilder` for end-to-end builds; UCU-04 owns row-61 evidence and remaining window acceptance.
 '''
+
+[[debt]]
+id          = 'yaml-playlist-refresh-cycle-state'
+description = 'Continue retains complete playlist state, but Refresh and legacy Continue still restore partial child history without complete shuffled-cycle state. Verify and correct restoration before row 78 acceptance.'
+discovered  = '2026-09-25'
+evidence    = 'UCU-05 row 78 evidence; YamlContext::apply_playlist_history and PlaylistEnumerator::apply_history restore child indices without persisted remaining membership or shuffle seed. The new Continue midnight regression covers saved full state only.'
+resolved    = false

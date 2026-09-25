@@ -79,6 +79,8 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
         guide_mode: GuideMode::Filler,
         fill_with_group_mode: FillWithGroupMode::FillWithOrderedGroups,
         marathon_group_by: MarathonGroupBy::Show,
+        marathon_shuffle_groups: true,
+        marathon_batch_size: Some(2),
         marathon_shuffle_items: true,
         custom_title: Some("Comedy".to_owned()),
         sort_order: 7,
@@ -96,6 +98,8 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
     let loaded = repos.program_schedule.get_item(30).await.unwrap();
     assert_eq!(loaded.playout_mode, PlayoutMode::Multiple);
     assert_eq!(loaded.multiple_mode, MultipleMode::CollectionSize);
+    assert!(loaded.marathon_shuffle_groups);
+    assert_eq!(loaded.marathon_batch_size, Some(2));
     assert_eq!(loaded.multiple_count, Some("3".to_owned()));
     assert_eq!(loaded.search_query, Some("genre:comedy".to_owned()));
     assert_eq!(loaded.watermark_ids, vec![501]);
@@ -105,6 +109,13 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
     assert_eq!(loaded.post_roll_filler_id, Some(703));
     assert_eq!(loaded.tail_filler_id, Some(704));
     assert_eq!(loaded.fallback_filler_id, Some(705));
+    let mut updated = loaded;
+    updated.marathon_shuffle_groups = false;
+    updated.marathon_batch_size = Some(3);
+    repos.program_schedule.upsert_item(&updated).await.unwrap();
+    let updated = repos.program_schedule.get_item(30).await.unwrap();
+    assert!(!updated.marathon_shuffle_groups);
+    assert_eq!(updated.marathon_batch_size, Some(3));
 
     let duration = ProgramScheduleItem {
         id: 31,

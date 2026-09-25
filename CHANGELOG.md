@@ -20,6 +20,18 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep playlist cycles open until every playable item has been visited, exclude
+  season-zero episodes from Season/Episode playlist children, and reconstruct
+  shuffled group order from its saved seed. Classic now loads the saved
+  Shuffle Playlist Items setting and structured playlist children. Classic and
+  YAML marathon Continue preserve complete child and cycle state. Repeating
+  YAML playback no longer exhausts the empty-loop guard while adding content. Repeated playlist sources share playback progress. Legacy Classic Continue
+  requires complete state or a safe Refresh checkpoint; Refresh refuses older
+  playlist checkpoints without cycle state before clearing items; Reset creates a
+  complete checkpoint (upstream PR #2956, reconciliation in progress).
+- Honor Classic Marathon grouping by show, season, artist, album or first
+  director, including batch size and group/item shuffle settings. Split builds
+  retain the same playback order and guide groups as uninterrupted builds.
 - Preserve Classic collection progress for inactive alternate schedules across
   Continue builds; a saved shuffle index remains valid against the full item
   count (upstream PR #2955).

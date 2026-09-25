@@ -743,6 +743,9 @@ async fn classic_continue_preserves_inactive_alternate_anchor_in_sqlite() {
     .await
     .expect("seed alternate collection progress");
 
+    pool.close().await;
+    let pool = open_database(&database_path, false).await;
+
     run_classic_build(
         &pool,
         RELATED_PLAYOUT_ID,
@@ -760,6 +763,231 @@ async fn classic_continue_preserves_inactive_alternate_anchor_in_sqlite() {
     .expect("inactive alternate progress survives Continue");
     assert_eq!(retained, (1234, 9));
     pool.close().await;
+}
+
+#[tokio::test]
+async fn classic_shuffled_playlist_restart_matches_continuous_build_and_refresh() {
+    assert_grouped_playlist_restart(false).await;
+}
+
+#[tokio::test]
+async fn classic_marathon_restart_matches_continuous_build_and_refresh() {
+    assert_grouped_playlist_restart(true).await;
+}
+
+async fn assert_grouped_playlist_restart(marathon: bool) {
+    let directory = tempfile::tempdir().expect("temporary database directory");
+    let baseline_path = directory.path().join("playlist-baseline.sqlite");
+    let oracle_path = directory.path().join("playlist-oracle.sqlite");
+    let restarted_path = directory.path().join("playlist-restarted.sqlite");
+    let baseline = open_database(&baseline_path, true).await;
+    seed_grouped_playlist_fixture(&baseline, marathon).await;
+    let start = common::fixed_time();
+    run_classic_build(
+        &baseline,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Reset,
+        start,
+    )
+    .await;
+    assert_build_succeeded(&baseline, RELATED_PLAYOUT_ID, "reset").await;
+    if marathon {
+        assert_eq!(
+            playlist_timeline(&baseline)
+                .await
+                .iter()
+                .take(4)
+                .map(|row| row.0)
+                .collect::<Vec<_>>(),
+            [101, 201, 102, 201]
+        );
+    }
+    baseline.close().await;
+    tokio::fs::copy(&baseline_path, &oracle_path).await.unwrap();
+    tokio::fs::copy(&baseline_path, &restarted_path)
+        .await
+        .unwrap();
+    let oracle = open_database(&oracle_path, false).await;
+    run_classic_build(
+        &oracle,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Continue,
+        start + Duration::hours(6),
+    )
+    .await;
+    let restarted = open_database(&restarted_path, false).await;
+    run_classic_build(
+        &restarted,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Continue,
+        start + Duration::hours(2),
+    )
+    .await;
+    restarted.close().await;
+    let restarted = open_database(&restarted_path, false).await;
+    run_classic_build(
+        &restarted,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Continue,
+        start + Duration::hours(6),
+    )
+    .await;
+    assert_build_succeeded(&restarted, RELATED_PLAYOUT_ID, "continue").await;
+    assert_eq!(
+        playlist_timeline(&restarted).await,
+        playlist_timeline(&oracle).await
+    );
+    for pool in [&oracle, &restarted] {
+        run_classic_build(
+            pool,
+            RELATED_PLAYOUT_ID,
+            PlayoutBuildMode::Refresh,
+            start + Duration::hours(15),
+        )
+        .await;
+        assert_build_succeeded(pool, RELATED_PLAYOUT_ID, "refresh").await;
+    }
+    let timeline = playlist_timeline(&restarted).await;
+    assert_eq!(timeline, playlist_timeline(&oracle).await);
+    assert!(!timeline.is_empty());
+    assert!(timeline
+        .iter()
+        .all(|row| row.3.as_deref() == Some("nld") && row.4.as_deref() == Some("eng")));
+    oracle.close().await;
+    restarted.close().await;
+}
+
+async fn seed_grouped_playlist_fixture(pool: &SqlitePool, marathon: bool) {
+    seed_acceptance_fixture(pool).await;
+    pool.execute(
+        r#"
+        INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+            VALUES (91, 'Playlist child', 1);
+        INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
+            VALUES (91, 101, 0), (91, 102, 1);
+        UPDATE "PlaylistItem" SET "CollectionType" = 'Collection',
+            "CollectionId" = 91, "MediaItemId" = NULL WHERE "Id" = 101;
+        UPDATE "ProgramSchedule" SET "RandomStartPoint" = 1 WHERE "Id" = 301;
+        INSERT INTO "PlaylistItem" (
+            "Id", "Index", "PlaylistId", "CollectionType", "MediaItemId",
+            "IncludeInProgramGuide", "PlaybackOrder", "PlayAll"
+        ) VALUES (102, 1, 11, 'Movie', 102, 1, 'Chronological', 1),
+                 (103, 2, 11, 'Movie', 201, 1, 'Chronological', 1);
+        UPDATE "PlaylistItem" SET "CollectionType" = 'Collection',
+            "CollectionId" = 91, "MediaItemId" = NULL, "PlayAll" = 0
+            WHERE "Id" IN (101, 102);
+        UPDATE "ProgramScheduleItem" SET "MarathonShuffleGroups" = 1,
+            "PreferredAudioLanguageCode" = 'nld', "PreferredSubtitleLanguageCode" = 'eng'
+            WHERE "Id" = 401;
+    "#,
+    )
+    .await
+    .expect("seed shuffled playlist with track preferences");
+    if marathon {
+        pool.execute(r#"
+            INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex") VALUES (91, 201, 2);
+            INSERT INTO "Director" ("MovieMetadataId", "Name") VALUES
+                (101, 'First Director'), (101, 'Second Director'),
+                (102, 'First Director'), (201, 'Other Director');
+            UPDATE "ProgramScheduleItem" SET "CollectionType" = 'Collection',
+                "CollectionId" = 91, "PlaylistId" = NULL, "PlaybackOrder" = 'Marathon',
+                "MarathonGroupBy" = 'Director', "MarathonBatchSize" = 1 WHERE "Id" = 401;
+        "#).await.expect("seed director-grouped Marathon");
+    }
+}
+
+#[tokio::test]
+async fn classic_playlist_legacy_refresh_refuses_without_clearing_rows() {
+    assert_legacy_playlist_refusal(PlayoutBuildMode::Refresh).await;
+}
+
+#[tokio::test]
+async fn classic_playlist_legacy_continue_refuses_without_clearing_rows() {
+    assert_legacy_playlist_refusal(PlayoutBuildMode::Continue).await;
+}
+
+async fn assert_legacy_playlist_refusal(mode: PlayoutBuildMode) {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy-playlist.sqlite");
+    let pool = open_database(&path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    let start = common::fixed_time();
+    run_classic_build(&pool, RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset, start).await;
+    assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "reset").await;
+    sqlx::query(r#"UPDATE "PlayoutAnchor" SET "Context" = json_remove("Context", '$.playlist_sources') WHERE "PlayoutId" = ?"#)
+        .bind(RELATED_PLAYOUT_ID).execute(&pool).await.unwrap();
+    let rows = sqlx::query(r#"SELECT "CheckpointDate", "Context" FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = ?"#)
+        .bind(RELATED_PLAYOUT_ID).fetch_all(&pool).await.unwrap();
+    assert!(!rows.is_empty());
+    for row in rows {
+        let mut checkpoint: serde_json::Value =
+            serde_json::from_str(&row.get::<String, _>("Context")).unwrap();
+        for source in checkpoint["Sources"].as_object_mut().unwrap().values_mut() {
+            assert!(source["Playlist"]
+                .as_object_mut()
+                .unwrap()
+                .remove("RemainingMediaIds")
+                .is_some());
+        }
+        sqlx::query(r#"UPDATE "PlayoutClassicCheckpoint" SET "Context" = ? WHERE "PlayoutId" = ? AND "CheckpointDate" = ?"#)
+            .bind(checkpoint.to_string()).bind(RELATED_PLAYOUT_ID).bind(row.get::<String, _>("CheckpointDate"))
+            .execute(&pool).await.unwrap();
+    }
+    pool.close().await;
+    let pool = open_database(&path, false).await;
+    let mut before = persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await;
+    let error = run_requested_playout_build(
+        &pool,
+        &EntityLocker::new(),
+        PlayoutBuildRequest {
+            playout_id: RELATED_PLAYOUT_ID,
+            mode,
+        },
+        start,
+        None,
+    )
+    .await
+    .expect_err("incompatible playlist checkpoint must refuse an unsafe build");
+    assert!(error.to_string().contains("playable-cycle state"));
+    let status: (i64, String) = sqlx::query_as(
+        r#"SELECT "Success", "Message" FROM "PlayoutBuildStatus" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status.0, 0);
+    assert!(status.1.contains("playable-cycle state"), "{}", status.1);
+    let mut after = persisted_classic_rows(&pool, RELATED_PLAYOUT_ID).await;
+    // Only the observable failed build status may change on refusal.
+    before.build_status.clear();
+    after.build_status.clear();
+    assert!(
+        before == after,
+        "unsafe Refresh must preserve persisted playout rows"
+    );
+    pool.close().await;
+}
+
+type PlaylistTimelineRow = (
+    i64,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+async fn playlist_timeline(pool: &SqlitePool) -> Vec<PlaylistTimelineRow> {
+    sqlx::query_as(
+        r#"SELECT "MediaItemId", "Start", "Finish", "PreferredAudioLanguageCode",
+        "PreferredSubtitleLanguageCode", "SchedulingContext" FROM "PlayoutItem"
+        WHERE "PlayoutId" = ? ORDER BY "Start", "Id""#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .fetch_all(pool)
+    .await
+    .expect("load playlist timeline")
 }
 
 #[tokio::test]

@@ -543,6 +543,9 @@ fn run_playout(
 
         dispatch_instruction(context, &instruction, mode, definition)?;
         apply_pending_shuffles(context, definition);
+        if context.added_items.len() > before_items {
+            repeat_guard = 0;
+        }
         if !changes_index {
             context.instruction_index += 1;
         } else if context.added_items.len() == before_items {
@@ -664,6 +667,8 @@ struct SerializedYamlContext {
         skip_serializing_if = "super::SchedulingSmartShuffleState::is_empty"
     )]
     smart_shuffle: super::SchedulingSmartShuffleState,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    playlist_states: BTreeMap<String, super::classic::ClassicPlaylistCheckpoint>,
 }
 
 #[derive(Debug, Clone)]
@@ -689,6 +694,7 @@ struct YamlContext {
     gaps: Vec<ersatzrs_domain::PlayoutGap>,
     enumerators: BTreeMap<String, MediaEnumerator>,
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
+    restored_playlist_states: BTreeMap<String, super::classic::ClassicPlaylistCheckpoint>,
     content_sources: BTreeMap<String, ResolvedYamlContent>,
     smart_shuffle_state: super::SchedulingSmartShuffleState,
 }
@@ -756,6 +762,7 @@ impl YamlContext {
             gaps: Vec::new(),
             enumerators: BTreeMap::new(),
             playlist_enumerators: BTreeMap::new(),
+            restored_playlist_states: BTreeMap::new(),
             content_sources,
             smart_shuffle_state: super::SchedulingSmartShuffleState::default(),
         }
@@ -773,6 +780,12 @@ impl YamlContext {
                 self.instruction_index,
             );
         }
+        let mut playlist_states = self.restored_playlist_states.clone();
+        playlist_states.extend(
+            self.playlist_enumerators.iter().map(|(key, playlist)| {
+                (key.clone(), super::classic::playlist_checkpoint(playlist))
+            }),
+        );
         let state = SerializedYamlContext {
             instruction_index: self.instruction_index,
             guide_group: self.guide_group,
@@ -782,6 +795,7 @@ impl YamlContext {
             active_schedule: self.active_schedule.clone(),
             schedule_indices,
             smart_shuffle: self.smart_shuffle_state.clone(),
+            playlist_states,
         };
         serde_json::to_string(&state)
             .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))
@@ -798,6 +812,7 @@ impl YamlContext {
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();
                 self.pre_roll_sequence = state.pre_roll_sequence;
+                self.restored_playlist_states = state.playlist_states;
                 self.active_schedule = state.active_schedule;
                 self.list_states = state
                     .schedule_indices
@@ -877,10 +892,9 @@ impl YamlContext {
 
     fn playlist_enumerator(&mut self, content: &str) -> Option<&mut PlaylistEnumerator> {
         if !self.playlist_enumerators.contains_key(content) {
-            let mut items = self.playlist_items(content)?;
+            let items = self.playlist_items(content)?;
 
-            // Shuffle groups deterministically when requested (Marathon only).
-            // Seed mirrors ErsatzTV: playout-seed + instruction-index + day-of-year.
+            // Preserve the cycle seed and canonical group order across builds.
             let should_shuffle = self.content_sources.get(content).is_some_and(|resolved| {
                 matches!(
                     &resolved.source,
@@ -890,18 +904,16 @@ impl YamlContext {
                     }
                 )
             });
+            let mut playlist = PlaylistEnumerator::new(items);
             if should_shuffle {
-                let seed = self
-                    .playout
-                    .id
-                    .cast_unsigned()
-                    .wrapping_add(self.instruction_index as u64)
-                    .wrapping_add(u64::from(self.current_time.ordinal()));
-                shuffle_with_seed(&mut items, seed);
+                playlist.shuffle_groups(self.playout.seed);
+            }
+            if let Some(state) = self.restored_playlist_states.get(content) {
+                super::classic::restore_playlist_checkpoint(&mut playlist, state);
             }
 
             self.playlist_enumerators
-                .insert(content.to_owned(), PlaylistEnumerator::new(items));
+                .insert(content.to_owned(), playlist);
         }
         self.playlist_enumerators.get_mut(content)
     }
@@ -929,7 +941,9 @@ impl YamlContext {
         for content in &definition.content {
             let history_key = content.history_key();
             if self.playlist_items(&content.key).is_some() {
-                self.apply_playlist_history(&content.key, &history_key, &ignored);
+                if !self.restored_playlist_states.contains_key(&content.key) {
+                    self.apply_playlist_history(&content.key, &history_key, &ignored);
+                }
                 continue;
             }
 

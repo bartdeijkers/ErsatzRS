@@ -515,6 +515,9 @@ impl SqliteSchedulingContentRepository {
                 self.items_for_program_schedule_item(item).await?,
             );
         }
+        let playlist_items_by_key = self
+            .classic_playlist_items(&schedule_items, &media_by_key)
+            .await?;
         let mut classic_filler_presets = BTreeMap::new();
         for filler_id in schedule_items
             .iter()
@@ -533,6 +536,7 @@ impl SqliteSchedulingContentRepository {
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
+                playlist_items_by_key,
                 classic_schedule_id: Some(schedule.id),
                 classic_schedule_name: Some(schedule.name),
                 classic_schedule_items: schedule_items,
@@ -580,6 +584,31 @@ impl SqliteSchedulingContentRepository {
         }
         self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
             .await
+    }
+
+    async fn classic_playlist_items(
+        &self,
+        schedule_items: &[ProgramScheduleItem],
+        media_by_key: &BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<BTreeMap<String, Vec<SchedulingPlaylistItem>>> {
+        let mut playlists = BTreeMap::new();
+        for item in schedule_items {
+            let key = classic_schedule_item_key(item);
+            if item.playback_order == ersatzrs_domain::PlaybackOrder::Marathon {
+                playlists.insert(
+                    key.clone(),
+                    ersatzrs_core::scheduling::classic_marathon_playlist_items(
+                        item,
+                        media_by_key.get(&key).cloned().unwrap_or_default(),
+                    ),
+                );
+            } else if item.collection_type == CollectionType::Playlist {
+                if let Some(id) = item.playlist_id {
+                    playlists.insert(key, self.playlist_items_by_id(id).await?);
+                }
+            }
+        }
+        Ok(playlists)
     }
 
     async fn active_classic_schedule_id(
@@ -1498,6 +1527,13 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         };
 
+        self.playlist_items_by_id(playlist_id).await
+    }
+
+    async fn playlist_items_by_id(
+        &self,
+        playlist_id: EntityId,
+    ) -> Result<Vec<SchedulingPlaylistItem>> {
         let rows = sqlx::query(
             r#"SELECT *
              FROM "PlaylistItem"
@@ -2874,12 +2910,25 @@ impl SqliteSchedulingContentRepository {
                 (SELECT "s"."ShowId" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "show_id",
                 (SELECT "e"."SeasonId" FROM "Episode" AS "e" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_id",
                 (SELECT "mv"."ArtistId" FROM "MusicVideo" AS "mv" WHERE "mv"."Id" = "mi"."Id" LIMIT 1) AS "artist_id",
+                COALESCE(
+                    (SELECT "Album" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Album" FROM "SongMetadata" WHERE "SongId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
+                ) AS "album",
+                (SELECT "d"."Name" FROM "Director" AS "d" WHERE
+                    "d"."MovieMetadataId" = (SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."EpisodeMetadataId" = (SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."MusicVideoMetadataId" = (SELECT "Id" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."OtherVideoMetadataId" = (SELECT "Id" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
+                    ORDER BY "d"."Id" LIMIT 1
+                ) AS "first_director",
                 (SELECT "s"."SeasonNumber" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_number",
                 (SELECT "em"."EpisodeNumber" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1) AS "episode_number",
                 COALESCE(
                     (SELECT "em"."ReleaseDate" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
                     (SELECT "mm"."ReleaseDate" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
-                    (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1)
+                    (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1),
+                    (SELECT "ReleaseDate" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "ReleaseDate" FROM "SongMetadata" WHERE "SongId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
                 ) AS "release_date",
                 (SELECT "rs"."Liveness" FROM "RemoteStream" AS "rs"
                  WHERE "rs"."Id" = "mi"."Id" LIMIT 1) AS "remote_liveness",
@@ -3909,6 +3958,8 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
         show_id: row.try_get("show_id").repository()?,
         season_id: row.try_get("season_id").repository()?,
         artist_id: row.try_get("artist_id").repository()?,
+        album: row.try_get("album").repository()?,
+        first_director: row.try_get("first_director").repository()?,
         season: row.try_get("season_number").repository()?,
         episode: row.try_get("episode_number").repository()?,
         release_date: row
