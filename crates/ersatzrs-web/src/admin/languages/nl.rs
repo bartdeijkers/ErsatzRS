@@ -1170,7 +1170,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSort => "Sorteervolgorde",
         TextKey::AddonWorkspaceAscending => "Oplopend",
         TextKey::AddonWorkspaceDescending => "Aflopend",
-        TextKey::AddonWorkspaceUploadDate => "Uploaddatum",
+        TextKey::AddonWorkspaceItemDate => "Datum",
         TextKey::AddonWorkspaceSelectVisible => "Zichtbare items selecteren",
         TextKey::AddonWorkspaceDeselectVisible => "Zichtbare items deselecteren",
         TextKey::ItemFromList => "Van lijst",

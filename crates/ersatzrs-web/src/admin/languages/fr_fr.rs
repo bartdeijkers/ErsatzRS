@@ -446,7 +446,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSort => "Ordre de tri",
         TextKey::AddonWorkspaceAscending => "Croissant",
         TextKey::AddonWorkspaceDescending => "Décroissant",
-        TextKey::AddonWorkspaceUploadDate => "Date de mise en ligne",
+        TextKey::AddonWorkspaceItemDate => "Date",
         TextKey::AddonWorkspaceSelectVisible => "Sélectionner les éléments visibles",
         TextKey::AddonWorkspaceDeselectVisible => "Désélectionner les éléments visibles",
         TextKey::ItemFromList => "De la liste",

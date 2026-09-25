@@ -55,7 +55,7 @@ release section when tagging a release.
 
 ### Added
 
-- Sort add-on list review items by clicking the playlist, upload date, or name
+- Sort add-on list review items by clicking the playlist, item date, or name
   heading in either direction; select or deselect the visible page from the
   checkbox above item selections while skipping excluded videos. Pagination
   sits above the items, and excluded and unavailable rows have visual status cues.

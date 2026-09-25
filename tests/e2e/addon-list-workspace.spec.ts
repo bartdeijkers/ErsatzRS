@@ -54,6 +54,7 @@ for (const javaScriptEnabled of [false, true]) {
       await expect(rows.last().locator('.item-state-badge.is-unavailable')).toBeVisible();
       await expect(rows.last().locator('.row-pick input[type="checkbox"]')).toBeDisabled();
       await expect(page.locator('.episode-column-head .header-select')).toBeVisible();
+      await expect(page.locator('.episode-column-head .sort-heading[value="sort:date_asc"]')).toContainText('Date');
       expect(await page.locator('.pager').evaluate(pager =>
         pager.nextElementSibling?.classList.contains('episode-list'))).toBe(true);
       await submit(page, 'sort:name_asc');

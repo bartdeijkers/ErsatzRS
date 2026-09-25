@@ -415,11 +415,6 @@ fn selectable_ids(d: &Draft, visible: &[&AddonMediaListItemRow]) -> Vec<i64> {
 
 fn items(w: &Workspace) -> AnyView {
     let d = &w.submission.draft;
-    let date_label = if w.form.addon_id == "org.ersatzrs.addon.yt-dlp" {
-        TextKey::AddonWorkspaceUploadDate
-    } else {
-        TextKey::FirstAired
-    };
     let rows = filtered(w);
     let size = if d.page_size == 0 {
         rows.len().max(1)
@@ -495,22 +490,22 @@ fn items(w: &Workspace) -> AnyView {
                     <button type="submit" class="header-select" form=FORM name="intent" value=selection_intent disabled=selectable_here==0 formnovalidate aria-label=tr(selection_label) title=tr(selection_label) aria-pressed=all_visible_selected.to_string()><span aria-hidden="true">{if all_visible_selected {"✓"} else {""}}</span></button>
                     {sort_heading(TextKey::Playlist,"playlist",&d.sort,false)}
                     {sort_heading(TextKey::Name,"name",&d.sort,false)}
-                    {sort_heading(date_label,"date",&d.sort,false)}
+                    {sort_heading(TextKey::AddonWorkspaceItemDate,"date",&d.sort,false)}
                 </div>
                 <div class="episode-column-head">
                     <div class="review-first-column">{sort_heading(TextKey::Playlist,"playlist",&d.sort,true)}<button type="submit" class="header-select" form=FORM name="intent" value=selection_intent disabled=selectable_here==0 formnovalidate aria-label=tr(selection_label) title=tr(selection_label) aria-pressed=all_visible_selected.to_string()><span aria-hidden="true">{if all_visible_selected {"✓"} else {""}}</span></button></div>
                     {sort_heading(TextKey::Name,"name",&d.sort,false)}
-                    {sort_heading(date_label,"date",&d.sort,false)}
+                    {sort_heading(TextKey::AddonWorkspaceItemDate,"date",&d.sort,false)}
                     <span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span>
                 </div>
-                <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row,date_label)).collect_view()}</ol>
+                <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
                 <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>
             </div>
         </section>
     }.into_any()
 }
 
-fn item_row(w: &Workspace, row: &AddonMediaListItemRow, date_label: TextKey) -> AnyView {
+fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
     let d = &w.submission.draft;
     let id = row.id;
     let rank = w.items.iter().position(|r| r.id == id).unwrap_or(0);
@@ -553,7 +548,7 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow, date_label: TextKey) -> 
             <small hidden=!row.local_media_available>{tr(TextKey::AddonLocalPlaybackAvailable)}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
         </div></div>
-        <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(date_label)}</span><span class="sr-only">{tr(date_label)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
+        <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::AddonWorkspaceItemDate)}</span><span class="sr-only">{tr(TextKey::AddonWorkspaceItemDate)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
         <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||tr(TextKey::UnknownAvailability).into(),|n|format!("{}:{:02}",n/60,n%60))}</span></div></div>
         <div class="row-numbering"><div class="inline-pair">
             {[("season",TextKey::Season,row.season,"S"),("episode",TextKey::Episode,row.episode,"E")].into_iter().map(|(name,key,saved,symbol)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved_number(saved)))}<span aria-hidden="true">{symbol}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved_number(saved)) data-saved=saved_number(saved) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
