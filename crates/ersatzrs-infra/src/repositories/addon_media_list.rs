@@ -1013,6 +1013,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
                    SET "ContentKind" = ?, "Included" = ?,
+                       "IncludedByUser" = CASE WHEN "Included" <> ? THEN 1 ELSE "IncludedByUser" END,
                        "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
                        "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
                        "LivenessConflict" = CASE WHEN "Kind" = 4 THEN 0 ELSE "LivenessConflict" END,
@@ -1020,6 +1021,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                    WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
             )
             .bind(content_kind)
+            .bind(edit.included)
             .bind(edit.included)
             .bind(liveness)
             .bind(liveness)
@@ -2083,7 +2085,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
-            r#"UPDATE "AddonMediaListItem" SET "Included" = ?
+            r#"UPDATE "AddonMediaListItem" SET "Included" = ?, "IncludedByUser" = 1
                WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
         )
         .bind(included)
@@ -5856,6 +5858,8 @@ async fn addon_media_list_publication_readiness(
         prepared_media_failures,
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
+        optional_detail_skipped: progress.map_or(0, |progress| progress.detail_skipped),
+        optional_detail_failed: progress.map_or(0, |progress| progress.detail_failed),
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
         saved_revision: form.draft_revision,
         review_state: form.review_state,

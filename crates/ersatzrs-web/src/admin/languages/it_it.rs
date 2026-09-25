@@ -545,6 +545,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNavigation => "La navigazione mantiene le modifiche non salvate. Le modifiche salvate vengono applicate automaticamente.",
         TextKey::AddonWorkspaceSeasonOnly => "Modifica solo stagione",
         TextKey::AddonWorkspaceSeasonPerYear => "Nuova stagione per anno solare",
+        TextKey::AddonWorkspaceYearDatesIncomplete => "Mancano alcune date di caricamento. Attendi i dettagli o inserisci le date mancanti prima di raggruppare le stagioni per anno.",
         TextKey::AddonWorkspacePageSize => "Elementi per pagina",
 
         TextKey::AddonAccessTest => "Verifica accesso",

@@ -346,13 +346,14 @@ async fn save_item(
         .map_err(|_| conflict("cannot encode metadata conflicts"))?;
     let liveness = edit.liveness_override.map(encode_enum);
     sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ?, "Included" = ?,
+        "IncludedByUser" = CASE WHEN "Included" <> ? THEN 1 ELSE "IncludedByUser" END,
         "CollectionRole" = COALESCE(?, "CollectionRole"),
         "ChapterInput" = CASE WHEN ? THEN ? ELSE "ChapterInput" END,
         "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
         "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
         "LivenessConflict" = CASE WHEN "Kind" = 4 AND ? THEN 0 ELSE "LivenessConflict" END,
         "MetadataOverrideJson" = ?, "MetadataConflictJson" = ? WHERE "Id" = ? AND "AddonMediaListId" = ?"#)
-        .bind(encode_enum(edit.content_kind)).bind(edit.included).bind(item.role.map(encode_enum))
+        .bind(encode_enum(edit.content_kind)).bind(edit.included).bind(edit.included).bind(item.role.map(encode_enum))
         .bind(item.chapters.is_some()).bind(item.chapters.as_deref().map(str::trim).filter(|s| !s.is_empty()))
         .bind(liveness).bind(liveness).bind(edit.liveness_override != previous.liveness_override).bind(overrides).bind(conflicts)
         .bind(edit.item_id).bind(list_id).execute(&mut **tx).await.repository()?;

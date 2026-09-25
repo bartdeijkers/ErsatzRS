@@ -1261,6 +1261,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNavigation => "Navigatie behoudt niet-opgeslagen wijzigingen. Opgeslagen wijzigingen worden automatisch toegepast.",
         TextKey::AddonWorkspaceSeasonOnly => "Alleen seizoen wijzigen",
         TextKey::AddonWorkspaceSeasonPerYear => "Nieuw seizoen per kalenderjaar",
+        TextKey::AddonWorkspaceYearDatesIncomplete => "Uploaddatums ontbreken nog. Wacht op de details of vul de ontbrekende datums in voordat je seizoenen per jaar groepeert.",
         TextKey::AddonWorkspacePageSize => "Items per pagina",
 
         TextKey::AddonAccessTest => "Toegang testen",

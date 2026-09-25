@@ -237,6 +237,13 @@ fn preview(
         return Err(TextKey::NumberEpisodes);
     }
     let season_per_year = intent == "auto-number" && field(fields, "season_per_year") == "true";
+    if season_per_year
+        && targets
+            .iter()
+            .any(|row| super::super::super::parse_first_aired(row.first_aired.as_deref()).is_none())
+    {
+        return Err(TextKey::AddonWorkspaceYearDatesIncomplete);
+    }
     if intent == "auto-number" {
         targets = super::super::super::order_by_first_aired(targets);
     }
@@ -419,7 +426,7 @@ pub(super) async fn select_range(state: &AppState, d: &mut Draft, fields: &Field
 mod tests {
     use super::{
         preview, AddonMediaListDraftDiffRow, AddonMediaListItemRow, AddonMediaListPresentationKind,
-        Draft, Fields, Result,
+        Draft, Fields, Result, TextKey,
     };
     use std::collections::BTreeSet;
     fn row(id: i64, season: Option<i32>, episode: Option<i32>) -> AddonMediaListItemRow {
@@ -560,11 +567,11 @@ mod tests {
             page_size: 10,
             ..Default::default()
         };
-        // Newest first; item 3 is undated and follows its provider neighbour.
+        // Newest first; every selected item has a known upload date.
         let rows = [
             (1, Some("2015-01-02")),
             (2, Some("2014-12-30")),
-            (3, None),
+            (3, Some("2014-06-01")),
             (4, Some("2014-01-05")),
             (5, Some("2013-12-31")),
         ]
@@ -594,9 +601,42 @@ mod tests {
         };
         assert_eq!(pair(5), ("1", "1"));
         assert_eq!(pair(4), ("2", "1"));
-        assert_eq!(pair(2), ("2", "2"));
-        assert_eq!(pair(3), ("2", "3"));
+        assert_eq!(pair(3), ("2", "2"));
+        assert_eq!(pair(2), ("2", "3"));
         assert_eq!(pair(1), ("3", "1"));
+    }
+    #[test]
+    fn year_grouping_waits_for_selected_upload_dates() {
+        let d = Draft {
+            selected: BTreeSet::from([1, 2]),
+            page_size: 10,
+            ..Default::default()
+        };
+        let rows = [
+            AddonMediaListItemRow {
+                first_aired: Some("2020-01-01".into()),
+                ..row(1, None, None)
+            },
+            AddonMediaListItemRow {
+                first_aired: None,
+                ..row(2, None, None)
+            },
+        ];
+        let mut f = fields();
+        f.insert("gap_days".into(), "90".into());
+        f.insert("season_per_year".into(), "true".into());
+        assert_eq!(
+            preview(
+                &d,
+                &f,
+                "auto-number",
+                &rows,
+                AddonMediaListPresentationKind::TelevisionShow,
+                &AddonMediaListDraftDiffRow::default()
+            )
+            .unwrap_err(),
+            TextKey::AddonWorkspaceYearDatesIncomplete,
+        );
     }
     #[test]
     fn season_detection_uses_its_own_first_season_and_ignores_manual_count() {

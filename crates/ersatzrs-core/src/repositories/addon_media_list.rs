@@ -320,6 +320,10 @@ pub struct AddonMediaListPublicationReadiness {
     pub prepared_media_failures: Vec<AddonMediaListPreparationFailure>,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
+    #[serde(default)]
+    pub optional_detail_skipped: u64,
+    #[serde(default)]
+    pub optional_detail_failed: u64,
     pub optional_detail_pending: u64,
     pub saved_revision: i32,
     pub review_state: AddonMediaListReviewState,

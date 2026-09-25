@@ -383,6 +383,10 @@ pub struct AddonMediaListPublicationReadiness {
     pub prepared_media_failures: Vec<AddonMediaListPreparationFailure>,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
+    #[serde(default)]
+    pub optional_detail_skipped: u64,
+    #[serde(default)]
+    pub optional_detail_failed: u64,
     pub optional_detail_pending: u64,
     pub saved_revision: i32,
     pub review_state: AddonMediaListReviewState,
@@ -584,6 +588,8 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
                 .collect(),
             optional_detail_total: value.optional_detail_total,
             optional_detail_complete: value.optional_detail_complete,
+            optional_detail_skipped: value.optional_detail_skipped,
+            optional_detail_failed: value.optional_detail_failed,
             optional_detail_pending: value.optional_detail_pending,
             saved_revision: value.saved_revision,
             review_state: value.review_state,

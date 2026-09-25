@@ -2755,7 +2755,7 @@ async fn materialize_revision_as_draft(
 
     sqlx::query(
         r#"UPDATE "AddonMediaListItem"
-           SET "Included" = 0
+           SET "Included" = 0, "IncludedByUser" = 1
            WHERE "AddonMediaListId" = ?"#,
     )
     .bind(fence.list_id)
@@ -2892,6 +2892,7 @@ async fn upsert_restored_draft_item_in_tx(
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
                SET "Rank" = ?, "Kind" = ?, "ContentKind" = ?, "Included" = ?,
+                   "IncludedByUser" = 1,
                    "DisplayTitle" = ?, "Title" = ?, "Year" = ?, "Season" = ?,
                    "Episode" = ?, "SourceUrl" = ?, "AdditionalImageUrls" = ?,
                    "DurationSeconds" = ?, "ParentProviderId" = ?,

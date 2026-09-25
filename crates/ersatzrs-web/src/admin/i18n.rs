@@ -219,6 +219,7 @@ pub enum TextKey {
     AddonWorkspaceNavigation,
     AddonWorkspaceSeasonOnly,
     AddonWorkspaceSeasonPerYear,
+    AddonWorkspaceYearDatesIncomplete,
     AddonWorkspacePageSize,
 
     AddonAccessTest,
@@ -2222,6 +2223,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonWorkspaceNavigation,
     TextKey::AddonWorkspaceSeasonOnly,
     TextKey::AddonWorkspaceSeasonPerYear,
+    TextKey::AddonWorkspaceYearDatesIncomplete,
     TextKey::AddonWorkspacePageSize,
     TextKey::AddonAccessTest,
     TextKey::AddonAccessHelp,

@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the maintenance scheduler running when a new library scan starts just
+  after startup replay, so add-on publication cannot trigger a false replay error.
+- Exclude add-on list videos when later detail import identifies them as unavailable, while preserving explicit inclusion choices and retained media; show detail progress before preparation and wait for upload dates before grouping seasons by year.
 - Remove stale projected media when an item is excluded from a published
   add-on list, so the next publication can complete verification while keeping
   the source stream.

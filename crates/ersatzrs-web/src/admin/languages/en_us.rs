@@ -541,6 +541,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNavigation => "Navigation retains unsaved edits. Saved changes are applied automatically.",
         TextKey::AddonWorkspaceSeasonOnly => "Change season only",
         TextKey::AddonWorkspaceSeasonPerYear => "New season each calendar year",
+        TextKey::AddonWorkspaceYearDatesIncomplete => "Upload dates are incomplete. Wait for details or enter the missing dates before grouping seasons by year.",
         TextKey::AddonWorkspacePageSize => "Items per page",
 
         TextKey::AddonAccessTest => "Test access",

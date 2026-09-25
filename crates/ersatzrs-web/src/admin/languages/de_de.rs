@@ -547,6 +547,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNavigation => "Die Navigation behält ungespeicherte Änderungen. Gespeicherte Änderungen werden automatisch angewendet.",
         TextKey::AddonWorkspaceSeasonOnly => "Nur Staffel ändern",
         TextKey::AddonWorkspaceSeasonPerYear => "Neue Staffel pro Kalenderjahr",
+        TextKey::AddonWorkspaceYearDatesIncomplete => "Uploaddaten fehlen noch. Warten Sie auf die Details oder ergänzen Sie die fehlenden Daten, bevor Sie Staffeln nach Jahr gruppieren.",
         TextKey::AddonWorkspacePageSize => "Einträge pro Seite",
 
         TextKey::AddonAccessTest => "Zugriff testen",

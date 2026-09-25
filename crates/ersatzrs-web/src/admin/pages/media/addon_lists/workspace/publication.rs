@@ -129,6 +129,9 @@ fn state_key(readiness: &AddonMediaListPublicationReadiness) -> TextKey {
     if restored_failure(readiness) {
         return TextKey::AddonWorkspacePublicationFailed;
     }
+    if readiness.optional_detail_pending > 0 {
+        return TextKey::AddonWorkspaceImporting;
+    }
     match publication_primary_action(false, readiness) {
         PublicationPrimaryAction::Queued
         | PublicationPrimaryAction::Publishing
@@ -313,8 +316,44 @@ fn watch_readiness(list_id: i64, readiness: RwSignal<AddonMediaListPublicationRe
 /// Activity & recovery owns the full counters.
 fn preparation_line_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
     view! {
-        <span class="preparation-line" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || !preparation_needs_attention(r))>
+        <span class="preparation-line" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.optional_detail_pending > 0 || r.preparation.affected_items == 0 || !preparation_needs_attention(r))>
             {move || readiness.with(preparation_line)}
+        </span>
+    }
+}
+
+fn detail_line(readiness: &AddonMediaListPublicationReadiness) -> String {
+    let mut line = format!(
+        "{}: {}/{}",
+        tr(TextKey::DetailsComplete),
+        readiness.optional_detail_complete,
+        readiness.optional_detail_total,
+    );
+    if readiness.optional_detail_skipped > 0 {
+        write!(
+            line,
+            " · {}: {}",
+            tr(TextKey::DetailsSkipped),
+            readiness.optional_detail_skipped
+        )
+        .expect("writing a string is infallible");
+    }
+    if readiness.optional_detail_failed > 0 {
+        write!(
+            line,
+            " · {}: {}",
+            tr(TextKey::ItemDetailsFailed),
+            readiness.optional_detail_failed
+        )
+        .expect("writing a string is infallible");
+    }
+    line
+}
+
+fn detail_progress_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+    view! {
+        <span class="preparation-line" data-testid="addon-detail-progress" hidden=move || readiness.with(|r| r.optional_detail_total == 0 || r.optional_detail_pending == 0)>
+            {move || readiness.with(detail_line)}
         </span>
     }
 }
@@ -379,7 +418,7 @@ fn overview_view(
         <div class="publication-overview">
             <div class="publication-state">
                 <strong>{move || readiness.with(|r| tr(state_key(r)))}</strong>
-                <span>{move || readiness.with(counts_text)}{preparation_line_view(readiness)}</span>
+                <span>{move || readiness.with(counts_text)}{detail_progress_view(readiness)}{preparation_line_view(readiness)}</span>
             </div>
             <button
                 class="button primary"
@@ -443,7 +482,13 @@ pub fn PublicationRecoveryIsland(
 ) -> impl IntoView {
     let readiness = RwSignal::new(initial);
     watch_readiness(list_id, readiness);
-    view! { <PublicationRecovery readiness list_id only_attention=false/>{preparation_view(readiness)} }
+    view! { <PublicationRecovery readiness list_id only_attention=false/>
+        <section class="settings-section" data-testid="addon-activity-detail-progress" hidden=move || readiness.with(|r| r.optional_detail_total == 0)>
+            <h3>{move || readiness.with(|r| tr(if r.optional_detail_pending > 0 {TextKey::LoadingItemDetails} else {TextKey::DetailsComplete}))}</h3>
+            <p aria-live="polite">{move || readiness.with(detail_line)}</p>
+        </section>
+        {preparation_view(readiness)}
+    }
 }
 
 /// Latest publication job with its recovery actions. With `only_attention`
@@ -479,6 +524,19 @@ mod tests {
         AddonMediaListPreparationFailure, AddonMediaListPublicationBlocker,
         AddonMediaListPublicationBlockerKind,
     };
+
+    #[test]
+    fn terminal_detail_progress_explains_skipped_items() {
+        let readiness = AddonMediaListPublicationReadiness {
+            optional_detail_total: 52,
+            optional_detail_complete: 47,
+            optional_detail_skipped: 5,
+            ..Default::default()
+        };
+        let line = detail_line(&readiness);
+        assert!(line.contains("47/52"));
+        assert!(line.contains(&format!("{}: 5", tr(TextKey::DetailsSkipped))));
+    }
 
     #[test]
     fn restored_outcome_is_not_success_and_old_failure_does_not_override_new_draft() {

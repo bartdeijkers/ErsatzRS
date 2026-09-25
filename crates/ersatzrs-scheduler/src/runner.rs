@@ -51,6 +51,9 @@ pub struct SchedulerOptions {
 
 /// Run the background scheduler.
 ///
+/// Callers that supply an application must complete interrupted scan replay
+/// and refresh admission before starting the scheduler.
+///
 /// # Errors
 ///
 /// Returns an error when database bootstrap or a run-once maintenance pass
@@ -79,7 +82,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
 
     repair_classic_playouts_on_startup(&startup.pool, &locker, hls_sessions.as_deref()).await?;
 
-    recover_scan_refreshes_on_startup(application.as_ref()).await?;
+    // The web host completes interrupted scan replay and refresh admission
+    // before starting background workers. Do not repeat that check here: a
+    // new scan may already be running when this scheduler starts.
 
     if run_once {
         let report = run_maintenance_once(
@@ -167,22 +172,6 @@ async fn repair_classic_playouts_on_startup(
         info!(
             repaired,
             "repaired inconsistent Classic playout runtime state"
-        );
-    }
-    Ok(())
-}
-
-async fn recover_scan_refreshes_on_startup(
-    application: Option<&Arc<ersatzrs_app::ApplicationServices>>,
-) -> anyhow::Result<()> {
-    let Some(application) = application else {
-        return Ok(());
-    };
-    let recovered = application.recover_scan_playout_refreshes().await?;
-    if recovered > 0 {
-        info!(
-            recovered,
-            "re-admitted durable scan-triggered playout refreshes"
         );
     }
     Ok(())
