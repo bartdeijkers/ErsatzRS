@@ -1,8 +1,15 @@
 feature    = 'Block scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
-Ported: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`.
+Implemented: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`. UCU-05 row 79 fixes nonpositive default-filler loops and expired-row gap detection; Reset filler replacement and cancellation parity remain open.
 '''
+
+[[debt]]
+id          = 'block-reset-filler-and-build-cancellation'
+description = 'Row 79 source comparison finds no native counterpart for Reset removing existing filler while retaining primary and GuideMode items at the offset-aware boundary. The synchronous scheduling request also has no cancellation hook for a running filler build. Complete the native lifecycle mapping and regression evidence before landing row 79.'
+discovered  = '2026-09-25'
+evidence    = 'Upstream a2f54ef1 BlockPlayoutFillerBuilder.Build and AddDefaultFiller; native scheduling/block.rs, playout_builder.rs and maintenance::build_playout. The first checkpoint fixes invalid duration and expiration handling only. Focused acceptance is recorded in UCU-05.'
+resolved    = false

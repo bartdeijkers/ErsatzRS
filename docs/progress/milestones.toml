@@ -9410,6 +9410,17 @@ legacy refusal without clearing scheduled rows, and successful explicit Reset.
 The environment-gated real-world DB test in that selection is not claimed as
 live-profile proof. Source review and scoped Clippy pass. Pin, ledger and
 upstream checkout advance together to row 78; row 79 is next.
+Row 79 (a2f54ef1) is under audit; its verdict and pin remain pending.
+The native default-filler loop now stops with a warning on nonpositive
+duration. Gap detection excludes rows that SQL persistence will expire,
+including the same nonnegative mirror offset and inclusive finish boundary.
+All 13 Block core tests pass (c5c78378), including invalid duration after valid
+filler, cutoff/offset/removal cases, ordinary trimming and oversized primary
+termination. The SQLite delayed-mirror retention test passes (3a7af2d0), and
+core all-target Clippy passes. Source comparison also exposes missing Reset
+filler replacement and no synchronous build cancellation hook; Block parity
+is reopened with explicit debt. Finish those lifecycle requirements before
+assigning a row verdict or advancing the pin. This is a local checkpoint only.
 No UCU-05 window gates, push or CI are claimed.
 """
 

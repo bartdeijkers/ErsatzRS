@@ -35,6 +35,22 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 79 source map: Block build loop safety (audit in progress)
+
+Upstream `a2f54ef1` guards nonpositive default-filler durations, excludes
+existing rows that persistence will expire, uses offset-aware finish times
+during Reset, and observes cancellation while filling gaps. Its primary-item
+fix removes reliance on an optional enumerator minimum duration. Rust's
+`scheduling/block.rs` primary loop is bounded by the configured Block items
+and already stops on an oversized candidate. The first local checkpoint adds
+the missing nonpositive-duration guard and expired-row filter, matching the SQL
+repository cutoff (`remove_before - max(max_playout_offset, zero)`) with an
+inclusive retained boundary. Rust playout times are UTC instants. All 13 Block
+core tests, the SQLite mirror-retention test and scoped Clippy pass; UCU-05
+owns the evidence. Reset does not yet replace existing filler, and the
+synchronous builder has no cancellation hook. These gaps are recorded in Block
+parity and must be completed before a verdict or pin advance.
+
 ## Row 78 source map: playlist enumeration consistency
 
 Upstream `16b71569` changes `PlaylistEnumerator` and the shared playable-item

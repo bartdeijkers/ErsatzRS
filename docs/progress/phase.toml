@@ -65,7 +65,9 @@ next_steps = '''
 loading, all Classic Marathon groups/batches, complete Continue state and
 versioned YAML history restoration have core and restarted SQLite proof.
 Legacy state refuses unsafe builds before clearing; Reset recovers. Continue
-at row 79 (a2f54ef1). UCU-05 window gates, push and CI remain open.
+at row 79 (a2f54ef1). Invalid filler duration and expired-row gap fixes pass
+focused checks; complete Reset filler replacement and cancellation mapping
+before landing row 79. UCU-05 window gates, push and CI remain open.
 
 2026-09-25: UCU-05 row 77 (6ff44cf5) adapts upstream shuffled-progress
 validation to the flat Classic media enumerator. A saved high valid index

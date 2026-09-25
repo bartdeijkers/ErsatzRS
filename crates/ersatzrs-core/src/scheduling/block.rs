@@ -1004,7 +1004,15 @@ fn apply_block_deco_filler(
     }
 
     let mut all_items = reference_data.existing_items.clone();
-    all_items.retain(|item| !result.items_to_remove.contains(&item.id));
+    // Use the same retention boundary as apply_build_result so expired rows
+    // cannot create gaps that this build fills again.
+    let deleted_before = result
+        .remove_before
+        .map(|start| start - reference_data.max_playout_offset.max(Duration::zero()));
+    all_items.retain(|item| {
+        !result.items_to_remove.contains(&item.id)
+            && deleted_before.is_none_or(|cutoff| item.finish >= cutoff)
+    });
     all_items.extend(result.added_items.clone());
     all_items.sort_by_key(|item| item.start);
 
@@ -1165,6 +1173,13 @@ fn add_default_filler(
             break;
         };
         let mut duration = media_item.duration;
+        if duration <= Duration::zero() {
+            result.warnings.push(format!(
+                "default filler item {} has no positive duration; stopped filling gap at {current}",
+                media_item.id
+            ));
+            break;
+        }
         if current + duration > finish {
             if deco.default_filler_trim_to_fit {
                 duration = finish - current;
@@ -1588,6 +1603,151 @@ mod tests {
             "items": timeline(&result.added_items),
             "history_keys": result.added_history.iter().map(|history| &history.key).collect::<Vec<_>>(),
         }));
+    }
+
+    #[test]
+    fn block_default_filler_stops_at_nonpositive_duration() {
+        let start = utc("2026-04-15T08:00:00Z");
+        for invalid_duration in [Duration::zero(), Duration::seconds(-1)] {
+            let mut reference_data = filler_reference_data(start);
+            reference_data.media_by_key.insert(
+                "filler".to_owned(),
+                vec![
+                    SchedulingMediaItem::new(90, Duration::minutes(1)),
+                    SchedulingMediaItem::new(91, invalid_duration),
+                    SchedulingMediaItem::new(92, Duration::minutes(1)),
+                ],
+            );
+            let result = schedule(reference_data, start, Duration::hours(1), 100, 0);
+            let filler = result
+                .added_items
+                .iter()
+                .filter(|item| item.filler_kind == FillerKind::DecoDefault)
+                .collect::<Vec<_>>();
+            assert_eq!(filler.len(), 1);
+            assert_eq!(filler[0].media_item_id, 90);
+            assert_eq!(filler[0].finish, start + Duration::minutes(11));
+            assert_eq!(result.warnings.len(), 1);
+            assert!(result.warnings[0].contains("item 91 has no positive duration"));
+            assert!(!result
+                .added_history
+                .iter()
+                .any(|entry| entry.when >= filler[0].finish
+                    && entry.when < start + Duration::minutes(25)));
+        }
+    }
+
+    #[test]
+    fn block_filler_uses_persistence_retention_boundary() {
+        let start = utc("2026-04-15T08:00:00Z");
+        for (offset, remove_before, removed, expected_count) in [
+            (
+                Duration::zero(),
+                Some(start + Duration::minutes(10) + Duration::seconds(1)),
+                false,
+                0,
+            ),
+            (
+                Duration::zero(),
+                Some(start + Duration::minutes(10)),
+                false,
+                3,
+            ),
+            (
+                Duration::minutes(5),
+                Some(start + Duration::minutes(15)),
+                false,
+                3,
+            ),
+            (
+                Duration::minutes(-5),
+                Some(start + Duration::minutes(10)),
+                false,
+                3,
+            ),
+            (Duration::zero(), None, false, 3),
+            (Duration::zero(), None, true, 0),
+        ] {
+            let mut reference_data = filler_reference_data(start);
+            reference_data.max_playout_offset = offset;
+            let first = existing_item(1, 10, 20, start, String::new(), String::new());
+            let second = existing_item(
+                2,
+                11,
+                21,
+                start + Duration::minutes(25),
+                String::new(),
+                String::new(),
+            );
+            reference_data.existing_items = vec![first, second];
+            let mut result = SchedulingResult {
+                remove_before,
+                items_to_remove: if removed { vec![1] } else { Vec::new() },
+                ..SchedulingResult::default()
+            };
+            apply_block_deco_filler(
+                100,
+                0,
+                start + Duration::hours(1),
+                &reference_data,
+                &mut result,
+            );
+            assert_eq!(
+                result.added_items.len(),
+                expected_count,
+                "offset={offset}, cutoff={remove_before:?}, removed={removed}"
+            );
+            assert_eq!(result.added_history.len(), expected_count);
+            assert!(result
+                .added_items
+                .iter()
+                .all(|item| item.start >= start + Duration::minutes(10)
+                    && item.finish <= start + Duration::minutes(25)));
+        }
+    }
+
+    #[test]
+    fn block_oversized_primary_item_stops_without_retrying() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference_data = filler_reference_data(start);
+        reference_data.effective_blocks.truncate(1);
+        reference_data.effective_blocks[0].deco = None;
+        reference_data.media_by_key.insert(
+            "movies".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::hours(1))],
+        );
+        let result = schedule(reference_data, start, Duration::hours(1), 100, 0);
+        assert!(result.added_items.is_empty());
+        assert!(result.added_history.is_empty());
+    }
+
+    fn filler_reference_data(start: DateTime<Utc>) -> SchedulingReferenceData {
+        let mut first = effective_block(10, 20, "movies", start);
+        first.duration = Duration::minutes(10);
+        first.deco = Some(EffectiveDeco {
+            id: 80,
+            default_filler_content: Some("filler".to_owned()),
+            default_filler_collection_key: Some(collection_key(CollectionType::Collection, 80)),
+            default_filler_trim_to_fit: true,
+            break_content: Vec::new(),
+        });
+        SchedulingReferenceData {
+            effective_blocks: vec![
+                first,
+                effective_block(11, 21, "movies", start + Duration::minutes(25)),
+            ],
+            media_by_key: BTreeMap::from([
+                (
+                    "movies".to_owned(),
+                    vec![SchedulingMediaItem::new(1, Duration::minutes(10))],
+                ),
+                (
+                    "filler".to_owned(),
+                    vec![SchedulingMediaItem::new(90, Duration::minutes(7))],
+                ),
+            ]),
+            ..SchedulingReferenceData::default()
+        }
     }
 
     #[test]

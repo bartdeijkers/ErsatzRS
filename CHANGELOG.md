@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Stop Block default filler at items with zero or negative duration, with a
+  diagnostic instead of an endless build loop. Exclude expired playout rows
+  from filler-gap detection while retaining rows needed by delayed mirrors.
 - Keep playlist cycles open until every playable item has been visited, exclude
   season-zero episodes from Season/Episode playlist children, and reconstruct
   shuffled group order from its saved seed. Classic now loads the saved
