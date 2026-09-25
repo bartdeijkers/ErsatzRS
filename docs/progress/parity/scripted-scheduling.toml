@@ -5,4 +5,5 @@ status     = 'Ported'
 adr        = []
 summary    = '''
 Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`.
+Continuous scripted builds remove played items older than the build start minus four hours, preserving the existing mirror-offset retention window. On-demand scripted builds defer played-item cleanup to the checkpoint-based time shifter.
 '''

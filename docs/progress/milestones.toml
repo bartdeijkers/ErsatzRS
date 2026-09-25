@@ -9005,6 +9005,23 @@ guards, Rust append callers, map/sequence rendering and file cleanup. UCU-04
 window gates, push and terminal exact-SHA CI remain open; continue at row 59
 (2b7531ca).
 
+2026-09-25: row 59 (2b7531ca, PR #2934) is Port. Upstream scripted builds
+remove items before start minus four hours only for continuous channels;
+on-demand channels defer cleanup to the time shifter, which removes items
+finished strictly before the saved checkpoint. ErsatzRS now supplies the
+channel mode to scripted scheduling, retains the existing maximum mirror
+offset during repository deletion, and deletes played on-demand items in the
+same transaction as the existing item/history/anchor/checkpoint shift. No
+schema, selected-track, history, or anchor contract changes occur. The 28
+scripted core tests, two on-demand SQLite tests, delayed-mirror repository
+regression, scoped infrastructure all-target Clippy and native smoke pass. The
+sandbox initially blocked smoke's localhost probe; the same built binary
+passed with socket access: MPEG-TS bytes, HLS variant and initial segments.
+Substantive review checked upstream ownership,
+strict cutoff, transaction ordering, cascade constraints and unaffected
+channels. UCU-04 window gates, push and exact-SHA CI remain open; continue at
+row 60 (c8bd9766).
+
 """
 
 [[milestone]]

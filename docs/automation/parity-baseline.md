@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0b8c51464ece9d7ba20fbc5fd7ec4444e09848c0` |
-| **Commit subject** | `fix: continue serving old segments when unable to transcode in realtime (#2933)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0b8c51464ece9d7ba20fbc5fd7ec4444e09848c0 |
+| **Pinned commit** | `2b7531ca2da521873f9b7c9857cb558cda33cd10` |
+| **Commit subject** | `fix: remove already-played playout items (#2934)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2b7531ca2da521873f9b7c9857cb558cda33cd10 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

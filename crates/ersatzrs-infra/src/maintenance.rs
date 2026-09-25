@@ -632,6 +632,8 @@ async fn build_playout(
         PlayoutScheduleKind::None => return Ok(()),
     };
     reference_data.max_playout_offset = max_playout_offset;
+    let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
+    reference_data.channel_playout_mode = channel_info.playout_mode;
 
     mode = safe_classic_build_mode(
         pool,
@@ -651,7 +653,6 @@ async fn build_playout(
         reference_data,
     })?;
     log_build_warnings(playout_id, &result);
-    let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
     let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
         || (mode != PlayoutBuildMode::Continue
             && channel_info.playout_mode == ChannelPlayoutMode::OnDemand);

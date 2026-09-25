@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **114 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **113 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **58**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **59**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-58 are reconciled; the next row is 59 (2b7531ca).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-59 are reconciled; the next row is 60 (c8bd9766).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,27 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 59 source map: remove already-played playout items
+
+Upstream `2b7531ca` (PR #2934) changes the scripted builder and the on-demand
+time shifter. Continuous scripted builds set `RemoveBefore` to the build start
+minus four hours; on-demand scripted builds leave it unset because the time
+shifter removes items whose finish is strictly before the saved checkpoint.
+The upstream playout builder also documents this ownership split. The change
+does not alter scheduling history, anchors, media selection, or schema.
+
+ErsatzRS owns scripted build results in
+`crates/ersatzrs-core/src/scheduling/scripted/mod.rs` and persists their trim
+cutoff through `crates/ersatzrs-infra/src/repositories/playout.rs`. The existing
+repository subtraction of the maximum mirror offset remains necessary for
+delayed channels. `crates/ersatzrs-infra/src/maintenance.rs` loads the channel
+mode before building and supplies it to reference data. The on-demand segmenter
+time shifter in `crates/ersatzrs-infra/src/hls_worker.rs` removes played rows
+inside its existing shift transaction before moving surviving rows, history,
+anchors, and checkpoint. Focused scheduler and SQLite tests own the strict
+boundary, channel isolation, and continuity checks; native smoke covers routed
+playback. This row does not delete history or reset enumerators.
 
 ## Row 58 source map: retain stale HLS segments during append
 
@@ -1057,7 +1078,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 56 | `6b74da3c` | chore: update docker image (#2926) | Port | upstream-baseline-catch-up | `fix(docker): package matched Intel media drivers` | ucu-04; pinned Intel userspace stack, licenses and stripped libraries; x64 loader and managed FFmpeg CPU/VAAPI-loading proof plus ARM64/ARMv7 runtime builds/start pass. Physical B70 playback is not claimed. |
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | Port | upstream-baseline-catch-up | `fix(deps): reconcile SQLite and NCalc 6.2` | ucu-04; bundled SQLite 3.51.3 closes CVE-2025-6965; NCalc 6.2 saved-expression NaN and signed-zero behavior follows exact-version oracle. Opacity helper and NuGet-only updates are covered; focused regressions, dependency audit, scoped Clippy and native smoke pass. |
 | 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | Port | hls-variant-playlists-segmenter | `fix(hls): retain stale segments until replacement` | ucu-04; no-limit append trim keeps the prior MPEG-TS/fMP4 playlist when every segment predates the cutoff. Red-then-green stale-window and referenced-file cleanup regressions, native smoke and TSDuck transport gate pass. Empty source playlists already avoid a minimum-operation failure. |
-| 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | | | | ucu-04; provisional: Port candidate. |
+| 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | Port | scripted-scheduling; hls-variant-playlists-segmenter | `fix(scheduling): trim played playout items by channel mode` | ucu-04; continuous scripted builds retain four hours plus mirror offset; on-demand time shifting removes only items finished before the saved checkpoint in its shift transaction. Focused scheduler, on-demand SQLite and delayed-mirror persistence tests, scoped Clippy and native smoke pass. |
 | 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | | | | ucu-04; provisional: Port candidate. |
 | 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | | | | ucu-04; provisional: Next behavior triage. |

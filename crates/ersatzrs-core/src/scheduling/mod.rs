@@ -9,10 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
-    CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior, PlaybackOrder,
-    Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap, PlayoutHistory, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind,
-    ProgramScheduleItem,
+    ChannelPlayoutMode, CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior,
+    PlaybackOrder, Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap, PlayoutHistory,
+    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    PlayoutScheduleKind, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -265,6 +265,7 @@ pub trait BlockPreviewRepository: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
+    pub channel_playout_mode: ChannelPlayoutMode,
     /// Legacy schedule/playout-wide policy used only when an item has not yet
     /// materialized its own Smart Shuffle attachment.
     pub smart_shuffle_policy: SchedulingSmartShufflePolicy,

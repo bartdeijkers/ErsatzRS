@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc};
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
-use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
+use ersatzrs_domain::{ChannelPlayoutMode, EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
 use mlua::{Lua, Table};
 use serde::{Deserialize, Serialize};
 
@@ -82,12 +82,15 @@ impl ScriptedSchedulingEngine {
             .map(|item| item.finish)
             .max()
             .unwrap_or(state.current_time);
+        let remove_before = (state.reference_data.channel_playout_mode
+            != ChannelPlayoutMode::OnDemand)
+            .then_some(request.start - Duration::hours(4));
         Ok(SchedulingResult {
             clear_items: matches!(
                 state.mode,
                 PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
             ),
-            remove_before: Some(request.start),
+            remove_before,
             anchor: Some(PlayoutAnchor {
                 next_start: anchor_time,
                 context: state.reference_data.has_active_smart_shuffle().then(|| {
@@ -1158,6 +1161,36 @@ set_cooldown_policy(
     }
 
     // ── regression: original test ─────────────────────────────────────────────
+
+    #[test]
+    fn scripted_trim_cutoff_depends_on_channel_playout_mode() {
+        let start = base_start();
+        for (channel_playout_mode, expected_cutoff) in [
+            (
+                ChannelPlayoutMode::Continuous,
+                Some(start - Duration::hours(4)),
+            ),
+            (ChannelPlayoutMode::OnDemand, None),
+        ] {
+            let reference_data = SchedulingReferenceData {
+                channel_playout_mode,
+                ..SchedulingReferenceData::default()
+            };
+            let result = ScriptedSchedulingEngine
+                .schedule_script(
+                    "",
+                    SchedulingRequest {
+                        playout: Playout::default(),
+                        start,
+                        finish: start + Duration::hours(1),
+                        mode: PlayoutBuildMode::Continue,
+                        reference_data,
+                    },
+                )
+                .expect("empty script builds");
+            assert_eq!(result.remove_before, expected_cutoff);
+        }
+    }
 
     #[test]
     fn scripted_lua_schedules_count_and_duration_snapshot() {

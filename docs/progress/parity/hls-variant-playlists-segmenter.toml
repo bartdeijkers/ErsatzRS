@@ -14,7 +14,8 @@ mirrors MPEG-TS provider path replacement, trims without emptying stale-only
 playlists, preserves real `#EXT-X-DISCONTINUITY`, deletes stale segments, and supports fMP4
 `#EXT-X-MAP` rewriting. It ports ErsatzTV's state transitions and worker loop:
 work-ahead/buffer gates, realtime switching, initial-segment gating,
-`PlayoutUpdated`, OnDemand checkpointing, slug output, and error-ASS fallback.
+`PlayoutUpdated`, OnDemand checkpointing and played-item trimming, slug output,
+and error-ASS fallback.
 Finite add-on inputs keep one producer for the complete remaining play item:
 an initial 44-second read-rate burst fills the buffer, then the same FFmpeg
 process continues in realtime and releases its work-ahead reservation after 30

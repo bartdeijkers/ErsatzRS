@@ -4599,6 +4599,11 @@ async fn time_shift_on_demand_playout(
     let offset = now - checkpoint;
 
     let mut tx = crate::db::begin_write(pool).await?;
+    sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
+        .bind(playout_id)
+        .bind(encode_datetime(checkpoint))
+        .execute(&mut *tx)
+        .await?;
     shift_playout_items(&mut tx, playout_id, offset).await?;
     shift_playout_history(&mut tx, playout_id, offset).await?;
     shift_playout_program_schedule_anchors(&mut tx, playout_id, offset).await?;
@@ -8250,6 +8255,52 @@ mod tests {
         assert_eq!(
             checkpoint.get::<String, _>("OnDemandCheckpoint"),
             "2026-06-08 12:05:00"
+        );
+    }
+
+    #[tokio::test]
+    async fn on_demand_timeshift_trims_only_items_before_checkpoint() {
+        let pool = on_demand_test_pool().await;
+        sqlx::query(
+            r#"UPDATE "Playout" SET "OnDemandCheckpoint" = '2026-06-08 10:00:24' WHERE "Id" = 11"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("set checkpoint");
+        for statement in [
+            r#"INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "Start", "Finish") VALUES (22, 11, '2026-06-08 09:00:00', '2026-06-08 10:00:23')"#,
+            r#"INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "Start", "Finish") VALUES (23, 11, '2026-06-08 10:00:24', '2026-06-08 10:01:24')"#,
+            r#"INSERT INTO "Channel" ("Id", "Number", "Name", "PlayoutMode") VALUES (8, '8', 'Other', 1)"#,
+            r#"INSERT INTO "Playout" ("Id", "ChannelId") VALUES (12, 8)"#,
+            r#"INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "Start", "Finish") VALUES (24, 12, '2026-06-08 09:00:00', '2026-06-08 10:00:23')"#,
+        ] {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .expect("seed item");
+        }
+
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        time_shift_on_demand_playout(&pool, 7, now)
+            .await
+            .expect("shift playout");
+        let rows = sqlx::query(r#"SELECT "Id", "Start" FROM "PlayoutItem" ORDER BY "Id""#)
+            .fetch_all(&pool)
+            .await
+            .expect("load surviving rows");
+        let actual = rows
+            .iter()
+            .map(|row| (row.get::<i64, _>("Id"), row.get::<String, _>("Start")))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            vec![
+                (21, "2026-06-08 11:59:36".to_owned()),
+                (23, "2026-06-08 12:00:00".to_owned()),
+                (24, "2026-06-08 09:00:00".to_owned()),
+            ]
         );
     }
 

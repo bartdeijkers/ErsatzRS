@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Remove already-played on-demand playout items at the saved checkpoint and
+  retain four hours of continuous scripted playout history for delayed viewing.
 - Keep the existing HLS segments and fMP4 init map available when a realtime
   transcode falls behind the playlist trim cutoff, instead of returning an
   empty session playlist before the next append.

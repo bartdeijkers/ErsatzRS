@@ -61,6 +61,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 59 is Port. Continuous scripted builds now trim items
+older than four hours before the build start while retaining the delayed-mirror
+offset. On-demand time shifting removes only items finished strictly before
+the saved checkpoint inside its shift transaction. Focused scheduler,
+on-demand SQLite and delayed-mirror persistence tests, scoped Clippy and
+native smoke pass. Next is row 60 (c8bd9766, OpenAPI build).
+The UCU-04 window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 58 is Port. The no-limit HLS append trim now keeps
 existing segments when every segment predates its cutoff. Red-then-green
 MPEG-TS/fMP4 regressions, referenced-file cleanup, native smoke and the
