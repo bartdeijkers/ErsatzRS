@@ -9500,19 +9500,34 @@ the CHANGELOG 26.7.0 heading and comparison links. ErsatzRS retains its own
 release history; no runtime, packaging or behavior contract changes here.
 Source inspection, diff and progress checks pass. Pin, ledger and checkout
 advance together; row 84 (15db3c4c) is next.
-Row 84 (15db3c4c) is under audit. The shared selector dropped HTTP logo
-URLs and has no generated fallback. Explicit Local/Http watermark images now
+Row 84 (15db3c4c) audit found that the shared selector dropped HTTP logo
+URLs and had no generated fallback. Explicit Local/Http watermark images now
 preserve external URLs in native inputs and Next HTTP sources, with unchanged
 local missing-file checks. All 12 focused tests pass (984f6c62). A real official
 Next test using a synthetic loopback image passes (864a56a8): static/dynamic
 caption paths, overlay geometry, selected audio and DisableWatermarks hold.
 The native URL argv snapshot passes after review (0d79731c). The public type
 update includes troubleshooting consumers and the existing integration assertion.
-Generated logos remain open: the current SVG endpoint is not decodable by the
-supported FFmpeg binary. The owning catch-up debt tracks generated rendering
-and native decoded output; no row verdict or pin advance is claimed.
-Infra/web/FFmpeg all-target Clippy, formatting, diff and progress validation
-pass for the partial URL correction.
+Row 84 is now Port. The generated fallback uses a hash-keyed cached PNG,
+rendered by existing FFmpeg drawvg/drawtext support with bundled Roboto.
+The SVG endpoint shares its abbreviation helper. Rendering has a five-second
+lock/process deadline and bounded managed-child cleanup; only completed PNGs
+are atomically promoted. Explicit missing local artwork is still ignored.
+The real PNG render/cache-reuse test passes (99f60b05); all eight focused
+logo/selection/cancellation/snapshot checks pass (3fa1fd9e). Official Next
+802f2d8 plus FFmpeg n9.0-20260805 proves generated logo pixels, selected Dutch
+audio, static/dynamic caption paths and DisableWatermarks (98f7b8e4).
+Native SoftwarePipelineBuilder output proves both HTTP and generated logo
+pixels plus selected alternate audio (9f032148). The native synthetic generated
+logo uses 50 percent width so its four-pixel source border remains two pixels
+after scaling; the original 30 percent fixture lost the expected color through
+subsampling. Pixel color assertions are unchanged. Native subtitle rendering
+is unchanged; the new native test asserts the unburned output and selected audio.
+Both SVG endpoint tests pass (e0992099). Infra/web all-target Clippy, format,
+progress validation and staged Clippy-allow policy pass. Review confirms the
+shared selector preserves precedence and missing-local-artwork behavior, and
+only complete generated files enter the cache. Pin, ledger and checkout advance
+together to 15db3c4c; row 85 follows.
 No UCU-05 window gates, push or CI are claimed.
 """
 

@@ -3359,7 +3359,17 @@ async fn resolve_watermark_image_path(
             .fetch_optional(pool)
             .await
             .repository()?;
-            Ok(path.as_deref().and_then(resolve_channel_logo_image))
+            if let Some(path) = path {
+                return Ok(resolve_channel_logo_image(&path));
+            }
+            let name: String = sqlx::query_scalar(r#"SELECT "Name" FROM "Channel" WHERE "Id"=?"#)
+                .bind(channel_id)
+                .fetch_one(pool)
+                .await
+                .repository()?;
+            Ok(Some(PlaybackWatermarkImage::Local(
+                crate::channel_logo::generated_image(&name).await?,
+            )))
         }
         // "used for song progress overlay" — `WatermarkSelector.GetWatermarkOptions`
         // resolves the image inside the resources cache folder and ignores the

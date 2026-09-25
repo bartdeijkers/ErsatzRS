@@ -4,9 +4,9 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 173 commits, 83 reconciled, 90 pending. Bootstrap and AMM-N-03 are
+Ledger: 173 commits, 84 reconciled, 89 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 has processed
-rows 68-83; row 84 follows; UCU-05 owns runtime evidence.
+rows 68-84; row 85 follows; UCU-05 owns runtime evidence.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -181,5 +181,5 @@ evidence    = 'UCU-03 owns row 32. Transactional cleanup, hourly cadence, manual
 id = 'ucu84-generated-channel-logo-watermark'
 description = 'Row 84: channel-logo watermark fallback is absent when artwork is missing. The generated SVG logo endpoint is not a playable image input for the supported FFmpeg build.'
 discovered = '2026-09-25'
-resolved = false
-evidence = 'UCU-05 owns row 84. Shared HTTP/local source typing corrects external logos with focused and Next runtime proof. Generated logo rendering and native decoded output remain required before the row verdict and pin advance.'
+resolved = true
+evidence = 'UCU-05 owns row 84. Typed HTTP/local sources and an atomically cached generated PNG preserve external and generated channel-logo watermarks. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. Window acceptance remains open.'
