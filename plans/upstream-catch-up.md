@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **117 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **116 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **55**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **56**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-55 are reconciled; catch-up continues with row 56 after the maintainer resumed work.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-56 are reconciled; the next row is 57 (3756e7fb).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,28 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 56 source map: Intel container driver stack
+
+Upstream `6b74da3c` (PR #2926) changes only the changelog, announcing an Intel
+driver update in its externally built FFmpeg base image for newer Battlemage
+devices such as B70. The pinned upstream Dockerfile consumes that image; it
+contains no driver source pin itself. ErsatzRS uses Debian runtime images and
+the separate managed FFmpeg executable package under ADR 0008. Before this row, the active root
+Dockerfiles installed no Intel media driver, and the managed Linux FFmpeg package
+bundled no driver shared libraries. Passing a render device alone therefore
+does not deliver the announced userspace capability. This is a packaging gap,
+not an upstream-only documentation change.
+
+The owning targets are the active Docker runtime stages, compatible Intel
+userspace dependencies, container installation guidance and existing hardware
+capability/health probes. Row 56 is Port: matched checksum-pinned Intel sources
+are built separately from Rust/WASM, stripped and copied with licenses into
+Linux x64 runtime images. Minimal and alternate runtime loader checks, actual
+managed FFmpeg CPU encode/decode and VAAPI loading, and ARM64/ARMv7 build/start
+checks pass. UCU-04 owns the detailed evidence and remaining window gates.
+Physical Battlemage transcoding is not claimed by these packaging checks. Kernel drivers and render-device permissions remain host-owned under
+ADR 0008. No Rust playback or UI behavior change is implied by the source diff.
 
 ## Row 55 source map: undefined sidecar language and title isolation
 
@@ -980,7 +1002,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | Port | drawvg-graphics-engine | `feat(graphics): import image EPG template context` | ucu-04; import and persist Image epg_entries, render its EPG-selected path without rereading YAML under ADR 0005; focused import/render and decoded graphics proof pass. |
 | 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | Port | upstream-baseline-catch-up | `fix(subtitles): complete local collision repair` | ucu-04; kind-separated deterministic merge, one-time folder invalidation, all-owner hourly cleanup and localized health; upgrade rescan, native/Next language selection, decoded captions and native smoke pass. |
 | 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | Covered | upstream-baseline-catch-up | `test(subtitles): verify undefined sidecar language and flags` | ucu-04; existing suffix-only parser preserves title isolation and und without a language; persisted path/flag/rescan matrix and undefined-language playback selection pass. |
-| 56 | `6b74da3c` | chore: update docker image (#2926) | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 56 | `6b74da3c` | chore: update docker image (#2926) | Port | upstream-baseline-catch-up | `fix(docker): package matched Intel media drivers` | ucu-04; pinned Intel userspace stack, licenses and stripped libraries; x64 loader and managed FFmpeg CPU/VAAPI-loading proof plus ARM64/ARMv7 runtime builds/start pass. Physical B70 playback is not claimed. |
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | | | | ucu-04; provisional: Port candidate. |
 | 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | | | | ucu-04; provisional: Port candidate. |

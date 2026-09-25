@@ -125,10 +125,18 @@ accepted names, and secret-bearing settings.
 
 ## Expose hardware acceleration
 
-Hardware acceleration is optional. The container only advertises modes that
-the runtime can probe successfully.
+Hardware acceleration is optional. Available modes depend on the resolved
+FFmpeg build; device access and a successful hardware transcode must also be
+verified on the deployment host.
 
-- For VAAPI or Intel QSV, pass the relevant `/dev/dri` devices.
+- For VAAPI or Intel QSV, pass the relevant `/dev/dri` devices. The Linux x64
+  image includes Intel Media Driver and VPL GPU Runtime 26.2.4 with their
+  matching libva, Gmmlib and VPL dispatcher. The host still supplies the kernel
+  driver, firmware and device permissions. The Intel stack includes Battlemage
+  device definitions; actual availability is determined by runtime probing.
+  See [the pinned sources](../../docker/intel-media-sources.json) for component
+  versions and checksums. Licenses and this manifest are installed under
+  `/usr/local/share/licenses/intel-media/` inside the image.
 - For NVIDIA, install and configure the NVIDIA Container Toolkit, then expose
   the GPU with Docker's GPU option.
 - `linux/arm/v7` is CPU-only in the published image.

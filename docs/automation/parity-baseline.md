@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `32e548285acc38a5f1cc202d481163d345c99a19` |
-| **Commit subject** | `fix: use und language tag with local subtitles (#2925)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/32e548285acc38a5f1cc202d481163d345c99a19 |
+| **Pinned commit** | `6b74da3cec6afd61ec6b374dca53c1ce9ead5a1f` |
+| **Commit subject** | `chore: update docker image (#2926)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6b74da3cec6afd61ec6b374dca53c1ce9ead5a1f |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

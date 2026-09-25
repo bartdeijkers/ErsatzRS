@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Include a matched Intel VAAPI/QSV userspace stack in Linux x64 Docker images,
+  with pinned source checksums and licenses, so passing an Intel render device
+  no longer leaves the container without its media driver.
 - Reconcile local sidecar subtitles by filename without colliding with embedded
   stream zero; rescans remove duplicate identities and update moved sidecar paths
   while preserving unchanged embedded extraction caches. Existing collisions trigger

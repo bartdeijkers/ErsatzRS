@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
+# Build GPU userspace libraries independently from the Rust/WASM graph.
+FROM debian:bookworm-slim AS intel-media
+ARG TARGETARCH
+COPY docker/build-intel-media.sh docker/intel-media-sources.json /build/
+RUN bash /build/build-intel-media.sh "$TARGETARCH"
+# Keep driver debugging symbols out of the shipped runtime layer.
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+        find /out/usr/local/lib -type f -name '*.so*' -exec strip --strip-unneeded '{}' +; \
+    fi
+
 # Stage the optional Next runtime on the build host for the target platform.
 # Keep Python and download tooling out of the runtime image.
 FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
@@ -117,14 +127,18 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     test -f target/site/bundle.css
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
-FROM debian:bookworm-slim AS runtime
+FROM debian:bookworm-slim AS runtime-base
 
 # Runtime library dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    libssl3 \
+    libssl3 libdrm2 libpciaccess0 libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=intel-media /out/ /
+RUN ldconfig
+
+FROM runtime-base AS runtime
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck

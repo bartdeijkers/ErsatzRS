@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 55 reconciled, 117 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-55 are
+Ledger: 172 commits, 56 reconciled, 116 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-56 are
 reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 
@@ -60,6 +60,13 @@ explicitly refused. Unsupported graphics integration remains refused. Later endp
 optional Next engine alongside native playback. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id          = 'ucu-intel-container-driver-stack'
+description = 'Row 56: package and verify the Intel userspace driver stack needed by container VAAPI/QSV and newer Battlemage devices.'
+discovered  = '2026-09-25'
+resolved    = true
+evidence    = 'UCU-04 row 56 owns the source audit and packaging proof: matched Intel libraries load in minimal and alternate x64 runtime bases; managed FFmpeg CPU encode/decode and VAAPI library resolution pass; ARM64/ARMv7 bases build and start without Intel binaries. Licenses are included and build tools stay out of the minimal runtime. Physical Battlemage playback and full application/window acceptance are not inferred from packaging proof.'
 
 [[debt]]
 id          = 'ucu-local-subtitle-collision-repair'

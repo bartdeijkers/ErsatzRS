@@ -6,6 +6,16 @@ ARG CARGO_LEPTOS_VERSION=0.3.6
 ARG STYLANCE_CLI_VERSION=0.8.2
 ARG WASM_BINDGEN_CLI_VERSION=0.2.122
 
+# Build GPU userspace libraries independently from the Rust/WASM graph.
+FROM debian:${DEBIAN_VERSION}-slim AS intel-media
+ARG TARGETARCH
+COPY docker/build-intel-media.sh docker/intel-media-sources.json /build/
+RUN bash /build/build-intel-media.sh "$TARGETARCH"
+# Keep driver debugging symbols out of the shipped runtime layer.
+RUN if [ "$TARGETARCH" = amd64 ]; then \
+        find /out/usr/local/lib -type f -name '*.so*' -exec strip --strip-unneeded '{}' +; \
+    fi
+
 # Stage the optional Next runtime on the build host for the target platform.
 # Keep Python and download tooling out of the runtime image.
 FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
@@ -119,6 +129,8 @@ RUN set -eux; \
         libass9 \
         libdav1d6 \
         libdrm2 \
+        libpciaccess0 \
+        libstdc++6 \
         libfontconfig1 \
         libfreetype6 \
         libfribidi0 \
@@ -148,6 +160,9 @@ RUN set -eux; \
     fi; \
     mkdir -p /data/.ersatzrs; \
     rm -rf /var/lib/apt/lists/*
+
+COPY --from=intel-media /out/ /
+RUN ldconfig
 
 FROM runtime-base AS runtime-release
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web

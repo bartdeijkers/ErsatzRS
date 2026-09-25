@@ -654,3 +654,32 @@ version, use `--no-cache-filter next-artifacts` with buildx, or change
 This is packaging support only. Native playback remains unchanged; engine
 selection, process supervision and Next playback acceptance remain open under
 [ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md).
+
+## Intel container userspace verification
+
+The Docker `intel-media` stage builds the matched, checksum-pinned sources in
+`docker/intel-media-sources.json` on Debian Bookworm. It is independent of the
+Rust/WASM graph and uses two build jobs by default. Only `linux/amd64` receives
+Intel libraries; the ARM stages produce no Intel binaries. Shared libraries
+are stripped before copying them into the runtime. Build tools remain in the
+intermediate image. Native installs still use their host GPU drivers.
+
+After changing this stack, verify its loading in the production runtime base:
+
+```bash
+docker build --platform linux/amd64 --target intel-media -t ersatzrs-intel-build:test .
+docker build --platform linux/amd64 --target runtime-base -t ersatzrs-runtime:test .
+docker build --platform linux/amd64 -f docker/verify-intel-media.Dockerfile .
+```
+
+Repeat `runtime-base` builds for the release Dockerfile and the supported ARM
+platforms. For the alternate `docker/Dockerfile`, use the probe's
+`--target loader-check`: its existing Mesa Vulkan packages depend on Python,
+whereas the default probe additionally requires the minimal runtime to omit it.
+The loader probe checks the shipped driver, VAAPI, Gmmlib, dispatcher
+and QSV runtime without adding build dependencies to the runtime image. This
+proves packaging and symbol resolution; hardware acceptance additionally needs
+an exposed render device, successful application capability/health checks and
+a decoded hardware transcode. Source device IDs alone do not prove playback
+on a particular GPU. The full application image retains the existing matched
+SSR/WASM and managed FFmpeg verification requirements.

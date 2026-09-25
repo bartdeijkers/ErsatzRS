@@ -61,12 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-25 catch-up resumed. UCU-04 row 55 is Covered: the existing local
-subtitle parser uses und without a language and reads forced/SDH/CC flags only
-from the filename suffix. Persisted title-isolation, path-mode and repeated
-scan checks plus subtitle selection tests pass (17 focused tests); scoped
-Clippy passes. Row 54 upgrade/rescan, cleanup, health and runtime evidence
-remains valid. Next is row 56 (6b74da3c, upstream Docker image update).
+2026-09-25: UCU-04 row 56 is Port. Linux x64 containers now package the
+matched Intel userspace stack with source checksums and licenses. Stripped
+libraries load in minimal/alternate runtime bases; managed FFmpeg CPU
+encode/decode and VAAPI loading pass. ARM64/ARMv7 bases build and start without
+Intel binaries. This is packaging proof, not physical Battlemage playback or
+full application acceptance. Next is row 57 (3756e7fb, dependency refresh).
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of

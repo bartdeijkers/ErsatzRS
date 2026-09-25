@@ -8890,6 +8890,59 @@ requirements are unchanged. Advance pin, ledger and clean upstream checkout
 together, then continue at row 56, 6b74da3c. UCU-04 window gates, push and
 terminal exact-SHA CI remain open.
 
+
+2026-09-25 row 56 reconciliation (Port):
+AMM-N-03 and UCU-00 remain Complete. Pin, ledger and clean upstream checkout
+began at row 55; fresh origin/main remains 27f9d217, with all 172 ordered
+SHA/subject pairs verified. Upstream 6b74da3c (PR #2926) changes its changelog
+only, announcing newer Battlemage/B70 support in its external Intel driver
+image. Source/package audit found a real gap: active application containers
+installed no Intel media driver, and the managed FFmpeg package carries no GPU
+shared libraries. The source map is in plans/upstream-catch-up.md.
+
+All three Dockerfiles now build a matched Intel stack from checksum-pinned
+upstream sources: libva 2.23.0, Gmmlib 22.10.0, Media Driver 26.2.4, VPL
+2.17.0 and VPL GPU Runtime 26.2.4. Driver/runtime sources include Battlemage
+0xe222/0xe223 definitions; these are source evidence, not physical GPU proof.
+Only amd64 receives these libraries. Kernel/firmware/device ownership and
+managed FFmpeg acquisition remain under ADRs 0008/0063. No Rust playback,
+subtitle/audio, schema or UI contract changes. Existing capability and device
+health checks remain; their advertised FFmpeg modes do not prove GPU access.
+Installation guidance now makes that boundary explicit.
+
+Focused Docker Desktop Linux checks pass on the final stripped libraries:
+- General/release runtime-base builds for amd64, arm64 and arm/v7; ARM
+  containers start with the expected architecture and no Intel driver/runtime.
+- The alternate Dockerfile amd64 runtime-base builds, with the new driver copied
+  after distro packages so those packages cannot overwrite it.
+- RTLD_NOW loader checks pass for libva, libva-drm, Gmmlib, VPL, libmfx-gen
+  and iHD in minimal and alternate runtime bases. All five component licenses
+  and the source manifest are present; no compiler is installed. Minimal
+  runtime additionally has no Python. The alternate image already requires
+  Python through Mesa Vulkan, so its loader target preserves that dependency.
+- Managed FFmpeg n9.0 (SHA-256
+  0da9feb315425f096496ff3d86afe05abf4099e3973da17efe93f5a676cee73a)
+  encodes a one-second 128x72/10fps testsrc2 with libx264 and decodes it to null.
+  LD_DEBUG=libs confirms it loads the new libva/libva-drm from /usr/local/lib;
+  intentional /dev/null device initialization fails without loader/symbol
+  errors. This negative-device probe does not claim hardware transcoding.
+- General/release amd64 runtime bases have identical filesystem layers; final
+  layer e92acb624ac64643af252c3c47080d0fb2e418e7ced7ce6812a721fec57d61ad.
+  Docker reports 201420107 bytes for each base, down from 1005553292 before
+  stripping. Verification commands live in BUILD.md and the loader Dockerfile.
+
+Substantive Codex review checked source ownership, matched ABI/dependencies,
+licenses, architecture guards, driver search paths, distro overwrite order,
+CPU compatibility and evidence limits. It corrected excess driver symbols and
+kept the alternate driver's Debian baseline aligned with its runtime argument.
+The initial alternate probe's no-Python assumption was corrected from package
+metadata; loader and no-compiler requirements pass unchanged. bash -n and
+progress/diff checks pass. Full application SSR/WASM builds, physical B70
+transcoding and UCU-04 window gates are not claimed. Advance pin, ledger and
+upstream checkout to row 56; continue at row 57 (3756e7fb). No intermediate
+push or CI was launched. Concurrent Clippy-policy edits remain outside this
+row's checkpoint.
+
 """
 
 [[milestone]]
