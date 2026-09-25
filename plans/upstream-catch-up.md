@@ -36,6 +36,28 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 86 source map: flexible fixed starts near midnight
+
+Upstream `a7ecc5f9` changes `PlayoutModeSchedulerBase.GetStartTimeAfter`:
+flexible starts wait for the next occurrence only when it is at most 12 hours
+away; a peek from an active Flood still advances to tomorrow. Tomorrow's local
+wall-clock offset is resolved independently to preserve DST boundaries.
+The matrix covers midnight, early morning, recently missed starts on either
+side of midnight, same-day future starts, all calendar dates and a real
+three-item builder sequence around midnight.
+
+Native `classic::get_start_time_after` still uses same-UTC-day comparison.
+Its `midnight` and `seconds_since_midnight` helpers also use UTC, while persisted
+schedule start times are wall-clock durations. The host reports CEST; no
+Classic time-zone conversion is present in its reference-data loader. The
+existing Sequential YAML local-clock helper deliberately retains the current
+offset, so it cannot supply row 86's independently resolved tomorrow semantics.
+Targets: Classic fixed-start occurrence calculation, explicit clock boundary,
+core matrix and persisted production-builder proof including DST. Preserve
+complete Refresh checkpoints and legacy refusal under ADR 0020. Row 86 stays
+pending until both the wait rule and local/DST behavior are proven; pin remains
+at row 85. No new architecture or behavior deviation is accepted by this audit.
+
 ## Row 85 source map: complete Classic collection identities
 
 Upstream `ecf6c2c1` groups Refresh anchors by every CollectionKey field and

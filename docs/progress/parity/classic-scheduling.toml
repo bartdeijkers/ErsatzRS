@@ -186,3 +186,10 @@ discovered  = '2026-09-25'
 adr         = '0020'
 evidence    = 'UCU-05 row 78 evidence. The restarted production fixture now exercises structured playlist children and Random Start Point; earlier flattened-path comparisons are not playlist-enumerator acceptance. All five Marathon grouping modes and batches have core coverage; director grouping and restart/Refresh have SQL proof.'
 resolved    = true
+
+[[debt]]
+id = 'ucu86-flexible-fixed-start-clock'
+description = 'Row 86 requires nearest flexible fixed-start occurrence within 12 hours, local wall-clock interpretation and an independently resolved next-day offset. Classic currently compares UTC dates/times and can start early before midnight or wait almost a day after a missed late start.'
+discovered = '2026-09-25'
+resolved = false
+evidence = 'Upstream a7ecc5f9 changes PlayoutModeSchedulerBase.GetStartTimeAfter and adds clock/builder tests. Native classic::get_start_time_after, midnight and seconds_since_midnight still use UTC; the loader has no local conversion. Existing YAML timing intentionally retains its current offset and cannot substitute for the required next-day DST resolution. Row 86 source map and UCU-05 own the correction and acceptance; no verdict or pin advance.'

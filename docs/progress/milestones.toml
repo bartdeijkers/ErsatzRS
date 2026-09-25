@@ -9549,6 +9549,13 @@ Core/infra/web all-target Clippy passes. Review confirms full identity grouping,
 unchanged absent-field JSON, and preflight before destructive persistence.
 Verdict: Adapt under ADR 0020. Pin/ledger/checkout advance to ecf6c2c1;
 row 86 follows. Formatting, progress and staged lint policy pass.
+Row 86 (a7ecc5f9) is under audit. Its nearest-occurrence flexible wait rule
+also requires independently resolved tomorrow local offsets across DST.
+Native Classic currently uses UTC midnight/time-of-day, and its SQL loader
+performs no local conversion. Existing YAML timing preserves the current offset
+by an earlier upstream contract, so reusing it would miss this row's correction.
+The source map and Classic parity debt record both requirements. No row-86
+implementation, verdict, time-zone deviation or pin advance is claimed.
 No UCU-05 window gates, push or CI are claimed.
 """
 
