@@ -103,7 +103,10 @@ impl NextHost {
     /// Authentication is enforced by the HTTP transport before this call.
     /// # Errors
     /// Refuses changed gaps, expired sessions, unavailable media and preparation failure.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Fallback resolution keeps the admitted session and persisted gap identity explicit."
+    )]
     pub async fn resolve_fallback(
         &self,
         channel_id: i64,
@@ -261,7 +264,10 @@ impl NextHost {
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Fallback preparation carries the selected item, session, and deadline."
+    )]
     async fn prepare_fallback(
         &self,
         projected: Projection,
@@ -337,7 +343,10 @@ impl NextHost {
         dynamic_item::resolve_at(&snapshot.projection.item, now).map_err(|_| unavailable())
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Track preparation keeps media identity and selected tracks explicit."
+    )]
     async fn prepare_fallback_tracks(
         &self,
         projected: &mut selection::DeferredProjection,
@@ -516,7 +525,10 @@ impl NextHost {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Fallback reuse compares the full item, session, and gap identity."
+    )]
     async fn fallback_preparation_unchanged(
         &self,
         channel: &Channel,
@@ -569,7 +581,10 @@ impl NextHost {
             && self.dynamic_contexts.lock().await.contains_key(&instance)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Fallback reuse compares the full item, session, and gap identity."
+    )]
     async fn fallback_unchanged(
         &self,
         channel: &Channel,

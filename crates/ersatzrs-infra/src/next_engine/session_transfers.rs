@@ -315,7 +315,10 @@ async fn cancelled(cancellation: &mut watch::Receiver<bool>) {
     let _ = cancellation.changed().await;
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Preparation retains ownership, cancellation, and both deadlines explicitly."
+)]
 async fn run_preparation<F, Fut>(
     state: Weak<Mutex<State>>,
     id: Uuid,

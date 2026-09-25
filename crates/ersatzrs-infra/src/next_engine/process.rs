@@ -95,7 +95,10 @@ impl NextProcess {
     }
 
     /// Supply a reserved callback identity only to this spawned Next process.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Process startup forwards the explicit channel configuration and session identity."
+    )]
     pub(super) async fn start_with_session(
         executable: &Path,
         number: &str,

@@ -20,7 +20,10 @@ use crate::{
 };
 
 impl NextHost {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Producer resolution carries the source, session, selected tracks, and deadline."
+    )]
     pub(super) async fn resolve_producer(
         &self,
         before: Snapshot,

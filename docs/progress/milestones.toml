@@ -9196,6 +9196,15 @@ recorded under UCU-02. No post-gate product source changed. The remaining
 UCU-04 acceptance step is to push the exact candidate and obtain terminal
 green exact-SHA CI. Milestone status remains In progress until that proof.
 
+The first pushed local-acceptance candidate 889ed11b reached CI run
+36126046169 and failed in Format's new Clippy allow policy; downstream jobs
+were skipped, so this is not CI acceptance. Thirteen UCU-04 item-level Clippy
+suppression attributes lacked the required reason. Each now names its concrete
+context, with no production logic change. The same policy against the UCU-03
+base, cargo fmt and scoped infrastructure/scanner all-target Clippy pass.
+The earlier runtime/window evidence remains applicable. Push the corrected
+candidate and require a new terminal green exact-SHA run.
+
 """
 
 [[milestone]]

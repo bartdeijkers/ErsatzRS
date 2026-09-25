@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: The first UCU-04 pushed candidate 889ed11b failed CI's new
+Clippy allow policy before downstream jobs. Thirteen item-level suppressions
+now carry explicit reasons; local policy, formatting and scoped all-target
+Clippy pass. Push the corrected candidate and require a terminal green run
+at its exact SHA. UCU-05 remains gated.
+
 2026-09-25: UCU-04 local window gates pass on row-67 source candidate
 9208e381: workspace Clippy, 3,177 selected closeout tests plus doctests,
 matched Leptos build, web parity (690 selected tests), native smoke and the

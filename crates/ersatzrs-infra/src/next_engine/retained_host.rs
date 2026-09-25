@@ -32,7 +32,10 @@ impl Drop for PendingClaim {
 }
 
 impl NextHost {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Retained resolution carries the source, session, selected tracks, and deadline."
+    )]
     pub(super) async fn resolve_retained(
         &self,
         before: Snapshot,
@@ -230,7 +233,10 @@ fn runtime_error(error: ItemRuntimeError) -> RemoteStreamError {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Fresh tracks require the original item and probed stream identity."
+)]
 pub(super) fn install_fresh_tracks(
     mut item: protocol::PlayoutItem,
     probe: &FfprobeMediaVersion,

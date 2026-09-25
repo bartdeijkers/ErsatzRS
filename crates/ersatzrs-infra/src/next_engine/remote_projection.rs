@@ -306,7 +306,10 @@ struct Binding {
 }
 
 /// Load one original occurrence and release all scheduler guards before returning.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Snapshot loading needs the channel, schedule, and published source identity."
+)]
 pub(crate) async fn snapshot(
     pool: &DbPool,
     locker: &EntityLocker,

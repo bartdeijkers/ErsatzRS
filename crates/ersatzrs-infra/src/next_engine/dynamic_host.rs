@@ -115,7 +115,10 @@ impl NextHost {
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Resolution forwards the admitted session, selected tracks, and timing bounds."
+    )]
     async fn resolve_concrete(
         &self,
         before: dynamic_projection::Snapshot,

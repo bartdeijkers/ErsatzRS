@@ -365,7 +365,10 @@ async fn second_scan_skips_unchanged_season_via_etag() {
 /// invalidates the folder and the ordinary scanner repairs it without a file touch.
 #[tokio::test]
 #[ignore = "requires FFmpeg 9, ffprobe and the Big Buck Bunny fixture"]
-#[allow(clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_lines,
+    reason = "The end-to-end upgrade regression covers scan invalidation and playback selection."
+)]
 async fn subtitle_collision_upgrade_reenters_scan_and_restores_language_selection() {
     let ffprobe = ffprobe_binary().expect("ffprobe is required for this acceptance test");
     let fixture = big_buck_bunny_fixture().expect("Big Buck Bunny fixture is required");
