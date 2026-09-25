@@ -1643,6 +1643,7 @@ impl SqliteSchedulingContentRepository {
                 collection_id: item.collection_id,
                 multi_collection_id: item.multi_collection_id,
                 smart_collection_id: item.smart_collection_id,
+                rerun_collection_id: item.rerun_collection_id,
                 media_item_id: item.media_item_id,
                 playlist_id: item.playlist_id,
                 search_query: item.search_query.clone(),
@@ -3357,7 +3358,9 @@ impl SqliteSchedulingContentRepository {
             let selection = match mode {
                 DecoMode::Inherit => EffectiveDecoSelection::Inherit,
                 DecoMode::Override => EffectiveDecoSelection::Override(
-                    self.effective_deco(deco_id, media_by_key).await?,
+                    self.effective_deco(deco_id, media_by_key)
+                        .await?
+                        .map(Box::new),
                 ),
                 DecoMode::Disable | DecoMode::Merge => EffectiveDecoSelection::Disable,
             };
@@ -3924,6 +3927,7 @@ fn collection_key_from_row(row: &DbRow) -> Result<SchedulingCollectionKey> {
         collection_id: optional_id(row, "CollectionId")?,
         multi_collection_id: optional_id(row, "MultiCollectionId")?,
         smart_collection_id: optional_id(row, "SmartCollectionId")?,
+        rerun_collection_id: optional_id(row, "RerunCollectionId")?,
         media_item_id: optional_id(row, "MediaItemId")?,
         playlist_id: optional_id(row, "PlaylistId")?,
         search_query: row

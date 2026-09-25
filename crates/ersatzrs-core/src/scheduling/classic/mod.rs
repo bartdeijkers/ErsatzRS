@@ -888,16 +888,7 @@ impl ClassicContext {
             if !anchor.enumerator_state.started {
                 continue;
             }
-            let key = history_key_for_collection_key(&SchedulingCollectionKey {
-                collection_type: anchor.collection_type,
-                collection_id: anchor.collection_id,
-                multi_collection_id: anchor.multi_collection_id,
-                smart_collection_id: anchor.smart_collection_id,
-                media_item_id: anchor.media_item_id,
-                playlist_id: anchor.playlist_id,
-                search_query: anchor.search_query.clone(),
-                fake_collection_key: anchor.fake_collection_key.clone(),
-            });
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
             if let Some(enumerator) = self.media.get_mut(&key) {
                 let seed = seed_to_u64(anchor.enumerator_state.seed);
                 let index = usize::try_from(anchor.enumerator_state.index).unwrap_or(0);
@@ -2323,7 +2314,7 @@ impl ClassicContext {
                 collection_id: key.collection_id,
                 multi_collection_id: key.multi_collection_id,
                 smart_collection_id: key.smart_collection_id,
-                rerun_collection_id: None,
+                rerun_collection_id: key.rerun_collection_id,
                 media_item_id: key.media_item_id,
                 playlist_id: key.playlist_id,
                 search_query: key.search_query,
@@ -2961,6 +2952,7 @@ fn collection_key(item: &ProgramScheduleItem) -> SchedulingCollectionKey {
         collection_id: item.collection_id,
         multi_collection_id: item.multi_collection_id,
         smart_collection_id: item.smart_collection_id,
+        rerun_collection_id: item.rerun_collection_id,
         media_item_id: item.media_item_id,
         playlist_id: item.playlist_id,
         search_query: item.search_query.clone(),
@@ -2974,6 +2966,7 @@ fn collection_key_for_anchor(anchor: &PlayoutProgramScheduleAnchor) -> Schedulin
         collection_id: anchor.collection_id,
         multi_collection_id: anchor.multi_collection_id,
         smart_collection_id: anchor.smart_collection_id,
+        rerun_collection_id: anchor.rerun_collection_id,
         media_item_id: anchor.media_item_id,
         playlist_id: anchor.playlist_id,
         search_query: anchor.search_query.clone(),
@@ -3153,6 +3146,7 @@ fn anchor_matches_key(
         && anchor.collection_id == key.collection_id
         && anchor.multi_collection_id == key.multi_collection_id
         && anchor.smart_collection_id == key.smart_collection_id
+        && anchor.rerun_collection_id == key.rerun_collection_id
         && anchor.media_item_id == key.media_item_id
         && anchor.playlist_id == key.playlist_id
         && anchor.search_query == key.search_query

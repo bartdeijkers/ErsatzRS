@@ -883,18 +883,29 @@ mod tests {
 
     #[tokio::test]
     async fn classic_playout_state_health_fails_until_runtime_state_is_complete() {
+        assert_classic_playout_health(false).await;
+    }
+
+    #[tokio::test]
+    async fn classic_playout_state_health_rejects_missing_rerun_identity() {
+        assert_classic_playout_health(true).await;
+    }
+
+    async fn assert_classic_playout_health(rerun: bool) {
         let pool = test_pool().await;
         seed_empty_schedule(&pool).await;
         seed_library_path(&pool).await;
         for statement in [
             r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (80, 10, 0)"#,
             r#"INSERT INTO "Movie" ("Id") VALUES (80)"#,
+            r#"INSERT INTO "MovieMetadata" ("Id", "MovieId", "MetadataKind", "Title", "SortTitle", "DateAdded", "DateUpdated")
+                VALUES (80, 80, 0, 'Classic health', 'Classic health', '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z')"#,
             r#"INSERT INTO "MediaVersion" (
                    "Id", "DateAdded", "DateUpdated", "Duration", "Height",
                    "MovieId", "VideoScanKind", "Width"
                ) VALUES (
                    80, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z',
-                   '00:01:00', 1080, 80, 1, 1920
+                   '01:00:00', 1080, 80, 1, 1920
                )"#,
             r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
                VALUES (80, 'Classic Health', 0)"#,
@@ -904,14 +915,24 @@ mod tests {
                 .await
                 .expect("seed Classic health content");
         }
+        if rerun {
+            pool.execute(r#"INSERT INTO "RerunCollection" ("Id", "Name", "CollectionType", "CollectionId", "FirstRunPlaybackOrder", "RerunPlaybackOrder")
+                VALUES (80, 'Rerun health', 'Collection', 80, 'Chronological', 'Chronological')"#).await.unwrap();
+        }
         let repositories = crate::repositories::make_repositories(pool.clone());
         repositories
             .program_schedule
             .upsert_item(&ProgramScheduleItem {
                 id: 80,
                 program_schedule_id: 10,
-                collection_type: CollectionType::Collection,
-                collection_id: Some(80),
+                playout_mode: ersatzrs_domain::PlayoutMode::One,
+                collection_type: if rerun {
+                    CollectionType::RerunFirstRun
+                } else {
+                    CollectionType::Collection
+                },
+                collection_id: (!rerun).then_some(80),
+                rerun_collection_id: rerun.then_some(80),
                 ..ProgramScheduleItem::default()
             })
             .await
@@ -952,6 +973,24 @@ mod tests {
         .await
         .expect("build complete Classic checkpoint state");
 
+        assert_populated_classic_health(&pool, &check, rerun).await;
+    }
+
+    async fn assert_populated_classic_health(
+        pool: &Pool<Db>,
+        check: &ClassicPlayoutStateHealthCheck,
+        rerun: bool,
+    ) {
+        let count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem" WHERE "PlayoutId"=10"#)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert!(
+            count > 0,
+            "healthy Classic state requires a populated build"
+        );
+
         assert_eq!(
             check
                 .check()
@@ -960,6 +999,12 @@ mod tests {
                 .status,
             HealthCheckStatus::Pass
         );
+        if rerun {
+            pool.execute(r#"UPDATE "PlayoutProgramScheduleAnchor" SET "RerunCollectionId"=NULL"#)
+                .await
+                .unwrap();
+            assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Fail);
+        }
     }
 
     #[tokio::test]

@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 85 is Adapt under ADR 0020. Complete collection
+identities include rerun IDs; playlist and synthetic keys retain existing
+checkpoint restoration. Three-week playlist and rerun restart/Refresh proof
+passes; legacy identity loss refuses clearing and fails health. UCU-05 owns
+acceptance evidence. Continue at row 86 (a7ecc5f9); window gates/push/CI remain open.
+
 2026-09-25: UCU-05 row 84 is Port. External and generated channel-logo
 watermarks have native and official Next decoded proof with selected audio;
 Next subtitles and DisableWatermarks also pass. Cached PNG rendering preserves

@@ -9528,6 +9528,27 @@ progress validation and staged Clippy-allow policy pass. Review confirms the
 shared selector preserves precedence and missing-local-artwork behavior, and
 only complete generated files enter the cache. Pin, ledger and checkout advance
 together to 15db3c4c; row 85 follows.
+Row 85 (ecf6c2c1) groups all source identities and selects the earliest
+checkpoint. Existing ADR 0020 restoration already preserves playlist and
+synthetic keys; the audit found missing RerunCollectionId in shared keys,
+Classic projection/matching and history. The new core regression failed with
+[20,21,20,21] instead of [10,20,11,21] (7cd53b4a), then passed (0110bde5).
+All 267 core tests pass (4cb2c12e), with unchanged non-rerun serialized keys.
+A production SQLite fixture builds a 300-item, six-hour playlist through
+21 days, then reopens and Refreshes: future media, absolute times, track
+preferences and contexts are identical, starting at item 1084 (0f9e2241).
+Distinct rerun sources survive restarted Refresh and persist separate IDs;
+ambiguous legacy anchors fail preflight without clearing rows (aab3e6b3).
+Both Classic health tests pass (7ed345fc). Their fixture now uses a populated
+One-mode build rather than an empty duration-mode result; removing rerun
+identity makes the actual health check fail. ADR 0020 legacy refusal is retained.
+Adding the source-key field crossed the decoration-selection enum size lint;
+the optional override payload is boxed without changing its serialized form.
+The final 267 core plus two health tests all pass (b860a06b).
+Core/infra/web all-target Clippy passes. Review confirms full identity grouping,
+unchanged absent-field JSON, and preflight before destructive persistence.
+Verdict: Adapt under ADR 0020. Pin/ledger/checkout advance to ecf6c2c1;
+row 86 follows. Formatting, progress and staged lint policy pass.
 No UCU-05 window gates, push or CI are claimed.
 """
 

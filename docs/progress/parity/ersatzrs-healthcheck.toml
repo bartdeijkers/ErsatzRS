@@ -30,7 +30,10 @@ or out-of-range signed offsets, and legacy mirrors that also own a playout.
 The Classic Playout State check reports generated Classic playouts whose
 source-keyed collection anchors, fill-group indices, or owned enumerator rows
 do not exactly match the active schedule. The scheduler audits and repairs the
-same invariant at startup and before every Continue build.
+same invariant at startup and before every Continue build. Row 85 includes
+RerunCollectionId in that identity: a populated production build reports Pass,
+then missing rerun identities report Fail. Ambiguous legacy state requires
+explicit Reset; it is not silently rebuilt from empty progress.
 
 The Output Dynamic Range check uses a backend-portable `SELECT DISTINCT`
 ordering and one shared classification contract for SQLite and MySQL. The

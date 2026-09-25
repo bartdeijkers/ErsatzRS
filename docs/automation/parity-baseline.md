@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `15db3c4ca0abd436d1ec099ef9f54f6f8bc83a81` |
-| **Commit subject** | `fix: don't ignore channel logo watermarks that are urls (#2961)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/15db3c4ca0abd436d1ec099ef9f54f6f8bc83a81 |
+| **Pinned commit** | `ecf6c2c1ab2f915a85fcf0b1ffa6f903c07753a4` |
+| **Commit subject** | `fix: classic playout playlist progress (#2966)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ecf6c2c1ab2f915a85fcf0b1ffa6f903c07753a4 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -149,7 +149,7 @@ pub struct EffectiveDecoTemplateItem {
 pub enum EffectiveDecoSelection {
     Inherit,
     Disable,
-    Override(Option<EffectiveDeco>),
+    Override(Option<Box<EffectiveDeco>>),
 }
 
 impl EffectiveDecoSelection {
@@ -157,7 +157,7 @@ impl EffectiveDecoSelection {
         match self {
             Self::Inherit => channel_deco.cloned(),
             Self::Disable => None,
-            Self::Override(deco) => deco.clone(),
+            Self::Override(deco) => deco.as_deref().cloned(),
         }
     }
 }
@@ -2313,7 +2313,9 @@ mod tests {
                 EffectiveDecoTemplateItem {
                     start_time: NaiveTime::from_hms_opt(6, 0, 0).expect("valid time"),
                     end_time: NaiveTime::from_hms_opt(12, 0, 0).expect("valid time"),
-                    selection: EffectiveDecoSelection::Override(Some(override_deco.clone())),
+                    selection: EffectiveDecoSelection::Override(Some(Box::new(
+                        override_deco.clone(),
+                    ))),
                 },
                 EffectiveDecoTemplateItem {
                     start_time: NaiveTime::from_hms_opt(12, 0, 0).expect("valid time"),

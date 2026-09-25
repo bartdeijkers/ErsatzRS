@@ -19,18 +19,24 @@ Shuffled collection fix (2026-06-14): Classic shuffled media collections now mir
 
 Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
 
-Windows MTV dogfood (2026-07-19): `Multiple (3)` then `One` repeats three
-primary items and one bumper across Refresh without filler. The observed issue
-was schedule topology; the regression covers the intended sequence.
+Windows dogfood (2026-07-19): the regression proves Multiple (3) then One
+keeps the intended three-primary/one-bumper sequence across Refresh.
 
-Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
+Frozen-shuffle fix (2026-07-27): Reset regenerates the seed; Refresh accepts
+only aligned dated checkpoints. Random draws with replacement, RandomRotation
+persists cycle predecessors, and Continue preserves both. ADR 0010 owns the
+adaptation and Random Start Point semantics.
 
 Upstream rows 69-71 (2026-09-25): Classic playlist children honor Random Start
 Point, and explicit Started state distinguishes unplayed anchored sources from
 played sources whose index wrapped to zero. All three SQLite enumerator state
 tables persist the flag; legacy rows default false. Rebuilding a started
-playlist reproduces seeded child offsets and replays its saved index. Row 85's
-broader playlist continuation repair remains in UCU-05.
+playlist reproduces seeded child offsets and replays its saved index.
+Row 85 completes collection-key identity with RerunCollectionId; distinct rerun
+sources no longer share progress. Same-day earliest complete checkpoints already
+preserve playlist and synthetic keys. Three-week playlist restart/Refresh and
+separate rerun sources have production SQLite proof; ambiguous legacy state
+fails preflight without clearing rows. UCU-05 owns acceptance evidence.
 
 Row 77: the flat enumerator accepts saved indices through the full item count.
 Continue retains inactive alternate anchors; the active-state audit permits

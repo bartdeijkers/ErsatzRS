@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep distinct rerun collections separate in Classic scheduling progress and
+  Refresh checkpoints. Ambiguous legacy state is reported by Classic Playout
+  State health and requires Reset before rebuilding (upstream PR #2966).
+
 - Preserve external channel-logo URLs as watermark inputs for native and Next
   playback instead of discarding them as missing local files. Channels without
   artwork use a cached, playable image of their generated logo (upstream PR #2961).

@@ -94,6 +94,57 @@ fn classic_playlist_continue_matches_uninterrupted_across_cycles() {
 }
 
 #[test]
+fn classic_distinct_rerun_collections_keep_separate_progress() {
+    let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 50, 0).unwrap();
+    let mut data = SchedulingReferenceData::default();
+    for id in [1, 2] {
+        let item = ProgramScheduleItem {
+            id,
+            program_schedule_id: 1,
+            sort_order: i32::try_from(id).unwrap(),
+            collection_type: CollectionType::RerunFirstRun,
+            rerun_collection_id: Some(id),
+            playout_mode: PlayoutMode::One,
+            ..ProgramScheduleItem::default()
+        };
+        data.media_by_key.insert(
+            item_key(&item),
+            vec![
+                SchedulingMediaItem::new(id * 10, Duration::minutes(10)),
+                SchedulingMediaItem::new(id * 10 + 1, Duration::minutes(10)),
+            ],
+        );
+        data.classic_schedule_items.push(item);
+    }
+    let full = build(start, start + Duration::minutes(40), data.clone(), None);
+    assert_eq!(
+        full.added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>(),
+        [10, 20, 11, 21]
+    );
+    let first = build(start, start + Duration::minutes(20), data.clone(), None);
+    data.existing_items = first.added_items;
+    data.existing_program_schedule_anchors = first.program_schedule_anchors;
+    data.existing_classic_checkpoints = first.classic_checkpoints;
+    let continued = build(
+        start + Duration::minutes(20),
+        start + Duration::minutes(40),
+        data,
+        first.anchor,
+    );
+    assert_eq!(continued.added_items, full.added_items[2..]);
+    let rerun_ids = continued
+        .program_schedule_anchors
+        .iter()
+        .filter(|anchor| anchor.anchor_date.is_none())
+        .map(|anchor| anchor.rerun_collection_id)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(rerun_ids, BTreeSet::from([Some(1), Some(2)]));
+}
+
+#[test]
 fn classic_playlist_random_start_continue_matches_uninterrupted() {
     let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
     let (_, mut data) = fixture(true);

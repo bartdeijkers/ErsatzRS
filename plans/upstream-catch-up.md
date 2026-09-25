@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **89 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **88 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **84**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **85**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-84; the next upstream row is 85 (`ecf6c2c1`).
+  processed rows 68-85; the next upstream row is 86 (`a7ecc5f9`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -35,6 +35,24 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 85 source map: complete Classic collection identities
+
+Upstream `ecf6c2c1` groups Refresh anchors by every CollectionKey field and
+selects the earliest same-day checkpoint. This repairs dropped playlist and
+synthetic anchors. ErsatzRS already groups its versioned complete checkpoints
+by serialized source keys (ADR 0020), including playlist and synthetic keys.
+The audit found a missing RerunCollectionId in SchedulingCollectionKey, anchor
+projection and matching; distinct rerun sources can share an enumerator.
+A focused regression reproduces wrong media selection before the correction.
+Targets: shared scheduling key/history serialization, Classic item/anchor
+mapping, SQL key hydration, and production restart/Refresh tests. Preserve
+legacy refusal and full key identity; no UI or rebuild-policy changes.
+The correction includes the rerun ID in source/history keys, persisted anchors,
+and matching. Non-rerun JSON is unchanged. Restart/Refresh and health checks
+preserve populated timelines and refuse ambiguous legacy anchors. The 21-day
+playlist fixture proves progress survives Refresh. Verdict: Adapt under ADR
+0020 (complete checkpoints and explicit legacy refusal); UCU-05 owns evidence.
 
 ## Row 84 source map: channel-logo watermarks
 
@@ -1590,7 +1608,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | Adapt (ADRs 0095/0100) | upstream-baseline-catch-up | `test(streaming): verify Next subtitle font and empty-cue playback` | ucu-05; checkpoint 7b5ef28f supplies the font cache; official Next runtime proves selected font rendering, end-of-cue playback and alternate audio. Exact-version preparation and native absolute extraction indexes preserve existing safety; see UCU-05 evidence. |
 | 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.0 release metadata` | ucu-05; only CHANGELOG release heading and comparison links change. ErsatzRS retains its own release history; no runtime contract changes. Source and progress checks pass. |
 | 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | Port | upstream-baseline-catch-up | `fix(streaming): render generated channel-logo watermarks` | ucu-05; checkpoint 876ed514 preserves external URLs; cached PNG fallback now preserves generated logos. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. See UCU-05 evidence; window gates remain open. |
-| 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | | | | ucu-05; provisional: Port candidate. |
+| 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | Adapt (ADR 0020) | classic-scheduling; ersatzrs-healthcheck | `fix(scheduling): preserve complete Classic collection identities` | ucu-05; complete source keys now include RerunCollectionId. Existing earliest complete checkpoints preserve playlist/fake keys. Three-week playlist and rerun restart/Refresh, legacy refusal, actual health reporting and core regressions pass; see UCU-05 evidence. |
 | 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | | | | ucu-05; provisional: Port candidate. |
 | 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | | | | ucu-05; provisional: Port candidate. |
 | 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |

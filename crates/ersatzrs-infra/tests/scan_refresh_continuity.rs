@@ -1,5 +1,8 @@
 mod common;
 
+#[path = "scan_refresh_continuity/collection_identity.rs"]
+mod collection_identity;
+
 use std::collections::BTreeSet;
 use std::path::Path;
 

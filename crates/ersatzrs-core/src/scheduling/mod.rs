@@ -164,6 +164,8 @@ pub struct SchedulingCollectionKey {
     pub collection_id: Option<EntityId>,
     pub multi_collection_id: Option<EntityId>,
     pub smart_collection_id: Option<EntityId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rerun_collection_id: Option<EntityId>,
     pub media_item_id: Option<EntityId>,
     pub playlist_id: Option<EntityId>,
     pub search_query: Option<String>,
@@ -1034,6 +1036,8 @@ fn history_key_for_collection_key(collection_key: &SchedulingCollectionKey) -> S
         #[serde(skip_serializing_if = "Option::is_none")]
         smart_collection_id: Option<EntityId>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        rerun_collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         media_item_id: Option<EntityId>,
         #[serde(skip_serializing_if = "Option::is_none")]
         playlist_id: Option<EntityId>,
@@ -1048,6 +1052,7 @@ fn history_key_for_collection_key(collection_key: &SchedulingCollectionKey) -> S
         collection_id: collection_key.collection_id,
         multi_collection_id: collection_key.multi_collection_id,
         smart_collection_id: collection_key.smart_collection_id,
+        rerun_collection_id: collection_key.rerun_collection_id,
         media_item_id: collection_key.media_item_id,
         playlist_id: collection_key.playlist_id,
         search_query: collection_key.search_query.as_deref(),
