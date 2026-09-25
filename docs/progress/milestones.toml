@@ -9495,6 +9495,11 @@ partial-subtitle ordinal bug. Only fonts_folder is new in the upstream wire
 field sets. Accepted ADR 0100 live/one-shot limitations remain unchanged.
 Final infra all-target Clippy, formatting, diff and progress checks pass.
 Pin, ledger and checkout advance together to 4ffd775a; row 83 follows.
+Row 83 (05dd6cbe) is N/A (upstream release metadata). Its only change is
+the CHANGELOG 26.7.0 heading and comparison links. ErsatzRS retains its own
+release history; no runtime, packaging or behavior contract changes here.
+Source inspection, diff and progress checks pass. Pin, ledger and checkout
+advance together; row 84 (15db3c4c) is next.
 No UCU-05 window gates, push or CI are claimed.
 """
 

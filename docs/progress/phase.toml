@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 83 is N/A: only upstream 26.7.0 changelog
+release metadata changes. Pin, ledger and checkout advance together.
+Continue at row 84 (15db3c4c); window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 82 is Adapt under ADRs 0095/0100. Next receives
 the subtitle font cache; runtime checks prove font selection, decoded captions,
 end-of-cue playback and retained alternate audio. UCU-05 owns focused evidence.
