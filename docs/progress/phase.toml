@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 73 (5855deb8) is Adapt under accepted ADR 0063.
+Upstream only updates FFmpeg 8.1.2 packaging/version health; ErsatzRS's FFmpeg
+9 runtime, startup validation and health contract remain authoritative.
+Pin, ledger and checkout advance together. Continue at row 74 (6d8666b8);
+UCU-05 window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 72 (16e341d9) is N/A. Upstream only re-keys its
 Windows global singleton mutex by configuration folder. ErsatzRS has no
 equivalent mutex; ADR 0080 excludes multiple active server deployments.

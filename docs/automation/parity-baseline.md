@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `16e341d9b5feb436a9e4ac47bec671c864fbb15d` |
-| **Commit subject** | `fix: key singleton mutex on config folder (#2946)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/16e341d9b5feb436a9e4ac47bec671c864fbb15d |
+| **Pinned commit** | `5855deb8bc9fa18e00abbc5020bb09c96bae6d9a` |
+| **Commit subject** | `feat: upgrade ffmpeg to 8.1.2 (#2951)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5855deb8bc9fa18e00abbc5020bb09c96bae6d9a |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

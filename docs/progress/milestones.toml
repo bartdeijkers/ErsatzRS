@@ -9319,6 +9319,14 @@ multiple active server instances remain outside ADR 0080's supported
 deployment contract. Pin, ledger and checkout advance together; row 73 is
 next. Source and progress checks pass; no UCU-05 window gates, push or CI are
 claimed.
+Row 73 (5855deb8) is Adapt under accepted ADR 0063. Upstream changes
+FFmpeg 7.1 to 8.1.2 package pins in release CI and Docker, plus its bundled
+version health wording. ErsatzRS already requires first-party FFmpeg 9,
+rejects 8.1.2 at startup, and reports the resolved version in health. ADR
+0063 supersedes ADR 0008's older version pin. No transcoding or selection
+logic changes upstream in this row. Pin, ledger and checkout advance together;
+row 74 is next. Source and progress checks pass; no UCU-05 window gates, push
+or CI are claimed.
 No UCU-05 window gates, push or CI are claimed.
 """
 

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **100 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **99 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **72**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **73**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-72; the next upstream row is 73 (`5855deb8`).
+  processed rows 68-73; the next upstream row is 74 (`6d8666b8`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,19 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 73 source map: FFmpeg 8.1.2 packaging and health
+
+Upstream `5855deb8` changes release artifact acquisition, four Docker bases,
+the FFmpeg version health check and changelog from the FFmpeg 7.1 line to
+8.1.2. It does not change filter graphs, transcoding commands, media models,
+playout, subtitles or alternate-audio selection. ErsatzRS's accepted ADR 0063
+requires first-party FFmpeg 9 and rejects 8.1.2 at startup; its health check
+reports the resolved runtime version against that supported line. ADR 0008
+retains package provenance and architecture, not the superseded version pin.
+Verdict: Adapt (ADR 0063); no Rust package or health change is appropriate.
+The existing FFmpeg 9 runtime, package and health acceptance evidence remains
+the relevant proof; UCU-05 window gates remain open.
 
 ## Row 72 source map: config-folder keyed singleton mutex
 
@@ -1380,7 +1393,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 70 | `0d692e70` | fix: always randomize start points (#2949) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist enumerator started state` | ucu-05; Started is stored in all three SQLite enumerator state tables and carried through Classic advancement. Previously unused anchored sources randomize; played sources at wrapped index zero stay in sequence; the final item is eligible. Migration upgrade, repository round trip, 247 core tests and scoped Clippy pass. Row 71 remains open. |
 | 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): replay random playlist offsets on Continue` | ucu-05; each Classic playlist build recreates seeded child offsets and a retained Continue build replays its saved index. The 6+6 versus uninterrupted 12-item timeline regression passes with identical identities and timestamps; all 248 core tests and scoped Clippy pass. Row 85 owns broader playlist progress repair. |
 | 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | N/A (upstream singleton mutex; ADR 0080) | upstream-baseline-catch-up | `docs(porting): classify upstream config-folder mutex` | ucu-05; upstream re-keys a Windows global mutex to AppDataFolder. ErsatzRS has no such mutex; multiple active server instances remain unsupported under ADR 0080. No Rust runtime surface or user-visible contract changed. Source and progress checks pass. |
-| 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
+| 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | Adapt (ADR 0063) | ffmpeg-runtime; upstream-baseline-catch-up | `docs(porting): classify FFmpeg 8.1.2 upstream upgrade` | ucu-05; upstream changes package pins, Docker bases and version health to 8.1.2. Accepted ADR 0063 requires ErsatzRS FFmpeg 9, startup rejects 8.1.2, and health reports the resolved supported runtime. No filter graph or media selection change. Source and progress checks pass. |
 | 74 | `6d8666b8` | chore: update dependencies (#2952) | | | | ucu-05; provisional: Upstream tooling candidate. |
 | 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | | | | ucu-05; provisional: Adapt candidate. |
 | 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | | | | ucu-05; provisional: Port candidate. |
