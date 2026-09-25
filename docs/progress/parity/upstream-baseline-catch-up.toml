@@ -4,22 +4,20 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 67 reconciled, 105 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03/04 have green CI at 8f722099/07847071. UCU-05 begins at
-row 68. UCU-01 proves repository
-links, channel-only packaging, provenance,
-six-RID staging and Docker startup.
+Ledger: 172 commits, 68 reconciled, 104 pending. Bootstrap and AMM-N-03 are
+Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 has processed
+row 68; row 69 follows. UCU-01 proves links, provenance, six-RID packaging and
+Docker startup.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
-retained native defaults, mode normalization and a localized SSR editor with
-Chromium/Firefox and no-JS proof. The optional Next adapter has atomic publication,
-profile mapping, supervised startup/stop, HLS registry/admission/idle cleanup,
-preview isolation and continued schedule publication for channels and mirrors.
+native defaults and a localized SSR editor with browser/no-JS proof. The Next
+adapter has atomic publication, supervised lifecycle, HLS admission/cleanup,
+preview isolation and schedule publication for channels and mirrors.
 Decoded Linux playback preserves selected alternate audio and external subtitles;
 exact pins/silence, selected versions/files and mirror timing have regression
 coverage. Atomic publication has native Windows/NTFS proof. Media-server inputs
-use scoped local paths or capability-protected media opens with current provider
-credentials, verified Plex failover, Range handling and redirect isolation.
+use scoped paths or protected opens with current credentials, verified Plex
+failover, Range handling and redirect isolation.
 
 Row 21 is Adapt (ADR 0096), explicitly accepted by the maintainer. Shared bounded
 JavaScript movie/episode callbacks now feed native playback, troubleshooting and
@@ -53,7 +51,10 @@ Row 28 proves pad/stretch/crop scaling. Row 29 proves authenticated provider
 Convert subtitles, excludes provider EIA-608 and places watermarks inside content.
 Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
 Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
-The official Next RGB opacity bug is explicitly accepted pending upstream correction, with visible unresolved debt.
+Row 68 ports Plex movie/Other Video title refresh on ordinary scans, including
+the first scan after replacing timestamp-only fingerprints. Focused tests pass;
+UCU-05 window acceptance remains open.
+The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain

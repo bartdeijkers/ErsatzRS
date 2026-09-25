@@ -200,7 +200,7 @@ impl PlexService {
                 .media_container
                 .metadata
                 .into_iter()
-                .filter_map(project_media_item)
+                .filter_map(project_movie_item)
                 .collect(),
         })
     }
@@ -1701,6 +1701,19 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
     })
 }
 
+fn project_movie_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
+    let mut item = project_media_item(item)?;
+    // ErsatzTV's PlexEtag.ForMovie includes Title from row 68 onward. The
+    // version prefix makes existing timestamp-only ETags refresh once, while
+    // later title-only edits refresh movies and Other Videos on normal scans.
+    item.etag = Some(format!(
+        "title-v1:{}:{}",
+        item.etag.as_deref().unwrap_or_default(),
+        sha256_hex(&item.title)
+    ));
+    Some(item)
+}
+
 fn plex_tag_values(values: Vec<PlexTagResponse>) -> Vec<String> {
     ersatzrs_core::metadata_facets::normalize_facet_values(
         values.into_iter().filter_map(|value| value.tag),
@@ -2785,7 +2798,7 @@ async fn ensure_media_file(
     ))
     .bind(version_id)
     .bind(&item.path)
-    .bind(path_hash(&item.path))
+    .bind(sha256_hex(&item.path))
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -2793,7 +2806,7 @@ async fn ensure_media_file(
     // re-inserting it, so there is no fresh rowid to read. Resolve the real id
     // by the natural key instead.
     let file_id: i64 = sqlx::query_scalar(r#"SELECT "Id" FROM "MediaFile" WHERE "PathHash" = ?"#)
-        .bind(path_hash(&item.path))
+        .bind(sha256_hex(&item.path))
         .fetch_one(&mut **tx)
         .await
         .repository()?;
@@ -3306,8 +3319,8 @@ fn unix_time(value: Option<i64>) -> DateTime<Utc> {
         .unwrap_or_else(Utc::now)
 }
 
-fn path_hash(path: &str) -> String {
-    let digest = Sha256::digest(path.as_bytes());
+fn sha256_hex(value: &str) -> String {
+    let digest = Sha256::digest(value.as_bytes());
     let mut hash = String::with_capacity(digest.len() * 2);
 
     for byte in digest {

@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 68 (18137832) is Port. Plex movie and Other Video
+ordinary scans now refresh title-only changes and upgrade old timestamp-only
+fingerprints. Focused Plex tests and scoped lint pass. Pin, ledger row 68 and
+upstream checkout advance together. Continue at row 69 (e5a2a763); UCU-05
+window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04's documentation-only closeout needed manual CI. Run
 36136343034 is terminal red only in Chromium: the NSF live scenario queried
 SQLite before its schedule Save completed; Firefox and all other jobs pass.

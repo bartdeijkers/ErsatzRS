@@ -9256,7 +9256,7 @@ correction and require terminal green CI at its new exact SHA before UCU-05.
 id         = 'ucu-05'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 35b5a259'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-04']
@@ -9274,7 +9274,22 @@ for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-25: UCU-04 prerequisite is Complete with terminal green exact-SHA CI
+36140800461 at a14ada809c9d18d68c89e9294199ced60715bc33. At UCU-05
+start, the pin, last processed row 67 and upstream checkout all equal
+0b44ad47095c1db80c28137edc280947c66ee456. A fresh fetch leaves upstream
+origin/main at 27f9d2174f377e27baa553872c73fcac863a52d7; all 172 ledger
+SHA/subject pairs remain an exact prefix and there is no new UCU-09 tail.
+Row 68 (18137832) is Port: upstream PlexEtag.ForMovie now includes Title and
+movie/Other Video scanners compare and persist Title plus SortTitle. ErsatzRS
+uses a versioned title-aware Etag for both library kinds; ordinary scans
+refresh title-only changes and replace old timestamp-only fingerprints once.
+The red/green regression (Nextest d557bc42 then da5c2cd3) and 20 Plex tests
+(86fad0a9) cover persisted titles, Etag changes and unchanged-item behavior.
+Scoped all-target infrastructure Clippy, format and progress checks pass.
+Pin, ledger row 68 and upstream checkout advance to 18137832 together; row 69
+(e5a2a763) is next.
+No UCU-05 window gates, push or CI are claimed.
 """
 
 [[milestone]]

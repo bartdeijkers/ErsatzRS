@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **105 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **104 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **67**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **68**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
-  [36131751469](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36131751469)
-  at `07847071` are recorded in its milestone. The earlier Clippy-policy and
-  Firefox failures were corrected without changing product logic. The next
-  upstream row is 68 (`18137832`) in UCU-05.
+  [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
+  at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
+  Firefox failures were corrected without changing product logic. UCU-05 has
+  processed row 68 (`18137832`); the next upstream row is 69 (`e5a2a763`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,29 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 68 source map: Plex movie and other-video title refresh
+
+- ErsatzTV UI/pages: no route or control changes; updated library titles flow to
+  existing media listings and search.
+- ErsatzTV response/model: Plex movie and Other Video records carry `Title` and
+  `UpdatedAt`. `PlexEtag.ForMovie` now includes title in its fingerprint, so a
+  title-only change reaches ordinary periodic scans and the first scan after
+  upgrading refreshes the old fingerprint.
+- ErsatzTV handlers/scanners: `PlexMovieLibraryScanner` and
+  `PlexOtherVideoLibraryScanner` compare both `Title` and `SortTitle` with the
+  existing metadata after a changed fingerprint.
+- ErsatzTV repositories: `IMovieRepository` and `IOtherVideoRepository` write
+  `Title` and `SortTitle` together; no schema change.
+- Side effects: changed movie/Other Video titles become visible after sync;
+  unchanged records retain the existing no-write fast path. No subtitle,
+  alternate-audio, playout or transport behavior changes.
+- ErsatzRS target: `ersatzrs-infra::plex` projection, Etag skip and metadata
+  upserts; `tests/plex_service.rs` covers title-only ordinary rescans for both
+  library kinds, metadata persistence and unchanged-scan idempotency.
+- Intentional deviations: none. ErsatzRS uses a versioned title-aware Etag
+  representation rather than byte-identical upstream hashing; its persisted
+  skip contract and one-time old-Etag refresh are the behavior that matters.
 
 ## Row 67 source map: upstream 26.6.0 release preparation
 
@@ -1279,7 +1302,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | Port | support-pages | `feat(web): show bundled release notes on home and health` | ucu-04; localized shared SSR card on both routes selects the installed beta or latest dated bundled changelog section, sanitizes Markdown and serves the full offline changelog. GitHub remains an optional link; anonymous API and page return 404. Focused section/security tests, web check, scoped Clippy, dependency audit, hydration lint and Chromium 320px/content/link proof pass. Window gates remain open. |
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | N/A (upstream SkiaSharp API migration) | upstream-baseline-catch-up | `docs(porting): classify SkiaSharp 4 API migration` | ucu-04; two .NET package upgrades and three DrawBitmap overload updates add explicit default sampling. Rust SVG logos and native FFmpeg Image/Motion overlays use no Skia API or dependency. Source/ADR review and progress validation pass; no new pixel-equivalence claim. Window gates remain open. |
 | 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.6.0 release prep` | ucu-04; only ErsatzTV CHANGELOG heading/comparison links change. ErsatzRS releases and dated changelog sections have separate acceptance; no product or build behavior changes. Source and progress checks pass; UCU-04 window gates remain open. |
-| 68 | `18137832` | fix: update plex movie and other video titles (#2947) | | | | ucu-05; provisional: Port candidate. |
+| 68 | `18137832` | fix: update plex movie and other video titles (#2947) | Port | library-management; upstream-baseline-catch-up | `fix(infra): refresh Plex titles on ordinary scans` | ucu-05; versioned title-aware movie/Other Video Etag refreshes old timestamp-only fingerprints once and title-only changes thereafter. Existing metadata upsert writes Title and SortTitle. Red/green focused regression, 20 Plex tests, scoped Clippy, format and progress checks pass. UCU-05 window gates remain open. |
 | 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | | | | ucu-05; provisional: Port candidate. |
 | 70 | `0d692e70` | fix: always randomize start points (#2949) | | | | ucu-05; provisional: Port candidate. |
 | 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | | | | ucu-05; provisional: Port candidate. |

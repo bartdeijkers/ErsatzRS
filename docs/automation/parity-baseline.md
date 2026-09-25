@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0b44ad47095c1db80c28137edc280947c66ee456` |
-| **Commit subject** | `prep for release v26.6.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0b44ad47095c1db80c28137edc280947c66ee456 |
+| **Pinned commit** | `18137832e69e34f1319cd5afca8735e88ac2a130` |
+| **Commit subject** | `fix: update plex movie and other video titles (#2947)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/18137832e69e34f1319cd5afca8735e88ac2a130 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

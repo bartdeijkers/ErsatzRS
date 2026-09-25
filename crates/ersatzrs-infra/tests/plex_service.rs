@@ -388,6 +388,116 @@ async fn plex_sync_paginates_movie_library() {
 }
 
 #[tokio::test]
+async fn plex_title_only_change_refreshes_movie_and_other_video_metadata() {
+    for (library_id, provider_table, metadata_table, metadata_sql, etag_sql) in [
+        (
+            1,
+            "PlexMovie",
+            "MovieMetadata",
+            r#"SELECT "Title", "SortTitle" FROM "MovieMetadata" LIMIT 1"#,
+            r#"SELECT "Etag" FROM "PlexMovie" LIMIT 1"#,
+        ),
+        (
+            8,
+            "PlexOtherVideo",
+            "OtherVideoMetadata",
+            r#"SELECT "Title", "SortTitle" FROM "OtherVideoMetadata" LIMIT 1"#,
+            r#"SELECT "Etag" FROM "PlexOtherVideo" LIMIT 1"#,
+        ),
+    ] {
+        let original_server = MockServer::start_async().await;
+        mock_plex_title_page(&original_server, library_id, "Original Plex Title").await;
+        let renamed_server = MockServer::start_async().await;
+        mock_plex_title_page(&renamed_server, library_id, "Renamed Plex Title").await;
+        let pool = common::test_db().await;
+        let service = PlexService::new();
+        let mut config = PlexConnectionConfig {
+            uri: original_server.base_url(),
+            token: "plex-token".to_owned(),
+        };
+
+        if library_id == 1 {
+            sync_plex_movie_library(&pool, &service, &config, 1, library_id, "1", false)
+                .await
+                .unwrap();
+        } else {
+            sync_plex_other_video_library(&pool, &service, &config, 1, library_id, "8", false)
+                .await
+                .unwrap();
+        }
+        let original = sqlx::query(metadata_sql).fetch_one(&pool).await.unwrap();
+        assert_eq!(original.get::<String, _>("Title"), "Original Plex Title");
+        assert_eq!(
+            original.get::<String, _>("SortTitle"),
+            "Original Plex Title"
+        );
+        let original_etag: String = sqlx::query_scalar(etag_sql).fetch_one(&pool).await.unwrap();
+        assert!(original_etag.starts_with("title-v1:"));
+
+        // Existing installations store only updatedAt. The first ordinary
+        // scan after this change must replace that old fingerprint.
+        if library_id == 1 {
+            sqlx::query(r#"UPDATE "PlexMovie" SET "Etag" = '1776406500'"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sync_plex_movie_library(&pool, &service, &config, 1, library_id, "1", false)
+                .await
+                .unwrap();
+        } else {
+            sqlx::query(r#"UPDATE "PlexOtherVideo" SET "Etag" = '1776406500'"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sync_plex_other_video_library(&pool, &service, &config, 1, library_id, "8", false)
+                .await
+                .unwrap();
+        }
+        let migrated_etag: String = sqlx::query_scalar(etag_sql).fetch_one(&pool).await.unwrap();
+        assert_eq!(migrated_etag, original_etag);
+
+        config.uri = renamed_server.base_url();
+        if library_id == 1 {
+            sync_plex_movie_library(&pool, &service, &config, 1, library_id, "1", false)
+                .await
+                .unwrap();
+        } else {
+            sync_plex_other_video_library(&pool, &service, &config, 1, library_id, "8", false)
+                .await
+                .unwrap();
+        }
+        let renamed = sqlx::query(metadata_sql).fetch_one(&pool).await.unwrap();
+        assert_eq!(renamed.get::<String, _>("Title"), "Renamed Plex Title");
+        assert_eq!(renamed.get::<String, _>("SortTitle"), "Renamed Plex Title");
+        let renamed_etag: String = sqlx::query_scalar(etag_sql).fetch_one(&pool).await.unwrap();
+        assert_ne!(original_etag, renamed_etag);
+        assert_eq!(count(&pool, provider_table).await, 1);
+        assert_eq!(count(&pool, metadata_table).await, 1);
+    }
+}
+
+async fn mock_plex_title_page(server: &MockServer, library_id: i64, title: &str) {
+    let mut item = media_json(
+        "/library/metadata/100",
+        "/library/parts/10",
+        "/media/title-change.mkv",
+        100,
+    );
+    item["title"] = json!(title);
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(format!("/library/sections/{library_id}/all"))
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": { "totalSize": 1, "Metadata": [item] }
+            }));
+        })
+        .await;
+}
+
+#[tokio::test]
 async fn plex_sync_skips_unchanged_movie_etag_writes() {
     let server = MockServer::start_async().await;
     let page = server
