@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 77 adapts shuffled collection progress; core and persisted inactive-alternate Continue regressions pass; row 78 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 76 ports final-pass Classic daily checkpoints; seven-day hourly regression, 249 core tests and persisted SQLite Continue-to-Refresh pass; row 77 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 75 ports FFmpeg green-line workaround removal; two argv snapshots, 344 FFmpeg tests, scoped Clippy and synthetic FFmpeg 9 NVENC overlay pass; row 76 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 74 is N/A: upstream Jint NuGet patch only; ErsatzRS uses accepted bounded QuickJS under ADR 0096; row 75 next"}

@@ -32,6 +32,10 @@ tables persist the flag; legacy rows default false. Rebuilding a started
 playlist reproduces seeded child offsets and replays its saved index. Row 85's
 broader playlist continuation repair remains in UCU-05.
 
+Row 77: the flat enumerator accepts saved indices through the full item count.
+Continue retains inactive alternate anchors; the active-state audit permits
+them. Core and SQLite regressions pass. Multipart grouping remains open below.
+
 Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
 
 Resolved 2026-08-24: Classic persists complete versioned initial/day

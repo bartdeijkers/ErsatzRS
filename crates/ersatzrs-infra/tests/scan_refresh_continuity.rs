@@ -708,6 +708,61 @@ async fn classic_continue_persists_checkpoint_for_new_final_day() {
 }
 
 #[tokio::test]
+async fn classic_continue_preserves_inactive_alternate_anchor_in_sqlite() {
+    let directory = tempfile::tempdir().expect("temporary database directory");
+    let database_path = directory.path().join("alternate-anchor.sqlite");
+    let pool = open_database(&database_path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    let start = common::fixed_time();
+    run_classic_build(&pool, RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset, start).await;
+    sqlx::query(
+        r#"INSERT INTO "ProgramScheduleAlternate" (
+               "PlayoutId", "ProgramScheduleId", "Index", "DaysOfWeek",
+               "LimitToDateRange", "StartMonth", "StartDay", "EndMonth", "EndDay"
+           ) VALUES (?, 302, 0, '["Sunday"]', 0, 1, 1, 12, 31)"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .execute(&pool)
+    .await
+    .expect("seed inactive Sunday alternate");
+    sqlx::query(
+        r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+               "Id", "CollectionType", "PlaylistId", "PlayoutId"
+           ) VALUES (9001, 'Playlist', 12, ?)"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .execute(&pool)
+    .await
+    .expect("seed alternate collection anchor");
+    sqlx::query(
+        r#"INSERT INTO "CollectionEnumeratorState" (
+               "PlayoutProgramScheduleAnchorId", "Seed", "Index", "Started"
+           ) VALUES (9001, 1234, 9, 1)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed alternate collection progress");
+
+    run_classic_build(
+        &pool,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Continue,
+        start + Duration::hours(1),
+    )
+    .await;
+    assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "continue").await;
+    let retained = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT "Seed", "Index" FROM "CollectionEnumeratorState"
+           WHERE "PlayoutProgramScheduleAnchorId" = 9001"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inactive alternate progress survives Continue");
+    assert_eq!(retained, (1234, 9));
+    pool.close().await;
+}
+
+#[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn classic_smart_shuffle_refresh_matches_uninterrupted_cooldown_across_round_trip() {
     let directory = tempfile::tempdir().expect("temporary database directory");

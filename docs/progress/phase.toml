@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 77 (6ff44cf5) adapts upstream shuffled-progress
+validation to the flat Classic media enumerator. A saved high valid index
+survives, and inactive alternate collection anchors now persist through
+Continue; restarted SQLite proof passes. The pre-existing multipart grouping
+gap remains visible in Classic parity. Continue at row 78 (16b71569); UCU-05
+window gates, push and CI remain open.
+
 2026-09-25: UCU-05 row 76 (f7bdcede) ports daily Classic checkpointing through
 the final build pass. A seven-day shuffled hourly Continue regression failed
 before the fix, then passed; all 249 core tests and a production SQLite

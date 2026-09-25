@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve Classic collection progress for inactive alternate schedules across
+  Continue builds; a saved shuffle index remains valid against the full item
+  count (upstream PR #2955).
 - Keep a Classic Refresh checkpoint for every day in a continued playout and
   preserve the already built prefix when Refresh rewinds to it, including a
   media item crossing midnight (upstream PR #2954).

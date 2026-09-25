@@ -9352,6 +9352,15 @@ retains the scheduled prefix through the selected checkpoint and rebuilds the
 future. All 249 core tests, the SQLite regression and scoped Clippy pass. Pin,
 ledger and checkout advance together; row 77 is next. UCU-05 window gates,
 push and exact-SHA CI remain open.
+Row 77 (6ff44cf5) is Adapt under ADR 0010. The Rust flat Classic media
+enumerator already validates saved shuffled indices against the full item
+count; a core regression preserves index 9 of ten show items. A separate
+inactive-alternate loss found during source comparison is fixed: Continue
+retains dormant collection anchors, and the active-state audit permits them.
+A production SQLite build preserves the inactive alternate's saved seed and
+index. Multipart grouping remains explicit Classic parity debt. Pin, ledger
+and checkout advance together; row 78 is next. UCU-05 window gates, push and
+exact-SHA CI remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 

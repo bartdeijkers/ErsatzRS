@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f7bdcede69a365715d45a0cc254b4c25dc8659d9` |
-| **Commit subject** | `fix: checkpoint classic schedules every day (#2954)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f7bdcede69a365715d45a0cc254b4c25dc8659d9 |
+| **Pinned commit** | `6ff44cf5ec3bb763a5fb6a0429b5b14baf1ba1d9` |
+| **Commit subject** | `fix: don't prematurely reset shuffled collection progress (#2955)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6ff44cf5ec3bb763a5fb6a0429b5b14baf1ba1d9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

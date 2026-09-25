@@ -322,6 +322,10 @@ pub fn audit_classic_runtime_state(
         .iter()
         .filter(|anchor| anchor.anchor_date.is_none())
         .map(|anchor| history_key_for_collection_key(&collection_key_for_anchor(anchor)))
+        // Alternate schedules retain their own undated source progress while
+        // inactive. Audit the current schedule's exact state without treating
+        // those dormant anchors as a duplicate or stale active source.
+        .filter(|key| expected_anchor_keys.contains(key))
         .collect::<Vec<_>>();
     let actual_anchor_key_set = actual_anchor_keys.iter().cloned().collect::<BTreeSet<_>>();
 
@@ -2202,6 +2206,20 @@ impl ClassicContext {
 
     fn program_schedule_anchors(&self) -> Vec<PlayoutProgramScheduleAnchor> {
         let mut result = BTreeMap::new();
+        let active_keys = self
+            .schedule_items
+            .iter()
+            .map(item_key)
+            .collect::<BTreeSet<_>>();
+        for anchor in self.collection_anchors.iter().filter(|anchor| {
+            anchor.anchor_date.is_none()
+                && !active_keys.contains(&history_key_for_collection_key(
+                    &collection_key_for_anchor(anchor),
+                ))
+        }) {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            result.insert((anchor.anchor_date, key), anchor.clone());
+        }
         for anchor in self
             .collection_anchors
             .iter()
@@ -5861,6 +5879,131 @@ mod tests {
             starting_index(PlaybackOrder::Shuffle, true),
             "Shuffle should ignore random_start_point (already randomized)"
         );
+    }
+
+    #[test]
+    fn classic_continue_preserves_last_flat_shuffle_index_for_grouped_show_items() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let items = (101..=110)
+            .map(|id| SchedulingMediaItem {
+                show_id: Some(7),
+                ..SchedulingMediaItem::new(id, Duration::minutes(10))
+            })
+            .collect::<Vec<_>>();
+        let mut expected =
+            MediaEnumerator::new(&key, items.clone()).with_playback_order(PlaybackOrder::Shuffle);
+        prepare_enumerator_items(
+            &mut expected,
+            PlaybackOrder::Shuffle,
+            seed_to_u64(1234),
+            None,
+        );
+        expected.set_index(9);
+        let expected_id = expected.current().expect("last item").id;
+
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            media_by_key: BTreeMap::from([(key, items)]),
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                id: 21,
+                playout_id: 50,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 1234,
+                    index: 9,
+                    started: true,
+                },
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("Classic Continue with last valid index");
+        assert_eq!(result.added_items[0].media_item_id, expected_id);
+    }
+
+    #[test]
+    fn classic_continue_keeps_inactive_alternate_collection_progress() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let active = schedule_item(1, PlayoutMode::One, 1, None);
+        let key = item_key(&active);
+        let inactive = PlayoutProgramScheduleAnchor {
+            id: 22,
+            playout_id: 50,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(2),
+            enumerator_state: CollectionEnumeratorState {
+                seed: 1234,
+                index: 9,
+                started: true,
+            },
+            ..PlayoutProgramScheduleAnchor::default()
+        };
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![active],
+            media_by_key: BTreeMap::from([(
+                key,
+                vec![SchedulingMediaItem::new(101, Duration::minutes(10))],
+            )]),
+            existing_program_schedule_anchors: vec![inactive.clone()],
+            ..SchedulingReferenceData::default()
+        };
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("Continue with inactive alternate");
+        assert!(result.program_schedule_anchors.contains(&inactive));
+    }
+
+    #[test]
+    fn classic_runtime_audit_accepts_inactive_alternate_anchor() {
+        let active = schedule_item(1, PlayoutMode::One, 1, None);
+        let anchors = [1, 2].map(|collection_id| PlayoutProgramScheduleAnchor {
+            playout_id: 50,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(collection_id),
+            enumerator_state: CollectionEnumeratorState {
+                seed: 1234,
+                index: 9,
+                started: true,
+            },
+            ..PlayoutProgramScheduleAnchor::default()
+        });
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![active],
+            existing_program_schedule_anchors: anchors.to_vec(),
+            ..SchedulingReferenceData::default()
+        };
+        let audit = audit_classic_runtime_state(&reference_data);
+        assert!(audit.anchors_match);
+        assert_eq!(audit.expected_anchor_count, 1);
+        assert_eq!(audit.actual_anchor_count, 1);
     }
 
     #[test]

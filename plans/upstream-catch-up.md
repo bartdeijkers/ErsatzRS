@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **76**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **77**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-76; the next upstream row is 77 (`6ff44cf5`).
+  processed rows 68-77; the next upstream row is 78 (`16b71569`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,23 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 77 source map: shuffled collection index retention
+
+Upstream `6ff44cf5` validates a saved shuffled index against the flattened
+media-item count instead of the smaller multipart-group count. Its alternate
+schedule regression preserves index 9 for ten episodes represented by nine
+groups. ErsatzRS's Classic `MediaEnumerator` already stores a flat item vector
+and bounds `set_index` and `current` against its full length. A new core test
+proves index 9 of ten show items selects the expected item. Source comparison
+also exposed a separate loss: Classic Continue omitted undated collection
+anchors belonging to inactive alternate schedules when publishing the next
+state. The corrected publication retains those anchors, and the runtime audit
+checks the active source set while allowing dormant alternate state. A restarted
+SQLite build preserves an inactive Sunday's saved seed and index through a
+Wednesday Continue. The existing multipart grouping and schedule-flag gaps
+remain explicit in `classic-scheduling.toml`; this row does not claim that
+missing feature. Verdict: Adapt under ADR 0010; UCU-05 window gates remain open.
 
 ## Row 76 source map: daily Classic checkpoints
 
@@ -1443,7 +1460,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 74 | `6d8666b8` | chore: update dependencies (#2952) | N/A (NuGet-only Jint update; ADR 0096) | upstream-baseline-catch-up | `docs(porting): classify Jint patch update` | ucu-05; only ErsatzTV.Infrastructure.csproj changes Jint 4.13.0 to 4.14.0. ErsatzRS uses accepted QuickJS/rquickjs under ADR 0096; no source or behavior contract changes. Source and progress checks pass. |
 | 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | Port | ffmpeg-command-generation | `fix(ffmpeg): remove obsolete green-line crop filters` | ucu-05; upstream deletes NVIDIA H.264 and radeonsi HEVC crop metadata filters after FFmpeg 8.1.2. ErsatzRS FFmpeg 9.0 uses the same affected encode paths. Removed both filters and their applicability gate; two argv snapshots and all 344 FFmpeg tests pass. A local FFmpeg 9 NVENC overlay encode preserves 1080 bottom-row colors without crop metadata. AMD live hardware proof remains unavailable here; window playback gates remain open. |
 | 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | Port | classic-scheduling | `fix(scheduling): retain Classic daily checkpoint prefix` | ucu-05; captures day seams inside all build passes. A seven-day shuffled hourly Continue regression failed before the fix, then passed. Restarted SQLite Refresh preserves the crossing item and appends the matching future. All 249 core tests, scoped Clippy and progress checks pass. |
-| 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | | | | ucu-05; provisional: Port candidate. |
+| 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | Adapt (ADR 0010) | classic-scheduling | `fix(scheduling): retain inactive alternate progress` | ucu-05; Rust's flat enumerator already validates against the full item count. A core regression proves index 9 of ten remains valid. Corrected Continue publication and active-source audit to retain dormant alternate anchors; restarted SQLite proof preserves the inactive source seed/index. Existing multipart grouping debt remains visible in the owning parity record; no grouped parity is claimed. |
 | 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | | | | ucu-05; provisional: Port candidate. |
 | 79 | `a2f54ef1` | fix: block playout build loop (#2957) | | | | ucu-05; provisional: Port candidate. |
 | 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | | | | ucu-05; provisional: Adapt candidate. |
