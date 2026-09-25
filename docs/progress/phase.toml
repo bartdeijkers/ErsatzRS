@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 74 (6d8666b8) is N/A. Its only diff is a Jint NuGet
+version bump; ADR 0096 selects bounded QuickJS for ErsatzRS and no callback
+contract changes here. Pin, ledger and checkout advance together. Continue
+at row 75 (7850ced6); UCU-05 window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 73 (5855deb8) is Adapt under accepted ADR 0063.
 Upstream only updates FFmpeg 8.1.2 packaging/version health; ErsatzRS's FFmpeg
 9 runtime, startup validation and health contract remain authoritative.

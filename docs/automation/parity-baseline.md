@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5855deb8bc9fa18e00abbc5020bb09c96bae6d9a` |
-| **Commit subject** | `feat: upgrade ffmpeg to 8.1.2 (#2951)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5855deb8bc9fa18e00abbc5020bb09c96bae6d9a |
+| **Pinned commit** | `6d8666b88f1e24edd311c992971fc56fd503f2bb` |
+| **Commit subject** | `chore: update dependencies (#2952)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6d8666b88f1e24edd311c992971fc56fd503f2bb |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

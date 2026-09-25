@@ -9327,6 +9327,12 @@ rejects 8.1.2 at startup, and reports the resolved version in health. ADR
 logic changes upstream in this row. Pin, ledger and checkout advance together;
 row 74 is next. Source and progress checks pass; no UCU-05 window gates, push
 or CI are claimed.
+Row 74 (6d8666b8) is N/A (NuGet-only Jint update under ADR 0096). Its sole
+diff changes the `ErsatzTV.Infrastructure.csproj` Jint reference from 4.13.0
+to 4.14.0. ErsatzRS uses the accepted bounded QuickJS/rquickjs adapter and
+the upstream commit changes no callback or runtime behavior contract. Pin,
+ledger and checkout advance together; row 75 is next. Source and progress
+checks pass; UCU-05 window gates, push and CI remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 

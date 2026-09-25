@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 74 is N/A: upstream Jint NuGet patch only; ErsatzRS uses accepted bounded QuickJS under ADR 0096; row 75 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 73 adapts upstream FFmpeg 8.1.2 package/health change under accepted FFmpeg 9 ADR 0063; source and progress checks pass; row 74 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 72 is N/A: upstream re-keys a Windows singleton mutex absent from ErsatzRS; ADR 0080 excludes multiple active server instances; row 73 next"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-05 row 71 replays seeded Classic playlist offsets across Continue builds; 12-item timeline regression, 248 core tests and scoped Clippy pass; row 72 next"}
