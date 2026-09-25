@@ -5,8 +5,9 @@ status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
 Ledger: 172 commits, 67 reconciled, 105 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03 is Complete with green CI at 8f722099; UCU-04 rows 35-67 are
-reconciled. UCU-01 proves repository links, channel-only packaging, provenance,
+Complete. UCU-03/04 have green CI at 8f722099/07847071. UCU-05 begins at
+row 68. UCU-01 proves repository
+links, channel-only packaging, provenance,
 six-RID staging and Docker startup.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,

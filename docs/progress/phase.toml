@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-04: reconcile upstream through 0b44ad47'
+current_focus = 'UCU-05: reconcile upstream through 35b5a259'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 is Complete. All 33 window rows (35-67), local gates,
+push and terminal green exact-SHA CI are recorded in its milestone. CI run
+36131751469 passes at 078470718a3d08afeccbac1066d9339ca4134957,
+including Firefox after the numbering scenarios were isolated. Pin, row 67
+and upstream checkout agree at 0b44ad47. Start UCU-05 at row 68 (18137832)
+after refreshing the upstream target and appending any new commits to UCU-09.
+The existing HLS Direct TSDuck calibration limitation remains visible.
+
 2026-09-25: Corrected CI fb803e8e is terminal red only in Firefox: 213 pass,
 30 skip, one timeout in a combined add-on-list numbering scenario. The trace
 shows repeated hydration waits consuming the fixed test budget and the final

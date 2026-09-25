@@ -19,14 +19,12 @@
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
 - Processed rows: **67**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
-- UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-67 and all local
-  window gates are complete on source candidate `9208e381`; push and terminal
-  green exact-SHA CI remain open. First pushed candidate `889ed11b` failed the
-  new Clippy allow policy; candidate `fb803e8e` passed all jobs except one
-  Firefox test that exhausted its fixed budget across repeated hydration. Its
-  preserved assertions now pass as two isolated tests in both browsers; a new
-  exact-SHA CI run remains required. The next upstream row is 68 (18137832) in UCU-05.
+- UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
+  rows 35-67, local window gates and terminal green exact-SHA CI run
+  [36131751469](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36131751469)
+  at `07847071` are recorded in its milestone. The earlier Clippy-policy and
+  Firefox failures were corrected without changing product logic. The next
+  upstream row is 68 (`18137832`) in UCU-05.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)

@@ -7876,7 +7876,7 @@ not a release or acceptance of later code.
 id         = 'ucu-04'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 0b44ad47'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-03']
@@ -9217,6 +9217,21 @@ direct SQLite seed of the already-tested S05E05 starting state for the conflict
 case. No timeout, retry or assertion is weakened. A matched SSR/WASM Firefox
 run passes all four hydrated/no-JS cases; Chromium passes the same four cases.
 The full corrected exact-SHA CI remains required before UCU-04 completion.
+
+2026-09-25 UCU-04 acceptance closeout: corrected candidate
+078470718a3d08afeccbac1066d9339ca4134957 has terminal success in CI
+36131751469. Preflight, Format, documentation links, Test, Next engine,
+Firefox, Chromium, Cargo deny and workspace Clippy all pass. Firefox reports
+216 passed and 30 standard skips; Chromium reports 240 passed and six standard
+skips. The test shard and PR-only commit lint are skipped by workflow contract.
+At acceptance verification, local HEAD, origin/main and live remote main all
+matched that exact SHA. All 33 contiguous UCU-04 rows (35-67) are reconciled;
+the ledger row 67, pin and upstream checkout agree at
+0b44ad47095c1db80c28137edc280947c66ee456. Local window gates above
+remain valid: the post-gate edits add Clippy reasons and isolate two E2E
+scenarios without changing product logic. The HLS Direct TSDuck calibration
+limitation remains explicit; this closeout makes no new six-platform runtime
+or release claim. UCU-04 is Complete; UCU-05 can start at row 68 (18137832).
 
 """
 
