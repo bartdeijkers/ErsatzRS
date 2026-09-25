@@ -3,28 +3,29 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
-  — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **93 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
+  — perf: watermark improvements (#3039).
+- Ledger: **173 commits**, **93 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
   A subsequent refresh adds the AMD VAAPI default-driver fix. The subtitle
   correction audit appends graphics-subtitle performance and Jellyfin 12 collection
   handling as two pending tail rows; neither is processed by the row-39 audit.
+  The row-80 refresh appends watermark improvements as pending row 173.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **79**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **80**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-79; the next upstream row is 80 (`9cc771be`).
+  processed rows 68-80; the next upstream row is 81 (`3f2efcd4`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +35,37 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 80 source and hydration map
+
+Upstream `9cc771be` adds detected Next/FFmpeg versions to General diagnostics
+and the playback troubleshooting archive. Native targets are
+`admin/server_fns/troubleshooting.rs` and `host/troubleshooting.rs`.
+Reuse the startup-only Next probe and accepted FFmpeg runtime report; requests
+must not spawn new probes. Share the startup Next value with the archive runtime.
+Keep the existing `Version` key for ErsatzRS and add `NextVersion` and
+`FFmpegVersion`; an unavailable optional engine is reported as unknown.
+
+- Route/SSR wrapper: `/system/troubleshooting`, `TroubleshootingPage`.
+- Islands: none changed; General is an SSR report with unchanged DOM shape.
+- Boundary: `load_troubleshooting_report_with_state`, shared runtime versions.
+- API/export: existing playback preview artifacts and archive endpoint.
+- No-JS: the initial browser proof found the report stuck at Loading because
+  the default streaming route inserts resolved content through JavaScript.
+  Use the existing `SsrMode::InOrder` pattern on this route so General JSON
+  arrives as ordinary HTML through the existing report block.
+- Shared primitives: none; sidebar reads the same startup Next value.
+- Browser proof: focused General JSON assertions with and without JavaScript,
+  including agreement with the sidebar when Next is available.
+- Localization: existing localized tabs and unavailable sidebar label remain;
+  diagnostic JSON field names retain the machine-readable English contract.
+
+Verdict: Adapt under ADR 0095: ErsatzRS retains its `Version` diagnostic key
+instead of adopting the upstream Legacy label, and reports the detected version
+of the optional Next executable. All 26 focused library tests and four General
+browser checks pass in Chromium/Firefox with JavaScript enabled/disabled.
+The populated/absent Next contract has unit coverage; the isolated browser
+fixture reports Next as unknown. UCU-05 owns the complete evidence.
 
 ## Row 79 source map: Block build loop safety
 
@@ -1504,7 +1536,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | Adapt (ADR 0010) | classic-scheduling | `fix(scheduling): retain inactive alternate progress` | ucu-05; Rust's flat enumerator already validates against the full item count. A core regression proves index 9 of ten remains valid. Corrected Continue publication and active-source audit to retain dormant alternate anchors; restarted SQLite proof preserves the inactive source seed/index. Existing multipart grouping debt remains visible in the owning parity record; no grouped parity is claimed. |
 | 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | Adapt (ADRs 0010/0020) | classic-scheduling; yaml-scheduling | `fix(scheduling): restore YAML playlist history safely` | ucu-05; checkpoint 1eb06d15 plus versioned YAML history restore. Playable cycles, canonical shuffle, candidate rollback, repeated sources, all Classic Marathon groups/batches and structured SQL loaders have core and restart/Refresh proof. Legacy state refuses before clearing; explicit Reset recovers. See UCU-05 evidence. |
 | 79 | `a2f54ef1` | fix: block playout build loop (#2957) | Port | block-scheduling | `fix(scheduling): rebuild Block filler safely and observe shutdown` | ucu-05; checkpoint ee8f7c34 plus Reset filler/history replacement, retained primary repositioning, and cooperative cancellation through scheduler ownership. Core and SQLite evidence in UCU-05; row 80 follows. |
-| 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | | | | ucu-05; provisional: Adapt candidate. |
+| 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | Adapt (ADR 0095) | support-pages | `feat(troubleshooting): report detected engine versions` | ucu-05; shared detected versions in General and playback archives, startup-only Next cache, in-order SSR. 26 library tests and four Chromium/Firefox JavaScript/no-JS checks pass; see UCU-05 evidence. |
 | 81 | `3f2efcd4` | fix: discover tests in ErsatzTV.Tests (#2959) | | | | ucu-05; provisional: Upstream tooling candidate. |
 | 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | | | | ucu-05; provisional: Next behavior triage. |
 | 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
@@ -1597,3 +1629,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 170 | `e8b7bb63` | fix: amd vaapi accel when driver is set to default (#3036) | | | | ucu-09; pending source review. |
 | 171 | `62b7a5e9` | perf: graphics engine subtitles (#3037) | | | | ucu-09; pending source review. |
 | 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; pending source review. |
+| 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; pending source review. |

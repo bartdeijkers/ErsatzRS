@@ -9439,6 +9439,25 @@ focused SQL Block loading and cancellation tests pass (1206b128). Both scheduler
 shutdown tests pass (94d6e55e), and core/infra/scheduler all-target Clippy passes.
 Upstream refresh still yields 27f9d217. Pin, ledger and upstream checkout advance
 together to a2f54ef1; row 80 (9cc771be) is next.
+Row 80 implementation adds shared detected Version/NextVersion/FFmpegVersion
+fields to General diagnostics and preview archives, reusing startup Next
+inspection and the accepted FFmpeg runtime. The optional Next value is shared
+with the sidebar without request-time probing. All 26 focused troubleshooting
+library tests pass (ccb89033), including available/absent Next serialization.
+This web build also found and corrected a test-only playlist fixture missing
+row 78 album/director fields. Row 80 is Adapt under ADR 0095: retain the
+ErsatzRS Version key and use the optional engine executable version rather
+than the upstream Legacy/embedded Next labels.
+The first Chromium/Firefox run passed both JavaScript cases but exposed a
+no-JS Loading state in the existing streaming route. In-order SSR on only the
+General troubleshooting route fixes it without relaxing assertions or timeouts.
+The matched SSR/WASM build and all four focused support-pages browser checks
+pass (General diagnostics expose detected runtime versions, 5.8 seconds).
+The isolated browser fixture uses FFmpeg 9.0.0 and an unavailable optional
+Next engine; populated Next values are covered by the shared serializer tests.
+Hydration lint reports no new findings, scoped web all-target Clippy passes,
+and formatting/diff checks pass. Pin, ledger and upstream checkout advance
+together to 9cc771be; row 81 (3f2efcd4) is next.
 No UCU-05 window gates, push or CI are claimed.
 """
 
@@ -9526,7 +9545,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 27f9d217 (latest fetched tip) in order,
+Process every ledger row in this release window through c0184f00 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -9554,4 +9573,7 @@ This refresh changes the target only, not the processed pin.
 rows 171 (62b7a5e9, graphics subtitle performance) and 172 (27f9d217, Jellyfin 12
 collections). The existing 170 SHA/subject pairs are an exact prefix. No new row
 is processed and the pin remains at row 38 while row 39 acceptance continues.
+2026-09-25 row-80 refresh appends row 173 (c0184f00, watermark improvements).
+All 173 ordered SHA/subject pairs match upstream history, preserving the prior
+172 rows as an exact prefix. The new row remains pending in UCU-09.
 """

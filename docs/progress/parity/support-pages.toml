@@ -20,8 +20,12 @@ app-data log file and exposes the ErsatzTV-visible search, sort, paging, and
 localized level labels. `/system/troubleshooting` exposes the Tools tab plus
 General and platform hardware report tabs; the General report is server-side
 JSON from live ErsatzRS state with selected environment values redacted,
-runtime paths, CPU summary, warning/fail health rows, FFmpeg settings,
-channels, and FFmpeg profiles. Tool routes cover Sequential Schedule
+runtime paths, detected application/Next/FFmpeg versions, CPU summary, warning/fail health rows, FFmpeg settings,
+channels, and FFmpeg profiles. UCU-05 row 80 shares the detected version fields
+with playback troubleshooting archives and uses in-order SSR so General JSON
+renders without JavaScript. Four focused Chromium/Firefox checks pass; optional
+Next absence is explicit, and populated version values have unit coverage.
+Tool routes cover Sequential Schedule
 Validation, Block Playout Troubleshooting, media-specific playback
 troubleshooting, and the ADR 0013 MPEG-TS tool at
 `/system/troubleshooting/mpeg`, which captures bounded channel samples, runs

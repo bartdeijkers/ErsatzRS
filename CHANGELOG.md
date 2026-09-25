@@ -20,6 +20,7 @@ release section when tagging a release.
 
 ### Fixed
 
+- Render General troubleshooting diagnostics without requiring JavaScript.
 - Stop Block default filler at items with zero or negative duration, with a
   diagnostic instead of an endless build loop. Exclude expired playout rows
   from filler-gap detection while retaining rows needed by delayed mirrors.
@@ -84,6 +85,8 @@ release section when tagging a release.
 
 ### Added
 
+- Show detected Next and FFmpeg versions alongside the ErsatzRS version in
+  General troubleshooting diagnostics and playback troubleshooting archives.
 - Show sanitized release notes from the bundled changelog on the home and
   health pages, with an offline full-changelog link (upstream PR #2942).
 - Support named, priority-ordered date ranges in Sequential YAML playouts. Each

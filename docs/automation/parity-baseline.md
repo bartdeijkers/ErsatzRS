@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `a2f54ef1bb3e6972c6ae612c400defd354de5cda` |
-| **Commit subject** | `fix: block playout build loop (#2957)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a2f54ef1bb3e6972c6ae612c400defd354de5cda |
+| **Pinned commit** | `9cc771beb8118148acbf34e69d1429bee9232304` |
+| **Commit subject** | `feat: show next and ffmpeg version in troubleshooting (#2958)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9cc771beb8118148acbf34e69d1429bee9232304 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

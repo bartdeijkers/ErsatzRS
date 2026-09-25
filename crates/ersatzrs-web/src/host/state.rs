@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicI32, Ordering},
-    Arc,
+    Arc, OnceLock,
 };
 
 use ersatzrs_app::{
@@ -20,6 +20,7 @@ use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 use super::addons::NativeAddonRuntime;
+use super::artwork_cleanup::TokioArtworkCleanupQueue;
 use super::channels::NativeChannelRuntime;
 use super::health::NativeAdminHealthRuntime;
 use super::media_sources::NativeMediaSourceRuntime;
@@ -63,7 +64,7 @@ impl SystemStartup {
 #[derive(Clone)]
 pub struct AppState {
     /// Optional Next version discovered once during host startup.
-    pub next_version: Option<String>,
+    pub next_version: Arc<OnceLock<String>>,
     /// Storage-neutral application services built from native infrastructure
     /// ports by this composition root.
     pub application: Arc<ApplicationServices>,
@@ -139,6 +140,7 @@ impl AppState {
             InMemoryHlsSessionRegistry::with_playout_updates_to(preview_hls_sessions.clone()),
         );
         let ffmpeg_runtime = Arc::new(RwLock::new(ffmpeg_runtime));
+        let next_version = Arc::new(OnceLock::new());
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
         let application = Arc::new(ApplicationServices::new(
@@ -187,6 +189,7 @@ impl AppState {
                     pool.clone(),
                     Arc::clone(&repositories),
                     Arc::clone(&ffmpeg_runtime),
+                    Arc::clone(&next_version),
                 )),
                 Arc::new(NativeRemoteStreamPlaylistRuntime::new(pool.clone())),
                 Arc::new(NativeAddonRuntime::new(pool.clone())),
@@ -213,11 +216,9 @@ impl AppState {
             )
             .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
         );
-        let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
-        let (artwork_cleanup, _) = super::artwork_cleanup::TokioArtworkCleanupQueue::channel();
         Self {
-            next_version: None,
-            artwork_cleanup: Arc::new(artwork_cleanup),
+            next_version,
+            artwork_cleanup: Arc::new(TokioArtworkCleanupQueue::channel().0),
             application,
             repositories,
             pool,
@@ -228,7 +229,7 @@ impl AppState {
             tuner_count,
             hls_sessions,
             preview_hls_sessions,
-            hls_direct_indices,
+            hls_direct_indices: Arc::new(RwLock::new(HashMap::new())),
             next_engine,
             iptv_access_token_verifier,
         }

@@ -39,7 +39,7 @@ use ersatzrs_infra::{
 };
 use std::path::{Path as FsPath, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::process::Command;
 use tokio::sync::RwLock;
@@ -53,6 +53,7 @@ pub struct NativeAdminTroubleshootingRuntime {
     pool: DbPool,
     repositories: Arc<Repositories>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    next_version: Arc<OnceLock<String>>,
 }
 
 impl NativeAdminTroubleshootingRuntime {
@@ -60,11 +61,36 @@ impl NativeAdminTroubleshootingRuntime {
         pool: DbPool,
         repositories: Arc<Repositories>,
         ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+        next_version: Arc<OnceLock<String>>,
     ) -> Self {
         Self {
             pool,
             repositories,
             ffmpeg_runtime,
+            next_version,
+        }
+    }
+}
+
+/// Stable diagnostic fields shared by the General report and preview archive.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub(crate) struct TroubleshootingVersions {
+    version: &'static str,
+    next_version: String,
+    #[serde(rename = "FFmpegVersion")]
+    ffmpeg_version: String,
+}
+
+impl TroubleshootingVersions {
+    pub(crate) fn detected(
+        next: Option<&str>,
+        ffmpeg: &ersatzrs_ffmpeg::version::FfmpegVersion,
+    ) -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION"),
+            next_version: next.unwrap_or("unknown").to_owned(),
+            ffmpeg_version: ffmpeg.to_string(),
         }
     }
 }
@@ -675,7 +701,11 @@ async fn write_preview_artifacts(
     .await?;
 
     let runtime = state.ffmpeg_runtime.read().await.clone();
-    let troubleshooting_info = serde_json::json!({
+    let mut troubleshooting_info = serde_json::to_value(TroubleshootingVersions::detected(
+        state.next_version.get().map(String::as_str),
+        &runtime.ffmpeg.version,
+    ))?;
+    let preview_details = serde_json::json!({
         "FFmpegProfile": {
             "Id": playback_profile.profile.id,
             "Name": playback_profile.profile.name,
@@ -695,6 +725,12 @@ async fn write_preview_artifacts(
         },
         "SelectedWatermarks": query.watermark,
     });
+    if let (Some(info), Some(details)) = (
+        troubleshooting_info.as_object_mut(),
+        preview_details.as_object(),
+    ) {
+        info.extend(details.clone());
+    }
     tokio::fs::write(
         working_dir.join("troubleshooting_info.json"),
         serde_json::to_vec_pretty(&troubleshooting_info)?,
@@ -1651,6 +1687,23 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn diagnostic_versions_preserve_contract_and_optional_engine_absence() {
+        let ffmpeg = ersatzrs_ffmpeg::version::FfmpegVersion {
+            major: 9,
+            minor: 2,
+            patch: 3,
+        };
+        for (next, expected) in [(None, "unknown"), (Some("0.9.4-test"), "0.9.4-test")] {
+            let json =
+                serde_json::to_value(super::TroubleshootingVersions::detected(next, &ffmpeg))
+                    .unwrap();
+            assert_eq!(json["Version"], env!("CARGO_PKG_VERSION"));
+            assert_eq!(json["NextVersion"], expected);
+            assert_eq!(json["FFmpegVersion"], "9.2.3");
+            assert_eq!(json.as_object().unwrap().len(), 3);
+        }
+    }
     use super::*;
     use ersatzrs_ffmpeg::format_time_limit;
 

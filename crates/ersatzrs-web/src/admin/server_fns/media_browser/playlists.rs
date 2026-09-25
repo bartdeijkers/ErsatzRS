@@ -355,6 +355,8 @@ pub(in crate::admin::server_fns::media_browser) async fn playlist_preview_refere
                     show_id: None,
                     season_id: None,
                     artist_id: None,
+                    album: None,
+                    first_director: None,
                     season: None,
                     episode: None,
                     release_date: None,

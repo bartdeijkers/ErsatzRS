@@ -276,6 +276,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("system"), StaticSegment("troubleshooting"))
                 view=TroubleshootingPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(
