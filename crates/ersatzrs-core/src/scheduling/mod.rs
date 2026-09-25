@@ -745,6 +745,26 @@ pub trait PlayoutSchedulingEngine {
     /// Returns an error when the engine cannot load or evaluate its schedule
     /// definition.
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError>;
+
+    /// Build with cooperative cancellation. Engines can additionally check
+    /// inside long-running loops; the default rejects cancelled results.
+    ///
+    /// # Errors
+    /// Returns `Cancelled` when cancellation is requested, or a scheduling error.
+    fn schedule_cancellable(
+        &self,
+        request: SchedulingRequest,
+        cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Result<SchedulingResult, SchedulingError> {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
+        let result = self.schedule(request)?;
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
+        Ok(result)
+    }
 }
 
 /// `ErsatzTV`'s external JSON playout builder is a no-op: external playout rows
@@ -761,6 +781,10 @@ impl PlayoutSchedulingEngine for ExternalJsonSchedulingEngine {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SchedulingError {
+    #[error("playout build cancelled")]
+    Cancelled,
+    #[error("cannot reposition Block item {0}: scheduling history is missing")]
+    MissingBlockHistory(EntityId),
     #[error("missing schedule file")]
     MissingScheduleFile,
     #[error("schedule file {0} does not exist")]

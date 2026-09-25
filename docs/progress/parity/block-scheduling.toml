@@ -1,15 +1,15 @@
 feature    = 'Block scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
-Implemented: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`. UCU-05 row 79 fixes nonpositive default-filler loops and expired-row gap detection; Reset filler replacement and cancellation parity remain open.
+Implemented: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`. UCU-05 row 79 fixes nonpositive default-filler loops and expired-row gap detection; Reset replaces filler/history at the UTC boundary and repositions retained primary content safely. Scheduler shutdown cancels Block filler generation without persisting partial output.
 '''
 
 [[debt]]
 id          = 'block-reset-filler-and-build-cancellation'
-description = 'Row 79 source comparison finds no native counterpart for Reset removing existing filler while retaining primary and GuideMode items at the offset-aware boundary. The synchronous scheduling request also has no cancellation hook for a running filler build. Complete the native lifecycle mapping and regression evidence before landing row 79.'
+description = 'Row 79 source comparison finds no native counterpart for Reset removing existing filler while retaining primary and GuideMode items at the offset-aware boundary. The synchronous scheduling request also has no cancellation hook for a running filler build. Resolved by Reset filler/history replacement, retained-primary repositioning and cancellation propagated from scheduler shutdown to the awaited synchronous worker.'
 discovered  = '2026-09-25'
-evidence    = 'Upstream a2f54ef1 BlockPlayoutFillerBuilder.Build and AddDefaultFiller; native scheduling/block.rs, playout_builder.rs and maintenance::build_playout. The first checkpoint fixes invalid duration and expiration handling only. Focused acceptance is recorded in UCU-05.'
-resolved    = false
+evidence    = 'Upstream a2f54ef1 BlockPlayoutFillerBuilder.Build and AddDefaultFiller; native scheduling/block.rs, playout_builder.rs and maintenance::build_playout. Checkpoint ee8f7c34 fixes invalid duration and expiration handling. Final core coverage includes Reset/Continue, UTC retention, changed break duration, missing-history refusal and cancellation inside a filler loop. SQLite proof preserves items/history and releases the lock after worker cancellation. Acceptance is recorded in UCU-05.'
+resolved    = true

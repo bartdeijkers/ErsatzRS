@@ -9420,7 +9420,25 @@ termination. The SQLite delayed-mirror retention test passes (3a7af2d0), and
 core all-target Clippy passes. Source comparison also exposes missing Reset
 filler replacement and no synchronous build cancellation hook; Block parity
 is reopened with explicit debt. Finish those lifecycle requirements before
-assigning a row verdict or advancing the pin. This is a local checkpoint only.
+assigning a row verdict or advancing the pin. That was local checkpoint ee8f7c34.
+Row 79 is now Port. Reset replacement first failed because no existing filler
+was removed (1188ab4d); Reset now replaces filler and corresponding history,
+preserves primary/GuideMode content, and retains older filler for delayed mirrors.
+Block-start insertion is Reset-only. Changed break duration repositions retained
+primary/history pairs together, preserves track preferences, and refuses missing
+history before persistence. Core regressions cover UTC boundary equality,
+Reset versus Continue, changed break duration and cancellation during a long
+filler gap. All 269 core tests pass (d1f635f1).
+The shared dispatcher accepts cooperative cancellation, and scheduler-owned
+builds use an awaited blocking worker so shutdown can run on the async executor.
+The host token and standalone Ctrl+C listener both reach requested and periodic
+builds. Cancelled results never reach persistence. A single-thread async SQLite
+test proves worker cancellation preserves the timeline/history, records failed
+status and releases the lock. All 20 maintenance tests pass (b16bfe6e); final
+focused SQL Block loading and cancellation tests pass (1206b128). Both scheduler
+shutdown tests pass (94d6e55e), and core/infra/scheduler all-target Clippy passes.
+Upstream refresh still yields 27f9d217. Pin, ledger and upstream checkout advance
+together to a2f54ef1; row 80 (9cc771be) is next.
 No UCU-05 window gates, push or CI are claimed.
 """
 

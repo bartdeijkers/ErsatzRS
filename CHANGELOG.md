@@ -23,6 +23,9 @@ release section when tagging a release.
 - Stop Block default filler at items with zero or negative duration, with a
   diagnostic instead of an endless build loop. Exclude expired playout rows
   from filler-gap detection while retaining rows needed by delayed mirrors.
+  Reset replaces existing filler and moves retained primary content together
+  with its history when block-start filler changes length. Shutdown now cancels
+  Block filler generation without publishing a partial timeline (upstream PR #2957).
 - Keep playlist cycles open until every playable item has been visited, exclude
   season-zero episodes from Season/Episode playlist children, and reconstruct
   shuffled group order from its saved seed. Classic now loads the saved

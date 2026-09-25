@@ -86,21 +86,35 @@ impl PlayoutBuilder {
     ///
     /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `None`, which
     /// is not a buildable schedule kind.
-    pub fn build(
+    pub fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        self.build_cancellable(request, &|| false)
+    }
+
+    /// Build a timeline while observing the owner cancellation signal.
+    ///
+    /// # Errors
+    /// Returns `Cancelled` instead of a partial timeline, or a scheduling error.
+    pub fn build_cancellable(
         &self,
         mut request: SchedulingRequest,
+        cancelled: &(dyn Fn() -> bool + Sync),
     ) -> Result<SchedulingResult, SchedulingError> {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
         let populated_classic_sources = populated_classic_source_ids(&request.reference_data);
         let dropped = drop_unschedulable_remote_streams(&mut request.reference_data);
         validate_populated_classic_sources(&request.reference_data, &populated_classic_sources)?;
         validate_remote_stream_placements(&request)?;
         let options = ConfiguredPlayoutOptions::from_request(&request);
         let mut result = match request.playout.schedule_kind {
-            PlayoutScheduleKind::Classic => self.classic.schedule(request),
-            PlayoutScheduleKind::Block => self.block.schedule(request),
-            PlayoutScheduleKind::Sequential => self.yaml.schedule(request),
-            PlayoutScheduleKind::Scripted => self.scripted.schedule(request),
-            PlayoutScheduleKind::ExternalJson => self.external_json.schedule(request),
+            PlayoutScheduleKind::Classic => self.classic.schedule_cancellable(request, cancelled),
+            PlayoutScheduleKind::Block => self.block.schedule_cancellable(request, cancelled),
+            PlayoutScheduleKind::Sequential => self.yaml.schedule_cancellable(request, cancelled),
+            PlayoutScheduleKind::Scripted => self.scripted.schedule_cancellable(request, cancelled),
+            PlayoutScheduleKind::ExternalJson => {
+                self.external_json.schedule_cancellable(request, cancelled)
+            }
             PlayoutScheduleKind::None => Err(SchedulingError::UnsupportedScheduleKind(
                 PlayoutScheduleKind::None,
             )),
@@ -108,6 +122,9 @@ impl PlayoutBuilder {
 
         apply_configured_playout_options(&mut result, &options);
         result.warnings.extend(dropped);
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
         Ok(result)
     }
 }
@@ -341,11 +358,38 @@ pub trait EngineDispatch {
     /// Returns a [`SchedulingError`] when the engine cannot evaluate its
     /// schedule definition.
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError>;
+
+    /// Build with cancellation checks before publishing the result.
+    ///
+    /// # Errors
+    /// Returns `Cancelled` or the underlying scheduling error.
+    fn schedule_cancellable(
+        &self,
+        request: SchedulingRequest,
+        cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Result<SchedulingResult, SchedulingError> {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
+        let result = self.schedule(request)?;
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
+        Ok(result)
+    }
 }
 
 impl<E: crate::scheduling::PlayoutSchedulingEngine> EngineDispatch for E {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         crate::scheduling::PlayoutSchedulingEngine::schedule(self, request)
+    }
+
+    fn schedule_cancellable(
+        &self,
+        request: SchedulingRequest,
+        cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Result<SchedulingResult, SchedulingError> {
+        crate::scheduling::PlayoutSchedulingEngine::schedule_cancellable(self, request, cancelled)
     }
 }
 

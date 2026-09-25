@@ -8,8 +8,8 @@ use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
-    repair_invalid_classic_playouts, run_maintenance_once, run_requested_playout_build,
-    MaintenancePassReport,
+    repair_invalid_classic_playouts, run_maintenance_once_cancellable,
+    run_requested_playout_build_cancellable, MaintenancePassReport, PlayoutBuildCancellation,
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
@@ -70,6 +70,10 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         shutdown,
     } = options;
 
+    let (shutdown, _signals) = scheduler_shutdown(shutdown);
+    let build_token = shutdown.clone();
+    let cancelled: PlayoutBuildCancellation = Arc::new(move || build_token.is_cancelled());
+
     let startup = db::bootstrap_media_server_database().await?;
     let cache_config = CacheCleanupConfig::from_paths(transcode_dir, channel_guide_dir);
     // Single in-process `EntityLocker` shared across maintenance passes,
@@ -82,7 +86,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     recover_scan_refreshes_on_startup(application.as_ref()).await?;
 
     if run_once {
-        let report = run_maintenance_once(
+        let report = run_maintenance_once_cancellable(
             startup.pool,
             &cache_config,
             application.as_deref().map(|services| {
@@ -91,6 +95,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
             &locker,
             startup.schema_status,
             hls_sessions.clone(),
+            Some(&cancelled),
         )
         .await?;
         log_report(&report);
@@ -103,13 +108,13 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
 
     loop {
         tokio::select! {
-            () = wait_for_shutdown(shutdown.as_ref()) => {
+            () = wait_for_shutdown(Some(&shutdown)) => {
                 info!("scheduler service shutting down");
                 return Ok(());
             }
             _ = ticker.tick() => {
                 retry_pending_scan_refreshes(application.as_ref()).await;
-                match run_maintenance_once(
+                match run_maintenance_once_cancellable(
                     startup.pool.clone(),
                     &cache_config,
                     application.as_deref().map(|services| {
@@ -118,6 +123,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     &locker,
                     startup.schema_status.clone(),
                     hls_sessions.clone(),
+                    Some(&cancelled),
                 )
                 .await
                 {
@@ -138,12 +144,13 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 };
                 let playout_id = request.playout_id;
                 let mode = request.mode;
-                match run_requested_playout_build(
+                match run_requested_playout_build_cancellable(
                     &startup.pool,
                     &locker,
                     request,
                     chrono::Utc::now(),
                     hls_sessions.as_deref(),
+                    Some(&cancelled),
                 )
                 .await
                 {
@@ -216,6 +223,24 @@ async fn recv_build_request(
 /// Resolve when the scheduler should shut down. Prefers an externally supplied
 /// `CancellationToken` (the web host's coordinated shutdown); otherwise installs
 /// a standalone `ctrl_c` handler so direct callers still stop cleanly.
+fn scheduler_shutdown(
+    shutdown: Option<CancellationToken>,
+) -> (CancellationToken, tokio::task::JoinSet<()>) {
+    // Own the standalone signal listener for this runner's lifetime. Host mode
+    // uses its existing shutdown token directly, including during a build.
+    let mut signals = tokio::task::JoinSet::new();
+    let shutdown = shutdown.unwrap_or_else(|| {
+        let token = CancellationToken::new();
+        let signal = token.clone();
+        signals.spawn(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            signal.cancel();
+        });
+        token
+    });
+    (shutdown, signals)
+}
+
 async fn wait_for_shutdown(token: Option<&CancellationToken>) {
     match token {
         Some(token) => token.cancelled().await,

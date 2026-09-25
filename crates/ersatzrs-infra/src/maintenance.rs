@@ -166,7 +166,13 @@ pub enum MaintenanceError {
     /// HTTP client setup failed.
     #[error(transparent)]
     Http(#[from] reqwest::Error),
+    /// The owned scheduling worker failed before producing a result.
+    #[error("playout build worker failed: {0}")]
+    BuildWorker(#[from] tokio::task::JoinError),
 }
+
+/// Owner-supplied cancellation signal shared with the synchronous build worker.
+pub type PlayoutBuildCancellation = Arc<dyn Fn() -> bool + Send + Sync>;
 
 /// Result alias for maintenance operations.
 pub type Result<T> = std::result::Result<T, MaintenanceError>;
@@ -187,19 +193,51 @@ pub async fn run_maintenance_once(
     schema_status: DatabaseSchemaStatus,
     hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
 ) -> Result<MaintenancePassReport> {
+    run_maintenance_once_cancellable(
+        pool,
+        cache_config,
+        library_scans,
+        locker,
+        schema_status,
+        hls_sessions,
+        None,
+    )
+    .await
+}
+
+/// Cancellation-aware variant of [`run_maintenance_once`].
+///
+/// # Errors
+/// Returns the same errors as the ordinary entry point, including cancellation.
+pub async fn run_maintenance_once_cancellable(
+    pool: Pool<Db>,
+    cache_config: &CacheCleanupConfig,
+    library_scans: Option<&dyn ScheduledLibraryScanRequester>,
+    locker: &EntityLocker,
+    schema_status: DatabaseSchemaStatus,
+    hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
+    cancelled: Option<&PlayoutBuildCancellation>,
+) -> Result<MaintenancePassReport> {
+    if cancelled.is_some_and(|check| check()) {
+        return Err(SchedulingError::Cancelled.into());
+    }
     let now = Utc::now();
     let library_refresh_interval = load_library_refresh_interval(&pool).await?;
     let mut report = MaintenancePassReport::default();
 
     if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
         let playout_report =
-            build_due_playouts(&pool, locker, now, hls_sessions.as_deref()).await?;
+            build_due_playouts(&pool, locker, now, hls_sessions.as_deref(), cancelled).await?;
         report.playouts_built = playout_report.built;
         report.playouts_skipped_locked = playout_report.skipped_locked;
         report.playouts_failed = playout_report.failed;
         report.playouts_reset = playout_report.reset_queued;
         report.loops_ran.set(MaintenanceLoopFlags::PLAYOUT);
         record_loop_run(&pool, "playout", now).await?;
+    }
+
+    if cancelled.is_some_and(|check| check()) {
+        return Err(SchedulingError::Cancelled.into());
     }
 
     if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
@@ -334,6 +372,21 @@ pub async fn run_requested_playout_build(
     now: DateTime<Utc>,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<bool> {
+    run_requested_playout_build_cancellable(pool, locker, request, now, hls_sessions, None).await
+}
+
+/// Cancellation-aware variant of [`run_requested_playout_build`].
+///
+/// # Errors
+/// Returns the same errors as the ordinary entry point, including cancellation.
+pub async fn run_requested_playout_build_cancellable(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    request: PlayoutBuildRequest,
+    now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
+    cancelled: Option<&PlayoutBuildCancellation>,
+) -> Result<bool> {
     let Some(_guard) = PlayoutLockGuard::try_acquire(locker, request.playout_id) else {
         return Ok(false);
     };
@@ -347,7 +400,16 @@ pub async fn run_requested_playout_build(
         None
     };
 
-    match build_playout(pool, request.playout_id, request.mode, now, hls_sessions).await {
+    match build_playout(
+        pool,
+        request.playout_id,
+        request.mode,
+        now,
+        hls_sessions,
+        cancelled,
+    )
+    .await
+    {
         Ok(()) => {
             if let Some(generation) = refresh_generation {
                 crate::scan_refresh::complete_refresh(pool, request.playout_id, generation).await?;
@@ -460,6 +522,7 @@ pub async fn repair_invalid_classic_playouts(
             PlayoutBuildMode::Refresh,
             now,
             hls_sessions,
+            None,
         )
         .await
         {
@@ -498,6 +561,7 @@ async fn build_due_playouts(
     locker: &EntityLocker,
     now: DateTime<Utc>,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
+    cancelled: Option<&PlayoutBuildCancellation>,
 ) -> Result<PlayoutBuildReport> {
     let cutoff = encode_datetime(now - PLAYOUT_BUILD_INTERVAL);
     let rows = sqlx::query(
@@ -529,6 +593,9 @@ async fn build_due_playouts(
 
     let mut report = PlayoutBuildReport::default();
     for entry in due {
+        if cancelled.is_some_and(|check| check()) {
+            return Err(SchedulingError::Cancelled.into());
+        }
         // Mirror `EntityLocker.LockPlayout` from
         // `ErsatzTV.Infrastructure.Locking.EntityLocker`: skip silently when
         // another worker already owns this playout's lock.
@@ -544,7 +611,7 @@ async fn build_due_playouts(
             PlayoutBuildMode::Continue
         };
 
-        match build_playout(pool, entry.playout_id, mode, now, hls_sessions).await {
+        match build_playout(pool, entry.playout_id, mode, now, hls_sessions, cancelled).await {
             Ok(()) => report.built += 1,
             Err(error) => {
                 report.failed += 1;
@@ -573,29 +640,34 @@ fn log_build_warnings(playout_id: EntityId, result: &SchedulingResult) {
     }
 }
 
-async fn build_playout(
-    pool: &Pool<Db>,
-    playout_id: EntityId,
-    mut mode: PlayoutBuildMode,
-    now: DateTime<Utc>,
-    hls_sessions: Option<&dyn HlsSessionRegistry>,
-) -> Result<()> {
-    let repository = SqlitePlayoutRepository(pool.clone());
-    let scheduling = SqliteSchedulingContentRepository::new(pool.clone());
-    let mut playout = repository.get_with_anchor(playout_id).await?;
-    // Mirror ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`.
-    // Without this, a Reset reshuffles from the same seed the playout has had
-    // since creation, so every rebuild reproduces the identical schedule-item
-    // and collection shuffle order forever.
-    if mode == PlayoutBuildMode::Reset {
-        playout.seed = ersatzrs_core::scheduling::next_playout_seed();
+async fn generate_playout(
+    request: SchedulingRequest,
+    cancelled: Option<&PlayoutBuildCancellation>,
+) -> Result<SchedulingResult> {
+    let worker_cancelled = cancelled.cloned();
+    // Keep CPU-bound scheduling off the async executor so shutdown can set
+    // the cancellation signal even on a single-thread runtime. Await ownership
+    // of this worker before releasing the playout lock.
+    let result = tokio::task::spawn_blocking(move || {
+        PlayoutBuilder::default().build_cancellable(request, &|| {
+            worker_cancelled.as_ref().is_some_and(|check| check())
+        })
+    })
+    .await??;
+    if cancelled.is_some_and(|check| check()) {
+        return Err(SchedulingError::Cancelled.into());
     }
-    let days = load_playout_days_to_build(pool).await?;
-    let window = Duration::days(days);
-    let finish = now + window;
+    Ok(result)
+}
 
-    let max_playout_offset = load_max_mirror_playout_offset(pool, playout.channel_id).await?;
-    let mut reference_data = match playout.schedule_kind {
+async fn load_scheduling_reference_data(
+    pool: &Pool<Db>,
+    playout: &ersatzrs_domain::Playout,
+    now: DateTime<Utc>,
+    max_playout_offset: Duration,
+) -> Result<SchedulingReferenceData> {
+    let scheduling = SqliteSchedulingContentRepository::new(pool.clone());
+    Ok(match playout.schedule_kind {
         PlayoutScheduleKind::Classic => {
             scheduling
                 .classic_reference_data(playout.id, now, max_playout_offset)
@@ -629,8 +701,40 @@ async fn build_playout(
                 .await?
         }
         PlayoutScheduleKind::ExternalJson => scheduling.configured_playout_options().await?,
-        PlayoutScheduleKind::None => return Ok(()),
-    };
+        PlayoutScheduleKind::None => SchedulingReferenceData::default(),
+    })
+}
+
+async fn build_playout(
+    pool: &Pool<Db>,
+    playout_id: EntityId,
+    mut mode: PlayoutBuildMode,
+    now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
+    cancelled: Option<&PlayoutBuildCancellation>,
+) -> Result<()> {
+    if cancelled.is_some_and(|check| check()) {
+        return Err(SchedulingError::Cancelled.into());
+    }
+    let repository = SqlitePlayoutRepository(pool.clone());
+    let mut playout = repository.get_with_anchor(playout_id).await?;
+    if playout.schedule_kind == PlayoutScheduleKind::None {
+        return Ok(());
+    }
+    // Mirror ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`.
+    // Without this, a Reset reshuffles from the same seed the playout has had
+    // since creation, so every rebuild reproduces the identical schedule-item
+    // and collection shuffle order forever.
+    if mode == PlayoutBuildMode::Reset {
+        playout.seed = ersatzrs_core::scheduling::next_playout_seed();
+    }
+    let days = load_playout_days_to_build(pool).await?;
+    let window = Duration::days(days);
+    let finish = now + window;
+
+    let max_playout_offset = load_max_mirror_playout_offset(pool, playout.channel_id).await?;
+    let mut reference_data =
+        load_scheduling_reference_data(pool, &playout, now, max_playout_offset).await?;
     reference_data.max_playout_offset = max_playout_offset;
     let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
     reference_data.channel_playout_mode = channel_info.playout_mode;
@@ -645,13 +749,14 @@ async fn build_playout(
     )
     .await?;
 
-    let result = PlayoutBuilder::default().build(SchedulingRequest {
+    let request = SchedulingRequest {
         playout: playout.clone(),
         start: now,
         finish,
         mode,
         reference_data,
-    })?;
+    };
+    let result = generate_playout(request, cancelled).await?;
     log_build_warnings(playout_id, &result);
     let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
         || (mode != PlayoutBuildMode::Continue

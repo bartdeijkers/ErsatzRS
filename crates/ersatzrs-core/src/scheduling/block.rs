@@ -334,6 +334,17 @@ fn block_anchor_context_version() -> u32 {
 
 impl PlayoutSchedulingEngine for BlockSchedulingEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        self.schedule_cancellable(request, &|| false)
+    }
+
+    fn schedule_cancellable(
+        &self,
+        request: SchedulingRequest,
+        cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Result<SchedulingResult, SchedulingError> {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
         let mut result = SchedulingResult::default();
         let mut smart_shuffle_state = if request.mode == super::PlayoutBuildMode::Continue {
             request
@@ -358,6 +369,21 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
         let collection_etags = collection_etags(&request.reference_data, &blocks);
         let change_set = block_changes(&request, &blocks, &collection_etags);
         result.items_to_remove.extend(change_set.items_to_remove);
+        if request.mode == super::PlayoutBuildMode::Reset {
+            // Rebuild filler from the current deco while retaining primary and
+            // guide-hidden content. Mirror-retained filler before the rebuild
+            // boundary remains available to delayed channels.
+            for item in &request.reference_data.existing_items {
+                if !matches!(item.filler_kind, FillerKind::None | FillerKind::GuideMode)
+                    && result
+                        .remove_before
+                        .is_some_and(|start| item.finish >= start)
+                    && !result.items_to_remove.contains(&item.id)
+                {
+                    result.items_to_remove.push(item.id);
+                }
+            }
+        }
         result.history_to_remove.extend(history_to_remove_for_items(
             &request,
             &result.items_to_remove,
@@ -383,7 +409,9 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             request.finish,
             &request.reference_data,
             &mut result,
-        );
+            cancelled,
+            request.mode,
+        )?;
 
         result.history_to_remove.extend(cleanup_history(
             &request.reference_data.existing_history,
@@ -980,12 +1008,17 @@ fn apply_block_deco_filler(
     schedule_finish: DateTime<Utc>,
     reference_data: &super::SchedulingReferenceData,
     result: &mut SchedulingResult,
-) {
+    cancelled: &(dyn Fn() -> bool + Sync),
+    mode: super::PlayoutBuildMode,
+) -> Result<(), SchedulingError> {
     let mut blocks = reference_data.effective_blocks.clone();
     blocks.sort_by_key(|block| block.start);
 
     for block in blocks {
-        if block.start >= schedule_finish {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
+        if block.start >= schedule_finish || mode != super::PlayoutBuildMode::Reset {
             continue;
         }
         let Some(deco) = &block.deco else {
@@ -1000,7 +1033,7 @@ fn apply_block_deco_filler(
             &block,
             deco,
             block_finish,
-        );
+        )?;
     }
 
     let mut all_items = reference_data.existing_items.clone();
@@ -1040,10 +1073,11 @@ fn apply_block_deco_filler(
             result,
             deco,
             one,
-            one.finish,
-            two.start,
-        );
+            one.finish..two.start,
+            cancelled,
+        )?;
     }
+    Ok(())
 }
 
 fn add_block_start_break_content(
@@ -1054,8 +1088,23 @@ fn add_block_start_break_content(
     block: &EffectiveBlock,
     deco: &EffectiveDeco,
     block_finish: DateTime<Utc>,
-) {
+) -> Result<(), SchedulingError> {
+    let retained = reference_data
+        .existing_items
+        .iter()
+        .filter(|item| {
+            item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
+                && item.guide_start == Some(block.start)
+                && matches!(item.filler_kind, FillerKind::None | FillerKind::GuideMode)
+                && !result.items_to_remove.contains(&item.id)
+        })
+        .collect::<Vec<_>>();
+    let retained_duration = retained
+        .iter()
+        .map(|item| item.finish - item.start)
+        .fold(Duration::zero(), |sum, duration| sum + duration);
     let remaining = block.duration
+        - retained_duration
         - result
             .added_items
             .iter()
@@ -1077,9 +1126,7 @@ fn add_block_start_break_content(
         if enumerator.is_empty() {
             continue;
         }
-        if playout_seed != 0 {
-            enumerator.set_index(usize::try_from(playout_seed.unsigned_abs()).unwrap_or_default());
-        }
+        enumerator.set_index(usize::try_from(playout_seed.unsigned_abs()).unwrap_or_default());
         let Some(media_item) = enumerator.current().cloned() else {
             continue;
         };
@@ -1115,12 +1162,15 @@ fn add_block_start_break_content(
         inserted.push(filler);
     }
 
-    if inserted.is_empty() {
-        return;
+    if deco.break_content.is_empty() {
+        return Ok(());
     }
 
+    reposition_retained_block_items(reference_data, result, block, &retained, inserted_duration)?;
+
     for item in result.added_items.iter_mut().filter(|item| {
-        item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
+        item.id == 0
+            && item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
             && item.guide_start == Some(block.start)
     }) {
         item.start += inserted_duration;
@@ -1131,7 +1181,7 @@ fn add_block_start_break_content(
         .iter_mut()
         .filter(|history| history.when >= block.start && history.when < block_finish)
     {
-        if history.key.contains("\"DecoBreakContentId\"") {
+        if history.id != 0 || history.key.contains("\"DecoBreakContentId\"") {
             continue;
         }
         history.when += inserted_duration;
@@ -1141,6 +1191,54 @@ fn add_block_start_break_content(
     }
     result.added_items.extend(inserted);
     result.added_items.sort_by_key(|item| item.start);
+    Ok(())
+}
+
+fn reposition_retained_block_items(
+    reference: &super::SchedulingReferenceData,
+    result: &mut SchedulingResult,
+    block: &EffectiveBlock,
+    retained: &[&PlayoutItem],
+    inserted_duration: Duration,
+) -> Result<(), SchedulingError> {
+    let mut primary = retained
+        .iter()
+        .map(|item| (*item).clone())
+        .chain(
+            result
+                .added_items
+                .iter()
+                .filter(|item| {
+                    item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
+                        && item.guide_start == Some(block.start)
+                        && matches!(item.filler_kind, FillerKind::None | FillerKind::GuideMode)
+                })
+                .cloned(),
+        )
+        .collect::<Vec<_>>();
+    primary.sort_by_key(|item| item.start);
+    let mut next = block.start + inserted_duration;
+    for mut item in primary {
+        let duration = item.finish - item.start;
+        if item.id != 0 && item.start != next {
+            let Some(history) = reference.existing_history.iter().find(|history| {
+                history.when == item.start && !result.history_to_remove.contains(&history.id)
+            }) else {
+                return Err(SchedulingError::MissingBlockHistory(item.id));
+            };
+            let mut history = history.clone();
+            result.items_to_remove.push(item.id);
+            result.history_to_remove.push(history.id);
+            item.start = next;
+            item.finish = next + duration;
+            history.when = item.start;
+            history.finish = Some(item.finish);
+            result.added_items.push(item);
+            result.added_history.push(history);
+        }
+        next += duration;
+    }
+    Ok(())
 }
 
 fn add_default_filler(
@@ -1149,18 +1247,20 @@ fn add_default_filler(
     result: &mut SchedulingResult,
     deco: &EffectiveDeco,
     guide_item: &PlayoutItem,
-    start: DateTime<Utc>,
-    finish: DateTime<Utc>,
-) {
+    window: std::ops::Range<DateTime<Utc>>,
+    cancelled: &(dyn Fn() -> bool + Sync),
+) -> Result<(), SchedulingError> {
+    let start = window.start;
+    let finish = window.end;
     let Some(content) = &deco.default_filler_content else {
-        return;
+        return Ok(());
     };
     let Some(collection_key) = &deco.default_filler_collection_key else {
-        return;
+        return Ok(());
     };
     let mut enumerator = lookup_media(reference_data, content);
     if enumerator.is_empty() {
-        return;
+        return Ok(());
     }
     if runtime.playout_seed != 0 {
         enumerator
@@ -1169,6 +1269,9 @@ fn add_default_filler(
 
     let mut current = start;
     while current < finish {
+        if cancelled() {
+            return Err(SchedulingError::Cancelled);
+        }
         let Some(media_item) = enumerator.current().cloned() else {
             break;
         };
@@ -1217,6 +1320,7 @@ fn add_default_filler(
         enumerator.advance();
     }
     result.added_items.sort_by_key(|item| item.start);
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1606,6 +1710,225 @@ mod tests {
     }
 
     #[test]
+    fn block_reset_replaces_filler_and_history_without_rebuilding_primary_items() {
+        let start = utc("2026-04-15T08:00:00Z");
+        for hidden_from_guide in [false, true] {
+            let mut reference = filler_reference_data(start);
+            reference.effective_blocks[0].items[0].include_in_program_guide = !hidden_from_guide;
+            let original = schedule(reference.clone(), start, Duration::hours(1), 100, 0);
+            reference.existing_items = original.added_items;
+            reference.existing_history = original.added_history;
+            for (index, item) in reference.existing_items.iter_mut().enumerate() {
+                item.id = i64::try_from(index + 1).unwrap();
+            }
+            for (index, entry) in reference.existing_history.iter_mut().enumerate() {
+                entry.id = i64::try_from(index + 100).unwrap();
+            }
+            reference.media_by_key.insert(
+                "filler".to_owned(),
+                vec![SchedulingMediaItem::new(91, Duration::minutes(5))],
+            );
+            let primary_ids = reference
+                .existing_items
+                .iter()
+                .filter(|item| matches!(item.filler_kind, FillerKind::None | FillerKind::GuideMode))
+                .map(|item| item.id)
+                .collect::<Vec<_>>();
+            let filler_ids = reference
+                .existing_items
+                .iter()
+                .filter(|item| item.filler_kind == FillerKind::DecoDefault)
+                .map(|item| item.id)
+                .collect::<Vec<_>>();
+            let filler_history_ids = reference
+                .existing_history
+                .iter()
+                .filter(|entry| {
+                    reference.existing_items.iter().any(|item| {
+                        item.filler_kind == FillerKind::DecoDefault && item.start == entry.when
+                    })
+                })
+                .map(|entry| entry.id)
+                .collect::<Vec<_>>();
+            assert_eq!(filler_ids.len(), 3);
+            assert_eq!(filler_history_ids.len(), 3);
+            for mode in [PlayoutBuildMode::Continue, PlayoutBuildMode::Reset] {
+                let result = BlockSchedulingEngine
+                    .schedule(SchedulingRequest {
+                        playout: Playout {
+                            id: 100,
+                            ..Playout::default()
+                        },
+                        start,
+                        finish: start + Duration::hours(1),
+                        mode,
+                        reference_data: reference.clone(),
+                    })
+                    .unwrap();
+                assert!(primary_ids
+                    .iter()
+                    .all(|id| !result.items_to_remove.contains(id)));
+                if mode == PlayoutBuildMode::Reset {
+                    assert_eq!(result.items_to_remove, filler_ids);
+                    assert_eq!(result.history_to_remove, filler_history_ids);
+                    assert_eq!(result.added_items.len(), 3);
+                    assert!(result
+                        .added_items
+                        .iter()
+                        .all(|item| item.media_item_id == 91));
+                    assert_eq!(
+                        result.added_items.first().unwrap().start,
+                        start + Duration::minutes(10)
+                    );
+                    assert_eq!(
+                        result.added_items.last().unwrap().finish,
+                        start + Duration::minutes(25)
+                    );
+                } else {
+                    assert!(result.items_to_remove.is_empty());
+                    assert!(result.history_to_remove.is_empty());
+                    assert!(result.added_items.is_empty());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn block_reset_repositions_retained_primary_with_changed_break_duration() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference = filler_reference_data(start);
+        reference.effective_blocks[0].duration = Duration::minutes(20);
+        reference.effective_blocks[0]
+            .deco
+            .as_mut()
+            .unwrap()
+            .break_content
+            .push(EffectiveBreakContent {
+                id: 81,
+                placement: DecoBreakPlacement::BlockStart,
+                content: "bumper".to_owned(),
+                collection_key: collection_key(CollectionType::Playlist, 81),
+            });
+        reference.media_by_key.insert(
+            "bumper".to_owned(),
+            vec![SchedulingMediaItem::new(99, Duration::minutes(2))],
+        );
+        let original = schedule(reference.clone(), start, Duration::hours(1), 100, 0);
+        reference.existing_items = original.added_items;
+        reference.existing_history = original.added_history;
+        for (index, item) in reference.existing_items.iter_mut().enumerate() {
+            item.id = i64::try_from(index + 1).unwrap();
+            item.preferred_audio_language_code = Some("nld".to_owned());
+        }
+        for (index, entry) in reference.existing_history.iter_mut().enumerate() {
+            entry.id = i64::try_from(index + 100).unwrap();
+        }
+        reference.media_by_key.insert(
+            "bumper".to_owned(),
+            vec![SchedulingMediaItem::new(99, Duration::minutes(3))],
+        );
+        let request = SchedulingRequest {
+            playout: Playout {
+                id: 100,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: PlayoutBuildMode::Reset,
+            reference_data: reference,
+        };
+        let result = BlockSchedulingEngine.schedule(request.clone()).unwrap();
+        let primary = result
+            .added_items
+            .iter()
+            .find(|item| item.filler_kind == FillerKind::None)
+            .unwrap();
+        assert_eq!(primary.start, start + Duration::minutes(3));
+        assert_eq!(primary.finish, start + Duration::minutes(13));
+        assert_eq!(
+            primary.preferred_audio_language_code.as_deref(),
+            Some("nld")
+        );
+        assert!(result
+            .added_items
+            .windows(2)
+            .all(|pair| pair[0].finish <= pair[1].start));
+        assert!(
+            result
+                .added_history
+                .iter()
+                .any(|history| history.when == primary.start
+                    && history.finish == Some(primary.finish))
+        );
+        let mut missing_history = request;
+        missing_history
+            .reference_data
+            .existing_history
+            .retain(|entry| entry.when != start + Duration::minutes(2));
+        assert!(matches!(
+            BlockSchedulingEngine.schedule(missing_history),
+            Err(SchedulingError::MissingBlockHistory(_))
+        ));
+    }
+
+    #[test]
+    fn block_reset_retains_filler_before_utc_boundary_for_delayed_mirrors() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference = SchedulingReferenceData {
+            max_playout_offset: Duration::hours(1),
+            ..SchedulingReferenceData::default()
+        };
+        for (index, finish) in [
+            start - Duration::seconds(1),
+            start,
+            start + Duration::seconds(1),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            reference.existing_items.push(PlayoutItem {
+                id: i64::try_from(index + 1).unwrap(),
+                start: finish - Duration::minutes(1),
+                finish,
+                filler_kind: FillerKind::DecoDefault,
+                ..PlayoutItem::default()
+            });
+        }
+        let result = schedule(reference, start, Duration::hours(1), 100, 0);
+        assert_eq!(result.items_to_remove, vec![2, 3]);
+    }
+
+    #[test]
+    fn block_cancellation_during_filler_returns_no_partial_build() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference = filler_reference_data(start);
+        reference.media_by_key.insert(
+            "filler".to_owned(),
+            vec![SchedulingMediaItem::new(90, Duration::milliseconds(1))],
+        );
+        for cancel_after in [1, 100] {
+            let checks = AtomicUsize::new(0);
+            let result = crate::playout_builder::PlayoutBuilder::default().build_cancellable(
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        schedule_kind: ersatzrs_domain::PlayoutScheduleKind::Block,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data: reference.clone(),
+                },
+                &|| checks.fetch_add(1, Ordering::SeqCst) + 1 >= cancel_after,
+            );
+            assert!(matches!(result, Err(SchedulingError::Cancelled)));
+            assert_eq!(checks.load(Ordering::SeqCst), cancel_after);
+        }
+    }
+
+    #[test]
     fn block_default_filler_stops_at_nonpositive_duration() {
         let start = utc("2026-04-15T08:00:00Z");
         for invalid_duration in [Duration::zero(), Duration::seconds(-1)] {
@@ -1691,7 +2014,10 @@ mod tests {
                 start + Duration::hours(1),
                 &reference_data,
                 &mut result,
-            );
+                &|| false,
+                PlayoutBuildMode::Continue,
+            )
+            .unwrap();
             assert_eq!(
                 result.added_items.len(),
                 expected_count,

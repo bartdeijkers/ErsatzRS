@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `16b715699649fa787bbf0aa033a6139f2a44c7b6` |
-| **Commit subject** | `fix: playlist enumerator consistency fixes (#2956)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/16b715699649fa787bbf0aa033a6139f2a44c7b6 |
+| **Pinned commit** | `a2f54ef1bb3e6972c6ae612c400defd354de5cda` |
+| **Commit subject** | `fix: block playout build loop (#2957)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a2f54ef1bb3e6972c6ae612c400defd354de5cda |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
