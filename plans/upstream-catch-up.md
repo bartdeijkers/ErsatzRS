@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **111 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **110 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **61**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **62**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-61 are reconciled; the next row is 62 (0036fc5c).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-62 are reconciled; the next row is 63 (620bc0bc).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,29 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 62 source map: Next subtitle selection and extraction
+
+Upstream `0036fc5c` (PR #2938) adds subtitle codec/index entries to Next
+`ProbeHint` from the selected media version. Its custom stream selector lets
+Next select an unextracted embedded text track, while native transcoding
+continues to require extraction outside HLS Direct. The playout subtitle
+extraction handler also admits channels with a custom stream selector even
+when the channel subtitle mode is None; the converter suppresses duplicate
+selector diagnostics during Next projection. There is no UI or schema change.
+The channel-save trigger remains gated on the general subtitle mode upstream;
+playout builds and settings changes still dispatch extraction.
+
+ErsatzRS already projects version-scoped subtitle probe hints in
+`crates/ersatzrs-infra/src/next_engine/probe_hint.rs` and separates Next/native
+custom selection in `crates/ersatzrs-infra/src/playback.rs`. The Next selector
+and decoded subtitle tests own these existing contracts. The remaining query
+gap is in `crates/ersatzrs-infra/src/subtitles.rs`: its playout extraction
+candidate filter checks channel and schedule subtitle modes but omits custom
+stream selectors. Add that upstream branch and prove the eligibility matrix,
+then run focused extraction/Next checks and playback runtime evidence. ADR
+0100's live and one-shot embedded-text limitations remain separate; this
+upstream row does not remove them.
 
 ## Row 61 source map: date-based YAML scheduled playouts
 
@@ -1121,7 +1144,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | Port | scripted-scheduling; hls-variant-playlists-segmenter | `fix(scheduling): trim played playout items by channel mode` | ucu-04; continuous scripted builds retain four hours plus mirror offset; on-demand time shifting removes only items finished before the saved checkpoint in its shift transaction. Focused scheduler, on-demand SQLite and delayed-mirror persistence tests, scoped Clippy and native smoke pass. |
 | 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | N/A (NuGet-only build override) | upstream-baseline-catch-up | `docs(porting): classify OpenAPI build override as upstream-only` | ucu-04; single `.csproj` package reference overrides transitive Microsoft.OpenApi 2.0.0 with 2.7.5. Startup registration and endpoint code do not change; Rust has no matching NuGet or OpenAPI generation dependency. Source/package-graph review and progress validation pass; no API endpoint parity claim. |
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | Port | yaml-scheduling | `feat(scheduling): port YAML scheduled playouts` | ucu-04; named annual/specific date overrides select by local date and priority, with per-list state and persisted continuation indices. Scheduled sequences expand, repeat and shuffle in the active list; local wait/pad timing and editor schema align. Core YAML, SQLite restart, web validation, scoped Clippy and native smoke pass. Window gates remain open. |
-| 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | | | | ucu-04; provisional: Next behavior triage. |
+| 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | Port | library-management; upstream-baseline-catch-up | `fix(infra): include custom selectors in subtitle extraction` | ucu-04; Next subtitle probe hints, version-scoped custom selection and native extraction split were already ported. Playout extraction now admits custom-selector channels with general subtitles off. Red-then-green SQL eligibility, 8 probe-hint, 22 selection, 2 extraction, decoded official Next Burn/Convert and routed Next Convert smoke pass. ADR 0100 live/one-shot text limits stay open. |
 | 63 | `620bc0bc` | fix: properly delete manual collections from search index (#2939) | | | | ucu-04; provisional: Adapt candidate. |
 | 64 | `075649ad` | fix: synchronize subtitle titles from plex libraries (#2940) | | | | ucu-04; provisional: Port candidate. |
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | | | | ucu-04; provisional: Adapt candidate. |

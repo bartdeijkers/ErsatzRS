@@ -1236,7 +1236,10 @@ async fn playout_media_item_ids_with_text_subtitles(
              AND PI."Finish" >= ?
              AND PI."Start" <= ?
              AND (
-               C."SubtitleMode" != 0 OR EXISTS (
+               C."SubtitleMode" != 0
+               -- Custom selectors can request embedded text with channel subtitles off.
+               OR C."StreamSelectorMode" = 1
+               OR EXISTS (
                  SELECT 1
                  FROM "ProgramScheduleItem" PSI
                  WHERE PSI."ProgramScheduleId" = P."ProgramScheduleId"
@@ -2433,6 +2436,25 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
         );
 
         pool.execute(r#"UPDATE "Channel" SET "SubtitleMode" = 0 WHERE "Id" = 1"#)
+            .await
+            .unwrap();
+        assert!(playout_media_item_ids_with_text_subtitles(&pool, 1)
+            .await
+            .unwrap()
+            .is_empty());
+
+        pool.execute(r#"UPDATE "Channel" SET "StreamSelectorMode" = 1 WHERE "Id" = 1"#)
+            .await
+            .unwrap();
+        assert_eq!(
+            playout_media_item_ids_with_text_subtitles(&pool, 1)
+                .await
+                .unwrap(),
+            vec![10],
+            "custom selectors can choose embedded text despite channel subtitles being off"
+        );
+
+        pool.execute(r#"UPDATE "Channel" SET "StreamSelectorMode" = 2 WHERE "Id" = 1"#)
             .await
             .unwrap();
         assert!(playout_media_item_ids_with_text_subtitles(&pool, 1)

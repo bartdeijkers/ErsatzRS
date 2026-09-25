@@ -61,6 +61,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 62 is Port. Next already had selected subtitle
+probe hints, version-scoped custom selection and the native extraction split.
+Playout extraction now also admits custom-selector channels whose general
+subtitle mode is off, matching upstream. The red-then-green eligibility test,
+probe-hint, selection and extraction regressions, decoded official Next
+Burn/Convert test, scoped Clippy and routed Next Convert smoke pass. ADR 0100's
+live and one-shot embedded-text limitations remain open. Next is row 63
+(620bc0bc, manual collection search-index cleanup). UCU-04 window gates,
+push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 61 is Port. Sequential YAML now selects named date
 overrides by local date and priority, resumes separate list positions and
 in-build ambient state, and persists indices across Continue and SQLite

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `42937ac37231c844907638f8401c654b289097a8` |
-| **Commit subject** | `feat: YAML Scheduled Playouts (#2935)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/42937ac37231c844907638f8401c654b289097a8 |
+| **Pinned commit** | `0036fc5cc81429008ef7136efc14b88ec018e561` |
+| **Commit subject** | `fix: subtitles with next engine (#2938)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0036fc5cc81429008ef7136efc14b88ec018e561 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

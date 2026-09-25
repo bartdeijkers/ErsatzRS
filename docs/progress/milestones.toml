@@ -9057,6 +9057,35 @@ path. This row adds no FFmpeg pipeline change, so the window's TSDuck rule is
 unchanged. UCU-04 window gates, push and terminal exact-SHA CI remain open;
 continue at row 62 (0036fc5c). No intermediate push or CI was launched.
 
+2026-09-25: row 62 (0036fc5c, PR #2938) is Port. Upstream includes subtitle
+codec/index in Next probe hints, permits unextracted embedded text through
+Next custom selection while preserving native extraction rules, admits custom
+selectors to playout subtitle extraction, and suppresses duplicate selector
+diagnostics during Next projection. ErsatzRS already had the first two
+contracts and emits no per-candidate selector diagnostics during projection.
+The remaining SQL candidate gap is fixed: upcoming items on a channel with
+`StreamSelectorMode = Custom` are eligible for embedded
+text extraction even with channel `SubtitleMode = None`. Upstream and ErsatzRS
+both queue immediate channel-save extraction only when the general subtitle
+mode is enabled; settings changes and playout builds still request extraction.
+This Rust row changes no UI, schema, FFmpeg argument or selected-track ordering.
+
+The custom-selector eligibility assertion failed before the query change
+(nextest 15fae5ee) and passed afterward (5f0d1f81). Eight probe-hint tests,
+22 Next selection tests, two extraction tests and the official Next synthetic
+Burn/Convert decoded-audio/subtitle/off runtime test pass. The initial
+selection suite could not write disposable YAML to the sandbox's default
+application-data path; the unchanged suite passes 22/22 with isolated writable
+test data. Scoped infrastructure all-target Clippy, formatting and the Clippy
+allow policy pass. Routed Next Convert smoke passes authenticated media access,
+selected Dutch WebVTT, Dutch Hybrid audio, preview and idle cleanup. ADR 0100
+continues to own the separately accepted live and ordinary one-shot embedded
+text refusal; this row does not claim those capabilities. Substantive review
+checked source ownership, trigger parity, version-bound hints and selection,
+and the unchanged native rules. UCU-04 window gates, push and terminal
+exact-SHA CI remain open; continue at row 63 (620bc0bc). No intermediate
+push or CI was launched.
+
 """
 
 [[milestone]]

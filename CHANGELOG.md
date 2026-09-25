@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Extract embedded text subtitles for upcoming playout items when a channel
+  uses a custom stream selector, even if its general subtitle mode is off.
+  Next can select embedded text directly; native transcoding still requires
+  extraction outside HLS Direct (upstream PR #2938).
 - Remove already-played on-demand playout items at the saved checkpoint and
   retain four hours of continuous scripted playout history for delayed viewing.
 - Keep the existing HLS segments and fMP4 init map available when a realtime
