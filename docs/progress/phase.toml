@@ -61,11 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-25 UCU-04 row 54 is reconciled: local subtitle identity repair,
-one-time folder invalidation, all-owner hourly cleanup and localized health.
-Upgrade/rescan, native and Next language selection, decoded captions, scoped
-Clippy and native MPEG-TS/HLS smoke pass. Paused at the maintainer's request
-after row 54; next on resumption is row 55 (32e54828, local subtitle und tag).
+2026-09-25 catch-up resumed. UCU-04 row 55 is Covered: the existing local
+subtitle parser uses und without a language and reads forced/SDH/CC flags only
+from the filename suffix. Persisted title-isolation, path-mode and repeated
+scan checks plus subtitle selection tests pass (17 focused tests); scoped
+Clippy passes. Row 54 upgrade/rescan, cleanup, health and runtime evidence
+remains valid. Next is row 56 (6b74da3c, upstream Docker image update).
 Full UCU-04 acceptance precedes the authorized push and exact-SHA CI.
 
 2026-09-22 acceptance: the maintainer completed native Windows acceptance of

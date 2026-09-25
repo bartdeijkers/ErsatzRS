@@ -8867,6 +8867,29 @@ work and unchanged provider URL identities. Advance pin and ledger to row 54.
 The maintainer requested a pause after this row; row 55 is not started.
 UCU-04 window acceptance, push and exact-SHA CI remain open.
 
+
+2026-09-25 row 55 reconciliation (Covered):
+The maintainer resumed after row 54. AMM-N-03 and UCU-00 remain Complete;
+pin, ledger and clean upstream checkout began at row 54. Fresh origin/main
+remains 27f9d217 and all 172 SHA/subject pairs match ordered upstream history.
+Upstream 32e54828 (PR #2925) parses only the filename suffix, removing subtitle
+flags before assigning und when no language remains. Its added tests cover
+bare/forced-only sidecars and Forced in the video title. Rust already derives
+flags and language from suffix tokens. Direct source and consumer review find
+no product delta to implement. The new persisted matrix covers plain titles
+and titles containing Forced/SDH/CC, bare and flag-only files, uppercase
+suffixes, supported codecs, filename/full-path modes and stable repeated scans.
+Six metadata tests pass (9a43865c) and eleven subtitle playback tests pass
+(2b1d5bf9), including undefined-language selection. An initial broader filter
+hit a read-only default state directory while generating music-video credits;
+the same playback selection passes with isolated ERSATZRS_APP_STATE_DIR and
+ERSATZRS_APP_DATA_DIR. No assertion or acceptance was weakened. Focused test
+Clippy passes. Row-54 smoke and runtime proof on f27251cb remain valid because
+production sources, dependencies, schema and assets are unchanged. Health
+requirements are unchanged. Advance pin, ledger and clean upstream checkout
+together, then continue at row 56, 6b74da3c. UCU-04 window gates, push and
+terminal exact-SHA CI remain open.
+
 """
 
 [[milestone]]

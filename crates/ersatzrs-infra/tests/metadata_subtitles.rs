@@ -339,3 +339,70 @@ async fn local_rescan_repairs_duplicates_blank_sidecars_and_preserves_embedded_z
         previous = Some(rows);
     }
 }
+
+#[tokio::test]
+async fn local_sidecar_flags_and_undefined_language_come_only_from_suffix() {
+    let cases = [
+        (".srt", "und", false, false, "subrip"),
+        (".forced.srt", "und", true, false, "subrip"),
+        (".sdh.srt", "und", false, true, "subrip"),
+        (".cc.vtt", "und", false, true, "webvtt"),
+        (".en.srt", "eng", false, false, "subrip"),
+        (".en.forced.ass", "eng", true, false, "ass"),
+        (".FORCED.EN.SDH.SRT", "eng", true, true, "subrip"),
+    ];
+    for stem in ["Movie", "Synthetic.Forced.SDH.CC.Title"] {
+        let pool = common::test_db().await;
+        seed_local_movie(&pool).await;
+        let temp = tempdir().unwrap();
+        let media = temp.path().join(format!("{stem}.mkv"));
+        std::fs::write(&media, b"").unwrap();
+        for (suffix, ..) in cases {
+            std::fs::write(temp.path().join(format!("{stem}{suffix}")), b"caption").unwrap();
+        }
+        let mut first_ids = Vec::new();
+        for full_path in [false, true, true] {
+            let mut tx = pool.begin().await.unwrap();
+            update_local_file_subtitles(
+                &mut tx,
+                SubtitleMetadataOwner::Movie(10),
+                &[],
+                &media,
+                full_path,
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            let rows = sqlx::query(
+                r#"SELECT "Id", "Language", "Forced", "SDH", "Codec", "Path"
+                FROM "Subtitle" WHERE "MovieMetadataId" = 10 ORDER BY "Id""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(rows.len(), cases.len());
+            let ids: Vec<i64> = rows.iter().map(|row| row.get("Id")).collect();
+            if first_ids.is_empty() {
+                first_ids = ids;
+            } else {
+                assert_eq!(ids, first_ids);
+            }
+            for (suffix, language, forced, sdh, codec) in cases {
+                let filename = format!("{stem}{suffix}");
+                let expected_path = if full_path {
+                    temp.path().join(&filename).display().to_string()
+                } else {
+                    filename
+                };
+                let row = rows
+                    .iter()
+                    .find(|row| row.get::<String, _>("Path") == expected_path)
+                    .unwrap();
+                assert_eq!(row.get::<String, _>("Language"), language);
+                assert_eq!(row.get::<bool, _>("Forced"), forced);
+                assert_eq!(row.get::<bool, _>("SDH"), sdh);
+                assert_eq!(row.get::<String, _>("Codec"), codec);
+            }
+        }
+    }
+}

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7032cfc866e40162f02b8bbef61167004de1111d` |
-| **Commit subject** | `fix: better handling of local subtitles (#2924)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7032cfc866e40162f02b8bbef61167004de1111d |
+| **Pinned commit** | `32e548285acc38a5f1cc202d481163d345c99a19` |
+| **Commit subject** | `fix: use und language tag with local subtitles (#2925)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/32e548285acc38a5f1cc202d481163d345c99a19 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,7 +59,7 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `27f9d2174f377e27baa553872c73fcac863a52d7` (verified 2026-09-24),
+The latest fetched target is `27f9d2174f377e27baa553872c73fcac863a52d7` (verified 2026-09-25),
 currently **172 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original

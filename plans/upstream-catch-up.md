@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-24): `27f9d2174f377e27baa553872c73fcac863a52d7`
+- Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **118 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **117 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **54**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **55**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-54 are reconciled. Paused after row 54 at the maintainer's request; row 55 is next on resumption.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-55 are reconciled; catch-up continues with row 56 after the maintainer resumed work.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,19 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 55 source map: undefined sidecar language and title isolation
+
+Upstream `32e54828` (PR #2925) changes LocalSubtitlesProvider to parse only
+text after the media filename stem, removes forced/SDH/CC flags from that
+suffix, and uses `und` when no language remains. Its regression matrix adds
+bare and forced-only sidecars and a video title containing Forced. There are
+no UI, schema, API or maintenance changes. Rust's existing `sidecar_suffix`,
+`sidecar_tokens` and `sidecar_language` already implement these outcomes;
+`locate_external_subtitles` preserves full-path/filename modes and codec flags.
+The metadata integration matrix verifies persisted suffix-only flags and `und`
+across rescans, with the existing undefined-language playback selection test.
+No production change or new deviation is needed for this row.
 
 ## Row 54 source map: local subtitle identity and repair
 
@@ -966,7 +979,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 52 | `dca93717` | fix: improve speed of motion graphics element compositing (#2922) | Covered (ADR 0005) | drawvg-graphics-engine | `docs(porting): verify native motion graphics compositing` | ucu-04; native FFmpeg motion input is placed at its own dimensions without a Skia full-frame copy. Loop/Disappear/Hold snapshots, Hold renderer plan and decoded four-kind compositing pass; Next graphics debt remains open. |
 | 53 | `dbdf3dff` | feat: add epg_entries support to image graphics elements (#2923) | Port | drawvg-graphics-engine | `feat(graphics): import image EPG template context` | ucu-04; import and persist Image epg_entries, render its EPG-selected path without rereading YAML under ADR 0005; focused import/render and decoded graphics proof pass. |
 | 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | Port | upstream-baseline-catch-up | `fix(subtitles): complete local collision repair` | ucu-04; kind-separated deterministic merge, one-time folder invalidation, all-owner hourly cleanup and localized health; upgrade rescan, native/Next language selection, decoded captions and native smoke pass. |
-| 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | | | | ucu-04; provisional: Port candidate. |
+| 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | Covered | upstream-baseline-catch-up | `test(subtitles): verify undefined sidecar language and flags` | ucu-04; existing suffix-only parser preserves title isolation and und without a language; persisted path/flag/rescan matrix and undefined-language playback selection pass. |
 | 56 | `6b74da3c` | chore: update docker image (#2926) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | | | | ucu-04; provisional: Port candidate. |
