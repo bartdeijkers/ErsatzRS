@@ -61,6 +61,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 64 is Adapt under ADR 0098. Plex already persists
+embedded and external subtitle titles in stream and movie/episode metadata;
+focused provider-sync fixtures now prove them. The accepted deterministic
+NCalcSync 6.2 expression profile stays pinned despite upstream's 6.4 package
+refresh. The focused Classic corpus and scoped infrastructure Clippy pass.
+Next is row 65 (3e1918c9, home release notes). UCU-04 window gates, push and
+exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 63 is Covered. Manual collection deletion already
 removes search membership immediately: the SQL-backed search projection reads
 current collection rows for each query, and the delete cascades membership.

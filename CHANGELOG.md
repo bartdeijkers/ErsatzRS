@@ -108,6 +108,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Keep saved Classic filler expressions on the accepted deterministic NCalcSync
+  6.2 profile while upstream advances to 6.4, preserving their existing
+  meaning across upgrades (upstream PR #2940).
 - Check new Clippy exemptions in CI and provide a local pre-commit check,
   requiring item-level scope and an explicit reason without running a crate
   build after each edit.

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **109 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **108 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **63**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **64**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-63 are reconciled; the next row is 64 (075649ad).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-64 are reconciled; the next row is 65 (3e1918c9).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -697,6 +697,33 @@ satisfy that prerequisite or authorize a later implementation commit.
   through the real delete and query repositories. No schema, UI, or translation
   change is needed.
 
+## Row 64 source map: Plex subtitle titles
+
+- ErsatzTV UI, view models, validators: unchanged. The existing media stream
+  and subtitle metadata surfaces consume persisted stream titles.
+- ErsatzTV service: `ErsatzTV.Infrastructure/Plex/PlexServerApiClient.cs`
+  now copies `PlexStreamResponse.Title` into embedded and external subtitle
+  `MediaStream` projections; audio titles were already copied.
+- ErsatzTV repository/side effect: Plex scans persist projected `MediaStream`
+  rows and derive metadata-backed `Subtitle` rows from them. The same commit
+  updates .NET package references in seven project manifests.
+- ErsatzRS targets: `crates/ersatzrs-infra/src/plex.rs` already deserializes
+  Plex stream `title` and projects it for all stream kinds. `replace_streams`
+  persists `MediaStream.Title`; `metadata::update_metadata_subtitles` copies
+  that value to movie and episode `Subtitle.Title`, including updates.
+- Intentional deviations: none for subtitle-title behavior. ADR 0098 retains a
+  deterministic NCalcSync 6.2 saved-expression profile while this upstream row
+  raises NCalcSync to 6.4; ADRs 0009 and 0096 own the existing SQL-search and
+  QuickJS runtime choices behind its Lucene/Jint package updates. Movie and
+  episode provider-sync fixtures now assert embedded/external stream and
+  metadata subtitle titles.
+- Dependency sources: the [NCalc changelog](https://github.com/ncalc/ncalc/blob/master/CHANGELOG.md)
+  records 6.3.x membership coercion changes; the [Jint 4.11 release](https://github.com/sebastienros/jint/releases/tag/v4.11.0)
+  documents its function-source retention default; [Refit 13 breaking changes](https://github.com/reactiveui/refit/blob/main/docs/breaking-changes.md)
+  describe XML/JSON hardening; and the [Lucene beta18 status](https://github.com/apache/lucenenet/discussions/1401)
+  identifies its vulnerability fixes. These upstream package changes do not
+  alter the accepted Rust alternatives or introduce a matching Cargo upgrade.
+
 ## Row 20 source map: media-server inputs
 
 Upstream `bb493670` changes `Application/Playouts/Commands/SyncNextPlayoutHandler.cs`
@@ -1168,7 +1195,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | Port | yaml-scheduling | `feat(scheduling): port YAML scheduled playouts` | ucu-04; named annual/specific date overrides select by local date and priority, with per-list state and persisted continuation indices. Scheduled sequences expand, repeat and shuffle in the active list; local wait/pad timing and editor schema align. Core YAML, SQLite restart, web validation, scoped Clippy and native smoke pass. Window gates remain open. |
 | 62 | `0036fc5c` | fix: subtitles with next engine (#2938) | Port | library-management; upstream-baseline-catch-up | `fix(infra): include custom selectors in subtitle extraction` | ucu-04; Next subtitle probe hints, version-scoped custom selection and native extraction split were already ported. Playout extraction now admits custom-selector channels with general subtitles off. Red-then-green SQL eligibility, 8 probe-hint, 22 selection, 2 extraction, decoded official Next Burn/Convert and routed Next Convert smoke pass. ADR 0100 live/one-shot text limits stay open. |
 | 63 | `620bc0bc` | fix: properly delete manual collections from search index (#2939) | Covered | collections-smart-collections; search-index | `test(search): verify manual collection deletion invalidates queries` | ucu-04; live SQLite search documents re-read collection names for each query, while foreign-key cascade removes deleted membership. A focused integration test proves immediate search removal and continued media search. No persisted index needs rebuilding. |
-| 64 | `075649ad` | fix: synchronize subtitle titles from plex libraries (#2940) | | | | ucu-04; provisional: Port candidate. |
+| 64 | `075649ad` | fix: synchronize subtitle titles from plex libraries (#2940) | Adapt (ADR 0098) | library-management; classic-scheduling; upstream-baseline-catch-up | `test(plex): cover subtitle title synchronization` | ucu-04; Plex embedded/external titles already persist in MediaStream and movie/episode Subtitle rows; two provider-sync regressions prove both. The accepted deterministic Classic expression profile remains on NCalcSync 6.2 despite the upstream 6.4 package bump. Other .NET package updates map to existing ADR 0009/0096 alternatives or no Rust package. Focused NCalc corpus, scoped Clippy and progress checks pass. |
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | | | | ucu-04; provisional: Adapt candidate. |
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | | | | ucu-04; provisional: Upstream tooling candidate. |

@@ -9,6 +9,11 @@ against NCalcSync 6.2.0. IEEE-754 NaN comparisons and the sign of zero from
 `IEEERemainder` follow that release; the deterministic culture and resource
 limits remain the accepted contract.
 
+Upstream row 64 raises NCalcSync to 6.4.0. Its intervening 6.3.x releases
+change numeric coercion in `in` comparisons; the accepted deterministic 6.2
+profile remains in force. This row does not claim compatibility with later
+NCalc package semantics. See the [NCalc changelog](https://github.com/ncalc/ncalc/blob/master/CHANGELOG.md).
+
 The maintainer explicitly accepted this deterministic expression contract on
 2026-09-23 and requested implementation. ADR 0097 accepts the separate no-match
 padding correction; implementation and platform/runtime acceptance remain distinct.

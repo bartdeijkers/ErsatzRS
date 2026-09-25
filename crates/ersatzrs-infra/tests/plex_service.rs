@@ -328,32 +328,7 @@ async fn plex_movie_sync_writes_metadata_subtitle_rows() {
         server.base_url()
     );
     assert_eq!(count(&pool, "MovieMetadata").await, 1);
-    assert_eq!(count(&pool, "Subtitle").await, 2);
-    assert_eq!(
-        subtitle_rows(&pool).await,
-        json!([
-            {
-                "codec": "srt",
-                "default": 1,
-                "forced": 0,
-                "language": "eng",
-                "owner": "movie",
-                "path": null,
-                "stream_index": 2,
-                "subtitle_kind": 0
-            },
-            {
-                "codec": "ass",
-                "default": 0,
-                "forced": 1,
-                "language": "jpn",
-                "owner": "movie",
-                "path": external_subtitle_url,
-                "stream_index": 4,
-                "subtitle_kind": 1
-            }
-        ])
-    );
+    assert_plex_subtitle_titles(&pool, "movie", &external_subtitle_url).await;
 }
 
 #[tokio::test]
@@ -658,33 +633,7 @@ async fn plex_episode_sync_writes_metadata_subtitle_rows() {
         "{}/library/streams/4?X-Plex-Token=plex-token",
         server.base_url()
     );
-    assert_eq!(count(&pool, "EpisodeMetadata").await, 1);
-    assert_eq!(count(&pool, "Subtitle").await, 2);
-    assert_eq!(
-        subtitle_rows(&pool).await,
-        json!([
-            {
-                "codec": "srt",
-                "default": 1,
-                "forced": 0,
-                "language": "eng",
-                "owner": "episode",
-                "path": null,
-                "stream_index": 2,
-                "subtitle_kind": 0
-            },
-            {
-                "codec": "ass",
-                "default": 0,
-                "forced": 1,
-                "language": "jpn",
-                "owner": "episode",
-                "path": external_subtitle_url,
-                "stream_index": 4,
-                "subtitle_kind": 1
-            }
-        ])
-    );
+    assert_plex_subtitle_titles(&pool, "episode", &external_subtitle_url).await;
 }
 
 #[tokio::test]
@@ -1174,6 +1123,7 @@ fn media_json_with_subtitles(key: &str, part_key: &str, path: &str, id: i32) -> 
         "streamType": 3,
         "codec": "srt",
         "languageCode": "eng",
+        "title": "English captions",
         "default": true,
         "embeddedInVideo": false
     }));
@@ -1183,6 +1133,7 @@ fn media_json_with_subtitles(key: &str, part_key: &str, path: &str, id: i32) -> 
         "streamType": 3,
         "codec": "ass",
         "languageCode": "jpn",
+        "title": "Japanese signs",
         "forced": true
     }));
     value
@@ -1408,7 +1359,7 @@ async fn subtitle_rows(pool: &SqlitePool) -> serde_json::Value {
                     WHEN "EpisodeMetadataId" IS NOT NULL THEN 'episode'
                     ELSE 'other'
                   END AS "Owner",
-                  "StreamIndex", "Codec", "SubtitleKind", "Language",
+                  "StreamIndex", "Codec", "SubtitleKind", "Language", "Title",
                   "Default", "Forced", "Path"
            FROM "Subtitle"
            ORDER BY "Owner", "StreamIndex""#,
@@ -1425,6 +1376,7 @@ async fn subtitle_rows(pool: &SqlitePool) -> serde_json::Value {
                     "codec": row.get::<String, _>("Codec"),
                     "subtitle_kind": row.get::<i64, _>("SubtitleKind"),
                     "language": row.get::<Option<String>, _>("Language"),
+                    "title": row.get::<Option<String>, _>("Title"),
                     "default": row.get::<i64, _>("Default"),
                     "forced": row.get::<i64, _>("Forced"),
                     "path": row.get::<Option<String>, _>("Path")
@@ -1432,6 +1384,50 @@ async fn subtitle_rows(pool: &SqlitePool) -> serde_json::Value {
             })
             .collect(),
     )
+}
+
+async fn subtitle_stream_titles(pool: &SqlitePool) -> Vec<String> {
+    sqlx::query_scalar(
+        r#"SELECT "Title" FROM "MediaStream"
+           WHERE "MediaStreamKind" IN (3, 5) ORDER BY "Index""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+async fn assert_plex_subtitle_titles(pool: &SqlitePool, owner: &str, external_subtitle_url: &str) {
+    assert_eq!(
+        subtitle_stream_titles(pool).await,
+        vec!["English captions", "Japanese signs"]
+    );
+    assert_eq!(
+        subtitle_rows(pool).await,
+        json!([
+            {
+                "codec": "srt",
+                "default": 1,
+                "forced": 0,
+                "language": "eng",
+                "owner": owner,
+                "path": null,
+                "stream_index": 2,
+                "subtitle_kind": 0,
+                "title": "English captions"
+            },
+            {
+                "codec": "ass",
+                "default": 0,
+                "forced": 1,
+                "language": "jpn",
+                "owner": owner,
+                "path": external_subtitle_url,
+                "stream_index": 4,
+                "subtitle_kind": 1,
+                "title": "Japanese signs"
+            }
+        ])
+    );
 }
 
 async fn plex_collection_rows(pool: &SqlitePool) -> serde_json::Value {

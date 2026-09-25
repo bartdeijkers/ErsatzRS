@@ -9104,6 +9104,34 @@ deletion cascade, live collection hydration and the shared admin/scheduling
 query path. UCU-04 window gates, push and terminal exact-SHA CI remain open;
 continue at row 64 (075649ad). No intermediate push or CI was launched.
 
+2026-09-25: row 64 (075649ad, PR #2940) is Adapt under accepted ADR 0098.
+Upstream copies Plex `PlexStreamResponse.Title` into embedded and external
+subtitle streams. ErsatzRS already deserializes that field, projects it for
+both stream kinds, persists `MediaStream.Title`, and copies it into movie and
+episode `Subtitle.Title` on provider sync. The existing two mock-provider sync
+fixtures now assert both titles in stream and metadata rows (nextest 535bddb7,
+2/2 passed). The initial sandbox run could not bind the mock server; the
+unchanged tests passed with loopback permission. No scanner or playback code
+change was needed.
+
+The same upstream row refreshes .NET dependencies. NCalcSync rises from 6.2
+to 6.4; its intervening 6.3.x changes numeric membership coercion. ADR 0098
+explicitly retains the deterministic 6.2 saved-expression contract, whose
+119-case Rust corpus still passes (nextest 091bf5af). Jint 4.11 changes its
+default function-source retention; ADR 0096 already selects QuickJS for the
+documented audio-selector callback contract and does not claim exact Jint
+built-in semantics. Refit 13 XML/JSON hardening, Lucene beta18 security fixes,
+and the remaining .NET package changes have no direct Rust package counterpart;
+ADR 0009 keeps SQL-backed search. The package review uses the official
+NCalc changelog, Jint release notes, Refit breaking-change notes and Lucene
+beta18 status report linked in the row source map. No UI, schema, FFmpeg
+arguments or selected-track policy changed. Scoped infrastructure all-target
+Clippy, formatting, Clippy allow policy and progress validation pass.
+Substantive review checked source projection, provider scan persistence,
+metadata title updates and dependency/ADR boundaries. UCU-04 window gates,
+push and terminal exact-SHA CI remain open; continue at row 65 (3e1918c9).
+No intermediate push or CI was launched.
+
 """
 
 [[milestone]]
