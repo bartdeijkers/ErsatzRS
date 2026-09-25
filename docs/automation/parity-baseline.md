@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `e5a2a763d69f04e4aeec2020a645510ccd7dee49` |
-| **Commit subject** | `fix: randomize start points with classic playlists (#2948)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e5a2a763d69f04e4aeec2020a645510ccd7dee49 |
+| **Pinned commit** | `0d692e7088de67fb92fd22f2c0cd88ab0702f97d` |
+| **Commit subject** | `fix: always randomize start points (#2949)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0d692e7088de67fb92fd22f2c0cd88ab0702f97d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

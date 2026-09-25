@@ -3417,7 +3417,8 @@ impl SqliteSchedulingContentRepository {
         let rows = sqlx::query(
             r#"SELECT "a".*,
                       "s"."Seed" AS "EnumeratorSeed",
-                      "s"."Index" AS "EnumeratorIndex"
+                      "s"."Index" AS "EnumeratorIndex",
+                      "s"."Started" AS "EnumeratorStarted"
              FROM "PlayoutProgramScheduleAnchor" AS "a"
              LEFT JOIN "CollectionEnumeratorState" AS "s"
                 ON "s"."PlayoutProgramScheduleAnchorId" = "a"."Id"
@@ -3459,6 +3460,10 @@ impl SqliteSchedulingContentRepository {
                             .unwrap_or_default(),
                         index: row
                             .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
+                            .unwrap_or_default(),
+                        started: row
+                            .try_get::<Option<bool>, _>("EnumeratorStarted")
                             .repository()?
                             .unwrap_or_default(),
                     },
@@ -3503,7 +3508,8 @@ impl SqliteSchedulingContentRepository {
         let rows = sqlx::query(
             r#"SELECT "i".*,
                       "s"."Seed" AS "EnumeratorSeed",
-                      "s"."Index" AS "EnumeratorIndex"
+                      "s"."Index" AS "EnumeratorIndex",
+                      "s"."Started" AS "EnumeratorStarted"
              FROM "PlayoutScheduleItemFillGroupIndex" AS "i"
              LEFT JOIN "FillGroupEnumeratorState" AS "s"
                 ON "s"."PlayoutScheduleItemFillGroupIndexId" = "i"."Id"
@@ -3528,6 +3534,10 @@ impl SqliteSchedulingContentRepository {
                             .unwrap_or_default(),
                         index: row
                             .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
+                            .unwrap_or_default(),
+                        started: row
+                            .try_get::<Option<bool>, _>("EnumeratorStarted")
                             .repository()?
                             .unwrap_or_default(),
                     },

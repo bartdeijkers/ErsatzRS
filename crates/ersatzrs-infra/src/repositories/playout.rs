@@ -91,7 +91,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .repository()?;
         if let Some(ref anchor_row) = anchor {
             let state_row = sqlx::query(
-                r#"SELECT "Seed", "Index" FROM "ScheduleItemsEnumeratorState" WHERE "PlayoutAnchorPlayoutId" = ?"#,
+                r#"SELECT "Seed", "Index", "Started" FROM "ScheduleItemsEnumeratorState" WHERE "PlayoutAnchorPlayoutId" = ?"#,
             )
             .bind(id)
             .fetch_optional(&self.0)
@@ -2006,16 +2006,21 @@ fn map_playout(row: &DbRow) -> Result<Playout> {
 }
 
 fn map_anchor(row: &DbRow, state_row: Option<&DbRow>) -> Result<ersatzrs_domain::PlayoutAnchor> {
-    let (seed, index) = if let Some(state) = state_row {
+    let (seed, index, started) = if let Some(state) = state_row {
         (
             state.try_get("Seed").unwrap_or(0),
             state.try_get("Index").unwrap_or(0),
+            state.try_get::<bool, _>("Started").unwrap_or(false),
         )
     } else {
-        (0, 0)
+        (0, 0, false)
     };
     Ok(ersatzrs_domain::PlayoutAnchor {
-        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState { seed, index },
+        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState {
+            seed,
+            index,
+            started,
+        },
         next_start: decode_datetime(
             "playout anchor next_start",
             &row.try_get::<String, _>("NextStart").repository()?,
@@ -2275,12 +2280,13 @@ async fn replace_anchor_state(
         .repository()?;
         sqlx::query(
             r#"REPLACE INTO "ScheduleItemsEnumeratorState" (
-                "PlayoutAnchorPlayoutId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutAnchorPlayoutId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(playout_id)
         .bind(anchor.schedule_items_enumerator_state.seed)
         .bind(anchor.schedule_items_enumerator_state.index)
+        .bind(anchor.schedule_items_enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -2438,12 +2444,13 @@ async fn replace_program_schedule_anchors(
         };
         sqlx::query(
             r#"INSERT INTO "CollectionEnumeratorState" (
-                "PlayoutProgramScheduleAnchorId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutProgramScheduleAnchorId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(persisted_id)
         .bind(anchor.enumerator_state.seed)
         .bind(anchor.enumerator_state.index)
+        .bind(anchor.enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -2555,12 +2562,13 @@ async fn replace_fill_group_indices(
         };
         sqlx::query(
             r#"INSERT INTO "FillGroupEnumeratorState" (
-                "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(persisted_id)
         .bind(index.enumerator_state.seed)
         .bind(index.enumerator_state.index)
+        .bind(index.enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;

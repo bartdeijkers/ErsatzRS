@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **103 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **102 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **69**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **70**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-69; the next upstream row is 70 (`0d692e70`).
+  processed rows 68-70; the next upstream row is 71 (`4fb42f69`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,29 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 70 source map: durable enumerator Started state
+
+- ErsatzTV model and persistence: `CollectionEnumeratorState.Started` is added
+  to schedule-items, fill-group and collection enumerator state tables. All
+  enumerator constructors and ResetState paths copy it; MoveNext marks it true.
+- ErsatzTV builder: passes the active Classic schedule setting each build and
+  gates random initialization with `!state.Started`, including when Index wraps
+  to zero. Chronological and SeasonEpisode bounds now include the last item;
+  playlist children receive the same correction.
+- ErsatzRS domain/SQLite: `CollectionEnumeratorState.started` defaults false
+  for old JSON. An additive SQLite migration adds Started to all three tables.
+  Anchor, source and fill-group repository reads/writes persist the flag.
+- ErsatzRS Classic: schedule, media and fill-group advancement mark state
+  started. New or retained-but-unplayed sources can receive the configured
+  random initial choice; a played source at index zero does not restart. The
+  existing seed modulo range already includes the final item.
+- Tests: an old-schema migration preserves legacy state with a false default;
+  repository round trips true for all three state tables; Classic covers fresh,
+  unplayed anchored, played anchored and final-index playlist cases. Row 71's
+  later playlist rule remains pending.
+- Intentional deviations: Rust's deterministic seed-to-index choice remains
+  different from .NET PRNG bytes; selection and persistence behavior match.
 
 ## Row 69 source map: Classic playlist random start
 
@@ -52,9 +75,8 @@
 - The same upstream commit updates .NET package manifests and test null guards.
   These have no Rust dependency or behavior counterpart in this row.
 - Intentional deviations: ErsatzRS uses its existing seed-to-index choice rather
-  than reproducing the .NET PRNG. Row 70 corrects upstream's excluded final
-  index and introduces explicit Started state; row 71 revisits the playlist
-  fresh-build rule. Those later rows remain pending until reviewed in order.
+  than reproducing the .NET PRNG. Row 70 adds explicit Started state and
+  full-range selection; row 71 still owns the later playlist rule.
 
 ## Row 68 source map: Plex movie and other-video title refresh
 
@@ -1325,7 +1347,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.6.0 release prep` | ucu-04; only ErsatzTV CHANGELOG heading/comparison links change. ErsatzRS releases and dated changelog sections have separate acceptance; no product or build behavior changes. Source and progress checks pass; UCU-04 window gates remain open. |
 | 68 | `18137832` | fix: update plex movie and other video titles (#2947) | Port | library-management; upstream-baseline-catch-up | `fix(infra): refresh Plex titles on ordinary scans` | ucu-05; versioned title-aware movie/Other Video Etag refreshes old timestamp-only fingerprints once and title-only changes thereafter. Existing metadata upsert writes Title and SortTitle. Red/green focused regression, 20 Plex tests, scoped Clippy, format and progress checks pass. UCU-05 window gates remain open. |
 | 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): honor Classic playlist random start` | ucu-05; eligible fresh Chronological, SeasonEpisode and ShuffleInOrder playlist children receive deterministic start indices; retained sources bypass new initialization. Focused playlist tests, scoped core Clippy, format and progress checks pass. Rows 70-71 own follow-up start-state behavior; row 85 owns playlist continuation. |
-| 70 | `0d692e70` | fix: always randomize start points (#2949) | | | | ucu-05; provisional: Port candidate. |
+| 70 | `0d692e70` | fix: always randomize start points (#2949) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist enumerator started state` | ucu-05; Started is stored in all three SQLite enumerator state tables and carried through Classic advancement. Previously unused anchored sources randomize; played sources at wrapped index zero stay in sequence; the final item is eligible. Migration upgrade, repository round trip, 247 core tests and scoped Clippy pass. Row 71 remains open. |
 | 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | | | | ucu-05; provisional: Port candidate. |
 | 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | | | | ucu-05; provisional: Port candidate. |
 | 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |

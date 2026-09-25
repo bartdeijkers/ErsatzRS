@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Classic random starts eligible for previously unused collections while
+  preserving the progress of collections whose saved index wrapped to zero
+  (upstream PR #2949).
 - Apply Classic Random Start Point to playlist children on fresh builds
   (upstream PR #2948).
 - Update Plex movie and Other Video titles on ordinary scans when Plex changes

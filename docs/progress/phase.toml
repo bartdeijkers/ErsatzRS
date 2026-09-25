@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 70 (0d692e70) ports durable Started state across the
+three enumerator tables and Classic advancement. Migration upgrade, repository
+round trip, and 247 core tests pass; scoped lint passes. Pin, ledger and
+upstream checkout advance together. Continue at row 71 (4fb42f69); UCU-05
+window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 69 (e5a2a763) ports Classic playlist random starts for
 fresh sources and bypasses retained state. Focused tests and scoped lint
 pass. Pin, ledger and upstream checkout advance together; row 70 (0d692e70)

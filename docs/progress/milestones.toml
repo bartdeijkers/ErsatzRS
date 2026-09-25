@@ -9293,8 +9293,18 @@ builder initializes eligible fresh playlist children from the playout seed;
 retained anchors and Refresh checkpoints bypass that initialization. Focused
 playlist Nextest 1f54cdd2 passes 2/2; scoped core Clippy, format and progress
 checks pass. Pin, ledger row 69 and checkout advance to e5a2a763 together.
-Rows 70-71 retain ownership of later upstream random-start corrections.
+Rows 70-71 own later upstream random-start corrections.
 Row 85 still owns the pre-existing playlist continuation behavior.
+Row 70 (0d692e70) ports explicit Started state. The source audit showed
+ErsatzRS anchors include unplayed sources, so anchor presence alone could not
+replace upstream's flag. A new additive migration persists Started in the
+schedule-items, fill-group and collection enumerator state tables; old JSON and
+rows default false. Classic advancement marks the relevant state started.
+Migration upgrade Nextest 2b40821e, repository round trip 5ae3299c, and all
+247 core tests (81d4d674) pass. Focused playlist proof covers unused and played
+zero-index anchors and selecting the final item. Scoped core/infra Clippy,
+format and progress checks pass. Pin, ledger and checkout advance to row 70;
+row 71 remains open. No UCU-05 window gates, push or CI are claimed.
 No UCU-05 window gates, push or CI are claimed.
 """
 

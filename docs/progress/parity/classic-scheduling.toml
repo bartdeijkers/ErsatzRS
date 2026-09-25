@@ -9,7 +9,9 @@ The Classic baseline covers engine dispatch, SQL loading, typed items,
 collections, filler, anchors, fill groups, and scheduling-context persistence.
 Regressions cover filler placement and whole-item advancement.
 
-Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
+Continue-build fix (2026-06-08): persist the post-build anchor and trim only
+before `request.start - 4h`, matching ErsatzTV. This prevents overlapping
+items and deletion of the future timeline on periodic builds.
 
 Continue-build seam fix (2026-06-14): the Classic engine now clamps the persisted continue anchor to the finish of the last generated item when an item overshoots a build hard-stop boundary. This preserves ErsatzTV's accepted future overshoot item while preventing the next Continue build from re-adding the same item at the boundary.
 
@@ -17,9 +19,17 @@ Shuffled collection fix (2026-06-14): Classic shuffled media collections now mir
 
 Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
 
-Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
+Windows MTV dogfood (2026-07-19): `Multiple (3)` then `One` repeats three
+primary items and one bumper across Refresh without filler. The observed issue
+was schedule topology; the regression covers the intended sequence.
 
 Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
+
+Upstream rows 69-70 (2026-09-25): Classic playlist children honor Random Start
+Point, and explicit Started state distinguishes unplayed anchored sources from
+played sources whose index wrapped to zero. All three SQLite enumerator state
+tables persist the flag; legacy rows default false. Row 71's later playlist
+rule and row 85's playlist continuation repair remain in UCU-05.
 
 Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
 

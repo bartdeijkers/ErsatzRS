@@ -409,7 +409,7 @@ async fn assert_history_row(pool: &sqlx::SqlitePool) {
 
 async fn assert_anchor_state_row(pool: &sqlx::SqlitePool) {
     let anchor_state = sqlx::query(
-        r#"SELECT "Seed", "Index" FROM "ScheduleItemsEnumeratorState"
+        r#"SELECT "Seed", "Index", "Started" FROM "ScheduleItemsEnumeratorState"
            WHERE "PlayoutAnchorPlayoutId" = 1"#,
     )
     .fetch_one(pool)
@@ -417,11 +417,12 @@ async fn assert_anchor_state_row(pool: &sqlx::SqlitePool) {
     .unwrap();
     assert_eq!(anchor_state.try_get::<i32, _>("Seed").unwrap(), 77);
     assert_eq!(anchor_state.try_get::<i32, _>("Index").unwrap(), 5);
+    assert!(anchor_state.try_get::<bool, _>("Started").unwrap());
 }
 
 async fn assert_program_anchor_state_row(pool: &sqlx::SqlitePool) {
     let program_anchor_state = sqlx::query(
-        r#"SELECT "Seed", "Index" FROM "CollectionEnumeratorState"
+        r#"SELECT "Seed", "Index", "Started" FROM "CollectionEnumeratorState"
            WHERE "PlayoutProgramScheduleAnchorId" = 41"#,
     )
     .fetch_one(pool)
@@ -429,11 +430,12 @@ async fn assert_program_anchor_state_row(pool: &sqlx::SqlitePool) {
     .unwrap();
     assert_eq!(program_anchor_state.try_get::<i32, _>("Seed").unwrap(), 33);
     assert_eq!(program_anchor_state.try_get::<i32, _>("Index").unwrap(), 7);
+    assert!(program_anchor_state.try_get::<bool, _>("Started").unwrap());
 }
 
 async fn assert_fill_group_state_row(pool: &sqlx::SqlitePool) {
     let fill_group_state = sqlx::query(
-        r#"SELECT "Seed", "Index" FROM "FillGroupEnumeratorState"
+        r#"SELECT "Seed", "Index", "Started" FROM "FillGroupEnumeratorState"
            WHERE "PlayoutScheduleItemFillGroupIndexId" = 51"#,
     )
     .fetch_one(pool)
@@ -441,6 +443,7 @@ async fn assert_fill_group_state_row(pool: &sqlx::SqlitePool) {
     .unwrap();
     assert_eq!(fill_group_state.try_get::<i32, _>("Seed").unwrap(), 55);
     assert_eq!(fill_group_state.try_get::<i32, _>("Index").unwrap(), 11);
+    assert!(fill_group_state.try_get::<bool, _>("Started").unwrap());
 }
 
 async fn runtime_state_id(pool: &sqlx::SqlitePool, table: &str, playout_id: i64) -> i64 {

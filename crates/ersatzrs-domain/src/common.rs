@@ -6,6 +6,8 @@ pub type EntityId = i64;
 pub struct CollectionEnumeratorState {
     pub seed: i32,
     pub index: i32,
+    #[serde(default)]
+    pub started: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -582,14 +582,27 @@ impl ClassicContext {
             anchor_context.random_rotation_cycle_predecessors;
         for item in &schedule_items {
             let key = item_key(item);
-            let seed = request.playout.seed;
+            let retained_state = collection_anchors
+                .iter()
+                .filter(|anchor| {
+                    history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
+                })
+                .fold(None, |selected, anchor| {
+                    if selected
+                        .is_none_or(|existing| should_prefer_enumerator_anchor(anchor, existing))
+                    {
+                        Some(anchor)
+                    } else {
+                        selected
+                    }
+                })
+                .map(|anchor| anchor.enumerator_state);
+            let seed = retained_state.map_or(request.playout.seed, |state| state.seed);
+            let started = retained_state.is_some_and(|state| state.started);
             if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
                 let mut playlist = PlaylistEnumerator::new(playlist_items.clone());
-                let has_retained_anchor = collection_anchors.iter().any(|anchor| {
-                    history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
-                });
                 if request.reference_data.classic_random_start_point
-                    && !has_retained_anchor
+                    && !started
                     && restored_checkpoint.is_none()
                 {
                     for (child_index, child) in playlist.children.iter_mut().enumerate() {
@@ -615,7 +628,14 @@ impl ClassicContext {
                     }
                 }
                 playlists.insert(key.clone(), playlist);
-                media_states.insert(key, CollectionEnumeratorState { seed, index: 0 });
+                media_states.insert(
+                    key,
+                    retained_state.unwrap_or(CollectionEnumeratorState {
+                        seed,
+                        index: 0,
+                        started: false,
+                    }),
+                );
                 continue;
             }
             let mut enumerator = MediaEnumerator::new(
@@ -625,16 +645,20 @@ impl ClassicContext {
                     .media_items_for_source(&super::SchedulingContentSource::direct(&key)),
             )
             .with_playback_order(item.playback_order);
-            let has_retained_anchor = collection_anchors.iter().any(|anchor| {
-                history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
-            });
-            if has_retained_anchor {
-                media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+            if started || restored_checkpoint.is_some() {
+                media_states.insert(
+                    key.clone(),
+                    retained_state.unwrap_or(CollectionEnumeratorState {
+                        seed,
+                        index: 0,
+                        started: false,
+                    }),
+                );
             } else {
                 prepare_enumerator_items(
                     &mut enumerator,
                     item.playback_order,
-                    seed_to_u64(request.playout.seed),
+                    seed_to_u64(seed),
                     None,
                 );
                 // Matching ErsatzTV: Random Start Point only affects orders
@@ -653,20 +677,26 @@ impl ClassicContext {
                     && random_start_point_applies
                     && !enumerator.is_empty()
                 {
-                    let index = usize::try_from(
-                        seed_to_u64(request.playout.seed) % enumerator.len() as u64,
-                    )
-                    .unwrap_or(0);
+                    let index = usize::try_from(seed_to_u64(seed) % enumerator.len() as u64)
+                        .unwrap_or_default();
                     enumerator.set_index(index);
                     media_states.insert(
                         key.clone(),
                         CollectionEnumeratorState {
                             seed,
                             index: i32::try_from(index).unwrap_or_default(),
+                            started: false,
                         },
                     );
                 } else {
-                    media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+                    media_states.insert(
+                        key.clone(),
+                        CollectionEnumeratorState {
+                            seed,
+                            index: 0,
+                            started: false,
+                        },
+                    );
                 }
                 if item.playback_order == PlaybackOrder::Random && !enumerator.is_empty() {
                     let random_state = select_random_draw(&mut enumerator, seed_to_u64(seed), 0);
@@ -723,6 +753,7 @@ impl ClassicContext {
                     .or_insert(CollectionEnumeratorState {
                         seed: request.playout.seed,
                         index: 0,
+                        started: false,
                     });
             }
         }
@@ -771,6 +802,9 @@ impl ClassicContext {
         }
 
         for anchor in selected_anchors.values() {
+            if !anchor.enumerator_state.started {
+                continue;
+            }
             let key = history_key_for_collection_key(&SchedulingCollectionKey {
                 collection_type: anchor.collection_type,
                 collection_id: anchor.collection_id,
@@ -810,6 +844,8 @@ impl ClassicContext {
                         enumerator.set_index(index);
                     }
                 }
+                self.media_states.insert(key, anchor.enumerator_state);
+            } else if self.playlists.contains_key(&key) {
                 self.media_states.insert(key, anchor.enumerator_state);
             }
         }
@@ -2086,6 +2122,7 @@ impl ClassicContext {
                     .unwrap_or(CollectionEnumeratorState {
                         seed: self.request.playout.seed,
                         index: 0,
+                        started: false,
                     });
             let media = self
                 .media
@@ -2196,6 +2233,7 @@ impl ClassicContext {
             .unwrap_or(CollectionEnumeratorState {
                 seed: self.request.playout.seed,
                 index: 0,
+                started: false,
             });
         if let Some(playlist) = self.playlists.get(key) {
             state.index = i32::try_from(playlist.index).unwrap_or_default();
@@ -2247,6 +2285,7 @@ impl ClassicContext {
                     || CollectionEnumeratorState {
                         seed: self.request.playout.seed,
                         index: 0,
+                        started: false,
                     },
                     |state| *state,
                 ),
@@ -2297,6 +2336,7 @@ impl ClassicContext {
         } else {
             self.state.schedule_state.index = next;
         }
+        self.state.schedule_state.started = true;
         self.state.in_flood = false;
     }
 
@@ -2425,6 +2465,7 @@ impl ClassicContext {
             playlist.advance();
             if let Some(state) = self.media_states.get_mut(&key) {
                 state.index = i32::try_from(playlist.index).unwrap_or_default();
+                state.started = true;
             }
             return;
         }
@@ -2439,6 +2480,7 @@ impl ClassicContext {
                         .or_insert(CollectionEnumeratorState {
                             seed: self.request.playout.seed,
                             index: 0,
+                            started: false,
                         });
                 let draw_index = usize::try_from(media_state.index).unwrap_or_default();
                 let random_state = self.random_draw_states.entry(key).or_insert_with(|| {
@@ -2447,6 +2489,7 @@ impl ClassicContext {
                 *random_state = next_random_state(*random_state);
                 enumerator.set_index(random_index(*random_state, enumerator.len()));
                 media_state.index = media_state.index.saturating_add(1);
+                media_state.started = true;
                 return;
             }
 
@@ -2467,6 +2510,7 @@ impl ClassicContext {
             let mut next_seed = None;
             if let Some(state) = self.media_states.get_mut(&key) {
                 state.index = index;
+                state.started = true;
                 if should_reshuffle {
                     state.seed = next_i32_seed(state.seed);
                     next_seed = Some(state.seed);
@@ -2544,6 +2588,7 @@ impl ClassicContext {
             return;
         };
         state.index = state.index.saturating_add(1);
+        state.started = true;
         if schedule_item.fill_with_group_mode == FillWithGroupMode::FillWithShuffledGroups {
             state.seed = next_i32_seed(state.seed);
         }
@@ -2576,6 +2621,7 @@ fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> Cl
         schedule_state: CollectionEnumeratorState {
             seed: request.playout.seed,
             index,
+            started: false,
         },
         multiple_remaining: None,
         duration_finish: None,
@@ -3356,6 +3402,14 @@ mod tests {
         PlayoutBuildMode, SchedulingFillerPreset, SchedulingPlaylistItem, SchedulingReferenceData,
     };
 
+    fn started_state(seed: i32, index: i32) -> CollectionEnumeratorState {
+        CollectionEnumeratorState {
+            seed,
+            index,
+            started: true,
+        }
+    }
+
     #[test]
     fn classic_anchor_context_v1_defaults_random_rotation_state() {
         let context: ClassicAnchorContext =
@@ -4021,7 +4075,7 @@ mod tests {
             ..schedule_item(1, PlayoutMode::Flood, 1, None)
         };
         let key = item_key(&schedule_item);
-        let build = |playback_order, random_start_point, seed| {
+        let build = |playback_order, random_start_point, seed, retained_started: Option<bool>| {
             ClassicSchedulingEngine
                 .schedule(SchedulingRequest {
                     playout: Playout {
@@ -4032,10 +4086,29 @@ mod tests {
                     },
                     start,
                     finish: start + Duration::minutes(10),
-                    mode: PlayoutBuildMode::Reset,
+                    mode: if retained_started.is_some() {
+                        PlayoutBuildMode::Continue
+                    } else {
+                        PlayoutBuildMode::Reset
+                    },
                     reference_data: SchedulingReferenceData {
                         classic_schedule_items: vec![schedule_item.clone()],
                         classic_random_start_point: random_start_point,
+                        existing_program_schedule_anchors: if let Some(started) = retained_started {
+                            vec![PlayoutProgramScheduleAnchor {
+                                playout_id: 50,
+                                collection_type: CollectionType::Playlist,
+                                playlist_id: Some(99),
+                                enumerator_state: CollectionEnumeratorState {
+                                    seed,
+                                    index: 0,
+                                    started,
+                                },
+                                ..PlayoutProgramScheduleAnchor::default()
+                            }]
+                        } else {
+                            Vec::new()
+                        },
                         playlist_items_by_key: BTreeMap::from([(
                             key.clone(),
                             vec![SchedulingPlaylistItem {
@@ -4065,12 +4138,21 @@ mod tests {
             PlaybackOrder::SeasonEpisode,
             PlaybackOrder::ShuffleInOrder,
         ] {
-            assert_eq!(build(order, false, 4), 101, "{order:?}");
+            assert_eq!(build(order, false, 4, None), 101, "{order:?}");
             assert!(
-                (1..=16).any(|seed| build(order, true, seed) != 101),
+                (1..=16).any(|seed| build(order, true, seed, None) != 101),
                 "{order:?} should permit a nonzero start"
             );
         }
+        assert_eq!(build(PlaybackOrder::Chronological, true, 5, None), 103);
+        assert_eq!(
+            build(PlaybackOrder::Chronological, true, 5, Some(false)),
+            103
+        );
+        assert_eq!(
+            build(PlaybackOrder::Chronological, true, 5, Some(true)),
+            101
+        );
     }
 
     #[test]
@@ -4088,7 +4170,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 42,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -4149,7 +4235,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 42,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -4224,6 +4314,7 @@ mod tests {
                         schedule_items_enumerator_state: CollectionEnumeratorState {
                             seed: 7,
                             index: 1,
+                            started: true,
                         },
                         next_start: start + Duration::days(2),
                         ..PlayoutAnchor::default()
@@ -4334,7 +4425,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: None,
-                    enumerator_state: CollectionEnumeratorState { seed: 99, index: 0 },
+                    enumerator_state: started_state(99, 0),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
                 PlayoutProgramScheduleAnchor {
@@ -4343,7 +4434,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: Some(start),
-                    enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                    enumerator_state: started_state(42, 1),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
                 PlayoutProgramScheduleAnchor {
@@ -4352,7 +4443,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: Some(start + Duration::days(1)),
-                    enumerator_state: CollectionEnumeratorState { seed: 7, index: 2 },
+                    enumerator_state: started_state(7, 2),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
             ],
@@ -4584,7 +4675,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 7, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 7,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -5635,7 +5730,11 @@ mod tests {
                 id: 700,
                 playout_id: 50,
                 program_schedule_item_id: 1,
-                enumerator_state: CollectionEnumeratorState { seed: 11, index: 4 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 11,
+                    index: 4,
+                    started: true,
+                },
             }],
             ..SchedulingReferenceData::default()
         };
