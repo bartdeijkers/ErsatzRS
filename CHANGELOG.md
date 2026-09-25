@@ -85,6 +85,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Check new Clippy exemptions in CI and provide a local pre-commit check,
+  requiring item-level scope and an explicit reason without running a crate
+  build after each edit.
 - Keep the official Next build and explicitly refuse unsupported live embedded
   text captions and one-shot producer embedded text without an independently
   prepared caption artifact (ADR 0100). These accepted alpha limitations remain

@@ -44,6 +44,15 @@ and marks tests slow after 60 seconds. Use `./run.sh test-closeout` for the
 canonical local gate: it runs nextest across the workspace, then invokes Cargo
 only for doctests. CI remains on its existing direct Cargo test selection.
 
+After a coherent Rust edit batch, run strict Clippy on the affected crate.
+After staging Rust changes and before committing, run
+`python3 scripts/check_new_clippy_allows.py --base HEAD`.
+New Clippy `allow` and `expect` attributes must be item-scoped with an inline
+explanation or a Rust `reason = "..."` argument; CI checks the full push or pull
+request diff. Broad lint groups and `#[allow(warnings)]` are rejected. Use
+`cargo xtask clippy-ledger` to review existing exemptions separately. The
+existing single-file formatting hook stays immediate.
+
 ## Workflow
 
 1. Read the relevant contract first:

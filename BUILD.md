@@ -295,6 +295,19 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
   build`, `cargo xtask parity-check`) **once at
   closeout**, not per edit.
 
+The agent edit hook formats a single Rust file when it can identify one. Run
+`cargo xtask affected-checks` after a coherent edit batch, then run strict
+Clippy on the affected crate with `cargo clippy -p <crate> --all-targets -- -D warnings`
+before closeout. Do not run Clippy from a per-edit hook: it compiles a crate and
+can repeatedly check unfinished intermediate edits. After staging Rust
+changes and before committing, run `python3 scripts/check_new_clippy_allows.py --base HEAD` to check
+new Clippy exemptions in the working tree. The CI Format job applies the same
+policy to the full push or pull request diff. New `#[allow(clippy::...)]` and
+`#[expect(clippy::...)]` attributes must be item-scoped and carry an inline
+`//` explanation or a `reason = "..."` argument. Broad lint groups and
+`#[allow(warnings)]` are rejected. Existing exemptions remain outside this diff
+check; `cargo xtask clippy-ledger` tracks the existing inventory.
+
 Nextest does not run doctests. `./run.sh test-closeout` therefore runs nextest
 for unit/integration/binary tests and then uses Cargo only for workspace
 doctests. Direct agent `cargo test` commands are blocked by the checked-in
