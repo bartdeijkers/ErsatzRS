@@ -41,6 +41,7 @@ pub mod admin_settings;
 pub mod artwork_cleanup;
 pub mod audio_script;
 pub mod cache_cleanup;
+pub mod channel_logo;
 pub mod channel_playout;
 pub(crate) mod condition;
 pub mod db;

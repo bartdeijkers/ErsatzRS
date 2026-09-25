@@ -29,6 +29,27 @@ async function expectNoRuntimeErrors(page: Page, runtimeErrors: string[]): Promi
 }
 
 test.describe('support route-family parity', () => {
+  for (const javaScriptEnabled of [true, false]) {
+    test(`General diagnostics expose detected runtime versions (JavaScript ${javaScriptEnabled})`, async ({ browser, baseURL }) => {
+      const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      try {
+        const page = await context.newPage();
+        await forceEnglish(page);
+        await page.goto('/system/troubleshooting#general-panel');
+        const report = page.locator('#general-panel code');
+        await expect(report).toBeVisible();
+        await expect(report).toContainText('FFmpegVersion');
+        const info = JSON.parse(await report.innerText());
+        expect(info.Version).toMatch(/^\d+\.\d+\.\d+/);
+        expect(info.FFmpegVersion).toMatch(/^9\.\d+\.\d+$/);
+        const next = (await page.locator('[data-next-version] span').last().innerText()).trim();
+        expect(info.NextVersion).toBe(next === 'Not available' ? 'unknown' : next);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
   test('release notes fit the home and health routes at 320px', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium', 'Capture the narrow layout once.');
     await forceEnglish(page);

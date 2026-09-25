@@ -34,6 +34,69 @@ release section when tagging a release.
   control is no longer mistaken for an item season field.
 - Exclude newly discovered unavailable add-on list videos by default while
   retaining them for review and optional local replacement.
+- Preserve normal chunked HTTP end-of-stream handling between legacy MPEG-TS
+  programmes, preventing FFmpeg 9 from aborting the channel at the first item.
+- Make the playback validation gate follow HLS direct's session playlist,
+  reject failed or prematurely ended captures, and report channel-worker failures.
+
+- Publish playout gap rows with their completed build and move them with
+  on-demand playback, so the detail table keeps gaps aligned with scheduled items
+  (upstream PR #2968).
+
+- Resolve Classic fixed starts in local wall time, including tomorrow's DST
+  offset. Flexible starts wait at most 12 hours across midnight (upstream PR #2967).
+
+- Keep distinct rerun collections separate in Classic scheduling progress and
+  Refresh checkpoints. Ambiguous legacy state is reported by Classic Playout
+  State health and requires Reset before rebuilding (upstream PR #2966).
+
+- Preserve external channel-logo URLs as watermark inputs for native and Next
+  playback instead of discarding them as missing local files. Channels without
+  artwork use a cached, playable image of their generated logo (upstream PR #2961).
+
+- Pass the extracted-font cache to Next subtitle rendering for normal playback
+  and browser previews (upstream PR #2960).
+
+- Render General troubleshooting diagnostics without requiring JavaScript.
+- Stop Block default filler at items with zero or negative duration, with a
+  diagnostic instead of an endless build loop. Exclude expired playout rows
+  from filler-gap detection while retaining rows needed by delayed mirrors.
+  Reset replaces existing filler and moves retained primary content together
+  with its history when block-start filler changes length. Shutdown now cancels
+  Block filler generation without publishing a partial timeline (upstream PR #2957).
+- Keep playlist cycles open until every playable item has been visited, exclude
+  season-zero episodes from Season/Episode playlist children, and reconstruct
+  shuffled group order from its saved seed. Classic now loads the saved
+  Shuffle Playlist Items setting and structured playlist children. Classic and
+  YAML marathon Continue preserve complete child and cycle state. Repeating
+  YAML playback no longer exhausts the empty-loop guard while adding content. Repeated playlist sources share playback progress. Legacy Classic Continue
+  requires complete state or a safe Refresh checkpoint; Refresh refuses older
+  playlist checkpoints without cycle state before clearing items; Reset creates a
+  complete checkpoint (upstream PR #2956).
+- Restore YAML playlist and Marathon progress after history cleanup and a
+  restart. Structured SQL loading now preserves playlist children. Versioned
+  snapshots retain cycle state without copying the full playlist on every
+  item; incompatible legacy history refuses Refresh and requires Reset.
+- Honor Classic Marathon grouping by show, season, artist, album or first
+  director, including batch size and group/item shuffle settings. Split builds
+  retain the same playback order and guide groups as uninterrupted builds.
+- Preserve Classic collection progress for inactive alternate schedules across
+  Continue builds; a saved shuffle index remains valid against the full item
+  count (upstream PR #2955).
+- Keep a Classic Refresh checkpoint for every day in a continued playout and
+  preserve the already built prefix when Refresh rewinds to it, including a
+  media item crossing midnight (upstream PR #2954).
+- Drop NVIDIA and AMD crop-metadata workarounds on FFmpeg 9 so overlay output
+  retains its full picture height (upstream PR #2953).
+- Preserve Classic playlist Random Start Point offsets across Continue builds
+  so resumed playback follows the uninterrupted sequence (upstream PR #2950).
+- Keep Classic random starts eligible for previously unused collections while
+  preserving the progress of collections whose saved index wrapped to zero
+  (upstream PR #2949).
+- Apply Classic Random Start Point to playlist children on fresh builds
+  (upstream PR #2948).
+- Update Plex movie and Other Video titles on ordinary scans when Plex changes
+  only the title, including the first scan after upgrading (upstream PR #2947).
 - Extract embedded text subtitles for upcoming playout items when a channel
   uses a custom stream selector, even if its general subtitle mode is off.
   Next can select embedded text directly; native transcoding still requires
@@ -63,6 +126,8 @@ release section when tagging a release.
   heading in either direction; select or deselect the visible page from the
   checkbox above item selections while skipping excluded videos. Pagination
   sits above the items, and excluded and unavailable rows have visual status cues.
+- Show detected Next and FFmpeg versions alongside the ErsatzRS version in
+  General troubleshooting diagnostics and playback troubleshooting archives.
 - Show sanitized release notes from the bundled changelog on the home and
   health pages, with an offline full-changelog link (upstream PR #2942).
 - Support named, priority-ordered date ranges in Sequential YAML playouts. Each

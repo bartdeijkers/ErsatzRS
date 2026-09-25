@@ -20,31 +20,12 @@ pub async fn get_generated_logo(Query(query): Query<HashMap<String, String>>) ->
 
 #[must_use]
 fn generated_logo_svg(text: &str) -> String {
-    let label = logo_label(text);
+    let label = ersatzrs_infra::channel_logo::label(text);
     let escaped = escape_xml(&label);
 
     format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180" role="img" aria-label="{escaped}"><rect width="320" height="180" fill="#050505"/><rect x="10" y="10" width="300" height="160" fill="none" stroke="#009688" stroke-width="4"/><text x="160" y="104" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="46" font-weight="700" fill="#f5f5f5">{escaped}</text></svg>"##
     )
-}
-
-fn logo_label(text: &str) -> String {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return "TV".to_string();
-    }
-
-    let words: Vec<&str> = trimmed.split_whitespace().collect();
-    if words.len() > 1 {
-        return words
-            .iter()
-            .take(2)
-            .filter_map(|word| word.chars().next())
-            .collect::<String>()
-            .to_uppercase();
-    }
-
-    trimmed.chars().take(6).collect::<String>().to_uppercase()
 }
 
 fn escape_xml(input: &str) -> String {

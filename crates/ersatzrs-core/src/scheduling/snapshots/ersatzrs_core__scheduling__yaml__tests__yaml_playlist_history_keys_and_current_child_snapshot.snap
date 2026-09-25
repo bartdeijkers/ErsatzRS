@@ -1,12 +1,13 @@
 ---
-source: crates/ersatzrs-core/src/scheduling/yaml.rs
+source: crates/ersatzrs-core/src/scheduling/yaml/tests.rs
+assertion_line: 1150
 expression: "serde_json::json!({\n    \"media\":\n    result.added_items.iter().map(|item|\n    item.media_item_id).collect::<Vec<_>>(), \"history\":\n    result.added_history.iter().map(|history|\n    serde_json::json!({\n        \"key\": history.key, \"child_key\": history.child_key, \"index\":\n        history.index, \"details\": history.details, \"is_current_child\":\n        history.is_current_child,\n    })).collect::<Vec<_>>(),\n})"
 ---
 {
   "history": [
     {
       "child_key": null,
-      "details": "{\"MediaItemId\":10}",
+      "details": "{\"version\":1,\"cycle\":0,\"index\":1,\"seed\":null,\"media_details\":\"{\\\"MediaItemId\\\":10}\",\"snapshot\":{\"cycle\":0,\"index\":1,\"child_index\":1,\"children\":[{\"playlist_index\":0,\"collection_key\":{\"collection_type\":\"FakePlaylistItem\",\"collection_id\":0,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null},\"play_all\":false,\"count\":null,\"items_taken_from_current\":1,\"enumerator\":{\"items\":[{\"id\":1,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":null,\"season_id\":null,\"artist_id\":null,\"season\":1,\"episode\":1,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null},{\"id\":2,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":null,\"season_id\":null,\"artist_id\":null,\"season\":1,\"episode\":2,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null}],\"index\":1,\"playback_order\":\"Chronological\"}},{\"playlist_index\":1,\"collection_key\":{\"collection_type\":\"FakePlaylistItem\",\"collection_id\":1,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null},\"play_all\":false,\"count\":null,\"items_taken_from_current\":0,\"enumerator\":{\"items\":[{\"id\":10,\"duration\":[600,0],\"chapter\":null,\"liveness\":null,\"title\":null,\"show_id\":null,\"season_id\":null,\"artist_id\":null,\"season\":null,\"episode\":null,\"release_date\":null,\"preferred_audio_language_code\":null,\"preferred_audio_title\":null,\"preferred_subtitle_language_code\":null,\"subtitle_mode\":null,\"pinned_stream_selection\":null}],\"index\":0,\"playback_order\":\"Chronological\"}}],\"all_media_ids\":[1,2,10],\"remaining_media_ids\":[2,10],\"shuffle_seed\":null}}",
       "index": 1,
       "is_current_child": false,
       "key": "{\"Key\":\"playlist\",\"Order\":\"None\"}"

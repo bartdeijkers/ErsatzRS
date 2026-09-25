@@ -81,8 +81,8 @@ pub(super) fn NavDrawer() -> impl IntoView {
 #[component]
 fn NextVersion() -> impl IntoView {
     #[cfg(feature = "ssr")]
-    let version =
-        use_context::<crate::host::state::AppState>().and_then(|state| state.next_version);
+    let version = use_context::<crate::host::state::AppState>()
+        .and_then(|state| state.next_version.get().cloned());
     #[cfg(not(feature = "ssr"))]
     let version: Option<String> = None;
 

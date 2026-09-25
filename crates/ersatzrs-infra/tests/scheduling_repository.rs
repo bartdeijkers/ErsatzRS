@@ -647,6 +647,7 @@ async fn scheduling_repository_searches_documented_lucene_smart_collection_field
         music_video.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![31]
     );
+    assert_eq!(music_video[0].album.as_deref(), Some("Hits"));
 
     let excluded_music_video = repos
         .scheduling

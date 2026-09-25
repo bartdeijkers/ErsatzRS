@@ -192,9 +192,11 @@ pub async fn run() {
     .await
     .expect("failed to build application state");
 
-    app_state.next_version = ersatzrs_infra::next_engine::version::discover().await;
+    if let Some(version) = ersatzrs_infra::next_engine::version::discover().await {
+        let _ = app_state.next_version.set(version);
+    }
     tracing::info!(
-        version = app_state.next_version.as_deref().unwrap_or("n/a"),
+        version = app_state.next_version.get().map_or("n/a", String::as_str),
         "Next engine version"
     );
 

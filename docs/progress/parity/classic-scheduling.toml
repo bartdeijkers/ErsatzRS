@@ -9,7 +9,9 @@ The Classic baseline covers engine dispatch, SQL loading, typed items,
 collections, filler, anchors, fill groups, and scheduling-context persistence.
 Regressions cover filler placement and whole-item advancement.
 
-Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
+Continue-build fix (2026-06-08): persist the post-build anchor and trim only
+before `request.start - 4h`, matching ErsatzTV. This prevents overlapping
+items and deletion of the future timeline on periodic builds.
 
 Continue-build seam fix (2026-06-14): the Classic engine now clamps the persisted continue anchor to the finish of the last generated item when an item overshoots a build hard-stop boundary. This preserves ErsatzTV's accepted future overshoot item while preventing the next Continue build from re-adding the same item at the boundary.
 
@@ -17,9 +19,28 @@ Shuffled collection fix (2026-06-14): Classic shuffled media collections now mir
 
 Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
 
-Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the intended semantics of two ordered schedule items, `Multiple (3)` followed by `One`. Regression `classic_multiple_then_one_repeats_three_to_one_sequence_on_refresh` proves a Refresh rebuild emits three primary items followed by one bumper and repeats that sequence without producing filler rows; the live regression was schedule topology, not a Classic scheduler semantic defect.
+Windows dogfood (2026-07-19): the regression proves Multiple (3) then One
+keeps the intended three-primary/one-bumper sequence across Refresh.
 
-Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
+Frozen-shuffle fix (2026-07-27): Reset regenerates the seed; Refresh accepts
+only aligned dated checkpoints. Random draws with replacement, RandomRotation
+persists cycle predecessors, and Continue preserves both. ADR 0010 owns the
+adaptation and Random Start Point semantics.
+
+Upstream rows 69-71 (2026-09-25): Classic playlist children honor Random Start
+Point, and explicit Started state distinguishes unplayed anchored sources from
+played sources whose index wrapped to zero. All three SQLite enumerator state
+tables persist the flag; legacy rows default false. Rebuilding a started
+playlist reproduces seeded child offsets and replays its saved index.
+Row 85 completes collection-key identity with RerunCollectionId; distinct rerun
+sources no longer share progress. Same-day earliest complete checkpoints already
+preserve playlist and synthetic keys. Three-week playlist restart/Refresh and
+separate rerun sources have production SQLite proof; ambiguous legacy state
+fails preflight without clearing rows. UCU-05 owns acceptance evidence.
+
+Row 77: the flat enumerator accepts saved indices through the full item count.
+Continue retains inactive alternate anchors; the active-state audit permits
+them. Core and SQLite regressions pass. Multipart grouping remains open below.
 
 Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
 
@@ -37,7 +58,7 @@ id          = 'classic-refresh-has-no-production-checkpoint-anchor'
 description = 'Generate and restore dated Classic day checkpoints in real builds so Refresh cannot restart shuffled or enumerated media from the beginning.'
 discovered  = '2026-08-23'
 adr         = '0020'
-evidence    = 'Resolved by `PlayoutClassicCheckpoint`, chunked initial/day-seam generation, exact full-set preflight, stable source-order reconciliation, startup refusal, and Classic Playout State health reporting. Regressions cover fresh multi-day generation, duplicate sources, shuffled schedule order, membership add/remove, Shuffle/Random/RandomRotation restart equivalence with mutable setting re-stamping, continuation-only refusal without row deletion, safe startup repair, SQLite idempotency, and the paired MySQL migration/repository path.'
+evidence    = 'Resolved by `PlayoutClassicCheckpoint`, chunked initial/day-seam and final-pass generation, exact full-set preflight, stable source-order reconciliation, startup refusal, and Classic Playout State health reporting. Regressions cover seven-day shuffled hourly Continue, persisted final-day Refresh retaining a midnight-crossing item, duplicate sources, membership add/remove, Shuffle/Random/RandomRotation restart equivalence with mutable setting re-stamping, continuation-only refusal without row deletion, safe startup repair, SQLite idempotency, and the paired MySQL migration/repository path.'
 resolved    = true
 
 [[debt]]
@@ -100,7 +121,7 @@ resolved    = true
 id          = 'playback-order-shuffle-modes-aliased'
 description = 'Shuffle, ShuffleInOrder, and MultiEpisodeShuffle were byte-for-byte identical (all ran the same artist-distance shuffle); Random, RandomRotation, and Marathon were also identical (all ran a plain seeded shuffle). Users picking different playback orders got no behavioral difference.'
 discovered  = '2026-07-27'
-evidence    = 'Resolved for Shuffle/ShuffleInOrder/Random/RandomRotation: Shuffle is a flat exhaustive permutation; ShuffleInOrder/MultiEpisodeShuffle keep show/artist distance; Random performs deterministic draws with replacement; and RandomRotation randomizes within groups while preserving group separation across cycles and persisted Continue seams. Regressions include classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_draws_with_replacement_and_differs_from_shuffle, classic_random_continue_matches_uninterrupted_draws, and the classic_random_rotation_* family (classic/mod.rs). Remaining: Marathon stays aliased to its existing seeded order pending marathon_group_by/marathon_shuffle_items wiring; MultiEpisodeShuffle awaits part-number metadata; and persisted schedule flags keep_multi_part_episodes_together/treat_collections_as_shows still do not reach SchedulingReferenceData.'
+evidence    = 'Resolved for Shuffle/ShuffleInOrder/Random/RandomRotation: Shuffle is a flat exhaustive permutation; ShuffleInOrder/MultiEpisodeShuffle keep show/artist distance; Random performs deterministic draws with replacement; and RandomRotation randomizes within groups while preserving group separation across cycles and persisted Continue seams. Regressions include classic_shuffle_in_order_and_shuffle_produce_different_orders, classic_random_draws_with_replacement_and_differs_from_shuffle, classic_random_continue_matches_uninterrupted_draws, and the classic_random_rotation_* family (classic/mod.rs). Row 78 wires Marathon show/season/artist/album/first-director groups, group/item shuffle and batch settings into shared playlists with core and restarted SQL proof (UCU-05 evidence). Remaining: MultiEpisodeShuffle awaits part-number metadata; and persisted schedule flags keep_multi_part_episodes_together/treat_collections_as_shows still do not reach SchedulingReferenceData.'
 resolved    = true
 
 [[debt]]
@@ -157,3 +178,18 @@ discovered  = '2026-09-23'
 adr         = '0098'
 evidence    = 'Exact NCalcSync 5.12.0 probes across invariant/en-US/nl-NL/tr-TR demonstrate deployment-sensitive string comparisons and numeric/date conversions. The maintainer accepted ADR 0098 on 2026-09-23; 238 focused core/SQL tests passed, followed by 19 expression/atomic-failure tests after eager literal validation was added. Eight profile regressions passed in each of four separate language-environment processes. Dependency audit passed. Native MPEG-TS/HLS smoke and decoded Unicode-selected chapter playback pass, including persisted fractional fallback intervals. All-six-platform application evidence remains required. See ADR 0098 and UCU-02.'
 resolved    = false
+
+[[debt]]
+id          = 'classic-playlist-production-cycle-continuity'
+description = 'Row 78 exposed a flattened SQL playlist path and incomplete cycle reconstruction. Structured loading, full Continue state and legacy Refresh refusal are implemented; legacy flattened Continue now requires complete state or a safe Refresh checkpoint, and repeated child sources share progress. Grouped Marathon now uses the same tested path. Row 78 also completes YAML restoration; see UCU-05 evidence.'
+discovered  = '2026-09-25'
+adr         = '0020'
+evidence    = 'UCU-05 row 78 evidence. The restarted production fixture now exercises structured playlist children and Random Start Point; earlier flattened-path comparisons are not playlist-enumerator acceptance. All five Marathon grouping modes and batches have core coverage; director grouping and restart/Refresh have SQL proof.'
+resolved    = true
+
+[[debt]]
+id = 'ucu86-flexible-fixed-start-clock'
+description = 'Row 86 requires nearest flexible fixed-start occurrence within 12 hours, local wall-clock interpretation and an independently resolved next-day offset.'
+discovered = '2026-09-25'
+resolved = true
+evidence = 'Row 86 Port: explicit ClassicClock with production system-zone loading and Jiff transition offsets; flexible tomorrow resolution and 12-hour bound, preserved Strict semantics and UTC complete checkpoints. Core and SQLite restart DST Continue/Refresh tests pass (ccc204b9, 8aa5dab9); Clippy, architecture and license checks pass. UCU-05 owns detailed evidence and remaining window gates.'

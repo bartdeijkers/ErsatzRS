@@ -41,6 +41,8 @@ pub struct Normalization {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct SubtitleNormalization {
     pub mode: SubtitleMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fonts_folder: Option<String>,
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]

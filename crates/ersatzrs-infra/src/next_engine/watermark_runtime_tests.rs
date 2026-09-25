@@ -88,13 +88,112 @@ async fn assert_overlay(ffmpeg: &Path, segment: &Path, scaled: bool, disabled: b
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
-    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    watermark_runtime_cases(false, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; serves a synthetic logo over loopback HTTP"]
+async fn real_next_http_channel_logo_watermark_preserves_tracks_and_disable() {
+    watermark_runtime_cases(true, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; isolates generated channel-logo cache"]
+async fn real_next_generated_channel_logo_preserves_tracks_and_disable() {
+    prepared_artifact_runtime::run_isolated_test("next_engine::process::runtime_tests::text_subtitle_runtime_tests::watermark_runtime_tests::fixture_child_generated_logo").await;
+}
+
+#[tokio::test]
+#[ignore = "child of real_next_generated_channel_logo_preserves_tracks_and_disable"]
+async fn fixture_child_generated_logo() {
+    let _root = prepared_artifact_runtime::temporary_root().await;
+    watermark_runtime_cases(false, true).await;
+}
+
+#[tokio::test]
+#[ignore = "requires FFmpeg 9; isolates generated logo cache and synthetic HTTP artwork"]
+async fn real_native_channel_logos_preserve_selected_audio() {
+    prepared_artifact_runtime::run_isolated_test("next_engine::process::runtime_tests::text_subtitle_runtime_tests::watermark_runtime_tests::fixture_child_native_logos").await;
+}
+
+#[tokio::test]
+#[ignore = "child of real_native_channel_logos_preserve_selected_audio"]
+async fn fixture_child_native_logos() {
+    use ersatzrs_ffmpeg::{
+        DesiredVideoState, FrameSize, InputFile, PipelineBuilder, PipelineRequest,
+        SoftwarePipelineBuilder, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
+        SourceVideoStream,
+    };
+    let _isolated = prepared_artifact_runtime::temporary_root().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
-    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let root = tempfile::tempdir().unwrap();
     let clip = generate_text_clip(&ffmpeg, root.path()).await;
     let image = root.path().join("red.png");
-    let mut generate = Command::new(&ffmpeg);
+    red_logo(&ffmpeg, &image).await;
+    let server = httpmock::MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.path("/logo.png");
+            then.status(200)
+                .header("content-type", "image/png")
+                .body(std::fs::read(&image).unwrap());
+        })
+        .await;
+    for generated in [false, true] {
+        let (pool, _locker) = prepare_schedule(&clip, false, &FFmpegProfile::default()).await;
+        seed_watermark(&pool, &image, false, false).await;
+        if generated {
+            sqlx::raw_sql(r#"DELETE FROM "Artwork" WHERE "ChannelId"=1;
+                UPDATE "ChannelWatermark" SET "Size"=0,"WidthPercent"=50,"Location"=3 WHERE "Id"=1;"#)
+                .execute(&pool).await.unwrap();
+        } else {
+            sqlx::query(r#"UPDATE "Artwork" SET "Path"=? WHERE "ChannelId"=1"#)
+                .bind(server.url("/logo.png"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let resolved = crate::playback::resolve_playback_watermarks_by_ids(&pool, 1, vec![1])
+            .await
+            .unwrap();
+        assert_eq!(resolved.len(), 1);
+        let mut desired = DesiredVideoState::h264_1080p();
+        desired.frame_size = FrameSize::new(320, 180);
+        desired.scaled_size = desired.frame_size;
+        let mut request = PipelineRequest::new(InputFile::video(clip.to_str().unwrap()), desired)
+            .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264))
+            .with_source_audio_streams(vec![
+                SourceAudioStream::new(SourceAudioCodec::Aac).with_index(2)
+            ]);
+        request.state.duration = Some(Duration::from_secs(2));
+        request.state.report_progress = false;
+        request.state.thread_count = Some(1);
+        for (input, overlay) in
+            crate::playback::watermark_inputs_for_stream(resolved, request.state.duration).await
+        {
+            request.inputs.push(input);
+            request.watermarks.push(overlay);
+        }
+        let mut args = SoftwarePipelineBuilder
+            .build(request.clone())
+            .command(&request.inputs)
+            .arguments;
+        assert_eq!(args.pop().as_deref(), Some("pipe:1"));
+        let segment = root.path().join(format!("native-{generated}.ts"));
+        let mut encode = Command::new(&ffmpeg);
+        encode.args(args).arg(&segment);
+        tool(encode).await;
+        if generated {
+            assert_generated_overlay(&ffmpeg, &segment, false).await;
+        } else {
+            assert_overlay(&ffmpeg, &segment, false, false).await;
+        }
+        assert_text_video_and_audio(&ffmpeg, &segment, false).await;
+    }
+}
+
+async fn red_logo(ffmpeg: &Path, image: &Path) {
+    let mut generate = Command::new(ffmpeg);
     generate
         .args([
             "-v",
@@ -110,8 +209,32 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
             "-threads",
             "1",
         ])
-        .arg(&image);
+        .arg(image);
     tool(generate).await;
+}
+
+async fn logo_server(image: &Path) -> httpmock::MockServer {
+    let server = httpmock::MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.path("/logo.png");
+            then.status(200)
+                .header("content-type", "image/png")
+                .body(std::fs::read(image).unwrap());
+        })
+        .await;
+    server
+}
+
+async fn watermark_runtime_cases(remote_logo: bool, generated_logo: bool) {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = generate_text_clip(&ffmpeg, root.path()).await;
+    let image = root.path().join("red.png");
+    red_logo(&ffmpeg, &image).await;
+    let server = logo_server(&image).await;
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::H264,
         audio_format: FFmpegProfileAudioFormat::Aac,
@@ -129,6 +252,18 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
         configure_text_tracks(&pool, true, !dynamic, false).await;
         seed_watermark(&pool, &image, scaled, disabled).await;
+        if generated_logo {
+            sqlx::raw_sql(r#"DELETE FROM "Artwork" WHERE "ChannelId"=1;
+                UPDATE "ChannelWatermark" SET "Size"=0,"WidthPercent"=50,"Location"=3,"Opacity"=100 WHERE "Id"=1;"#)
+                .execute(&pool).await.unwrap();
+        }
+        if remote_logo {
+            sqlx::query(r#"UPDATE "Artwork" SET "Path"=? WHERE "ChannelId"=1"#)
+                .bind(server.url("/logo.png"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
         let host = std::sync::Arc::new(host::NextHost::new(
             pool,
             locker,
@@ -175,12 +310,54 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
             })
             .unwrap();
-        assert_overlay(&ffmpeg, &output.join(segment), scaled, disabled).await;
+        if generated_logo {
+            assert_generated_overlay(&ffmpeg, &output.join(segment), disabled).await;
+        } else {
+            assert_overlay(&ffmpeg, &output.join(segment), scaled, disabled).await;
+        }
         assert_text_video_and_audio(&ffmpeg, &output.join(segment), dynamic).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         callback.stop().await;
         assert!(!output.exists());
+    }
+}
+
+async fn assert_generated_overlay(ffmpeg: &Path, segment: &Path, disabled: bool) {
+    let mut decode = Command::new(ffmpeg);
+    decode
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(segment)
+        .args([
+            "-ss",
+            "0.5",
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-vf",
+            "crop=200:110:0:0",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixels = tool(decode).await;
+    assert_eq!(pixels.len(), 200 * 110 * 3);
+    let border = pixels
+        .chunks_exact(3)
+        .filter(|p| p[0] < 65 && p[1] > 90 && p[2] > 60 && p[2] < 200)
+        .count();
+    let text = pixels
+        .chunks_exact(3)
+        .filter(|p| p.iter().all(|c| *c > 175))
+        .count();
+    if disabled {
+        assert_eq!((border, text), (0, 0));
+    } else {
+        assert!(border > 80, "generated teal border missing: {border}");
+        assert!(text > 15, "generated initials missing: {text}");
     }
 }
 

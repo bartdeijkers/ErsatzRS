@@ -213,7 +213,11 @@ pub fn playout(id: i64, channel_id: i64, schedule_id: i64) -> Playout {
 #[must_use]
 pub fn playout_anchor() -> PlayoutAnchor {
     PlayoutAnchor {
-        schedule_items_enumerator_state: CollectionEnumeratorState { seed: 77, index: 5 },
+        schedule_items_enumerator_state: CollectionEnumeratorState {
+            seed: 77,
+            index: 5,
+            started: true,
+        },
         next_start: fixed_time() + Duration::minutes(45),
         multiple_remaining: Some(2),
         duration_finish: Some(fixed_time() + Duration::hours(2)),
@@ -267,7 +271,11 @@ pub fn program_schedule_anchor(id: i64, playout_id: i64) -> PlayoutProgramSchedu
         playlist_id: None,
         search_query: Some("title:fixture".to_owned()),
         fake_collection_key: Some("anchor-key".to_owned()),
-        enumerator_state: CollectionEnumeratorState { seed: 33, index: 7 },
+        enumerator_state: CollectionEnumeratorState {
+            seed: 33,
+            index: 7,
+            started: true,
+        },
     }
 }
 
@@ -284,6 +292,7 @@ pub fn fill_group_index(
         enumerator_state: CollectionEnumeratorState {
             seed: 55,
             index: 11,
+            started: true,
         },
     }
 }

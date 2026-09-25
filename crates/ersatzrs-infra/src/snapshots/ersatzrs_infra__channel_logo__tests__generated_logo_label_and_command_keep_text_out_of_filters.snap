@@ -1,0 +1,23 @@
+---
+source: crates/ersatzrs-infra/src/channel_logo.rs
+assertion_line: 182
+expression: "arguments().join(\"\\n\")"
+---
+-nostdin
+-hide_banner
+-loglevel
+error
+-y
+-f
+lavfi
+-i
+color=c=0x050505:s=320x180:r=1
+-vf
+drawvg=file=background.vgs,drawtext=fontfile=font.ttf:textfile=label.txt:expansion=none:fontsize=46:x=(w-text_w)/2:y=104-ascent:fontcolor=0xf5f5f5
+-frames:v
+1
+-threads
+1
+-c:v
+png
+logo.png

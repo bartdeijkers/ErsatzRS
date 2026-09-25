@@ -530,6 +530,110 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
 }
 
 #[tokio::test]
+async fn cancelled_build_worker_preserves_timeline_and_releases_lock() {
+    use ersatzrs_infra::maintenance::{
+        run_requested_playout_build_cancellable, PlayoutBuildCancellation,
+    };
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    let request = PlayoutBuildRequest {
+        playout_id: 88,
+        mode: PlayoutBuildMode::Reset,
+    };
+    run_requested_playout_build(&pool, &locker, request, now, None)
+        .await
+        .unwrap();
+    let before = repos
+        .playout
+        .items_in_range(88, now, now + Duration::days(3))
+        .await
+        .unwrap();
+    assert!(!before.is_empty());
+    let history_before: Vec<(i64, String, String)> = sqlx::query_as(
+        r#"SELECT "Id", "When", "Key" FROM "PlayoutHistory" WHERE "PlayoutId" = 88 ORDER BY "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    let stopped = Arc::new(AtomicBool::new(false));
+    let worker_stopped = stopped.clone();
+    let checks = AtomicUsize::new(0);
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let entered_tx = Mutex::new(Some(entered_tx));
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = Mutex::new(release_rx);
+    let cancelled: PlayoutBuildCancellation = Arc::new(move || {
+        // First check is admission; the second runs on the scheduling worker.
+        if checks.fetch_add(1, Ordering::SeqCst) == 1 {
+            entered_tx.lock().unwrap().take().unwrap().send(()).unwrap();
+            release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+        }
+        worker_stopped.load(Ordering::SeqCst)
+    });
+    let worker_pool = pool.clone();
+    let worker_locker = locker.clone();
+    let build = tokio::spawn(async move {
+        run_requested_playout_build_cancellable(
+            &worker_pool,
+            &worker_locker,
+            request,
+            now,
+            None,
+            Some(&cancelled),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(5), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(locker.is_playout_locked(88));
+    stopped.store(true, Ordering::SeqCst);
+    release_tx.send(()).unwrap();
+    let error = tokio::time::timeout(std::time::Duration::from_secs(5), build)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap_err();
+    assert!(error.to_string().contains("playout build cancelled"));
+    assert!(!locker.is_playout_locked(88));
+    assert_eq!(
+        repos
+            .playout
+            .items_in_range(88, now, now + Duration::days(3))
+            .await
+            .unwrap(),
+        before
+    );
+    let history_after: Vec<(i64, String, String)> = sqlx::query_as(
+        r#"SELECT "Id", "When", "Key" FROM "PlayoutHistory" WHERE "PlayoutId" = 88 ORDER BY "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(history_after, history_before);
+    let status: (bool, String) = sqlx::query_as(
+        r#"SELECT "Success", "Message" FROM "PlayoutBuildStatus" WHERE "PlayoutId" = 88"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!status.0);
+    assert!(status.1.contains("playout build cancelled"));
+}
+
+#[tokio::test]
 async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

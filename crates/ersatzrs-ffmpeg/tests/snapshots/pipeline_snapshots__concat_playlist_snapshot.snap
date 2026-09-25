@@ -1,7 +1,10 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 2587
 expression: playlist.render()
 ---
 ffconcat version 1.0
 file http://localhost:8409/ffmpeg/stream/101?mode=segmenter
+option multiple_requests 1
 file http://localhost:8409/ffmpeg/stream/101?mode=segmenter
+option multiple_requests 1

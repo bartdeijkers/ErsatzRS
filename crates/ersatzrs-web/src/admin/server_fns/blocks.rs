@@ -1094,6 +1094,7 @@ fn block_preview_query(
                     playlist_id: item.playlist_id,
                     search_query: item.search_query,
                     fake_collection_key: None,
+                    rerun_collection_id: None,
                 },
                 playback_order: preview_playback_order(item.playback_order)?,
                 include_in_program_guide: item.include_in_program_guide,

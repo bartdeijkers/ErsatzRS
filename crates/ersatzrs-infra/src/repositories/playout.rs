@@ -91,7 +91,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .repository()?;
         if let Some(ref anchor_row) = anchor {
             let state_row = sqlx::query(
-                r#"SELECT "Seed", "Index" FROM "ScheduleItemsEnumeratorState" WHERE "PlayoutAnchorPlayoutId" = ?"#,
+                r#"SELECT "Seed", "Index", "Started" FROM "ScheduleItemsEnumeratorState" WHERE "PlayoutAnchorPlayoutId" = ?"#,
             )
             .bind(id)
             .fetch_optional(&self.0)
@@ -246,11 +246,26 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
         // ── items ─────────────────────────────────────────────────────────────
         if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
+            if let Some(seam) = result.retain_through {
+                let cutoff = result.remove_before.unwrap_or(seam)
+                    - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?
+                       AND ("Finish" > ? OR "Finish" < ?)"#,
+                )
                 .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(cutoff))
                 .execute(&mut *tx)
                 .await
                 .repository()?;
+            } else {
+                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
+                    .bind(playout.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         } else {
             for &item_id in &result.items_to_remove {
                 sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "Id" = ?"#)
@@ -326,33 +341,34 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             replace_playout_item_graphics_elements(&mut tx, inserted_id, item).await?;
         }
 
-        // ── gaps ──────────────────────────────────────────────────────────────
-        if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
-                .bind(playout.id)
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-        }
-        for gap in &result.added_gaps {
-            sqlx::query(
-                r#"INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish") VALUES (?, ?, ?)"#,
-            )
-            .bind(playout.id)
-            .bind(encode_datetime(gap.start))
-            .bind(encode_datetime(gap.finish))
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
+        // Publish gaps from the final retained/appended item set in the same
+        // transaction. Scheduler hints may precede fallback filling or omit
+        // gaps entirely, and cannot be used as the persisted UI projection.
+        rebuild_playout_gaps(&mut tx, playout.id).await?;
 
         // ── history ───────────────────────────────────────────────────────────
         if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+            if let Some(seam) = result.retain_through {
+                let cutoff = result.remove_before.unwrap_or(seam)
+                    - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?
+                       AND ("When" >= ? OR "Finish" > ? OR "Finish" < ?)"#,
+                )
                 .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(cutoff))
                 .execute(&mut *tx)
                 .await
                 .repository()?;
+            } else {
+                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+                    .bind(playout.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         } else {
             for &history_id in &result.history_to_remove {
                 sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)
@@ -714,6 +730,32 @@ async fn list_admin(
             })
         })
         .collect()
+}
+
+async fn rebuild_playout_gaps(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout_id: EntityId,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    // Match PlayoutGapInserter's adjacent-item rule, including its rejection
+    // of zero-length and negative gaps caused by touching/overlapping items.
+    sqlx::query(
+        r#"INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish")
+        SELECT ?, "PreviousFinish", "Start" FROM (
+            SELECT "Start", LAG("Finish") OVER (ORDER BY "Start", "Id") AS "PreviousFinish"
+            FROM "PlayoutItem" WHERE "PlayoutId" = ?
+        ) WHERE "PreviousFinish" < "Start""#,
+    )
+    .bind(playout_id)
+    .bind(playout_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    Ok(())
 }
 
 async fn list_detail_admin(
@@ -2006,16 +2048,21 @@ fn map_playout(row: &DbRow) -> Result<Playout> {
 }
 
 fn map_anchor(row: &DbRow, state_row: Option<&DbRow>) -> Result<ersatzrs_domain::PlayoutAnchor> {
-    let (seed, index) = if let Some(state) = state_row {
+    let (seed, index, started) = if let Some(state) = state_row {
         (
             state.try_get("Seed").unwrap_or(0),
             state.try_get("Index").unwrap_or(0),
+            state.try_get::<bool, _>("Started").unwrap_or(false),
         )
     } else {
-        (0, 0)
+        (0, 0, false)
     };
     Ok(ersatzrs_domain::PlayoutAnchor {
-        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState { seed, index },
+        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState {
+            seed,
+            index,
+            started,
+        },
         next_start: decode_datetime(
             "playout anchor next_start",
             &row.try_get::<String, _>("NextStart").repository()?,
@@ -2275,12 +2322,13 @@ async fn replace_anchor_state(
         .repository()?;
         sqlx::query(
             r#"REPLACE INTO "ScheduleItemsEnumeratorState" (
-                "PlayoutAnchorPlayoutId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutAnchorPlayoutId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(playout_id)
         .bind(anchor.schedule_items_enumerator_state.seed)
         .bind(anchor.schedule_items_enumerator_state.index)
+        .bind(anchor.schedule_items_enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -2438,12 +2486,13 @@ async fn replace_program_schedule_anchors(
         };
         sqlx::query(
             r#"INSERT INTO "CollectionEnumeratorState" (
-                "PlayoutProgramScheduleAnchorId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutProgramScheduleAnchorId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(persisted_id)
         .bind(anchor.enumerator_state.seed)
         .bind(anchor.enumerator_state.index)
+        .bind(anchor.enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;
@@ -2555,12 +2604,13 @@ async fn replace_fill_group_indices(
         };
         sqlx::query(
             r#"INSERT INTO "FillGroupEnumeratorState" (
-                "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index"
-             ) VALUES (?, ?, ?)"#,
+                "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index", "Started"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(persisted_id)
         .bind(index.enumerator_state.seed)
         .bind(index.enumerator_state.index)
+        .bind(index.enumerator_state.started)
         .execute(&mut **tx)
         .await
         .repository()?;

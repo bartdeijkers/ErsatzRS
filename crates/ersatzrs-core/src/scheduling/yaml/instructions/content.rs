@@ -160,13 +160,15 @@ pub(super) fn add_media_item(
             child_index,
             child_details,
         } => {
+            let details = context
+                .playlist_history_details(content, history_details_for_media_item(media_item));
             context.added_history.push(history(
                 context.playout.id,
                 history_key.clone(),
                 &item,
                 None,
                 index,
-                history_details_for_media_item(media_item),
+                details,
                 false,
             ));
             context.added_history.push(history(

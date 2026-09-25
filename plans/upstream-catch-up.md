@@ -3,28 +3,29 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
-  — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **105 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
+  — perf: watermark improvements (#3039).
+- Ledger: **173 commits**, **83 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
   A subsequent refresh adds the AMD VAAPI default-driver fix. The subtitle
   correction audit appends graphics-subtitle performance and Jellyfin 12 collection
   handling as two pending tail rows; neither is processed by the row-39 audit.
+  The row-80 refresh appends watermark improvements as pending row 173.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **67**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **90**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
-  [36131751469](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36131751469)
-  at `07847071` are recorded in its milestone. The earlier Clippy-policy and
-  Firefox failures were corrected without changing product logic. The next
-  upstream row is 68 (`18137832`) in UCU-05.
+  [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
+  at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
+  Firefox failures were corrected without changing product logic. UCU-05 has
+  processed rows 68-90; local window gates pass. Push/CI remain open before UCU-06 row 91 (`5ab81525`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +35,408 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 90 source map: upstream release metadata
+
+Upstream `35b5a259` changes only CHANGELOG.md: a 26.7.1 heading dated
+2026-07-31 and the Unreleased/26.7.1 comparison links. Its commit subject says
+26.7.0, but the diff is 26.7.1. ErsatzRS retains its own version and release
+history. Verdict: N/A (upstream release metadata); no runtime or package change.
+Rows 68-90 are reconciled. UCU-05 remains In progress until its full window
+acceptance and authorized push plus exact-SHA terminal green CI are recorded.
+
+## Row 89 source map: playback archive engine versions
+
+Upstream `b5fd035b` adds only `NextVersion` and `FFmpegVersion` to the anonymous
+object written by `StartTroubleshootingPlaybackHandler`. Row 80 commit
+`f6f076a2` already supplies both top-level keys in the native preview writer's
+`troubleshooting_info.json`, using shared `TroubleshootingVersions::detected`.
+The archive member filter includes JSON files, so these fields reach the
+playback ZIP as well as General diagnostics. The Next version comes from the
+startup cache and the FFmpeg version from the accepted runtime; absent optional
+Next is `unknown`, retaining ADR 0095's accepted optional-engine contract.
+Verdict: Covered. Reuse row 80's 26 passing library tests (including both Next
+presence states) and current source inspection; no code change or duplicate
+runtime gate is needed for this two-field addition.
+
+## Row 88 source map: upstream Windows FFmpeg archive
+
+Upstream `57a0c40d` changes only the Windows artifact download URL in
+`.github/workflows/artifacts.yml` and its changelog. The archive remains FFmpeg
+8.1.2 but changes build revision from `g82f576a8` to `gd3cc14b8` for QSV fixes.
+No pipeline code, capability check or scheduling behavior changes in this row.
+ErsatzRS acquires its own first-party runtime through `ersatzrs-ffmpeg::runtime`
+under ADRs 0008/0063; its supported line is FFmpeg 9. Importing this 8.1.2 archive
+would violate the accepted runtime contract. Verdict: N/A under ADR 0063 for
+this upstream packaging pin. This source classification provides no new native
+Windows/QSV execution evidence and does not substitute for runtime acceptance.
+
+## Row 87 source map: build and on-demand gap consistency
+
+Upstream `3d24c3f0` moves gap insertion into the locked build completion path,
+after any time shift; its adjacent-item calculation rejects zero/negative gaps.
+The on-demand shifter trims gaps finishing before the checkpoint and shifts all
+retained gaps with the items. No layout or localization changes are involved.
+
+Native `SqlitePlayoutRepository::apply_build_result` already commits items and
+scheduler-provided gaps atomically, but Classic supplies no complete gap list
+and Continue retains stale projections. Rebuild the adjacent-item projection
+from the final retained/appended SQL item set in that transaction. Match the
+upstream adjacent-item rule exactly. YAML gap hints still drive fallback filling
+before persistence; the UI projection is based on the resulting items.
+`hls_worker::time_shift_on_demand_playout` must trim/shift gaps in the existing
+transaction alongside item timestamps. Unrelated playouts remain untouched;
+any projection/shift failure rolls back all associated item changes.
+
+UI source map: `/playouts`, SSR wrapper and `PlayoutsIsland` in
+`admin/pages/scheduling/playouts.rs`; detail/count server functions delegate to
+repository `list_detail_admin`/`count_detail_admin`. Existing localized negative
+filler-kind rows display UNSCHEDULED; shared primitives and SSR/WASM structure
+are unchanged. Focused browser target is the existing playout-detail workflow
+in `tests/e2e/playouts-feedback.spec.ts`, paired with actual repository producer
+and on-demand transaction tests. UCU-05 owns passing acceptance evidence; row 87 is Port.
+
+## Row 86 source map: flexible fixed starts near midnight
+
+Upstream `a7ecc5f9` changes `PlayoutModeSchedulerBase.GetStartTimeAfter`:
+flexible starts wait for the next occurrence only when it is at most 12 hours
+away; a peek from an active Flood still advances to tomorrow. Tomorrow's local
+wall-clock offset is resolved independently to preserve DST boundaries.
+The matrix covers midnight, early morning, recently missed starts on either
+side of midnight, same-day future starts, all calendar dates and a real
+three-item builder sequence around midnight.
+
+Classic now carries an explicit civil clock in reference data. The SQL loader
+resolves the host zone once per build; deterministic core fixtures use UTC or
+an explicit named zone. Jiff 0.2.23 supplies real transition offsets, including
+platform system-zone discovery. Chrono's `LocalResult::None` alone cannot expose
+both sides of a missing civil time, and the existing YAML helper deliberately
+retains the current offset. No new parser or OS-specific implementation is added.
+Jiff's MIT license passes repository policy. UTC checkpoint dates and complete
+Refresh state remain unchanged under ADR 0020.
+
+The flexible rule and Flood peek resolve tomorrow independently; Strict retains
+upstream's wall-time comparison and offset-preserving AddDays behavior. Initial
+state no longer pre-advances a flexible late-night start before applying the
+12-hour rule. Clock resolution errors propagate before publishing a build.
+Tests cover the upstream clock matrix, the inclusive 12-hour bound, incomplete
+modes, Flood peek, every 2026 date in four zones, and the real three-item builder.
+A .NET runtime 10.0.12 oracle (SDK 10.0.112) checks gap/fold offsets in Amsterdam,
+Dublin, Lord Howe and Casablanca, plus political clock changes in Apia/Moscow.
+SQLite restart Continue and Refresh across both DST transitions preserve future
+identities, UTC timestamps, track preferences and scheduling contexts. UCU-05
+owns final evidence. Row 86 is Port; row 87 follows.
+
+## Row 85 source map: complete Classic collection identities
+
+Upstream `ecf6c2c1` groups Refresh anchors by every CollectionKey field and
+selects the earliest same-day checkpoint. This repairs dropped playlist and
+synthetic anchors. ErsatzRS already groups its versioned complete checkpoints
+by serialized source keys (ADR 0020), including playlist and synthetic keys.
+The audit found a missing RerunCollectionId in SchedulingCollectionKey, anchor
+projection and matching; distinct rerun sources can share an enumerator.
+A focused regression reproduces wrong media selection before the correction.
+Targets: shared scheduling key/history serialization, Classic item/anchor
+mapping, SQL key hydration, and production restart/Refresh tests. Preserve
+legacy refusal and full key identity; no UI or rebuild-policy changes.
+The correction includes the rerun ID in source/history keys, persisted anchors,
+and matching. Non-rerun JSON is unchanged. Restart/Refresh and health checks
+preserve populated timelines and refuse ambiguous legacy anchors. The 21-day
+playlist fixture proves progress survives Refresh. Verdict: Adapt under ADR
+0020 (complete checkpoints and explicit legacy refusal); UCU-05 owns evidence.
+
+## Row 84 source map: channel-logo watermarks
+
+Upstream `15db3c4c` changes the three precedence branches in
+`ErsatzTV.Core/FFmpeg/WatermarkSelector.cs` to accept external/generated logo
+URLs without filesystem existence checks. Its regression matrix covers external
+URLs, generated logos, cached files and missing cached files. No editor or
+validation contract changes.
+
+Native targets are the shared `playback` watermark resolver, Next watermark
+projection, and the existing generated-logo transport. The resolver initially
+excluded HTTP logos and had no generated fallback. Explicit source typing now
+preserves URLs for native and Next inputs, with focused and Next runtime proof
+in UCU-05. Channels without artwork now receive a cached PNG rendered with
+existing FFmpeg drawvg/drawtext support and the bundled font. The SVG endpoint
+shares the abbreviation helper; its response is unchanged. Rendering is bounded
+and only complete PNGs are atomically promoted. Explicit missing local artwork
+still produces no watermark, matching upstream. Native and Next decoded output
+checks pass. Verdict: Port; UCU-05 owns the evidence and remaining window gates.
+
+## Row 82 source map: text subtitle playback
+
+Upstream `4ffd775a` changes `UpdateChannelHandler`,
+`StartFFmpegNextSessionHandler`, both embedded-subtitle extraction handlers,
+`PlayoutItemConverter`, `InternalController`, and generated Next wire models.
+It adds the font cache to subtitle normalization, extracted text sidecars with
+source in/out points, republishing after extraction, channel-save invalidation
+for subtitle/credits modes, disabled-credits handling, and valid empty subtitle
+documents after seeking beyond the final cue. There is no UI layout change.
+
+Native targets are `next_engine::{protocol,host,selection,credits}`, the shared
+subtitle extraction/cache paths, channel save orchestration, and subtitle HTTP
+transport. ADRs 0095/0100 retain official Next integration and explicit refusal
+of unsupported live/one-shot embedded text. Existing version-bound demand-time
+preparation must not be replaced with an unvalidated legacy cache path.
+
+The initial audit found the `fonts_folder` wire field and host configuration
+missing; the partial correction and red/green test are recorded in UCU-05.
+The web save wrapper already notifies the shared registry, including Next and
+preview sessions. Existing exact-version demand preparation validates the source
+before publishing a sidecar, so Next does not depend on legacy background cache
+completion. Playout builds also extract before notifying consumers. Native
+extraction maps absolute stream indexes, preserving partially extracted sets.
+The new runtime matrix proves continued video/audio after the final text cue in
+embedded/external Burn/Convert; a separate isolated fixture proves cached Sen
+font selection and decoded captions. Disabled credits leave the projected tracks
+unchanged. Generated wire-model comparison adds only `fonts_folder` to the field
+set; existing typed serialization retains the other names. Verdict: Adapt under
+ADRs 0095/0100. UCU-05 owns test identities and remaining window acceptance.
+
+## Row 80 source and hydration map
+
+Upstream `9cc771be` adds detected Next/FFmpeg versions to General diagnostics
+and the playback troubleshooting archive. Native targets are
+`admin/server_fns/troubleshooting.rs` and `host/troubleshooting.rs`.
+Reuse the startup-only Next probe and accepted FFmpeg runtime report; requests
+must not spawn new probes. Share the startup Next value with the archive runtime.
+Keep the existing `Version` key for ErsatzRS and add `NextVersion` and
+`FFmpegVersion`; an unavailable optional engine is reported as unknown.
+
+- Route/SSR wrapper: `/system/troubleshooting`, `TroubleshootingPage`.
+- Islands: none changed; General is an SSR report with unchanged DOM shape.
+- Boundary: `load_troubleshooting_report_with_state`, shared runtime versions.
+- API/export: existing playback preview artifacts and archive endpoint.
+- No-JS: the initial browser proof found the report stuck at Loading because
+  the default streaming route inserts resolved content through JavaScript.
+  Use the existing `SsrMode::InOrder` pattern on this route so General JSON
+  arrives as ordinary HTML through the existing report block.
+- Shared primitives: none; sidebar reads the same startup Next value.
+- Browser proof: focused General JSON assertions with and without JavaScript,
+  including agreement with the sidebar when Next is available.
+- Localization: existing localized tabs and unavailable sidebar label remain;
+  diagnostic JSON field names retain the machine-readable English contract.
+
+Verdict: Adapt under ADR 0095: ErsatzRS retains its `Version` diagnostic key
+instead of adopting the upstream Legacy label, and reports the detected version
+of the optional Next executable. All 26 focused library tests and four General
+browser checks pass in Chromium/Firefox with JavaScript enabled/disabled.
+The populated/absent Next contract has unit coverage; the isolated browser
+fixture reports Next as unknown. UCU-05 owns the complete evidence.
+
+## Row 79 source map: Block build loop safety
+
+Upstream `a2f54ef1` guards nonpositive default-filler durations, excludes
+existing rows that persistence will expire, uses offset-aware finish times
+during Reset, and observes cancellation while filling gaps. Its primary-item
+fix removes reliance on an optional enumerator minimum duration. Rust's
+primary loop is already bounded and stops on an oversized candidate. Local
+checkpoint `ee8f7c34` added the duration guard and expired-row filter, matching
+SQL's nonnegative mirror offset and inclusive retained boundary.
+Reset now replaces filler and matching history at the UTC rebuild boundary,
+retains primary/GuideMode items, and repositions retained primary/history pairs
+when block-start filler changes length. Missing history refuses the build
+before persistence. Break insertion is Reset-only, as upstream requires.
+The scheduler's shutdown signal reaches Block's filler loop through the shared
+build dispatcher. CPU work runs on an awaited blocking worker so the async
+executor remains responsive; cancellation returns no partial build to persist.
+Core, SQLite cancellation/retention, maintenance and scheduler evidence belongs
+in UCU-05. Verdict: Port. Row 80 follows; window gates remain open.
+
+## Row 78 source map: playlist enumeration consistency
+
+Upstream `16b71569` changes `PlaylistEnumerator` and the shared playable-item
+filter in `SeasonEpisodeMediaCollectionEnumerator`. `PlayoutBuilder` passes
+the Classic item's `MarathonShuffleGroups` to playlists; `MarathonHelper`
+constructs a playlist from grouped media. The regression contract covers
+cycle completion with season-zero specials, deterministic reconstruction after
+a shuffled cycle, and complete restoration after a rejected filler candidate.
+No UI or schema changes occur in the upstream row. Rust targets are the shared
+`scheduling::PlaylistEnumerator`, Classic construction/checkpoints, YAML
+marathons and SQL-backed restart regressions. Existing audio/subtitle override
+identities survive ordering and reconstruction. Production tests exposed
+flattened Classic/YAML SQL loaders; both now supply structured children.
+Classic Marathon honors all five group types, batches and shuffle flags.
+YAML history stores versioned snapshots at build/cycle boundaries and candidate
+swaps, replays the saved membership before reconciling current media, and keeps
+the required baseline during cleanup. Incompatible history refuses an unsafe
+build before clearing rows; explicit Reset establishes compatible state.
+Verdict: Adapt under ADRs 0010/0020, using Rust identity checkpoints and the
+existing safe-rebuild contract. Core, SQL restart/Refresh, failure/Reset and
+scoped Clippy evidence is recorded in UCU-05; window gates remain open.
+
+## Row 77 source map: shuffled collection index retention
+
+Upstream `6ff44cf5` validates a saved shuffled index against the flattened
+media-item count instead of the smaller multipart-group count. Its alternate
+schedule regression preserves index 9 for ten episodes represented by nine
+groups. ErsatzRS's Classic `MediaEnumerator` already stores a flat item vector
+and bounds `set_index` and `current` against its full length. A new core test
+proves index 9 of ten show items selects the expected item. Source comparison
+also exposed a separate loss: Classic Continue omitted undated collection
+anchors belonging to inactive alternate schedules when publishing the next
+state. The corrected publication retains those anchors, and the runtime audit
+checks the active source set while allowing dormant alternate state. A restarted
+SQLite build preserves an inactive Sunday's saved seed and index through a
+Wednesday Continue. The existing multipart grouping and schedule-flag gaps
+remain explicit in `classic-scheduling.toml`; this row does not claim that
+missing feature. Verdict: Adapt under ADR 0010; UCU-05 window gates remain open.
+
+## Row 76 source map: daily Classic checkpoints
+
+Upstream `f7bdcede` moves checkpoint creation from pass boundaries to the
+moment scheduled items cross a local day seam, because a final partial pass
+can cross midnight without leaving a checkpoint for that day. It also keeps
+one checkpoint per collection and local date. ErsatzRS already captures
+dated source anchors and full Classic context at pass boundaries, but its
+final pass omitted a capture. A seven-day, shuffled, hourly Continue test
+failed on the newly covered final day before the fix. The Rust scheduler now
+captures after the block that crosses midnight, emits one generated checkpoint
+per UTC schedule day, and reuses persisted Continue checkpoints for that day.
+The first SQLite Refresh proof exposed a second loss: clearing the entire
+playout discarded the item crossing midnight before the first checkpoint.
+Refresh now retains the item, gap and history prefix through the selected
+checkpoint, then replaces the future transactionally. This preserves primary
+content under accepted ADR 0097. The full-window regression, 249 core tests,
+and a restarted production SQLite Continue-to-Refresh proof pass. The health
+check already audits the complete checkpoint before Refresh. Verdict: Port;
+window gates remain open.
+
+## Row 75 source map: FFmpeg green-line workaround removal
+
+Upstream `7850ced6` deletes `AmdCropMetadataWorkaroundFilter` and
+`NvidiaGreenLineWorkaroundFilter`, removes their insertion from VAAPI and
+NVIDIA pipeline builders, and updates its Windows FFmpeg artifact. Its release
+notes tie the old bottom-edge artifacts to FFmpeg and the new 8.1.2 runtime.
+The tagged upstream package builds from the official 8.1.2 tarball; ErsatzRS
+uses its first-party FFmpeg 9.0 build under ADR 0063. The Rust pipeline still
+inserted the same `h264_metadata`/`hevc_metadata` bottom crop options. Removed
+those options and their NVIDIA applicability gate. The two affected argv
+snapshots assert no `-bsf:v`; 344 FFmpeg crate tests pass. A synthetic 1080p
+NVENC overlay encoded by the shipped FFmpeg 9 payload without crop metadata
+retained neutral bottom rows matching the source. AMD live hardware is not
+available on this host; AMD command generation is covered by its snapshot.
+Verdict: Port. UCU-05 window playback gates remain open.
+
+## Row 74 source map: Jint dependency patch
+
+Upstream `6d8666b8` changes one NuGet package reference in
+`ErsatzTV.Infrastructure.csproj`: Jint 4.13.0 to 4.14.0. There is no C#
+source, JavaScript callback, selector result, media metadata, UI, database,
+health or playback change in the commit. ErsatzRS uses `rquickjs` under
+accepted ADR 0096, with its own bounded interpreter and tests. No Rust crate
+or source contract maps to this Jint-only version update. Verdict: N/A
+(NuGet-only update under ADR 0096).
+
+## Row 73 source map: FFmpeg 8.1.2 packaging and health
+
+Upstream `5855deb8` changes release artifact acquisition, four Docker bases,
+the FFmpeg version health check and changelog from the FFmpeg 7.1 line to
+8.1.2. It does not change filter graphs, transcoding commands, media models,
+playout, subtitles or alternate-audio selection. ErsatzRS's accepted ADR 0063
+requires first-party FFmpeg 9 and rejects 8.1.2 at startup; its health check
+reports the resolved runtime version against that supported line. ADR 0008
+retains package provenance and architecture, not the superseded version pin.
+Verdict: Adapt (ADR 0063); no Rust package or health change is appropriate.
+The existing FFmpeg 9 runtime, package and health acceptance evidence remains
+the relevant proof; UCU-05 window gates remain open.
+
+## Row 72 source map: config-folder keyed singleton mutex
+
+Upstream `16e341d9` changes only `ErsatzTV/Program.cs` and its changelog:
+the Windows global singleton mutex name now hashes `AppDataFolder`, letting
+different configuration folders run concurrently. ErsatzRS has no named
+process-wide mutex in its server or launcher, so there is no equivalent Rust
+lock to re-key. ADR 0080 explicitly leaves multiple active ErsatzRS server
+instances outside the supported deployment contract. No model, schema, UI,
+scanner, playout, subtitle or audio behavior changes in this row. Verdict:
+N/A (upstream-only singleton mutex; ADR 0080 deployment boundary).
+
+## Row 71 source map: repeat playlist offsets on every build
+
+- ErsatzTV UI/model: no setting or schema change; the existing Classic Random
+  Start Point flag remains the input.
+- ErsatzTV `PlaylistEnumerator.Create` now reapplies the seeded child offsets
+  on every build, even when the playlist state's Started flag is true.
+  `PlayoutBuilder` passes the active schedule flag directly to playlists.
+- The new upstream test builds three chronological playlist children, saves
+  state halfway through, rebuilds from the same seed and proves its continuation
+  matches the uninterrupted sequence.
+- ErsatzRS target: Classic recreates child offsets whenever the flag is on,
+  then replays a retained Continue index before scheduling. A production-engine
+  regression compares a 6+6 item Continue build with an uninterrupted 12-item
+  build, including media identity and timestamps. A Refresh checkpoint still
+  restores its complete source state after initialization.
+- Intentional deviations: Rust uses its existing deterministic seed mapping;
+  no UI, transport or migration change is needed for this row. Later row 85
+  still owns broader playlist progress repair beyond this random-start path.
+
+## Row 70 source map: durable enumerator Started state
+
+- ErsatzTV model and persistence: `CollectionEnumeratorState.Started` is added
+  to schedule-items, fill-group and collection enumerator state tables. All
+  enumerator constructors and ResetState paths copy it; MoveNext marks it true.
+- ErsatzTV builder: passes the active Classic schedule setting each build and
+  gates random initialization with `!state.Started`, including when Index wraps
+  to zero. Chronological and SeasonEpisode bounds now include the last item;
+  playlist children receive the same correction.
+- ErsatzRS domain/SQLite: `CollectionEnumeratorState.started` defaults false
+  for old JSON. An additive SQLite migration adds Started to all three tables.
+  Anchor, source and fill-group repository reads/writes persist the flag.
+- ErsatzRS Classic: schedule, media and fill-group advancement mark state
+  started. New or retained-but-unplayed sources can receive the configured
+  random initial choice; a played source at index zero does not restart. The
+  existing seed modulo range already includes the final item.
+- Tests: an old-schema migration preserves legacy state with a false default;
+  repository round trips true for all three state tables; Classic covers fresh,
+  unplayed anchored, played anchored and final-index playlist cases. Row 71
+  subsequently adds the every-build playlist rule.
+- Intentional deviations: Rust's deterministic seed-to-index choice remains
+  different from .NET PRNG bytes; selection and persistence behavior match.
+
+## Row 69 source map: Classic playlist random start
+
+- ErsatzTV UI/model: the existing Classic schedule Random Start Point setting
+  also applies to playlist children; no new field or route.
+- ErsatzTV builder: `PlayoutBuilder.GetMediaCollectionEnumerator` passes the
+  setting into `PlaylistEnumerator.Create`. The enumerator seeds its choice from
+  the saved collection state and applies it only when the state index is zero.
+- ErsatzTV orders: Chronological and SeasonEpisode children receive an initial
+  media index; ShuffleInOrder receives the setting. Already randomized orders
+  retain their existing selection. Other Block/YAML/Next call sites pass false.
+- ErsatzRS target: `ersatzrs-core::scheduling::classic` initializes eligible
+  playlist children with deterministic start indices only for a fresh source.
+  Retained anchors and Refresh checkpoints bypass this new initialization;
+  existing playlist continuation behavior remains owned by later row 85.
+- The same upstream commit updates .NET package manifests and test null guards.
+  These have no Rust dependency or behavior counterpart in this row.
+- Intentional deviations: ErsatzRS uses its existing seed-to-index choice rather
+  than reproducing the .NET PRNG. Row 70 adds explicit Started state and
+  full-range selection; row 71 still owns the later playlist rule.
+
+## Row 68 source map: Plex movie and other-video title refresh
+
+- ErsatzTV UI/pages: no route or control changes; updated library titles flow to
+  existing media listings and search.
+- ErsatzTV response/model: Plex movie and Other Video records carry `Title` and
+  `UpdatedAt`. `PlexEtag.ForMovie` now includes title in its fingerprint, so a
+  title-only change reaches ordinary periodic scans and the first scan after
+  upgrading refreshes the old fingerprint.
+- ErsatzTV handlers/scanners: `PlexMovieLibraryScanner` and
+  `PlexOtherVideoLibraryScanner` compare both `Title` and `SortTitle` with the
+  existing metadata after a changed fingerprint.
+- ErsatzTV repositories: `IMovieRepository` and `IOtherVideoRepository` write
+  `Title` and `SortTitle` together; no schema change.
+- Side effects: changed movie/Other Video titles become visible after sync;
+  unchanged records retain the existing no-write fast path. No subtitle,
+  alternate-audio, playout or transport behavior changes.
+- ErsatzRS target: `ersatzrs-infra::plex` projection, Etag skip and metadata
+  upserts; `tests/plex_service.rs` covers title-only ordinary rescans for both
+  library kinds, metadata persistence and unchanged-scan idempotency.
+- Intentional deviations: none. ErsatzRS uses a versioned title-aware Etag
+  representation rather than byte-identical upstream hashing; its persisted
+  skip contract and one-time old-Etag refresh are the behavior that matters.
 
 ## Row 67 source map: upstream 26.6.0 release preparation
 
@@ -1279,29 +1682,29 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | Port | support-pages | `feat(web): show bundled release notes on home and health` | ucu-04; localized shared SSR card on both routes selects the installed beta or latest dated bundled changelog section, sanitizes Markdown and serves the full offline changelog. GitHub remains an optional link; anonymous API and page return 404. Focused section/security tests, web check, scoped Clippy, dependency audit, hydration lint and Chromium 320px/content/link proof pass. Window gates remain open. |
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | N/A (upstream SkiaSharp API migration) | upstream-baseline-catch-up | `docs(porting): classify SkiaSharp 4 API migration` | ucu-04; two .NET package upgrades and three DrawBitmap overload updates add explicit default sampling. Rust SVG logos and native FFmpeg Image/Motion overlays use no Skia API or dependency. Source/ADR review and progress validation pass; no new pixel-equivalence claim. Window gates remain open. |
 | 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.6.0 release prep` | ucu-04; only ErsatzTV CHANGELOG heading/comparison links change. ErsatzRS releases and dated changelog sections have separate acceptance; no product or build behavior changes. Source and progress checks pass; UCU-04 window gates remain open. |
-| 68 | `18137832` | fix: update plex movie and other video titles (#2947) | | | | ucu-05; provisional: Port candidate. |
-| 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | | | | ucu-05; provisional: Port candidate. |
-| 70 | `0d692e70` | fix: always randomize start points (#2949) | | | | ucu-05; provisional: Port candidate. |
-| 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | | | | ucu-05; provisional: Port candidate. |
-| 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | | | | ucu-05; provisional: Port candidate. |
-| 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
-| 74 | `6d8666b8` | chore: update dependencies (#2952) | | | | ucu-05; provisional: Upstream tooling candidate. |
-| 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | | | | ucu-05; provisional: Adapt candidate. |
-| 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | | | | ucu-05; provisional: Port candidate. |
-| 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | | | | ucu-05; provisional: Port candidate. |
-| 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | | | | ucu-05; provisional: Port candidate. |
-| 79 | `a2f54ef1` | fix: block playout build loop (#2957) | | | | ucu-05; provisional: Port candidate. |
-| 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | | | | ucu-05; provisional: Adapt candidate. |
-| 81 | `3f2efcd4` | fix: discover tests in ErsatzTV.Tests (#2959) | | | | ucu-05; provisional: Upstream tooling candidate. |
-| 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | | | | ucu-05; provisional: Next behavior triage. |
-| 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
-| 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | | | | ucu-05; provisional: Port candidate. |
-| 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | | | | ucu-05; provisional: Port candidate. |
-| 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | | | | ucu-05; provisional: Port candidate. |
-| 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | | | | ucu-05; provisional: Port candidate. |
-| 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
-| 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | | | | ucu-05; provisional: Adapt candidate. |
-| 90 | `35b5a259` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
+| 68 | `18137832` | fix: update plex movie and other video titles (#2947) | Port | library-management; upstream-baseline-catch-up | `fix(infra): refresh Plex titles on ordinary scans` | ucu-05; versioned title-aware movie/Other Video Etag refreshes old timestamp-only fingerprints once and title-only changes thereafter. Existing metadata upsert writes Title and SortTitle. Red/green focused regression, 20 Plex tests, scoped Clippy, format and progress checks pass. UCU-05 window gates remain open. |
+| 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): honor Classic playlist random start` | ucu-05; eligible fresh Chronological, SeasonEpisode and ShuffleInOrder playlist children receive deterministic start indices; retained sources bypass new initialization. Focused playlist tests, scoped core Clippy, format and progress checks pass. Rows 70-71 own follow-up start-state behavior; row 85 owns playlist continuation. |
+| 70 | `0d692e70` | fix: always randomize start points (#2949) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist enumerator started state` | ucu-05; Started is stored in all three SQLite enumerator state tables and carried through Classic advancement. Previously unused anchored sources randomize; played sources at wrapped index zero stay in sequence; the final item is eligible. Migration upgrade, repository round trip, 247 core tests and scoped Clippy pass. Row 71 remains open. |
+| 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): replay random playlist offsets on Continue` | ucu-05; each Classic playlist build recreates seeded child offsets and a retained Continue build replays its saved index. The 6+6 versus uninterrupted 12-item timeline regression passes with identical identities and timestamps; all 248 core tests and scoped Clippy pass. Row 85 owns broader playlist progress repair. |
+| 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | N/A (upstream singleton mutex; ADR 0080) | upstream-baseline-catch-up | `docs(porting): classify upstream config-folder mutex` | ucu-05; upstream re-keys a Windows global mutex to AppDataFolder. ErsatzRS has no such mutex; multiple active server instances remain unsupported under ADR 0080. No Rust runtime surface or user-visible contract changed. Source and progress checks pass. |
+| 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | Adapt (ADR 0063) | ffmpeg-command-generation; upstream-baseline-catch-up | `docs(porting): classify FFmpeg 8.1.2 upstream upgrade` | ucu-05; upstream changes package pins, Docker bases and version health to 8.1.2. Accepted ADR 0063 requires ErsatzRS FFmpeg 9, startup rejects 8.1.2, and health reports the resolved supported runtime. No filter graph or media selection change. Source and progress checks pass. |
+| 74 | `6d8666b8` | chore: update dependencies (#2952) | N/A (NuGet-only Jint update; ADR 0096) | upstream-baseline-catch-up | `docs(porting): classify Jint patch update` | ucu-05; only ErsatzTV.Infrastructure.csproj changes Jint 4.13.0 to 4.14.0. ErsatzRS uses accepted QuickJS/rquickjs under ADR 0096; no source or behavior contract changes. Source and progress checks pass. |
+| 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | Port | ffmpeg-command-generation | `fix(ffmpeg): remove obsolete green-line crop filters` | ucu-05; upstream deletes NVIDIA H.264 and radeonsi HEVC crop metadata filters after FFmpeg 8.1.2. ErsatzRS FFmpeg 9.0 uses the same affected encode paths. Removed both filters and their applicability gate; two argv snapshots and all 344 FFmpeg tests pass. A local FFmpeg 9 NVENC overlay encode preserves 1080 bottom-row colors without crop metadata. AMD live hardware proof remains unavailable here; window playback gates remain open. |
+| 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | Port | classic-scheduling | `fix(scheduling): retain Classic daily checkpoint prefix` | ucu-05; captures day seams inside all build passes. A seven-day shuffled hourly Continue regression failed before the fix, then passed. Restarted SQLite Refresh preserves the crossing item and appends the matching future. All 249 core tests, scoped Clippy and progress checks pass. |
+| 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | Adapt (ADR 0010) | classic-scheduling | `fix(scheduling): retain inactive alternate progress` | ucu-05; Rust's flat enumerator already validates against the full item count. A core regression proves index 9 of ten remains valid. Corrected Continue publication and active-source audit to retain dormant alternate anchors; restarted SQLite proof preserves the inactive source seed/index. Existing multipart grouping debt remains visible in the owning parity record; no grouped parity is claimed. |
+| 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | Adapt (ADRs 0010/0020) | classic-scheduling; yaml-scheduling | `fix(scheduling): restore YAML playlist history safely` | ucu-05; checkpoint 1eb06d15 plus versioned YAML history restore. Playable cycles, canonical shuffle, candidate rollback, repeated sources, all Classic Marathon groups/batches and structured SQL loaders have core and restart/Refresh proof. Legacy state refuses before clearing; explicit Reset recovers. See UCU-05 evidence. |
+| 79 | `a2f54ef1` | fix: block playout build loop (#2957) | Port | block-scheduling | `fix(scheduling): rebuild Block filler safely and observe shutdown` | ucu-05; checkpoint ee8f7c34 plus Reset filler/history replacement, retained primary repositioning, and cooperative cancellation through scheduler ownership. Core and SQLite evidence in UCU-05; row 80 follows. |
+| 80 | `9cc771be` | feat: show next and ffmpeg version in troubleshooting (#2958) | Adapt (ADR 0095) | support-pages | `feat(troubleshooting): report detected engine versions` | ucu-05; shared detected versions in General and playback archives, startup-only Next cache, in-order SSR. 26 library tests and four Chromium/Firefox JavaScript/no-JS checks pass; see UCU-05 evidence. |
+| 81 | `3f2efcd4` | fix: discover tests in ErsatzTV.Tests (#2959) | N/A (upstream .NET test tooling) | upstream-baseline-catch-up | `docs(porting): classify upstream test discovery fix` | ucu-05; sole diff adds Microsoft.NET.Test.Sdk 18.8.1 to ErsatzTV.Tests. Cargo/Nextest has no dependency on that discovery adapter. No runtime or test behavior is changed in ErsatzRS; source and progress checks pass. |
+| 82 | `4ffd775a` | fix: text subtitle fixes (#2960) | Adapt (ADRs 0095/0100) | upstream-baseline-catch-up | `test(streaming): verify Next subtitle font and empty-cue playback` | ucu-05; checkpoint 7b5ef28f supplies the font cache; official Next runtime proves selected font rendering, end-of-cue playback and alternate audio. Exact-version preparation and native absolute extraction indexes preserve existing safety; see UCU-05 evidence. |
+| 83 | `05dd6cbe` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.0 release metadata` | ucu-05; only CHANGELOG release heading and comparison links change. ErsatzRS retains its own release history; no runtime contract changes. Source and progress checks pass. |
+| 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | Port | upstream-baseline-catch-up | `fix(streaming): render generated channel-logo watermarks` | ucu-05; checkpoint 876ed514 preserves external URLs; cached PNG fallback now preserves generated logos. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. See UCU-05 evidence; window gates remain open. |
+| 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | Adapt (ADR 0020) | classic-scheduling; ersatzrs-healthcheck | `fix(scheduling): preserve complete Classic collection identities` | ucu-05; complete source keys now include RerunCollectionId. Existing earliest complete checkpoints preserve playlist/fake keys. Three-week playlist and rerun restart/Refresh, legacy refusal, actual health reporting and core regressions pass; see UCU-05 evidence. |
+| 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | Port | classic-scheduling | `fix(scheduling): resolve flexible starts across local midnight` | ucu-05; explicit local civil clock, independent tomorrow offsets and inclusive 12-hour wait. Core clock/builder and persisted DST Continue/Refresh proof pass; Strict and complete UTC checkpoints retain their contracts. See UCU-05 evidence. |
+| 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | Port | playout-list-detail | `fix(playout): publish gaps with builds and on-demand shifts` | ucu-05; final item-derived positive gaps replace stale rows atomically; on-demand gaps trim and shift with items. Repository, rollback, continuity and Chromium/Firefox detail proof pass; see UCU-05 evidence. |
+| 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | N/A (ADR 0063) | ffmpeg-command-generation; upstream-baseline-catch-up | `docs(porting): classify upstream Windows FFmpeg archive update` | ucu-05; sole runtime-facing diff changes the upstream FFmpeg 8.1.2 Windows archive revision. ErsatzRS uses its first-party FFmpeg 9 line under ADR 0063; no native QSV execution claim is inferred. Source and progress checks pass. |
+| 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | Covered | support-pages | `docs(porting): record existing playback archive engine versions` | ucu-05; row-80 f6f076a2 already writes both top-level keys to troubleshooting_info.json and includes it in playback ZIPs. Shared detected-version tests cover present/absent optional Next under ADR 0095; source and progress checks pass. |
+| 90 | `35b5a259` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.1 release metadata` | ucu-05; only CHANGELOG adds a 26.7.1 heading and comparison links, despite the 26.7.0 commit subject. ErsatzRS keeps its own release history. Source and progress checks pass; UCU-05 window acceptance remains open. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | | | | ucu-06; provisional: Port candidate. |
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | | | | ucu-06; provisional: Port candidate. |
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
@@ -1384,3 +1787,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 170 | `e8b7bb63` | fix: amd vaapi accel when driver is set to default (#3036) | | | | ucu-09; pending source review. |
 | 171 | `62b7a5e9` | perf: graphics engine subtitles (#3037) | | | | ucu-09; pending source review. |
 | 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; pending source review. |
+| 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; pending source review. |

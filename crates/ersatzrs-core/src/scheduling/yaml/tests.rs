@@ -1079,10 +1079,8 @@ fn yaml_playlist_history_keys_and_current_child_snapshot() {
     let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
         .expect("valid time")
         .with_timezone(&Utc);
-    let playlist_key = history_key_for_content("playlist", PlaybackOrder::None);
     let child_0_key = SchedulingCollectionKey::fake_playlist_item(0);
     let child_1_key = SchedulingCollectionKey::fake_playlist_item(1);
-    let child_0_history_key = history_key_for_collection_key(&child_0_key);
     let mut reference_data = SchedulingReferenceData::default();
     let item_1 = SchedulingMediaItem {
         season: Some(1),
@@ -1115,29 +1113,6 @@ fn yaml_playlist_history_keys_and_current_child_snapshot() {
             },
         ],
     );
-    reference_data.existing_history = vec![
-        ersatzrs_domain::PlayoutHistory {
-            id: 30,
-            key: playlist_key.clone(),
-            when: start - Duration::hours(1),
-            finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
-            index: 0,
-            details: history_details_for_media_item(&item_1),
-            ..ersatzrs_domain::PlayoutHistory::default()
-        },
-        ersatzrs_domain::PlayoutHistory {
-            id: 31,
-            key: playlist_key,
-            child_key: Some(child_0_history_key),
-            when: start - Duration::hours(1),
-            finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
-            index: 0,
-            details: history_details_for_media_item(&item_1),
-            is_current_child: true,
-            ..ersatzrs_domain::PlayoutHistory::default()
-        },
-    ];
-
     let definition = YamlPlayoutEngine::definition_from_str(
         r#"
 content:
@@ -1150,6 +1125,22 @@ playout:
 "#,
     )
     .expect("valid yaml");
+    let initial = YamlPlayoutEngine
+        .schedule_definition(
+            definition.clone(),
+            SchedulingRequest {
+                playout: Playout {
+                    id: 100,
+                    ..Playout::default()
+                },
+                start: start - Duration::hours(1),
+                finish: start - Duration::minutes(50),
+                mode: PlayoutBuildMode::Reset,
+                reference_data: reference_data.clone(),
+            },
+        )
+        .expect("generate playlist history through the builder");
+    reference_data.existing_history = initial.added_history;
     let result = YamlPlayoutEngine
         .schedule_definition(
             definition,
@@ -1909,6 +1900,154 @@ playout:
 }
 
 // ── playlist batch/count child semantics tests ────────────────────────────
+
+#[test]
+fn yaml_shuffled_marathon_continue_preserves_cycles_across_midnight() {
+    let (definition, request) = marathon_history_fixture();
+    let start = request.start;
+    let full = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), request.clone())
+        .unwrap();
+    assert!(full.added_items.iter().all(|item| item.media_item_id != 99));
+    let mut first_request = request.clone();
+    first_request.finish = start + Duration::minutes(100);
+    let mut first = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), first_request)
+        .unwrap();
+    for (index, history) in first.added_history.iter_mut().enumerate() {
+        history.id = i64::try_from(index + 1).unwrap();
+    }
+    let snapshot_count = first
+        .added_history
+        .iter()
+        .filter(|history| history.child_key.is_none())
+        .filter(|history| {
+            serde_json::from_str::<serde_json::Value>(&history.details)
+                .unwrap()
+                .get("snapshot")
+                .is_some()
+        })
+        .count();
+    assert_eq!(
+        snapshot_count, 2,
+        "persist one snapshot per cycle, not per item"
+    );
+    let mut next = request;
+    next.start = first.anchor.as_ref().unwrap().next_start;
+    next.playout.anchor = first.anchor;
+    next.reference_data.existing_items = first.added_items.clone();
+    next.reference_data.existing_history = first.added_history.clone();
+    let continued = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), next.clone())
+        .unwrap();
+    assert_eq!(
+        continued.added_items,
+        full.added_items[first.added_items.len()..]
+    );
+    next.reference_data
+        .existing_history
+        .retain(|history| !continued.history_to_remove.contains(&history.id));
+    next.mode = PlayoutBuildMode::Refresh;
+    let refreshed = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), next.clone())
+        .unwrap();
+    let timeline = |items: &[ersatzrs_domain::PlayoutItem]| {
+        items
+            .iter()
+            .map(|item| (item.media_item_id, item.start, item.finish))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        timeline(&refreshed.added_items),
+        timeline(&full.added_items[first.added_items.len()..])
+    );
+    let mut legacy = next.clone();
+    legacy.playout.anchor = None;
+    for history in &mut legacy.reference_data.existing_history {
+        if history.child_key.is_none() {
+            history.details = serde_json::from_str::<serde_json::Value>(&history.details).unwrap()
+                ["media_details"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+        }
+    }
+    for mode in [PlayoutBuildMode::Continue, PlayoutBuildMode::Refresh] {
+        legacy.mode = mode;
+        assert!(YamlPlayoutEngine
+            .schedule_definition(definition.clone(), legacy.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("cannot safely restore"));
+    }
+    legacy.mode = PlayoutBuildMode::Reset;
+    assert!(YamlPlayoutEngine
+        .schedule_definition(definition.clone(), legacy)
+        .is_ok());
+    let mut changed = next;
+    let media = changed
+        .reference_data
+        .searches_by_query
+        .get_mut("episodes")
+        .unwrap();
+    let expected_next = full.added_items[first.added_items.len()].media_item_id;
+    media.retain(|item| item.id != 99);
+    media.push(episode_item(7, 40, 4001, 1, 1));
+    let refreshed = YamlPlayoutEngine
+        .schedule_definition(definition, changed)
+        .unwrap();
+    assert_eq!(
+        refreshed.added_items[0].media_item_id, expected_next,
+        "membership addition must preserve the next surviving item"
+    );
+}
+
+fn marathon_history_fixture() -> (YamlPlayoutDefinition, SchedulingRequest) {
+    let mut data = SchedulingReferenceData::default();
+    data.searches_by_query.insert(
+        "episodes".to_owned(),
+        vec![
+            episode_item(1, 10, 1001, 1, 1),
+            episode_item(2, 10, 1001, 1, 2),
+            episode_item(3, 20, 2001, 1, 1),
+            episode_item(4, 20, 2001, 1, 2),
+            episode_item(5, 30, 3001, 1, 1),
+            episode_item(6, 30, 3001, 1, 2),
+            episode_item(99, 10, 1000, 0, 1),
+        ],
+    );
+    let definition = YamlPlayoutEngine::definition_from_str(
+        r#"
+content:
+  - key: marathon
+    marathon: Shows
+    searches: [episodes]
+    group_by: show
+    item_order: season_episode
+    shuffle_groups: true
+playout:
+  - count: "1"
+    content: marathon
+  - repeat: true
+"#,
+    )
+    .unwrap();
+    let start = DateTime::parse_from_rfc3339("2026-04-15T23:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let request = SchedulingRequest {
+        playout: Playout {
+            id: 100,
+            seed: 12345,
+            ..Playout::default()
+        },
+        start,
+        finish: start + Duration::hours(3),
+        mode: PlayoutBuildMode::Continue,
+        reference_data: data,
+    };
+    (definition, request)
+}
 
 #[test]
 fn yaml_playlist_count_child_takes_n_items_before_switching_snapshot() {

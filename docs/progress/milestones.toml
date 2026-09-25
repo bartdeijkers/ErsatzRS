@@ -9256,7 +9256,7 @@ correction and require terminal green CI at its new exact SHA before UCU-05.
 id         = 'ucu-05'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 35b5a259'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-04']
@@ -9274,7 +9274,383 @@ for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-25: UCU-04 prerequisite is Complete with terminal green exact-SHA CI
+36140800461 at a14ada809c9d18d68c89e9294199ced60715bc33. At UCU-05
+start, the pin, last processed row 67 and upstream checkout all equal
+0b44ad47095c1db80c28137edc280947c66ee456. A fresh fetch leaves upstream
+origin/main at 27f9d2174f377e27baa553872c73fcac863a52d7; all 172 ledger
+SHA/subject pairs remain an exact prefix and there is no new UCU-09 tail.
+Row 68 (18137832) is Port: upstream PlexEtag.ForMovie now includes Title and
+movie/Other Video scanners compare and persist Title plus SortTitle. ErsatzRS
+uses a versioned title-aware Etag for both library kinds; ordinary scans
+refresh title-only changes and replace old timestamp-only fingerprints once.
+The red/green regression (Nextest d557bc42 then da5c2cd3) and 20 Plex tests
+(86fad0a9) cover persisted titles, Etag changes and unchanged-item behavior.
+Scoped all-target infrastructure Clippy, format and progress checks pass.
+Pin, ledger row 68 and upstream checkout advance to 18137832 together; row 69
+(e5a2a763) then ports Classic playlist random starts. The production Classic
+builder initializes eligible fresh playlist children from the playout seed;
+retained anchors and Refresh checkpoints bypass that initialization. Focused
+playlist Nextest 1f54cdd2 passes 2/2; scoped core Clippy, format and progress
+checks pass. Pin, ledger row 69 and checkout advance to e5a2a763 together.
+Rows 70-71 own later upstream random-start corrections.
+Row 85 still owns the pre-existing playlist continuation behavior.
+Row 70 (0d692e70) ports explicit Started state. The source audit showed
+ErsatzRS anchors include unplayed sources, so anchor presence alone could not
+replace upstream's flag. A new additive migration persists Started in the
+schedule-items, fill-group and collection enumerator state tables; old JSON and
+rows default false. Classic advancement marks the relevant state started.
+Migration upgrade Nextest 2b40821e, repository round trip 5ae3299c, and all
+247 core tests (81d4d674) pass. Focused playlist proof covers unused and played
+zero-index anchors and selecting the final item. Scoped core/infra Clippy,
+format and progress checks pass. Pin, ledger and checkout advance to row 70;
+row 71 followed. No UCU-05 window gates, push or CI were claimed for row 70.
+Row 71 (4fb42f69) ports the upstream every-build playlist rule. Classic now
+recreates seeded child offsets for each build and replays a retained Continue
+index. The production-engine regression Nextest 338b5ddb compares 6+6 items
+with an uninterrupted 12-item run and matches identities and timestamps.
+All 248 core tests (a34829bc), scoped core Clippy, format and progress checks
+pass. Pin, ledger and checkout advance together to row 71. Row 85 retains the
+broader playlist progress repair; UCU-05 window gates, push and CI remain open.
+Row 72 (16e341d9) is N/A (upstream singleton mutex; ADR 0080). Upstream only
+changes its Windows process mutex name to a hash of AppDataFolder and updates
+its changelog. ErsatzRS has no process-wide singleton mutex to re-key, and
+multiple active server instances remain outside ADR 0080's supported
+deployment contract. Pin, ledger and checkout advance together; row 73 is
+next. Source and progress checks pass; no UCU-05 window gates, push or CI are
+claimed.
+Row 73 (5855deb8) is Adapt under accepted ADR 0063. Upstream changes
+FFmpeg 7.1 to 8.1.2 package pins in release CI and Docker, plus its bundled
+version health wording. ErsatzRS already requires first-party FFmpeg 9,
+rejects 8.1.2 at startup, and reports the resolved version in health. ADR
+0063 supersedes ADR 0008's older version pin. No transcoding or selection
+logic changes upstream in this row. Pin, ledger and checkout advance together;
+row 74 is next. Source and progress checks pass; no UCU-05 window gates, push
+or CI are claimed.
+Row 74 (6d8666b8) is N/A (NuGet-only Jint update under ADR 0096). Its sole
+diff changes the `ErsatzTV.Infrastructure.csproj` Jint reference from 4.13.0
+to 4.14.0. ErsatzRS uses the accepted bounded QuickJS/rquickjs adapter and
+the upstream commit changes no callback or runtime behavior contract. Pin,
+ledger and checkout advance together; row 75 is next. Source and progress
+checks pass; UCU-05 window gates, push and CI remain open.
+Row 75 (7850ced6) is Port. Upstream removes NVIDIA H.264 and radeonsi HEVC
+crop metadata workarounds after its FFmpeg 8.1.2 update. The analogous Rust
+output options are removed for the required FFmpeg 9 runtime. Both affected
+argv snapshots assert the absence of `-bsf:v`; all 344 FFmpeg crate tests
+pass. A synthetic 1080p NVENC overlay encoded with the shipped FFmpeg 9
+payload retained neutral bottom rows matching the source without crop
+metadata. AMD live GPU proof is unavailable locally; its command generation
+is covered by the snapshot. Pin, ledger and checkout advance together; row 76
+is next. UCU-05 window gates, push and exact-SHA CI remain open.
+Row 76 (f7bdcede) is Port. Upstream captures Classic source progress when
+scheduled items cross day seams, including the final partial pass. ErsatzRS
+already has full dated checkpoint state but missed its final pass. The new
+seven-day shuffled hourly Continue regression failed at the last covered day
+before the fix and passes after it. Restarted SQLite Continue-to-Refresh proof
+also found that Refresh discarded the item crossing midnight. Refresh now
+retains the scheduled prefix through the selected checkpoint and rebuilds the
+future. All 249 core tests, the SQLite regression and scoped Clippy pass. Pin,
+ledger and checkout advance together; row 77 is next. UCU-05 window gates,
+push and exact-SHA CI remain open.
+Row 77 (6ff44cf5) is Adapt under ADR 0010. The Rust flat Classic media
+enumerator already validates saved shuffled indices against the full item
+count; a core regression preserves index 9 of ten show items. A separate
+inactive-alternate loss found during source comparison is fixed: Continue
+retains dormant collection anchors, and the active-state audit permits them.
+A production SQLite build preserves the inactive alternate's saved seed and
+index. Multipart grouping remains explicit Classic parity debt. Pin, ledger
+and checkout advance together; row 78 is next. UCU-05 window gates, push and
+exact-SHA CI remain open.
+Row 78 (16b71569) began with local checkpoint 1eb06d15 before its verdict and pin advance. Shared playlist
+cycles now track playable membership and reconstruct canonical shuffled group
+order. Classic loads MarathonShuffleGroups, persists complete playlist Continue
+state, and uses structured SQL playlist children. The latter was absent:
+earlier restart comparisons exercised flattened media, so those runs are not
+structured-playlist acceptance. The revised production restart/Refresh test
+passes with unequal children, random start and track preferences after wiring
+the structured loader (Nextest 324761a4). The legacy checkpoint test then
+proves scheduler-owned Refresh refuses missing cycle state, records failure,
+and preserves persisted rows across SQLite reopen (769f696f).
+A random-start Continue regression failed at split 9 (becf821f), then passed
+with full child/cycle persistence (cc5d42a2). YAML Continue now retains the same
+state across midnight. A repeating marathon exposed a guard that accumulated
+across successful instructions (b8fa6eb7); resetting it on successful playback
+passes all 260 core tests (f19f6800), including empty-loop rejection.
+The final playlist-focused selection passes 63/63 (3f170497); scoped
+core/domain/infra all-target Clippy passes.
+Legacy Classic Continue admission now checks complete active-playlist context
+through the same runtime audit used by maintenance and health. A restarted
+legacy Continue previously succeeded unsafely (4cee0720); it now requires a
+valid Refresh checkpoint or records refusal without clearing rows. All 22
+Classic infra tests pass (cecd3426). Repeated child-source references also
+shared no cursor: the red sequence 10,10,20 is now 10,11,20. All 17 core
+playlist tests pass (3e683d22), and the production shuffled/random-start
+restart-to-Refresh test passes with repeated collection children (86d2caac).
+Classic Marathon now constructs shared playlists for show, season, artist,
+album and first-director groups, preserves MarathonBatchSize through typed SQL
+insert/update, and applies group/item shuffle flags. SQL loads album and first
+director without multiplying media rows; EXPLAIN on a freshly migrated SQLite
+database uses all four Director metadata indexes. The core matrix covers all
+five groups, play-all/batch, shuffled/unshuffled Continue across midnight. It
+exposed a single-item Flood guide-group increment mismatch, now corrected.
+All 262 core tests pass (65ba8679); 46 Classic/scheduling/typed-repository tests
+pass (891694a7), including actual grouped SQL output, duplicate directors,
+restarted Continue and Refresh, track preferences and album projection.
+Row 78 is now Adapt under ADRs 0010/0020. YAML Refresh initially diverged
+after a shuffled cycle (267ac375). Versioned history now records full state at
+build/cycle boundaries and candidate swaps, replays original membership, then
+reconciles current candidates. Cleanup retains the baseline for the oldest
+surviving position. Core proof covers cleanup, sparse storage, legacy refusal,
+explicit Reset and membership additions; all 262 core tests pass (f895d126).
+SQL restart proof exposed a second flattened loader: YAML Marathon could not
+materialize groups. YAML reference data now loads structured playlist/Marathon
+children. Eight focused infra tests pass (97897ce3), including real-builder
+Continue and Refresh across SQLite reopen and history cleanup, scheduler-owned
+legacy refusal without clearing scheduled rows, and successful explicit Reset.
+The environment-gated real-world DB test in that selection is not claimed as
+live-profile proof. Source review and scoped Clippy pass. Pin, ledger and
+upstream checkout advance together to row 78; row 79 is next.
+Row 79 (a2f54ef1) is under audit; its verdict and pin remain pending.
+The native default-filler loop now stops with a warning on nonpositive
+duration. Gap detection excludes rows that SQL persistence will expire,
+including the same nonnegative mirror offset and inclusive finish boundary.
+All 13 Block core tests pass (c5c78378), including invalid duration after valid
+filler, cutoff/offset/removal cases, ordinary trimming and oversized primary
+termination. The SQLite delayed-mirror retention test passes (3a7af2d0), and
+core all-target Clippy passes. Source comparison also exposes missing Reset
+filler replacement and no synchronous build cancellation hook; Block parity
+is reopened with explicit debt. Finish those lifecycle requirements before
+assigning a row verdict or advancing the pin. That was local checkpoint ee8f7c34.
+Row 79 is now Port. Reset replacement first failed because no existing filler
+was removed (1188ab4d); Reset now replaces filler and corresponding history,
+preserves primary/GuideMode content, and retains older filler for delayed mirrors.
+Block-start insertion is Reset-only. Changed break duration repositions retained
+primary/history pairs together, preserves track preferences, and refuses missing
+history before persistence. Core regressions cover UTC boundary equality,
+Reset versus Continue, changed break duration and cancellation during a long
+filler gap. All 269 core tests pass (d1f635f1).
+The shared dispatcher accepts cooperative cancellation, and scheduler-owned
+builds use an awaited blocking worker so shutdown can run on the async executor.
+The host token and standalone Ctrl+C listener both reach requested and periodic
+builds. Cancelled results never reach persistence. A single-thread async SQLite
+test proves worker cancellation preserves the timeline/history, records failed
+status and releases the lock. All 20 maintenance tests pass (b16bfe6e); final
+focused SQL Block loading and cancellation tests pass (1206b128). Both scheduler
+shutdown tests pass (94d6e55e), and core/infra/scheduler all-target Clippy passes.
+Upstream refresh still yields 27f9d217. Pin, ledger and upstream checkout advance
+together to a2f54ef1; row 80 (9cc771be) is next.
+Row 80 implementation adds shared detected Version/NextVersion/FFmpegVersion
+fields to General diagnostics and preview archives, reusing startup Next
+inspection and the accepted FFmpeg runtime. The optional Next value is shared
+with the sidebar without request-time probing. All 26 focused troubleshooting
+library tests pass (ccb89033), including available/absent Next serialization.
+This web build also found and corrected a test-only playlist fixture missing
+row 78 album/director fields. Row 80 is Adapt under ADR 0095: retain the
+ErsatzRS Version key and use the optional engine executable version rather
+than the upstream Legacy/embedded Next labels.
+The first Chromium/Firefox run passed both JavaScript cases but exposed a
+no-JS Loading state in the existing streaming route. In-order SSR on only the
+General troubleshooting route fixes it without relaxing assertions or timeouts.
+The matched SSR/WASM build and all four focused support-pages browser checks
+pass (General diagnostics expose detected runtime versions, 5.8 seconds).
+The isolated browser fixture uses FFmpeg 9.0.0 and an unavailable optional
+Next engine; populated Next values are covered by the shared serializer tests.
+Hydration lint reports no new findings, scoped web all-target Clippy passes,
+and formatting/diff checks pass. Pin, ledger and upstream checkout advance
+together to 9cc771be; row 81 (3f2efcd4) is next.
+Row 81 (3f2efcd4) is N/A (upstream .NET test tooling). Its entire diff adds
+Microsoft.NET.Test.Sdk 18.8.1 to ErsatzTV.Tests.csproj. ErsatzRS discovers
+Rust tests through Cargo/Nextest in run.sh and has no equivalent dependency
+on that adapter. No product or test behavior changes here. Source inspection,
+diff and progress checks pass; pin, ledger and checkout advance together.
+Row 82 (4ffd775a) is under audit. The host omitted fonts_folder from Next
+subtitle normalization. A normal/preview configuration regression failed
+with a missing JSON value (775392c1), then passed after adding the optional
+wire field and host font-cache path (8a92a203). Infra all-target Clippy passes.
+The low-level profile converter keeps the optional field absent; the host
+supplies its configured cache for both normal and preview sessions.
+The initial suspicion of absent channel-save notifications was disproved:
+save_channel_with_state notifies the shared HLS registry, which forwards to
+NextSession and previews. Continue auditing extraction/publication ordering,
+mode changes and empty-caption playback. Font rendering and seeking beyond
+the final cue still need runtime evidence. No row verdict or pin advance.
+Row 82 is now Adapt under ADRs 0095/0100. Checkpoint 7b5ef28f supplies the
+font cache. Final serialized runtime tests pass 3/3 (adc0b7d3): cached Sen
+selection is observed in libass's report and captions/audio are decoded;
+embedded/external Burn/Convert retain captions and selected audio during normal
+seek, and continue with no cues or glyphs after the final cue. The font fixture
+uses a child with isolated app data and the repository font. Runtime identity is
+official Next 802f2d8 (archive SHA256 f4f06196f7ecb751ee973d6754cf3292f22ab1a7f92e85e836ee490056631808)
+and FFmpeg n9.0-20260805 on Linux x64. These runs do not claim other platforms.
+The focused selection/cache/credits/session/extraction suite passes 43/43
+(6305bb93). Its first run had three filesystem-permission failures; redirecting
+application state/data to temporary roots passes without assertion changes.
+Disabled credits preserve the projected tracks. Existing channel-save source
+and regression save_channel_notifies_next_consumers_without_rebuilding_playouts
+cover registry notification to normal and preview consumers. The demand-time
+adapter prepares exact-version text before returning a sidecar and revalidates
+its binding; it does not depend on legacy extraction metadata. Playout builds
+extract before notification. Absolute stream mapping avoids the upstream
+partial-subtitle ordinal bug. Only fonts_folder is new in the upstream wire
+field sets. Accepted ADR 0100 live/one-shot limitations remain unchanged.
+Final infra all-target Clippy, formatting, diff and progress checks pass.
+Pin, ledger and checkout advance together to 4ffd775a; row 83 follows.
+Row 83 (05dd6cbe) is N/A (upstream release metadata). Its only change is
+the CHANGELOG 26.7.0 heading and comparison links. ErsatzRS retains its own
+release history; no runtime, packaging or behavior contract changes here.
+Source inspection, diff and progress checks pass. Pin, ledger and checkout
+advance together; row 84 (15db3c4c) is next.
+Row 84 (15db3c4c) audit found that the shared selector dropped HTTP logo
+URLs and had no generated fallback. Explicit Local/Http watermark images now
+preserve external URLs in native inputs and Next HTTP sources, with unchanged
+local missing-file checks. All 12 focused tests pass (984f6c62). A real official
+Next test using a synthetic loopback image passes (864a56a8): static/dynamic
+caption paths, overlay geometry, selected audio and DisableWatermarks hold.
+The native URL argv snapshot passes after review (0d79731c). The public type
+update includes troubleshooting consumers and the existing integration assertion.
+Row 84 is now Port. The generated fallback uses a hash-keyed cached PNG,
+rendered by existing FFmpeg drawvg/drawtext support with bundled Roboto.
+The SVG endpoint shares its abbreviation helper. Rendering has a five-second
+lock/process deadline and bounded managed-child cleanup; only completed PNGs
+are atomically promoted. Explicit missing local artwork is still ignored.
+The real PNG render/cache-reuse test passes (99f60b05); all eight focused
+logo/selection/cancellation/snapshot checks pass (3fa1fd9e). Official Next
+802f2d8 plus FFmpeg n9.0-20260805 proves generated logo pixels, selected Dutch
+audio, static/dynamic caption paths and DisableWatermarks (98f7b8e4).
+Native SoftwarePipelineBuilder output proves both HTTP and generated logo
+pixels plus selected alternate audio (9f032148). The native synthetic generated
+logo uses 50 percent width so its four-pixel source border remains two pixels
+after scaling; the original 30 percent fixture lost the expected color through
+subsampling. Pixel color assertions are unchanged. Native subtitle rendering
+is unchanged; the new native test asserts the unburned output and selected audio.
+Both SVG endpoint tests pass (e0992099). Infra/web all-target Clippy, format,
+progress validation and staged Clippy-allow policy pass. Review confirms the
+shared selector preserves precedence and missing-local-artwork behavior, and
+only complete generated files enter the cache. Pin, ledger and checkout advance
+together to 15db3c4c; row 85 follows.
+Row 85 (ecf6c2c1) groups all source identities and selects the earliest
+checkpoint. Existing ADR 0020 restoration already preserves playlist and
+synthetic keys; the audit found missing RerunCollectionId in shared keys,
+Classic projection/matching and history. The new core regression failed with
+[20,21,20,21] instead of [10,20,11,21] (7cd53b4a), then passed (0110bde5).
+All 267 core tests pass (4cb2c12e), with unchanged non-rerun serialized keys.
+A production SQLite fixture builds a 300-item, six-hour playlist through
+21 days, then reopens and Refreshes: future media, absolute times, track
+preferences and contexts are identical, starting at item 1084 (0f9e2241).
+Distinct rerun sources survive restarted Refresh and persist separate IDs;
+ambiguous legacy anchors fail preflight without clearing rows (aab3e6b3).
+Both Classic health tests pass (7ed345fc). Their fixture now uses a populated
+One-mode build rather than an empty duration-mode result; removing rerun
+identity makes the actual health check fail. ADR 0020 legacy refusal is retained.
+Adding the source-key field crossed the decoration-selection enum size lint;
+the optional override payload is boxed without changing its serialized form.
+The final 267 core plus two health tests all pass (b860a06b).
+Core/infra/web all-target Clippy passes. Review confirms full identity grouping,
+unchanged absent-field JSON, and preflight before destructive persistence.
+Verdict: Adapt under ADR 0020. Pin/ledger/checkout advance to ecf6c2c1;
+row 86 follows. Formatting, progress and staged lint policy pass.
+Row 86 (a7ecc5f9) is Port. ClassicClock makes the civil zone explicit;
+the production loader resolves the host zone once per build. Jiff 0.2.23 supplies
+transition offsets unavailable from Chrono LocalResult alone; license policy passes.
+Flexible starts use the next occurrence within 12 hours, tomorrow resolves its
+own local offset, and active Flood peek retains its next-day rule. Strict keeps
+upstream's wall-time comparison and carried offset. Initial state applies the
+flexible rule before advancing; clock failures abort publication.
+The clock matrix covers midnight, ties, incomplete modes, Flood peek, 365 dates
+in four zones, and the real three-item builder sequence. A .NET 10.0.12 oracle
+(SDK 10.0.112) verifies gap/fold offsets in Amsterdam, Dublin, Lord Howe and
+Casablanca and political seams in Apia/Moscow. UTC complete checkpoints remain
+unchanged. A real SQLite build/reopen/Continue/reopen/Refresh across spring and
+autumn DST preserves media, UTC times, track preferences and contexts (d7019ea3).
+The final core plus full scan-refresh-continuity selection passes 295 tests
+(ccc204b9); the final first-item regression passes separately (8aa5dab9).
+Core/infra/web all-target strict Clippy, architecture lint, licenses, format and
+diff checks pass. No browser behavior changes. Pin/ledger/checkout advance to
+a7ecc5f9; row 87 follows. Window runtime/build gates remain required.
+Row 87 (3d24c3f0) is Port. Build persistence recomputes positive gaps between
+adjacent final items, in the same SQLite transaction as item replacement,
+retention and appends. This follows upstream's exact adjacent-item rule; core
+YAML gap hints still serve fallback generation before persistence. Continue
+removes stale gaps, repeated builds have stable logical counts, and unrelated
+playouts remain untouched. The SQL plan uses IX_PlayoutItem_PlayoutId before
+sorting the selected playout's items. On-demand playback trims gaps finishing
+before its checkpoint and shifts retained gaps in the item/anchor transaction.
+Injected insert/update failures prove rollback of item replacement/shifting and
+gap deletion; the admin detail/count query exposes only the expected positive gap.
+The regression first failed with zero expected gap rows (316b876c), then all
+12 round-trip tests passed (0e41e37d). Three on-demand tests pass (2e430162).
+Final combined round-trip, on-demand and full scan-refresh-continuity selection:
+33 passed (e3b11655). Strict infra all-target Clippy passes. A fresh matched
+Leptos build succeeds, including the new Jiff WASM dependency. The existing
+playout-detail workflow passes in Chromium (2.9 seconds) and Firefox (6.0 seconds),
+serially on isolated synthetic databases: UNSCHEDULED, filler preference,
+context dialog and playout controls. No UI layout or translation changes.
+Pin/ledger/checkout advance to 3d24c3f0; row 88 follows. This matched build may
+be reused until relevant source changes; full UCU-05 window gates remain open.
+Row 88 (57a0c40d) is N/A under ADR 0063. The entire upstream diff changes
+its Windows FFmpeg 8.1.2 artifact from g82f576a8 to gd3cc14b8 and adds a changelog
+entry. ErsatzRS runtime acquisition uses the first-party FFmpeg 9 line; the
+upstream 8.1.2 packaging pin is not applicable. No command-generation change or
+native Windows QSV execution evidence is claimed. Source, diff and progress
+checks pass; pin/ledger/checkout advance to 57a0c40d. Row 89 follows.
+Row 89 (b5fd035b) is Covered by row-80 commit f6f076a2. Its only two added
+fields, NextVersion and FFmpegVersion, already appear at the top level of
+native playback troubleshooting_info.json through TroubleshootingVersions::detected.
+The current archive member filter includes JSON files. The writer uses startup
+Next detection and the accepted runtime version; optional absence remains unknown
+under ADR 0095. Reuse the unchanged row-80 serializer evidence (ccb89033,
+26 tests including both Next states); source inspection verifies the actual
+writer and ZIP path. No code change or new runtime claim. Pin/ledger/checkout
+advance to b5fd035b; row 90 follows.
+Row 90 (35b5a259) is N/A (upstream release metadata). The sole changed file
+is CHANGELOG.md, adding the 26.7.1 heading/date and comparison links; the commit
+subject's 26.7.0 wording does not match that diff. ErsatzRS keeps its own release
+history. Source/progress/diff checks pass; pin/ledger/checkout advance to
+35b5a259. All UCU-05 rows are reconciled, but the milestone remains In progress
+until full window acceptance, authorized push and terminal green exact-SHA CI.
+Window acceptance started at 61f373ba: workspace all-target Clippy passes
+(3m35s), and cargo deny passes advisories, bans, licenses and sources. Full ./run.sh test-closeout passes: Nextest 366af9c7 reports 3230 passed and
+107 skipped; the Cargo doctest phase completes successfully (0 doctests). The configured target cache reached
+74 GiB, requiring cleanup under the 60-GiB repository policy before subsequent
+heavy gates. After cleanup, cargo xtask smoke passes with FFmpeg n9.0-20260805:
+MPEG-TS returns HTTP 200 with stream bytes, and HLS provides both a variant
+playlist and initial session segments. Parity, TSDuck and final bundle consistency
+remain open, followed by the authorized push and exact-SHA CI.
+The first TSDuck runs exposed invalid gate evidence: HLS direct was skipped
+because its master playlist was treated as a media playlist, and a nonempty
+legacy capture was accepted despite ending after about five seconds. The gate
+now follows the session playlist, rejects failed/early captures, retains each
+capture's diagnostics and scans channel-worker failure signatures. Synthetic
+capture checks cover early EOF, nonzero exit with bytes, and a complete window;
+the existing delivery regressions pass. A standalone chunked HTTP fixture with
+FFmpeg n9.0-20260805 reproduces legacy concat's EIO/ENOSYS failure. Declaring
+seekable=0 does not fix it; per-entry multiple_requests=1 preserves normal EOF
+and crosses five requests successfully. The playlist now sets that option for
+both entries. Three focused concat tests pass (da26145b), including the reviewed
+playlist snapshot. The strengthened real-server TSDuck gate passes all four
+paths with 87 checks and zero failures. Legacy delivers 141,215 packets and
+20.497 seconds of media reported by ffprobe, with zero continuity, PTS/DTS/PCR-leap,
+sync or transport errors. HLS segmenter pip cadence deviates by at most 30 ms.
+The server log is free of known failure signatures. The original provider-specific
+debt remains visible pending confirmation; no live-provider acceptance is inferred.
+Post-correction workspace all-target strict Clippy passes (3m59s), along with
+format, diff and progress checks. At checkpoint 7206739c, full test closeout
+passes: Nextest 74f93cd9 reports 3230 passed, 107 skipped in 51.800 seconds;
+the Cargo doctest phase completes successfully (0 doctests). A fresh fetch
+still yields c0184f00: all 173 ledger SHA/subject pairs match upstream exactly,
+with 90 processed and 83 pending; pin/last processed row/checkout agree at
+35b5a259. All 23 UCU-05 rows reference existing owning parity records and
+recorded commits; rows 73/88 now use the canonical ffmpeg-command-generation
+slug instead of nonexistent ffmpeg-runtime. Verdicts are unchanged.
+The parity gate passes progress, format, architecture and hydration lint;
+its web Nextest selection passes 691 tests with 13 skipped (0e5f631c), and
+strict web all-target Clippy passes. The matched Leptos SSR/WASM build succeeds
+and the complete parity gate exits successfully. The assembled-bundle verifier
+boots that server against disposable state and serves both referenced JS/WASM
+assets successfully. The full push-range Clippy suppression-policy check passes.
+Reuse the earlier native smoke result for unchanged hybrid/HLS routing, alongside
+the post-correction four-path TSDuck proof. All local UCU-05 window requirements
+pass; authorized milestone push and terminal green exact-SHA CI remain open.
 """
 
 [[milestone]]
@@ -9361,7 +9737,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 27f9d217 (latest fetched tip) in order,
+Process every ledger row in this release window through c0184f00 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -9389,4 +9765,7 @@ This refresh changes the target only, not the processed pin.
 rows 171 (62b7a5e9, graphics subtitle performance) and 172 (27f9d217, Jellyfin 12
 collections). The existing 170 SHA/subject pairs are an exact prefix. No new row
 is processed and the pin remains at row 38 while row 39 acceptance continues.
+2026-09-25 row-80 refresh appends row 173 (c0184f00, watermark improvements).
+All 173 ordered SHA/subject pairs match upstream history, preserving the prior
+172 rows as an exact prefix. The new row remains pending in UCU-09.
 """

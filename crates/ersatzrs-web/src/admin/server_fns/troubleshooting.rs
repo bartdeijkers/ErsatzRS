@@ -388,7 +388,10 @@ pub async fn load_troubleshooting_report_with_state(
     let nvidia_probe_output = nvidia_probe_output(&runtime.capabilities);
     let video_toolbox_probe_output = video_toolbox_probe_output(&runtime.capabilities);
     let info = GeneralTroubleshootingInfo {
-        version: env!("CARGO_PKG_VERSION").to_owned(),
+        versions: crate::host::troubleshooting::TroubleshootingVersions::detected(
+            state.next_version.get().map(String::as_str),
+            &runtime.ffmpeg.version,
+        ),
         environment: troubleshooting_environment(),
         runtime: runtime_summary(),
         cpus: cpu_summary(),
@@ -961,7 +964,8 @@ fn local_mpeg_sample_url(channel_number: &str, mode: &str) -> String {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 struct GeneralTroubleshootingInfo {
-    version: String,
+    #[serde(flatten)]
+    versions: crate::host::troubleshooting::TroubleshootingVersions,
     environment: BTreeMap<String, String>,
     runtime: RuntimeSummary,
     cpus: Vec<CpuSummary>,
@@ -2483,7 +2487,14 @@ mod tests {
     #[test]
     fn general_report_replaces_empty_dotnet_carryovers_with_runtime_summary() {
         let info = GeneralTroubleshootingInfo {
-            version: "0.1.0".to_owned(),
+            versions: crate::host::troubleshooting::TroubleshootingVersions::detected(
+                Some("0.9.4-test"),
+                &ersatzrs_ffmpeg::version::FfmpegVersion {
+                    major: 9,
+                    minor: 2,
+                    patch: 3,
+                },
+            ),
             environment: BTreeMap::new(),
             runtime: RuntimeSummary {
                 os: "linux",
@@ -2518,6 +2529,9 @@ mod tests {
 
         let json = serde_json::to_value(&info).expect("general info serializes");
 
+        assert_eq!(json["Version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(json["NextVersion"], "0.9.4-test");
+        assert_eq!(json["FFmpegVersion"], "9.2.3");
         assert!(json.get("Runtime").is_some());
         assert!(json.get("VideoControllers").is_none());
         assert!(json.get("AviSynth").is_none());

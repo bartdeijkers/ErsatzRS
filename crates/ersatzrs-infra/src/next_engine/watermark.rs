@@ -3,14 +3,13 @@
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{ChannelWatermarkMode, WatermarkLocation, WatermarkSize};
 
-use crate::playback::ResolvedPlaybackWatermark;
+use crate::playback::{PlaybackWatermarkImage, ResolvedPlaybackWatermark};
 
 use super::protocol;
 
 /// Preserve selection precedence; unsupported active combinations fail closed.
 /// Disabled selections do not contribute an overlay. The shared image resolver
-/// supplies local cached files, so no provider credentials or source seeks are
-/// introduced here. HTTP remains a wire capability, not a new image resolver.
+/// preserves local cached files and operator-supplied channel-logo URLs.
 pub(super) fn project(
     selected: &[ResolvedPlaybackWatermark],
 ) -> Result<Option<protocol::Watermark>> {
@@ -29,24 +28,13 @@ pub(super) fn project(
         return Err(unavailable());
     }
     let watermark = &selected.watermark;
-    let path = selected
-        .image_path
-        .to_str()
-        .filter(|path| !path.trim().is_empty())
-        .ok_or_else(unavailable)?;
     let width_percent = match watermark.size {
         WatermarkSize::Scaled => Some(percent(watermark.width_percent)?),
         WatermarkSize::ActualSize => None,
     };
     Ok(Some(protocol::Watermark {
         timing: timing(watermark)?,
-        source: protocol::Source::Local {
-            path: path.to_owned(),
-            in_point_ms: None,
-            out_point_ms: None,
-
-            probe_hint: None,
-        },
+        source: image_source(&selected.image)?,
         stream_index: Some(0),
         within_source_content: watermark.place_within_source_content.then_some(true),
         location: match watermark.location {
@@ -65,6 +53,40 @@ pub(super) fn project(
         vertical_margin_percent: Some(percent(watermark.vertical_margin_percent)?),
         opacity_percent: Some(percent(f64::from(watermark.opacity))?),
     }))
+}
+
+fn image_source(image: &PlaybackWatermarkImage) -> Result<protocol::Source> {
+    match image {
+        PlaybackWatermarkImage::Local(path) => Ok(protocol::Source::Local {
+            path: path
+                .to_str()
+                .filter(|path| !path.trim().is_empty())
+                .ok_or_else(unavailable)?
+                .to_owned(),
+            in_point_ms: None,
+            out_point_ms: None,
+            probe_hint: None,
+        }),
+        PlaybackWatermarkImage::Http(uri) => {
+            let parsed = url::Url::parse(uri).map_err(|_| unavailable())?;
+            if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+                return Err(unavailable());
+            }
+            Ok(protocol::Source::Http {
+                uri: uri.clone(),
+                headers: Vec::new(),
+                user_agent: None,
+                keep_alive: Some(false),
+                reconnect: None,
+                reconnect_delay_max: None,
+                timeout_us: None,
+                in_point_ms: None,
+                out_point_ms: None,
+                probe_hint: None,
+                is_live: None,
+            })
+        }
+    }
 }
 
 fn timing(

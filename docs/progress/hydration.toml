@@ -342,7 +342,7 @@ notes  = '`tests/e2e/support-pages.spec.ts` covers the Support logs surface.'
 name   = 'TroubleshootingPage'
 status = '✅'
 routes = ['/system/troubleshooting', '/system/troubleshooting/mpeg', '/system/troubleshooting/sequential-schedule', '/system/troubleshooting/block-playout', '/system/troubleshooting/block-playout/history']
-notes  = '`tests/e2e/support-pages.spec.ts` covers the ErsatzTV-style tools and report tabs. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
+notes  = '`tests/e2e/support-pages.spec.ts` covers the ErsatzTV-style tools and report tabs. UCU-05 row 80 proves General version diagnostics through in-order SSR in Chromium and Firefox with JavaScript enabled and disabled. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
 
 [[page]]
 name   = 'PlaybackTroubleshootingPage'

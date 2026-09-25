@@ -1536,7 +1536,7 @@ fn nvenc_pipeline_interlaced_software_decode_does_not_double_upload_before_yadif
 }
 
 #[test]
-fn nvenc_pipeline_with_1080p_overlay_uses_green_line_workaround_snapshot() {
+fn nvenc_pipeline_with_1080p_overlay_omits_crop_metadata_snapshot() {
     let mut request = PipelineRequest::new(
         InputFile::video("/media/movie.mkv"),
         DesiredVideoState::h264_1080p(),
@@ -1556,7 +1556,9 @@ fn nvenc_pipeline_with_1080p_overlay_uses_green_line_workaround_snapshot() {
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
 
-    insta::assert_snapshot!(command.arguments.join(" "));
+    let arguments = command.arguments.join(" ");
+    assert!(!arguments.contains("-bsf:v"));
+    insta::assert_snapshot!(arguments);
 }
 
 #[test]
@@ -1741,7 +1743,7 @@ fn vaapi_pipeline_emits_encoder_capability_options_snapshot() {
 }
 
 #[test]
-fn vaapi_radeonsi_hevc_pipeline_uses_crop_metadata_workaround_snapshot() {
+fn vaapi_radeonsi_hevc_pipeline_omits_crop_metadata_snapshot() {
     let profile = FFmpegProfile {
         hardware_acceleration: HardwareAccelerationKind::Vaapi,
         vaapi_device: Some("/dev/dri/renderD128".to_owned()),
@@ -1769,6 +1771,7 @@ fn vaapi_radeonsi_hevc_pipeline_uses_crop_metadata_workaround_snapshot() {
     let pipeline = VaapiPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
 
+    assert!(!command.arguments.contains(&"-bsf:v".to_owned()));
     insta::assert_snapshot!(format!(
         "env={:?}\nargs={}",
         command.environment,
@@ -2183,6 +2186,18 @@ fn pipeline_with_scaled_permanent_watermark_snapshot() {
     let command = pipeline.command(&request.inputs);
 
     insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_http_channel_logo_preserves_url_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark(
+        "https://example.test/logo%20image.png?revision=2",
+    ));
+    request.watermarks.push(WatermarkOverlay::default());
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    insta::assert_snapshot!(command.arguments.join("\n"));
 }
 
 #[test]

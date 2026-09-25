@@ -285,6 +285,15 @@ mod tests {
             .await
             .unwrap();
         assert!(projected_off.item.tracks.unwrap().subtitle.is_none());
+
+        let mut disabled = channel.clone();
+        disabled.music_video_credits_mode = ChannelMusicVideoCreditsMode::None;
+        let mut projection = project(&pool, &disabled, &item).await;
+        let before = serde_json::to_value(&projection.item).unwrap();
+        attach(&pool, &relay, &disabled, &item, &mut projection)
+            .await
+            .unwrap();
+        assert_eq!(serde_json::to_value(&projection.item).unwrap(), before);
     }
 
     #[tokio::test]

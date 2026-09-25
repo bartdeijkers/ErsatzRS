@@ -13,8 +13,22 @@ fn selected() -> ResolvedPlaybackWatermark {
             opacity: 75,
             ..Default::default()
         },
-        image_path: "synthetic-watermark.png".into(),
+        image: crate::playback::PlaybackWatermarkImage::Local("synthetic-watermark.png".into()),
     }
+}
+
+#[test]
+fn channel_logo_url_projects_an_http_source_without_media_seeks() {
+    let mut selected = selected();
+    let uri = "https://example.test/logo%20image.png?revision=2";
+    selected.image = PlaybackWatermarkImage::Http(uri.to_owned());
+    let projected = project(&[selected]).unwrap().unwrap();
+    let source = serde_json::to_value(projected.source).unwrap();
+    assert_eq!(source["source_type"], "http");
+    assert_eq!(source["uri"], uri);
+    assert!(source.get("path").is_none());
+    assert!(source.get("in_point_ms").is_none());
+    assert!(source.get("out_point_ms").is_none());
 }
 
 #[test]
@@ -99,7 +113,7 @@ fn invalid_active_percentages_and_empty_paths_fail_redacted() {
         assert!(project(&[selection]).is_err());
     }
     let mut selection = selected();
-    selection.image_path = " ".into();
+    selection.image = crate::playback::PlaybackWatermarkImage::Local(" ".into());
     assert!(project(&[selection]).is_err());
 }
 
@@ -228,7 +242,8 @@ fn channel_logo_watermark_projects_the_resolved_artwork_path() {
     let mut selection = selected();
     selection.watermark.image_source = ersatzrs_domain::ChannelWatermarkImageSource::ChannelLogo;
     selection.watermark.image = None;
-    selection.image_path = "synthetic/iptv/logos/channel.png".into();
+    selection.image =
+        crate::playback::PlaybackWatermarkImage::Local("synthetic/iptv/logos/channel.png".into());
     let projected = project(&[selection]).unwrap().unwrap();
     assert_eq!(
         serde_json::to_value(projected).unwrap()["source"],

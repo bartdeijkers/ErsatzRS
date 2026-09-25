@@ -515,6 +515,9 @@ impl SqliteSchedulingContentRepository {
                 self.items_for_program_schedule_item(item).await?,
             );
         }
+        let playlist_items_by_key = self
+            .classic_playlist_items(&schedule_items, &media_by_key)
+            .await?;
         let mut classic_filler_presets = BTreeMap::new();
         for filler_id in schedule_items
             .iter()
@@ -533,6 +536,9 @@ impl SqliteSchedulingContentRepository {
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
+                playlist_items_by_key,
+                classic_clock: ersatzrs_core::scheduling::ClassicClock::system()
+                    .map_err(|error| decode_message("Classic clock", &error.to_string()))?,
                 classic_schedule_id: Some(schedule.id),
                 classic_schedule_name: Some(schedule.name),
                 classic_schedule_items: schedule_items,
@@ -580,6 +586,31 @@ impl SqliteSchedulingContentRepository {
         }
         self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
             .await
+    }
+
+    async fn classic_playlist_items(
+        &self,
+        schedule_items: &[ProgramScheduleItem],
+        media_by_key: &BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<BTreeMap<String, Vec<SchedulingPlaylistItem>>> {
+        let mut playlists = BTreeMap::new();
+        for item in schedule_items {
+            let key = classic_schedule_item_key(item);
+            if item.playback_order == ersatzrs_domain::PlaybackOrder::Marathon {
+                playlists.insert(
+                    key.clone(),
+                    ersatzrs_core::scheduling::classic_marathon_playlist_items(
+                        item,
+                        media_by_key.get(&key).cloned().unwrap_or_default(),
+                    ),
+                );
+            } else if item.collection_type == CollectionType::Playlist {
+                if let Some(id) = item.playlist_id {
+                    playlists.insert(key, self.playlist_items_by_id(id).await?);
+                }
+            }
+        }
+        Ok(playlists)
     }
 
     async fn active_classic_schedule_id(
@@ -709,9 +740,23 @@ impl SqliteSchedulingContentRepository {
             media_by_key.insert(item.key.clone(), items);
         }
 
+        let mut playlist_items_by_key = BTreeMap::new();
+        for item in &definition.content {
+            let source = item.source();
+            let children = if matches!(source, SchedulingContentSource::Marathon { .. }) {
+                source.marathon_playlist_items(media_by_key[&item.key].clone())
+            } else {
+                self.playlist_items_for_source(&source).await?
+            };
+            if let Some(children) = children {
+                playlist_items_by_key.insert(item.key.clone(), children);
+            }
+        }
+
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
+                playlist_items_by_key,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
                 max_playout_offset,
@@ -1498,6 +1543,13 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         };
 
+        self.playlist_items_by_id(playlist_id).await
+    }
+
+    async fn playlist_items_by_id(
+        &self,
+        playlist_id: EntityId,
+    ) -> Result<Vec<SchedulingPlaylistItem>> {
         let rows = sqlx::query(
             r#"SELECT *
              FROM "PlaylistItem"
@@ -1593,6 +1645,7 @@ impl SqliteSchedulingContentRepository {
                 collection_id: item.collection_id,
                 multi_collection_id: item.multi_collection_id,
                 smart_collection_id: item.smart_collection_id,
+                rerun_collection_id: item.rerun_collection_id,
                 media_item_id: item.media_item_id,
                 playlist_id: item.playlist_id,
                 search_query: item.search_query.clone(),
@@ -2874,12 +2927,25 @@ impl SqliteSchedulingContentRepository {
                 (SELECT "s"."ShowId" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "show_id",
                 (SELECT "e"."SeasonId" FROM "Episode" AS "e" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_id",
                 (SELECT "mv"."ArtistId" FROM "MusicVideo" AS "mv" WHERE "mv"."Id" = "mi"."Id" LIMIT 1) AS "artist_id",
+                COALESCE(
+                    (SELECT "Album" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "Album" FROM "SongMetadata" WHERE "SongId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
+                ) AS "album",
+                (SELECT "d"."Name" FROM "Director" AS "d" WHERE
+                    "d"."MovieMetadataId" = (SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."EpisodeMetadataId" = (SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."MusicVideoMetadataId" = (SELECT "Id" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1) OR
+                    "d"."OtherVideoMetadataId" = (SELECT "Id" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
+                    ORDER BY "d"."Id" LIMIT 1
+                ) AS "first_director",
                 (SELECT "s"."SeasonNumber" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_number",
                 (SELECT "em"."EpisodeNumber" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1) AS "episode_number",
                 COALESCE(
                     (SELECT "em"."ReleaseDate" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
                     (SELECT "mm"."ReleaseDate" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
-                    (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1)
+                    (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1),
+                    (SELECT "ReleaseDate" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = "mi"."Id" ORDER BY "Id" LIMIT 1),
+                    (SELECT "ReleaseDate" FROM "SongMetadata" WHERE "SongId" = "mi"."Id" ORDER BY "Id" LIMIT 1)
                 ) AS "release_date",
                 (SELECT "rs"."Liveness" FROM "RemoteStream" AS "rs"
                  WHERE "rs"."Id" = "mi"."Id" LIMIT 1) AS "remote_liveness",
@@ -3294,7 +3360,9 @@ impl SqliteSchedulingContentRepository {
             let selection = match mode {
                 DecoMode::Inherit => EffectiveDecoSelection::Inherit,
                 DecoMode::Override => EffectiveDecoSelection::Override(
-                    self.effective_deco(deco_id, media_by_key).await?,
+                    self.effective_deco(deco_id, media_by_key)
+                        .await?
+                        .map(Box::new),
                 ),
                 DecoMode::Disable | DecoMode::Merge => EffectiveDecoSelection::Disable,
             };
@@ -3417,7 +3485,8 @@ impl SqliteSchedulingContentRepository {
         let rows = sqlx::query(
             r#"SELECT "a".*,
                       "s"."Seed" AS "EnumeratorSeed",
-                      "s"."Index" AS "EnumeratorIndex"
+                      "s"."Index" AS "EnumeratorIndex",
+                      "s"."Started" AS "EnumeratorStarted"
              FROM "PlayoutProgramScheduleAnchor" AS "a"
              LEFT JOIN "CollectionEnumeratorState" AS "s"
                 ON "s"."PlayoutProgramScheduleAnchorId" = "a"."Id"
@@ -3459,6 +3528,10 @@ impl SqliteSchedulingContentRepository {
                             .unwrap_or_default(),
                         index: row
                             .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
+                            .unwrap_or_default(),
+                        started: row
+                            .try_get::<Option<bool>, _>("EnumeratorStarted")
                             .repository()?
                             .unwrap_or_default(),
                     },
@@ -3503,7 +3576,8 @@ impl SqliteSchedulingContentRepository {
         let rows = sqlx::query(
             r#"SELECT "i".*,
                       "s"."Seed" AS "EnumeratorSeed",
-                      "s"."Index" AS "EnumeratorIndex"
+                      "s"."Index" AS "EnumeratorIndex",
+                      "s"."Started" AS "EnumeratorStarted"
              FROM "PlayoutScheduleItemFillGroupIndex" AS "i"
              LEFT JOIN "FillGroupEnumeratorState" AS "s"
                 ON "s"."PlayoutScheduleItemFillGroupIndexId" = "i"."Id"
@@ -3528,6 +3602,10 @@ impl SqliteSchedulingContentRepository {
                             .unwrap_or_default(),
                         index: row
                             .try_get::<Option<i32>, _>("EnumeratorIndex")
+                            .repository()?
+                            .unwrap_or_default(),
+                        started: row
+                            .try_get::<Option<bool>, _>("EnumeratorStarted")
                             .repository()?
                             .unwrap_or_default(),
                     },
@@ -3851,6 +3929,7 @@ fn collection_key_from_row(row: &DbRow) -> Result<SchedulingCollectionKey> {
         collection_id: optional_id(row, "CollectionId")?,
         multi_collection_id: optional_id(row, "MultiCollectionId")?,
         smart_collection_id: optional_id(row, "SmartCollectionId")?,
+        rerun_collection_id: optional_id(row, "RerunCollectionId")?,
         media_item_id: optional_id(row, "MediaItemId")?,
         playlist_id: optional_id(row, "PlaylistId")?,
         search_query: row
@@ -3899,6 +3978,8 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
         show_id: row.try_get("show_id").repository()?,
         season_id: row.try_get("season_id").repository()?,
         artist_id: row.try_get("artist_id").repository()?,
+        album: row.try_get("album").repository()?,
+        first_director: row.try_get("first_director").repository()?,
         season: row.try_get("season_number").repository()?,
         episode: row.try_get("episode_number").repository()?,
         release_date: row

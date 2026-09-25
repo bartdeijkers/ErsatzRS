@@ -61,6 +61,141 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
+full window acceptance gates, record evidence, then use the authorized milestone
+push and require terminal green exact-SHA CI. Do not start UCU-06 row 91 before
+UCU-05 closes. The row-87 matched Leptos build remains valid unless code changes.
+
+2026-09-25: UCU-05 row 89 is Covered by row 80's detected engine-version
+fields in playback JSON/ZIPs. Continue at row 90 (35b5a259), then run the
+UCU-05 window gates before its authorized push and exact-SHA CI acceptance.
+
+2026-09-25: UCU-05 row 88 is N/A under ADR 0063: only upstream's FFmpeg
+8.1.2 Windows archive revision changes; ErsatzRS retains first-party FFmpeg 9.
+Continue at row 89 (b5fd035b). UCU-05 window gates/push/CI remain open.
+
+2026-09-25: UCU-05 row 87 is Port. Item-derived gaps publish atomically with
+builds, and on-demand gaps trim/shift with items. Repository rollback and full
+continuity selection (33 tests), strict infra Clippy and Chromium/Firefox detail
+proof pass. Continue at row 88 (57a0c40d); window gates/push/CI remain open.
+
+2026-09-25: UCU-05 row 86 is Port. Flexible local starts resolve tomorrow's
+DST offset and wait at most 12 hours; Strict and UTC complete checkpoints retain
+their contracts. Core and persisted Continue/Refresh proof, strict consumer
+Clippy and dependency license checks pass. Continue at row 87 (3d24c3f0).
+UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 85 is Adapt under ADR 0020. Complete collection
+identities include rerun IDs; playlist and synthetic keys retain existing
+checkpoint restoration. Three-week playlist and rerun restart/Refresh proof
+passes; legacy identity loss refuses clearing and fails health. UCU-05 owns
+acceptance evidence. Continue at row 86 (a7ecc5f9); window gates/push/CI remain open.
+
+2026-09-25: UCU-05 row 84 is Port. External and generated channel-logo
+watermarks have native and official Next decoded proof with selected audio;
+Next subtitles and DisableWatermarks also pass. Cached PNG rendering preserves
+missing-local-artwork behavior. UCU-05 owns the evidence. Continue at row 85
+(ecf6c2c1); window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 83 is N/A: only upstream 26.7.0 changelog
+release metadata changes. Pin, ledger and checkout advance together.
+Continue at row 84 (15db3c4c); window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 82 is Adapt under ADRs 0095/0100. Next receives
+the subtitle font cache; runtime checks prove font selection, decoded captions,
+end-of-cue playback and retained alternate audio. UCU-05 owns focused evidence.
+Continue at row 83 (05dd6cbe); window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 82 audit found missing Next subtitle font-cache
+configuration. The partial correction has a red/green normal/preview regression
+and passing infra Clippy. Continue with extraction/publication ordering and
+runtime font/empty-cue playback proof. Row verdict and pin remain at row 81;
+window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 81 (3f2efcd4) is N/A: upstream only adds the
+.NET test-discovery SDK. ErsatzRS uses Cargo/Nextest; no runtime behavior
+changes. Pin, ledger and checkout advance together. Continue at row 82
+(4ffd775a). UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 80 (9cc771be) adds detected engine versions to
+General diagnostics and playback archives, with startup-only Next discovery
+shared across the sidebar and reports. In-order SSR fixes the demonstrated
+no-JS Loading state. Focused Rust/browser evidence is in UCU-05. Continue at
+row 81 (3f2efcd4); window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 79 (a2f54ef1) is reconciled. Block filler stops on
+nonpositive duration, excludes expired rows, and rebuilds Reset filler/history
+without overlapping retained primary content. Scheduler shutdown reaches the
+filler loop; cancelled builds preserve persisted timelines. Continue at row 80
+(9cc771be). UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 78 (16b71569) is reconciled. Structured playlist
+loading, all Classic Marathon groups/batches, complete Continue state and
+versioned YAML history restoration have core and restarted SQLite proof.
+Legacy state refuses unsafe builds before clearing; Reset recovers. Row 79 was the next audit; its completed evidence is recorded above.
+UCU-05 window gates, push and CI remain open.
+
+2026-09-25: UCU-05 row 77 (6ff44cf5) adapts upstream shuffled-progress
+validation to the flat Classic media enumerator. A saved high valid index
+survives, and inactive alternate collection anchors now persist through
+Continue; restarted SQLite proof passes. The pre-existing multipart grouping
+gap remains visible in Classic parity. Continue at row 78 (16b71569); UCU-05
+window gates, push and CI remain open.
+
+2026-09-25: UCU-05 row 76 (f7bdcede) ports daily Classic checkpointing through
+the final build pass. A seven-day shuffled hourly Continue regression failed
+before the fix, then passed; all 249 core tests and a production SQLite
+Continue-to-Refresh proof preserves the item crossing midnight while replacing
+the future. Pin, ledger and checkout advance together.
+Continue at row 77 (6ff44cf5); UCU-05 window gates, push and CI remain open.
+
+2026-09-25: UCU-05 row 75 (7850ced6) ports upstream removal of NVIDIA and
+AMD green-line crop metadata workarounds to FFmpeg 9. Both argv snapshots and
+all 344 FFmpeg crate tests pass. A synthetic FFmpeg 9 NVENC overlay encode
+preserves the 1080 bottom rows without crop metadata; AMD live GPU proof is
+unavailable here. Pin, ledger and checkout advance together. Continue at
+row 76 (f7bdcede); UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 74 (6d8666b8) is N/A. Its only diff is a Jint NuGet
+version bump; ADR 0096 selects bounded QuickJS for ErsatzRS and no callback
+contract changes here. Pin, ledger and checkout advance together. Continue
+at row 75 (7850ced6); UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 73 (5855deb8) is Adapt under accepted ADR 0063.
+Upstream only updates FFmpeg 8.1.2 packaging/version health; ErsatzRS's FFmpeg
+9 runtime, startup validation and health contract remain authoritative.
+Pin, ledger and checkout advance together. Continue at row 74 (6d8666b8);
+UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 72 (16e341d9) is N/A. Upstream only re-keys its
+Windows global singleton mutex by configuration folder. ErsatzRS has no
+equivalent mutex; ADR 0080 excludes multiple active server deployments.
+Pin, ledger and checkout advance together. Continue at row 73 (5855deb8);
+UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 71 (4fb42f69) ports every-build Classic playlist
+offsets and saved-index replay. A 6+6 item Continue build matches the
+uninterrupted 12-item timeline; all 248 core tests and scoped Clippy pass.
+Pin, ledger and checkout advance together. Continue at row 72 (16e341d9);
+UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 70 (0d692e70) ports durable Started state across the
+three enumerator tables and Classic advancement. Migration upgrade, repository
+round trip, and 247 core tests pass; scoped lint passes. Pin, ledger and
+upstream checkout advance together. Continue at row 71 (4fb42f69); UCU-05
+window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 69 (e5a2a763) ports Classic playlist random starts for
+fresh sources and bypasses retained state. Focused tests and scoped lint
+pass. Pin, ledger and upstream checkout advance together; row 70 (0d692e70)
+is next. UCU-05 window gates, push and exact-SHA CI remain open.
+
+2026-09-25: UCU-05 row 68 (18137832) is Port. Plex movie and Other Video
+ordinary scans now refresh title-only changes and upgrade old timestamp-only
+fingerprints. Focused Plex tests and scoped lint pass. Pin, ledger row 68 and
+upstream checkout advance together. Continue at row 69 (e5a2a763); UCU-05
+window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04's documentation-only closeout needed manual CI. Run
 36136343034 is terminal red only in Chromium: the NSF live scenario queried
 SQLite before its schedule Save completed; Firefox and all other jobs pass.

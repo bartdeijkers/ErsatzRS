@@ -1,3 +1,8 @@
+mod clock;
+#[cfg(test)]
+mod fixed_start_tests;
+pub use clock::ClassicClock;
+
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
@@ -201,6 +206,19 @@ pub fn audit_classic_refresh_checkpoint(
             "checkpoint sources are partial, stale, or duplicated".to_owned(),
         );
     }
+    if context.sources.iter().any(|(key, source)| {
+        reference_data.playlist_items_by_key.contains_key(key)
+            && source
+                .playlist
+                .as_ref()
+                .is_none_or(|playlist| playlist.remaining_media_ids.is_none())
+    }) {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            "playlist checkpoint is missing playable-cycle state".to_owned(),
+        );
+    }
 
     let filler_context = context
         .anchor
@@ -322,6 +340,10 @@ pub fn audit_classic_runtime_state(
         .iter()
         .filter(|anchor| anchor.anchor_date.is_none())
         .map(|anchor| history_key_for_collection_key(&collection_key_for_anchor(anchor)))
+        // Alternate schedules retain their own undated source progress while
+        // inactive. Audit the current schedule's exact state without treating
+        // those dormant anchors as a duplicate or stale active source.
+        .filter(|key| expected_anchor_keys.contains(key))
         .collect::<Vec<_>>();
     let actual_anchor_key_set = actual_anchor_keys.iter().cloned().collect::<BTreeSet<_>>();
 
@@ -382,20 +404,64 @@ struct ClassicAnchorContext {
     filler_indices: BTreeMap<EntityId, usize>,
     #[serde(default)]
     filler_sources: BTreeMap<EntityId, ClassicMediaCheckpoint>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    playlist_sources: BTreeMap<String, ClassicPlaylistCheckpoint>,
 }
 
 fn classic_anchor_context_version() -> u32 {
     2
 }
 
+/// Check that persisted Continue context contains every active playlist's
+/// complete cycle state. Legacy flattened collection indices cannot restore it.
+#[must_use]
+pub fn classic_playlist_continuation_is_complete(
+    reference_data: &SchedulingReferenceData,
+    context: Option<&str>,
+) -> bool {
+    if reference_data.playlist_items_by_key.is_empty() {
+        return true;
+    }
+    let Some(context) =
+        context.and_then(|value| serde_json::from_str::<ClassicAnchorContext>(value).ok())
+    else {
+        return false;
+    };
+    context.version == classic_anchor_context_version()
+        && reference_data.playlist_items_by_key.keys().all(|key| {
+            context
+                .playlist_sources
+                .get(key)
+                .is_some_and(|source| source.remaining_media_ids.is_some())
+        })
+}
+
 impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
-    fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+    fn schedule(
+        &self,
+        mut request: SchedulingRequest,
+    ) -> Result<SchedulingResult, SchedulingError> {
         let mut items = request.reference_data.classic_schedule_items.clone();
         if items.is_empty() {
             return Ok(SchedulingResult::default());
         }
 
         items.sort_by_key(|item| (item.sort_order, item.id));
+        for item in &items {
+            if item.playback_order == PlaybackOrder::Marathon {
+                let key = item_key(item);
+                let media = request
+                    .reference_data
+                    .media_by_key
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_default();
+                request
+                    .reference_data
+                    .playlist_items_by_key
+                    .insert(key, super::classic_marathon_playlist_items(item, media));
+            }
+        }
         if request.mode == PlayoutBuildMode::Refresh
             && !request.reference_data.existing_items.is_empty()
         {
@@ -455,9 +521,13 @@ struct ClassicMediaCheckpoint {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct ClassicPlaylistCheckpoint {
+pub(super) struct ClassicPlaylistCheckpoint {
     index: usize,
     child_index: usize,
+    #[serde(default)]
+    shuffle_seed: Option<i32>,
+    #[serde(default)]
+    remaining_media_ids: Option<BTreeSet<EntityId>>,
     children: Vec<ClassicPlaylistChildCheckpoint>,
 }
 
@@ -486,14 +556,17 @@ struct ClassicMediaIdentity {
 }
 
 impl ClassicSchedulingEngine {
-    #[must_use]
+    /// Calculate a fixed start using an explicit UTC clock.
+    ///
+    /// # Errors
+    /// Returns an error if the civil date is outside the clock's supported range.
     pub fn get_start_time_after(
         current_time: DateTime<Utc>,
         schedule_item: &ProgramScheduleItem,
         schedule_fixed_start_time_behavior: FixedStartTimeBehavior,
         state: &PlayoutAnchor,
         is_peek: bool,
-    ) -> DateTime<Utc> {
+    ) -> Result<DateTime<Utc>, SchedulingError> {
         get_start_time_after(
             current_time,
             schedule_item,
@@ -508,6 +581,7 @@ impl ClassicSchedulingEngine {
                 next_guide_group: state.next_guide_group,
             },
             is_peek,
+            &ClassicClock::default(),
         )
     }
 }
@@ -519,6 +593,7 @@ struct ClassicContext {
     state: ClassicState,
     media: BTreeMap<String, MediaEnumerator>,
     playlists: BTreeMap<String, PlaylistEnumerator>,
+    retained_playlist_sources: BTreeMap<String, ClassicPlaylistCheckpoint>,
     media_states: BTreeMap<String, CollectionEnumeratorState>,
     collection_anchors: Vec<PlayoutProgramScheduleAnchor>,
     filler_media: BTreeMap<EntityId, MediaEnumerator>,
@@ -582,10 +657,76 @@ impl ClassicContext {
             anchor_context.random_rotation_cycle_predecessors;
         for item in &schedule_items {
             let key = item_key(item);
-            let seed = request.playout.seed;
+            let retained_state = collection_anchors
+                .iter()
+                .filter(|anchor| {
+                    history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
+                })
+                .fold(None, |selected, anchor| {
+                    if selected
+                        .is_none_or(|existing| should_prefer_enumerator_anchor(anchor, existing))
+                    {
+                        Some(anchor)
+                    } else {
+                        selected
+                    }
+                })
+                .map(|anchor| anchor.enumerator_state);
+            let seed = retained_state.map_or(request.playout.seed, |state| state.seed);
+            let started = retained_state.is_some_and(|state| state.started);
             if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
-                playlists.insert(key.clone(), PlaylistEnumerator::new(playlist_items.clone()));
-                media_states.insert(key, CollectionEnumeratorState { seed, index: 0 });
+                let mut playlist = PlaylistEnumerator::new(playlist_items.clone());
+                let mut prepared_children =
+                    Vec::<(SchedulingCollectionKey, MediaEnumerator)>::new();
+                for (child_index, child) in playlist.children.iter_mut().enumerate() {
+                    if let Some((_, enumerator)) = prepared_children
+                        .iter()
+                        .find(|(key, _)| *key == child.collection_key)
+                    {
+                        child.enumerator.clone_from(enumerator);
+                        continue;
+                    }
+                    let order = child.enumerator.playback_order;
+                    let child_seed = seed_to_u64(seed).wrapping_add(child_index as u64);
+                    prepare_enumerator_items(&mut child.enumerator, order, child_seed, None);
+                    if request.reference_data.classic_random_start_point
+                        && item.playback_order != PlaybackOrder::Marathon
+                        && matches!(
+                            order,
+                            PlaybackOrder::Chronological
+                                | PlaybackOrder::SeasonEpisode
+                                | PlaybackOrder::ShuffleInOrder
+                        )
+                        && !child.enumerator.is_empty()
+                    {
+                        child.enumerator.set_index(
+                            usize::try_from(child_seed % child.enumerator.len() as u64)
+                                .unwrap_or_default(),
+                        );
+                    }
+                    prepared_children
+                        .push((child.collection_key.clone(), child.enumerator.clone()));
+                }
+                if item.marathon_shuffle_groups {
+                    playlist.shuffle_groups(seed);
+                }
+                if request.mode == PlayoutBuildMode::Continue {
+                    if let Some(checkpoint) = anchor_context.playlist_sources.get(&key) {
+                        restore_playlist_checkpoint(&mut playlist, checkpoint);
+                    } else if let Some(state) = retained_state.filter(|state| state.started) {
+                        let target = usize::try_from(state.index).unwrap_or_default();
+                        playlist.replay_to(target);
+                    }
+                }
+                playlists.insert(key.clone(), playlist);
+                media_states.insert(
+                    key,
+                    retained_state.unwrap_or(CollectionEnumeratorState {
+                        seed,
+                        index: 0,
+                        started: false,
+                    }),
+                );
                 continue;
             }
             let mut enumerator = MediaEnumerator::new(
@@ -595,16 +736,20 @@ impl ClassicContext {
                     .media_items_for_source(&super::SchedulingContentSource::direct(&key)),
             )
             .with_playback_order(item.playback_order);
-            let has_retained_anchor = collection_anchors.iter().any(|anchor| {
-                history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
-            });
-            if has_retained_anchor {
-                media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+            if started || restored_checkpoint.is_some() {
+                media_states.insert(
+                    key.clone(),
+                    retained_state.unwrap_or(CollectionEnumeratorState {
+                        seed,
+                        index: 0,
+                        started: false,
+                    }),
+                );
             } else {
                 prepare_enumerator_items(
                     &mut enumerator,
                     item.playback_order,
-                    seed_to_u64(request.playout.seed),
+                    seed_to_u64(seed),
                     None,
                 );
                 // Matching ErsatzTV: Random Start Point only affects orders
@@ -623,20 +768,26 @@ impl ClassicContext {
                     && random_start_point_applies
                     && !enumerator.is_empty()
                 {
-                    let index = usize::try_from(
-                        seed_to_u64(request.playout.seed) % enumerator.len() as u64,
-                    )
-                    .unwrap_or(0);
+                    let index = usize::try_from(seed_to_u64(seed) % enumerator.len() as u64)
+                        .unwrap_or_default();
                     enumerator.set_index(index);
                     media_states.insert(
                         key.clone(),
                         CollectionEnumeratorState {
                             seed,
                             index: i32::try_from(index).unwrap_or_default(),
+                            started: false,
                         },
                     );
                 } else {
-                    media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+                    media_states.insert(
+                        key.clone(),
+                        CollectionEnumeratorState {
+                            seed,
+                            index: 0,
+                            started: false,
+                        },
+                    );
                 }
                 if item.playback_order == PlaybackOrder::Random && !enumerator.is_empty() {
                     let random_state = select_random_draw(&mut enumerator, seed_to_u64(seed), 0);
@@ -693,6 +844,7 @@ impl ClassicContext {
                     .or_insert(CollectionEnumeratorState {
                         seed: request.playout.seed,
                         index: 0,
+                        started: false,
                     });
             }
         }
@@ -707,6 +859,7 @@ impl ClassicContext {
             state,
             media,
             playlists,
+            retained_playlist_sources: anchor_context.playlist_sources,
             media_states,
             collection_anchors,
             filler_media,
@@ -741,16 +894,10 @@ impl ClassicContext {
         }
 
         for anchor in selected_anchors.values() {
-            let key = history_key_for_collection_key(&SchedulingCollectionKey {
-                collection_type: anchor.collection_type,
-                collection_id: anchor.collection_id,
-                multi_collection_id: anchor.multi_collection_id,
-                smart_collection_id: anchor.smart_collection_id,
-                media_item_id: anchor.media_item_id,
-                playlist_id: anchor.playlist_id,
-                search_query: anchor.search_query.clone(),
-                fake_collection_key: anchor.fake_collection_key.clone(),
-            });
+            if !anchor.enumerator_state.started {
+                continue;
+            }
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
             if let Some(enumerator) = self.media.get_mut(&key) {
                 let seed = seed_to_u64(anchor.enumerator_state.seed);
                 let index = usize::try_from(anchor.enumerator_state.index).unwrap_or(0);
@@ -780,6 +927,8 @@ impl ClassicContext {
                         enumerator.set_index(index);
                     }
                 }
+                self.media_states.insert(key, anchor.enumerator_state);
+            } else if self.playlists.contains_key(&key) {
                 self.media_states.insert(key, anchor.enumerator_state);
             }
         }
@@ -864,6 +1013,7 @@ impl ClassicContext {
             let schedule_item = self.schedule_items[index].clone();
             let next_schedule_item = self.schedule_items[self.peek_schedule_index(1)].clone();
             let before = self.state.current_time;
+            let before_count = self.result.added_items.len();
             match schedule_item.playout_mode {
                 ersatzrs_domain::PlayoutMode::One => {
                     self.schedule_one(&schedule_item, &next_schedule_item);
@@ -877,6 +1027,15 @@ impl ClassicContext {
                 ersatzrs_domain::PlayoutMode::Flood => {
                     self.schedule_flood(&schedule_item, &next_schedule_item);
                 }
+            }
+
+            // A pass can extend beyond its nominal midnight (and the final
+            // partial pass has no following pass boundary). Freeze progress
+            // immediately after the block that first crosses the day seam.
+            if self.result.added_items.len() > before_count
+                && self.state.current_time.date_naive() > before.date_naive()
+            {
+                self.capture_checkpoint();
             }
 
             if self.state.current_time == before && self.current_schedule_index() == index {
@@ -905,7 +1064,8 @@ impl ClassicContext {
                 .added_items
                 .last()
                 .map_or(item_start_time, |item| item.finish);
-            self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+            let filler_start = self.filler_start_after(next_schedule_item);
+            self.add_tail_and_fallback(schedule_item, filler_start);
             self.state.current_time = self
                 .state
                 .current_time
@@ -964,12 +1124,13 @@ impl ClassicContext {
             self.advance_fill_group(schedule_item);
         }
 
-        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+        let filler_start = self.filler_start_after(next_schedule_item);
+        self.add_tail_and_fallback(schedule_item, filler_start);
         self.state.current_time = self
             .state
             .current_time
             .min(self.filler_start_after(next_schedule_item));
-        self.decrement_guide_group_if_multi_item_group(start_len);
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
         self.state.next_guide_group += 1;
     }
 
@@ -1073,7 +1234,7 @@ impl ClassicContext {
                 self.state.current_time = until;
             }
         }
-        self.decrement_guide_group_if_multi_item_group(start_len);
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
         self.state.next_guide_group += 1;
     }
 
@@ -1105,7 +1266,12 @@ impl ClassicContext {
                     self.schedule_fixed_start_time_behavior(),
                     &peek_state,
                     true,
+                    &self.request.reference_data.classic_clock,
                 )
+                .unwrap_or_else(|error| {
+                    self.error = Some(error);
+                    self.request.finish
+                })
             } else {
                 DateTime::<Utc>::MAX_UTC
             };
@@ -1160,8 +1326,9 @@ impl ClassicContext {
             self.advance_schedule_item();
             self.advance_fill_group(schedule_item);
         }
-        self.decrement_guide_group_if_multi_item_group(start_len);
-        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
+        self.decrement_guide_group_if_advanced(start_len, schedule_item);
+        let filler_start = self.filler_start_after(next_schedule_item);
+        self.add_tail_and_fallback(schedule_item, filler_start);
         self.state.next_guide_group += 1;
     }
 
@@ -1925,6 +2092,12 @@ impl ClassicContext {
             self.request.mode,
             PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
         );
+        if self.request.mode == PlayoutBuildMode::Refresh {
+            self.result.retain_through = self
+                .restored_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.anchor.next_start);
+        }
         let current_item = self.schedule_items[self.current_schedule_index()].clone();
         let mut next_start = self.start_time_after(&current_item, false);
         if let Some(last_finish) = self.result.added_items.iter().map(|item| item.finish).max() {
@@ -1958,10 +2131,19 @@ impl ClassicContext {
             next_guide_group: self.state.next_guide_group,
             context: (self.request.reference_data.has_active_smart_shuffle()
                 || !self.random_rotation_cycle_predecessors.is_empty()
+                || !self.playlists.is_empty()
+                || !self.retained_playlist_sources.is_empty()
                 || !self.filler_media.is_empty())
             .then(|| {
+                let mut playlist_sources = self.retained_playlist_sources.clone();
+                playlist_sources.extend(
+                    self.playlists
+                        .iter()
+                        .map(|(key, playlist)| (key.clone(), playlist_checkpoint(playlist))),
+                );
                 serde_json::to_string(&ClassicAnchorContext {
                     version: classic_anchor_context_version(),
+                    playlist_sources,
                     filler_indices: self
                         .filler_media
                         .iter()
@@ -2006,10 +2188,18 @@ impl ClassicContext {
                 .unwrap_or(self.state.current_time)
                 .max(self.state.current_time),
         );
-        if self
-            .generated_checkpoints
-            .iter()
-            .any(|checkpoint| checkpoint.checkpoint_date == checkpoint_date)
+        if self.generated_checkpoints.iter().any(|checkpoint| {
+            checkpoint.checkpoint_date.date_naive() == checkpoint_date.date_naive()
+        }) || (self.request.mode == PlayoutBuildMode::Continue
+            && self
+                .request
+                .reference_data
+                .existing_classic_checkpoints
+                .iter()
+                .any(|checkpoint| {
+                    checkpoint.playout_id == self.request.playout.id
+                        && checkpoint.checkpoint_date.date_naive() == checkpoint_date.date_naive()
+                }))
         {
             return;
         }
@@ -2056,6 +2246,7 @@ impl ClassicContext {
                     .unwrap_or(CollectionEnumeratorState {
                         seed: self.request.playout.seed,
                         index: 0,
+                        started: false,
                     });
             let media = self
                 .media
@@ -2065,28 +2256,7 @@ impl ClassicContext {
                     current_index: enumerator.current_index(),
                     ordered_items: enumerator.items.iter().map(media_identity).collect(),
                 });
-            let playlist = self
-                .playlists
-                .get(&key)
-                .map(|playlist| ClassicPlaylistCheckpoint {
-                    index: playlist.index,
-                    child_index: playlist.child_index,
-                    children: playlist
-                        .children
-                        .iter()
-                        .map(|child| ClassicPlaylistChildCheckpoint {
-                            collection_key: child.collection_key.clone(),
-                            items_taken_from_current: child.items_taken_from_current,
-                            current_index: child.enumerator.current_index(),
-                            ordered_items: child
-                                .enumerator
-                                .items
-                                .iter()
-                                .map(media_identity)
-                                .collect(),
-                        })
-                        .collect(),
-                });
+            let playlist = self.playlists.get(&key).map(playlist_checkpoint);
             result.insert(
                 key,
                 ClassicCheckpointSource {
@@ -2101,6 +2271,20 @@ impl ClassicContext {
 
     fn program_schedule_anchors(&self) -> Vec<PlayoutProgramScheduleAnchor> {
         let mut result = BTreeMap::new();
+        let active_keys = self
+            .schedule_items
+            .iter()
+            .map(item_key)
+            .collect::<BTreeSet<_>>();
+        for anchor in self.collection_anchors.iter().filter(|anchor| {
+            anchor.anchor_date.is_none()
+                && !active_keys.contains(&history_key_for_collection_key(
+                    &collection_key_for_anchor(anchor),
+                ))
+        }) {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            result.insert((anchor.anchor_date, key), anchor.clone());
+        }
         for anchor in self
             .collection_anchors
             .iter()
@@ -2147,7 +2331,7 @@ impl ClassicContext {
                 collection_id: key.collection_id,
                 multi_collection_id: key.multi_collection_id,
                 smart_collection_id: key.smart_collection_id,
-                rerun_collection_id: None,
+                rerun_collection_id: key.rerun_collection_id,
                 media_item_id: key.media_item_id,
                 playlist_id: key.playlist_id,
                 search_query: key.search_query,
@@ -2166,9 +2350,13 @@ impl ClassicContext {
             .unwrap_or(CollectionEnumeratorState {
                 seed: self.request.playout.seed,
                 index: 0,
+                started: false,
             });
         if let Some(playlist) = self.playlists.get(key) {
             state.index = i32::try_from(playlist.index).unwrap_or_default();
+            if let Some(seed) = playlist.shuffle_seed {
+                state.seed = seed;
+            }
         } else if let Some(enumerator) = self.media.get(key) {
             if enumerator.playback_order != PlaybackOrder::Random {
                 state.index = i32::try_from(enumerator.current_index()).unwrap_or_default();
@@ -2217,6 +2405,7 @@ impl ClassicContext {
                     || CollectionEnumeratorState {
                         seed: self.request.playout.seed,
                         index: 0,
+                        started: false,
                     },
                     |state| *state,
                 ),
@@ -2267,6 +2456,7 @@ impl ClassicContext {
         } else {
             self.state.schedule_state.index = next;
         }
+        self.state.schedule_state.started = true;
         self.state.in_flood = false;
     }
 
@@ -2395,6 +2585,10 @@ impl ClassicContext {
             playlist.advance();
             if let Some(state) = self.media_states.get_mut(&key) {
                 state.index = i32::try_from(playlist.index).unwrap_or_default();
+                if let Some(seed) = playlist.shuffle_seed {
+                    state.seed = seed;
+                }
+                state.started = true;
             }
             return;
         }
@@ -2409,6 +2603,7 @@ impl ClassicContext {
                         .or_insert(CollectionEnumeratorState {
                             seed: self.request.playout.seed,
                             index: 0,
+                            started: false,
                         });
                 let draw_index = usize::try_from(media_state.index).unwrap_or_default();
                 let random_state = self.random_draw_states.entry(key).or_insert_with(|| {
@@ -2417,6 +2612,7 @@ impl ClassicContext {
                 *random_state = next_random_state(*random_state);
                 enumerator.set_index(random_index(*random_state, enumerator.len()));
                 media_state.index = media_state.index.saturating_add(1);
+                media_state.started = true;
                 return;
             }
 
@@ -2437,6 +2633,7 @@ impl ClassicContext {
             let mut next_seed = None;
             if let Some(state) = self.media_states.get_mut(&key) {
                 state.index = index;
+                state.started = true;
                 if should_reshuffle {
                     state.seed = next_i32_seed(state.seed);
                     next_seed = Some(state.seed);
@@ -2464,7 +2661,7 @@ impl ClassicContext {
     }
 
     fn start_time_after(
-        &self,
+        &mut self,
         schedule_item: &ProgramScheduleItem,
         is_peek: bool,
     ) -> DateTime<Utc> {
@@ -2474,10 +2671,15 @@ impl ClassicContext {
             self.schedule_fixed_start_time_behavior(),
             &self.state,
             is_peek,
+            &self.request.reference_data.classic_clock,
         )
+        .unwrap_or_else(|error| {
+            self.error = Some(error);
+            self.request.finish
+        })
     }
 
-    fn filler_start_after(&self, schedule_item: &ProgramScheduleItem) -> DateTime<Utc> {
+    fn filler_start_after(&mut self, schedule_item: &ProgramScheduleItem) -> DateTime<Utc> {
         self.start_time_after(schedule_item, false)
             .min(self.request.finish)
     }
@@ -2514,38 +2716,42 @@ impl ClassicContext {
             return;
         };
         state.index = state.index.saturating_add(1);
+        state.started = true;
         if schedule_item.fill_with_group_mode == FillWithGroupMode::FillWithShuffledGroups {
             state.seed = next_i32_seed(state.seed);
         }
     }
 
-    fn decrement_guide_group_if_multi_item_group(&mut self, start_len: usize) {
+    fn decrement_guide_group_if_advanced(
+        &mut self,
+        start_len: usize,
+        schedule_item: &ProgramScheduleItem,
+    ) {
         let groups = self.result.added_items[start_len..]
             .iter()
             .map(|item| item.guide_group)
             .collect::<BTreeSet<_>>();
-        if groups.len() > 1 {
+        if groups.len() > 1
+            || (!groups.is_empty()
+                && schedule_item
+                    .custom_title
+                    .as_deref()
+                    .is_none_or(str::is_empty))
+        {
             self.state.next_guide_group -= 1;
         }
     }
 }
 
-fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
+fn start_state(request: &SchedulingRequest, _items: &[ProgramScheduleItem]) -> ClassicState {
     let index = 0;
-    let next_start = items
-        .first()
-        .map_or(request.start, |item| match item.start_type {
-            StartType::Fixed => {
-                midnight(request.start) + item.start_time.unwrap_or_else(Duration::zero)
-            }
-            StartType::Dynamic => midnight(request.start),
-        });
 
     ClassicState {
-        current_time: next_start.max(request.start),
+        current_time: request.start,
         schedule_state: CollectionEnumeratorState {
             seed: request.playout.seed,
             index,
+            started: false,
         },
         multiple_remaining: None,
         duration_finish: None,
@@ -2686,7 +2892,8 @@ fn get_start_time_after(
     schedule_fixed_start_time_behavior: FixedStartTimeBehavior,
     state: &ClassicState,
     is_peek: bool,
-) -> DateTime<Utc> {
+    clock: &ClassicClock,
+) -> Result<DateTime<Utc>, SchedulingError> {
     let mut start_time = current_time;
     let is_incomplete = !is_peek
         && ((schedule_item.playout_mode == ersatzrs_domain::PlayoutMode::Multiple
@@ -2700,22 +2907,30 @@ fn get_start_time_after(
 
     if schedule_item.start_type == StartType::Fixed && !is_incomplete {
         let item_start_time = schedule_item.start_time.unwrap_or_else(Duration::zero);
-        let result = midnight(start_time) + item_start_time;
+        let (result, tomorrow) = clock.occurrences(start_time, item_start_time)?;
         let behavior = schedule_item
             .fixed_start_time_behavior
             .unwrap_or(schedule_fixed_start_time_behavior);
         match behavior {
             FixedStartTimeBehavior::Flexible => {
                 if is_peek && state.in_flood && start_time > result {
-                    start_time = result + Duration::days(1);
-                } else if result.date_naive() == start_time.date_naive()
-                    && result.time() > start_time.time()
-                {
-                    start_time = result;
+                    start_time = tomorrow;
+                } else {
+                    let next = if result >= start_time {
+                        result
+                    } else {
+                        tomorrow
+                    };
+                    if next - start_time <= Duration::hours(12) {
+                        start_time = next;
+                    }
                 }
             }
             FixedStartTimeBehavior::Strict => {
-                start_time = if seconds_since_midnight(start_time) > item_start_time {
+                let local = clock.local_time(start_time)?;
+                let time_of_day = Duration::seconds(i64::from(local.num_seconds_from_midnight()))
+                    + Duration::nanoseconds(i64::from(local.nanosecond()));
+                start_time = if time_of_day > item_start_time {
                     result + Duration::days(1)
                 } else {
                     result
@@ -2724,7 +2939,7 @@ fn get_start_time_after(
         }
     }
 
-    start_time
+    Ok(start_time)
 }
 
 fn midnight(value: DateTime<Utc>) -> DateTime<Utc> {
@@ -2733,10 +2948,6 @@ fn midnight(value: DateTime<Utc>) -> DateTime<Utc> {
         - Duration::minutes(i64::from(value.minute()))
         - Duration::seconds(i64::from(value.second()))
         - Duration::nanoseconds(i64::from(value.nanosecond()))
-}
-
-fn seconds_since_midnight(value: DateTime<Utc>) -> Duration {
-    Duration::seconds(i64::from(value.time().num_seconds_from_midnight()))
 }
 
 fn multiple_count(schedule_item: &ProgramScheduleItem, enumerator_len: usize, seed: u64) -> i32 {
@@ -2760,6 +2971,7 @@ fn collection_key(item: &ProgramScheduleItem) -> SchedulingCollectionKey {
         collection_id: item.collection_id,
         multi_collection_id: item.multi_collection_id,
         smart_collection_id: item.smart_collection_id,
+        rerun_collection_id: item.rerun_collection_id,
         media_item_id: item.media_item_id,
         playlist_id: item.playlist_id,
         search_query: item.search_query.clone(),
@@ -2773,6 +2985,7 @@ fn collection_key_for_anchor(anchor: &PlayoutProgramScheduleAnchor) -> Schedulin
         collection_id: anchor.collection_id,
         multi_collection_id: anchor.multi_collection_id,
         smart_collection_id: anchor.smart_collection_id,
+        rerun_collection_id: anchor.rerun_collection_id,
         media_item_id: anchor.media_item_id,
         playlist_id: anchor.playlist_id,
         search_query: anchor.search_query.clone(),
@@ -2862,10 +3075,44 @@ fn restore_media_checkpoint(
     true
 }
 
-fn restore_playlist_checkpoint(
+pub(super) fn playlist_checkpoint(playlist: &PlaylistEnumerator) -> ClassicPlaylistCheckpoint {
+    ClassicPlaylistCheckpoint {
+        index: playlist.index,
+        child_index: playlist.child_index,
+        shuffle_seed: playlist.shuffle_seed,
+        remaining_media_ids: Some(playlist.remaining_media_ids.clone()),
+        children: playlist
+            .children
+            .iter()
+            .map(|child| ClassicPlaylistChildCheckpoint {
+                collection_key: child.collection_key.clone(),
+                items_taken_from_current: child.items_taken_from_current,
+                current_index: child.enumerator.current_index(),
+                ordered_items: child.enumerator.items.iter().map(media_identity).collect(),
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn restore_playlist_checkpoint(
     playlist: &mut PlaylistEnumerator,
     checkpoint: &ClassicPlaylistCheckpoint,
 ) {
+    if playlist.shuffle_seed.is_some() {
+        playlist.shuffle_seed = checkpoint.shuffle_seed.or(playlist.shuffle_seed);
+    }
+    let old_media_ids = checkpoint
+        .children
+        .iter()
+        .flat_map(|child| child.ordered_items.iter().map(|item| item.media_item_id))
+        .collect::<BTreeSet<_>>();
+    if let Some(remaining) = &checkpoint.remaining_media_ids {
+        playlist.remaining_media_ids = remaining
+            .intersection(&playlist.all_media_ids)
+            .copied()
+            .chain(playlist.all_media_ids.difference(&old_media_ids).copied())
+            .collect();
+    }
     let mut available = std::mem::take(&mut playlist.children)
         .into_iter()
         .map(Some)
@@ -2918,6 +3165,7 @@ fn anchor_matches_key(
         && anchor.collection_id == key.collection_id
         && anchor.multi_collection_id == key.multi_collection_id
         && anchor.smart_collection_id == key.smart_collection_id
+        && anchor.rerun_collection_id == key.rerun_collection_id
         && anchor.media_item_id == key.media_item_id
         && anchor.playlist_id == key.playlist_id
         && anchor.search_query == key.search_query
@@ -3290,7 +3538,7 @@ fn seed_to_u64(seed: i32) -> u64 {
     seed as u64
 }
 
-fn next_i32_seed(seed: i32) -> i32 {
+pub(super) fn next_i32_seed(seed: i32) -> i32 {
     let next = next_random_state(seed_to_u64(seed));
     (next >> 33) as i32
 }
@@ -3325,6 +3573,14 @@ mod tests {
     use crate::scheduling::{
         PlayoutBuildMode, SchedulingFillerPreset, SchedulingPlaylistItem, SchedulingReferenceData,
     };
+
+    fn started_state(seed: i32, index: i32) -> CollectionEnumeratorState {
+        CollectionEnumeratorState {
+            seed,
+            index,
+            started: true,
+        }
+    }
 
     #[test]
     fn classic_anchor_context_v1_defaults_random_rotation_state() {
@@ -3685,7 +3941,8 @@ mod tests {
             FixedStartTimeBehavior::Strict,
             &anchor,
             false,
-        );
+        )
+        .unwrap();
 
         assert_eq!(next, Utc.with_ymd_and_hms(2026, 4, 27, 8, 0, 0).unwrap());
     }
@@ -3981,6 +4238,192 @@ mod tests {
     }
 
     #[test]
+    fn classic_playlist_random_start_point_applies_to_fresh_children() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            collection_type: CollectionType::Playlist,
+            collection_id: None,
+            playlist_id: Some(99),
+            playout_mode: PlayoutMode::Flood,
+            ..schedule_item(1, PlayoutMode::Flood, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let build = |playback_order, random_start_point, seed, retained_started: Option<bool>| {
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(10),
+                    mode: if retained_started.is_some() {
+                        PlayoutBuildMode::Continue
+                    } else {
+                        PlayoutBuildMode::Reset
+                    },
+                    reference_data: SchedulingReferenceData {
+                        classic_schedule_items: vec![schedule_item.clone()],
+                        classic_random_start_point: random_start_point,
+                        existing_program_schedule_anchors: if let Some(started) = retained_started {
+                            vec![PlayoutProgramScheduleAnchor {
+                                playout_id: 50,
+                                collection_type: CollectionType::Playlist,
+                                playlist_id: Some(99),
+                                enumerator_state: CollectionEnumeratorState {
+                                    seed,
+                                    index: 0,
+                                    started,
+                                },
+                                ..PlayoutProgramScheduleAnchor::default()
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        playlist_items_by_key: BTreeMap::from([(
+                            key.clone(),
+                            vec![SchedulingPlaylistItem {
+                                collection_key: SchedulingCollectionKey::fake_playlist_item(1),
+                                playback_order,
+                                play_all: true,
+                                count: None,
+                                media_items: vec![
+                                    SchedulingMediaItem::new(101, Duration::minutes(10)),
+                                    SchedulingMediaItem::new(102, Duration::minutes(10)),
+                                    SchedulingMediaItem::new(103, Duration::minutes(10)),
+                                ],
+                            }],
+                        )]),
+                        ..SchedulingReferenceData::default()
+                    },
+                })
+                .expect("Classic playlist should build")
+                .added_items
+                .first()
+                .expect("playlist should schedule one item")
+                .media_item_id
+        };
+
+        for order in [
+            PlaybackOrder::Chronological,
+            PlaybackOrder::SeasonEpisode,
+            PlaybackOrder::ShuffleInOrder,
+        ] {
+            // ShuffleInOrder prepares its seeded group order even without a
+            // random starting offset; chronological orders begin at 101.
+            let expected = if order == PlaybackOrder::ShuffleInOrder {
+                102
+            } else {
+                101
+            };
+            assert_eq!(build(order, false, 4, None), expected, "{order:?}");
+            assert!(
+                (1..=16)
+                    .any(|seed| build(order, true, seed, None) != build(order, false, seed, None)),
+                "{order:?} should permit a nonzero start"
+            );
+        }
+        assert_eq!(build(PlaybackOrder::Chronological, true, 5, None), 103);
+        assert_eq!(
+            build(PlaybackOrder::Chronological, true, 5, Some(false)),
+            103
+        );
+        assert_eq!(
+            build(PlaybackOrder::Chronological, true, 5, Some(true)),
+            103
+        );
+    }
+
+    #[test]
+    fn classic_random_playlist_continues_after_rebuilding_from_saved_state() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            collection_type: CollectionType::Playlist,
+            collection_id: None,
+            playlist_id: Some(99),
+            playout_mode: PlayoutMode::Flood,
+            ..schedule_item(1, PlayoutMode::Flood, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let playlist_items = (0..3)
+            .map(|child| SchedulingPlaylistItem {
+                collection_key: SchedulingCollectionKey::fake_playlist_item(child + 1),
+                playback_order: PlaybackOrder::Chronological,
+                play_all: false,
+                count: None,
+                media_items: (0..5)
+                    .map(|index| {
+                        SchedulingMediaItem::new(100 + child * 5 + index, Duration::minutes(1))
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        let build = |build_start,
+                     finish,
+                     mode,
+                     anchor: Option<PlayoutAnchor>,
+                     anchors: Vec<PlayoutProgramScheduleAnchor>| {
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed: 5,
+                        anchor,
+                        ..Playout::default()
+                    },
+                    start: build_start,
+                    finish,
+                    mode,
+                    reference_data: SchedulingReferenceData {
+                        classic_schedule_items: vec![schedule_item.clone()],
+                        classic_random_start_point: true,
+                        playlist_items_by_key: BTreeMap::from([(
+                            key.clone(),
+                            playlist_items.clone(),
+                        )]),
+                        existing_program_schedule_anchors: anchors,
+                        ..SchedulingReferenceData::default()
+                    },
+                })
+                .expect("Classic playlist should build")
+        };
+        let seam = start + Duration::minutes(6);
+        let oracle = build(
+            start,
+            start + Duration::minutes(12),
+            PlayoutBuildMode::Reset,
+            None,
+            vec![],
+        );
+        let first = build(start, seam, PlayoutBuildMode::Reset, None, vec![]);
+        let second = build(
+            seam,
+            start + Duration::minutes(12),
+            PlayoutBuildMode::Continue,
+            first.anchor.clone(),
+            first.program_schedule_anchors.clone(),
+        );
+        let stitched = first
+            .added_items
+            .iter()
+            .chain(second.added_items.iter())
+            .map(|item| (item.media_item_id, item.start, item.finish))
+            .collect::<Vec<_>>();
+        assert_eq!(stitched.len(), 12);
+        assert_eq!(
+            stitched,
+            oracle
+                .added_items
+                .iter()
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn classic_reuses_existing_anchor_seed_and_omits_collection_key() {
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
         let schedule_item = ProgramScheduleItem {
@@ -3995,7 +4438,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 42,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -4056,7 +4503,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 42,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -4131,6 +4582,7 @@ mod tests {
                         schedule_items_enumerator_state: CollectionEnumeratorState {
                             seed: 7,
                             index: 1,
+                            started: true,
                         },
                         next_start: start + Duration::days(2),
                         ..PlayoutAnchor::default()
@@ -4241,7 +4693,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: None,
-                    enumerator_state: CollectionEnumeratorState { seed: 99, index: 0 },
+                    enumerator_state: started_state(99, 0),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
                 PlayoutProgramScheduleAnchor {
@@ -4250,7 +4702,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: Some(start),
-                    enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                    enumerator_state: started_state(42, 1),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
                 PlayoutProgramScheduleAnchor {
@@ -4259,7 +4711,7 @@ mod tests {
                     collection_type: CollectionType::Collection,
                     collection_id: Some(1),
                     anchor_date: Some(start + Duration::days(1)),
-                    enumerator_state: CollectionEnumeratorState { seed: 7, index: 2 },
+                    enumerator_state: started_state(7, 2),
                     ..PlayoutProgramScheduleAnchor::default()
                 },
             ],
@@ -4369,6 +4821,71 @@ mod tests {
             1,
             "duplicate schedule sources share one continuation enumerator"
         );
+    }
+
+    #[test]
+    fn classic_hourly_continue_keeps_checkpoints_for_the_full_build_window() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 20, 0, 0).unwrap();
+        let items = (1..=3)
+            .map(|id| schedule_item(id, PlayoutMode::Multiple, 1, Some("5")))
+            .collect::<Vec<_>>();
+        let key = item_key(&items[0]);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: items,
+            classic_shuffle_schedule_items: true,
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            (101..=400)
+                .map(|id| SchedulingMediaItem::new(id, Duration::minutes(100)))
+                .collect(),
+        );
+        let mut playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 7,
+            ..Playout::default()
+        };
+        for hour in 0..24 * 3 {
+            let now = start + Duration::hours(hour);
+            let finish = now + Duration::days(7) + Duration::hours(1);
+            let result = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: playout.clone(),
+                    start: now,
+                    finish,
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference_data.clone(),
+                })
+                .expect("hourly Continue build");
+            playout.anchor = result.anchor;
+            reference_data.existing_items.extend(result.added_items);
+            reference_data.existing_program_schedule_anchors = result.program_schedule_anchors;
+            reference_data.existing_classic_checkpoints = result.classic_checkpoints;
+            reference_data.existing_fill_group_indices = result.fill_group_indices;
+            let first_day = (start + Duration::days(1))
+                .date_naive()
+                .max(now.date_naive());
+            for day_offset in 0..=7 {
+                let day = first_day + Duration::days(day_offset);
+                if day > finish.date_naive() {
+                    break;
+                }
+                assert!(
+                    reference_data
+                        .existing_classic_checkpoints
+                        .iter()
+                        .any(|checkpoint| checkpoint.checkpoint_date.date_naive() == day),
+                    "missing checkpoint for {day} at {now}; dates: {:?}",
+                    reference_data
+                        .existing_classic_checkpoints
+                        .iter()
+                        .map(|checkpoint| checkpoint.checkpoint_date)
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
     }
 
     #[test]
@@ -4491,7 +5008,11 @@ mod tests {
                 playout_id: 50,
                 collection_type: CollectionType::Collection,
                 collection_id: Some(1),
-                enumerator_state: CollectionEnumeratorState { seed: 7, index: 1 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 7,
+                    index: 1,
+                    started: true,
+                },
                 ..PlayoutProgramScheduleAnchor::default()
             }],
             ..SchedulingReferenceData::default()
@@ -5490,6 +6011,131 @@ mod tests {
     }
 
     #[test]
+    fn classic_continue_preserves_last_flat_shuffle_index_for_grouped_show_items() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let items = (101..=110)
+            .map(|id| SchedulingMediaItem {
+                show_id: Some(7),
+                ..SchedulingMediaItem::new(id, Duration::minutes(10))
+            })
+            .collect::<Vec<_>>();
+        let mut expected =
+            MediaEnumerator::new(&key, items.clone()).with_playback_order(PlaybackOrder::Shuffle);
+        prepare_enumerator_items(
+            &mut expected,
+            PlaybackOrder::Shuffle,
+            seed_to_u64(1234),
+            None,
+        );
+        expected.set_index(9);
+        let expected_id = expected.current().expect("last item").id;
+
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            media_by_key: BTreeMap::from([(key, items)]),
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                id: 21,
+                playout_id: 50,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 1234,
+                    index: 9,
+                    started: true,
+                },
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("Classic Continue with last valid index");
+        assert_eq!(result.added_items[0].media_item_id, expected_id);
+    }
+
+    #[test]
+    fn classic_continue_keeps_inactive_alternate_collection_progress() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let active = schedule_item(1, PlayoutMode::One, 1, None);
+        let key = item_key(&active);
+        let inactive = PlayoutProgramScheduleAnchor {
+            id: 22,
+            playout_id: 50,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(2),
+            enumerator_state: CollectionEnumeratorState {
+                seed: 1234,
+                index: 9,
+                started: true,
+            },
+            ..PlayoutProgramScheduleAnchor::default()
+        };
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![active],
+            media_by_key: BTreeMap::from([(
+                key,
+                vec![SchedulingMediaItem::new(101, Duration::minutes(10))],
+            )]),
+            existing_program_schedule_anchors: vec![inactive.clone()],
+            ..SchedulingReferenceData::default()
+        };
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("Continue with inactive alternate");
+        assert!(result.program_schedule_anchors.contains(&inactive));
+    }
+
+    #[test]
+    fn classic_runtime_audit_accepts_inactive_alternate_anchor() {
+        let active = schedule_item(1, PlayoutMode::One, 1, None);
+        let anchors = [1, 2].map(|collection_id| PlayoutProgramScheduleAnchor {
+            playout_id: 50,
+            collection_type: CollectionType::Collection,
+            collection_id: Some(collection_id),
+            enumerator_state: CollectionEnumeratorState {
+                seed: 1234,
+                index: 9,
+                started: true,
+            },
+            ..PlayoutProgramScheduleAnchor::default()
+        });
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![active],
+            existing_program_schedule_anchors: anchors.to_vec(),
+            ..SchedulingReferenceData::default()
+        };
+        let audit = audit_classic_runtime_state(&reference_data);
+        assert!(audit.anchors_match);
+        assert_eq!(audit.expected_anchor_count, 1);
+        assert_eq!(audit.actual_anchor_count, 1);
+    }
+
+    #[test]
     fn classic_continue_anchor_uses_last_item_finish_after_hard_stop_overshoot() {
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 50, 0).unwrap();
         let finish = Utc.with_ymd_and_hms(2026, 4, 27, 0, 0, 0).unwrap();
@@ -5542,7 +6188,11 @@ mod tests {
                 id: 700,
                 playout_id: 50,
                 program_schedule_item_id: 1,
-                enumerator_state: CollectionEnumeratorState { seed: 11, index: 4 },
+                enumerator_state: CollectionEnumeratorState {
+                    seed: 11,
+                    index: 4,
+                    started: true,
+                },
             }],
             ..SchedulingReferenceData::default()
         };
@@ -5801,5 +6451,7 @@ mod tests {
 mod fallback_tests;
 
 mod mid_roll;
+#[cfg(test)]
+mod playlist_tests;
 
 mod chapter_expression;
