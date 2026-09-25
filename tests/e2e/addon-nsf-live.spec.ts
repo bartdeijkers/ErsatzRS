@@ -546,15 +546,17 @@ SELECT "Id" || '|' || "Number" FROM "Channel" WHERE "Name" = 'nsf live';
     await scheduleItemSelect(page, 'Playout Mode').selectOption('1');
     await page.getByRole('button', { name: /save schedule items/i }).click();
     await expect(page.locator('tbody tr')).toHaveCount(1);
-    expect(
-      sqlite(`
+    await expect
+      .poll(() =>
+        sqlite(`
 SELECT item."CollectionType" || '|' || item."PlaylistId" || '|' ||
        CASE WHEN flood."Id" IS NOT NULL THEN 'Flood' ELSE 'Other' END
 FROM "ProgramScheduleItem" item
 LEFT JOIN "ProgramScheduleFloodItem" flood ON flood."Id" = item."Id"
 WHERE item."ProgramScheduleId" = ${scheduleId};
 `),
-    ).toBe(`6|${playlistId}|Flood`);
+      )
+      .toBe(`6|${playlistId}|Flood`);
 
     await gotoHydrated(page, '/playouts/add');
     await page.locator('select[name="channel_id"]').selectOption(String(channelId));

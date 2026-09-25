@@ -9239,6 +9239,17 @@ used an unsupported `progress` scope; that run was cancelled after the
 Commit lint failure. A follow-up commit with an allowed scope is required for
 terminal CI on the final closeout SHA.
 
+Manual exact-SHA CI 36136343034 at e68da9a5 is terminal red only in
+Chromium: 239 passed, six skipped, and the NSF live test read the schedule
+database immediately after clicking Save. Its trace shows the correct
+replace_schedule_items request and successful response arriving after the
+assertion; the table row was already visible from local editor state. Firefox,
+Test, Next engine, workspace Clippy, Commit lint, Format, documentation and
+Cargo deny pass. The NSF test now polls for the same exact persisted
+`6|playlist|Flood` value without weakening the assertion or adding retries.
+A focused Chromium run against a disposable database passes. Push this test
+correction and require terminal green CI at its new exact SHA before UCU-05.
+
 """
 
 [[milestone]]

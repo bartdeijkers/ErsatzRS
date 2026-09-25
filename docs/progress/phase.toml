@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04's documentation-only closeout needed manual CI. Run
+36136343034 is terminal red only in Chromium: the NSF live scenario queried
+SQLite before its schedule Save completed; Firefox and all other jobs pass.
+The test now waits for the same exact persisted value, and the focused
+Chromium scenario passes against a disposable database. Push this correction
+and require terminal green exact-SHA CI before UCU-05 row 68.
+
 2026-09-25: UCU-04 is Complete. All 33 window rows (35-67), local gates,
 push and terminal green exact-SHA CI are recorded in its milestone. CI run
 36131751469 passes at 078470718a3d08afeccbac1066d9339ca4134957,
