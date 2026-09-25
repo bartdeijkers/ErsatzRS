@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6d8666b88f1e24edd311c992971fc56fd503f2bb` |
-| **Commit subject** | `chore: update dependencies (#2952)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6d8666b88f1e24edd311c992971fc56fd503f2bb |
+| **Pinned commit** | `7850ced6ec52112eb71a9d157b7bc07b20878fd8` |
+| **Commit subject** | `fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7850ced6ec52112eb71a9d157b7bc07b20878fd8 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

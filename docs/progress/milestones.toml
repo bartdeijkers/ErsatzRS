@@ -9333,6 +9333,15 @@ to 4.14.0. ErsatzRS uses the accepted bounded QuickJS/rquickjs adapter and
 the upstream commit changes no callback or runtime behavior contract. Pin,
 ledger and checkout advance together; row 75 is next. Source and progress
 checks pass; UCU-05 window gates, push and CI remain open.
+Row 75 (7850ced6) is Port. Upstream removes NVIDIA H.264 and radeonsi HEVC
+crop metadata workarounds after its FFmpeg 8.1.2 update. The analogous Rust
+output options are removed for the required FFmpeg 9 runtime. Both affected
+argv snapshots assert the absence of `-bsf:v`; all 344 FFmpeg crate tests
+pass. A synthetic 1080p NVENC overlay encoded with the shipped FFmpeg 9
+payload retained neutral bottom rows matching the source without crop
+metadata. AMD live GPU proof is unavailable locally; its command generation
+is covered by the snapshot. Pin, ledger and checkout advance together; row 76
+is next. UCU-05 window gates, push and exact-SHA CI remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 

@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Drop NVIDIA and AMD crop-metadata workarounds on FFmpeg 9 so overlay output
+  retains its full picture height (upstream PR #2953).
 - Preserve Classic playlist Random Start Point offsets across Continue builds
   so resumed playback follows the uninterrupted sequence (upstream PR #2950).
 - Keep Classic random starts eligible for previously unused collections while

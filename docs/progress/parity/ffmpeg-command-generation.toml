@@ -14,6 +14,8 @@ now mirror ErsatzTV's command layer for resampling/apad, channels/bitrate/buffer
 size/sample-rate gates, scene-detect and GOP flags, MP4/fMP4/HLS movflags,
 timescale, frame-rate output, MPEG-TS offset, realtime input, still-image loop,
 time limits, output metadata, and platform-specific encoder options.
+Row 75 drops NVIDIA and radeonsi crop metadata. Argv snapshots and an FFmpeg 9
+NVENC encode pass; AMD live output remains unproven.
 
 Hardware capability coverage is in place for VAAPI/QSV device rows, NVIDIA CLI
 and native CUDA/NVDEC/NVENC probes, direct macOS VideoToolbox framework

@@ -1563,13 +1563,6 @@ fn build_transcode_pipeline(
     );
 
     let runtime_capabilities = request.runtime_capabilities.clone();
-    let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
-        &request,
-        effective_acceleration,
-        has_watermark_overlay,
-        has_image_subtitle_burn,
-        has_native_graphics_overlay || has_drawvg_graphics,
-    );
     let mut graphics_image_index = 0usize;
     for overlay in std::mem::take(&mut request.graphics_overlays) {
         match overlay {
@@ -1718,7 +1711,6 @@ fn build_transcode_pipeline(
         &request.state,
         &request.desired,
         effective_acceleration,
-        use_nvidia_green_line_workaround,
     );
 
     FFmpegPipeline {
@@ -3426,87 +3418,6 @@ fn pixel_format_output_option(pixel_format: PixelFormat) -> PipelineStep {
     )
 }
 
-fn crop_metadata_workaround_filter(
-    name: &'static str,
-    video_format: FFmpegProfileVideoFormat,
-    frame_size: FrameSize,
-) -> Option<PipelineStep> {
-    let (metadata_filter, crop_pixels) = match video_format {
-        FFmpegProfileVideoFormat::H264 => {
-            let crop_pixels = match frame_size.height {
-                1080 => 8,
-                720 => 16,
-                _ => return None,
-            };
-            ("h264_metadata", crop_pixels)
-        }
-        FFmpegProfileVideoFormat::Hevc => {
-            let crop_pixels = match frame_size.height {
-                1080 => 8,
-                _ => return None,
-            };
-            ("hevc_metadata", crop_pixels)
-        }
-        FFmpegProfileVideoFormat::Av1
-        | FFmpegProfileVideoFormat::Mpeg2Video
-        | FFmpegProfileVideoFormat::None
-        | FFmpegProfileVideoFormat::Copy => return None,
-    };
-
-    Some(PipelineStep::generic(
-        name,
-        [
-            "-bsf:v".to_owned(),
-            format!("{metadata_filter}=crop_bottom={crop_pixels}"),
-        ],
-    ))
-}
-
-fn nvidia_green_line_workaround_filter(frame_size: FrameSize) -> Option<PipelineStep> {
-    crop_metadata_workaround_filter(
-        "nvidia_green_line_workaround",
-        FFmpegProfileVideoFormat::H264,
-        frame_size,
-    )
-}
-
-fn amd_crop_metadata_workaround_filter(
-    video_format: FFmpegProfileVideoFormat,
-    frame_size: FrameSize,
-) -> Option<PipelineStep> {
-    if video_format != FFmpegProfileVideoFormat::Hevc {
-        return None;
-    }
-
-    crop_metadata_workaround_filter("amd_crop_metadata_workaround", video_format, frame_size)
-}
-
-fn nvidia_green_line_workaround_applies(
-    request: &PipelineRequest,
-    acceleration: HardwareAccelerationKind,
-    has_watermark: bool,
-    has_subtitle_overlay: bool,
-    has_graphics: bool,
-) -> bool {
-    if acceleration != HardwareAccelerationKind::Nvenc
-        || request.desired.video_format != FFmpegProfileVideoFormat::H264
-        || !(has_watermark || has_subtitle_overlay || has_graphics)
-    {
-        return false;
-    }
-
-    let source_matches_scaled = request
-        .source_video_stream
-        .as_ref()
-        .and_then(|source| source.frame_size)
-        == Some(request.desired.scaled_size);
-    let subtitle_graphics_scaled = has_subtitle_overlay
-        && has_graphics
-        && request.desired.frame_size == request.desired.scaled_size;
-
-    source_matches_scaled || subtitle_graphics_scaled
-}
-
 fn scene_detect_threshold(
     request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
@@ -4173,7 +4084,6 @@ fn add_output_options(
     state: &FfmpegState,
     desired: &DesiredVideoState,
     acceleration: HardwareAccelerationKind,
-    nvidia_green_line_workaround: bool,
 ) {
     if state.output_format != OutputFormat::Nut
         && desired.audio_format != FFmpegProfileAudioFormat::Copy
@@ -4234,25 +4144,6 @@ fn add_output_options(
 
     if let Some(step) = output_ts_offset_option(state, desired) {
         steps.push(step);
-    }
-
-    if nvidia_green_line_workaround {
-        if let Some(step) =
-            nvidia_green_line_workaround_filter(desired.cropped_size.unwrap_or(desired.frame_size))
-        {
-            steps.push(step);
-        }
-    }
-
-    if acceleration == HardwareAccelerationKind::Vaapi
-        && desired.vaapi_driver.as_deref() == Some("radeonsi")
-    {
-        if let Some(step) = amd_crop_metadata_workaround_filter(
-            desired.video_format,
-            desired.cropped_size.unwrap_or(desired.frame_size),
-        ) {
-            steps.push(step);
-        }
     }
 
     if state.do_not_map_metadata {
