@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `57a0c40d57e320a2016ae9eaa3b577d11edefef0` |
-| **Commit subject** | `fix: bundle newly patched ffmpeg for qsv on windows (#2969)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/57a0c40d57e320a2016ae9eaa3b577d11edefef0 |
+| **Pinned commit** | `b5fd035bad0f34de1c95ddc991cbd246226a2d13` |
+| **Commit subject** | `feat: show next and ffmpeg versions in troubleshooting results (#2970)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b5fd035bad0f34de1c95ddc991cbd246226a2d13 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

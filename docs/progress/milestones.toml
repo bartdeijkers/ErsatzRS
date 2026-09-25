@@ -9593,6 +9593,15 @@ entry. ErsatzRS runtime acquisition uses the first-party FFmpeg 9 line; the
 upstream 8.1.2 packaging pin is not applicable. No command-generation change or
 native Windows QSV execution evidence is claimed. Source, diff and progress
 checks pass; pin/ledger/checkout advance to 57a0c40d. Row 89 follows.
+Row 89 (b5fd035b) is Covered by row-80 commit f6f076a2. Its only two added
+fields, NextVersion and FFmpegVersion, already appear at the top level of
+native playback troubleshooting_info.json through TroubleshootingVersions::detected.
+The current archive member filter includes JSON files. The writer uses startup
+Next detection and the accepted runtime version; optional absence remains unknown
+under ADR 0095. Reuse the unchanged row-80 serializer evidence (ccb89033,
+26 tests including both Next states); source inspection verifies the actual
+writer and ZIP path. No code change or new runtime claim. Pin/ledger/checkout
+advance to b5fd035b; row 90 follows.
 No UCU-05 window gates, push or CI are claimed.
 """
 

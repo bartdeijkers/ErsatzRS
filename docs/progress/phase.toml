@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 89 is Covered by row 80's detected engine-version
+fields in playback JSON/ZIPs. Continue at row 90 (35b5a259), then run the
+UCU-05 window gates before its authorized push and exact-SHA CI acceptance.
+
 2026-09-25: UCU-05 row 88 is N/A under ADR 0063: only upstream's FFmpeg
 8.1.2 Windows archive revision changes; ErsatzRS retains first-party FFmpeg 9.
 Continue at row 89 (b5fd035b). UCU-05 window gates/push/CI remain open.
