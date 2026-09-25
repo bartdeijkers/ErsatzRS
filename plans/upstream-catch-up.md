@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **115 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **114 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **57**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **58**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-57 are reconciled; the next row is 58 (0b8c5146).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-58 are reconciled; the next row is 59 (2b7531ca).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,30 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 58 source map: retain stale HLS segments during append
+
+Upstream `0b8c5146` (PR #2933) changes only
+`ErsatzTV.Core/FFmpeg/HlsPlaylistFilter.cs` and its focused test. With no
+`maxSegments` limit, trimming now removes old segments only when at least one
+segment starts at or after `filterBefore`; otherwise it keeps the existing
+playlist. A second guard returns the current generation when the input has no
+segment, avoiding an empty-list minimum error. No UI, validation, database or
+FFmpeg command changes appear in this commit.
+
+ErsatzRS owns the equivalent parser, selection, renderer and append path in
+`crates/ersatzrs-infra/src/hls_worker.rs` (`trim_playlist_contents`,
+`select_retained_segments`, `render_trimmed_playlist` and
+`trim_playlist_for_append`). The current no-limit selection returns an empty
+list when every segment is before the cutoff, so rendering returns `None` and
+the append path cannot preserve a playable playlist. Bounded-window selection
+already keeps a non-empty tail. The no-limit path now retains all source
+segments only when none meets the cutoff; recent-segment trimming is unchanged.
+Red-then-green MPEG-TS and fMP4 tests verify sequence, map, generation and
+referenced-file cleanup. On empty input Rust already returns `None` before
+calling a minimum operation; append callers continue into the next FFmpeg
+generation, so the upstream empty-list exception has no Rust equivalent.
+Native smoke and TSDuck playback own the runtime/transport check.
 
 ## Row 57 source map: dependency refresh and SQLite security
 
@@ -1032,7 +1056,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | Covered | upstream-baseline-catch-up | `test(subtitles): verify undefined sidecar language and flags` | ucu-04; existing suffix-only parser preserves title isolation and und without a language; persisted path/flag/rescan matrix and undefined-language playback selection pass. |
 | 56 | `6b74da3c` | chore: update docker image (#2926) | Port | upstream-baseline-catch-up | `fix(docker): package matched Intel media drivers` | ucu-04; pinned Intel userspace stack, licenses and stripped libraries; x64 loader and managed FFmpeg CPU/VAAPI-loading proof plus ARM64/ARMv7 runtime builds/start pass. Physical B70 playback is not claimed. |
 | 57 | `3756e7fb` | chore: update dependencies (#2927) | Port | upstream-baseline-catch-up | `fix(deps): reconcile SQLite and NCalc 6.2` | ucu-04; bundled SQLite 3.51.3 closes CVE-2025-6965; NCalc 6.2 saved-expression NaN and signed-zero behavior follows exact-version oracle. Opacity helper and NuGet-only updates are covered; focused regressions, dependency audit, scoped Clippy and native smoke pass. |
-| 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | | | | ucu-04; provisional: Port candidate. |
+| 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | Port | hls-variant-playlists-segmenter | `fix(hls): retain stale segments until replacement` | ucu-04; no-limit append trim keeps the prior MPEG-TS/fMP4 playlist when every segment predates the cutoff. Red-then-green stale-window and referenced-file cleanup regressions, native smoke and TSDuck transport gate pass. Empty source playlists already avoid a minimum-operation failure. |
 | 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | | | | ucu-04; provisional: Port candidate. |
 | 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 61 | `42937ac3` | feat: YAML Scheduled Playouts (#2935) | | | | ucu-04; provisional: Port candidate. |

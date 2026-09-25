@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the existing HLS segments and fMP4 init map available when a realtime
+  transcode falls behind the playlist trim cutoff, instead of returning an
+  empty session playlist before the next append.
 - Match NCalc 6.2 when Classic filler expressions compare NaN values or
   preserve negative zero through `IEEERemainder`, keeping selected breaks
   consistent with the updated upstream evaluator.

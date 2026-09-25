@@ -1,5 +1,5 @@
 feature    = 'HLS variant playlists / segmenter'
-etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084']
@@ -10,8 +10,8 @@ playlists with per-channel media-sequence / `#EXT-X-DISCONTINUITY` tracking and
 `ffmpeg.hls_direct.output_format` targets (copy audio/video, realtime pacing).
 
 The segmenter worker spawns bounded FFmpeg generations into temp-backed output,
-mirrors MPEG-TS provider path replacement, trims playlists while preserving
-real `#EXT-X-DISCONTINUITY`, deletes stale segments, and supports fMP4
+mirrors MPEG-TS provider path replacement, trims without emptying stale-only
+playlists, preserves real `#EXT-X-DISCONTINUITY`, deletes stale segments, and supports fMP4
 `#EXT-X-MAP` rewriting. It ports ErsatzTV's state transitions and worker loop:
 work-ahead/buffer gates, realtime switching, initial-segment gating,
 `PlayoutUpdated`, OnDemand checkpointing, slug output, and error-ASS fallback.
@@ -146,6 +146,13 @@ adr         = '0057'
 description = 'Finite add-on HLS playback restarted the producer at the 44-second work-ahead boundary. A stream-copy producer can seek to the preceding keyframe, causing decoded video to repeat even though HLS and MPEG-TS timestamps remain continuous.'
 discovered  = '2026-08-17'
 evidence    = 'Resolved 2026-08-17: live probes of the installed Beeld & Geluid producer showed both Glamourland and Teleac requests for source offset 44.000 beginning at source second 42.000. crates/ersatzrs-infra/src/hls_worker.rs now keeps one producer for the complete remaining finite Remote Stream item, uses -readrate_initial_burst 44 before realtime pacing, and promotes the active HLS slot after 30 seconds of new segments while releasing work-ahead capacity. Focused command and capacity tests cover the pacing and promotion contracts. Sixty-five-second TSDuck captures across the former boundary reported zero continuity-counter, PTS, DTS, PCR, transport, sync, and scrambling faults for both channels; decoded-frame hash scans over the same interval found no repeated run at offsets from 1 through 100 frames.'
+resolved    = true
+
+[[debt]]
+id          = 'stale-playlist-trim-drops-all-segments'
+description = 'The no-limit HLS append trim could drop every segment when a realtime transcode fell behind its time cutoff, leaving no playable session playlist.'
+discovered  = '2026-09-25'
+evidence    = 'Resolved for UCU-04 row 58: retain all existing segments when none starts at or after the cutoff. Both MPEG-TS and fMP4 stale-window regressions failed before the correction and pass after it; fMP4 checks map, generation, sequence and retained-file cleanup. The full eight-test trim set, scoped all-target Clippy, native MPEG-TS/HLS smoke and 64-check TSDuck gate pass. HLS Direct had no segments in its capture window and is not claimed by that gate. Empty source playlists return None before any minimum operation, and append callers proceed to the next FFmpeg generation.'
 resolved    = true
 
 [[debt]]

@@ -8974,6 +8974,37 @@ diff, bundled library version and sharing, exact NCalc oracle differences,
 graphics adapter parity, and security/package bounds. UCU-04 window gates,
 push and terminal exact-SHA CI remain open; continue at row 58 (0b8c5146).
 
+2026-09-25 row 58 reconciliation (Port):
+Pin, ledger and clean upstream checkout began at row 57. Fresh origin/main
+remains 27f9d217; all 172 ordered SHA/subject pairs match the ledger with
+no new tail rows. Upstream 0b8c5146 (PR #2933) changes only its HLS playlist
+filter and one regression: when every segment is older than filterBefore,
+no-limit trimming retains the old segments instead of emitting a header-only
+playlist. Its empty-input minimum guard has no Rust exception path:
+trim_playlist_contents returns None before minimum selection, and append
+callers proceed to the next FFmpeg generation. No UI, schema, track selection
+or FFmpeg command changes occur.
+
+Rust's no-limit selection did discard every old segment, so the equivalent
+append trim returned None. Two new MPEG-TS/fMP4 stale-window tests failed
+against that code (nextest 4c4538be), then passed after retaining the
+existing segments only when none meets the cutoff. The fMP4 test verifies
+init map, generation, sequence, referenced files and cleanup of an earlier
+unreferenced segment; the full eight-test trim set passes (fc7cc7d1).
+The bounded-window and recent-segment paths retain their prior behavior.
+Scoped all-target infrastructure Clippy and formatting checks pass.
+
+Native smoke passes on the changed web build: MPEG-TS media bytes, HLS
+Segmenter variant and session playlists with initial segments. The manual
+TSDuck gate passes 64 checks with zero failures across legacy/hybrid MPEG-TS
+and HLS Segmenter transport, including continuity, PTS/DTS/PCR and audio pip
+cadence. Its HLS Direct fixture yielded no segments within the 20-second
+window and was a warning, so no HLS Direct transport claim is made from that
+run. Substantive Codex review checked upstream selection and generation
+guards, Rust append callers, map/sequence rendering and file cleanup. UCU-04
+window gates, push and terminal exact-SHA CI remain open; continue at row 59
+(2b7531ca).
+
 """
 
 [[milestone]]

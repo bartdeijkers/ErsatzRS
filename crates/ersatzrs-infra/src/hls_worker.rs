@@ -5853,11 +5853,16 @@ fn select_retained_segments(
         return all_segments.to_vec();
     }
 
-    all_segments
+    let recent: Vec<PlaylistSegment> = all_segments
         .iter()
         .filter(|segment| segment_is_after_filter(segment, filter_before))
         .cloned()
-        .collect()
+        .collect();
+    if recent.is_empty() {
+        all_segments.to_vec()
+    } else {
+        recent
+    }
 }
 
 fn segment_is_after_filter(segment: &PlaylistSegment, filter_before: DateTime<Utc>) -> bool {
@@ -9459,6 +9464,108 @@ mod tests {
         assert!(trimmed.playlist.contains("seg00002.ts"));
         assert!(trimmed.playlist.contains("seg00003.ts"));
         assert_eq!(trimmed.referenced_files.len(), 2);
+    }
+
+    #[test]
+    fn trim_playlist_contents_keeps_stale_segments_when_none_are_recent() {
+        let playlist = concat!(
+            "#EXTM3U\n",
+            "#EXT-X-VERSION:7\n",
+            "#EXT-X-TARGETDURATION:4\n",
+            "#EXT-X-MEDIA-SEQUENCE:1137\n",
+            "#EXT-X-INDEPENDENT-SEGMENTS\n",
+            "#EXTINF:4.000000,\n",
+            "live001137.ts\n",
+            "#EXTINF:4.000000,\n",
+            "live001138.ts\n"
+        );
+        let start = DateTime::parse_from_rfc3339("2021-10-09T13:00:00Z")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+
+        let trimmed = trim_playlist_contents(
+            OutputFormat::Hls,
+            playlist,
+            start,
+            start + chrono::Duration::seconds(60),
+            None,
+            true,
+            None,
+        )
+        .expect("stale segments still form a playable playlist");
+
+        assert_eq!(trimmed.sequence, 1137);
+        assert_eq!(trimmed.playlist_start, start);
+        assert_eq!(trimmed.playlist.matches("#EXTINF:").count(), 2);
+        assert!(trimmed.playlist.contains("#EXT-X-MEDIA-SEQUENCE:1137"));
+        assert!(trimmed.referenced_files.contains("live001137.ts"));
+        assert!(trimmed.referenced_files.contains("live001138.ts"));
+    }
+
+    #[tokio::test]
+    async fn trim_playlist_contents_keeps_stale_fmp4_segments_and_files() {
+        let working_dir = tempfile::tempdir().expect("create temp dir");
+        let generation = 1_760_874_038_i64;
+        let init_file = format!("{generation}_init.mp4");
+        let stale_file = format!("live_{generation}_001136.m4s");
+        let segments = (1137..=1139)
+            .map(|sequence| format!("live_{generation}_{sequence:06}.m4s"))
+            .collect::<Vec<_>>();
+        for file in std::iter::once(&init_file)
+            .chain(std::iter::once(&stale_file))
+            .chain(segments.iter())
+        {
+            tokio::fs::write(working_dir.path().join(file), b"segment")
+                .await
+                .expect("write HLS artifact");
+        }
+        let playlist = format!(
+            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n\
+             #EXT-X-MEDIA-SEQUENCE:1137\n#EXT-X-INDEPENDENT-SEGMENTS\n\
+             #EXT-X-DISCONTINUITY\n#EXT-X-MAP:URI=\"{init_file}\"\n\
+             #EXTINF:4.000000,\n{}\n#EXTINF:4.000000,\n{}\n\
+             #EXTINF:4.000000,\n{}\n",
+            segments[0], segments[1], segments[2]
+        );
+        let start = DateTime::parse_from_rfc3339("2021-10-09T13:00:00Z")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+
+        let trimmed = trim_playlist_contents(
+            OutputFormat::HlsMp4,
+            &playlist,
+            start,
+            start + chrono::Duration::seconds(60),
+            None,
+            true,
+            None,
+        )
+        .expect("stale fMP4 segments still form a playable playlist");
+
+        assert_eq!(trimmed.sequence, 1137);
+        assert_eq!(trimmed.playlist_start, start);
+        assert_eq!(trimmed.generated_at, Some(generation));
+        assert_eq!(trimmed.playlist.matches("#EXTINF:").count(), 3);
+        assert!(trimmed
+            .playlist
+            .contains(&format!("#EXT-X-MAP:URI=\"{init_file}\"")));
+        assert!(trimmed.referenced_files.contains(&init_file));
+        for segment in &segments {
+            assert!(trimmed.referenced_files.contains(segment));
+        }
+
+        delete_old_segments(
+            working_dir.path(),
+            &trimmed,
+            &mut HlsInitSegmentCache::default(),
+        )
+        .await
+        .expect("delete only unreferenced segments");
+        assert!(!working_dir.path().join(stale_file).exists());
+        assert!(working_dir.path().join(init_file).exists());
+        for segment in &segments {
+            assert!(working_dir.path().join(segment).exists());
+        }
     }
 
     #[test]
