@@ -601,10 +601,7 @@ impl ClassicContext {
             let started = retained_state.is_some_and(|state| state.started);
             if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
                 let mut playlist = PlaylistEnumerator::new(playlist_items.clone());
-                if request.reference_data.classic_random_start_point
-                    && !started
-                    && restored_checkpoint.is_none()
-                {
+                if request.reference_data.classic_random_start_point {
                     for (child_index, child) in playlist.children.iter_mut().enumerate() {
                         let order = child.enumerator.playback_order;
                         if matches!(
@@ -624,6 +621,19 @@ impl ClassicContext {
                                 usize::try_from(child_seed % child.enumerator.len() as u64)
                                     .unwrap_or_default(),
                             );
+                        }
+                    }
+                }
+                if request.mode == PlayoutBuildMode::Continue
+                    && request.reference_data.classic_random_start_point
+                {
+                    if let Some(state) = retained_state.filter(|state| state.started) {
+                        let target = usize::try_from(state.index).unwrap_or_default();
+                        while playlist.index < target {
+                            playlist.advance();
+                            if playlist.index == 0 {
+                                break;
+                            }
                         }
                     }
                 }
@@ -4151,7 +4161,94 @@ mod tests {
         );
         assert_eq!(
             build(PlaybackOrder::Chronological, true, 5, Some(true)),
-            101
+            103
+        );
+    }
+
+    #[test]
+    fn classic_random_playlist_continues_after_rebuilding_from_saved_state() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            collection_type: CollectionType::Playlist,
+            collection_id: None,
+            playlist_id: Some(99),
+            playout_mode: PlayoutMode::Flood,
+            ..schedule_item(1, PlayoutMode::Flood, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let playlist_items = (0..3)
+            .map(|child| SchedulingPlaylistItem {
+                collection_key: SchedulingCollectionKey::fake_playlist_item(child + 1),
+                playback_order: PlaybackOrder::Chronological,
+                play_all: false,
+                count: None,
+                media_items: (0..5)
+                    .map(|index| {
+                        SchedulingMediaItem::new(100 + child * 5 + index, Duration::minutes(1))
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        let build = |build_start,
+                     finish,
+                     mode,
+                     anchor: Option<PlayoutAnchor>,
+                     anchors: Vec<PlayoutProgramScheduleAnchor>| {
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed: 5,
+                        anchor,
+                        ..Playout::default()
+                    },
+                    start: build_start,
+                    finish,
+                    mode,
+                    reference_data: SchedulingReferenceData {
+                        classic_schedule_items: vec![schedule_item.clone()],
+                        classic_random_start_point: true,
+                        playlist_items_by_key: BTreeMap::from([(
+                            key.clone(),
+                            playlist_items.clone(),
+                        )]),
+                        existing_program_schedule_anchors: anchors,
+                        ..SchedulingReferenceData::default()
+                    },
+                })
+                .expect("Classic playlist should build")
+        };
+        let seam = start + Duration::minutes(6);
+        let oracle = build(
+            start,
+            start + Duration::minutes(12),
+            PlayoutBuildMode::Reset,
+            None,
+            vec![],
+        );
+        let first = build(start, seam, PlayoutBuildMode::Reset, None, vec![]);
+        let second = build(
+            seam,
+            start + Duration::minutes(12),
+            PlayoutBuildMode::Continue,
+            first.anchor.clone(),
+            first.program_schedule_anchors.clone(),
+        );
+        let stitched = first
+            .added_items
+            .iter()
+            .chain(second.added_items.iter())
+            .map(|item| (item.media_item_id, item.start, item.finish))
+            .collect::<Vec<_>>();
+        assert_eq!(stitched.len(), 12);
+        assert_eq!(
+            stitched,
+            oracle
+                .added_items
+                .iter()
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>()
         );
     }
 

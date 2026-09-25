@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **102 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **101 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **70**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **71**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-70; the next upstream row is 71 (`4fb42f69`).
+  processed rows 68-71; the next upstream row is 72 (`16e341d9`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,25 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 71 source map: repeat playlist offsets on every build
+
+- ErsatzTV UI/model: no setting or schema change; the existing Classic Random
+  Start Point flag remains the input.
+- ErsatzTV `PlaylistEnumerator.Create` now reapplies the seeded child offsets
+  on every build, even when the playlist state's Started flag is true.
+  `PlayoutBuilder` passes the active schedule flag directly to playlists.
+- The new upstream test builds three chronological playlist children, saves
+  state halfway through, rebuilds from the same seed and proves its continuation
+  matches the uninterrupted sequence.
+- ErsatzRS target: Classic recreates child offsets whenever the flag is on,
+  then replays a retained Continue index before scheduling. A production-engine
+  regression compares a 6+6 item Continue build with an uninterrupted 12-item
+  build, including media identity and timestamps. A Refresh checkpoint still
+  restores its complete source state after initialization.
+- Intentional deviations: Rust uses its existing deterministic seed mapping;
+  no UI, transport or migration change is needed for this row. Later row 85
+  still owns broader playlist progress repair beyond this random-start path.
 
 ## Row 70 source map: durable enumerator Started state
 
@@ -53,8 +72,8 @@
   existing seed modulo range already includes the final item.
 - Tests: an old-schema migration preserves legacy state with a false default;
   repository round trips true for all three state tables; Classic covers fresh,
-  unplayed anchored, played anchored and final-index playlist cases. Row 71's
-  later playlist rule remains pending.
+  unplayed anchored, played anchored and final-index playlist cases. Row 71
+  subsequently adds the every-build playlist rule.
 - Intentional deviations: Rust's deterministic seed-to-index choice remains
   different from .NET PRNG bytes; selection and persistence behavior match.
 
@@ -1348,7 +1367,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 68 | `18137832` | fix: update plex movie and other video titles (#2947) | Port | library-management; upstream-baseline-catch-up | `fix(infra): refresh Plex titles on ordinary scans` | ucu-05; versioned title-aware movie/Other Video Etag refreshes old timestamp-only fingerprints once and title-only changes thereafter. Existing metadata upsert writes Title and SortTitle. Red/green focused regression, 20 Plex tests, scoped Clippy, format and progress checks pass. UCU-05 window gates remain open. |
 | 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): honor Classic playlist random start` | ucu-05; eligible fresh Chronological, SeasonEpisode and ShuffleInOrder playlist children receive deterministic start indices; retained sources bypass new initialization. Focused playlist tests, scoped core Clippy, format and progress checks pass. Rows 70-71 own follow-up start-state behavior; row 85 owns playlist continuation. |
 | 70 | `0d692e70` | fix: always randomize start points (#2949) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist enumerator started state` | ucu-05; Started is stored in all three SQLite enumerator state tables and carried through Classic advancement. Previously unused anchored sources randomize; played sources at wrapped index zero stay in sequence; the final item is eligible. Migration upgrade, repository round trip, 247 core tests and scoped Clippy pass. Row 71 remains open. |
-| 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | | | | ucu-05; provisional: Port candidate. |
+| 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): replay random playlist offsets on Continue` | ucu-05; each Classic playlist build recreates seeded child offsets and a retained Continue build replays its saved index. The 6+6 versus uninterrupted 12-item timeline regression passes with identical identities and timestamps; all 248 core tests and scoped Clippy pass. Row 85 owns broader playlist progress repair. |
 | 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | | | | ucu-05; provisional: Port candidate. |
 | 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
 | 74 | `6d8666b8` | chore: update dependencies (#2952) | | | | ucu-05; provisional: Upstream tooling candidate. |

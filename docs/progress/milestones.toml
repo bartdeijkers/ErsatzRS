@@ -9304,7 +9304,14 @@ Migration upgrade Nextest 2b40821e, repository round trip 5ae3299c, and all
 247 core tests (81d4d674) pass. Focused playlist proof covers unused and played
 zero-index anchors and selecting the final item. Scoped core/infra Clippy,
 format and progress checks pass. Pin, ledger and checkout advance to row 70;
-row 71 remains open. No UCU-05 window gates, push or CI are claimed.
+row 71 followed. No UCU-05 window gates, push or CI were claimed for row 70.
+Row 71 (4fb42f69) ports the upstream every-build playlist rule. Classic now
+recreates seeded child offsets for each build and replays a retained Continue
+index. The production-engine regression Nextest 338b5ddb compares 6+6 items
+with an uninterrupted 12-item run and matches identities and timestamps.
+All 248 core tests (a34829bc), scoped core Clippy, format and progress checks
+pass. Pin, ledger and checkout advance together to row 71. Row 85 retains the
+broader playlist progress repair; UCU-05 window gates, push and CI remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 
