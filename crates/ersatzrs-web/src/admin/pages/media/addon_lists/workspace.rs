@@ -33,6 +33,8 @@ pub struct Draft {
     pub selected: BTreeSet<i64>,
     pub query: String,
     pub category: String,
+    #[serde(default)]
+    pub sort: String,
     /// Derived from current authoritative readiness; never accepted from a POST.
     #[serde(skip)]
     pub publication_blocker_items: BTreeSet<i64>,
@@ -154,6 +156,7 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
                     page: query.with_untracked(|q| q.get("page").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0)),
                     query: query.with_untracked(|q| q.get("q").unwrap_or_default()),
                     category: query.with_untracked(|q| q.get("review_category").unwrap_or_default()),
+                    sort: query.with_untracked(|q| q.get("sort").filter(|s| valid_sort(s)).unwrap_or_default()),
                     ..Draft::default()
                 },
                 error: query.with_untracked(|q|q.get("disk_warning").filter(|s|s=="error").map(|_|super::tr(super::TextKey::AddonListDiskWarningFailed).to_owned())),
@@ -212,6 +215,106 @@ fn matches_row(
             "removal_candidate" => diff.removal_candidate_item_ids.contains(&row.id),
             _ => false,
         }
+}
+
+#[cfg(feature = "ssr")]
+fn valid_sort(value: &str) -> bool {
+    matches!(
+        value,
+        "" | "playlist_asc" | "playlist_desc" | "date_asc" | "date_desc" | "name_asc" | "name_desc"
+    )
+}
+
+#[cfg(feature = "ssr")]
+fn sorted_filtered<'a>(
+    draft: &Draft,
+    rows: &'a [super::AddonMediaListItemRow],
+    presentation: super::AddonMediaListPresentationKind,
+    diff: &super::AddonMediaListDraftDiffRow,
+) -> Vec<&'a super::AddonMediaListItemRow> {
+    let mut result: Vec<_> = rows
+        .iter()
+        .filter(|row| matches_row(draft, row, presentation, diff))
+        .collect();
+    result.sort_by(|a, b| {
+        let order = match draft.sort.as_str() {
+            "playlist_desc" => b.rank.cmp(&a.rank),
+            "date_asc" | "date_desc" => {
+                let dates = a.first_aired.is_none().cmp(&b.first_aired.is_none());
+                if dates != std::cmp::Ordering::Equal {
+                    dates
+                } else if draft.sort == "date_desc" {
+                    b.first_aired.cmp(&a.first_aired)
+                } else {
+                    a.first_aired.cmp(&b.first_aired)
+                }
+            }
+            "name_asc" => a
+                .display_title
+                .to_lowercase()
+                .cmp(&b.display_title.to_lowercase()),
+            "name_desc" => b
+                .display_title
+                .to_lowercase()
+                .cmp(&a.display_title.to_lowercase()),
+            _ => a.rank.cmp(&b.rank),
+        };
+        order.then(a.rank.cmp(&b.rank)).then(a.id.cmp(&b.id))
+    });
+    result
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod sort_tests {
+    use super::*;
+
+    #[test]
+    fn review_sort_keeps_missing_dates_last_and_playlist_order_stable() {
+        let rows = [
+            super::super::AddonMediaListItemRow {
+                id: 1,
+                rank: 0,
+                display_title: "Zulu".into(),
+                first_aired: Some("2024-02-01".into()),
+                ..Default::default()
+            },
+            super::super::AddonMediaListItemRow {
+                id: 2,
+                rank: 1,
+                display_title: "alpha".into(),
+                first_aired: Some("2023-01-01".into()),
+                ..Default::default()
+            },
+            super::super::AddonMediaListItemRow {
+                id: 3,
+                rank: 2,
+                display_title: "Undated".into(),
+                ..Default::default()
+            },
+        ];
+        let mut draft = Draft::default();
+        let diff = super::super::AddonMediaListDraftDiffRow::default();
+        for (sort, expected) in [
+            ("playlist_asc", [1, 2, 3]),
+            ("playlist_desc", [3, 2, 1]),
+            ("date_asc", [2, 1, 3]),
+            ("date_desc", [1, 2, 3]),
+            ("name_asc", [2, 3, 1]),
+            ("name_desc", [1, 3, 2]),
+        ] {
+            draft.sort = sort.into();
+            let ids: Vec<_> = sorted_filtered(
+                &draft,
+                &rows,
+                super::super::AddonMediaListPresentationKind::Auto,
+                &diff,
+            )
+            .into_iter()
+            .map(|row| row.id)
+            .collect();
+            assert_eq!(ids, expected, "{sort}");
+        }
+    }
 }
 
 #[cfg(feature = "ssr")]

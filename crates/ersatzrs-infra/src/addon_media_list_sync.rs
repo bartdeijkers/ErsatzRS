@@ -3172,11 +3172,12 @@ async fn insert_item(
             "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl",
             "Availability", "AvailabilityReason", "AvailabilityReasonCode",
             "AvailabilityUpdated", "ContentKind",
+            "Included",
             "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
             "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
             "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness",
             "LastReconcileGeneration"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)"#,
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -3193,6 +3194,7 @@ async fn insert_item(
     .bind(item.availability_reason_code.map(encode_enum))
     .bind(encode_datetime(Utc::now()))
     .bind(encode_enum(item.content_kind))
+    .bind(item.availability != AddonMediaListItemAvailability::Unavailable)
     .bind(encode_enum(item.collection_role))
     .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
     .bind(&item.parent_provider_id)

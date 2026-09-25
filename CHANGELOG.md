@@ -20,6 +20,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Remove stale projected media when an item is excluded from a published
+  add-on list, so the next publication can complete verification while keeping
+  the source stream.
+- Save add-on list numbering previews that group seasons by year; the review
+  control is no longer mistaken for an item season field.
+- Exclude newly discovered unavailable add-on list videos by default while
+  retaining them for review and optional local replacement.
 - Extract embedded text subtitles for upcoming playout items when a channel
   uses a custom stream selector, even if its general subtitle mode is off.
   Next can select embedded text directly; native transcoding still requires
@@ -45,6 +52,10 @@ release section when tagging a release.
 
 ### Added
 
+- Sort add-on list review items by clicking the playlist, upload date, or name
+  heading in either direction; select or deselect the visible page from the
+  checkbox above item selections while skipping excluded videos. Pagination
+  sits above the items, and excluded and unavailable rows have visual status cues.
 - Show sanitized release notes from the bundled changelog on the home and
   health pages, with an offline full-changelog link (upstream PR #2942).
 - Support named, priority-ordered date ranges in Sequential YAML playouts. Each

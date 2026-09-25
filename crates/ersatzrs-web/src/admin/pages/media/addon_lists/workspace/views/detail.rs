@@ -108,6 +108,9 @@ pub(super) fn item(w: &Workspace) -> AnyView {
         <section class="item-edit" aria-labelledby="item-review-heading">
             <header class="section-heading"><h2 id="item-review-heading">{tr(TextKey::ReviewItem)}</h2>
                 <p class="item-status">{tr(TextKey::ItemPosition)}" "{row.rank.saturating_add(1)}" · "{tr(match row.availability {ersatzrs_domain::AddonMediaListItemAvailability::Available=>TextKey::Available,ersatzrs_domain::AddonMediaListItemAvailability::Unavailable=>TextKey::Unavailable,ersatzrs_domain::AddonMediaListItemAvailability::Unknown=>TextKey::UnknownAvailability})}" · "{tr(item_detail_state_key(row.detail_state))}" · "{tr(TextKey::ItemProviderPlayback)}": "{tr(super::super::super::liveness_text_key(row.provider_liveness))}</p>
+                <div class="item-state-line"><span class=if row.included {"item-state-badge is-included"} else {"item-state-badge is-excluded"}><span aria-hidden="true">{if row.included {"✓"} else {"⊘"}}</span>{tr(if row.included {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</span>
+                    {(row.availability==ersatzrs_domain::AddonMediaListItemAvailability::Unavailable).then(||view!{<span class="item-state-badge is-unavailable"><span aria-hidden="true">"!"</span>{tr(TextKey::Unavailable)}</span>})}
+                </div>
             </header>
             <super::MetadataConflictSummary conflicts=detail.nfo.conflicts.clone()/>
             {row.availability_reason.clone().filter(|s|!s.is_empty()).map(|reason|view!{<p class="notice">{reason}</p>})}

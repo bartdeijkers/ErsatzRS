@@ -1,6 +1,8 @@
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 final-docs CI red only in Chromium NSF schedule save race; exact persistence poll passes focused, final exact-SHA CI pending"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 complete: rows 35-67, local window gates and exact-SHA green CI 36131751469 at 07847071; UCU-05 starts at row 68"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 CI Firefox timeout traced to combined numbering scenario; split without changing timeout or assertions; focused browser proof passes"}
+{"agent":"Codex","date":"2026-09-25","summary":"Refined add-on list review pagination, sortable column headings, and select-visible control after maintainer Linux dogfood feedback; focused Chromium and Firefox JS/no-JS cases passed."}
+{"agent":"Codex","date":"2026-09-25","summary":"Implemented add-on list unavailable-by-default discovery, visible-page selection, six sort modes, and status badges in isolated worktrees; focused provider, Rust, and browser checks pass; uncommitted"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 first exact-SHA CI failed Clippy allow policy; item-level reasons fixed and scoped checks pass"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 rows 35-67 reconciled; local window gates pass on 9208e381; exact-SHA CI pending"}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 67 reconciled as upstream-only 26.6.0 changelog preparation; rows 35-67 complete, window acceptance gates and exact-SHA publication next."}

@@ -13,7 +13,7 @@ async function submit(page: Page, intent: string) {
   await settled(page);
   await Promise.all([
     page.waitForEvent('framenavigated', f => f === page.mainFrame()),
-    page.locator(`button[name="intent"][value="${intent}"]`).first().click(),
+    page.locator(`button[name="intent"][value="${intent}"]:visible`).first().click(),
   ]);
   await settled(page);
 }
@@ -38,6 +38,74 @@ async function choose(page: Page, name: 'category' | 'page_size', value: string)
 for (const javaScriptEnabled of [false, true]) {
   test.describe(`locked add-on list workspace (${javaScriptEnabled ? 'hydrated' : 'no JS'})`, () => {
     test.skip(!dbPath, 'An isolated E2E database is required');
+    test('sorts review items and selects only included videos on the visible page', async ({ browser, baseURL }, info) => {
+      const seed = seedMetadataEditor(info);
+      sqlite(`UPDATE "AddonMediaListItem" SET "Included"=0,"Availability"=1 WHERE "Id"=${seed.secondItemId};`);
+      const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      const page = await context.newPage();
+      if (javaScriptEnabled) hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}`);
+      await settled(page);
+      const rows = page.locator('.episode-row');
+      await expect(rows).toHaveCount(2);
+      await expect(rows.first()).toContainText(seed.firstTitle);
+      await expect(rows.last().locator('.item-state-badge.is-excluded')).toBeVisible();
+      await expect(rows.last().locator('.item-state-badge.is-unavailable')).toBeVisible();
+      await expect(rows.last().locator('.row-pick input[type="checkbox"]')).toBeDisabled();
+      await expect(page.locator('.episode-column-head .header-select')).toBeVisible();
+      expect(await page.locator('.pager').evaluate(pager =>
+        pager.nextElementSibling?.classList.contains('episode-list'))).toBe(true);
+      await submit(page, 'sort:name_asc');
+      await submit(page, 'sort:name_desc');
+      await expect(rows.first()).toContainText(seed.secondTitle);
+      await expect(rows.locator('.gap-note')).toHaveCount(0);
+      await submit(page, 'select-visible');
+      await expect(page.locator(`#item-${seed.firstItemId} .row-pick input[type="checkbox"]`)).toBeChecked();
+      await expect(page.locator(`#item-${seed.secondItemId} .row-pick input[type="checkbox"]`)).not.toBeChecked();
+      await submit(page, 'deselect-visible');
+      await expect(page.locator(`#item-${seed.firstItemId} .row-pick input[type="checkbox"]`)).not.toBeChecked();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.locator('.mobile-review-controls')).toBeVisible();
+      await expect(page.locator('.episode-column-head')).toBeHidden();
+      await submit(page, 'sort:date_asc');
+      await expect(page.locator('.mobile-review-controls .sort-heading.is-ascending')).toHaveAttribute('value', 'sort:date_desc');
+      await submit(page, 'select-visible');
+      await expect(page.locator(`#item-${seed.firstItemId} .row-pick input[type="checkbox"]`)).toBeChecked();
+      await submit(page, 'deselect-visible');
+      await expect(page.locator(`#item-${seed.firstItemId} .row-pick input[type="checkbox"]`)).not.toBeChecked();
+      expect(sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id"=${seed.secondItemId};`)).toBe('0');
+      await context.close();
+    });
+
+    test('saves seasons grouped by year after the numbering preview', async ({ browser, baseURL }, info) => {
+      const seed = seedMetadataEditor(info);
+      sqlite(`UPDATE "AddonMediaListItem" SET "ProviderMetadataJson"=json_set("ProviderMetadataJson",'$.release_date','2019-08-20') WHERE "Id"=${seed.firstItemId};`);
+      sqlite(`UPDATE "AddonMediaListItem" SET "ProviderMetadataJson"=json_set("ProviderMetadataJson",'$.release_date','2020-08-21') WHERE "Id"=${seed.secondItemId};`);
+      const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      const page = await context.newPage();
+      if (javaScriptEnabled) hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}`);
+      await settled(page);
+      await page.locator('details.bulk-tools > summary').click();
+      await page.locator('[name="bulk_scope"]').selectOption('all');
+      await page.locator('[name="season_per_year"][type="checkbox"]').check();
+      await submit(page, 'auto-number');
+      const preview = page.getByTestId('bulk-preview');
+      await expect(preview.locator('tbody tr')).toHaveCount(2);
+      await expect(preview.locator('tbody')).toContainText('Season: 1');
+      await expect(preview.locator('tbody')).toContainText('Season: 2');
+      await Promise.all([
+        page.waitForEvent('framenavigated', f => f === page.mainFrame()),
+        preview.locator('button[name="intent"][value="save"]').click(),
+      ]);
+      await settled(page);
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+      expect(sqlite(`SELECT group_concat(json_extract("MetadataOverrideJson",'$.season') || ',' || json_extract("MetadataOverrideJson",'$.episode'), ';') FROM (SELECT "MetadataOverrideJson" FROM "AddonMediaListItem" WHERE "Id" IN (${seed.firstItemId},${seed.secondItemId}) ORDER BY "Id")`)).toBe('1,1;2,1');
+      await context.close();
+    });
+
     test('saves playback after metadata progress and retains a competing edit', async ({ browser, baseURL }, info) => {
       const seed = seedMetadataEditor(info);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });

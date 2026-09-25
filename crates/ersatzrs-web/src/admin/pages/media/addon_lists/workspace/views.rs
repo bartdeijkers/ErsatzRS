@@ -359,16 +359,67 @@ fn choice<T: serde::Serialize>(val: T, key: TextKey) -> (String, String) {
 }
 
 fn filtered(w: &Workspace) -> Vec<&AddonMediaListItemRow> {
-    w.items
+    super::sorted_filtered(
+        &w.submission.draft,
+        &w.items,
+        w.form.presentation_kind,
+        &w.diff,
+    )
+}
+
+fn sort_heading(label: TextKey, field: &str, current: &str, compact: bool) -> AnyView {
+    let ascending = format!("{field}_asc");
+    let descending = format!("{field}_desc");
+    let active_ascending = current == ascending || (field == "playlist" && current.is_empty());
+    let active_descending = current == descending;
+    let next = if active_ascending {
+        descending
+    } else {
+        ascending
+    };
+    let direction = if active_ascending {
+        TextKey::AddonWorkspaceDescending
+    } else {
+        TextKey::AddonWorkspaceAscending
+    };
+    let description = format!(
+        "{}: {} · {}",
+        tr(TextKey::AddonWorkspaceSort),
+        tr(label),
+        tr(direction)
+    );
+    view! {
+        <button type="submit" class=if active_ascending {"sort-heading is-ascending"} else if active_descending {"sort-heading is-descending"} else {"sort-heading"}
+            form=FORM name="intent" value=format!("sort:{next}") formnovalidate
+            aria-label=description.clone() title=description>
+            <span>{if compact {"#"} else {tr(label)}}</span>
+            <span class="sort-arrows" aria-hidden="true"><span>"▲"</span><span>"▼"</span></span>
+        </button>
+    }.into_any()
+}
+
+fn selectable_ids(d: &Draft, visible: &[&AddonMediaListItemRow]) -> Vec<i64> {
+    visible
         .iter()
         .filter(|row| {
-            super::matches_row(&w.submission.draft, row, w.form.presentation_kind, &w.diff)
+            row.included
+                && d.field(
+                    "items",
+                    &format!("included_{}", row.id),
+                    row.included.to_string(),
+                ) == "true"
         })
+        .map(|row| row.id)
         .collect()
 }
 
 fn items(w: &Workspace) -> AnyView {
     let d = &w.submission.draft;
+    let date_label = if w.form.addon_id == "org.ersatzrs.addon.yt-dlp" {
+        TextKey::AddonWorkspaceUploadDate
+    } else {
+        TextKey::FirstAired
+    };
     let rows = filtered(w);
     let size = if d.page_size == 0 {
         rows.len().max(1)
@@ -383,10 +434,23 @@ fn items(w: &Workspace) -> AnyView {
         .take(size)
         .copied()
         .collect::<Vec<_>>();
-    let selected_here = visible
+    let selectable_ids = selectable_ids(d, &visible);
+    let selectable_here = selectable_ids.len();
+    let selected_here = selectable_ids
         .iter()
-        .filter(|row| d.selected.contains(&row.id))
+        .filter(|id| d.selected.contains(id))
         .count();
+    let all_visible_selected = selectable_here > 0 && selected_here == selectable_here;
+    let selection_intent = if all_visible_selected {
+        "deselect-visible"
+    } else {
+        "select-visible"
+    };
+    let selection_label = if all_visible_selected {
+        TextKey::AddonWorkspaceDeselectVisible
+    } else {
+        TextKey::AddonWorkspaceSelectVisible
+    };
     view! {
         <section class="panel episode-editor" aria-label=tr(TextKey::AddonWorkspaceItems)>
             <div class="filter-row">
@@ -415,11 +479,7 @@ fn items(w: &Workspace) -> AnyView {
             // Cancel preview inside the review replaces the bar's Undo for a
             // pending bulk proposal.
             <div class="numbering-actions editor-savebar numbering-save-bar">{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{save_button(w,TextKey::SaveChanges)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
-            <div class="episode-list"><div class="episode-column-head" aria-hidden="true"><span></span><span>{tr(TextKey::Name)}</span><span>{tr(TextKey::FirstAired)}</span><span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span></div>
-                <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
-                <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>
-            </div>
-            <footer class="pager"><span class="page-summary">{format!("{}–{} / {}",if rows.is_empty() {0} else {page*size+1},((page+1)*size).min(rows.len()),rows.len())}</span>
+            <div class="pager"><span class="page-summary">{format!("{}–{} / {}",if rows.is_empty() {0} else {page*size+1},((page+1)*size).min(rows.len()),rows.len())}</span>
                 {select("page_size",TextKey::AddonWorkspacePageSize,d.page_size.to_string(),[10,25,50,100,0].into_iter().map(|n|(n.to_string(),if n==0 {tr(TextKey::All).to_owned()} else {n.to_string()})).collect())}
                 {button("page-size",TextKey::Apply,false)}
                 <div class="page-jump">
@@ -429,23 +489,42 @@ fn items(w: &Workspace) -> AnyView {
                     <button class="button secondary" form=FORM name="intent" value=format!("page:{}",page+1) disabled={page+1>=pages} formnovalidate>{tr(TextKey::NextPage)}</button>
                     <button class="button secondary" form=FORM name="intent" value=format!("page:{}",pages-1) disabled={page+1>=pages} formnovalidate>{tr(TextKey::LastPage)}</button>
                 </div>
-            </footer>
+            </div>
+            <div class="episode-list">
+                <div class="mobile-review-controls">
+                    <button type="submit" class="header-select" form=FORM name="intent" value=selection_intent disabled=selectable_here==0 formnovalidate aria-label=tr(selection_label) title=tr(selection_label) aria-pressed=all_visible_selected.to_string()><span aria-hidden="true">{if all_visible_selected {"✓"} else {""}}</span></button>
+                    {sort_heading(TextKey::Playlist,"playlist",&d.sort,false)}
+                    {sort_heading(TextKey::Name,"name",&d.sort,false)}
+                    {sort_heading(date_label,"date",&d.sort,false)}
+                </div>
+                <div class="episode-column-head">
+                    <div class="review-first-column">{sort_heading(TextKey::Playlist,"playlist",&d.sort,true)}<button type="submit" class="header-select" form=FORM name="intent" value=selection_intent disabled=selectable_here==0 formnovalidate aria-label=tr(selection_label) title=tr(selection_label) aria-pressed=all_visible_selected.to_string()><span aria-hidden="true">{if all_visible_selected {"✓"} else {""}}</span></button></div>
+                    {sort_heading(TextKey::Name,"name",&d.sort,false)}
+                    {sort_heading(date_label,"date",&d.sort,false)}
+                    <span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span>
+                </div>
+                <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row,date_label)).collect_view()}</ol>
+                <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>
+            </div>
         </section>
     }.into_any()
 }
 
-fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
+fn item_row(w: &Workspace, row: &AddonMediaListItemRow, date_label: TextKey) -> AnyView {
     let d = &w.submission.draft;
     let id = row.id;
     let rank = w.items.iter().position(|r| r.id == id).unwrap_or(0);
     let title = row.display_title.clone();
     let select_name = format!("selected_{id}");
-    let gap = rank
-        .checked_sub(1)
-        .and_then(|i| w.items.get(i))
-        .and_then(|previous| parse_first_aired(previous.first_aired.as_deref()))
-        .zip(parse_first_aired(row.first_aired.as_deref()))
-        .map(|(a, b)| b.signed_duration_since(a).num_days());
+    let gap = if matches!(d.sort.as_str(), "" | "playlist_asc") {
+        rank.checked_sub(1)
+            .and_then(|i| w.items.get(i))
+            .and_then(|previous| parse_first_aired(previous.first_aired.as_deref()))
+            .zip(parse_first_aired(row.first_aired.as_deref()))
+            .map(|(a, b)| b.signed_duration_since(a).num_days())
+    } else {
+        None
+    };
     let menu = format!("row-commands-{id}");
     let item_url = format!("/media/addon-lists/{}/items/{id}", w.form.id);
     let saved_number = |value: Option<i32>| value.map(|n| n.to_string()).unwrap_or_default();
@@ -461,16 +540,20 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
                 d.field("items", &format!("{name}_{id}"), saved_number(saved))
                     != saved_number(saved)
             });
-    view!{<li class=if dirty {"episode-row row-dirty"} else {"episode-row"} id=format!("item-{id}") data-inclusion-changed=inclusion_changed.to_string()>
+    let excluded = d.field("items", &format!("included_{id}"), row.included.to_string()) != "true";
+    let unavailable =
+        row.availability == ersatzrs_domain::AddonMediaListItemAvailability::Unavailable;
+    view!{<li class=if dirty {"episode-row row-dirty"} else {"episode-row"} id=format!("item-{id}") data-inclusion-changed=inclusion_changed.to_string() data-excluded=excluded.to_string() data-unavailable=unavailable.to_string()>
         <input type="hidden" form=FORM name=format!("review_snapshot_{id}") value=super::review_snapshot(row)/>
-        <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
+        <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) disabled=excluded aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
         <div class="episode-identity"><span class="row-art-placeholder" aria-hidden="true"><span style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span><span class="row-thumbnail" style:background-image=row.thumbnail_url.as_ref().map(|url| format!("url({})",serde_json::to_string(url).expect("thumbnail URL serializes"))).unwrap_or_default()></span></span><div>
             <span class="row-title-line"><button class="button row-title" form=FORM name="intent" value="navigate" formaction=item_url.clone() formnovalidate>{title.clone()}</button><a class="row-open-tab" href=item_url target="_blank" rel="noopener" aria-label=format!("{}: {title}",tr(TextKey::OpenItemInNewTab)) title=tr(TextKey::OpenItemInNewTab)><span aria-hidden="true" style=icon_style(IconName::OpenInNew,"0.95rem")></span></a></span>
-            <small>{tr(if d.field("items", &format!("included_{id}"), row.included.to_string()) == "true" {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</small>
+            <span class=if excluded {"item-state-badge is-excluded"} else {"item-state-badge is-included"}><span aria-hidden="true">{if excluded {"⊘"} else {"✓"}}</span>{tr(if excluded {TextKey::AddonWorkspaceExcluded} else {TextKey::IncludeInPublication})}</span>
+            {unavailable.then(||view!{<span class="item-state-badge is-unavailable"><span aria-hidden="true">"!"</span>{tr(TextKey::Unavailable)}</span>})}
             <small hidden=!row.local_media_available>{tr(TextKey::AddonLocalPlaybackAvailable)}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
         </div></div>
-        <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::FirstAired)}</span><span class="sr-only">{tr(TextKey::FirstAired)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
+        <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(date_label)}</span><span class="sr-only">{tr(date_label)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
         <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||tr(TextKey::UnknownAvailability).into(),|n|format!("{}:{:02}",n/60,n%60))}</span></div></div>
         <div class="row-numbering"><div class="inline-pair">
             {[("season",TextKey::Season,row.season,"S"),("episode",TextKey::Episode,row.episode,"E")].into_iter().map(|(name,key,saved,symbol)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved_number(saved)))}<span aria-hidden="true">{symbol}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved_number(saved)) data-saved=saved_number(saved) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
