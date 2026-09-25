@@ -1006,7 +1006,7 @@ WHERE "Id" = ${seed.listId};
 
     const collection=page.locator('.episode-editor');
     const first=collection.locator('.episode-row').first();
-    for(const label of ['First aired','Duration'])await expect(first.getByText(label,{exact:true})).toBeVisible();
+    for(const label of ['Date','Duration'])await expect(first.getByText(label,{exact:true})).toBeVisible();
     const review=first.locator('button.row-title');await expect(review).toBeVisible();
     await review.focus();
     await nativeNavigate(page, () => page.keyboard.press('Enter'));
@@ -1107,7 +1107,8 @@ FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.firstItemId
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     await expect(page.locator('#workspace-errors')).toHaveCount(0);
-    await expect(page.getByText('Preparing media for publication', {exact:true})).toBeVisible();
+    await expect(page.getByTestId('addon-detail-progress')).toBeVisible();
+    await expect(page.getByTestId('addon-detail-progress')).toContainText('0/1');
     expect(
       sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
     ).toBe('0');

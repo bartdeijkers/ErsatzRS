@@ -431,11 +431,15 @@ fn items(w: &Workspace) -> AnyView {
         .collect::<Vec<_>>();
     let selectable_ids = selectable_ids(d, &visible);
     let selectable_here = selectable_ids.len();
-    let selected_here = selectable_ids
+    let selected_selectable = selectable_ids
         .iter()
         .filter(|id| d.selected.contains(id))
         .count();
-    let all_visible_selected = selectable_here > 0 && selected_here == selectable_here;
+    let selected_here = visible
+        .iter()
+        .filter(|row| d.selected.contains(&row.id))
+        .count();
+    let all_visible_selected = selectable_here > 0 && selected_selectable == selectable_here;
     let selection_intent = if all_visible_selected {
         "deselect-visible"
     } else {
@@ -540,7 +544,7 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
         row.availability == ersatzrs_domain::AddonMediaListItemAvailability::Unavailable;
     view!{<li class=if dirty {"episode-row row-dirty"} else {"episode-row"} id=format!("item-{id}") data-inclusion-changed=inclusion_changed.to_string() data-excluded=excluded.to_string() data-unavailable=unavailable.to_string()>
         <input type="hidden" form=FORM name=format!("review_snapshot_{id}") value=super::review_snapshot(row)/>
-        <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) disabled=excluded aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
+        <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
         <div class="episode-identity"><span class="row-art-placeholder" aria-hidden="true"><span style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span><span class="row-thumbnail" style:background-image=row.thumbnail_url.as_ref().map(|url| format!("url({})",serde_json::to_string(url).expect("thumbnail URL serializes"))).unwrap_or_default()></span></span><div>
             <span class="row-title-line"><button class="button row-title" form=FORM name="intent" value="navigate" formaction=item_url.clone() formnovalidate>{title.clone()}</button><a class="row-open-tab" href=item_url target="_blank" rel="noopener" aria-label=format!("{}: {title}",tr(TextKey::OpenItemInNewTab)) title=tr(TextKey::OpenItemInNewTab)><span aria-hidden="true" style=icon_style(IconName::OpenInNew,"0.95rem")></span></a></span>
             <span class=if excluded {"item-state-badge is-excluded"} else {"item-state-badge is-included"}><span aria-hidden="true">{if excluded {"⊘"} else {"✓"}}</span>{tr(if excluded {TextKey::AddonWorkspaceExcluded} else {TextKey::IncludeInPublication})}</span>

@@ -52,7 +52,7 @@ for (const javaScriptEnabled of [false, true]) {
       await expect(rows.first()).toContainText(seed.firstTitle);
       await expect(rows.last().locator('.item-state-badge.is-excluded')).toBeVisible();
       await expect(rows.last().locator('.item-state-badge.is-unavailable')).toBeVisible();
-      await expect(rows.last().locator('.row-pick input[type="checkbox"]')).toBeDisabled();
+      await expect(rows.last().locator('.row-pick input[type="checkbox"]')).toBeEnabled();
       await expect(page.locator('.episode-column-head .header-select')).toBeVisible();
       await expect(page.locator('.episode-column-head .sort-heading[value="sort:date_asc"]')).toContainText('Date');
       expect(await page.locator('.pager').evaluate(pager =>

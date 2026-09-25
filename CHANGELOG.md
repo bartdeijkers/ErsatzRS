@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep excluded add-on list items individually selectable for bulk inclusion;
+  select-visible still skips them and the on-page selection count stays accurate.
 - Choose a free loopback port for each Next CI smoke run so an existing local
   server on a shared runner cannot fail the playback gate before it starts.
 - Keep the maintenance scheduler running when a new library scan starts just
