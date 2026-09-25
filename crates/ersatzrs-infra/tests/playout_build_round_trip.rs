@@ -9,6 +9,8 @@
 //! `apply_build_result` into a fresh in-memory database (seeded from the real-
 //! world schema), then snapshot the produced `PlayoutItem` ordering with `insta`.
 mod common;
+#[path = "playout_build_round_trip/gaps.rs"]
+mod gaps;
 
 use std::collections::BTreeSet;
 

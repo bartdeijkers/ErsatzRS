@@ -341,51 +341,10 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             replace_playout_item_graphics_elements(&mut tx, inserted_id, item).await?;
         }
 
-        // ── gaps ──────────────────────────────────────────────────────────────
-        if result.clear_items {
-            if let Some(seam) = result.retain_through {
-                let cutoff = result.remove_before.unwrap_or(seam)
-                    - max_playout_offset.max(chrono::Duration::zero());
-                sqlx::query(
-                    r#"UPDATE "PlayoutGap" SET "Finish" = ? WHERE "PlayoutId" = ?
-                       AND "Start" < ? AND "Finish" > ?"#,
-                )
-                .bind(encode_datetime(seam))
-                .bind(playout.id)
-                .bind(encode_datetime(seam))
-                .bind(encode_datetime(seam))
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-                sqlx::query(
-                    r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?
-                       AND ("Start" >= ? OR "Finish" < ?)"#,
-                )
-                .bind(playout.id)
-                .bind(encode_datetime(seam))
-                .bind(encode_datetime(cutoff))
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-            } else {
-                sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
-                    .bind(playout.id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-        }
-        for gap in &result.added_gaps {
-            sqlx::query(
-                r#"INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish") VALUES (?, ?, ?)"#,
-            )
-            .bind(playout.id)
-            .bind(encode_datetime(gap.start))
-            .bind(encode_datetime(gap.finish))
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
+        // Publish gaps from the final retained/appended item set in the same
+        // transaction. Scheduler hints may precede fallback filling or omit
+        // gaps entirely, and cannot be used as the persisted UI projection.
+        rebuild_playout_gaps(&mut tx, playout.id).await?;
 
         // ── history ───────────────────────────────────────────────────────────
         if result.clear_items {
@@ -771,6 +730,32 @@ async fn list_admin(
             })
         })
         .collect()
+}
+
+async fn rebuild_playout_gaps(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout_id: EntityId,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    // Match PlayoutGapInserter's adjacent-item rule, including its rejection
+    // of zero-length and negative gaps caused by touching/overlapping items.
+    sqlx::query(
+        r#"INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish")
+        SELECT ?, "PreviousFinish", "Start" FROM (
+            SELECT "Start", LAG("Finish") OVER (ORDER BY "Start", "Id") AS "PreviousFinish"
+            FROM "PlayoutItem" WHERE "PlayoutId" = ?
+        ) WHERE "PreviousFinish" < "Start""#,
+    )
+    .bind(playout_id)
+    .bind(playout_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    Ok(())
 }
 
 async fn list_detail_admin(

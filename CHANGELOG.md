@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Publish playout gap rows with their completed build and move them with
+  on-demand playback, so the detail table keeps gaps aligned with scheduled items
+  (upstream PR #2968).
+
 - Resolve Classic fixed starts in local wall time, including tomorrow's DST
   offset. Flexible starts wait at most 12 hours across midnight (upstream PR #2967).
 

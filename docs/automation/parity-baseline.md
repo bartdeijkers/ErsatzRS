@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `a7ecc5f96a4db2e7c5d23c7e9c6cec3ae1e2b46c` |
-| **Commit subject** | `fix: improve flexible start time handling near midnight (#2967)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a7ecc5f96a4db2e7c5d23c7e9c6cec3ae1e2b46c |
+| **Pinned commit** | `3d24c3f0f58c1416abb0a2ebdd84f012bfd7edd5` |
+| **Commit subject** | `fix: playout gap correctness in ui (#2968)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3d24c3f0f58c1416abb0a2ebdd84f012bfd7edd5 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -18,3 +18,10 @@ visible creation routes after clicking, and Enter/Space close/reopen behavior
 at 1440px and 390px in Chromium and Firefox. This strengthens the previous
 href-only assertion without changing product behavior.
 '''
+
+[[debt]]
+id = 'ucu87-atomic-gap-projection'
+description = 'Build completion must publish item-derived positive gaps, and on-demand shifts must move retained gaps with the items.'
+discovered = '2026-09-25'
+resolved = true
+evidence = 'Upstream 3d24c3f0; repository regression 316b876c reproduced missing gaps. Transactional projection passes 12 round-trip tests (0e41e37d); all three on-demand trimming/shift/rollback tests pass (2e430162). Final 33 persistence/continuity tests pass (e3b11655); strict infra Clippy and matched-bundle Chromium/Firefox detail workflows pass. UCU-05 owns evidence and remaining window gates; row 87 is Port.'

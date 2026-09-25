@@ -9567,6 +9567,26 @@ The final core plus full scan-refresh-continuity selection passes 295 tests
 Core/infra/web all-target strict Clippy, architecture lint, licenses, format and
 diff checks pass. No browser behavior changes. Pin/ledger/checkout advance to
 a7ecc5f9; row 87 follows. Window runtime/build gates remain required.
+Row 87 (3d24c3f0) is Port. Build persistence recomputes positive gaps between
+adjacent final items, in the same SQLite transaction as item replacement,
+retention and appends. This follows upstream's exact adjacent-item rule; core
+YAML gap hints still serve fallback generation before persistence. Continue
+removes stale gaps, repeated builds have stable logical counts, and unrelated
+playouts remain untouched. The SQL plan uses IX_PlayoutItem_PlayoutId before
+sorting the selected playout's items. On-demand playback trims gaps finishing
+before its checkpoint and shifts retained gaps in the item/anchor transaction.
+Injected insert/update failures prove rollback of item replacement/shifting and
+gap deletion; the admin detail/count query exposes only the expected positive gap.
+The regression first failed with zero expected gap rows (316b876c), then all
+12 round-trip tests passed (0e41e37d). Three on-demand tests pass (2e430162).
+Final combined round-trip, on-demand and full scan-refresh-continuity selection:
+33 passed (e3b11655). Strict infra all-target Clippy passes. A fresh matched
+Leptos build succeeds, including the new Jiff WASM dependency. The existing
+playout-detail workflow passes in Chromium (2.9 seconds) and Firefox (6.0 seconds),
+serially on isolated synthetic databases: UNSCHEDULED, filler preference,
+context dialog and playout controls. No UI layout or translation changes.
+Pin/ledger/checkout advance to 3d24c3f0; row 88 follows. This matched build may
+be reused until relevant source changes; full UCU-05 window gates remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 

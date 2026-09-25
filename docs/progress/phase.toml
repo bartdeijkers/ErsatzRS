@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 87 is Port. Item-derived gaps publish atomically with
+builds, and on-demand gaps trim/shift with items. Repository rollback and full
+continuity selection (33 tests), strict infra Clippy and Chromium/Firefox detail
+proof pass. Continue at row 88 (57a0c40d); window gates/push/CI remain open.
+
 2026-09-25: UCU-05 row 86 is Port. Flexible local starts resolve tomorrow's
 DST offset and wait at most 12 hours; Strict and UTC complete checkpoints retain
 their contracts. Core and persisted Continue/Refresh proof, strict consumer

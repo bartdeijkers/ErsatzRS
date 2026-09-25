@@ -4605,6 +4605,7 @@ async fn time_shift_on_demand_playout(
         .execute(&mut *tx)
         .await?;
     shift_playout_items(&mut tx, playout_id, offset).await?;
+    shift_playout_gaps(&mut tx, playout_id, checkpoint, offset).await?;
     shift_playout_history(&mut tx, playout_id, offset).await?;
     shift_playout_program_schedule_anchors(&mut tx, playout_id, offset).await?;
     shift_playout_anchor(&mut tx, playout_id, offset).await?;
@@ -4683,6 +4684,41 @@ async fn shift_playout_items(
         .bind(row.get::<i64, _>("Id"))
         .execute(&mut **tx)
         .await?;
+    }
+    Ok(())
+}
+
+async fn shift_playout_gaps(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    playout_id: i64,
+    checkpoint: DateTime<Utc>,
+    offset: chrono::Duration,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
+        .bind(playout_id)
+        .bind(encode_datetime(checkpoint))
+        .execute(&mut **tx)
+        .await?;
+    let rows =
+        sqlx::query(r#"SELECT "Id", "Start", "Finish" FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+            .bind(playout_id)
+            .fetch_all(&mut **tx)
+            .await?;
+    for row in rows {
+        sqlx::query(r#"UPDATE "PlayoutGap" SET "Start" = ?, "Finish" = ? WHERE "Id" = ?"#)
+            .bind(shift_required_datetime(
+                "playout gap Start",
+                &row.try_get::<String, _>("Start")?,
+                offset,
+            )?)
+            .bind(shift_required_datetime(
+                "playout gap Finish",
+                &row.try_get::<String, _>("Finish")?,
+                offset,
+            )?)
+            .bind(row.get::<i64, _>("Id"))
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }
@@ -8304,6 +8340,75 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn on_demand_gaps_shift_trim_and_roll_back_with_items() {
+        let pool = on_demand_test_pool().await;
+        for statement in [
+            r#"UPDATE "Playout" SET "OnDemandCheckpoint"='2026-06-08 10:00:00' WHERE "Id"=11"#,
+            r#"INSERT INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish") VALUES
+                (1, 11, '2026-06-08 09:00:00', '2026-06-08 09:30:00'),
+                (2, 11, '2026-06-08 09:30:00', '2026-06-08 10:00:00'),
+                (3, 11, '2026-06-08 10:00:24', '2026-06-08 10:01:00'),
+                (4, 12, '2026-06-08 09:00:00', '2026-06-08 09:30:00')"#,
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        let now = "2026-06-08T12:00:00Z".parse().unwrap();
+        time_shift_on_demand_playout(&pool, 7, now).await.unwrap();
+        let rows: Vec<(i64, String, String)> =
+            sqlx::query_as(r#"SELECT "Id", "Start", "Finish" FROM "PlayoutGap" ORDER BY "Id""#)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    2,
+                    "2026-06-08 11:30:00".into(),
+                    "2026-06-08 12:00:00".into()
+                ),
+                (
+                    3,
+                    "2026-06-08 12:00:24".into(),
+                    "2026-06-08 12:01:00".into()
+                ),
+                (
+                    4,
+                    "2026-06-08 09:00:00".into(),
+                    "2026-06-08 09:30:00".into()
+                ),
+            ]
+        );
+        sqlx::query(
+            r#"CREATE TRIGGER reject_gap_shift BEFORE UPDATE ON "PlayoutGap"
+            BEGIN SELECT RAISE(ABORT, 'synthetic gap failure'); END"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(
+            time_shift_on_demand_playout(&pool, 7, now + chrono::Duration::hours(1))
+                .await
+                .is_err()
+        );
+        let item_start: String =
+            sqlx::query_scalar(r#"SELECT "Start" FROM "PlayoutItem" WHERE "Id"=21"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(item_start, "2026-06-08 12:00:00");
+        let unchanged: Vec<(i64, String, String)> =
+            sqlx::query_as(r#"SELECT "Id", "Start", "Finish" FROM "PlayoutGap" ORDER BY "Id""#)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            unchanged, rows,
+            "gap pruning and shifting must roll back too"
+        );
+    }
+
     async fn on_demand_test_pool() -> sqlx::SqlitePool {
         use sqlx::sqlite::SqlitePoolOptions;
 
@@ -8319,6 +8424,7 @@ mod tests {
 
     async fn create_on_demand_test_schema(pool: &sqlx::SqlitePool) {
         for statement in [
+            r#"CREATE TABLE "PlayoutGap" ("Id" INTEGER PRIMARY KEY, "PlayoutId" INTEGER NOT NULL, "Start" TEXT NOT NULL, "Finish" TEXT NOT NULL)"#,
             r#"CREATE TABLE "Channel" (
                 "Id" INTEGER PRIMARY KEY, "Number" TEXT NOT NULL, "Name" TEXT NOT NULL,
                 "PlayoutMode" INTEGER NOT NULL, "SlugSeconds" REAL NULL)"#,

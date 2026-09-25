@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **87 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **86 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **86**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **87**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-86; the next upstream row is 87 (`3d24c3f0`).
+  processed rows 68-87; the next upstream row is 88 (`57a0c40d`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -35,6 +35,31 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 87 source map: build and on-demand gap consistency
+
+Upstream `3d24c3f0` moves gap insertion into the locked build completion path,
+after any time shift; its adjacent-item calculation rejects zero/negative gaps.
+The on-demand shifter trims gaps finishing before the checkpoint and shifts all
+retained gaps with the items. No layout or localization changes are involved.
+
+Native `SqlitePlayoutRepository::apply_build_result` already commits items and
+scheduler-provided gaps atomically, but Classic supplies no complete gap list
+and Continue retains stale projections. Rebuild the adjacent-item projection
+from the final retained/appended SQL item set in that transaction. Match the
+upstream adjacent-item rule exactly. YAML gap hints still drive fallback filling
+before persistence; the UI projection is based on the resulting items.
+`hls_worker::time_shift_on_demand_playout` must trim/shift gaps in the existing
+transaction alongside item timestamps. Unrelated playouts remain untouched;
+any projection/shift failure rolls back all associated item changes.
+
+UI source map: `/playouts`, SSR wrapper and `PlayoutsIsland` in
+`admin/pages/scheduling/playouts.rs`; detail/count server functions delegate to
+repository `list_detail_admin`/`count_detail_admin`. Existing localized negative
+filler-kind rows display UNSCHEDULED; shared primitives and SSR/WASM structure
+are unchanged. Focused browser target is the existing playout-detail workflow
+in `tests/e2e/playouts-feedback.spec.ts`, paired with actual repository producer
+and on-demand transaction tests. UCU-05 owns passing acceptance evidence; row 87 is Port.
 
 ## Row 86 source map: flexible fixed starts near midnight
 
@@ -1641,7 +1666,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 84 | `15db3c4c` | fix: don't ignore channel logo watermarks that are urls (#2961) | Port | upstream-baseline-catch-up | `fix(streaming): render generated channel-logo watermarks` | ucu-05; checkpoint 876ed514 preserves external URLs; cached PNG fallback now preserves generated logos. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. See UCU-05 evidence; window gates remain open. |
 | 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | Adapt (ADR 0020) | classic-scheduling; ersatzrs-healthcheck | `fix(scheduling): preserve complete Classic collection identities` | ucu-05; complete source keys now include RerunCollectionId. Existing earliest complete checkpoints preserve playlist/fake keys. Three-week playlist and rerun restart/Refresh, legacy refusal, actual health reporting and core regressions pass; see UCU-05 evidence. |
 | 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | Port | classic-scheduling | `fix(scheduling): resolve flexible starts across local midnight` | ucu-05; explicit local civil clock, independent tomorrow offsets and inclusive 12-hour wait. Core clock/builder and persisted DST Continue/Refresh proof pass; Strict and complete UTC checkpoints retain their contracts. See UCU-05 evidence. |
-| 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | | | | ucu-05; provisional: Port candidate. |
+| 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | Port | playout-list-detail | `fix(playout): publish gaps with builds and on-demand shifts` | ucu-05; final item-derived positive gaps replace stale rows atomically; on-demand gaps trim and shift with items. Repository, rollback, continuity and Chromium/Firefox detail proof pass; see UCU-05 evidence. |
 | 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | | | | ucu-05; provisional: Adapt candidate. |
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
