@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6b74da3cec6afd61ec6b374dca53c1ce9ead5a1f` |
-| **Commit subject** | `chore: update docker image (#2926)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6b74da3cec6afd61ec6b374dca53c1ce9ead5a1f |
+| **Pinned commit** | `3756e7fb7a7a8a632a06fc99cbd8003c81a07435` |
+| **Commit subject** | `chore: update dependencies (#2927)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3756e7fb7a7a8a632a06fc99cbd8003c81a07435 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

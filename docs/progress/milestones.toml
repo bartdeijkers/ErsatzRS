@@ -8943,6 +8943,37 @@ upstream checkout to row 56; continue at row 57 (3756e7fb). No intermediate
 push or CI was launched. Concurrent Clippy-policy edits remain outside this
 row's checkpoint.
 
+2026-09-25 row 57 reconciliation (Port):
+Pin, ledger and clean upstream checkout began at row 56. Fresh origin/main
+remains 27f9d217; all 172 ordered SHA/subject pairs were verified. Upstream
+3756e7fb (PR #2927) changes twelve NuGet manifests and adapts the graphics
+opacity callback to NCalc 6.2's event arguments without changing fade math.
+The Rust opacity translation regression and three persisted watermark tests
+pass. The other NuGet package changes have no matching Rust dependency or
+source-contract edit.
+
+The update's SQLitePCLRaw pin reveals a matching Rust security gap: SQLx and
+xtask shared bundled SQLite 3.46.0, below the CVE-2025-6965 fix in 3.50.2.
+Upgrading xtask rusqlite to 0.39.0 unifies both on libsqlite3-sys 0.37.0
+with bundled SQLite 3.51.3. A SQLx in-memory connection proves the linked
+runtime version. Cargo dependency/advisory/license checks pass. The NCalcSync
+6.2.0 exact-version probe, configured like upstream's FillerExpression,
+matches all 119 checked oracle outcomes. IEEE-754 NaN comparison and signed
+zero from IEEERemainder differed from 5.12; the Rust evaluator, 119-case
+corpus, ADR 0098 and reference now follow 6.2. All 19 focused chapter
+expression/failure-path tests pass.
+
+The native smoke gate passes on the changed dependency and evaluator graph:
+MPEG-TS returns media bytes; HLS Segmenter and session playlists return
+segments. Its first sandbox run reached the web build but could not bind
+localhost; the identical gate passed with local binding permission. The
+configured target exceeded 60 GiB during that build and was cleaned before
+the successful run. No UI, schema, subtitle/audio selection or FFmpeg argv
+change appears in this row. Substantive Codex review checked the upstream
+diff, bundled library version and sharing, exact NCalc oracle differences,
+graphics adapter parity, and security/package bounds. UCU-04 window gates,
+push and terminal exact-SHA CI remain open; continue at row 58 (0b8c5146).
+
 """
 
 [[milestone]]

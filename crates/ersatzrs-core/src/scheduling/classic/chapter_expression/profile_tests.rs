@@ -77,13 +77,14 @@ fn invariant_numeric_strings_keep_real_and_integer_conversion_distinct() {
         "'1\\u0000' = 1",
         "'Infinity' + 0 = 1/0",
         "'-Infinity' + 0 = -1/0",
-        "'+NaN' + 0 = 0/0",
-        "'nan' + 0 = 0/0",
         "'1e999' + 0 = 1/0",
         "Round(1.5, '0') = 2",
         "(1 << '2') = 4",
     ] {
         assert_eq!(value(expression), Ok(Value::Boolean(true)), "{expression}");
+    }
+    for expression in ["'+NaN' + 0", "'nan' + 0"] {
+        assert!(matches!(value(expression), Ok(Value::Real(number)) if number.is_nan()));
     }
     for expression in [
         "',1' + 0",

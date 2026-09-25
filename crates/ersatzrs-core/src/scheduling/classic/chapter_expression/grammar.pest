@@ -1,4 +1,4 @@
-// NCalcSync 5.12 default parser precedence (LogicalExpressionParser).
+// NCalcSync 6.2 default parser precedence (LogicalExpressionParser).
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 root = { SOI ~ expression ~ EOI }
 expression = { binary ~ ("?" ~ binary ~ ":" ~ binary)? }

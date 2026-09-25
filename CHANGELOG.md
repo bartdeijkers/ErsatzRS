@@ -13,8 +13,16 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Update the bundled SQLite used by the server and tooling to 3.51.3, above
+  the 3.50.2 fix for CVE-2025-6965, without requiring a system SQLite install.
+
 ### Fixed
 
+- Match NCalc 6.2 when Classic filler expressions compare NaN values or
+  preserve negative zero through `IEEERemainder`, keeping selected breaks
+  consistent with the updated upstream evaluator.
 - Include a matched Intel VAAPI/QSV userspace stack in Linux x64 Docker images,
   with pinned source checksums and licenses, so passing an Intel render device
   no longer leaves the container without its media driver.

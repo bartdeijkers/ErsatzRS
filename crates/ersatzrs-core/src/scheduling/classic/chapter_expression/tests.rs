@@ -159,12 +159,12 @@ fn ncalc_membership_wildcards_and_builtin_math() {
     }
 }
 
-/// Captured from `NCalcSync` 5.12.0 with `CaseInsensitiveStringComparer`, Linux
+/// Captured from `NCalcSync` 6.2.0 with `CaseInsensitiveStringComparer`, Linux
 /// invariant culture, and callback num=2, point=600.0, title="Here"; other
 /// callback names return null. This is a behavioral oracle, not a snapshot of
 /// this evaluator's own output. ADR 0098 differences have separate profile tests.
 #[test]
-fn differential_ncalc_5_12_fixtures() {
+fn differential_ncalc_6_2_fixtures() {
     #[derive(serde::Deserialize)]
     struct Fixture {
         expression: String,
@@ -174,7 +174,7 @@ fn differential_ncalc_5_12_fixtures() {
         error: Option<String>,
     }
     let fixtures: Vec<Fixture> =
-        serde_json::from_str(include_str!("ncalc_5_12_fixtures.json")).unwrap();
+        serde_json::from_str(include_str!("ncalc_6_2_fixtures.json")).unwrap();
     let mut differences = Vec::new();
     for fixture in fixtures {
         let actual = value(&fixture.expression);
@@ -199,6 +199,9 @@ fn differential_ncalc_5_12_fixtures() {
         };
         let equal = match (&actual, &expected) {
             (Ok(Value::Real(a)), Value::Real(b)) if a.is_nan() && b.is_nan() => true,
+            (Ok(Value::Real(a)), Value::Real(b)) if *a == 0.0 && *b == 0.0 => {
+                a.to_bits() == b.to_bits()
+            }
             _ => actual.as_ref() == Ok(&expected),
         };
         if !equal {
@@ -209,6 +212,24 @@ fn differential_ncalc_5_12_fixtures() {
         }
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn ncalc_6_2_nan_comparisons_follow_ieee_754() {
+    for expression in [
+        "0/0 = 0/0",
+        "0/0 = 1",
+        "0/0 < -1/0",
+        "0/0 <= -1/0",
+        "0/0 > 1",
+        "0/0 >= 1",
+    ] {
+        assert_eq!(value(expression), Ok(Value::Boolean(false)), "{expression}");
+    }
+    assert_eq!(value("0/0 != 0/0"), Ok(Value::Boolean(true)));
+    assert_eq!(value("0/0 <> 1"), Ok(Value::Boolean(true)));
+    assert!(matches!(value("IEEERemainder(-0.0,0)"), Ok(Value::Real(number)) if number.is_nan()));
+    assert!(matches!(value("IEEERemainder(-0.0,0/0)"), Ok(Value::Real(number)) if number.is_nan()));
 }
 
 #[test]

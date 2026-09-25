@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **116 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **115 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **56**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **57**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-56 are reconciled; the next row is 57 (3756e7fb).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-57 are reconciled; the next row is 58 (0b8c5146).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +30,34 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 57 source map: dependency refresh and SQLite security
+
+Upstream `3756e7fb` (PR #2927) changes twelve C# project files and
+`OpacityExpressionHelper.cs`. Its NCalc 6.2 adapter replaces the event-argument
+type and indexed parameter evaluation while preserving the four fade helper
+arguments and arithmetic. The package refresh also pins a fixed SQLitePCLRaw
+native bundle to address GHSA-2m69-gcr7-jv3q. No UI, route or persisted schema
+changes appear in this commit.
+
+ErsatzRS renders opacity expressions through
+`crates/ersatzrs-ffmpeg/src/filter/simple.rs`; its existing custom-helper
+regression covers the unchanged fade arity and arithmetic. The other C# package
+updates use NuGet-only surfaces without a matching Rust dependency. The NCalc
+update does affect Classic saved filler expressions: an exact NCalcSync 6.2.0
+probe with upstream's comparer and parameter callback reproduced 119 oracle
+outcomes, finding changed IEEE-754 NaN comparisons and signed-zero remainder.
+The Rust evaluator, oracle corpus, expression reference and ADR 0098 follow
+those changes without altering its accepted deterministic culture or limits.
+
+The SQLite path is a bundled `libsqlite3-sys` shared by SQLx and `xtask`'s
+`rusqlite`. Before this row the lock resolved 0.30.1 with SQLite 3.46.0,
+below the advisory's 3.50.2 fix. `rusqlite` 0.39.0 permits one shared bundled
+`libsqlite3-sys` 0.37.0 with SQLite 3.51.3. An actual SQLx connection asserts
+the linked version at runtime. Focused watermark/opacity and expression probes,
+license/advisory checks, the native web smoke test, and progress checks own
+the row's acceptance. No schema, UI, media-track or release-package contract
+changes are implied.
 
 ## Row 56 source map: Intel container driver stack
 
@@ -1003,7 +1031,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 54 | `7032cfc8` | fix: better handling of local subtitles (#2924) | Port | upstream-baseline-catch-up | `fix(subtitles): complete local collision repair` | ucu-04; kind-separated deterministic merge, one-time folder invalidation, all-owner hourly cleanup and localized health; upgrade rescan, native/Next language selection, decoded captions and native smoke pass. |
 | 55 | `32e54828` | fix: use und language tag with local subtitles (#2925) | Covered | upstream-baseline-catch-up | `test(subtitles): verify undefined sidecar language and flags` | ucu-04; existing suffix-only parser preserves title isolation and und without a language; persisted path/flag/rescan matrix and undefined-language playback selection pass. |
 | 56 | `6b74da3c` | chore: update docker image (#2926) | Port | upstream-baseline-catch-up | `fix(docker): package matched Intel media drivers` | ucu-04; pinned Intel userspace stack, licenses and stripped libraries; x64 loader and managed FFmpeg CPU/VAAPI-loading proof plus ARM64/ARMv7 runtime builds/start pass. Physical B70 playback is not claimed. |
-| 57 | `3756e7fb` | chore: update dependencies (#2927) | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 57 | `3756e7fb` | chore: update dependencies (#2927) | Port | upstream-baseline-catch-up | `fix(deps): reconcile SQLite and NCalc 6.2` | ucu-04; bundled SQLite 3.51.3 closes CVE-2025-6965; NCalc 6.2 saved-expression NaN and signed-zero behavior follows exact-version oracle. Opacity helper and NuGet-only updates are covered; focused regressions, dependency audit, scoped Clippy and native smoke pass. |
 | 58 | `0b8c5146` | fix: continue serving old segments when unable to transcode in realtime (#2933) | | | | ucu-04; provisional: Port candidate. |
 | 59 | `2b7531ca` | fix: remove already-played playout items (#2934) | | | | ucu-04; provisional: Port candidate. |
 | 60 | `c8bd9766` | chore: update openapi to fix build (#2936) | | | | ucu-04; provisional: Upstream tooling candidate. |

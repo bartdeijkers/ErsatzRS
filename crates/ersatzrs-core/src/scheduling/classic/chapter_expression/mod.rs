@@ -1,5 +1,5 @@
 //! Chapter filtering follows ErsatzTV's `FillerExpression.FilterChapters`.
-//! Parsing uses a dedicated `NCalc` 5.12 grammar, rather than interpreting the
+//! Parsing uses a dedicated `NCalc` 6.2 grammar, rather than interpreting the
 //! expression as a different scripting language.
 
 mod evaluation;

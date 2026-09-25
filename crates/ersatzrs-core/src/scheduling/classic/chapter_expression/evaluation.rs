@@ -67,7 +67,7 @@ pub(super) fn evaluate(pair: Pair<'_, Rule>, parameters: &Parameters<'_>) -> Res
             while children.next().is_some() {
                 operands.push(children.next().ok_or(ExpressionError)?);
             }
-            // NCalc 5.12's exponential AST builder retains only the first
+            // NCalc 6.2's exponential AST builder retains only the first
             // three operands for chains longer than three. Preserve that
             // versioned behavior, rather than silently changing saved rules.
             operands.truncate(3);
@@ -93,7 +93,10 @@ fn unary(pair: Pair<'_, Rule>, parameters: &Parameters<'_>) -> Result<Value> {
         value = match operator.as_str().to_ascii_lowercase().as_str() {
             "!" | "not" => Value::Boolean(!value.boolean()?),
             "~" => Value::Unsigned(!value.unsigned()?),
-            "-" => arithmetic("-", Value::Int(0), value)?,
+            "-" => match value {
+                Value::Real(number) => Value::Real(-number),
+                other => arithmetic("-", Value::Int(0), other)?,
+            },
             _ => return Err(ExpressionError),
         };
     }
@@ -200,7 +203,11 @@ fn evaluate_binary(pair: Pair<'_, Rule>, parameters: &Parameters<'_>) -> Result<
 fn binary(operator: &str, left: Value, right: Value) -> Result<Value> {
     match operator {
         "=" | "==" | "!=" | "<>" | ">" | ">=" | "<" | "<=" => {
-            let result = if left.is_blank() == right.is_blank() {
+            let nan_operand = matches!(&left, Value::Real(value) if value.is_nan())
+                || matches!(&right, Value::Real(value) if value.is_nan());
+            let result = if nan_operand {
+                matches!(operator, "!=" | "<>")
+            } else if left.is_blank() == right.is_blank() {
                 let order = left.compare(&right)?;
                 match operator {
                     "=" | "==" => order == Ordering::Equal,
@@ -459,7 +466,7 @@ fn math_function(name: &str, values: &[Value]) -> Result<Value> {
         "Log" => x.log(y),
         "Pow" => x.powf(y),
         "IEEERemainder" => {
-            if x.is_finite() && y.is_infinite() {
+            if (x == 0.0 && y.is_finite() && y != 0.0) || (x.is_finite() && y.is_infinite()) {
                 x
             } else {
                 x - y * (x / y).round_ties_even()

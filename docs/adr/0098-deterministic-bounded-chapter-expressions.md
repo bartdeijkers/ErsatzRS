@@ -4,6 +4,11 @@
 
 Accepted 2026-09-23
 
+Updated 2026-09-25 for upstream row 57: the retained NCalc behavior is checked
+against NCalcSync 6.2.0. IEEE-754 NaN comparisons and the sign of zero from
+`IEEERemainder` follow that release; the deterministic culture and resource
+limits remain the accepted contract.
+
 The maintainer explicitly accepted this deterministic expression contract on
 2026-09-23 and requested implementation. ADR 0097 accepts the separate no-match
 padding correction; implementation and platform/runtime acceptance remain distinct.
@@ -14,11 +19,11 @@ Partial — the Classic chapter evaluator implements the accepted profile with
 pinned ICU4X 2.2.0 compiled collation data, invariant numeric conversions,
 validated Gregorian/elapsed-time
 literals, eager literal validation and redacted atomic build errors. The parser
-retains the NCalc 5.12 grammar, iterative binary evaluation, all nine callbacks,
+retains the NCalc 6.2 grammar, iterative binary evaluation, all nine callbacks,
 65,536-byte text limit and 32-level nesting limit.
 
 Focused Linux verification covers the five upstream chapter fixtures, 119
-NCalcSync 5.12.0 oracle outcomes, explicit deterministic-profile regressions and
+NCalcSync 6.2.0 oracle outcomes, explicit deterministic-profile regressions and
 SQL preservation of prior playout state on rejected expressions. The profile
 suite passes in separate processes under invariant, en-US, nl-NL and tr-TR
 language environments. Dependency advisory, license, source and ban checks pass.
@@ -69,9 +74,13 @@ explicit contract rather than an implicit claim of full NCalc compatibility.
 
 Adopt one deterministic expression profile for saved Classic filler expressions,
 independent of host locale, admin UI language, request headers and worker thread.
-Use the existing Rust evaluator with a versioned NCalcSync 5.12-compatible grammar,
+Use the existing Rust evaluator with a versioned NCalcSync 6.2-compatible grammar,
 operator precedence, lazy evaluation, built-in functions and value-conversion
 behavior, subject to the following explicit differences.
+
+NCalcSync 6.2 uses IEEE-754 comparisons for NaN: equality and ordered
+comparisons are false; inequality is true. `IEEERemainder` preserves the sign
+of a zero dividend. These replace the earlier 5.12 oracle outcomes.
 
 ### Culture and strings
 
@@ -201,5 +210,6 @@ close row 22 or the milestone.
 - [Pinned upstream FillerExpression](https://github.com/ErsatzTV/legacy/blob/7e38297d6ed240f784d388696e687f781e550a71/ErsatzTV.Core/Scheduling/FillerExpression.cs)
 - [NCalc 5.12 expression context](https://github.com/ncalc/ncalc/blob/bd0afe72c1b5a5679255e91f902f35021acbb48a/src/NCalc.Core/ExpressionContextBase.cs)
 - [NCalc 5.12 type comparison](https://github.com/ncalc/ncalc/blob/bd0afe72c1b5a5679255e91f902f35021acbb48a/src/NCalc.Core/Helpers/TypeHelper.cs)
+- [NCalc 6.2 release history](https://github.com/ncalc/ncalc/blob/master/CHANGELOG.md)
 - [ICU4X 2.2 collation options](https://docs.rs/icu_collator/2.2.0/icu_collator/)
 - [.NET CurrentCulture and startup culture selection](https://learn.microsoft.com/en-us/dotnet/api/system.globalization.cultureinfo.currentculture)

@@ -29,6 +29,7 @@ source, fill-group, Smart Shuffle, Random, and Random Rotation state, while
 stable playback identity prevents consumed replay after membership changes.
 Preflight refuses incomplete or legacy state before clearing, reports it in
 build/health status, and requires Reset. SQLite/MySQL replacement is atomic.
+Row 57 aligns the chapter oracle and NaN/signed-zero behavior with NCalcSync 6.2.0.
 '''
 
 [[debt]]
@@ -134,7 +135,7 @@ resolved    = true
 
 [[debt]]
 id          = 'classic-fallback-gap-and-chapter-padding'
-description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, mid-roll padding now follows source chapter boundaries, and chapter-point expression filtering implements the accepted deterministic ADR 0098 profile against a NCalc 5.12 oracle. Persisted filler identities preserve source offsets across membership changes; legacy destructive Refresh without identity evidence is refused.'
+description = 'UCU-02 row 22 requires duration-bounded fallback clips and chapter-aware padding. The first implementation corrects gap/post-roll fallback, chapter-as-media hydration and filler continuation, mid-roll padding now follows source chapter boundaries, and chapter-point expression filtering implements the accepted deterministic ADR 0098 profile against a versioned NCalc oracle. Persisted filler identities preserve source offsets across membership changes; legacy destructive Refresh without identity evidence is refused.'
 discovered  = '2026-09-23'
 evidence    = 'Upstream 7e38297d (#2867), PlayoutModeSchedulerBase and FillerExpression. Gap/pad/offset/continuation regressions and the SQL chapter fixture are recorded under UCU-02. Focused SQL tests now cover schedule-over-playlist pin precedence, chapter membership insertion/removal, persisted Continue/Refresh, and legacy checkpoint refusal. ADRs 0097 and 0098 accept primary-content preservation and deterministic bounded expression semantics. Row 22 local acceptance passes focused core/SQL tests, scoped Clippy, native smoke and decoded production-builder playback, including Unicode-selected breaks and fractional source clips. Cross-platform expression acceptance remains separately tracked under ADR 0098.'
 resolved    = true

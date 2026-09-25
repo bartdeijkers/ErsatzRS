@@ -54,10 +54,12 @@ minutes of programme, and spaces selected breaks at least ten source minutes apa
 
 ## Values and comparisons
 
-The grammar and retained operators/functions follow NCalcSync 5.12, with the
+The grammar and retained operators/functions follow NCalcSync 6.2, with the
 explicit deterministic differences below. Conditionals and boolean operators
 short-circuit. Function names are case-sensitive: for example, `if`, `ifs`, `in`,
 `Abs`, `Min`, `Max`, `Round`, `Sqrt` and `Pow` retain their upstream casing.
+NaN follows IEEE-754 comparisons: equality and ordered comparisons are false,
+while inequality is true. `IEEERemainder` preserves the sign of a zero dividend.
 
 String equality and ordering use ICU4X root collation: case is ignored, accents
 remain significant, and canonically equivalent Unicode text compares equally.
