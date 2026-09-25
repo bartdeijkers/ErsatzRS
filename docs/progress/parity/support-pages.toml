@@ -4,9 +4,13 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-we
 status     = 'In progress'
 adr        = ['0013', '0089']
 summary    = '''
-Upstream catch-up row 1 (1e5c0b12, PR #2842) is Covered: the removed upstream
-release-notes renderer and GitHub client are already absent from the native
-home/health pages. UCU-01 owns the source comparison; no product code changed.
+Upstream catch-up row 1 (1e5c0b12, PR #2842) was Covered when upstream removed
+release notes. Row 65 (3e1918c9, PR #2942) restores a release-notes card on
+both `/` and `/system/health`. The card renders sanitized Markdown from the
+bundled changelog's installed-tag section, or its latest dated release for a
+development build, and links to the full local changelog. The optional GitHub
+link remains available to operators with repository access; unauthenticated
+GitHub release requests returned 404 at reconciliation time.
 
 Ported: `/system/health` renders an ErsatzTV-style two-column health table from
 the live health service, filters `NotApplicable` rows, refreshes after scanner

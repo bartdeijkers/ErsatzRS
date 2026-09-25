@@ -29,6 +29,26 @@ async function expectNoRuntimeErrors(page: Page, runtimeErrors: string[]): Promi
 }
 
 test.describe('support route-family parity', () => {
+  test('release notes fit the home and health routes at 320px', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'Capture the narrow layout once.');
+    await forceEnglish(page);
+    await page.setViewportSize({ width: 320, height: 720 });
+
+    for (const route of ['/', '/system/health']) {
+      await page.goto(route);
+      const card = page.locator('[data-release-notes]');
+      await card.scrollIntoViewIfNeeded();
+      await expect(card).toBeVisible();
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+      await page.screenshot({
+        path: screenshotPath(testInfo, route === '/' ? 'home-release-notes' : 'health-release-notes'),
+      });
+    }
+  });
+
   test('health, logs, troubleshooting, validation, block playout, and playback fallbacks render hydrated controls', async ({
     page,
   }, testInfo) => {
@@ -46,8 +66,22 @@ test.describe('support route-family parity', () => {
     page.on('pageerror', (error) => runtimeErrors.push(error.message));
     await forceEnglish(page);
 
+    await page.goto('/');
+    await expect(page.locator('[data-release-notes]')).toHaveCount(1);
+    await expect(page.locator('[data-release-notes] a').first()).toHaveAttribute('href', '/changelog.md');
+    const changelog = await page.request.get('/changelog.md');
+    expect(changelog.ok()).toBe(true);
+    expect(changelog.headers()['content-type']).toContain('text/markdown');
+    const changelogText = await changelog.text();
+    expect(changelogText).toContain('## [Unreleased]');
+    const latestRelease = changelogText.match(/^## \[([^\]]+)\] - /m)?.[1];
+    expect(latestRelease).toBeDefined();
+    await expect(page.locator('[data-release-notes]')).toContainText(latestRelease!);
+
     await page.goto('/system/health');
     await expect(page.getByRole('heading', { name: 'Health Checks' })).toBeVisible();
+    await expect(page.locator('[data-release-notes]')).toHaveCount(1);
+    await expect(page.locator('[data-release-notes]')).toContainText(latestRelease!);
     // Scoped to the drawer: health-check rows can contain the word "unsupported",
     // which an unscoped text match also resolves to.
     await expect(

@@ -45,6 +45,8 @@ release section when tagging a release.
 
 ### Added
 
+- Show sanitized release notes from the bundled changelog on the home and
+  health pages, with an offline full-changelog link (upstream PR #2942).
 - Support named, priority-ordered date ranges in Sequential YAML playouts. Each
   schedule resumes its own instruction position and in-build graphics, watermark,
   filler and roll state; continuation survives a database restart. Scheduled

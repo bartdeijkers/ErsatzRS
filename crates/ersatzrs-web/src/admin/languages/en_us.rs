@@ -1307,6 +1307,8 @@ TextKey::NonPlayableItems => "Non-playable items",
             "Delays stream start until the specified number of (4-second) segments have been transcoded; a larger number will mean slower initial playback, but potentially less buffering"
         }
         TextKey::HomeRunning => "IPTV server is running.",
+        TextKey::ReleaseNotes => "Release notes",
+        TextKey::FullChangelog => "Full changelog",
         TextKey::HttpMinimumLogLevel => "Request Logging Minimum Log Level",
         TextKey::Id => "Id",
         TextKey::Images => "Images",

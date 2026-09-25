@@ -6,6 +6,7 @@ pub mod i18n;
 pub mod languages;
 pub mod layout;
 pub mod pages;
+pub mod release_notes;
 pub mod routes;
 pub mod search_query;
 pub mod server_fns;

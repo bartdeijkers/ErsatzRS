@@ -2040,6 +2040,8 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
             "Stelt de start van de stream uit totdat het opgegeven aantal segmenten van 4 seconden is getranscodeerd; een groter aantal betekent een tragere start maar mogelijk minder buffering"
         }
         TextKey::HomeRunning => "IPTV-server is actief.",
+        TextKey::ReleaseNotes => "Release notes",
+        TextKey::FullChangelog => "Volledige changelog",
         TextKey::HttpMinimumLogLevel => "Minimaal logniveau voor verzoeklogging",
         TextKey::Id => "Id",
         TextKey::Images => "Afbeeldingen",

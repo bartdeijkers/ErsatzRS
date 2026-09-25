@@ -1350,6 +1350,8 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
             "Verschiebt den Start des Streams, bis die angegebene Anzahl von (4-Sekunden-)Segmenten transkodiert wurden; eine größere Anzahl bedeutet eine langsamere initiale Wiedergabe, kann aber potenziell weniger Pufferung bedeuten"
         }
         TextKey::HomeRunning => "Der IPTV-Server läuft.",
+        TextKey::ReleaseNotes => "Versionshinweise",
+        TextKey::FullChangelog => "Vollständiges Änderungsprotokoll",
         TextKey::HttpMinimumLogLevel => {
             "Mindest-Protokollebene für die Anforderungsprotokollierung"
         }

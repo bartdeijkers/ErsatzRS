@@ -2060,6 +2060,8 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
             "Atrasa o início do stream até que a quantidade especificada de segmentos de 4 segundos seja transcodificada; um número maior inicia mais devagar, mas pode reduzir buffering"
         }
         TextKey::HomeRunning => "O servidor IPTV está em execução.",
+        TextKey::ReleaseNotes => "Notas de lançamento",
+        TextKey::FullChangelog => "Registro completo de alterações",
         TextKey::HttpMinimumLogLevel => "Nível mínimo de log de solicitações",
         TextKey::Id => "Id",
         TextKey::Images => "Imagens",

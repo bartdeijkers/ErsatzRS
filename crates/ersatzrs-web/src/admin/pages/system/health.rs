@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{health_check_message, health_check_title, health_summary, tr, TextKey};
+use crate::admin::release_notes::ReleaseNotesCard;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::layout::{
@@ -25,6 +26,9 @@ pub fn HealthPage() -> impl IntoView {
                     view! { <HealthIsland initial_snapshot=initial_snapshot/> }.into_any()
                 }))}
             </Suspense>
+            <div style="max-width:64rem;margin:0 auto;padding:0 0 2rem">
+                <ReleaseNotesCard/>
+            </div>
         </SystemPageLayout>
     }
 }

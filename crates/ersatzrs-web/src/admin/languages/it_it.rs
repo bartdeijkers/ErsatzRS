@@ -1336,6 +1336,8 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
             "Rinvia l'inizio dello streaming fino al numero specificato di segmenti (di 4 secondi) trascodificati; un numero maggiore comporterà una riproduzione iniziale più lenta, ma potenzialmente meno buffering"
         }
         TextKey::HomeRunning => "Il server IPTV è in esecuzione.",
+        TextKey::ReleaseNotes => "Note di rilascio",
+        TextKey::FullChangelog => "Registro completo delle modifiche",
         TextKey::HttpMinimumLogLevel => {
             "Livello Minimo di Log per la Registrazione delle Richieste"
         }

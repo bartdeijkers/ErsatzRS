@@ -9132,6 +9132,29 @@ metadata title updates and dependency/ADR boundaries. UCU-04 window gates,
 push and terminal exact-SHA CI remain open; continue at row 65 (3e1918c9).
 No intermediate push or CI was launched.
 
+2026-09-25: row 65 (3e1918c9, PR #2942) is Port. Upstream restores a
+release-notes card below the health table on its shared home/health page,
+fetching a versioned or latest GitHub release body, sanitizing Markdown and
+linking the full changelog. ErsatzRS now renders a shared localized SSR card
+on both separate routes, selects the exact tagged beta or latest dated section
+of its bundled canonical changelog, sanitizes Markdown and serves the complete
+file at /changelog.md. The optional GitHub link remains; unauthenticated
+requests to the ErsatzRS release API and page returned 404, and the first
+browser screenshot exposed the remote-only card's empty body. The local
+source corrects that observed defect without requiring repository credentials
+or network access. No database, playback, subtitle or alternate-audio path
+changes. Focused section and HTML-sanitization tests pass (nextest
+31afb296, 8/8 selected); web type check, cargo-deny advisories/bans/licenses/
+sources and hydration lint pass. A matched SSR/WASM/CSS browser run against a
+disposable database passes 3 Chromium cases, including actual latest-section
+text, local Markdown response, card placement on both routes and 320px bounds;
+3 existing Firefox-filtered cases are skipped. The web parity gate passes
+690 tests, scoped all-target Clippy, hydration and architecture lint, formatting
+and progress validation. The dependency audit and final substantive review
+pass. UCU-04
+window gates, push and terminal exact-SHA CI remain open; continue at row 66
+(95fa937c). No intermediate push or CI was launched.
+
 """
 
 [[milestone]]

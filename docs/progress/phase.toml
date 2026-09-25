@@ -61,6 +61,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 65 is Port. Home and health show sanitized release
+notes from the bundled changelog's exact beta or latest dated section, plus a
+local full-changelog route and optional GitHub link. The anonymous ErsatzRS
+GitHub API and page returned 404, so a remote-only card was empty. Focused
+section/security tests, matched SSR/WASM browser proof and 320px layout pass.
+Next is row 66 (95fa937c, SkiaSharp update). UCU-04 window gates, push and
+exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 64 is Adapt under ADR 0098. Plex already persists
 embedded and external subtitle titles in stream and movie/episode metadata;
 focused provider-sync fixtures now prove them. The accepted deterministic

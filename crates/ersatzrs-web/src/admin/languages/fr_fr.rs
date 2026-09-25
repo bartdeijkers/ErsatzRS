@@ -1328,6 +1328,8 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
             "Retarde le démarrage du flux jusqu'à ce que le nombre indiqué de segments (de 4 secondes) ait été transcodé ; une valeur plus élevée ralentit le démarrage initial mais peut réduire les mises en mémoire tampon"
         }
         TextKey::HomeRunning => "Le serveur IPTV est en cours d'exécution.",
+        TextKey::ReleaseNotes => "Notes de version",
+        TextKey::FullChangelog => "Journal complet des modifications",
         TextKey::HttpMinimumLogLevel => "Niveau de journalisation minimal des requêtes",
         TextKey::Id => "Id",
         TextKey::Images => "Images",

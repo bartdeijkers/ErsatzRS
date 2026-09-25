@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
+use crate::admin::release_notes::ReleaseNotesCard;
 
 stylance::import_crate_style!(style, "src/admin/home.module.css");
 
@@ -13,6 +14,7 @@ pub fn HomePage() -> impl IntoView {
             <p>
                 <a href="/channels" class=style::page_home_link>{format!("-> {}", tr(TextKey::Channels))}</a>
             </p>
+            <ReleaseNotesCard/>
         </div>
     }
 }

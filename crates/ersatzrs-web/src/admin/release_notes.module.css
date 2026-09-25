@@ -1,0 +1,55 @@
+.card {
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    color: var(--color-gray-100);
+    width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+}
+
+.header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.header h2 {
+    font-size: 1.125rem;
+    margin: 0 0 0.5rem;
+}
+
+.header p {
+    font-size: 0.875rem;
+    margin: 0;
+    color: var(--color-gray-300);
+}
+
+.header a,
+.body a {
+    color: var(--color-secondary);
+}
+
+.body {
+    padding: 1rem 1.5rem;
+    line-height: 1.5;
+}
+
+.body :first-child {
+    margin-top: 0;
+}
+
+.body :last-child {
+    margin-bottom: 0;
+}
+
+.body pre {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+@media (max-width: 480px) {
+    .header,
+    .body {
+        padding: 1rem;
+    }
+}

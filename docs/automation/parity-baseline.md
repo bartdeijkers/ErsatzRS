@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `075649ad02c5cbf87aafd8100f0bd7149bdcad32` |
-| **Commit subject** | `fix: synchronize subtitle titles from plex libraries (#2940)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/075649ad02c5cbf87aafd8100f0bd7149bdcad32 |
+| **Pinned commit** | `3e1918c992b99f8f67e0c86a977f0719e9def425` |
+| **Commit subject** | `feat: restore release notes on home page (#2942)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3e1918c992b99f8f67e0c86a977f0719e9def425 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

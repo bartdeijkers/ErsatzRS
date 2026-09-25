@@ -2049,6 +2049,8 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
             "Opóźnia start strumienia do czasu transkodowania podanej liczby 4-sekundowych segmentów; większa liczba oznacza wolniejszy start, ale może ograniczyć buforowanie"
         }
         TextKey::HomeRunning => "Serwer IPTV działa.",
+        TextKey::ReleaseNotes => "Informacje o wydaniu",
+        TextKey::FullChangelog => "Pełna lista zmian",
         TextKey::HttpMinimumLogLevel => "Minimalny poziom logów żądań",
         TextKey::Id => "Id",
         TextKey::Images => "Obrazy",

@@ -79,6 +79,10 @@ pub fn build_app(app_state: AppState) -> Router {
         Router::new()
             .route("/healthz", get(super::bootstrap::healthz))
             .route(
+                "/changelog.md",
+                get(crate::admin::release_notes::full_changelog),
+            )
+            .route(
                 "/api/maintenance/clean_artwork",
                 post(api::maintenance::clean_artwork),
             )
