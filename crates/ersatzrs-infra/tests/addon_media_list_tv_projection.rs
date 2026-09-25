@@ -1064,6 +1064,172 @@ async fn television_projection_is_idempotent() {
     );
 }
 
+#[tokio::test]
+async fn television_republication_removes_excluded_episode_projection() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("publish all episodes");
+    let excluded_episode_id: i64 = sqlx::query_scalar(
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+           WHERE "AddonMediaListItemId" = 11"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("find episode to exclude");
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = 11"#)
+        .execute(&pool)
+        .await
+        .expect("exclude previously published item");
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("republish the reduced selection");
+
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode""#).await,
+        2,
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode" AS "projection"
+               JOIN "AddonMediaListItem" AS "item"
+                 ON "item"."Id" = "projection"."AddonMediaListItemId"
+               WHERE "item"."Included" = 0"#,
+        )
+        .await,
+        0,
+    );
+    let removed_media_items: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(excluded_episode_id)
+            .fetch_one(&pool)
+            .await
+            .expect("check excluded projection ownership");
+    assert_eq!(removed_media_items, 0);
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "RemoteStream" WHERE "Id" = 111"#
+        )
+        .await,
+        1,
+        "excluding the episode must preserve its source stream",
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "MediaVersion"
+               WHERE "RemoteStreamId" = 111 AND "EpisodeId" IS NULL"#,
+        )
+        .await,
+        1,
+        "the source version must detach from the removed projection",
+    );
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "Show""#).await,
+        1,
+        "the parent show stays published",
+    );
+}
+
+#[tokio::test]
+async fn flat_and_music_video_republication_remove_excluded_projections() {
+    for (presentation, link_table) in [
+        (
+            AddonMediaListPresentationKind::Movies,
+            "AddonMediaListItemMovie",
+        ),
+        (
+            AddonMediaListPresentationKind::MusicVideos,
+            "AddonMediaListItemMusicVideo",
+        ),
+    ] {
+        let pool = common::test_db().await;
+        let _directory = seed_managed_list(&pool).await;
+        let repositories = make_repositories(pool.clone());
+        request_and_publish(&repositories, presentation)
+            .await
+            .expect("publish all projected items");
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = 11"#)
+            .execute(&pool)
+            .await
+            .expect("exclude previously published item");
+
+        request_and_publish(&repositories, presentation)
+            .await
+            .expect("republish the reduced selection");
+
+        let stale_projection_count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            r#"SELECT COUNT(*) FROM "{link_table}" WHERE "AddonMediaListItemId" = 11"#
+        )))
+        .fetch_one(&pool)
+        .await
+        .expect("count excluded projection");
+        assert_eq!(stale_projection_count, 0, "{presentation:?}");
+        assert_eq!(
+            scalar::<i64>(
+                &pool,
+                r#"SELECT COUNT(*) FROM "RemoteStream" WHERE "Id" = 111"#
+            )
+            .await,
+            1,
+            "{presentation:?} must preserve the source stream",
+        );
+    }
+}
+
+#[tokio::test]
+async fn excluding_an_operator_referenced_projection_preserves_it() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
+        .await
+        .expect("publish the movie projection");
+    let movie_id: i64 = scalar(
+        &pool,
+        r#"SELECT "MovieId" FROM "AddonMediaListItemMovie" WHERE "AddonMediaListItemId" = 11"#,
+    )
+    .await;
+    pool.execute(
+        r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+           VALUES (1, 'Operator picks', 0)"#,
+    )
+    .await
+    .expect("seed operator collection");
+    sqlx::query(r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (1, ?)"#)
+        .bind(movie_id)
+        .execute(&pool)
+        .await
+        .expect("reference projected movie");
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = 11"#)
+        .execute(&pool)
+        .await
+        .expect("exclude referenced item");
+
+    let error = request_and_publish(&repositories, AddonMediaListPresentationKind::Movies)
+        .await
+        .expect_err("referenced projection must be retained");
+    assert!(error.to_string().contains("referenced"), "{error}");
+    let retained: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
+        .bind(movie_id)
+        .fetch_one(&pool)
+        .await
+        .expect("inspect operator referenced movie");
+    assert_eq!(retained, 1);
+}
+
 /// The projection consumes the NFO rather than merely preserving it on disk:
 /// faceted search and artwork consumers read these database rows. Repeating the
 /// request proves the related-row replacement cannot accumulate duplicates.

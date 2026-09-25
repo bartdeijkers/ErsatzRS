@@ -111,6 +111,7 @@ pub async fn post(State(state): State<AppState>, request: Request<Body>) -> Resp
         || draft.list_id <= 0
         || draft.groups.len() > 10_010
         || ![0, 10, 25, 50, 100].contains(&draft.page_size)
+        || !super::valid_sort(&draft.sort)
     {
         return StatusCode::BAD_REQUEST.into_response();
     }
@@ -410,10 +411,61 @@ async fn execute(
         "clear-selection" => {
             d.selected.clear();
         }
+        "select-visible" | "deselect-visible" => {
+            let list = state
+                .application
+                .get_addon_media_list(d.list_id)
+                .await
+                .map_err(|_| TextKey::AddonWorkspaceRetained)?
+                .ok_or(TextKey::AddonMediaListNotFound)?;
+            let rows: Vec<crate::admin::server_fns::addon_media_lists::AddonMediaListItemRow> =
+                state
+                    .application
+                    .list_addon_media_list_items(d.list_id)
+                    .await
+                    .map_err(|_| TextKey::AddonWorkspaceRetained)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+            let diff = state
+                .application
+                .addon_media_list_saved_draft_diff(d.list_id)
+                .await
+                .map(crate::admin::server_fns::addon_media_lists::AddonMediaListDraftDiffRow::from)
+                .map_err(|_| TextKey::AddonWorkspaceRetained)?;
+            let filtered = super::sorted_filtered(d, &rows, list.presentation_kind, &diff);
+            let size = if d.page_size == 0 {
+                filtered.len().max(1)
+            } else {
+                d.page_size
+            };
+            let page = d.page.min(filtered.len().div_ceil(size).saturating_sub(1));
+            for row in filtered.into_iter().skip(page * size).take(size) {
+                if intent == "deselect-visible" {
+                    d.selected.remove(&row.id);
+                } else if row.included
+                    && d.field(
+                        "items",
+                        &format!("included_{}", row.id),
+                        row.included.to_string(),
+                    ) == "true"
+                {
+                    d.selected.insert(row.id);
+                }
+            }
+        }
         "select-range" => bulk::select_range(state, d, &fields).await?,
         "filter" => {
             field(&fields, "query").clone_into(&mut d.query);
             field(&fields, "category").clone_into(&mut d.category);
+            d.page = 0;
+        }
+        intent if intent.starts_with("sort:") => {
+            let sort = &intent[5..];
+            if !super::valid_sort(sort) {
+                return Err(TextKey::AddonWorkspaceSort);
+            }
+            sort.clone_into(&mut d.sort);
             d.page = 0;
         }
         "clear-filter" => {
@@ -904,6 +956,9 @@ async fn save_command(
                 .map(|row| row.id)
                 .collect::<std::collections::BTreeSet<_>>();
             for key in fields.keys() {
+                if key == "season_per_year" {
+                    continue;
+                }
                 for prefix in ["season_", "episode_", "kind_", "liveness_", "included_"] {
                     if let Some(value) = key.strip_prefix(prefix) {
                         if value == "only" {

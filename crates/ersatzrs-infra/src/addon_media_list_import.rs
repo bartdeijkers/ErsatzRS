@@ -6419,7 +6419,7 @@ mod tests {
             .await;
             assert_eq!(repaired, list_id);
             let repaired_rows = sqlx::query(
-                r#"SELECT "Id", "ProviderId", "Rank", "DisplayTitle", "Availability",
+                r#"SELECT "Id", "ProviderId", "Rank", "DisplayTitle", "Availability", "Included",
                           "AvailabilityReason", "ProviderMetadataJson"
                    FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
                    ORDER BY "Rank", "Id""#,
@@ -6457,6 +6457,7 @@ mod tests {
                 lesson_seven.try_get::<i32, _>("Availability").unwrap(),
                 encode_enum(ersatzrs_domain::AddonMediaListItemAvailability::Unavailable)
             );
+            assert!(!lesson_seven.try_get::<bool, _>("Included").unwrap());
             assert_eq!(
                 lesson_seven
                     .try_get::<Option<String>, _>("AvailabilityReason")
@@ -6539,6 +6540,11 @@ mod tests {
             assert_eq!(review_item.replacement_media_item_id, Some(9200));
             assert_eq!(review_item.replacement_media_version_id, Some(9300));
             assert!(review_item.replacement_valid);
+
+            repository
+                .set_item_included(list_id, lesson_seven_id, true)
+                .await
+                .expect("include unavailable item with a valid Local replacement");
 
             repository
                 .publish(list_id)

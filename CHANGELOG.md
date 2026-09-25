@@ -20,6 +20,20 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep excluded add-on list items individually selectable for bulk inclusion;
+  select-visible still skips them and the on-page selection count stays accurate.
+- Choose a free loopback port for each Next CI smoke run so an existing local
+  server on a shared runner cannot fail the playback gate before it starts.
+- Keep the maintenance scheduler running when a new library scan starts just
+  after startup replay, so add-on publication cannot trigger a false replay error.
+- Exclude add-on list videos when later detail import identifies them as unavailable, while preserving explicit inclusion choices and retained media; show detail progress before preparation and wait for upload dates before grouping seasons by year.
+- Remove stale projected media when an item is excluded from a published
+  add-on list, so the next publication can complete verification while keeping
+  the source stream.
+- Save add-on list numbering previews that group seasons by year; the review
+  control is no longer mistaken for an item season field.
+- Exclude newly discovered unavailable add-on list videos by default while
+  retaining them for review and optional local replacement.
 - Preserve normal chunked HTTP end-of-stream handling between legacy MPEG-TS
   programmes, preventing FFmpeg 9 from aborting the channel at the first item.
 - Make the playback validation gate follow HLS direct's session playlist,
@@ -108,6 +122,10 @@ release section when tagging a release.
 
 ### Added
 
+- Sort add-on list review items by clicking the playlist, item date, or name
+  heading in either direction; select or deselect the visible page from the
+  checkbox above item selections while skipping excluded videos. Pagination
+  sits above the items, and excluded and unavailable rows have visual status cues.
 - Show detected Next and FFmpeg versions alongside the ErsatzRS version in
   General troubleshooting diagnostics and playback troubleshooting archives.
 - Show sanitized release notes from the bundled changelog on the home and

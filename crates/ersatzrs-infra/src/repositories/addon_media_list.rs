@@ -23,7 +23,7 @@ use ersatzrs_domain::{
     AddonMediaListRefreshCadence, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use sha2::{Digest as _, Sha256};
-use sqlx::{Pool, Row};
+use sqlx::{Pool, Row, Transaction};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -1013,6 +1013,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
                    SET "ContentKind" = ?, "Included" = ?,
+                       "IncludedByUser" = CASE WHEN "Included" <> ? THEN 1 ELSE "IncludedByUser" END,
                        "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
                        "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
                        "LivenessConflict" = CASE WHEN "Kind" = 4 THEN 0 ELSE "LivenessConflict" END,
@@ -1020,6 +1021,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                    WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
             )
             .bind(content_kind)
+            .bind(edit.included)
             .bind(edit.included)
             .bind(liveness)
             .bind(liveness)
@@ -2083,7 +2085,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
-            r#"UPDATE "AddonMediaListItem" SET "Included" = ?
+            r#"UPDATE "AddonMediaListItem" SET "Included" = ?, "IncludedByUser" = 1
                WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
         )
         .bind(included)
@@ -5856,6 +5858,8 @@ async fn addon_media_list_publication_readiness(
         prepared_media_failures,
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
+        optional_detail_skipped: progress.map_or(0, |progress| progress.detail_skipped),
+        optional_detail_failed: progress.map_or(0, |progress| progress.detail_failed),
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
         saved_revision: form.draft_revision,
         review_state: form.review_state,
@@ -7809,6 +7813,64 @@ async fn reconcile_projection(
     }
 }
 
+/// Drop only projected media whose provider item left the published selection.
+/// The identifiers come from the closed projection definitions below.
+async fn remove_unpublished_projection_items(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    link_table: &str,
+    link_column: &str,
+) -> Result<()> {
+    let media_ids = sqlx::query_scalar::<_, EntityId>(sqlx::AssertSqlSafe(format!(
+        r#"SELECT "projection"."{link_column}"
+           FROM "{link_table}" AS "projection"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."Id" = "projection"."AddonMediaListItemId"
+           WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 0"#
+    )))
+    .bind(list_id)
+    .fetch_all(&mut **tx)
+    .await
+    .repository()?;
+    for media_id in media_ids {
+        let referenced: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                 SELECT 1 FROM "CollectionItem" WHERE "MediaItemId" = ?
+                 UNION ALL SELECT 1 FROM "PlaylistItem"
+                   WHERE "MediaItemId" = ? AND "PlaylistId" <> COALESCE(
+                     (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?), -1)
+                 UNION ALL SELECT 1 FROM "PlayoutItem" WHERE "MediaItemId" = ?
+               )"#,
+        )
+        .bind(media_id)
+        .bind(media_id)
+        .bind(list_id)
+        .bind(media_id)
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
+        if referenced {
+            return Err(RepositoryError::Conflict(
+                "an excluded projected item is still referenced by a collection, playlist, or playout".to_owned(),
+            ));
+        }
+        // The source Remote Stream and its version stay in the managed library.
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"UPDATE "MediaVersion" SET "{link_column}" = NULL WHERE "{link_column}" = ?"#
+        )))
+        .bind(media_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        sqlx::query(r#"DELETE FROM "MediaItem" WHERE "Id" = ?"#)
+            .bind(media_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+    }
+    Ok(())
+}
+
 /// Detach the Music Video projection, its managed Artist, and their media items.
 async fn revert_music_video_projection(
     pool: &Pool<crate::db::Db>,
@@ -8142,6 +8204,13 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
         .await?;
     }
 
+    remove_unpublished_projection_items(
+        &mut tx,
+        list_id,
+        "AddonMediaListItemMusicVideo",
+        "MusicVideoId",
+    )
+    .await?;
     sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
@@ -8605,6 +8674,7 @@ async fn apply_flat_projection(
         .await?;
     }
 
+    remove_unpublished_projection_items(&mut tx, list_id, link_table, link_column).await?;
     sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "PresentationKind" = ?, "PresentationError" = NULL WHERE "Id" = ?"#,
@@ -9014,6 +9084,8 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
         )
         .await?;
     }
+    remove_unpublished_projection_items(&mut tx, list_id, "AddonMediaListItemEpisode", "EpisodeId")
+        .await?;
     let empty_seasons = sqlx::query_scalar::<_, EntityId>(
         r#"SELECT "season"."Id" FROM "Season" AS "season"
            WHERE "season"."ShowId" = ?

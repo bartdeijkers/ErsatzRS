@@ -858,7 +858,18 @@ impl AddonMediaListSynchronizer {
                        "DurationSeconds" = ?, "AdditionalImageUrls" = ?,
                        "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
                        "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
-                       "LivenessConflict" = ?
+                       "LivenessConflict" = ?,
+                       "Included" = CASE
+                           WHEN ? = 1 AND "IncludedByUser" = 0
+                               AND ("MediaItemId" IS NULL OR EXISTS (
+                                   SELECT 1 FROM "RemoteStream" AS "source"
+                                   WHERE "source"."Id" = "AddonMediaListItem"."MediaItemId"
+                               ))
+                               AND NOT EXISTS (
+                                   SELECT 1 FROM "AddonMediaListItemReplacement" AS "replacement"
+                                   WHERE "replacement"."AddonMediaListItemId" = "AddonMediaListItem"."Id"
+                               ) THEN 0
+                           ELSE "Included" END
                    WHERE "Id" = ?"#,
             )
             .bind(encode_enum(item.kind))
@@ -881,6 +892,7 @@ impl AddonMediaListSynchronizer {
             .bind(encode_enum(item.liveness))
             .bind(encode_enum(effective_liveness))
             .bind(liveness_conflict)
+            .bind(item.availability == AddonMediaListItemAvailability::Unavailable)
             .bind(item_id)
             .execute(&mut *tx)
             .await
@@ -3172,11 +3184,12 @@ async fn insert_item(
             "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl",
             "Availability", "AvailabilityReason", "AvailabilityReasonCode",
             "AvailabilityUpdated", "ContentKind",
+            "Included",
             "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
             "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
             "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness",
             "LastReconcileGeneration"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)"#,
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -3193,6 +3206,7 @@ async fn insert_item(
     .bind(item.availability_reason_code.map(encode_enum))
     .bind(encode_datetime(Utc::now()))
     .bind(encode_enum(item.content_kind))
+    .bind(item.availability != AddonMediaListItemAvailability::Unavailable)
     .bind(encode_enum(item.collection_role))
     .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
     .bind(&item.parent_provider_id)
@@ -4681,6 +4695,102 @@ mod generated_playlist_refresh_tests {
         assert_eq!(checkpoint.2, encode_enum(RemoteStreamLiveness::Unknown));
         assert!(checkpoint.3.is_none());
         assert_eq!(checkpoint.4, 1);
+    }
+
+    #[tokio::test]
+    async fn unavailable_detail_excludes_only_unreviewed_remote_source() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "Availability" = 2, "Included" = 1, "IncludedByUser" = 0,
+                   "MediaItemId" = NULL, "Published" = 0
+               WHERE "Id" = 20"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed newly discovered source");
+        let item = EnumeratedAddonMediaListItem {
+            provider_id: "provider-one".to_owned(),
+            rank: 0,
+            display_title: "Unavailable video".to_owned(),
+            title: "Unavailable video".to_owned(),
+            year: None,
+            season: None,
+            episode: None,
+            kind: AddonMediaListItemKind::RemoteStream,
+            guids: Vec::new(),
+            source_url: Some("https://example.invalid/media/1".to_owned()),
+            availability: AddonMediaListItemAvailability::Unavailable,
+            availability_reason: Some("not_playable".to_owned()),
+            availability_reason_code: None,
+            content_kind: ersatzrs_domain::AddonMediaListContentKind::Auto,
+            collection_role: ersatzrs_domain::AddonMediaListItemRole::Auto,
+            duration_seconds: Some(600),
+            liveness: RemoteStreamLiveness::Live,
+            parent_provider_id: None,
+            fragment_start_seconds: None,
+            fragment_end_seconds: None,
+            additional_image_urls: Vec::new(),
+            metadata: ersatzrs_core::repositories::AddonMediaListNfoMetadata {
+                title: "Unavailable video".to_owned(),
+                ..Default::default()
+            },
+        };
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        synchronizer
+            .merge_detail_item(LIST_ID, &item)
+            .await
+            .expect("merge details");
+        let included: bool =
+            sqlx::query_scalar(r#"SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = 20"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load inclusion");
+        assert!(!included);
+
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Included" = 1, "IncludedByUser" = 1 WHERE "Id" = 20"#)
+            .execute(&pool).await.expect("choose to include item");
+        synchronizer
+            .merge_detail_item(LIST_ID, &item)
+            .await
+            .expect("merge details again");
+        let included: bool =
+            sqlx::query_scalar(r#"SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = 20"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load operator inclusion");
+        assert!(included);
+
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "IncludedByUser" = 0, "MediaItemId" = 1 WHERE "Id" = 20"#)
+            .execute(&pool).await.expect("attach projected remote stream");
+        synchronizer
+            .merge_detail_item(LIST_ID, &item)
+            .await
+            .expect("merge projected remote details");
+        let included: bool =
+            sqlx::query_scalar(r#"SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = 20"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load projected remote inclusion");
+        assert!(!included);
+
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (3, 1, 0)"#)
+            .execute(&pool)
+            .await
+            .expect("seed retained local media");
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Included" = 1, "IncludedByUser" = 0, "MediaItemId" = 3 WHERE "Id" = 20"#)
+            .execute(&pool).await.expect("attach local media");
+        synchronizer
+            .merge_detail_item(LIST_ID, &item)
+            .await
+            .expect("merge retained media details");
+        let included: bool =
+            sqlx::query_scalar(r#"SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = 20"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load retained media inclusion");
+        assert!(included);
     }
 
     async fn insert_playlist_item(

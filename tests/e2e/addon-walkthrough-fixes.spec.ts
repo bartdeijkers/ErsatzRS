@@ -355,6 +355,7 @@ test('bulk exclusion can be discarded or saved without JavaScript', async ({ pag
       await Promise.all([plain.waitForEvent('framenavigated', frame => frame === plain.mainFrame()), locator.click()]);
     };
     const selected = () => plain.getByRole('checkbox', { name: 'Selected for editing: Prepared calibration 2', exact: true });
+    const excludedBadge = () => plain.locator('.episode-row').filter({ hasText: 'Prepared calibration 2' }).locator('.item-state-badge.is-excluded');
     const openBulk = async () => {
       if (!(await plain.getByRole('button', { name: 'Exclude selected items', exact: true }).isVisible())) {
         await plain.locator('.bulk-tools > summary').click();
@@ -364,12 +365,12 @@ test('bulk exclusion can be discarded or saved without JavaScript', async ({ pag
     await openBulk();
     await submit(plain.getByRole('button', { name: 'Exclude selected items', exact: true }));
     // Retained input only: the row shows the pending exclusion, nothing is saved.
-    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(1);
+    await expect(excludedBadge()).toHaveCount(1);
     expect(includedItems(listId)).toBe('2');
     await expect(selected()).toBeChecked();
 
     await submit(plain.locator('button[name="intent"][value="discard"]').first());
-    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(0);
+    await expect(excludedBadge()).toHaveCount(0);
     expect(includedItems(listId)).toBe('2');
     await expect(selected()).toBeChecked();
 
@@ -378,7 +379,7 @@ test('bulk exclusion can be discarded or saved without JavaScript', async ({ pag
     await submit(plain.locator('button[name="intent"][value="save"]').first());
     await expect(plain.locator('#workspace-errors')).toHaveCount(0);
     expect(includedItems(listId)).toBe('1');
-    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(1);
+    await expect(excludedBadge()).toHaveCount(1);
     await expect(selected()).toBeChecked();
   } finally {
     await context.close();

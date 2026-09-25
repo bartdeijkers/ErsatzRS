@@ -316,7 +316,6 @@ jobs:
     needs: fmt
     timeout-minutes: 45
     env:
-      ERSATZRS_SMOKE_PORT: "18411"
       CARGO_BUILD_JOBS: "8"
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.0
     steps:
@@ -359,9 +358,13 @@ jobs:
         run: |
           ./run.sh test -p ersatzrs-infra -p ersatzrs-web --lib --profile ci --run-ignored all -E '(test(next_engine::) or test(transport::iptv::next_media::)) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
       - name: Next HTTP playback, burned subtitles and preview
-        run: cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
+        run: |
+          smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
+          ERSATZRS_SMOKE_PORT="$smoke_port" cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
       - name: Next Hybrid playback with converted subtitles
-        run: cargo xtask smoke --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
+        run: |
+          smoke_port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
+          ERSATZRS_SMOKE_PORT="$smoke_port" cargo xtask smoke --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
       - name: Collect Next diagnostics
         if: always()
         run: |

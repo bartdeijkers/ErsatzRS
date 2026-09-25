@@ -11,6 +11,16 @@ use super::{
 /// the shared scope, range and length filter.
 pub(super) fn numbering_panels(w: &Workspace, rows: &[&AddonMediaListItemRow]) -> AnyView {
     let d = &w.submission.draft;
+    let year_targets: Vec<_> = w
+        .items
+        .iter()
+        .filter(|row| row.included && row.parent_provider_id.is_none())
+        .collect();
+    let dated_targets = year_targets
+        .iter()
+        .filter(|row| super::parse_first_aired(row.first_aired.as_deref()).is_some())
+        .count();
+    let year_dates_complete = dated_targets == year_targets.len();
     let endpoint = |name: &str, label: TextKey, open: TextKey| {
         let choices = std::iter::once((String::new(), tr(open).to_owned()))
             .chain(
@@ -50,6 +60,9 @@ pub(super) fn numbering_panels(w: &Workspace, rows: &[&AddonMediaListItemRow]) -
             <section class="bulk-panel" aria-labelledby="bulk-panel-detect"><h3 id="bulk-panel-detect">{tr(TextKey::BulkDetectSeasons)}</h3>
                 <div class="grid-2">{input("detect_season",TextKey::BulkFirstSeason,d.field("items","detect_season","1"),"number")}{input("gap_days",TextKey::MinimumSeasonGapDays,d.field("items","gap_days","90"),"number")}</div>
                 {checkbox("season_per_year",TextKey::AddonWorkspaceSeasonPerYear,checked("season_per_year"))}
+                <p class=if year_dates_complete {"bulk-help"} else {"notice"} data-testid="addon-year-date-coverage">{tr(TextKey::FirstAired)}": "{dated_targets}" / "{year_targets.len()}</p>
+                <p class="bulk-help" hidden=year_dates_complete>{tr(TextKey::AddonWorkspaceYearDatesIncomplete)}</p>
+                {(!year_dates_complete).then(||button("navigate",TextKey::Refresh,false))}
                 <p class="bulk-help">{tr(TextKey::AutoDetectSeasonsHelp)}</p>
                 <div class="action-row">{button("auto-number",TextKey::AutoDetectSeasons,false)}</div>
             </section>
