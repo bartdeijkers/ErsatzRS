@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Choose a free loopback port for each Next CI smoke run so an existing local
+  server on a shared runner cannot fail the playback gate before it starts.
 - Keep the maintenance scheduler running when a new library scan starts just
   after startup replay, so add-on publication cannot trigger a false replay error.
 - Exclude add-on list videos when later detail import identifies them as unavailable, while preserving explicit inclusion choices and retained media; show detail progress before preparation and wait for upload dates before grouping seasons by year.

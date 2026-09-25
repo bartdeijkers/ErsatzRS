@@ -159,7 +159,8 @@ The job stages the published Next channel binary with the release staging
 script, retains its origin/digest metadata, and provisions FFmpeg through the
 production runtime manager (`provision_runtime` example, pinned release tag).
 It then runs Next HTTP and preview smoke, including MPEG-TS refusal and idle
-cleanup. Port 18411 and a job-specific temporary directory isolate it from
+cleanup. Each smoke invocation selects a free loopback port immediately before
+starting, and a job-specific temporary directory isolates its files from
 Playwright and the live server. Test output, JUnit timings, host logs, runtime
 identity and the ErsatzRS SHA are uploaded as `next-engine-<run>-<attempt>`.
 A Linux job is not acceptance for the other supported platforms.
