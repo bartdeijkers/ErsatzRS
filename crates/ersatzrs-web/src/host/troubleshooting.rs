@@ -1169,9 +1169,7 @@ async fn preview_watermark_inputs(
                 watermark_overlay_for_stream(&resolved.watermark, Some(program_duration)).map(
                     |overlay| {
                         (
-                            InputFile::watermark(
-                                resolved.image_path.to_string_lossy().into_owned(),
-                            ),
+                            InputFile::watermark(resolved.image.input_path().into_owned()),
                             overlay,
                         )
                     },
@@ -1208,9 +1206,7 @@ async fn preview_channel_watermark_inputs(
                 watermark_overlay_for_stream(&resolved.watermark, Some(program_duration)).map(
                     |overlay| {
                         (
-                            InputFile::watermark(
-                                resolved.image_path.to_string_lossy().into_owned(),
-                            ),
+                            InputFile::watermark(resolved.image.input_path().into_owned()),
                             overlay,
                         )
                     },

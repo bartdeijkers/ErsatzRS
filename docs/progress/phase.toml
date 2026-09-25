@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 84 is under audit. External channel-logo URLs now
+retain HTTP source identity for native and Next inputs, with focused and decoded
+Next overlay/audio/subtitle proof. Finish playable generated-logo fallback and
+native decoded output before advancing the row/pin. UCU-05 owns the evidence.
+
 2026-09-25: UCU-05 row 83 is N/A: only upstream 26.7.0 changelog
 release metadata changes. Pin, ledger and checkout advance together.
 Continue at row 84 (15db3c4c); window gates, push and exact-SHA CI remain open.

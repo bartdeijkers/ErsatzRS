@@ -2189,6 +2189,18 @@ fn pipeline_with_scaled_permanent_watermark_snapshot() {
 }
 
 #[test]
+fn pipeline_with_http_channel_logo_preserves_url_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark(
+        "https://example.test/logo%20image.png?revision=2",
+    ));
+    request.watermarks.push(WatermarkOverlay::default());
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    insta::assert_snapshot!(command.arguments.join("\n"));
+}
+
+#[test]
 fn pipeline_with_intermittent_watermark_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     // Fading a still image requires `-loop 1` (ErsatzTV `InfiniteLoopInputOption`).

@@ -36,6 +36,22 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 84 source map: channel-logo watermarks
+
+Upstream `15db3c4c` changes the three precedence branches in
+`ErsatzTV.Core/FFmpeg/WatermarkSelector.cs` to accept external/generated logo
+URLs without filesystem existence checks. Its regression matrix covers external
+URLs, generated logos, cached files and missing cached files. No editor or
+validation contract changes.
+
+Native targets are the shared `playback` watermark resolver, Next watermark
+projection, and the existing generated-logo transport. The resolver initially
+excluded HTTP logos and had no generated fallback. Explicit source typing now
+preserves URLs for native and Next inputs, with focused and Next runtime proof
+in UCU-05. Generated logos remain required: the existing SVG endpoint cannot be
+decoded by the supported FFmpeg binary, so a playable generated image is needed.
+Row 84 remains pending; do not advance its pin until both paths are verified.
+
 ## Row 82 source map: text subtitle playback
 
 Upstream `4ffd775a` changes `UpdateChannelHandler`,

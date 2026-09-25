@@ -88,13 +88,17 @@ async fn assert_overlay(ffmpeg: &Path, segment: &Path, scaled: bool, disabled: b
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
-    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
-    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
-    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
-    let root = tempfile::tempdir().unwrap();
-    let clip = generate_text_clip(&ffmpeg, root.path()).await;
-    let image = root.path().join("red.png");
-    let mut generate = Command::new(&ffmpeg);
+    watermark_runtime_cases(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; serves a synthetic logo over loopback HTTP"]
+async fn real_next_http_channel_logo_watermark_preserves_tracks_and_disable() {
+    watermark_runtime_cases(true).await;
+}
+
+async fn red_logo(ffmpeg: &Path, image: &Path) {
+    let mut generate = Command::new(ffmpeg);
     generate
         .args([
             "-v",
@@ -110,8 +114,27 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
             "-threads",
             "1",
         ])
-        .arg(&image);
+        .arg(image);
     tool(generate).await;
+}
+
+async fn watermark_runtime_cases(remote_logo: bool) {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = generate_text_clip(&ffmpeg, root.path()).await;
+    let image = root.path().join("red.png");
+    red_logo(&ffmpeg, &image).await;
+    let server = httpmock::MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.path("/logo.png");
+            then.status(200)
+                .header("content-type", "image/png")
+                .body(std::fs::read(&image).unwrap());
+        })
+        .await;
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::H264,
         audio_format: FFmpegProfileAudioFormat::Aac,
@@ -129,6 +152,13 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
         configure_text_tracks(&pool, true, !dynamic, false).await;
         seed_watermark(&pool, &image, scaled, disabled).await;
+        if remote_logo {
+            sqlx::query(r#"UPDATE "Artwork" SET "Path"=? WHERE "ChannelId"=1"#)
+                .bind(server.url("/logo.png"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
         let host = std::sync::Arc::new(host::NextHost::new(
             pool,
             locker,

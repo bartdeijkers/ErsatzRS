@@ -9500,6 +9500,19 @@ the CHANGELOG 26.7.0 heading and comparison links. ErsatzRS retains its own
 release history; no runtime, packaging or behavior contract changes here.
 Source inspection, diff and progress checks pass. Pin, ledger and checkout
 advance together; row 84 (15db3c4c) is next.
+Row 84 (15db3c4c) is under audit. The shared selector dropped HTTP logo
+URLs and has no generated fallback. Explicit Local/Http watermark images now
+preserve external URLs in native inputs and Next HTTP sources, with unchanged
+local missing-file checks. All 12 focused tests pass (984f6c62). A real official
+Next test using a synthetic loopback image passes (864a56a8): static/dynamic
+caption paths, overlay geometry, selected audio and DisableWatermarks hold.
+The native URL argv snapshot passes after review (0d79731c). The public type
+update includes troubleshooting consumers and the existing integration assertion.
+Generated logos remain open: the current SVG endpoint is not decodable by the
+supported FFmpeg binary. The owning catch-up debt tracks generated rendering
+and native decoded output; no row verdict or pin advance is claimed.
+Infra/web/FFmpeg all-target Clippy, formatting, diff and progress validation
+pass for the partial URL correction.
 No UCU-05 window gates, push or CI are claimed.
 """
 

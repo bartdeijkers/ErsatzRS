@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve external channel-logo URLs as watermark inputs for native and Next
+  playback instead of discarding them as missing local files (upstream PR #2961).
+
 - Pass the extracted-font cache to Next subtitle rendering for normal playback
   and browser previews (upstream PR #2960).
 

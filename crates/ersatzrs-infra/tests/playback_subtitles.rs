@@ -604,8 +604,10 @@ async fn playback_watermarks_resolve_channel_logo_and_defer_resource() {
     assert_eq!(selected.len(), 1);
     assert_eq!(selected[0].watermark.id, 205);
     assert_eq!(
-        selected[0].image_path,
-        data_path("iptv/logos/watermark-test-logo.png")
+        selected[0].image,
+        ersatzrs_infra::playback::PlaybackWatermarkImage::Local(data_path(
+            "iptv/logos/watermark-test-logo.png"
+        ))
     );
     cleanup_files([logo]);
 }

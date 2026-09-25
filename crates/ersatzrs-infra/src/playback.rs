@@ -133,7 +133,25 @@ pub struct PlaybackProfile {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedPlaybackWatermark {
     pub watermark: ChannelWatermark,
-    pub image_path: PathBuf,
+    pub image: PlaybackWatermarkImage,
+}
+
+/// A watermark input retains whether it is a filesystem path or an HTTP URL.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlaybackWatermarkImage {
+    Local(PathBuf),
+    Http(String),
+}
+
+impl PlaybackWatermarkImage {
+    /// Input spelling passed to native `FFmpeg` without filesystem URL conversion.
+    #[must_use]
+    pub fn input_path(&self) -> std::borrow::Cow<'_, str> {
+        match self {
+            Self::Local(path) => path.to_string_lossy(),
+            Self::Http(uri) => std::borrow::Cow::Borrowed(uri),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2600,7 +2618,7 @@ async fn resolve_playback_watermarks(
         {
             resolved.push(ResolvedPlaybackWatermark {
                 watermark,
-                image_path,
+                image: image_path,
             });
         }
     }
@@ -2630,7 +2648,7 @@ pub async fn watermark_inputs_for_stream(
     let mut inputs = Vec::with_capacity(watermarks.len());
     for resolved in watermarks {
         if let Some(overlay) = watermark_overlay_for_stream(&resolved.watermark, program_duration) {
-            let path = resolved.image_path.to_string_lossy().into_owned();
+            let path = resolved.image.input_path().into_owned();
             let input = watermark_input_for_stream(&path, &overlay).await;
             inputs.push((input, overlay));
         }
@@ -2689,7 +2707,7 @@ pub async fn watermark_inputs_for_stream_cancellable(
     let mut inputs = Vec::with_capacity(watermarks.len());
     for resolved in watermarks {
         if let Some(overlay) = watermark_overlay_for_stream(&resolved.watermark, program_duration) {
-            let path = resolved.image_path.to_string_lossy().into_owned();
+            let path = resolved.image.input_path().into_owned();
             let animated = is_watermark_animated_inner(&path, Some(&mut startup)).await?;
             inputs.push((
                 watermark_input_with_animation(&path, &overlay, animated),
@@ -3319,7 +3337,7 @@ async fn resolve_watermark_image_path(
     pool: &DbPool,
     channel_id: i64,
     watermark: &ChannelWatermark,
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<PlaybackWatermarkImage>> {
     match watermark.image_source {
         ChannelWatermarkImageSource::Custom => Ok(watermark
             .image
@@ -3327,7 +3345,8 @@ async fn resolve_watermark_image_path(
             .map(str::trim)
             .filter(|image| !image.is_empty())
             .map(|image| data_path(Path::new("watermarks").join(image)))
-            .filter(|path| path.is_file())),
+            .filter(|path| path.is_file())
+            .map(PlaybackWatermarkImage::Local)),
         ChannelWatermarkImageSource::ChannelLogo => {
             let path: Option<String> = sqlx::query_scalar(
                 r#"SELECT "Path"
@@ -3340,13 +3359,7 @@ async fn resolve_watermark_image_path(
             .fetch_optional(pool)
             .await
             .repository()?;
-            Ok(path
-                .as_deref()
-                .map(str::trim)
-                .filter(|path| !path.is_empty())
-                .filter(|path| !path.starts_with("http://") && !path.starts_with("https://"))
-                .map(resolve_channel_logo_path)
-                .filter(|path| path.is_file()))
+            Ok(path.as_deref().and_then(resolve_channel_logo_image))
         }
         // "used for song progress overlay" — `WatermarkSelector.GetWatermarkOptions`
         // resolves the image inside the resources cache folder and ignores the
@@ -3354,8 +3367,24 @@ async fn resolve_watermark_image_path(
         ChannelWatermarkImageSource::Resource => Ok(resolve_resource_watermark_path(
             &resources_cache_folder(),
             watermark.image.as_deref(),
-        )),
+        )
+        .map(PlaybackWatermarkImage::Local)),
     }
+}
+
+fn resolve_channel_logo_image(path: &str) -> Option<PlaybackWatermarkImage> {
+    let path = path.trim();
+    if path.is_empty() {
+        return None;
+    }
+    if url::Url::parse(path)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
+    {
+        return Some(PlaybackWatermarkImage::Http(path.to_owned()));
+    }
+    let path = resolve_channel_logo_path(path);
+    path.is_file()
+        .then_some(PlaybackWatermarkImage::Local(path))
 }
 
 fn resolve_resource_watermark_path(
@@ -4621,6 +4650,34 @@ mod tests {
         assert!(simple_expression_matches("en*", "ENG"));
         assert!(simple_expression_matches("p?r", "por"));
         assert!(!simple_expression_matches("jpn", "eng"));
+    }
+
+    #[test]
+    fn channel_logo_urls_are_preserved_and_local_logos_still_require_files() {
+        for uri in [
+            "http://example.test/logo.png",
+            "https://example.test/logo%20image.gif?revision=2",
+            "HTTPS://example.test/logo.png",
+        ] {
+            let image = resolve_channel_logo_image(uri).unwrap();
+            assert_eq!(image, PlaybackWatermarkImage::Http(uri.to_owned()));
+            assert_eq!(image.input_path(), uri);
+            let input = watermark_input_with_animation(
+                &image.input_path(),
+                &WatermarkOverlay::default(),
+                false,
+            );
+            assert_eq!(input.path, uri);
+        }
+        let root = tempfile::tempdir().unwrap();
+        let logo = root.path().join("logo.png");
+        assert!(resolve_channel_logo_image(logo.to_str().unwrap()).is_none());
+        std::fs::write(&logo, b"fixture").unwrap();
+        assert_eq!(
+            resolve_channel_logo_image(logo.to_str().unwrap()),
+            Some(PlaybackWatermarkImage::Local(logo))
+        );
+        assert!(resolve_channel_logo_image("  ").is_none());
     }
 
     #[test]
