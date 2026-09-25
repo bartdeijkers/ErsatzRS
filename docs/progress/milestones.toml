@@ -9602,6 +9602,12 @@ under ADR 0095. Reuse the unchanged row-80 serializer evidence (ccb89033,
 26 tests including both Next states); source inspection verifies the actual
 writer and ZIP path. No code change or new runtime claim. Pin/ledger/checkout
 advance to b5fd035b; row 90 follows.
+Row 90 (35b5a259) is N/A (upstream release metadata). The sole changed file
+is CHANGELOG.md, adding the 26.7.1 heading/date and comparison links; the commit
+subject's 26.7.0 wording does not match that diff. ErsatzRS keeps its own release
+history. Source/progress/diff checks pass; pin/ledger/checkout advance to
+35b5a259. All UCU-05 rows are reconciled, but the milestone remains In progress
+until full window acceptance, authorized push and terminal green exact-SHA CI.
 No UCU-05 window gates, push or CI are claimed.
 """
 

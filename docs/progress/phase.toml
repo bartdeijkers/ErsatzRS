@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
+full window acceptance gates, record evidence, then use the authorized milestone
+push and require terminal green exact-SHA CI. Do not start UCU-06 row 91 before
+UCU-05 closes. The row-87 matched Leptos build remains valid unless code changes.
+
 2026-09-25: UCU-05 row 89 is Covered by row 80's detected engine-version
 fields in playback JSON/ZIPs. Continue at row 90 (35b5a259), then run the
 UCU-05 window gates before its authorized push and exact-SHA CI acceptance.

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **84 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **83 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **89**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **90**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-89; the next upstream row is 90 (`35b5a259`).
+  processed rows 68-90; its window gates and push/CI remain open before UCU-06 row 91 (`5ab81525`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -35,6 +35,15 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 90 source map: upstream release metadata
+
+Upstream `35b5a259` changes only CHANGELOG.md: a 26.7.1 heading dated
+2026-07-31 and the Unreleased/26.7.1 comparison links. Its commit subject says
+26.7.0, but the diff is 26.7.1. ErsatzRS retains its own version and release
+history. Verdict: N/A (upstream release metadata); no runtime or package change.
+Rows 68-90 are reconciled. UCU-05 remains In progress until its full window
+acceptance and authorized push plus exact-SHA terminal green CI are recorded.
 
 ## Row 89 source map: playback archive engine versions
 
@@ -1695,7 +1704,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | Port | playout-list-detail | `fix(playout): publish gaps with builds and on-demand shifts` | ucu-05; final item-derived positive gaps replace stale rows atomically; on-demand gaps trim and shift with items. Repository, rollback, continuity and Chromium/Firefox detail proof pass; see UCU-05 evidence. |
 | 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | N/A (ADR 0063) | ffmpeg-runtime; upstream-baseline-catch-up | `docs(porting): classify upstream Windows FFmpeg archive update` | ucu-05; sole runtime-facing diff changes the upstream FFmpeg 8.1.2 Windows archive revision. ErsatzRS uses its first-party FFmpeg 9 line under ADR 0063; no native QSV execution claim is inferred. Source and progress checks pass. |
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | Covered | support-pages | `docs(porting): record existing playback archive engine versions` | ucu-05; row-80 f6f076a2 already writes both top-level keys to troubleshooting_info.json and includes it in playback ZIPs. Shared detected-version tests cover present/absent optional Next under ADR 0095; source and progress checks pass. |
-| 90 | `35b5a259` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
+| 90 | `35b5a259` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.1 release metadata` | ucu-05; only CHANGELOG adds a 26.7.1 heading and comparison links, despite the 26.7.0 commit subject. ErsatzRS keeps its own release history. Source and progress checks pass; UCU-05 window acceptance remains open. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | | | | ucu-06; provisional: Port candidate. |
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | | | | ucu-06; provisional: Port candidate. |
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
