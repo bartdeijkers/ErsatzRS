@@ -584,7 +584,37 @@ impl ClassicContext {
             let key = item_key(item);
             let seed = request.playout.seed;
             if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
-                playlists.insert(key.clone(), PlaylistEnumerator::new(playlist_items.clone()));
+                let mut playlist = PlaylistEnumerator::new(playlist_items.clone());
+                let has_retained_anchor = collection_anchors.iter().any(|anchor| {
+                    history_key_for_collection_key(&collection_key_for_anchor(anchor)) == key
+                });
+                if request.reference_data.classic_random_start_point
+                    && !has_retained_anchor
+                    && restored_checkpoint.is_none()
+                {
+                    for (child_index, child) in playlist.children.iter_mut().enumerate() {
+                        let order = child.enumerator.playback_order;
+                        if matches!(
+                            order,
+                            PlaybackOrder::Chronological
+                                | PlaybackOrder::SeasonEpisode
+                                | PlaybackOrder::ShuffleInOrder
+                        ) {
+                            let child_seed = seed_to_u64(seed).wrapping_add(child_index as u64);
+                            prepare_enumerator_items(
+                                &mut child.enumerator,
+                                order,
+                                child_seed,
+                                None,
+                            );
+                            child.enumerator.set_index(
+                                usize::try_from(child_seed % child.enumerator.len() as u64)
+                                    .unwrap_or_default(),
+                            );
+                        }
+                    }
+                }
+                playlists.insert(key.clone(), playlist);
                 media_states.insert(key, CollectionEnumeratorState { seed, index: 0 });
                 continue;
             }
@@ -3978,6 +4008,69 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![101, 102, 201, 202]
         );
+    }
+
+    #[test]
+    fn classic_playlist_random_start_point_applies_to_fresh_children() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            collection_type: CollectionType::Playlist,
+            collection_id: None,
+            playlist_id: Some(99),
+            playout_mode: PlayoutMode::Flood,
+            ..schedule_item(1, PlayoutMode::Flood, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let build = |playback_order, random_start_point, seed| {
+            ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        seed,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(10),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data: SchedulingReferenceData {
+                        classic_schedule_items: vec![schedule_item.clone()],
+                        classic_random_start_point: random_start_point,
+                        playlist_items_by_key: BTreeMap::from([(
+                            key.clone(),
+                            vec![SchedulingPlaylistItem {
+                                collection_key: SchedulingCollectionKey::fake_playlist_item(1),
+                                playback_order,
+                                play_all: true,
+                                count: None,
+                                media_items: vec![
+                                    SchedulingMediaItem::new(101, Duration::minutes(10)),
+                                    SchedulingMediaItem::new(102, Duration::minutes(10)),
+                                    SchedulingMediaItem::new(103, Duration::minutes(10)),
+                                ],
+                            }],
+                        )]),
+                        ..SchedulingReferenceData::default()
+                    },
+                })
+                .expect("Classic playlist should build")
+                .added_items
+                .first()
+                .expect("playlist should schedule one item")
+                .media_item_id
+        };
+
+        for order in [
+            PlaybackOrder::Chronological,
+            PlaybackOrder::SeasonEpisode,
+            PlaybackOrder::ShuffleInOrder,
+        ] {
+            assert_eq!(build(order, false, 4), 101, "{order:?}");
+            assert!(
+                (1..=16).any(|seed| build(order, true, seed) != 101),
+                "{order:?} should permit a nonzero start"
+            );
+        }
     }
 
     #[test]

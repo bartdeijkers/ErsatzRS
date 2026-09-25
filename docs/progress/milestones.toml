@@ -9288,7 +9288,13 @@ The red/green regression (Nextest d557bc42 then da5c2cd3) and 20 Plex tests
 (86fad0a9) cover persisted titles, Etag changes and unchanged-item behavior.
 Scoped all-target infrastructure Clippy, format and progress checks pass.
 Pin, ledger row 68 and upstream checkout advance to 18137832 together; row 69
-(e5a2a763) is next.
+(e5a2a763) then ports Classic playlist random starts. The production Classic
+builder initializes eligible fresh playlist children from the playout seed;
+retained anchors and Refresh checkpoints bypass that initialization. Focused
+playlist Nextest 1f54cdd2 passes 2/2; scoped core Clippy, format and progress
+checks pass. Pin, ledger row 69 and checkout advance to e5a2a763 together.
+Rows 70-71 retain ownership of later upstream random-start corrections.
+Row 85 still owns the pre-existing playlist continuation behavior.
 No UCU-05 window gates, push or CI are claimed.
 """
 

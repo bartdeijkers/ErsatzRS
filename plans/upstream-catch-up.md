@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **104 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **103 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **68**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **69**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed row 68 (`18137832`); the next upstream row is 69 (`e5a2a763`).
+  processed rows 68-69; the next upstream row is 70 (`0d692e70`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,27 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 69 source map: Classic playlist random start
+
+- ErsatzTV UI/model: the existing Classic schedule Random Start Point setting
+  also applies to playlist children; no new field or route.
+- ErsatzTV builder: `PlayoutBuilder.GetMediaCollectionEnumerator` passes the
+  setting into `PlaylistEnumerator.Create`. The enumerator seeds its choice from
+  the saved collection state and applies it only when the state index is zero.
+- ErsatzTV orders: Chronological and SeasonEpisode children receive an initial
+  media index; ShuffleInOrder receives the setting. Already randomized orders
+  retain their existing selection. Other Block/YAML/Next call sites pass false.
+- ErsatzRS target: `ersatzrs-core::scheduling::classic` initializes eligible
+  playlist children with deterministic start indices only for a fresh source.
+  Retained anchors and Refresh checkpoints bypass this new initialization;
+  existing playlist continuation behavior remains owned by later row 85.
+- The same upstream commit updates .NET package manifests and test null guards.
+  These have no Rust dependency or behavior counterpart in this row.
+- Intentional deviations: ErsatzRS uses its existing seed-to-index choice rather
+  than reproducing the .NET PRNG. Row 70 corrects upstream's excluded final
+  index and introduces explicit Started state; row 71 revisits the playlist
+  fresh-build rule. Those later rows remain pending until reviewed in order.
 
 ## Row 68 source map: Plex movie and other-video title refresh
 
@@ -1303,7 +1324,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | N/A (upstream SkiaSharp API migration) | upstream-baseline-catch-up | `docs(porting): classify SkiaSharp 4 API migration` | ucu-04; two .NET package upgrades and three DrawBitmap overload updates add explicit default sampling. Rust SVG logos and native FFmpeg Image/Motion overlays use no Skia API or dependency. Source/ADR review and progress validation pass; no new pixel-equivalence claim. Window gates remain open. |
 | 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.6.0 release prep` | ucu-04; only ErsatzTV CHANGELOG heading/comparison links change. ErsatzRS releases and dated changelog sections have separate acceptance; no product or build behavior changes. Source and progress checks pass; UCU-04 window gates remain open. |
 | 68 | `18137832` | fix: update plex movie and other video titles (#2947) | Port | library-management; upstream-baseline-catch-up | `fix(infra): refresh Plex titles on ordinary scans` | ucu-05; versioned title-aware movie/Other Video Etag refreshes old timestamp-only fingerprints once and title-only changes thereafter. Existing metadata upsert writes Title and SortTitle. Red/green focused regression, 20 Plex tests, scoped Clippy, format and progress checks pass. UCU-05 window gates remain open. |
-| 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | | | | ucu-05; provisional: Port candidate. |
+| 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | Port | classic-scheduling; upstream-baseline-catch-up | `fix(scheduling): honor Classic playlist random start` | ucu-05; eligible fresh Chronological, SeasonEpisode and ShuffleInOrder playlist children receive deterministic start indices; retained sources bypass new initialization. Focused playlist tests, scoped core Clippy, format and progress checks pass. Rows 70-71 own follow-up start-state behavior; row 85 owns playlist continuation. |
 | 70 | `0d692e70` | fix: always randomize start points (#2949) | | | | ucu-05; provisional: Port candidate. |
 | 71 | `4fb42f69` | fix: random start point is needed with every playlist build (#2950) | | | | ucu-05; provisional: Port candidate. |
 | 72 | `16e341d9` | fix: key singleton mutex on config folder (#2946) | | | | ucu-05; provisional: Port candidate. |

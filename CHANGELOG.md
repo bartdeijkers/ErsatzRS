@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Apply Classic Random Start Point to playlist children on fresh builds
+  (upstream PR #2948).
 - Update Plex movie and Other Video titles on ordinary scans when Plex changes
   only the title, including the first scan after upgrading (upstream PR #2947).
 - Extract embedded text subtitles for upcoming playout items when a channel
