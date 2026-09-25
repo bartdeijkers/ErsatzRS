@@ -9463,7 +9463,17 @@ Microsoft.NET.Test.Sdk 18.8.1 to ErsatzTV.Tests.csproj. ErsatzRS discovers
 Rust tests through Cargo/Nextest in run.sh and has no equivalent dependency
 on that adapter. No product or test behavior changes here. Source inspection,
 diff and progress checks pass; pin, ledger and checkout advance together.
-Row 82 (4ffd775a) is next.
+Row 82 (4ffd775a) is under audit. The host omitted fonts_folder from Next
+subtitle normalization. A normal/preview configuration regression failed
+with a missing JSON value (775392c1), then passed after adding the optional
+wire field and host font-cache path (8a92a203). Infra all-target Clippy passes.
+The low-level profile converter keeps the optional field absent; the host
+supplies its configured cache for both normal and preview sessions.
+The initial suspicion of absent channel-save notifications was disproved:
+save_channel_with_state notifies the shared HLS registry, which forwards to
+NextSession and previews. Continue auditing extraction/publication ordering,
+mode changes and empty-caption playback. Font rendering and seeking beyond
+the final cue still need runtime evidence. No row verdict or pin advance.
 No UCU-05 window gates, push or CI are claimed.
 """
 

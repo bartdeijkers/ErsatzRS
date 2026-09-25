@@ -36,6 +36,28 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 82 source map: text subtitle playback
+
+Upstream `4ffd775a` changes `UpdateChannelHandler`,
+`StartFFmpegNextSessionHandler`, both embedded-subtitle extraction handlers,
+`PlayoutItemConverter`, `InternalController`, and generated Next wire models.
+It adds the font cache to subtitle normalization, extracted text sidecars with
+source in/out points, republishing after extraction, channel-save invalidation
+for subtitle/credits modes, disabled-credits handling, and valid empty subtitle
+documents after seeking beyond the final cue. There is no UI layout change.
+
+Native targets are `next_engine::{protocol,host,selection,credits}`, the shared
+subtitle extraction/cache paths, channel save orchestration, and subtitle HTTP
+transport. ADRs 0095/0100 retain official Next integration and explicit refusal
+of unsupported live/one-shot embedded text. Existing version-bound demand-time
+preparation must not be replaced with an unvalidated legacy cache path.
+
+The initial audit found the `fonts_folder` wire field and host configuration
+missing; the partial correction and red/green test are recorded in UCU-05.
+The web save wrapper already notifies the shared registry, including Next and
+preview sessions. Extraction/publication timing and empty-cue runtime proof
+remain under audit. Row 82 has no verdict and the pin remains at row 81.
+
 ## Row 80 source and hydration map
 
 Upstream `9cc771be` adds detected Next/FFmpeg versions to General diagnostics

@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 82 audit found missing Next subtitle font-cache
+configuration. The partial correction has a red/green normal/preview regression
+and passing infra Clippy. Continue with extraction/publication ordering and
+runtime font/empty-cue playback proof. Row verdict and pin remain at row 81;
+window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-05 row 81 (3f2efcd4) is N/A: upstream only adds the
 .NET test-discovery SDK. ErsatzRS uses Cargo/Nextest; no runtime behavior
 changes. Pin, ledger and checkout advance together. Continue at row 82

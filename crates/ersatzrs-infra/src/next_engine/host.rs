@@ -178,6 +178,12 @@ impl NextHost {
             &request.ffprobe,
         )
         .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+        configuration.normalization.subtitle.fonts_folder = Some(
+            crate::file_system_layout::fonts_cache_folder()
+                .to_str()
+                .ok_or(ProcessError::Preparation("fonts path encoding"))?
+                .to_owned(),
+        );
         // Next retains error dossiers independently of native FFmpeg report opt-in.
         configuration.ffmpeg.reports_folder = Some(
             crate::file_system_layout::ffmpeg_reports_folder()

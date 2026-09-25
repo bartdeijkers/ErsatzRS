@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Pass the extracted-font cache to Next subtitle rendering for normal playback
+  and browser previews (upstream PR #2960).
+
 - Render General troubleshooting diagnostics without requiring JavaScript.
 - Stop Block default filler at items with zero or negative duration, with a
   diagnostic instead of an endless build loop. Exclude expired playout rows

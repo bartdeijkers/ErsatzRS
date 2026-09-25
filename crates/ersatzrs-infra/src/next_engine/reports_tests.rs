@@ -3,7 +3,7 @@ use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat};
 
 #[tokio::test]
-async fn next_error_reports_ignore_native_report_setting() {
+async fn next_runtime_config_preserves_fonts_and_error_reports() {
     let (pool, locker, _, _) = super::super::schedule::tests::fixture().await;
     crate::repositories::make_repositories(pool.clone())
         .ffmpeg_profile
@@ -52,6 +52,12 @@ async fn next_error_reports_ignore_native_report_setting() {
             request.preview = preview;
             let config = host.configuration(&request).await.unwrap();
             let value = serde_json::to_value(config).unwrap();
+            assert_eq!(
+                value["normalization"]["subtitle"]["fonts_folder"],
+                crate::file_system_layout::fonts_cache_folder()
+                    .to_str()
+                    .unwrap()
+            );
             assert_eq!(
                 value["ffmpeg"]["reports_folder"],
                 crate::file_system_layout::ffmpeg_reports_folder()
