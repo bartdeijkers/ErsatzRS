@@ -9634,8 +9634,23 @@ sync or transport errors. HLS segmenter pip cadence deviates by at most 30 ms.
 The server log is free of known failure signatures. The original provider-specific
 debt remains visible pending confirmation; no live-provider acceptance is inferred.
 Post-correction workspace all-target strict Clippy passes (3m59s), along with
-format, diff and progress checks. Test closeout, parity and matched-bundle
-verification remain open before the authorized milestone push and exact-SHA CI.
+format, diff and progress checks. At checkpoint 7206739c, full test closeout
+passes: Nextest 74f93cd9 reports 3230 passed, 107 skipped in 51.800 seconds;
+the Cargo doctest phase completes successfully (0 doctests). A fresh fetch
+still yields c0184f00: all 173 ledger SHA/subject pairs match upstream exactly,
+with 90 processed and 83 pending; pin/last processed row/checkout agree at
+35b5a259. All 23 UCU-05 rows reference existing owning parity records and
+recorded commits; rows 73/88 now use the canonical ffmpeg-command-generation
+slug instead of nonexistent ffmpeg-runtime. Verdicts are unchanged.
+The parity gate passes progress, format, architecture and hydration lint;
+its web Nextest selection passes 691 tests with 13 skipped (0e5f631c), and
+strict web all-target Clippy passes. The matched Leptos SSR/WASM build succeeds
+and the complete parity gate exits successfully. The assembled-bundle verifier
+boots that server against disposable state and serves both referenced JS/WASM
+assets successfully. The full push-range Clippy suppression-policy check passes.
+Reuse the earlier native smoke result for unchanged hybrid/HLS routing, alongside
+the post-correction four-path TSDuck proof. All local UCU-05 window requirements
+pass; authorized milestone push and terminal green exact-SHA CI remain open.
 """
 
 [[milestone]]
