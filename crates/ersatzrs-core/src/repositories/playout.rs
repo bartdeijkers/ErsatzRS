@@ -177,9 +177,9 @@ pub trait PlayoutRepository: Send + Sync {
     ) -> Result<()>;
     /// Persist the outcome of a single playout build in one transaction.
     ///
-    /// Respects `result.clear_items` (Reset semantics: delete all existing
-    /// items, gaps, and history for the playout before inserting the new
-    /// rows) vs. Continue semantics (delete only the ids listed in
+    /// Respects `result.clear_items` (Reset deletes all existing rows; Classic
+    /// Refresh can retain the already-built prefix through `retain_through`)
+    /// vs. Continue semantics (delete only the ids listed in
     /// `result.items_to_remove` / `result.history_to_remove`, then append).
     ///
     /// # Errors

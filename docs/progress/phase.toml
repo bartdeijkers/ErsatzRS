@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 76 (f7bdcede) ports daily Classic checkpointing through
+the final build pass. A seven-day shuffled hourly Continue regression failed
+before the fix, then passed; all 249 core tests and a production SQLite
+Continue-to-Refresh proof preserves the item crossing midnight while replacing
+the future. Pin, ledger and checkout advance together.
+Continue at row 77 (6ff44cf5); UCU-05 window gates, push and CI remain open.
+
 2026-09-25: UCU-05 row 75 (7850ced6) ports upstream removal of NVIDIA and
 AMD green-line crop metadata workarounds to FFmpeg 9. Both argv snapshots and
 all 344 FFmpeg crate tests pass. A synthetic FFmpeg 9 NVENC overlay encode

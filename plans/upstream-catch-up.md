@@ -18,13 +18,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **75**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **76**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-75; the next upstream row is 76 (`f7bdcede`).
+  processed rows 68-76; the next upstream row is 77 (`6ff44cf5`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -34,6 +34,26 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 76 source map: daily Classic checkpoints
+
+Upstream `f7bdcede` moves checkpoint creation from pass boundaries to the
+moment scheduled items cross a local day seam, because a final partial pass
+can cross midnight without leaving a checkpoint for that day. It also keeps
+one checkpoint per collection and local date. ErsatzRS already captures
+dated source anchors and full Classic context at pass boundaries, but its
+final pass omitted a capture. A seven-day, shuffled, hourly Continue test
+failed on the newly covered final day before the fix. The Rust scheduler now
+captures after the block that crosses midnight, emits one generated checkpoint
+per UTC schedule day, and reuses persisted Continue checkpoints for that day.
+The first SQLite Refresh proof exposed a second loss: clearing the entire
+playout discarded the item crossing midnight before the first checkpoint.
+Refresh now retains the item, gap and history prefix through the selected
+checkpoint, then replaces the future transactionally. This preserves primary
+content under accepted ADR 0097. The full-window regression, 249 core tests,
+and a restarted production SQLite Continue-to-Refresh proof pass. The health
+check already audits the complete checkpoint before Refresh. Verdict: Port;
+window gates remain open.
 
 ## Row 75 source map: FFmpeg green-line workaround removal
 
@@ -1422,7 +1442,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 73 | `5855deb8` | feat: upgrade ffmpeg to 8.1.2 (#2951) | Adapt (ADR 0063) | ffmpeg-runtime; upstream-baseline-catch-up | `docs(porting): classify FFmpeg 8.1.2 upstream upgrade` | ucu-05; upstream changes package pins, Docker bases and version health to 8.1.2. Accepted ADR 0063 requires ErsatzRS FFmpeg 9, startup rejects 8.1.2, and health reports the resolved supported runtime. No filter graph or media selection change. Source and progress checks pass. |
 | 74 | `6d8666b8` | chore: update dependencies (#2952) | N/A (NuGet-only Jint update; ADR 0096) | upstream-baseline-catch-up | `docs(porting): classify Jint patch update` | ucu-05; only ErsatzTV.Infrastructure.csproj changes Jint 4.13.0 to 4.14.0. ErsatzRS uses accepted QuickJS/rquickjs under ADR 0096; no source or behavior contract changes. Source and progress checks pass. |
 | 75 | `7850ced6` | fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953) | Port | ffmpeg-command-generation | `fix(ffmpeg): remove obsolete green-line crop filters` | ucu-05; upstream deletes NVIDIA H.264 and radeonsi HEVC crop metadata filters after FFmpeg 8.1.2. ErsatzRS FFmpeg 9.0 uses the same affected encode paths. Removed both filters and their applicability gate; two argv snapshots and all 344 FFmpeg tests pass. A local FFmpeg 9 NVENC overlay encode preserves 1080 bottom-row colors without crop metadata. AMD live hardware proof remains unavailable here; window playback gates remain open. |
-| 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | | | | ucu-05; provisional: Port candidate. |
+| 76 | `f7bdcede` | fix: checkpoint classic schedules every day (#2954) | Port | classic-scheduling | `fix(scheduling): retain Classic daily checkpoint prefix` | ucu-05; captures day seams inside all build passes. A seven-day shuffled hourly Continue regression failed before the fix, then passed. Restarted SQLite Refresh preserves the crossing item and appends the matching future. All 249 core tests, scoped Clippy and progress checks pass. |
 | 77 | `6ff44cf5` | fix: don't prematurely reset shuffled collection progress (#2955) | | | | ucu-05; provisional: Port candidate. |
 | 78 | `16b71569` | fix: playlist enumerator consistency fixes (#2956) | | | | ucu-05; provisional: Port candidate. |
 | 79 | `a2f54ef1` | fix: block playout build loop (#2957) | | | | ucu-05; provisional: Port candidate. |

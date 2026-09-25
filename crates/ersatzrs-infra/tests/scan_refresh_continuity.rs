@@ -614,6 +614,100 @@ async fn classic_refresh_survives_checkpoint_round_trip_at_sub_tick_precision() 
 }
 
 #[tokio::test]
+async fn classic_continue_persists_checkpoint_for_new_final_day() {
+    let directory = tempfile::tempdir().expect("temporary database directory");
+    let database_path = directory.path().join("daily-checkpoint.sqlite");
+    let pool = open_database(&database_path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    sqlx::query(
+        r#"UPDATE "ConfigElement" SET "Value" = '7' WHERE "Key" = 'playout.days_to_build'"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("set seven-day build window");
+    sqlx::query(
+        r#"UPDATE "MediaVersion" SET "Duration" = '01:40:00' WHERE "MovieId" IN (101, 102)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed long items that cross day seams");
+    let start = common::fixed_time()
+        .date_naive()
+        .and_hms_opt(20, 0, 0)
+        .expect("20:00")
+        .and_utc();
+    run_classic_build(&pool, RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset, start).await;
+    let continued_at = start + Duration::hours(4);
+    run_classic_build(
+        &pool,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Continue,
+        continued_at,
+    )
+    .await;
+
+    let dates = sqlx::query_scalar::<_, String>(
+        r#"SELECT DISTINCT substr("CheckpointDate", 1, 10)
+           FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .fetch_all(&pool)
+    .await
+    .expect("load persisted checkpoint dates");
+    let expected_last = (continued_at + Duration::days(7)).date_naive().to_string();
+    assert!(
+        dates.contains(&expected_last),
+        "production Continue did not persist a checkpoint on {expected_last}: {dates:?}"
+    );
+    let early_day_items = sqlx::query_as::<_, (i64, String, String)>(
+        r#"SELECT "MediaItemId", "Start", "Finish" FROM "PlayoutItem"
+           WHERE "PlayoutId" = ? AND (substr("Start", 1, 10) = ? OR substr("Finish", 1, 10) = ?)
+           ORDER BY "Start" LIMIT 3"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .bind(&expected_last)
+    .bind(&expected_last)
+    .fetch_all(&pool)
+    .await
+    .expect("load early final-day items");
+    assert!(
+        !early_day_items.is_empty(),
+        "the final day needs scheduled items"
+    );
+    pool.close().await;
+    let pool = open_database(&database_path, false).await;
+    run_classic_build(
+        &pool,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Refresh,
+        continued_at + Duration::days(7) + Duration::minutes(30),
+    )
+    .await;
+    assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "refresh").await;
+    let after_refresh = sqlx::query_as::<_, (i64, String, String)>(
+        r#"SELECT "MediaItemId", "Start", "Finish" FROM "PlayoutItem"
+           WHERE "PlayoutId" = ? AND (substr("Start", 1, 10) = ? OR substr("Finish", 1, 10) = ?)
+           ORDER BY "Start" LIMIT 3"#,
+    )
+    .bind(RELATED_PLAYOUT_ID)
+    .bind(&expected_last)
+    .bind(&expected_last)
+    .fetch_all(&pool)
+    .await
+    .expect("load final-day items after Refresh");
+    assert!(
+        after_refresh.starts_with(&early_day_items),
+        "Refresh dropped or changed the item crossing into the checkpoint day"
+    );
+    assert!(after_refresh.len() > early_day_items.len());
+    assert_eq!(
+        after_refresh[early_day_items.len()].1,
+        early_day_items.last().expect("prefix item").2
+    );
+    pool.close().await;
+}
+
+#[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn classic_smart_shuffle_refresh_matches_uninterrupted_cooldown_across_round_trip() {
     let directory = tempfile::tempdir().expect("temporary database directory");

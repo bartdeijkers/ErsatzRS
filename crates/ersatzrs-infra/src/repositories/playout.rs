@@ -246,11 +246,26 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
         // ── items ─────────────────────────────────────────────────────────────
         if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
+            if let Some(seam) = result.retain_through {
+                let cutoff = result.remove_before.unwrap_or(seam)
+                    - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?
+                       AND ("Finish" > ? OR "Finish" < ?)"#,
+                )
                 .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(cutoff))
                 .execute(&mut *tx)
                 .await
                 .repository()?;
+            } else {
+                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
+                    .bind(playout.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         } else {
             for &item_id in &result.items_to_remove {
                 sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "Id" = ?"#)
@@ -328,11 +343,37 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
         // ── gaps ──────────────────────────────────────────────────────────────
         if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+            if let Some(seam) = result.retain_through {
+                let cutoff = result.remove_before.unwrap_or(seam)
+                    - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(
+                    r#"UPDATE "PlayoutGap" SET "Finish" = ? WHERE "PlayoutId" = ?
+                       AND "Start" < ? AND "Finish" > ?"#,
+                )
+                .bind(encode_datetime(seam))
                 .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(seam))
                 .execute(&mut *tx)
                 .await
                 .repository()?;
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?
+                       AND ("Start" >= ? OR "Finish" < ?)"#,
+                )
+                .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(cutoff))
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            } else {
+                sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+                    .bind(playout.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         }
         for gap in &result.added_gaps {
             sqlx::query(
@@ -348,11 +389,27 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
         // ── history ───────────────────────────────────────────────────────────
         if result.clear_items {
-            sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+            if let Some(seam) = result.retain_through {
+                let cutoff = result.remove_before.unwrap_or(seam)
+                    - max_playout_offset.max(chrono::Duration::zero());
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?
+                       AND ("When" >= ? OR "Finish" > ? OR "Finish" < ?)"#,
+                )
                 .bind(playout.id)
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(seam))
+                .bind(encode_datetime(cutoff))
                 .execute(&mut *tx)
                 .await
                 .repository()?;
+            } else {
+                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+                    .bind(playout.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         } else {
             for &history_id in &result.history_to_remove {
                 sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)

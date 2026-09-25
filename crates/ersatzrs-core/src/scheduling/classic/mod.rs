@@ -940,6 +940,7 @@ impl ClassicContext {
             let schedule_item = self.schedule_items[index].clone();
             let next_schedule_item = self.schedule_items[self.peek_schedule_index(1)].clone();
             let before = self.state.current_time;
+            let before_count = self.result.added_items.len();
             match schedule_item.playout_mode {
                 ersatzrs_domain::PlayoutMode::One => {
                     self.schedule_one(&schedule_item, &next_schedule_item);
@@ -953,6 +954,15 @@ impl ClassicContext {
                 ersatzrs_domain::PlayoutMode::Flood => {
                     self.schedule_flood(&schedule_item, &next_schedule_item);
                 }
+            }
+
+            // A pass can extend beyond its nominal midnight (and the final
+            // partial pass has no following pass boundary). Freeze progress
+            // immediately after the block that first crosses the day seam.
+            if self.result.added_items.len() > before_count
+                && self.state.current_time.date_naive() > before.date_naive()
+            {
+                self.capture_checkpoint();
             }
 
             if self.state.current_time == before && self.current_schedule_index() == index {
@@ -2001,6 +2011,12 @@ impl ClassicContext {
             self.request.mode,
             PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
         );
+        if self.request.mode == PlayoutBuildMode::Refresh {
+            self.result.retain_through = self
+                .restored_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.anchor.next_start);
+        }
         let current_item = self.schedule_items[self.current_schedule_index()].clone();
         let mut next_start = self.start_time_after(&current_item, false);
         if let Some(last_finish) = self.result.added_items.iter().map(|item| item.finish).max() {
@@ -2082,10 +2098,18 @@ impl ClassicContext {
                 .unwrap_or(self.state.current_time)
                 .max(self.state.current_time),
         );
-        if self
-            .generated_checkpoints
-            .iter()
-            .any(|checkpoint| checkpoint.checkpoint_date == checkpoint_date)
+        if self.generated_checkpoints.iter().any(|checkpoint| {
+            checkpoint.checkpoint_date.date_naive() == checkpoint_date.date_naive()
+        }) || (self.request.mode == PlayoutBuildMode::Continue
+            && self
+                .request
+                .reference_data
+                .existing_classic_checkpoints
+                .iter()
+                .any(|checkpoint| {
+                    checkpoint.playout_id == self.request.playout.id
+                        && checkpoint.checkpoint_date.date_naive() == checkpoint_date.date_naive()
+                }))
         {
             return;
         }
@@ -4650,6 +4674,71 @@ mod tests {
             1,
             "duplicate schedule sources share one continuation enumerator"
         );
+    }
+
+    #[test]
+    fn classic_hourly_continue_keeps_checkpoints_for_the_full_build_window() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 20, 0, 0).unwrap();
+        let items = (1..=3)
+            .map(|id| schedule_item(id, PlayoutMode::Multiple, 1, Some("5")))
+            .collect::<Vec<_>>();
+        let key = item_key(&items[0]);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: items,
+            classic_shuffle_schedule_items: true,
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            (101..=400)
+                .map(|id| SchedulingMediaItem::new(id, Duration::minutes(100)))
+                .collect(),
+        );
+        let mut playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 7,
+            ..Playout::default()
+        };
+        for hour in 0..24 * 3 {
+            let now = start + Duration::hours(hour);
+            let finish = now + Duration::days(7) + Duration::hours(1);
+            let result = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: playout.clone(),
+                    start: now,
+                    finish,
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference_data.clone(),
+                })
+                .expect("hourly Continue build");
+            playout.anchor = result.anchor;
+            reference_data.existing_items.extend(result.added_items);
+            reference_data.existing_program_schedule_anchors = result.program_schedule_anchors;
+            reference_data.existing_classic_checkpoints = result.classic_checkpoints;
+            reference_data.existing_fill_group_indices = result.fill_group_indices;
+            let first_day = (start + Duration::days(1))
+                .date_naive()
+                .max(now.date_naive());
+            for day_offset in 0..=7 {
+                let day = first_day + Duration::days(day_offset);
+                if day > finish.date_naive() {
+                    break;
+                }
+                assert!(
+                    reference_data
+                        .existing_classic_checkpoints
+                        .iter()
+                        .any(|checkpoint| checkpoint.checkpoint_date.date_naive() == day),
+                    "missing checkpoint for {day} at {now}; dates: {:?}",
+                    reference_data
+                        .existing_classic_checkpoints
+                        .iter()
+                        .map(|checkpoint| checkpoint.checkpoint_date)
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
     }
 
     #[test]

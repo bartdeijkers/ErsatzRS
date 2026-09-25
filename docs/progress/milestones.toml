@@ -9342,6 +9342,16 @@ payload retained neutral bottom rows matching the source without crop
 metadata. AMD live GPU proof is unavailable locally; its command generation
 is covered by the snapshot. Pin, ledger and checkout advance together; row 76
 is next. UCU-05 window gates, push and exact-SHA CI remain open.
+Row 76 (f7bdcede) is Port. Upstream captures Classic source progress when
+scheduled items cross day seams, including the final partial pass. ErsatzRS
+already has full dated checkpoint state but missed its final pass. The new
+seven-day shuffled hourly Continue regression failed at the last covered day
+before the fix and passes after it. Restarted SQLite Continue-to-Refresh proof
+also found that Refresh discarded the item crossing midnight. Refresh now
+retains the scheduled prefix through the selected checkpoint and rebuilds the
+future. All 249 core tests, the SQLite regression and scoped Clippy pass. Pin,
+ledger and checkout advance together; row 77 is next. UCU-05 window gates,
+push and exact-SHA CI remain open.
 No UCU-05 window gates, push or CI are claimed.
 """
 

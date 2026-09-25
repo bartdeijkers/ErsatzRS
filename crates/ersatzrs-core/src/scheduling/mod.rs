@@ -619,6 +619,8 @@ pub struct SchedulingRequest {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingResult {
     pub clear_items: bool,
+    /// Classic Refresh keeps the already-built prefix through this checkpoint.
+    pub retain_through: Option<DateTime<Utc>>,
     pub remove_before: Option<DateTime<Utc>>,
     pub added_items: Vec<PlayoutItem>,
     pub added_gaps: Vec<PlayoutGap>,

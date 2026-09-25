@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7850ced6ec52112eb71a9d157b7bc07b20878fd8` |
-| **Commit subject** | `fix: remove green line workarounds; etv's ffmpeg 8.1.2 fixes (#2953)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7850ced6ec52112eb71a9d157b7bc07b20878fd8 |
+| **Pinned commit** | `f7bdcede69a365715d45a0cc254b4c25dc8659d9` |
+| **Commit subject** | `fix: checkpoint classic schedules every day (#2954)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f7bdcede69a365715d45a0cc254b4c25dc8659d9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -4,10 +4,9 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 172 commits, 75 reconciled, 97 pending. Bootstrap and AMM-N-03 are
+Ledger: 172 commits, 76 reconciled, 96 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 has processed
-rows 68-75; row 76 follows. UCU-01 proves links, provenance, six-RID packaging and
-Docker.
+rows 68-76; row 77 follows.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -53,7 +52,8 @@ Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
 Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
 Rows 68-71 port Plex title refresh and Classic playlist continuity. Row 75
 drops FFmpeg crop metadata workarounds; NVIDIA overlay output passes, with AMD
-live output unproven. UCU-05 window acceptance remains open.
+live output unproven. Row 76 restores final-day Classic Refresh checkpoints.
+UCU-05 window acceptance remains open.
 The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and

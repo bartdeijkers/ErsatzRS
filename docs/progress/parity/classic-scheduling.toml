@@ -48,7 +48,7 @@ id          = 'classic-refresh-has-no-production-checkpoint-anchor'
 description = 'Generate and restore dated Classic day checkpoints in real builds so Refresh cannot restart shuffled or enumerated media from the beginning.'
 discovered  = '2026-08-23'
 adr         = '0020'
-evidence    = 'Resolved by `PlayoutClassicCheckpoint`, chunked initial/day-seam generation, exact full-set preflight, stable source-order reconciliation, startup refusal, and Classic Playout State health reporting. Regressions cover fresh multi-day generation, duplicate sources, shuffled schedule order, membership add/remove, Shuffle/Random/RandomRotation restart equivalence with mutable setting re-stamping, continuation-only refusal without row deletion, safe startup repair, SQLite idempotency, and the paired MySQL migration/repository path.'
+evidence    = 'Resolved by `PlayoutClassicCheckpoint`, chunked initial/day-seam and final-pass generation, exact full-set preflight, stable source-order reconciliation, startup refusal, and Classic Playout State health reporting. Regressions cover seven-day shuffled hourly Continue, persisted final-day Refresh retaining a midnight-crossing item, duplicate sources, membership add/remove, Shuffle/Random/RandomRotation restart equivalence with mutable setting re-stamping, continuation-only refusal without row deletion, safe startup repair, SQLite idempotency, and the paired MySQL migration/repository path.'
 resolved    = true
 
 [[debt]]

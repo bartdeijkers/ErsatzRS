@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep a Classic Refresh checkpoint for every day in a continued playout and
+  preserve the already built prefix when Refresh rewinds to it, including a
+  media item crossing midnight (upstream PR #2954).
 - Drop NVIDIA and AMD crop-metadata workarounds on FFmpeg 9 so overlay output
   retains its full picture height (upstream PR #2953).
 - Preserve Classic playlist Random Start Point offsets across Continue builds
