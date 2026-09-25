@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
   — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **86 pending**. The original plan covered 152 through
+- Ledger: **173 commits**, **85 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -19,13 +19,13 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **87**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **88**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-87; the next upstream row is 88 (`57a0c40d`).
+  processed rows 68-88; the next upstream row is 89 (`b5fd035b`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -35,6 +35,18 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 88 source map: upstream Windows FFmpeg archive
+
+Upstream `57a0c40d` changes only the Windows artifact download URL in
+`.github/workflows/artifacts.yml` and its changelog. The archive remains FFmpeg
+8.1.2 but changes build revision from `g82f576a8` to `gd3cc14b8` for QSV fixes.
+No pipeline code, capability check or scheduling behavior changes in this row.
+ErsatzRS acquires its own first-party runtime through `ersatzrs-ffmpeg::runtime`
+under ADRs 0008/0063; its supported line is FFmpeg 9. Importing this 8.1.2 archive
+would violate the accepted runtime contract. Verdict: N/A under ADR 0063 for
+this upstream packaging pin. This source classification provides no new native
+Windows/QSV execution evidence and does not substitute for runtime acceptance.
 
 ## Row 87 source map: build and on-demand gap consistency
 
@@ -1667,7 +1679,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 85 | `ecf6c2c1` | fix: classic playout playlist progress (#2966) | Adapt (ADR 0020) | classic-scheduling; ersatzrs-healthcheck | `fix(scheduling): preserve complete Classic collection identities` | ucu-05; complete source keys now include RerunCollectionId. Existing earliest complete checkpoints preserve playlist/fake keys. Three-week playlist and rerun restart/Refresh, legacy refusal, actual health reporting and core regressions pass; see UCU-05 evidence. |
 | 86 | `a7ecc5f9` | fix: improve flexible start time handling near midnight (#2967) | Port | classic-scheduling | `fix(scheduling): resolve flexible starts across local midnight` | ucu-05; explicit local civil clock, independent tomorrow offsets and inclusive 12-hour wait. Core clock/builder and persisted DST Continue/Refresh proof pass; Strict and complete UTC checkpoints retain their contracts. See UCU-05 evidence. |
 | 87 | `3d24c3f0` | fix: playout gap correctness in ui (#2968) | Port | playout-list-detail | `fix(playout): publish gaps with builds and on-demand shifts` | ucu-05; final item-derived positive gaps replace stale rows atomically; on-demand gaps trim and shift with items. Repository, rollback, continuity and Chromium/Firefox detail proof pass; see UCU-05 evidence. |
-| 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | | | | ucu-05; provisional: N/A candidate under ADR 0063. |
+| 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | N/A (ADR 0063) | ffmpeg-runtime; upstream-baseline-catch-up | `docs(porting): classify upstream Windows FFmpeg archive update` | ucu-05; sole runtime-facing diff changes the upstream FFmpeg 8.1.2 Windows archive revision. ErsatzRS uses its first-party FFmpeg 9 line under ADR 0063; no native QSV execution claim is inferred. Source and progress checks pass. |
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | | | | ucu-05; provisional: Adapt candidate. |
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | | | | ucu-06; provisional: Port candidate. |

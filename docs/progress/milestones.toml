@@ -9587,6 +9587,12 @@ serially on isolated synthetic databases: UNSCHEDULED, filler preference,
 context dialog and playout controls. No UI layout or translation changes.
 Pin/ledger/checkout advance to 3d24c3f0; row 88 follows. This matched build may
 be reused until relevant source changes; full UCU-05 window gates remain open.
+Row 88 (57a0c40d) is N/A under ADR 0063. The entire upstream diff changes
+its Windows FFmpeg 8.1.2 artifact from g82f576a8 to gd3cc14b8 and adds a changelog
+entry. ErsatzRS runtime acquisition uses the first-party FFmpeg 9 line; the
+upstream 8.1.2 packaging pin is not applicable. No command-generation change or
+native Windows QSV execution evidence is claimed. Source, diff and progress
+checks pass; pin/ledger/checkout advance to 57a0c40d. Row 89 follows.
 No UCU-05 window gates, push or CI are claimed.
 """
 

@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-05 row 88 is N/A under ADR 0063: only upstream's FFmpeg
+8.1.2 Windows archive revision changes; ErsatzRS retains first-party FFmpeg 9.
+Continue at row 89 (b5fd035b). UCU-05 window gates/push/CI remain open.
+
 2026-09-25: UCU-05 row 87 is Port. Item-derived gaps publish atomically with
 builds, and on-demand gaps trim/shift with items. Repository rollback and full
 continuity selection (33 tests), strict infra Clippy and Chromium/Firefox detail
