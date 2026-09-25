@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `3e1918c992b99f8f67e0c86a977f0719e9def425` |
-| **Commit subject** | `feat: restore release notes on home page (#2942)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3e1918c992b99f8f67e0c86a977f0719e9def425 |
+| **Pinned commit** | `95fa937c1d1b33bb96d70ba14271b04a87a33bba` |
+| **Commit subject** | `chore: update skia sharp (#2943)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/95fa937c1d1b33bb96d70ba14271b04a87a33bba |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

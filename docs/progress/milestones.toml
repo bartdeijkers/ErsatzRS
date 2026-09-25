@@ -9155,6 +9155,23 @@ pass. UCU-04
 window gates, push and terminal exact-SHA CI remain open; continue at row 66
 (95fa937c). No intermediate push or CI was launched.
 
+2026-09-25: row 66 (95fa937c, PR #2943) is N/A (upstream SkiaSharp API
+migration). The fetched target remains 27f9d217, all 172 ledger SHA/subject
+pairs match upstream in order, and the row's parent equals the prior pin.
+Two .NET manifests raise SkiaSharp and its Linux native assets from 3.119.4
+to 4.150.0. The only consumer changes add `SKSamplingOptions.Default` to
+one channel-logo destination-rectangle draw and two prepared-image point
+draws. Placement, opacity branches, image selection, output routes and data
+contracts are unchanged by this diff. ErsatzRS has no SkiaSharp dependency:
+`transport/iptv/logos.rs` generates SVG, and ADR 0005's Image/Motion path
+uses native FFmpeg inputs and overlay filters in `ersatzrs-ffmpeg`. No Rust
+draw-call migration or new graphics behavior follows from this .NET API
+change. Existing rendered-graphics evidence remains applicable, but this
+row claims no cross-version pixel identity. The source/diff review and
+progress check pass; no product code or tests change. UCU-04 window gates,
+push and terminal exact-SHA CI remain open; continue at row 67 (0b44ad47).
+No intermediate push or CI was launched.
+
 """
 
 [[milestone]]

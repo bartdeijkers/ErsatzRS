@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 66 is N/A (upstream SkiaSharp API migration). Three
+DrawBitmap calls now pass explicit default sampling after the .NET 4.150.0
+upgrade. ErsatzRS SVG logos and native FFmpeg image/motion overlays have no
+Skia dependency or corresponding overload. No Rust rendering behavior changes.
+Next is row 67 (0b44ad47, upstream release preparation). UCU-04 window gates,
+push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 65 is Port. Home and health show sanitized release
 notes from the bundled changelog's exact beta or latest dated section, plus a
 local full-changelog route and optional GitHub link. The anonymous ErsatzRS
