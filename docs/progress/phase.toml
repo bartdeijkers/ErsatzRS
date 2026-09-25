@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 67 is N/A (upstream release metadata). Only ErsatzTV's
+CHANGELOG heading and version comparison links change for 26.6.0. ErsatzRS
+keeps its own release history; no dated section is created for this upstream
+tag. All rows through the UCU-04 window end are reconciled. Run the remaining
+window acceptance gates, then push the accepted exact candidate and verify
+terminal green exact-SHA CI before starting UCU-05 row 68 (18137832).
+
 2026-09-25: UCU-04 row 66 is N/A (upstream SkiaSharp API migration). Three
 DrawBitmap calls now pass explicit default sampling after the .NET 4.150.0
 upgrade. ErsatzRS SVG logos and native FFmpeg image/motion overlays have no

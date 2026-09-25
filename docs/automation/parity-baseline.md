@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `95fa937c1d1b33bb96d70ba14271b04a87a33bba` |
-| **Commit subject** | `chore: update skia sharp (#2943)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/95fa937c1d1b33bb96d70ba14271b04a87a33bba |
+| **Pinned commit** | `0b44ad47095c1db80c28137edc280947c66ee456` |
+| **Commit subject** | `prep for release v26.6.0 [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0b44ad47095c1db80c28137edc280947c66ee456 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

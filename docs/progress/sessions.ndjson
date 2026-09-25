@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 67 reconciled as upstream-only 26.6.0 changelog preparation; rows 35-67 complete, window acceptance gates and exact-SHA publication next."}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 66 classifies upstream SkiaSharp 4 API migration as N/A after source and Rust graphics/logo boundary audit; row 67 next, window gates open."}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 65 ports localized release notes on home and health from the bundled changelog; focused Rust, browser, Clippy, hydration and dependency checks pass; row 66 next, window gates open."}
 {"agent":"Codex","date":"2026-09-25","summary":"UCU-04 row 64 Adapt under ADR 0098: Plex embedded/external subtitle titles already persist; provider-sync tests cover stream and metadata rows. Retained NCalc 6.2 corpus and scoped Clippy pass; row 65 next, window push/CI open."}

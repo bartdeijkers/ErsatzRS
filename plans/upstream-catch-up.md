@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-25): `27f9d2174f377e27baa553872c73fcac863a52d7`
   — fix: jellyfin 12 collections as shows (#3038).
-- Ledger: **172 commits**, **106 pending**. The original plan covered 152 through
+- Ledger: **172 commits**, **105 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -18,9 +18,10 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **66**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **67**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-66 are reconciled; the next row is 67 (0b44ad47).
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-67 are reconciled;
+  window acceptance is in progress. The next upstream row is 68 (18137832) in UCU-05.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -30,6 +31,22 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 67 source map: upstream 26.6.0 release preparation
+
+Upstream `0b44ad47` changes only `$ERSATZTV_SRC/CHANGELOG.md`: it places a
+dated `26.6.0` heading after `Unreleased`, advances the latter's comparison
+link from `v26.5.1` to `v26.6.0`, and adds the `26.6.0` comparison link. It
+adds no C# code, packages, migrations, assets, UI, runtime configuration,
+subtitles, or audio behavior. The release notes under the new heading are
+earlier upstream entries, not new changes in this commit.
+
+ErsatzRS keeps an independent version and release history. Its changelog
+contract creates a dated section only when performing an ErsatzRS release;
+this upstream-only preparation does not perform one. The row therefore needs
+no Rust, UI, or changelog edit. Verdict: N/A (upstream release metadata).
+The upstream diff, ErsatzRS changelog rules, and progress validation own this
+row; UCU-04 window acceptance remains separate.
 
 ## Row 66 source map: SkiaSharp 4 API migration
 
@@ -1258,7 +1275,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 64 | `075649ad` | fix: synchronize subtitle titles from plex libraries (#2940) | Adapt (ADR 0098) | library-management; classic-scheduling; upstream-baseline-catch-up | `test(plex): cover subtitle title synchronization` | ucu-04; Plex embedded/external titles already persist in MediaStream and movie/episode Subtitle rows; two provider-sync regressions prove both. The accepted deterministic Classic expression profile remains on NCalcSync 6.2 despite the upstream 6.4 package bump. Other .NET package updates map to existing ADR 0009/0096 alternatives or no Rust package. Focused NCalc corpus, scoped Clippy and progress checks pass. |
 | 65 | `3e1918c9` | feat: restore release notes on home page (#2942) | Port | support-pages | `feat(web): show bundled release notes on home and health` | ucu-04; localized shared SSR card on both routes selects the installed beta or latest dated bundled changelog section, sanitizes Markdown and serves the full offline changelog. GitHub remains an optional link; anonymous API and page return 404. Focused section/security tests, web check, scoped Clippy, dependency audit, hydration lint and Chromium 320px/content/link proof pass. Window gates remain open. |
 | 66 | `95fa937c` | chore: update skia sharp (#2943) | N/A (upstream SkiaSharp API migration) | upstream-baseline-catch-up | `docs(porting): classify SkiaSharp 4 API migration` | ucu-04; two .NET package upgrades and three DrawBitmap overload updates add explicit default sampling. Rust SVG logos and native FFmpeg Image/Motion overlays use no Skia API or dependency. Source/ADR review and progress validation pass; no new pixel-equivalence claim. Window gates remain open. |
-| 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | | | | ucu-04; provisional: Upstream tooling candidate. |
+| 67 | `0b44ad47` | prep for release v26.6.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.6.0 release prep` | ucu-04; only ErsatzTV CHANGELOG heading/comparison links change. ErsatzRS releases and dated changelog sections have separate acceptance; no product or build behavior changes. Source and progress checks pass; UCU-04 window gates remain open. |
 | 68 | `18137832` | fix: update plex movie and other video titles (#2947) | | | | ucu-05; provisional: Port candidate. |
 | 69 | `e5a2a763` | fix: randomize start points with classic playlists (#2948) | | | | ucu-05; provisional: Port candidate. |
 | 70 | `0d692e70` | fix: always randomize start points (#2949) | | | | ucu-05; provisional: Port candidate. |

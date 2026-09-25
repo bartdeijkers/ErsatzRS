@@ -9172,6 +9172,17 @@ progress check pass; no product code or tests change. UCU-04 window gates,
 push and terminal exact-SHA CI remain open; continue at row 67 (0b44ad47).
 No intermediate push or CI was launched.
 
+2026-09-25: row 67 (0b44ad47) is N/A (upstream release metadata). The fresh
+upstream target remains 27f9d217; all 172 ledger SHA/subject pairs are an
+exact prefix and the row parent equals the prior pin. The entire diff is
+ErsatzTV CHANGELOG.md: it closes that project's Unreleased notes as 26.6.0
+and updates its comparison links. No code, package, media, UI, subtitle or
+audio contract changes. ErsatzRS keeps its own version history and creates
+dated changelog sections only during its own release. Source review and
+progress validation pass; no Rust tests are invalidated by this row. Rows
+35-67 are reconciled. UCU-04 window gates, push and exact-SHA CI remain open.
+No intermediate push or CI was launched.
+
 """
 
 [[milestone]]
