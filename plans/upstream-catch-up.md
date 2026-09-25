@@ -20,8 +20,9 @@
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
 - Processed rows: **67**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. UCU-04 rows 35-67 are reconciled;
-  window acceptance is in progress. The next upstream row is 68 (18137832) in UCU-05.
+  green CI on pushed candidate `8f722099`. UCU-04 rows 35-67 and all local
+  window gates are complete on source candidate `9208e381`; push and terminal
+  green exact-SHA CI remain open. The next upstream row is 68 (18137832) in UCU-05.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)

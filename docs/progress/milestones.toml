@@ -9183,6 +9183,19 @@ progress validation pass; no Rust tests are invalidated by this row. Rows
 35-67 are reconciled. UCU-04 window gates, push and exact-SHA CI remain open.
 No intermediate push or CI was launched.
 
+2026-09-25 UCU-04 local window gates pass on source candidate 9208e381.
+Workspace all-target Clippy passes. ./run.sh test-closeout passes 3,177
+selected tests and all workspace doctest crates. The matched cargo leptos
+build passes. cargo xtask parity-check passes progress, formatting,
+architecture and hydration lint, 690 selected web tests and scoped Clippy.
+cargo xtask smoke serves MPEG-TS bytes and HLS playlists with initial segments.
+The required TSDuck gate passes 64 checks with zero failures across legacy and
+hybrid MPEG-TS and HLS segmenter; the HLS Direct calibration source produces
+no segments within 20 seconds, so that branch remains unproven as already
+recorded under UCU-02. No post-gate product source changed. The remaining
+UCU-04 acceptance step is to push the exact candidate and obtain terminal
+green exact-SHA CI. Milestone status remains In progress until that proof.
+
 """
 
 [[milestone]]
