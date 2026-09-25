@@ -9233,6 +9233,12 @@ scenarios without changing product logic. The HLS Direct TSDuck calibration
 limitation remains explicit; this closeout makes no new six-platform runtime
 or release claim. UCU-04 is Complete; UCU-05 can start at row 68 (18137832).
 
+The documentation-only closeout commit 67da74ce was excluded by the CI push
+path filter. A manual CI dispatch (36136129301) found that its commit message
+used an unsupported `progress` scope; that run was cancelled after the
+Commit lint failure. A follow-up commit with an allowed scope is required for
+terminal CI on the final closeout SHA.
+
 """
 
 [[milestone]]
