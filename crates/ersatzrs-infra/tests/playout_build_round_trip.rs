@@ -585,6 +585,189 @@ playout:
     );
 }
 
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the database restart and continued timeline proof in one causal test."
+)]
+async fn yaml_scheduled_playout_restores_list_indices_after_sqlite_restart() {
+    use chrono::{Local, TimeZone};
+    use ersatzrs_core::scheduling::SchedulingMediaItem;
+    use std::collections::BTreeMap;
+
+    let temp = tempfile::tempdir().expect("temporary database directory");
+    let url = format!("sqlite://{}", temp.path().join("scheduled.db").display());
+    let pool = ersatzrs_infra::db::init(&url)
+        .await
+        .expect("create migrated database");
+    pool.execute(
+        r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height")
+           VALUES (1, '1920x1080', 1920, 1080)"#,
+    )
+    .await
+    .expect("seed profile resolution");
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    common::seed_media_item(&pool, 2, 1).await;
+    common::seed_media_item(&pool, 3, 1).await;
+
+    let local_time = |day, hour, minute| {
+        Local
+            .with_ymd_and_hms(2026, 12, day, hour, minute, 0)
+            .single()
+            .expect("unambiguous local date")
+            .with_timezone(&Utc)
+    };
+    let yaml = r#"
+content:
+  - key: main
+  - key: bumpers
+playout:
+  - count: "1"
+    content: main
+  - repeat: true
+schedules:
+  - name: Holiday
+    start_date: 12-25
+    end_date: 12-25
+    playout:
+      - count: "1"
+        content: bumpers
+      - wait_until: "00:00"
+        tomorrow: "true"
+"#;
+    sqlx::query(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed", "ScheduleFile")
+           VALUES (1, 1, 'Sequential', 0, ?)"#,
+    )
+    .bind(yaml)
+    .execute(&pool)
+    .await
+    .expect("save YAML playout");
+
+    let start = local_time(24, 23, 50);
+    let split = local_time(25, 0, 1);
+    let finish = local_time(26, 0, 16);
+    let media_by_key = BTreeMap::from([
+        (
+            "main".to_owned(),
+            vec![
+                SchedulingMediaItem::new(1, Duration::minutes(10)),
+                SchedulingMediaItem::new(2, Duration::minutes(15)),
+            ],
+        ),
+        (
+            "bumpers".to_owned(),
+            vec![SchedulingMediaItem::new(3, Duration::minutes(1))],
+        ),
+    ]);
+    let mut reference_data = repos
+        .scheduling
+        .yaml_reference_data(1, yaml, Duration::zero())
+        .await
+        .expect("load production YAML reference data");
+    reference_data.media_by_key = media_by_key.clone();
+    let playout = repos
+        .playout
+        .get_with_anchor(1)
+        .await
+        .expect("load playout");
+    let full = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: playout.clone(),
+            start,
+            finish,
+            mode: PlayoutBuildMode::Reset,
+            reference_data: reference_data.clone(),
+        })
+        .expect("uninterrupted build");
+    let first = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout,
+            start,
+            finish: split,
+            mode: PlayoutBuildMode::Reset,
+            reference_data,
+        })
+        .expect("first build");
+    repos
+        .playout
+        .apply_build_result(
+            &first,
+            &repos.playout.get_with_anchor(1).await.unwrap(),
+            Duration::zero(),
+        )
+        .await
+        .expect("persist first build");
+    drop(repos);
+    pool.close().await;
+
+    let pool = ersatzrs_infra::db::init(&url)
+        .await
+        .expect("reopen migrated database");
+    let repos = make_repositories(pool.clone());
+    let loaded = repos
+        .playout
+        .get_with_anchor(1)
+        .await
+        .expect("load saved anchor");
+    assert!(loaded
+        .anchor
+        .as_ref()
+        .and_then(|a| a.context.as_ref())
+        .is_some_and(|value| value.contains("schedule_indices")));
+    let mut reference_data = repos
+        .scheduling
+        .yaml_reference_data(1, yaml, Duration::zero())
+        .await
+        .expect("reload persisted YAML history");
+    assert!(!reference_data.existing_history.is_empty());
+    reference_data.media_by_key = media_by_key;
+    let continued = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: loaded.clone(),
+            start: split,
+            finish,
+            mode: PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .expect("continue after restart");
+    let combined = first
+        .added_items
+        .iter()
+        .chain(&continued.added_items)
+        .map(|item| (item.media_item_id, item.start, item.guide_group))
+        .collect::<Vec<_>>();
+    let uninterrupted = full
+        .added_items
+        .iter()
+        .map(|item| (item.media_item_id, item.start, item.guide_group))
+        .collect::<Vec<_>>();
+    assert_eq!(combined, uninterrupted);
+    repos
+        .playout
+        .apply_build_result(&continued, &loaded, Duration::zero())
+        .await
+        .expect("persist continued build");
+    let persisted = repos
+        .playout
+        .items_in_range(
+            1,
+            split - Duration::minutes(1),
+            finish + Duration::minutes(20),
+        )
+        .await
+        .expect("load surviving timeline");
+    assert_eq!(
+        persisted
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>(),
+        vec![3, 2, 1]
+    );
+}
+
 // ── real-world env-gated round-trip ───────────────────────────────────────────
 
 #[cfg(test)]

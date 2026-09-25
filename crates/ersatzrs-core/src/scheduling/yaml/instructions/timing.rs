@@ -3,6 +3,7 @@ use super::super::{
     Utc, YamlContext, YamlInstruction, YamlPlayoutDefinition,
 };
 use super::content::{add_media_item, schedule_next_with_rolls};
+use chrono::{Local, Offset, TimeZone};
 
 pub(super) fn handle_wait_until(
     context: &mut YamlContext,
@@ -14,9 +15,10 @@ pub(super) fn handle_wait_until(
     };
     let (hour, minute, second) = parse_hhmm(wait_until)?;
     let current_time = context.current_time;
-    let current_seconds = current_time.num_seconds_from_midnight();
+    let local_time = current_time.with_timezone(&Local);
+    let current_seconds = local_time.num_seconds_from_midnight();
     let target_seconds = hour * 3600 + minute * 60 + second;
-    let mut date = current_time.date_naive();
+    let mut date = local_time.date_naive();
     if current_seconds > target_seconds {
         if instruction.tomorrow == Some("true".to_owned()) {
             date = date
@@ -26,10 +28,8 @@ pub(super) fn handle_wait_until(
             return Ok(());
         }
     }
-    let target = date
-        .and_hms_opt(hour, minute, second)
+    context.current_time = local_clock_target(current_time, date, (hour, minute, second))
         .ok_or_else(|| SchedulingError::InvalidTime(wait_until.clone()))?;
-    context.current_time = DateTime::from_naive_utc_and_offset(target, Utc);
     Ok(())
 }
 
@@ -78,24 +78,35 @@ pub(super) fn handle_pad_until(
 ) -> Result<(), SchedulingError> {
     let value = instruction.pad_until.as_deref().unwrap_or_default();
     let (hour, minute, second) = parse_hhmm(value)?;
-    let mut date = context.current_time.date_naive();
+    let local_time = context.current_time.with_timezone(&Local);
+    let mut date = local_time.date_naive();
     let target_seconds = hour * 3600 + minute * 60 + second;
-    if context.current_time.num_seconds_from_midnight() > target_seconds
+    if local_time.num_seconds_from_midnight() > target_seconds
         && instruction.tomorrow.as_deref().unwrap_or("false") == "true"
     {
         date = date
             .succ_opt()
             .ok_or_else(|| SchedulingError::InvalidTime(value.to_owned()))?;
     }
-    let target = date
-        .and_hms_opt(hour, minute, second)
+    let target = local_clock_target(context.current_time, date, (hour, minute, second))
         .ok_or_else(|| SchedulingError::InvalidTime(value.to_owned()))?;
-    schedule_until(
-        context,
-        instruction,
-        definition,
-        DateTime::from_naive_utc_and_offset(target, Utc),
-    )
+    schedule_until(context, instruction, definition, target)
+}
+
+fn local_clock_target(
+    current_time: DateTime<Utc>,
+    date: chrono::NaiveDate,
+    (hour, minute, second): (u32, u32, u32),
+) -> Option<DateTime<Utc>> {
+    let local = current_time.with_timezone(&Local);
+    let target = date.and_hms_opt(hour, minute, second)?;
+    // Upstream retains the current DateTimeOffset offset across a day change.
+    local
+        .offset()
+        .fix()
+        .from_local_datetime(&target)
+        .single()
+        .map(|time| time.with_timezone(&Utc))
 }
 
 fn schedule_until(

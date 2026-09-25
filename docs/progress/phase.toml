@@ -61,6 +61,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-25: UCU-04 row 61 is Port. Sequential YAML now selects named date
+overrides by local date and priority, resumes separate list positions and
+in-build ambient state, and persists indices across Continue and SQLite
+restart. Scheduled sequences expand and shuffle in the active list; local
+wait/pad timing and editor validation match the new contract. All 55 focused
+YAML tests, SQLite restart, web schema validation, scoped all-target Clippy
+and native MPEG-TS/HLS smoke pass. Next is row 62 (0036fc5c, Next subtitles).
+UCU-04 window gates, push and exact-SHA CI remain open.
+
 2026-09-25: UCU-04 row 60 is N/A (NuGet-only build override). Upstream adds a
 direct Microsoft.OpenApi package reference without changing the OpenAPI
 registration or endpoints. ErsatzRS has no matching dependency; this row

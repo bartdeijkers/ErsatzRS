@@ -9033,6 +9033,30 @@ OpenAPI endpoint parity. Source and package-graph review pass; progress
 validation records the row. UCU-04 window gates, push and exact-SHA CI
 remain open; continue at row 61 (42937ac3).
 
+2026-09-25: row 61 (42937ac3, PR #2935) is Port. Upstream adds named,
+priority-ordered annual and specific-year date ranges to Sequential YAML,
+switching instruction lists at each boundary with separate in-build ambient
+state and persisted list indices. ErsatzRS selects by local calendar date,
+preserves default-list anchors, restores named-list positions across SQLite
+restart, expands integer-repeat sequences in each list and shuffles only the
+active list. Local `wait_until` and `pad_until` semantics now align with the
+date selector and upstream clock. Both YAML schemas accept `schedules`, and
+the served validator rejects missing required fields. No database migration,
+FFmpeg pipeline, selected-track or admin layout change occurs.
+
+All 55 core YAML tests pass, including annual/wrapping/year-specific ranges,
+priority/ties, invalid dates, ambient state, sequence shuffle, local-clock
+timing and uninterrupted-versus-continued timeline. The migrated SQLite
+restart test persists the first build, reopens the repository and matches the
+continued timeline and surviving rows. The focused web schema validation
+test, core/infra/web all-target Clippy, Clippy allow policy, formatting and
+native smoke pass. Smoke returned MPEG-TS bytes plus HLS variant and first
+segments. Substantive source review checked schedule selection, context
+serialization, sequence expansion/shuffle and the unchanged database write
+path. This row adds no FFmpeg pipeline change, so the window's TSDuck rule is
+unchanged. UCU-04 window gates, push and terminal exact-SHA CI remain open;
+continue at row 62 (0036fc5c). No intermediate push or CI was launched.
+
 """
 
 [[milestone]]

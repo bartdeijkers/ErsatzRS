@@ -61,7 +61,7 @@ impl YamlInstruction {
             YamlInstructionKind::PostRoll
         } else if self.mid_roll.is_some() {
             YamlInstructionKind::MidRoll
-        } else if self.repeat.unwrap_or(false) {
+        } else if self.repeat.is_some_and(super::YamlRepeat::is_control) {
             YamlInstructionKind::Repeat
         } else if self.sequence.is_some() {
             YamlInstructionKind::Sequence
@@ -140,7 +140,16 @@ pub(super) fn dispatch_instruction(
             definition,
             instruction.sequence.as_deref().unwrap_or_default(),
         ),
-        YamlInstructionKind::ShuffleSequence => Ok(()),
+        YamlInstructionKind::ShuffleSequence => {
+            if let Some(key) = instruction
+                .shuffle_sequence
+                .as_deref()
+                .filter(|key| !key.trim().is_empty())
+            {
+                context.pending_shuffles.push(key.to_owned());
+            }
+            Ok(())
+        }
         YamlInstructionKind::SkipItems => {
             handle_skip_items(context, instruction);
             Ok(())

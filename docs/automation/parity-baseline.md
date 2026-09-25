@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `c8bd97664694292f51733238a26c82c1dca59d97` |
-| **Commit subject** | `chore: update openapi to fix build (#2936)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c8bd97664694292f51733238a26c82c1dca59d97 |
+| **Pinned commit** | `42937ac37231c844907638f8401c654b289097a8` |
+| **Commit subject** | `feat: YAML Scheduled Playouts (#2935)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/42937ac37231c844907638f8401c654b289097a8 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

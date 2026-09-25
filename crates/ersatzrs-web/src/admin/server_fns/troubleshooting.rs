@@ -2581,6 +2581,40 @@ playout:
 
     #[cfg(feature = "ssr")]
     #[test]
+    fn sequential_schedule_validation_accepts_date_overrides_and_rejects_missing_fields() {
+        let yaml = r#"
+content:
+  - collection: Cartoons
+    key: cartoons
+    order: shuffle
+playout:
+  - count: "1"
+    content: cartoons
+schedules:
+  - name: Holiday
+    start_date: 12-25
+    end_date: 2026-12-25
+    priority: 10
+    playout:
+      - count: "1"
+        content: cartoons
+"#;
+        let json = sequential_schedule_json_from_yaml(yaml).expect("valid YAML");
+        let messages = validate_sequential_schedule_json(&json, false).expect("validate schema");
+        assert!(messages.is_empty(), "{messages:?}");
+
+        let mut invalid = json;
+        let schedule = invalid["schedules"][0]
+            .as_object_mut()
+            .expect("schedule object");
+        schedule.remove("end_date");
+        let messages =
+            validate_sequential_schedule_json(&invalid, false).expect("validate missing date");
+        assert!(messages.iter().any(|message| message.contains("end_date")));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[test]
     fn sequential_schedule_import_schema_does_not_require_playout() {
         let import_json = sequential_schedule_json_from_yaml(
             r"

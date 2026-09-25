@@ -38,6 +38,20 @@ pub struct YamlPlayoutDefinition {
     pub reset: Vec<YamlInstruction>,
     #[serde(default)]
     pub playout: Vec<YamlInstruction>,
+    #[serde(default)]
+    pub schedules: Vec<YamlPlayoutScheduleItem>,
+}
+
+/// A named date-range override for the default Sequential YAML playout.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct YamlPlayoutScheduleItem {
+    pub name: String,
+    pub start_date: String,
+    pub end_date: String,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default)]
+    pub playout: Vec<YamlInstruction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -214,7 +228,7 @@ pub struct YamlInstruction {
     #[serde(default)]
     pub rewind: Option<String>,
     #[serde(default)]
-    pub repeat: Option<bool>,
+    pub repeat: Option<YamlRepeat>,
     #[serde(default)]
     pub sequence: Option<String>,
     #[serde(default)]
@@ -263,8 +277,30 @@ fn default_mid_roll_expression() -> String {
     "true".to_owned()
 }
 
+/// `repeat` is a Boolean control instruction or a sequence repetition count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum YamlRepeat {
+    Control(bool),
+    Sequence(i32),
+}
+
+impl YamlRepeat {
+    fn is_control(self) -> bool {
+        matches!(self, Self::Control(true))
+    }
+
+    fn sequence_count(self) -> usize {
+        match self {
+            Self::Sequence(count) if count > 0 => usize::try_from(count).unwrap_or(1),
+            _ => 1,
+        }
+    }
+}
+
 mod expressions;
 mod instructions;
+mod schedules;
 mod sequences;
 
 #[cfg(test)]
@@ -275,6 +311,7 @@ pub(super) use expressions::eval_count_expression;
 use instructions::dispatch_instruction;
 #[cfg(test)]
 use instructions::YamlInstructionKind;
+use schedules::select_schedule;
 use sequences::{detect_cycle, flatten_sequences};
 
 #[derive(Debug, Clone, Default)]
@@ -449,29 +486,10 @@ impl YamlPlayoutEngine {
             for instruction in &definition.reset {
                 dispatch_instruction(&mut context, instruction, request.mode, &definition)?;
             }
+            apply_pending_shuffles(&mut context, &mut definition);
         }
 
-        let mut repeat_guard = 0usize;
-        while context.current_time < request.finish {
-            if context.instruction_index >= definition.playout.len() {
-                break;
-            }
-            let before_items = context.added_items.len();
-            let instruction = &definition.playout[context.instruction_index].clone();
-            let changes_index = instruction.repeat.unwrap_or(false);
-
-            dispatch_instruction(&mut context, instruction, request.mode, &definition)?;
-            if !changes_index {
-                context.instruction_index += 1;
-            } else if context.added_items.len() == before_items {
-                repeat_guard += 1;
-                if repeat_guard > definition.playout.len().saturating_add(1) {
-                    return Err(SchedulingError::InvalidYaml(
-                        "YAML repeat loop did not add items".to_owned(),
-                    ));
-                }
-            }
-        }
+        run_playout(&mut context, &mut definition, request.finish, request.mode)?;
 
         let max_time = context
             .added_items
@@ -497,6 +515,100 @@ impl YamlPlayoutEngine {
         result.history_to_remove.sort_unstable();
         result.history_to_remove.dedup();
         Ok(result)
+    }
+}
+
+fn run_playout(
+    context: &mut YamlContext,
+    definition: &mut YamlPlayoutDefinition,
+    finish: DateTime<Utc>,
+    mode: PlayoutBuildMode,
+) -> Result<(), SchedulingError> {
+    let mut repeat_guard = 0usize;
+    while context.current_time < finish {
+        let selected_schedule = select_schedule(&definition.schedules, context.current_time)
+            .map(|schedule| schedule.name.clone());
+        if selected_schedule != context.active_schedule {
+            context.switch_to_schedule(selected_schedule);
+            context.advance_guide_group();
+            repeat_guard = 0;
+        }
+        let instructions = context.current_instructions(definition);
+        if context.instruction_index >= instructions.len() {
+            break;
+        }
+        let before_items = context.added_items.len();
+        let instruction = instructions[context.instruction_index].clone();
+        let changes_index = instruction.repeat.is_some_and(YamlRepeat::is_control);
+
+        dispatch_instruction(context, &instruction, mode, definition)?;
+        apply_pending_shuffles(context, definition);
+        if !changes_index {
+            context.instruction_index += 1;
+        } else if context.added_items.len() == before_items {
+            repeat_guard += 1;
+            if repeat_guard
+                > context
+                    .current_instructions(definition)
+                    .len()
+                    .saturating_add(1)
+            {
+                return Err(SchedulingError::InvalidYaml(
+                    "YAML repeat loop did not add items".to_owned(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply_pending_shuffles(context: &mut YamlContext, definition: &mut YamlPlayoutDefinition) {
+    type SequenceGroup = (Option<String>, Vec<(usize, YamlInstruction)>);
+    for key in std::mem::take(&mut context.pending_shuffles) {
+        let playout = context
+            .active_schedule
+            .as_ref()
+            .and_then(|name| {
+                definition
+                    .schedules
+                    .iter_mut()
+                    .find(|item| item.name == *name)
+            })
+            .map_or(&mut definition.playout, |item| &mut item.playout);
+        let mut groups: Vec<SequenceGroup> = Vec::new();
+        for (index, instruction) in playout.iter().enumerate() {
+            if instruction.sequence_key.as_deref() != Some(key.as_str()) {
+                continue;
+            }
+            if let Some((_, members)) = groups
+                .iter_mut()
+                .find(|(guid, _)| guid == &instruction.sequence_guid)
+            {
+                members.push((index, instruction.clone()));
+            } else {
+                groups.push((
+                    instruction.sequence_guid.clone(),
+                    vec![(index, instruction.clone())],
+                ));
+            }
+        }
+        for (guid, mut members) in groups {
+            let Some(first) = playout.iter().position(|item| {
+                item.sequence_guid == guid && item.sequence_key.as_deref() == Some(key.as_str())
+            }) else {
+                continue;
+            };
+            let last_original_index = members.last().map_or(first, |(index, _)| *index);
+            shuffle_with_seed(
+                &mut members,
+                super::next_playout_seed().cast_unsigned().into(),
+            );
+            if members.len() > 1 && members[0].0 == last_original_index {
+                members.rotate_left(1);
+            }
+            let finish = first.saturating_add(members.len()).min(playout.len());
+            playout.splice(first..finish, members.into_iter().map(|(_, item)| item));
+        }
     }
 }
 
@@ -536,6 +648,18 @@ struct SerializedYamlContext {
     pre_roll_sequence: Option<String>,
     #[serde(
         default,
+        alias = "ActiveSchedule",
+        skip_serializing_if = "Option::is_none"
+    )]
+    active_schedule: Option<String>,
+    #[serde(
+        default,
+        alias = "ScheduleIndices",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    schedule_indices: BTreeMap<String, usize>,
+    #[serde(
+        default,
         alias = "cooldown",
         skip_serializing_if = "super::SchedulingSmartShuffleState::is_empty"
     )]
@@ -548,6 +672,8 @@ struct YamlContext {
     reference_data: SchedulingReferenceData,
     current_time: DateTime<Utc>,
     instruction_index: usize,
+    active_schedule: Option<String>,
+    list_states: BTreeMap<String, YamlListState>,
     visited_instructions: BTreeSet<usize>,
     guide_group: i32,
     guide_group_locked: bool,
@@ -557,6 +683,7 @@ struct YamlContext {
     post_roll_sequence: Option<String>,
     mid_roll_sequence: Option<(String, String)>,
     filler_stack: Vec<FillerKind>,
+    pending_shuffles: Vec<String>,
     added_items: Vec<ersatzrs_domain::PlayoutItem>,
     added_history: Vec<ersatzrs_domain::PlayoutHistory>,
     gaps: Vec<ersatzrs_domain::PlayoutGap>,
@@ -564,6 +691,33 @@ struct YamlContext {
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
     content_sources: BTreeMap<String, ResolvedYamlContent>,
     smart_shuffle_state: super::SchedulingSmartShuffleState,
+}
+
+#[derive(Debug, Clone)]
+struct YamlListState {
+    instruction_index: usize,
+    visited_instructions: BTreeSet<usize>,
+    watermark_ids: BTreeSet<EntityId>,
+    graphics_elements: BTreeMap<EntityId, Option<String>>,
+    pre_roll_sequence: Option<String>,
+    post_roll_sequence: Option<String>,
+    mid_roll_sequence: Option<(String, String)>,
+    filler_stack: Vec<FillerKind>,
+}
+
+impl YamlListState {
+    fn at_index(instruction_index: usize) -> Self {
+        Self {
+            instruction_index,
+            visited_instructions: BTreeSet::new(),
+            watermark_ids: BTreeSet::new(),
+            graphics_elements: BTreeMap::new(),
+            pre_roll_sequence: None,
+            post_roll_sequence: None,
+            mid_roll_sequence: None,
+            filler_stack: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -585,6 +739,8 @@ impl YamlContext {
             reference_data,
             current_time,
             instruction_index: 0,
+            active_schedule: None,
+            list_states: BTreeMap::new(),
             visited_instructions: BTreeSet::new(),
             guide_group: 1,
             guide_group_locked: false,
@@ -594,6 +750,7 @@ impl YamlContext {
             post_roll_sequence: None,
             mid_roll_sequence: None,
             filler_stack: Vec::new(),
+            pending_shuffles: Vec::new(),
             added_items: Vec::new(),
             added_history: Vec::new(),
             gaps: Vec::new(),
@@ -605,12 +762,25 @@ impl YamlContext {
     }
 
     fn serialize(&self) -> Result<String, SchedulingError> {
+        let mut schedule_indices = self
+            .list_states
+            .iter()
+            .map(|(name, state)| (name.clone(), state.instruction_index))
+            .collect::<BTreeMap<_, _>>();
+        if self.active_schedule.is_some() || !schedule_indices.is_empty() {
+            schedule_indices.insert(
+                self.active_schedule.clone().unwrap_or_default(),
+                self.instruction_index,
+            );
+        }
         let state = SerializedYamlContext {
             instruction_index: self.instruction_index,
             guide_group: self.guide_group,
             guide_group_locked: self.guide_group_locked,
             watermark_ids: self.watermark_ids.iter().copied().collect(),
             pre_roll_sequence: self.pre_roll_sequence.clone(),
+            active_schedule: self.active_schedule.clone(),
+            schedule_indices,
             smart_shuffle: self.smart_shuffle_state.clone(),
         };
         serde_json::to_string(&state)
@@ -628,10 +798,63 @@ impl YamlContext {
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();
                 self.pre_roll_sequence = state.pre_roll_sequence;
+                self.active_schedule = state.active_schedule;
+                self.list_states = state
+                    .schedule_indices
+                    .into_iter()
+                    .map(|(name, index)| (name, YamlListState::at_index(index)))
+                    .collect();
                 self.smart_shuffle_state = state.smart_shuffle;
             }
         }
         Ok(())
+    }
+
+    fn current_instructions<'a>(
+        &self,
+        definition: &'a YamlPlayoutDefinition,
+    ) -> &'a [YamlInstruction] {
+        self.active_schedule
+            .as_ref()
+            .and_then(|name| definition.schedules.iter().find(|item| item.name == *name))
+            .map_or(&definition.playout, |item| item.playout.as_slice())
+    }
+
+    fn switch_to_schedule(&mut self, schedule_name: Option<String>) {
+        let current_key = self.active_schedule.clone().unwrap_or_default();
+        self.list_states
+            .insert(current_key, self.capture_list_state());
+        let target_key = schedule_name.clone().unwrap_or_default();
+        self.active_schedule = schedule_name;
+        if let Some(state) = self.list_states.get(&target_key).cloned() {
+            self.restore_list_state(state);
+        } else {
+            self.restore_list_state(YamlListState::at_index(0));
+        }
+    }
+
+    fn capture_list_state(&self) -> YamlListState {
+        YamlListState {
+            instruction_index: self.instruction_index,
+            visited_instructions: self.visited_instructions.clone(),
+            watermark_ids: self.watermark_ids.clone(),
+            graphics_elements: self.graphics_elements.clone(),
+            pre_roll_sequence: self.pre_roll_sequence.clone(),
+            post_roll_sequence: self.post_roll_sequence.clone(),
+            mid_roll_sequence: self.mid_roll_sequence.clone(),
+            filler_stack: self.filler_stack.clone(),
+        }
+    }
+
+    fn restore_list_state(&mut self, state: YamlListState) {
+        self.instruction_index = state.instruction_index;
+        self.visited_instructions = state.visited_instructions;
+        self.watermark_ids = state.watermark_ids;
+        self.graphics_elements = state.graphics_elements;
+        self.pre_roll_sequence = state.pre_roll_sequence;
+        self.post_roll_sequence = state.post_roll_sequence;
+        self.mid_roll_sequence = state.mid_roll_sequence;
+        self.filler_stack = state.filler_stack;
     }
 
     fn enumerator(&mut self, content: &str) -> &mut MediaEnumerator {

@@ -1,4 +1,7 @@
-use super::{BTreeMap, BTreeSet, SchedulingError, YamlInstruction, YamlPlayoutDefinition};
+use super::{
+    BTreeMap, BTreeSet, SchedulingError, YamlInstruction, YamlPlayoutDefinition,
+    YamlPlayoutSequenceItem,
+};
 
 pub(super) fn detect_cycle(definition: &YamlPlayoutDefinition) -> Result<(), SchedulingError> {
     fn visit<'a>(
@@ -44,32 +47,54 @@ pub(super) fn detect_cycle(definition: &YamlPlayoutDefinition) -> Result<(), Sch
 pub(super) fn flatten_sequences(
     definition: &mut YamlPlayoutDefinition,
 ) -> Result<(), SchedulingError> {
+    flatten_list(&mut definition.playout, &definition.sequence)?;
+    for schedule in &mut definition.schedules {
+        flatten_list(&mut schedule.playout, &definition.sequence)?;
+    }
+    Ok(())
+}
+
+fn flatten_list(
+    playout: &mut Vec<YamlInstruction>,
+    sequences: &[YamlPlayoutSequenceItem],
+) -> Result<(), SchedulingError> {
     let mut depth = 0;
-    while definition.playout.iter().any(is_sequence_instruction) {
+    let mut sequence_id = 0_u64;
+    while playout.iter().any(is_sequence_instruction) {
         if depth > 100 {
             return Err(SchedulingError::SequenceNestingTooDeep);
         }
-        let original = definition.playout.clone();
-        definition.playout.clear();
+        let original = std::mem::take(playout);
         for instruction in original {
             if is_sequence_instruction(&instruction) {
                 let sequence_key = instruction.sequence.as_ref().expect("sequence exists");
                 let repeat = instruction
-                    .count
-                    .as_deref()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(1);
-                if let Some(sequence) = definition
-                    .sequence
+                    .repeat
+                    .map_or(1, super::YamlRepeat::sequence_count);
+                if let Some(sequence) = sequences
                     .iter()
                     .find(|sequence| &sequence.key == sequence_key)
                 {
+                    sequence_id += 1;
+                    let sequence_guid = format!("{sequence_key}:{sequence_id}");
                     for _ in 0..repeat {
-                        definition.playout.extend(sequence.items.clone());
+                        for item in &sequence.items {
+                            let mut item = item.clone();
+                            item.sequence_key = Some(sequence_key.clone());
+                            item.sequence_guid = Some(sequence_guid.clone());
+                            if instruction
+                                .custom_title
+                                .as_ref()
+                                .is_some_and(|title| !title.trim().is_empty())
+                            {
+                                item.custom_title.clone_from(&instruction.custom_title);
+                            }
+                            playout.push(item);
+                        }
                     }
                 }
             } else {
-                definition.playout.push(instruction);
+                playout.push(instruction);
             }
         }
         depth += 1;

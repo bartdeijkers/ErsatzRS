@@ -41,6 +41,12 @@ release section when tagging a release.
 
 ### Added
 
+- Support named, priority-ordered date ranges in Sequential YAML playouts. Each
+  schedule resumes its own instruction position and in-build graphics, watermark,
+  filler and roll state; continuation survives a database restart. Scheduled
+  sequences expand and shuffle within their active list, and the YAML editor
+  validates the new `schedules` structure. YAML `wait_until` and `pad_until`
+  now use the server's local clock, matching the date selector (upstream PR #2935).
 - Support `epg_entries` in imported image graphics definitions so image paths
   can use programme guide template variables (upstream PR #2923).
 - Supply stored video, alternate-audio and embedded-subtitle probe hints to

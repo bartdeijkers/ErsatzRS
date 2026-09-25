@@ -39,7 +39,8 @@ pub use smart_shuffle::{
     SchedulingSmartShuffleUnit,
 };
 pub use yaml::{
-    YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
+    YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutScheduleItem,
+    YamlPlayoutSequenceItem, YamlRepeat,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

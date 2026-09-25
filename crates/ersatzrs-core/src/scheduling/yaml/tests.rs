@@ -117,7 +117,7 @@ pad_until: "11:00"
     assert_eq!(instruction.kind(), YamlInstructionKind::MidRoll);
     instruction.mid_roll = None;
     assert_eq!(instruction.kind(), YamlInstructionKind::Repeat);
-    instruction.repeat = Some(false);
+    instruction.repeat = Some(YamlRepeat::Control(false));
     assert_eq!(instruction.kind(), YamlInstructionKind::Sequence);
     instruction.sequence = None;
     assert_eq!(instruction.kind(), YamlInstructionKind::ShuffleSequence);
@@ -254,6 +254,222 @@ fn schedule_yaml(yaml: &str) -> SchedulingResult {
     YamlPlayoutEngine
         .schedule_definition(definition, request)
         .expect("schedule builds")
+}
+
+#[test]
+fn yaml_schedule_switch_restores_each_lists_ambient_state() {
+    let mut context = YamlContext::new(
+        Playout::default(),
+        SchedulingReferenceData::default(),
+        Utc::now(),
+        BTreeMap::new(),
+    );
+    context.instruction_index = 2;
+    context
+        .graphics_elements
+        .insert(77, Some("default".to_owned()));
+    context.watermark_ids.insert(42);
+    context.pre_roll_sequence = Some("default-roll".to_owned());
+
+    context.switch_to_schedule(Some("Christmas".to_owned()));
+    assert_eq!(context.instruction_index, 0);
+    assert!(context.graphics_elements.is_empty());
+    assert!(context.watermark_ids.is_empty());
+    assert!(context.pre_roll_sequence.is_none());
+    context.instruction_index = 1;
+    context
+        .graphics_elements
+        .insert(77, Some("holiday".to_owned()));
+
+    context.switch_to_schedule(None);
+    assert_eq!(context.instruction_index, 2);
+    assert_eq!(
+        context.graphics_elements.get(&77),
+        Some(&Some("default".to_owned()))
+    );
+    assert_eq!(context.watermark_ids, BTreeSet::from([42]));
+    assert_eq!(context.pre_roll_sequence.as_deref(), Some("default-roll"));
+
+    context.switch_to_schedule(Some("Christmas".to_owned()));
+    assert_eq!(context.instruction_index, 1);
+    assert_eq!(
+        context.graphics_elements.get(&77),
+        Some(&Some("holiday".to_owned()))
+    );
+}
+
+#[test]
+fn yaml_schedule_shuffle_targets_active_list_and_preserves_default() {
+    let make_instruction = |content: &str| YamlInstruction {
+        content: Some(content.to_owned()),
+        sequence_key: Some("bundle".to_owned()),
+        sequence_guid: Some("group-1".to_owned()),
+        ..YamlInstruction::default()
+    };
+    let mut definition = YamlPlayoutDefinition {
+        playout: vec![make_instruction("default-a"), make_instruction("default-b")],
+        schedules: vec![YamlPlayoutScheduleItem {
+            name: "Holiday".to_owned(),
+            playout: vec![
+                make_instruction("holiday-a"),
+                make_instruction("holiday-b"),
+                make_instruction("holiday-c"),
+            ],
+            ..YamlPlayoutScheduleItem::default()
+        }],
+        ..YamlPlayoutDefinition::default()
+    };
+    let original_default = definition.playout.clone();
+    let mut context = YamlContext::new(
+        Playout::default(),
+        SchedulingReferenceData::default(),
+        Utc::now(),
+        BTreeMap::new(),
+    );
+    context.switch_to_schedule(Some("Holiday".to_owned()));
+    context.pending_shuffles.push("bundle".to_owned());
+    apply_pending_shuffles(&mut context, &mut definition);
+
+    assert_eq!(definition.playout, original_default);
+    let holiday = &definition.schedules[0].playout;
+    let mut actual = holiday
+        .iter()
+        .map(|item| item.content.as_deref().expect("content"))
+        .collect::<Vec<_>>();
+    actual.sort_unstable();
+    assert_eq!(actual, ["holiday-a", "holiday-b", "holiday-c"]);
+    assert_ne!(holiday[0].content.as_deref(), Some("holiday-c"));
+}
+
+#[test]
+fn yaml_schedule_sequences_expand_inside_override() {
+    let definition = YamlPlayoutEngine::definition_from_str(
+        r#"
+sequence:
+  - key: bumpers
+    items:
+      - content: a
+        count: "1"
+      - content: b
+        count: "1"
+playout:
+  - content: default
+    count: "1"
+schedules:
+  - name: Holiday
+    start_date: 12-25
+    end_date: 12-25
+    playout:
+      - sequence: bumpers
+        custom_title: Holiday title
+"#,
+    )
+    .expect("definition");
+    let mut flattened = definition;
+    flatten_sequences(&mut flattened).expect("flatten schedule");
+    assert_eq!(flattened.playout.len(), 1);
+    let scheduled = &flattened.schedules[0].playout;
+    assert_eq!(scheduled.len(), 2);
+    assert!(scheduled
+        .iter()
+        .all(|item| item.sequence_key.as_deref() == Some("bumpers")));
+    assert_eq!(scheduled[0].sequence_guid, scheduled[1].sequence_guid);
+    assert!(scheduled
+        .iter()
+        .all(|item| item.custom_title.as_deref() == Some("Holiday title")));
+}
+
+#[test]
+fn yaml_schedule_sequence_repeat_uses_integer_repeat() {
+    let mut definition = YamlPlayoutEngine::definition_from_str(
+        "sequence:\n  - key: bumpers\n    items:\n      - content: a\nplayout: []\nschedules:\n  - name: Holiday\n    start_date: 12-25\n    end_date: 12-25\n    playout:\n      - sequence: bumpers\n        repeat: 3\n",
+    )
+    .expect("integer sequence repeat parses");
+    flatten_sequences(&mut definition).expect("flatten repeated scheduled sequence");
+    assert_eq!(definition.schedules[0].playout.len(), 3);
+
+    let mut negative = YamlPlayoutEngine::definition_from_str(
+        "sequence:\n  - key: bumpers\n    items:\n      - content: a\nplayout:\n  - sequence: bumpers\n    repeat: -1\n",
+    )
+    .expect("signed sequence repeat parses");
+    flatten_sequences(&mut negative).expect("nonpositive repeat falls back to one");
+    assert_eq!(negative.playout.len(), 1);
+}
+
+#[test]
+fn yaml_scheduled_playout_continue_matches_uninterrupted_future() {
+    use chrono::{Local, TimeZone};
+
+    let local_time = |day, hour, minute| {
+        Local
+            .with_ymd_and_hms(2026, 12, day, hour, minute, 0)
+            .single()
+            .expect("unambiguous local date")
+            .with_timezone(&Utc)
+    };
+    let yaml = r#"
+content:
+  - key: main
+  - key: bumpers
+playout:
+  - count: "1"
+    content: main
+  - repeat: true
+schedules:
+  - name: Christmas
+    start_date: 12-25
+    end_date: 12-25
+    priority: 10
+    playout:
+      - count: "1"
+        content: bumpers
+      - wait_until: "00:00"
+        tomorrow: "true"
+"#;
+    let (definition, mut request) = request(yaml);
+    request.start = local_time(24, 23, 50);
+    request.finish = local_time(26, 0, 16);
+    let full = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), request.clone())
+        .expect("uninterrupted build");
+
+    let mut first_request = request.clone();
+    first_request.finish = local_time(25, 0, 1);
+    let first = YamlPlayoutEngine
+        .schedule_definition(definition.clone(), first_request)
+        .expect("first build");
+    let first_anchor = first.anchor.clone().expect("first anchor");
+    let state: SerializedYamlContext =
+        serde_json::from_str(first_anchor.context.as_deref().expect("context"))
+            .expect("saved schedule state");
+    assert_eq!(state.active_schedule.as_deref(), Some("Christmas"));
+    assert_eq!(state.schedule_indices.get(""), Some(&1));
+    assert_eq!(state.schedule_indices.get("Christmas"), Some(&1));
+
+    request.playout.anchor = Some(first_anchor);
+    request.mode = PlayoutBuildMode::Continue;
+    request.start = first.added_items.last().expect("first item").finish;
+    request.reference_data.existing_history = first.added_history.clone();
+    let continued = YamlPlayoutEngine
+        .schedule_definition(definition, request)
+        .expect("continued build");
+
+    let combined = first
+        .added_items
+        .iter()
+        .chain(&continued.added_items)
+        .map(|item| (item.media_item_id, item.start, item.guide_group))
+        .collect::<Vec<_>>();
+    let uninterrupted = full
+        .added_items
+        .iter()
+        .map(|item| (item.media_item_id, item.start, item.guide_group))
+        .collect::<Vec<_>>();
+    assert_eq!(combined, uninterrupted);
+    assert_eq!(
+        combined.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+        vec![1, 9, 2, 1]
+    );
 }
 
 fn episode_item(
@@ -473,27 +689,64 @@ playout:
 }
 
 #[test]
-fn yaml_pad_until_instruction_snapshot() {
-    assert_yaml_json_snapshot!(snapshot(
-        r#"
+fn yaml_pad_until_uses_local_clock() {
+    use chrono::{Local, TimeZone};
+    let yaml = r#"
 playout:
   - pad_until: "10:10"
     content: bumpers
     trim: true
-"#
-    ));
+"#;
+    let (definition, mut request) = request(yaml);
+    request.start = Local
+        .with_ymd_and_hms(2026, 4, 15, 10, 7, 0)
+        .single()
+        .expect("local start")
+        .with_timezone(&Utc);
+    request.finish = request.start + Duration::hours(2);
+    let result = YamlPlayoutEngine
+        .schedule_definition(definition, request.clone())
+        .expect("build to local clock time");
+    assert_eq!(result.added_items.len(), 3);
+    assert_eq!(result.added_items[0].start, request.start);
+    assert_eq!(
+        result.added_items[2].finish,
+        request.start + Duration::minutes(3)
+    );
+    assert_eq!(
+        result.anchor.expect("anchor").next_start,
+        request.start + Duration::minutes(3)
+    );
 }
 
 #[test]
-fn yaml_wait_until_instruction_snapshot() {
-    assert_yaml_json_snapshot!(snapshot(
-        r#"
+fn yaml_wait_until_uses_local_clock() {
+    use chrono::{Local, TimeZone};
+    let yaml = r#"
 playout:
   - wait_until: "10:30"
   - count: "1"
     content: main
-"#
-    ));
+"#;
+    let (definition, mut request) = request(yaml);
+    request.start = Local
+        .with_ymd_and_hms(2026, 4, 15, 10, 7, 0)
+        .single()
+        .expect("local start")
+        .with_timezone(&Utc);
+    request.finish = request.start + Duration::hours(2);
+    let result = YamlPlayoutEngine
+        .schedule_definition(definition, request.clone())
+        .expect("build to local clock time");
+    assert_eq!(result.added_items.len(), 1);
+    assert_eq!(
+        result.added_items[0].start,
+        request.start + Duration::minutes(23)
+    );
+    assert_eq!(
+        result.added_items[0].finish,
+        request.start + Duration::minutes(33)
+    );
 }
 
 #[test]
