@@ -22,6 +22,8 @@
 
 use ersatzrs_domain::HardwareAccelerationKind;
 
+use crate::{tonemap_cuda_filter, PixelFormat, TonemapAlgorithm};
+
 /// A hardware graph whose viability must be proven functionally, not inferred
 /// from an advertised capability.
 ///
@@ -37,7 +39,7 @@ pub enum HardwareGraphOperation {
     /// HDR10, RGBA64 readback, software ten-bit YUV conversion, and HEVC
     /// Main10 NVENC.
     NvencDolbyVisionProfile5Hdr10,
-    /// Vulkan decode/upload, libplacebo tone-mapping, `hwmap` into CUDA, a CUDA
+    /// Vulkan decode/upload, libplacebo tone-mapping, transfer into CUDA, a CUDA
     /// scale, and an NVENC encode — the HDR path ErsatzRS prefers on NVIDIA.
     NvencHdrVulkanLibplacebo,
     /// CUDA upload, CUDA scale, and an NVENC encode. The fallback the primary
@@ -151,19 +153,21 @@ impl HardwareGraphOperation {
             }
             Self::NvencHdrVulkanLibplacebo => {
                 args.extend(NVENC_HDR_DEVICE_PREFIX.iter().map(|v| (*v).to_owned()));
+                // Match playback and ErsatzTV's TonemapCudaFilter: FFmpeg 9
+                // transfers Vulkan frames to CUDA; direct hwmap is unsupported.
+                let tonemap = tonemap_cuda_filter(PixelFormat::Nv12, TonemapAlgorithm::Hable);
                 args.extend(
-                    [
-                        "-f",
-                        "lavfi",
-                        "-i",
-                        PROBE_SOURCE,
-                        "-vf",
-                        "format=yuv420p10le,hwupload,libplacebo=format=nv12:colorspace=bt709:color_primaries=bt709:color_trc=bt709,hwmap=derive_device=cuda,scale_cuda=256:144",
-                        "-c:v",
-                        "h264_nvenc",
-                    ]
-                    .iter()
-                    .map(|value| (*value).to_owned()),
+                    ["-f", "lavfi", "-i", PROBE_SOURCE, "-vf"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
+                );
+                args.push(format!(
+                    "format=yuv420p10le,hwupload,{tonemap},scale_cuda=256:144"
+                ));
+                args.extend(
+                    ["-c:v", "h264_nvenc"]
+                        .iter()
+                        .map(|value| (*value).to_owned()),
                 );
             }
             Self::NvencCudaScale => {
@@ -600,9 +604,16 @@ mod tests {
         assert!(joined.contains("-init_hw_device vulkan=vk@nv"), "{joined}");
         assert!(joined.contains("-filter_hw_device vk"), "{joined}");
         assert!(joined.contains("libplacebo"), "{joined}");
-        assert!(joined.contains("hwmap=derive_device=cuda"), "{joined}");
+        assert!(joined.contains("hwupload_cuda"), "{joined}");
+        assert!(!joined.contains("hwmap"), "{joined}");
         assert!(joined.contains("scale_cuda"), "{joined}");
         assert!(joined.contains("h264_nvenc"), "{joined}");
+        insta::assert_snapshot!(
+            "nvenc_hdr_probe_arguments",
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo
+                .probe_arguments()
+                .join("\n")
+        );
     }
 
     #[test]

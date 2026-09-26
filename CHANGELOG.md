@@ -21,6 +21,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,
+  avoiding false capability failures from an unsupported direct mapping.
+  Recheck cached results from the old probe when the server starts.
 - Preserve optional Next subtitle style overrides in the channel-config model,
   including empty values, without changing the default subtitle appearance.
 - Keep custom stream selectors available for Next playback troubleshooting and

@@ -1,0 +1,27 @@
+---
+source: crates/ersatzrs-ffmpeg/src/graph_probe.rs
+expression: "HardwareGraphOperation::NvencHdrVulkanLibplacebo.probe_arguments().join(\"\\n\")"
+---
+-hide_banner
+-nostdin
+-loglevel
+error
+-init_hw_device
+cuda=nv:0
+-init_hw_device
+vulkan=vk@nv
+-filter_hw_device
+vk
+-f
+lavfi
+-i
+testsrc2=size=320x240:duration=0.2:rate=5
+-vf
+format=yuv420p10le,hwupload,libplacebo=tonemapping=hable:colorspace=bt709:color_primaries=bt709:color_trc=bt709:format=nv12,sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA,hwupload_cuda,scale_cuda=256:144
+-c:v
+h264_nvenc
+-frames:v
+1
+-f
+null
+-

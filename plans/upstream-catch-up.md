@@ -41,6 +41,32 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 99 source map: Windows Vulkan/CUDA export
+
+- Upstream `9f83c8d2` changes the Windows FFmpeg archive and changelog only.
+  The corresponding ErsatzTV-ffmpeg patch is
+  `patches/0002-vulkan-cuda-export-fix.patch`: query the actual image creation
+  flags and every backing image format before enabling external-memory export.
+- ErsatzRS uses first-party FFmpeg 9 (`runtime.rs`, ADRs 0008/0063).
+  Its v2.0.0 Windows archive and pinned BtbN build do not contain this fix;
+  FFmpeg n9.0 still queries only format zero with substituted alias flags.
+- Target: adapt the upstream patch to the first-party Windows package build,
+  preserving FFmpeg 9's DRM modifier diagnostics and dedicated-memory handling.
+  Native validation also exposed a separate Rust capability-probe defect:
+  `hwmap` is unsupported for Vulkan-to-CUDA in FFmpeg 9. Playback already uses
+  `hwupload_cuda`, matching upstream `Filter/Cuda/TonemapCudaFilter.cs`.
+  Reuse playback's filter in the probe, with a final-argv snapshot. Version the
+  persisted probe cache so an old false denial cannot survive this correction.
+  No UI, media-library, subtitle or alternate-audio changes are required.
+- Acceptance: patched package identity, native Windows CUDA control and the
+  existing `graph_probe.rs` Vulkan/libplacebo/CUDA/NVENC graph, plus decoded
+  output evidence. Both old and patched packages fail the old `hwmap` probe
+  and pass the upstream CUDA-upload path on the tested Windows GPU. Thus the
+  -40 failure proves probe drift, not the runtime patch's effect. The patched
+  candidate also passes a 25-frame BT.709 encode/decode check with the corrected
+  graph. UCU-06 owns detailed evidence. Row 99 remains
+  pending; the accepted pin stays at row 98 until the replacement is verified.
+
 ## Row 98 source map: live sources and Dolby Vision probe hints
 
 - Upstream `7c96203b` changes only `ErsatzTV.Core/Next/Playout.cs`: it moves

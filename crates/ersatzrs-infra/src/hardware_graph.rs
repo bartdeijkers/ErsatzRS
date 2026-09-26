@@ -22,6 +22,10 @@ use crate::runtime_identity::PersistedRuntimeIdentity;
 
 pub const CONFIG_KEY_HARDWARE_GRAPH_DENIALS: &str = "ffmpeg.hardware.graph_denials";
 
+// Increment when probe semantics change, even if the FFmpeg binary is unchanged.
+// Revision 1 replaces the unsupported Vulkan-to-CUDA hwmap with playback's upload.
+const GRAPH_PROBE_REVISION: u32 = 1;
+
 /// Upper bound for one functional probe.
 ///
 /// The probe encodes a single 256x144 frame from `lavfi`, so a healthy run is
@@ -79,6 +83,9 @@ impl PersistedHardwareGraphDenial {
 /// (proven or denied) before the record counts as complete.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 struct PersistedHardwareGraphState {
+    /// Legacy results used a different probe and must be measured again.
+    #[serde(default)]
+    probe_revision: u32,
     /// Complete runtime identity. Legacy path/device-only records never match.
     #[serde(default)]
     runtime_identity: Option<PersistedRuntimeIdentity>,
@@ -112,6 +119,9 @@ impl PersistedHardwareGraphState {
         device: &str,
         applicable: &[HardwareGraphOperation],
     ) -> bool {
+        if self.probe_revision != GRAPH_PROBE_REVISION {
+            return false;
+        }
         if !self
             .runtime_identity
             .as_ref()
@@ -460,6 +470,7 @@ pub fn encode_hardware_graph_state(
     report: &FfmpegCapabilityReport,
 ) -> Result<String, HardwareGraphDenialError> {
     let state = PersistedHardwareGraphState {
+        probe_revision: GRAPH_PROBE_REVISION,
         runtime_identity: PersistedRuntimeIdentity::from_capabilities(report),
         ffmpeg_path: Some(ffmpeg_path.to_owned()),
         device: Some(report.hardware_graph_device()),
@@ -540,6 +551,7 @@ mod tests {
             GraphFailureKind::CudaInterop,
         );
         let state = PersistedHardwareGraphState {
+            probe_revision: GRAPH_PROBE_REVISION,
             runtime_identity: None,
             ffmpeg_path: Some("/opt/ffmpeg/bin/ffmpeg".to_owned()),
             device: Some("NVIDIA GeForce RTX 3080 Ti".to_owned()),
@@ -1169,6 +1181,43 @@ mod tests {
                 .expect("apply"),
             "a different ffmpeg must re-probe"
         );
+    }
+
+    #[tokio::test]
+    async fn a_different_probe_revision_discards_old_denials() {
+        let pool = test_pool().await;
+        let mut previous = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = previous.hardware_graph_device();
+        previous.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
+        previous.deny_hardware_graph(HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            &device,
+            GraphFailureKind::HardwareMap,
+        ));
+        let encoded = encode_hardware_graph_state("/opt/ffmpeg", &previous).expect("encode");
+        for revision in [None, Some(0), Some(GRAPH_PROBE_REVISION + 1)] {
+            let mut value: serde_json::Value = serde_json::from_str(&encoded).expect("state");
+            let object = value.as_object_mut().expect("object");
+            match revision {
+                Some(revision) => {
+                    object.insert("probe_revision".to_owned(), revision.into());
+                }
+                None => {
+                    object.remove("probe_revision");
+                }
+            }
+            upsert_config(&pool, &value.to_string())
+                .await
+                .expect("seed");
+            let mut current = probed_report("NVIDIA GeForce RTX 3080 Ti");
+            assert!(
+                !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut current)
+                    .await
+                    .expect("apply")
+            );
+            assert!(current.hardware_graph_denials.is_empty());
+            assert!(load_config(&pool).await.expect("load").is_none());
+        }
     }
 
     /// A row written before completion tracking existed cannot be attributed.

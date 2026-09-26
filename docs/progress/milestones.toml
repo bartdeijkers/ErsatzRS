@@ -9999,6 +9999,60 @@ pipeline, UI or schema change in this upstream row. This is model/metadata
 coverage, not new Dolby Vision rendering or GPU acceptance. Pin, ledger and
 upstream checkout advance together to 7c96203b; continue row 99. UCU-06 window
 gates/push/CI remain open.
+
+Row 99 (9f83c8d2) audit identifies a missing first-party runtime patch.
+Upstream updates its Windows FFmpeg archive for Vulkan/CUDA external-memory
+export. First-party v2.0.0 uses unpatched FFmpeg n9.0; the higher major version
+does not cover the correction. The verified Windows archive has SHA-256
+176c11d8aceb20eb05025609d91335e7b8d23861567b1099337d0579c19f479a.
+On native Windows with an NVIDIA RTX 3080 Ti, the synthetic CUDA/NVENC control
+exits zero; the existing graph_probe.rs Vulkan/libplacebo/CUDA/NVENC graph
+fails with hwmap error -40 (Function not implemented) and writes no packets.
+An isolated first-party runtime checkout now contains an n9.0 adaptation of
+ErsatzTV-ffmpeg's 0002-vulkan-cuda-export-fix.patch and Windows build wiring.
+Patch application and build-script syntax checks pass. Patched binary and
+decoded output verification remain outstanding. Row 99 stays pending and the
+pin/ledger/upstream checkout remain at row 98; no window acceptance claimed.
+The generic BtbN-image probe build was stopped after maintainer correction;
+its different dependencies cannot verify the ErsatzRS-ffmpeg package recipe.
+The exact first-party recipe is prepared, but Docker Desktop rejects WSL and
+Windows-temp file mounts. WSL integration is requested before continuing.
+An isolated execution of the generated build script verifies that the patch
+loop variable survives heredoc expansion, check/apply precede configure, and
+unknown framework structure fails before mutation. Both checks pass; these
+validate build wiring only and do not replace native runtime acceptance.
+The maintainer enabled WSL integration; Docker 29.8.0 now responds through
+the WSL socket. The ErsatzRS-ffmpeg Windows build has started using its pinned
+BtbN revision d04d5526, Cairo/Pixman overrides and the prepared export patch.
+The first-party checkout now includes a bounded native Windows acceptance
+script covering the CUDA control, the existing capability graph and a
+25-frame H.264 BT.709 encode/decode check. Against the unchanged v2.0.0
+package, it passes the CUDA control and correctly fails the Vulkan/CUDA
+graph with hwmap -40. Patched-package execution remains pending at this point.
+Subsequent native comparison corrects the initial causal interpretation:
+both old and patched packages fail hwmap, which FFmpeg n9.0 does not implement
+for Vulkan-to-CUDA. Both pass hwupload_cuda, already used by ErsatzRS playback
+and upstream TonemapCudaFilter. The error demonstrates probe drift; it does
+not demonstrate this export patch's effect on the tested GPU.
+The first-party Windows recipe completed successfully at pinned BtbN d04d5526
+with the export patch and Cairo/Pixman overrides. Local candidate archive
+SHA-256: e11908ff91a3fadb1c8bea18c1de3ac1561c6c532ed8227bfb2ad6a1771000c9;
+ffmpeg.exe: ae2d9010789a61a1c91cdd4c77ca1c09a436f2d1b57c9e2b4329167de0e73787.
+The bounded native gate passes on the RTX 3080 Ti: CUDA control, corrected
+Vulkan/libplacebo/CUDA/NVENC transfer, 25 H.264 frames at 256x144 with BT.709
+color metadata, and error-free decode. The unchanged v2.0.0 also passes this
+corrected gate. The Windows graphics package contract passes with PowerShell 7
+after consuming complete version output before selecting its first line;
+direct Select-Object pipelining prematurely closed the native output pipe.
+Rust now reuses playback's tonemap filter in the capability probe. Its final
+argv snapshot and all 14 graph_probe tests pass (136f8799); strict FFmpeg
+Clippy passes. A probe revision invalidates cached results from the old graph,
+including otherwise identity-matching false denials. All 18 hardware_graph
+tests pass (3255b22b), including absent/old/future revision rejection.
+Strict infrastructure all-target Clippy and workspace formatting pass.
+The companion Linux candidate is building from the unchanged first-party
+recipe. Runtime delivery/default pin and row acceptance remain pending;
+processed pin, ledger and upstream checkout remain at row 98.
 """
 
 [[milestone]]
