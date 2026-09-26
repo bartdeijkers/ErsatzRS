@@ -32,8 +32,9 @@ release section when tagging a release.
   valid NVENC frame dimensions, and download Vulkan frames in their actual
   pixel format before conversion.
   Remove the obsolete MySQL feature from the alternate Docker build command.
-- Use ErsatzRS-ffmpeg v2.0.1 for fresh managed runtime installs, including the
-  Windows Vulkan/CUDA external-memory export correction.
+- Use ErsatzRS-ffmpeg v2.0.2 for fresh managed runtime installs, including the
+  Windows Vulkan/CUDA external-memory export correction and smooth audio/video
+  pacing across sparse subtitle gaps.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,
   avoiding false capability failures from an unsupported direct mapping.
   Recheck cached results from the old probe when the server starts.

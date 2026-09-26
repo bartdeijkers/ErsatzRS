@@ -10298,6 +10298,100 @@ Review covers startup ordering, shared lock ownership, periodic cancellation,
 monotonic atomic updates, retained capacity through cleanup and preview isolation.
 Pin, ledger and clean upstream checkout advance together to b36e94cc; continue
 row 108. UCU-06 window gates, milestone push and exact-SHA CI remain open.
+
+Row 108 audit (pending): c0e4c4ac updates only the Windows archive URL.
+ErsatzTV-ffmpeg 32bf88a3 adds a second readrate patch that is absent from
+n9.0 and the published v2.0.1 recipe. Unlike row 104, this prioritizes active
+audio/video over sparse streams and falls back to sparse-only pacing.
+The exact patch applies to n9.0 with zero fuzz, three-line offsets. A harness
+compiling the actual readrate_sleep function with a deterministic clock fails
+both continuous-stream cases before the patch and passes all seven after it:
+audio beside frozen subtitles, slowest audio/video, sparse-only fallback,
+finished/discarded/unstarted exclusions and no active streams. This is source
+behavior evidence; built-package playback remains required.
+The separate runtime candidate applies the common patch to Linux/Windows
+packages and all three Linux container architectures, retaining the Windows
+Vulkan patch. Both first-party builds complete. Runtime source commit 6b84f17
+is local only; the v2.0.2 candidate is not published. The identical decoded
+runtime regression fails on both published v2.0.1 controls: Linux has a
+7.902-second progress gap and 2.256-second media lead; Windows has a 7.787-second
+gap and 2.877-second lead. Both candidates pass unchanged bounds (gap below two
+seconds, lead below one second): Windows 16.070 seconds elapsed, 0.437-second
+maximum gap; Linux 15.487 seconds elapsed, 0.400-second maximum gap. Each retains
+all 400 frames, exactly 16 seconds of media, the before/after-gap bitmap positions,
+879.94 Hz selected alternate audio and error-free full decode. These are synthetic
+fixture results, not a claim about every sparse format or live-input pacing.
+Windows CUDA/NVENC and Vulkan/libplacebo/CUDA/NVENC controls pass, followed by
+25 decoded H.264 BT.709 frames at 256x144. Windows package graphics flags and
+file-backed drawtext pass. Linux tools execute on clean Debian bookworm, with
+both required graphics filters, the full shaping stack and file-backed drawtext.
+Both candidate archives contain byte-identical tested executables:
+Linux SHA-256 ef797ab1ad7c54340b2b92c208d1ecd7223c0941a68d831e1154aea16ba33e59;
+Windows SHA-256 0dc9422bc1d7a628a0b986957f684222459cd1a81ed3c8239873fc753ee500fb.
+Common container recipes use the same reviewed patch with zero fuzz; new full
+container image builds are not claimed. Review covers sparse-only fallback,
+excluded streams, retained Windows Vulkan changes, exact package identity and
+bounded disposable test processes. Scoped unified-diff whitespace attributes
+retain required blank context lines; final diff checks pass.
+v2.0.1 remains immutable. The maintainer has been asked for separate v2.0.2
+publication approval because the earlier approval named v2.0.1. Publication,
+public download verification, managed-default adoption and row acceptance remain
+pending; the ledger verdict and pin are unchanged.
+
+Host adoption is prepared but uncommitted: the runtime-manager default and Docker
+smoke bootstrap select v2.0.2, with matching documentation/changelog. All ten
+runtime-manager tests pass (6ec5a975), including download, pinned release, existing
+runtime and update paths. Strict ersatzrs-ffmpeg all-target Clippy, shell syntax,
+formatting and diff checks pass. Release notes and exact tested candidate assets
+are prepared; publishing and verifying their public downloads still require the
+pending separate approval. Do not commit the new host default before that proof.
+
+Window verification preparation: strict workspace all-target Clippy passes
+on the prepared host update (3m32s). The canonical test closeout passes:
+3296 tests (c7c26592, 51.147s), 121 opt-in skips, followed by successful
+workspace doctests. Its first invocation was deliberately interrupted during compilation to grant
+the local socket access required by HTTP fixtures. No test result is claimed
+from that invocation. Official Next with the candidate also passes decoded
+embedded bitmap selection and subtitle-off behavior (117ff847, 4.852s).
+After these terminal results, target exceeded the repository's 60-GiB boundary;
+cargo clean completed before further builds. Native streaming smoke passes
+with the candidate: MPEG-TS HTTP 200 with body data and HLS variant/session
+playlists with initial segments. Next smoke also passes: capability rejection,
+HLS/Hybrid output, decoded Dutch 880 Hz audio and burned subtitles, preview
+playback, wrapper restart, and normal/preview/wrapper idle cleanup. Both use
+disposable databases and the exact locally verified runtime. TSDuck passes
+all 87 checks across legacy/hybrid MPEG-TS and segmenter/direct HLS, including
+continuity, PTS/DTS/PCR continuity, PSI, audio/video PIDs, scrambling and known
+server failure signatures. The full parity gate with matched Leptos build passes:
+progress/fmt/architecture/hydration, all 716 web tests (d8ef3e96, 7.177s;
+20 opt-in skips), strict web all-target Clippy, and both SSR/WASM builds.
+The assembled bundle boots against disposable state with the candidate runtime;
+both emitted JavaScript and WASM URLs return HTTP 200. The first bundle-check
+invocation used a stale crate-relative site path; using cargo-leptos's actual
+workspace target/site output passes without source or assertion changes.
+All required local window gate commands are green, but row 108 is not accepted:
+v2.0.2 publication approval remains unanswered and a live GitHub query confirms
+the release does not exist. Public-download proof and managed adoption cannot
+finish yet. Row 109, milestone push and terminal exact-SHA CI remain pending;
+UCU-07 through UCU-09 retain their dependency gates. The same approval dependency
+has persisted across multiple goal turns; with independent verification complete,
+the goal is blocked on that input. No goal or milestone completion is claimed.
+Upstream refresh remains 6f0449c2; accepted checkout/pin remain b36e94cc.
+
+Publication follow-up: the maintainer explicitly authorized v2.0.2. Runtime
+source 6b84f17870c5d30294248d7d321caca911aa43b8 and its annotated tag are
+pushed. The redundant tag build 36271282836 was cancelled before publication
+to preserve the approved tested archives. Draft downloads matched all four
+candidate files; release v2.0.2 is public (2026-09-26T20:59:14Z):
+https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/tag/v2.0.2
+Anonymous public Linux/Windows archive downloads match the SHA-256 values above.
+This resolves the earlier approval blocker. Row 108 is Port; managed runtime
+and Docker smoke defaults adopt v2.0.2. Substantive review found no remaining
+row blocker: patch selection/fallback, package identity and unchanged audio/
+subtitle behavior are covered by the recorded evidence. No additional container
+build or broader hardware claim is made. Existing local window evidence remains
+valid. Row 109 and milestone push/terminal exact-SHA CI remain outstanding.
+
 """
 
 [[milestone]]

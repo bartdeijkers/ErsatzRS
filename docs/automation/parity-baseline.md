@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b36e94cc565c9634c6051f504efc35b088a783f2` |
-| **Commit subject** | `fix: on-demand channel progress using next engine (#2985)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b36e94cc565c9634c6051f504efc35b088a783f2 |
+| **Pinned commit** | `c0e4c4acde468a6b277959fcc37539554b5bd377` |
+| **Commit subject** | `chore: update windows ffmpeg (#2988)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c0e4c4acde468a6b277959fcc37539554b5bd377 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
