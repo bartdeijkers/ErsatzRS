@@ -214,6 +214,14 @@
   height: 1rem;
 }
 
+.wideField {
+  grid-column: 1 / -1;
+}
+
+.playbackForm [hidden] {
+  display: none;
+}
+
 .playbackField select[multiple] {
   min-height: 7rem;
   padding-block: 0.5rem;

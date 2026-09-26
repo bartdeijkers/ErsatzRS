@@ -121,6 +121,16 @@ pub async fn playback_preview(
     }
 }
 
+pub async fn playback_log(State(state): State<AppState>) -> Response {
+    match state.application.playback_preview_log().await {
+        Ok(log) => ([(header::CACHE_CONTROL, "no-store")], axum::Json(log)).into_response(),
+        Err(error) => {
+            tracing::warn!(%error, "failed to read playback troubleshooting log");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 pub async fn playback_archive(State(state): State<AppState>) -> Response {
     match state.application.build_troubleshooting_archive().await {
         Ok(Some(bytes)) => zip_response(

@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Initialize the shared HLS player correctly when a preview has no caption
+  toggle, including Firefox playback troubleshooting.
+- Render playback troubleshooting settings without requiring JavaScript to
+  replace the loading placeholder.
 - Decode stored media durations correctly when starting playback troubleshooting
   previews, including fractional seconds. Accept empty subtitle selections and
   multiple watermark or graphics selections, and honor Start From Beginning.
@@ -218,6 +222,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Add Legacy/Next engine selection to playback troubleshooting, including
+  engine-specific controls and in-page preview playback while retaining the
+  plain HTML playlist submission fallback. Display bounded completion logs
+  after the preview process and diagnostic writes finish.
 - Keep saved Classic filler expressions on the accepted deterministic NCalcSync
   6.2 profile while upstream advances to 6.4, preserving their existing
   meaning across upgrades (upstream PR #2940).

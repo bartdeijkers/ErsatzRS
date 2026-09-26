@@ -198,6 +198,14 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
             .map_err(map_runtime_error)
     }
 
+    async fn playback_preview_log(
+        &self,
+    ) -> Result<Option<String>, AdminTroubleshootingRuntimeError> {
+        read_preview_log_from(&transcode_troubleshooting_folder(), &self.preview_lock)
+            .await
+            .map_err(map_runtime_error)
+    }
+
     async fn build_media_sample_archive(
         &self,
         media_item_id: i64,
@@ -1566,6 +1574,29 @@ async fn count_segments(working_dir: &PathBuf, extension: &str) -> ApiResult<usi
     Ok(count)
 }
 
+async fn read_preview_log_from(
+    folder: &FsPath,
+    ownership: &Arc<Mutex<PreviewAvailability>>,
+) -> ApiResult<Option<String>> {
+    use tokio::io::AsyncReadExt as _;
+
+    // Keep completed diagnostics stable during the read. Active owners are still
+    // writing them; a new preview must not clear the directory midway through.
+    let Ok(_ownership) = ownership.try_lock() else {
+        return Ok(None);
+    };
+    let file = match tokio::fs::File::open(folder.join("logs.txt")).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut bytes = Vec::new();
+    file.take(4 * 1024 * 1024 + 4096)
+        .read_to_end(&mut bytes)
+        .await?;
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+}
+
 async fn build_troubleshooting_archive() -> ApiResult<Option<Vec<u8>>> {
     let folder = troubleshooting_folder();
     build_troubleshooting_archive_from(&folder).await
@@ -1781,6 +1812,45 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn completion_log_waits_for_ownership_and_bounds_file_reads() {
+        use super::*;
+
+        let root = tempfile::tempdir().unwrap();
+        let ownership = Arc::new(Mutex::new(PreviewAvailability::Available));
+        assert!(read_preview_log_from(root.path(), &ownership)
+            .await
+            .unwrap()
+            .is_none());
+        tokio::fs::write(root.path().join("logs.txt"), b"completed")
+            .await
+            .unwrap();
+        let active = ownership.lock().await;
+        assert!(read_preview_log_from(root.path(), &ownership)
+            .await
+            .unwrap()
+            .is_none());
+        drop(active);
+        assert_eq!(
+            read_preview_log_from(root.path(), &ownership)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("completed")
+        );
+        tokio::fs::write(root.path().join("logs.txt"), vec![b'x'; 5 * 1024 * 1024])
+            .await
+            .unwrap();
+        assert_eq!(
+            read_preview_log_from(root.path(), &ownership)
+                .await
+                .unwrap()
+                .unwrap()
+                .len(),
+            4 * 1024 * 1024 + 4096
+        );
+    }
+
     #[tokio::test]
     async fn preview_ownership_is_shared_by_runtime_clones_and_released_on_preparation_error() {
         use super::*;

@@ -486,6 +486,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 get(api::troubleshooting::playback_archive),
             )
             .route(
+                "/api/troubleshoot/playback/log",
+                get(api::troubleshooting::playback_log),
+            )
+            .route(
                 "/api/troubleshoot/playback.m3u8",
                 get(api::troubleshooting::playback_preview),
             )

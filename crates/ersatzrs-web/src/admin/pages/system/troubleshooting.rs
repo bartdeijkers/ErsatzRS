@@ -626,12 +626,19 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
     let selected_subtitle_id = context.selected_subtitle_id;
 
     view! {
-        <form method="get" action="/api/troubleshoot/playback.m3u8" class=style::playbackForm>
+        <form method="get" action="/api/troubleshoot/playback.m3u8" class=style::playbackForm data-playback-troubleshooting>
             <input type="hidden" name="mediaItem" value=context.media_item_id.to_string()/>
             <input type="hidden" name="channel" value=context.channel_id.to_string()/>
             <input type="hidden" name="streamingMode" value="1"/>
             <input type="hidden" name="preferredAudioTitle" value=preferred_audio_title/>
 
+            <label class=style::playbackField>
+                <span>{tr(TextKey::StreamingEngine)}</span>
+                <select class=style::select name="streamingEngine">
+                    <option value="Legacy" selected>"Legacy"</option>
+                    <option value="Next">"Next"</option>
+                </select>
+            </label>
             {playback_select_field(
                 tr(TextKey::FfmpegProfile),
                 "ffmpegProfile",
@@ -639,7 +646,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                 context.ffmpeg_profiles,
                 false,
             )}
-            <label class=style::playbackField>
+            <label class=style::playbackField data-legacy-preview-field>
                 <span>{tr(TextKey::StreamSelector)}</span>
                 <select class=style::select name="streamSelector" disabled=stream_selectors_disabled>
                     <option value="">{tr(TextKey::DefaultOption)}</option>
@@ -671,8 +678,10 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                             }).collect_view()}
                         </select>
                     </label>
-                    {playback_multi_select_field(tr(TextKey::Watermarks), "watermark", context.watermarks)}
-                    {playback_multi_select_field(tr(TextKey::GraphicsElements), "graphicsElement", context.graphics_elements)}
+                    {playback_watermark_field(context.watermarks)}
+                    <div class=style::wideField data-legacy-preview-field>
+                        {playback_multi_select_field(tr(TextKey::GraphicsElements), "graphicsElement", context.graphics_elements)}
+                    </div>
                     <label class=style::playbackCheck>
                         <span>{tr(TextKey::StartFromBeginning)}</span>
                         <input type="checkbox" name="startFromBeginning" value="true"/>
@@ -691,17 +700,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                 }.into_any()
             }}
 
-            <section class=style::wideSection>
-                <h2 class=style::subheading>{tr(TextKey::Preview)}</h2>
-                <div class=style::divider></div>
-                <button class=style::primaryButton type="submit">
-                    {tr(TextKey::Play)}
-                </button>
-                <div class=style::previewFrame>
-                    <video controls></video>
-                    <div class=style::previewSpacer></div>
-                </div>
-            </section>
+            {playback_preview_player()}
 
             <section class=style::wideSection>
                 <h2 class=style::subheading>{tr(TextKey::Logs)}</h2>
@@ -718,6 +717,52 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
         </form>
     }
     .into_any()
+}
+
+fn playback_watermark_field(
+    options: Vec<crate::admin::server_fns::troubleshooting::PlaybackTroubleshootingOption>,
+) -> impl IntoView {
+    view! {
+        <label class=style::playbackField>
+            <span data-watermark-label data-single=tr(TextKey::Watermark) data-multiple=tr(TextKey::Watermarks)>
+                {tr(TextKey::Watermarks)}
+            </span>
+            <select class=style::select name="watermark" multiple>
+                <option value="">{tr(TextKey::NoneOption)}</option>
+                {options.into_iter().map(|option| view! {
+                    <option value=option.id.to_string()>{option.name}</option>
+                }).collect_view()}
+            </select>
+        </label>
+    }
+}
+
+fn playback_preview_player() -> impl IntoView {
+    view! {
+        <section class=style::wideSection data-channel-preview data-preview-state="idle"
+            data-message-idle=tr(TextKey::PreviewIdle)
+            data-message-connecting=tr(TextKey::PreviewConnecting)
+            data-message-live=tr(TextKey::PreviewLive)
+            data-message-paused=tr(TextKey::PreviewPaused)
+            data-message-recovering=tr(TextKey::PreviewRecovering)
+            data-message-stopped=tr(TextKey::PreviewStopped)
+            data-message-unsupported=tr(TextKey::PreviewUnsupported)
+            data-message-authorization=tr(TextKey::PreviewAuthorizationFailed)
+            data-message-unavailable=tr(TextKey::PreviewUnavailable)
+            data-message-capacity=tr(TextKey::PreviewCapacityReached)
+            data-message-network=tr(TextKey::PreviewNetworkError)
+            data-message-media=tr(TextKey::PreviewMediaError)
+        >
+            <h2 class=style::subheading>{tr(TextKey::Preview)}</h2>
+            <div class=style::divider></div>
+            <button class=style::primaryButton type="submit">{tr(TextKey::Play)}</button>
+            <div class=style::previewFrame>
+                <video controls playsinline preload="none"></video>
+                <div class=style::previewSpacer></div>
+            </div>
+            <p data-preview-status aria-live="polite">{tr(TextKey::PreviewIdle)}</p>
+        </section>
+    }
 }
 
 fn playback_select_field(

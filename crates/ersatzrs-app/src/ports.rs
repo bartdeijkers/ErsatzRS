@@ -330,6 +330,9 @@ pub trait AdminTroubleshootingRuntime: Send + Sync {
     async fn build_troubleshooting_archive(
         &self,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
+    async fn playback_preview_log(
+        &self,
+    ) -> Result<Option<String>, AdminTroubleshootingRuntimeError>;
     async fn build_media_sample_archive(
         &self,
         media_item_id: EntityId,

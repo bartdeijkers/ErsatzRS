@@ -68,9 +68,9 @@ closeout; the extra CI rerun is not a prerequisite. UCU-06 row 91 (5ab81525)
 is Port: Unicode script inputs, safe default upgrades, native Windows/Unix
 playback and scoped checks pass. Row 92 (f737de89) is also Port: provider subtitle
 identity, cleanup, scan recovery and native/Next playback pass focused tests,
-decoded runtime checks and strict scoped Clippy. Row 93 (ad9848cc) now has the
-finite Next troubleshooting host/API path and decoded local/Remote Stream runtime proof.
-Finish engine controls and integrated browser/no-JS acceptance.
+decoded runtime checks and strict scoped Clippy. Row 93 (ad9848cc) is Port: isolated Next troubleshooting, decoded local/Remote
+Stream proof, engine controls, completion logs and Chromium/Firefox/no-JS
+acceptance pass. Continue at row 94 (9088ae1a).
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.
 

@@ -2235,6 +2235,15 @@ impl ApplicationServices {
             .await
     }
 
+    pub async fn playback_preview_log(
+        &self,
+    ) -> std::result::Result<Option<String>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .playback_preview_log()
+            .await
+    }
+
     pub async fn build_media_sample_archive(
         &self,
         media_item_id: i64,

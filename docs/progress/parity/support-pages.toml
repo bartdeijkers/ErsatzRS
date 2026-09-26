@@ -33,7 +33,9 @@ optional TSDuck continuity/PCR/analyze/bitrate checks, writes redacted report
 artifacts, and keeps raw `.ts` samples only when the user opts in. Playback
 troubleshooting archives and media samples have real download side effects, and
 the generated troubleshooting HLS session route serves the produced playlist
-and segments. Visible labels/statuses use the shared persisted-language i18n
+and segments. UCU-06 row 93 adds Legacy/Next controls, shared Hls.js playback,
+completion logs and in-order SSR for the no-JS GET form; Chromium and Firefox
+prove both engines, reports and narrow layouts. Visible labels/statuses use the shared persisted-language i18n
 layer for `en-us`, `pl`, `pt-br`, and `nl`; focused Rust and e2e tests cover the
 health/logs/troubleshooting/sequential/block/playback route family.
 

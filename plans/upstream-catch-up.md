@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **83 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **82 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **92**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **93**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-92 are Port; row 93 (`ad9848cc`) is next.
+  at `81bcd649`. UCU-06 rows 91-93 are Port; row 94 (`9088ae1a`) is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -89,10 +89,19 @@
 - Current page has no form island. Reuse its CSS module, field helpers and
   existing preview handling; any hydrated visibility controls must keep DOM
   nodes mounted and avoid prop-bearing islands across unresolved Suspense.
+- The form now uses a small delegated `troubleshooting-preview.js` enhancement:
+  engine changes hide/disable mounted Legacy fields, constrain Next watermarks,
+  and submit once before handing the redirected playlist to the shared player.
+  The SSR GET form and archive link remain usable without JavaScript. No new
+  resource/island boundary or provider request contract is introduced.
+- Completion logs use the existing troubleshooting application port and a
+  bounded GET read. Active preview ownership suppresses partial diagnostics;
+  browser polling stops on completion, navigation, or the two-minute deadline.
 - Browser proof: engine selection, Legacy-only fields, single Next watermark,
   serialized request and successful preview/report download; native regression,
   no-JS submission, narrow-screen geometry and no hydration errors.
-- Source audit is in progress; no row verdict or pin advancement yet.
+- Row 93 is Port. UCU-06 owns backend, decoded runtime, browser/no-JS and
+  web parity-gate evidence; row 94 owns subsequent upstream improvements.
 - Next source audit (`$ERSATZTV_NEXT_SRC`, `f6350a0`): troubleshooting exits
   after its first transcode, writes a dossier on success as well as failure,
   and retains an ended FFmpeg playlist. The ordinary `NextProcess` readiness
@@ -1854,7 +1863,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.1 release metadata` | ucu-05; only CHANGELOG adds a 26.7.1 heading and comparison links, despite the 26.7.0 commit subject. ErsatzRS keeps its own release history. Source and progress checks pass; UCU-05 window acceptance remains open. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | Port | mpeg-ts-channel-streaming | `fix(web): preserve Unicode MPEG-TS script inputs` | ucu-06; ETV_* environment values, bundled script upgrade and custom-template compatibility. Fourteen focused tests, strict web Clippy and native Windows/Unix FFmpeg 9 Unicode playback pass with both audio tracks. The upstream FFmpeg 8.1.2 archive is superseded by ADR 0063. |
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | Port | upstream-baseline-catch-up | `fix(infra): restore provider external subtitle playback` | ucu-06; ADR 0101, provider stream identity, local-only cleanup, targeted rescan repair, authenticated subtitle artifacts and native/Next/troubleshooting integration. Thirty affected tests, native and official Next decoded playback, scoped strict Clippy and review pass. |
-| 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
+| 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | Port | support-pages; upstream-baseline-catch-up | `feat(web): complete Next playback troubleshooting` | ucu-06; isolated finite Next previews, selected tracks/seek/profile, remote callback lifetime, nested reports and bounded completion logs. Decoded local/provider/direct/prepared/producer/retained proof, 712 web tests, strict Clippy, matched build and eight Chromium/Firefox browser cases pass. Pin and checkout advance together; window gates remain open. |
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 95 | `7b43e2f7` | chore: update next channel config model (#2975) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |

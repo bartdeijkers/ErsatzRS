@@ -4,12 +4,12 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 175 commits, 92 reconciled, 83 pending. Bootstrap and AMM-N-03 are
+Ledger: 175 commits, 93 reconciled, 82 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
-UCU-06: rows 91-92 Port; row 93 is in progress. Its finite Next troubleshooting
-host/API and Remote Stream callbacks pass focused and decoded runtime checks;
-UI/browser acceptance remains open. UCU-06 owns the current evidence.
+UCU-06 rows 91-93 are Port; row 94 is next. Next troubleshooting passes decoded
+runtime proof, the web gate and Chromium/Firefox/no-JS checks. UCU-06 owns the
+evidence; window gates and milestone push/CI remain open.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -195,6 +195,6 @@ evidence = 'UCU-05 owns row 84. Typed HTTP/local sources and an atomically cache
 id          = 'ucu93-next-troubleshooting-acceptance'
 description = 'Complete row 93 engine controls and integrated browser/no-JS acceptance.'
 discovered  = '2026-09-26'
-resolved    = false
+resolved    = true
 adr         = '0095'
-evidence    = 'UCU-06 owns current evidence. Isolated finite media/channel previews retain selected profiles, exact versions, subtitle/audio policy, capacity and bounded ownership. Decoded official Next local, direct HTTP, prepared-artifact, ordinary producer and retained-interval previews pass. Explicit subtitle selection preserves metadata required by retained-caption provenance. Focused regressions and strict Clippy pass. The UI selector and integrated browser/no-JS proof remain open, so row 93 and its pin are not advanced.'
+evidence    = 'UCU-06 owns current evidence. Isolated finite media/channel previews retain selected profiles, exact versions, subtitle/audio policy, capacity and bounded ownership. Decoded official Next local, direct HTTP, prepared-artifact, ordinary producer and retained-interval previews pass. Explicit subtitle selection preserves metadata required by retained-caption provenance. Focused regressions and strict Clippy pass. The engine selector, Legacy-only fields, first Next watermark, in-page Hls.js playback, bounded completion logs and no-JS submission pass in Chromium and Firefox. All 712 web tests, strict Clippy and the matched Leptos build pass. Row 93 is Port; UCU-06 window acceptance remains open.'

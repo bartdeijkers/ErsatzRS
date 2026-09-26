@@ -318,6 +318,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("playback"),
                 )
                 view=PlaybackTroubleshootingPage
+                ssr=SsrMode::InOrder
             />
             <Route path=(StaticSegment("blocks"), ParamSegment("id")) view=BlockEditorPage/>
             <Route path=(StaticSegment("scheduling"), StaticSegment("blocks")) view=BlocksPage/>

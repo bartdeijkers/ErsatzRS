@@ -9862,6 +9862,28 @@ and troubleshooting regressions (3e6b74d2) and strict infra/web all-target Clipp
 Runtime evidence is local Linux; installed producer fixtures explicitly use
 their existing Unix shell/Python boundary. Row 93 engine controls and integrated
 browser/no-JS proof remain open; its verdict and the pin are not advanced.
+Row 93 UI closeout adds engine selection before the profile, mounted Legacy-only
+controls, a clearable single Next watermark, shared in-page playback and bounded
+completion-log reads through the existing application port. Browser lifetime
+cancels polling and releases the player; the Play action remains pending until
+diagnostics are complete. The no-JS test reproduced an unresolved streamed
+loading placeholder; in-order SSR now provides the populated native GET form.
+Firefox reproduced an undefined optional caption listener in the shared HLS
+player; guarding that callback fixes Hls.js initialization (Chromium's native
+HLS fallback had masked the defect). Timeouts/assertions were not weakened.
+The final matched Leptos build and all four Chromium plus four Firefox cases
+pass: hydrated controls, first-watermark retention, 320px containment, Legacy
+and official Next Hls.js playback, selected request parameters, ended playlists,
+ZIP reports, completion logs, released Play controls and native no-JS form
+serialization. No-JS serialization is intercepted; real runtime is exercised by
+the two unmocked engine cases and the earlier decoded backend fixtures.
+The complete web parity gate passes: 712 tests (Nextest 97f204f5), strict
+all-target web Clippy, architecture/hydration lint, format and progress checks.
+Review confirms stable SSR DOM, localized existing labels, optional-caption
+handling, bounded log reads under output ownership, transient callback cleanup
+and no persistent playout mutation. Row 93 is Port; pin, ledger and upstream
+checkout advance together to ad9848cc. Continue with row 94; UCU-06 window
+gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]

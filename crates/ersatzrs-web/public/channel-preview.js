@@ -157,9 +157,11 @@ async function start(video, url) {
         manifestLoadingTimeOut: 30000,
       });
       entry.hls = hls;
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, entry.syncCaptions);
-      hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, entry.syncCaptions);
-      entry.syncCaptions?.();
+      if (entry.syncCaptions) {
+        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, entry.syncCaptions);
+        hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, entry.syncCaptions);
+        entry.syncCaptions();
+      }
       hls.attachMedia(video);
       hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
