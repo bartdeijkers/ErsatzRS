@@ -41,6 +41,44 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## Row 94 source map: Next troubleshooting selection and diagnostics
+
+- Upstream `9088ae1a`: `NextLogger`, `NextSessionWorker`, Prepare/Start
+  troubleshooting handlers, `PlayoutItemConverter`, `InMemoryLogService` and
+  `PlaybackTroubleshooting.razor`.
+- Outcome: custom stream selectors work with Next troubleshooting, explicit
+  subtitle candidates reach selection, diagnostic levels/targets are retained,
+  and completed Next previews report FFmpeg speed from immediate-child
+  `ffreport.log` files. Normal scheduled conversion stays quiet.
+- Existing coverage: row 93 already carries the Next engine identity and
+  explicit subtitle/off choices through isolated local/provider/remote
+  projection. Reuse those decoded fixtures while auditing selector precedence.
+- Gaps found: the Next host clears the request's selector; the UI hides that
+  field for Next; the process boundary discards stdout/stderr; completion logs
+  contain only a summary and no parsed speed. Preserve managed process cleanup,
+  bounded output and private-input redaction while connecting diagnostics.
+- Targets: shared playback/custom selectors, Next selection/process boundary,
+  troubleshooting host completion result, and existing preview/log UI.
+- Visual/hydration boundary: keep the row-93 SSR GET form and progressive
+  enhancement. Stream Selector remains mounted and available for both engines;
+  graphics remain Legacy-only. Add localized speed alongside Logs without
+  moving the page into an island or weakening no-JS submission.
+- Required proof: custom audio/subtitle selection and explicit-off precedence,
+  scheduled-selection regression, bounded log framing/level parsing and cleanup,
+  real Next completion speed/report evidence, then the existing serialized
+  Chromium/Firefox playback and no-JS cases with selector/speed assertions.
+- Exclusions: no producer protocol changes, persistent playout mutation,
+  dependency replacements or acceptance reductions. Row 94 remains pending.
+- Selection checkpoint: retain the submitted selector and mark media previews
+  as Custom; without a selector or explicit subtitle, supply no subtitle
+  candidates. Filter explicit candidates before YAML audio/subtitle rule
+  evaluation, using temporary forced eligibility while returning unchanged
+  metadata for retained-caption validation. Existing channel pins and scheduled
+  projection keep their selection policy. All 76 focused troubleshooting and
+  Next selection regressions pass (Nextest `a8e22597`), as does strict library
+  Clippy for infra/web. Selector UI, bounded
+  diagnostic logging and completion speed remain open.
+
 ## Row 93 source map: Next troubleshooting playback
 
 - Upstream `ad9848cc`: `PlaybackTroubleshooting.razor`,

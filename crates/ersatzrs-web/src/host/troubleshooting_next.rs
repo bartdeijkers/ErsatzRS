@@ -29,7 +29,6 @@ pub(super) async fn start(
     mut query: PlaybackPreviewQuery,
     mut ownership: PreviewOwnership,
 ) -> Result<(), AdminTroubleshootingRuntimeError> {
-    query.stream_selector = None;
     query.graphics_element.clear();
     query.watermark.truncate(1);
     let (sender, receiver) = oneshot::channel();
@@ -59,6 +58,7 @@ struct Selection {
     info: PreviewMediaItem,
     profile: PlaybackProfile,
     selected_at: Option<DateTime<Utc>>,
+    subtitle_id: Option<i64>,
 }
 
 async fn select(
@@ -113,6 +113,16 @@ async fn select(
         )
     };
     channel.streaming_engine = StreamingEngine::Next;
+    let mut subtitle_id = query.subtitle_id;
+    if selected_at.is_none() {
+        if channel.stream_selector.is_some() {
+            channel.stream_selector_mode = ersatzrs_domain::ChannelStreamSelectorMode::Custom;
+        } else {
+            // Upstream media troubleshooting supplies no subtitle candidates
+            // unless the operator chooses a track or a custom selector.
+            subtitle_id = Some(subtitle_id.unwrap_or(0));
+        }
+    }
     let profile_id = query
         .ffmpeg_profile
         .filter(|id| *id > 0)
@@ -144,6 +154,7 @@ async fn select(
         info,
         profile,
         selected_at,
+        subtitle_id,
     })
 }
 
@@ -209,7 +220,7 @@ async fn prepare_inner(
         media: &selected.media,
         channel: &selected.channel,
         profile: &selected.profile,
-        subtitle_id: query.subtitle_id,
+        subtitle_id: selected.subtitle_id,
         selection_time: selected.selected_at,
         watermark_ids: &query.watermark,
         replacements: &replacements,

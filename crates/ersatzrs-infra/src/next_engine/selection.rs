@@ -7,7 +7,7 @@ use crate::db::DbPool;
 use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePreferences};
 use crate::playback::{
     load_source_audio_streams, load_source_video_stream_by_index,
-    select_custom_playback_streams_for_version, select_next_pinned_playback_subtitle,
+    select_custom_playback_streams_with_subtitle_candidates, select_next_pinned_playback_subtitle,
     select_next_playback_subtitle_for_version, select_playback_audio_stream_index,
     subtitle_input_for_stream, CustomStreamSelection, PlaybackSubtitle,
 };
@@ -39,7 +39,7 @@ pub(crate) struct TroubleshootingSelection<'a> {
     pub subtitle_id: Option<i64>,
 }
 
-/// Reuse normal track selection, then apply an explicit troubleshooting subtitle.
+/// Restrict troubleshooting subtitle candidates before normal track selection.
 pub(crate) async fn project_troubleshooting_item(
     pool: &DbPool,
     request: TroubleshootingSelection<'_>,
@@ -52,56 +52,19 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
     request: TroubleshootingSelection<'_>,
     audio: AudioDirective,
 ) -> Result<DeferredProjection> {
-    let mut projected = project_deferred_item_with_audio(
+    project_deferred_item_selected(
         pool,
         request.channel,
         request.item,
         request.media_version_id,
         request.source,
         request.resolution,
-        audio,
+        SelectionDirectives {
+            audio,
+            subtitle_id: request.subtitle_id,
+        },
     )
-    .await?;
-    if let Some(id) = request.subtitle_id {
-        if id < 0 {
-            return Err(invalid("troubleshooting subtitle identity is invalid"));
-        }
-        let selected = if id > 0 {
-            Some(
-                crate::playback::select_next_troubleshooting_subtitle(
-                    pool,
-                    request.item.media_item_id,
-                    request.media_version_id,
-                    id,
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-        let tracks = projected
-            .item
-            .tracks
-            .as_mut()
-            .ok_or_else(|| invalid("troubleshooting tracks are unavailable"))?;
-        let source = tracks
-            .video
-            .as_ref()
-            .and_then(|track| track.source.as_ref())
-            .ok_or_else(|| invalid("troubleshooting source is unavailable"))?;
-        let (subtitle, pending) = project_deferred_subtitle(
-            pool,
-            selected.as_ref(),
-            source,
-            request.channel.next_engine_text_subtitle_mode,
-            request.item,
-        )
-        .await?;
-        tracks.subtitle = subtitle;
-        projected.pending_burn = pending;
-        projected.selected_subtitle = selected;
-    }
-    Ok(projected)
+    .await
 }
 
 /// Project one persisted item's timing and tracks using its resolved media version/source.
@@ -184,15 +147,96 @@ pub(crate) async fn project_deferred_item_with_audio(
     channel: &Channel,
     item: &PlayoutItem,
     media_version_id: i64,
+    source: wire::Source,
+    resolution: &Resolution,
+    audio: AudioDirective,
+) -> Result<DeferredProjection> {
+    project_deferred_item_selected(
+        pool,
+        channel,
+        item,
+        media_version_id,
+        source,
+        resolution,
+        SelectionDirectives {
+            audio,
+            subtitle_id: None,
+        },
+    )
+    .await
+}
+
+struct SelectionDirectives {
+    audio: AudioDirective,
+    subtitle_id: Option<i64>,
+}
+
+async fn project_deferred_item_selected(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+    media_version_id: i64,
     mut source: wire::Source,
     _resolution: &Resolution,
-    audio_directive: AudioDirective,
+    directives: SelectionDirectives,
 ) -> Result<DeferredProjection> {
     let duration_ms = u64::try_from((item.finish - item.start).num_milliseconds())
         .ok()
         .filter(|duration| *duration > 0)
         .ok_or_else(|| invalid("invalid item duration"))?;
     apply_item_seek(&mut source, item)?;
+    let selected =
+        select_projection_tracks(pool, channel, item, media_version_id, directives).await?;
+    let audio = match selected.audio {
+        Some(index) => wire::Track {
+            source: Some(source.clone()),
+            stream_index: Some(index_u32(index)?),
+        },
+        None => silent_audio(duration_ms),
+    };
+    let selected_subtitle = selected.subtitle;
+    let (subtitle, pending_burn) = project_deferred_subtitle(
+        pool,
+        selected_subtitle.as_ref(),
+        &source,
+        channel.next_engine_text_subtitle_mode,
+        item,
+    )
+    .await?;
+    Ok(DeferredProjection {
+        pending_burn,
+        selected_subtitle,
+        item: wire::PlayoutItem {
+            watermark: None,
+            id: item.id.to_string(),
+            start: item.start,
+            finish: item.finish,
+            source: None,
+            tracks: Some(wire::Tracks {
+                video: Some(wire::Track {
+                    source: Some(source),
+                    stream_index: selected.video.map(index_u32).transpose()?,
+                }),
+                audio: Some(audio),
+                subtitle,
+            }),
+        },
+    })
+}
+
+struct SelectedProjectionTracks {
+    video: Option<usize>,
+    audio: Option<usize>,
+    subtitle: Option<PlaybackSubtitle>,
+}
+
+async fn select_projection_tracks(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &PlayoutItem,
+    media_version_id: i64,
+    directives: SelectionDirectives,
+) -> Result<SelectedProjectionTracks> {
     let pin = item.pinned_stream_selection;
     if pin.is_some_and(|pin| pin.media_version_id != media_version_id) {
         return Err(invalid("resolved version differs from pinned version"));
@@ -205,21 +249,29 @@ pub(crate) async fn project_deferred_item_with_audio(
     .await?;
     let audio_streams = load_source_audio_streams(pool, media_version_id).await?;
     let preferences = playback_language_preferences(pool).await?;
+    let explicit = troubleshooting_subtitles(
+        pool,
+        item.media_item_id,
+        media_version_id,
+        directives.subtitle_id,
+    )
+    .await?;
     let custom =
         if pin.is_none() && channel.stream_selector_mode == ChannelStreamSelectorMode::Custom {
-            select_custom_playback_streams_for_version(
+            select_custom_playback_streams_with_subtitle_candidates(
                 pool,
                 media_version_id,
                 item.media_item_id,
                 channel,
                 item.start,
                 StreamingMode::HttpLiveStreamingSegmenter,
+                explicit.as_deref(),
             )
             .await?
         } else {
             None
         };
-    let audio_index = if let AudioDirective::Published(audio) = audio_directive {
+    let audio_index = if let AudioDirective::Published(audio) = directives.audio {
         let pinned_audio = audio
             .map(i32::try_from)
             .transpose()
@@ -242,50 +294,49 @@ pub(crate) async fn project_deferred_item_with_audio(
         )
         .await?
     };
-    let subtitle = selected_subtitle(
-        pool,
-        channel,
-        item,
-        media_version_id,
-        custom.as_ref(),
-        &preferences,
-    )
-    .await?;
-    let audio = match audio_index {
-        Some(index) => wire::Track {
-            source: Some(source.clone()),
-            stream_index: Some(index_u32(index)?),
-        },
-        None => silent_audio(duration_ms),
+    let subtitle = if let Some(explicit) = explicit {
+        custom.as_ref().map_or_else(
+            || explicit.into_iter().next(),
+            |selection| selection.subtitle.clone(),
+        )
+    } else {
+        selected_subtitle(
+            pool,
+            channel,
+            item,
+            media_version_id,
+            custom.as_ref(),
+            &preferences,
+        )
+        .await?
     };
-    let selected_subtitle = subtitle;
-    let (subtitle, pending_burn) = project_deferred_subtitle(
-        pool,
-        selected_subtitle.as_ref(),
-        &source,
-        channel.next_engine_text_subtitle_mode,
-        item,
-    )
-    .await?;
-    Ok(DeferredProjection {
-        pending_burn,
-        selected_subtitle,
-        item: wire::PlayoutItem {
-            watermark: None,
-            id: item.id.to_string(),
-            start: item.start,
-            finish: item.finish,
-            source: None,
-            tracks: Some(wire::Tracks {
-                video: Some(wire::Track {
-                    source: Some(source),
-                    stream_index: video.map(|stream| index_u32(stream.index)).transpose()?,
-                }),
-                audio: Some(audio),
-                subtitle,
-            }),
-        },
+    Ok(SelectedProjectionTracks {
+        video: video.map(|stream| stream.index),
+        audio: audio_index,
+        subtitle,
     })
+}
+
+async fn troubleshooting_subtitles(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    subtitle_id: Option<i64>,
+) -> Result<Option<Vec<PlaybackSubtitle>>> {
+    match subtitle_id {
+        None => Ok(None),
+        Some(0) => Ok(Some(Vec::new())),
+        Some(id) if id > 0 => Ok(Some(vec![
+            crate::playback::select_next_troubleshooting_subtitle(
+                pool,
+                media_item_id,
+                media_version_id,
+                id,
+            )
+            .await?,
+        ])),
+        Some(_) => Err(invalid("troubleshooting subtitle identity is invalid")),
+    }
 }
 
 async fn project_deferred_subtitle(

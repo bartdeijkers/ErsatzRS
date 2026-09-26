@@ -118,6 +118,35 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn media_preview_retains_custom_selector_and_defaults_to_subtitle_off_without_one() {
+    let fixture = Fixture::new().await;
+    let mut query = Fixture::query();
+    query.subtitle_id = None;
+    query.stream_selector = Some("fixture.yml".into());
+    let selected = select(&fixture.state, &query).await.unwrap();
+    assert_eq!(selected.channel.streaming_engine, StreamingEngine::Next);
+    assert_eq!(
+        selected.channel.stream_selector_mode,
+        ersatzrs_domain::ChannelStreamSelectorMode::Custom
+    );
+    assert_eq!(
+        selected.channel.stream_selector.as_deref(),
+        Some("fixture.yml")
+    );
+    assert_eq!(selected.subtitle_id, None);
+    query.stream_selector = None;
+    assert_eq!(
+        select(&fixture.state, &query).await.unwrap().subtitle_id,
+        Some(0)
+    );
+    query.subtitle_id = Some(2);
+    assert_eq!(
+        select(&fixture.state, &query).await.unwrap().subtitle_id,
+        Some(2)
+    );
+}
+
+#[tokio::test]
 async fn media_preview_preserves_selected_profile_audio_seek_and_whole_second_start() {
     let fixture = Fixture::new().await;
     let selected = select(&fixture.state, &Fixture::query()).await.unwrap();

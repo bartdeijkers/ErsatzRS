@@ -9884,6 +9884,19 @@ handling, bounded log reads under output ownership, transient callback cleanup
 and no persistent playout mutation. Row 93 is Port; pin, ledger and upstream
 checkout advance together to ad9848cc. Continue with row 94; UCU-06 window
 gates, push and exact-SHA CI remain open.
+
+Row 94 selection checkpoint: media previews retain submitted custom selectors,
+and explicit subtitle candidates restrict YAML rules before audio selection.
+Temporary forced eligibility does not alter stored subtitle provenance.
+Without a selector or explicit subtitle, media previews supply no subtitle
+candidates; scheduled selection and channel pins preserve their policy.
+All 76 focused infra/web troubleshooting and Next selection tests pass
+(Nextest a8e22597-4f7c-44a2-a50f-c64b622ca26d). Strict library Clippy passes
+for ersatzrs-infra and ersatzrs-web. Review confirms explicit-off handling,
+exact-version validation and unchanged unsupported-track rejection. This is
+a backend checkpoint: selector UI, bounded diagnostic logging, speed reporting
+and browser/runtime acceptance remain open. Row 94 stays pending; the pin and
+upstream checkout remain at row 93.
 """
 
 [[milestone]]

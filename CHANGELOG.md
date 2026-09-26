@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Apply explicit subtitle candidates before custom Next troubleshooting rules
+  choose audio, preserving stored subtitle metadata and explicit subtitle-off
+  selection. Retain custom selectors submitted to the preview API.
 - Initialize the shared HLS player correctly when a preview has no caption
   toggle, including Firefox playback troubleshooting.
 - Render playback troubleshooting settings without requiring JavaScript to

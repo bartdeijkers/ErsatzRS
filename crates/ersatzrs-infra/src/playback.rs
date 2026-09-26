@@ -1287,6 +1287,7 @@ pub async fn select_custom_playback_streams(
         content_start_time,
         streaming_mode,
         SubtitleSelectionEngine::Native,
+        None,
     )
     .await
 }
@@ -1304,6 +1305,29 @@ pub async fn select_custom_playback_streams_for_version(
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
 ) -> Result<Option<CustomStreamSelection>> {
+    select_custom_playback_streams_with_subtitle_candidates(
+        pool,
+        media_version_id,
+        media_item_id,
+        channel,
+        content_start_time,
+        streaming_mode,
+        None,
+    )
+    .await
+}
+
+/// Troubleshooting restricts candidates before evaluating custom selector rules.
+/// The selected record retains its stored metadata for later provenance checks.
+pub(crate) async fn select_custom_playback_streams_with_subtitle_candidates(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+    candidates: Option<&[PlaybackSubtitle]>,
+) -> Result<Option<CustomStreamSelection>> {
     select_custom_playback_streams_inner(
         pool,
         media_version_id,
@@ -1312,6 +1336,7 @@ pub async fn select_custom_playback_streams_for_version(
         content_start_time,
         streaming_mode,
         SubtitleSelectionEngine::Next,
+        candidates,
     )
     .await
 }
@@ -1325,6 +1350,7 @@ async fn select_custom_playback_streams_inner(
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
     engine: SubtitleSelectionEngine,
+    candidates: Option<&[PlaybackSubtitle]>,
 ) -> Result<Option<CustomStreamSelection>> {
     let Some(selector) = channel
         .stream_selector
@@ -1356,7 +1382,9 @@ async fn select_custom_playback_streams_inner(
         })?;
 
     let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = if engine == SubtitleSelectionEngine::Next {
+    let mut subtitles = if let Some(candidates) = candidates {
+        candidates.to_vec()
+    } else if engine == SubtitleSelectionEngine::Next {
         load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
@@ -1381,6 +1409,33 @@ async fn select_custom_playback_streams_inner(
         subtitles.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
     }
 
+    Ok(select_custom_stream_candidates(
+        selector,
+        &audio_streams,
+        &mut subtitles,
+        candidates.is_some(),
+        channel,
+        content_start_time,
+    ))
+}
+
+fn select_custom_stream_candidates(
+    selector: StreamSelector,
+    audio_streams: &[PlaybackAudioStream],
+    subtitles: &mut [PlaybackSubtitle],
+    explicit: bool,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+) -> Option<CustomStreamSelection> {
+    // ErsatzTV treats an explicitly supplied troubleshooting track as forced
+    // during selection. Do not mutate the record returned to artifact validation.
+    let originals = explicit.then(|| subtitles.to_vec());
+    if originals.is_some() {
+        for subtitle in &mut *subtitles {
+            subtitle.forced = true;
+        }
+    }
+
     for item in selector.items {
         if !item.content_condition.trim().is_empty()
             && !content_matches_condition(channel, content_start_time, &item.content_condition)
@@ -1388,19 +1443,26 @@ async fn select_custom_playback_streams_inner(
             continue;
         }
 
-        let audio = select_custom_audio(&audio_streams, &item);
-        let subtitles = select_custom_subtitle(&subtitles, &item);
+        let audio = select_custom_audio(audio_streams, &item);
+        let subtitles = select_custom_subtitle(subtitles, &item);
         if audio.passed && subtitles.passed {
-            return Ok(Some(CustomStreamSelection {
+            return Some(CustomStreamSelection {
                 audio_stream_index: audio
                     .selected
                     .and_then(|stream| usize::try_from(stream.stream_index).ok()),
-                subtitle: subtitles.selected.cloned(),
-            }));
+                subtitle: subtitles
+                    .selected
+                    .and_then(|selected| {
+                        originals.as_ref().map_or(Some(selected), |rows| {
+                            rows.iter().find(|row| row.id == selected.id)
+                        })
+                    })
+                    .cloned(),
+            });
         }
     }
 
-    Ok(None)
+    None
 }
 
 #[derive(Debug, Deserialize, Default)]

@@ -74,6 +74,64 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn troubleshooting_custom_rules_see_only_explicit_subtitle_candidates() {
+    use std::io::Write as _;
+    let mut fixture = Fixture::new().await;
+    let folder = crate::file_system_layout::channel_stream_selectors_folder();
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut selector = tempfile::Builder::new()
+        .prefix("ucu94-")
+        .suffix(".yml")
+        .tempfile_in(folder)
+        .unwrap();
+    selector.write_all(b"items:\n  - audio_language: [eng]\n    subtitle_language: [eng]\n  - audio_language: [nld]\n    subtitle_language: [nld]\n    subtitle_condition: forced\n  - audio_language: [eng]\n    disable_subtitles: true\n").unwrap();
+    selector.flush().unwrap();
+    fixture.channel.stream_selector_mode = ersatzrs_domain::ChannelStreamSelectorMode::Custom;
+    fixture.channel.stream_selector = Some(
+        selector
+            .path()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned(),
+    );
+    let snapshot = fixture
+        .host
+        .troubleshooting_snapshot(&fixture.request(Some(2)))
+        .await
+        .unwrap();
+    let tracks = snapshot.projection.item.tracks.unwrap();
+    assert_eq!(
+        tracks.audio.unwrap().stream_index,
+        Some(2),
+        "filter candidates before selecting the audio rule"
+    );
+    let subtitle = snapshot.projection.selected_subtitle.unwrap();
+    assert_eq!(subtitle.id, 2);
+    assert!(
+        !subtitle.forced,
+        "forced matching must not change stored provenance"
+    );
+    let off = fixture
+        .host
+        .troubleshooting_snapshot(&fixture.request(Some(0)))
+        .await
+        .unwrap();
+    assert!(off.projection.selected_subtitle.is_none());
+    assert_eq!(
+        off.projection
+            .item
+            .tracks
+            .unwrap()
+            .audio
+            .unwrap()
+            .stream_index,
+        Some(1)
+    );
+}
+
+#[tokio::test]
 async fn troubleshooting_media_context_decodes_the_persisted_duration() {
     use ersatzrs_core::repositories::TroubleshootingRepository as _;
     let fixture = Fixture::new().await;
