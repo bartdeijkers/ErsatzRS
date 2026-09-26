@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **78 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **77 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **97**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **98**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 98 source map: live sources and Dolby Vision probe hints
+
+- Upstream `7c96203b` changes only `ErsatzTV.Core/Next/Playout.cs`: it moves
+  existing `is_live` properties/documentation and adds optional `dv_profile`
+  to `VideoHint`. There is no runtime download pin or pipeline code change.
+- Rust already exposes HTTP `is_live` and video `dv_profile`; persisted
+  `DolbyVisionProfile` and freshly probed producer metadata populate the hint.
+  Live-source selection already removes source seek fields.
+- Acceptance: explicit profile 5/7/8 and absent-profile metadata preservation,
+  existing live-source selection/callback tests, and strict infra Clippy.
+  All 15 focused tests and strict infra library/test Clippy pass; UCU-06 owns
+  the evidence. No new tone-mapping, GPU or Dolby Vision rendering acceptance
+  is claimed.
 
 ## Row 97 source map: provider client generation and dependency contracts
 
@@ -1979,7 +1993,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 95 | `7b43e2f7` | chore: update next channel config model (#2975) | Port | upstream-baseline-catch-up | `feat(next): preserve optional subtitle force style` | ucu-06; optional force_style wire field, exact populated/empty value preservation and absent/null compatibility. Eleven config/protocol tests and strict infra/web Clippy pass; generated defaults remain unchanged. |
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream package patches` | ucu-06; .NET CliWrap, Testably, Scriban, MudCalendar and Scalar patch versions only; Rust counterparts and application consumers unchanged. Mesa note changes no container artifact and proves no new hardware acceptance. Scoped diff review and progress check pass. |
 | 97 | `aae2529f` | chore: update dependencies (#2977) | Adapt (ADRs 0009/0096/0098) | upstream-baseline-catch-up; classic-scheduling | `test(deps): retain SQLite safety and expression contracts` | ucu-06; Refit generated-client construction maps to existing reqwest, retained SQLite 3.51.3 includes WAL-reset fix, and the runtime guard protects that floor. NCalc remains the accepted deterministic 6.2 profile. All 34 provider/SQLite and 19 expression tests plus strict infra Clippy pass. |
-| 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
+| 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | Covered | upstream-baseline-catch-up | `test(next): verify Dolby Vision hint preservation` | ucu-06; typed HTTP is_live and video dv_profile already exist. Persisted/fresh producer profile 5/7/8 and absent-profile regression plus live seek/callback checks pass (15 tests); strict infra Clippy passes. Model-only coverage, no new GPU-rendering claim. |
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 101 | `11789e8d` | chore: update dependencies (#2980) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |

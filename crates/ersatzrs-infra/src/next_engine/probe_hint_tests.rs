@@ -165,6 +165,38 @@ fn ordinary_producer_preserves_detected_container_codecs_and_subtitles_without_d
 }
 
 #[tokio::test]
+async fn dolby_vision_profiles_survive_persisted_and_producer_hints() {
+    let pool = super::super::selection::tests::fixture_pool().await;
+    for profile in [None, Some(5), Some(7), Some(8)] {
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "DolbyVisionProfile"=? WHERE "MediaVersionId"=100 AND "Index"=0"#,
+        )
+        .bind(profile)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut probe = metadata();
+        probe.format_name = Some("matroska,webm".into());
+        probe.streams[0].codec = Some("hevc".into());
+        probe.streams[0].dolby_vision_profile = profile;
+        for hint in [
+            persisted(&pool, 100).await.unwrap().unwrap(),
+            producer(&probe).unwrap(),
+        ] {
+            let json = serde_json::to_value(&hint).unwrap();
+            if let Some(profile) = profile {
+                assert_eq!(json["video"][0]["dv_profile"], profile);
+            } else {
+                assert!(json["video"][0].get("dv_profile").is_none());
+            }
+            let decoded: super::super::protocol::ProbeHint =
+                serde_json::from_value(json.clone()).unwrap();
+            assert_eq!(serde_json::to_value(decoded).unwrap(), json);
+        }
+    }
+}
+
+#[tokio::test]
 async fn persisted_hint_preserves_all_selectable_tracks_and_refuses_incomplete_metadata() {
     let pool = super::super::selection::tests::fixture_pool().await;
     let hint = persisted(&pool, 100).await.unwrap().unwrap();

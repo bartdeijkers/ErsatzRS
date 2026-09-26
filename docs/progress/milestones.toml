@@ -9986,6 +9986,19 @@ format, progress and diff checks pass. Review confirms unchanged production
 code/dependencies, explicit newer-language exclusions and actual linked SQLite
 verification. Pin, ledger and upstream checkout advance to aae2529f; row 98
 is next. UCU-06 window gates/push/CI remain open.
+
+Row 98 (7c96203b) is Covered. Upstream changes only its playout DTO: existing
+is_live properties move and optional dv_profile is added. Rust already maps
+HTTP liveness and projects DolbyVisionProfile from persisted metadata and
+fresh producer probes. The new regression verifies profile 5/7/8 and absent
+values through both paths and JSON round trips. All 15 probe-hint/live-source
+selection/callback tests pass (f0ca2bc3), preserving selected audio/subtitles
+while suppressing live source seeks and retaining finite seeks. Strict infra
+library/test Clippy passes. Review confirms there is no runtime artifact pin,
+pipeline, UI or schema change in this upstream row. This is model/metadata
+coverage, not new Dolby Vision rendering or GPU acceptance. Pin, ledger and
+upstream checkout advance together to 7c96203b; continue row 99. UCU-06 window
+gates/push/CI remain open.
 """
 
 [[milestone]]
