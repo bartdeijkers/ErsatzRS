@@ -1920,6 +1920,36 @@ fn next_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> b
         && !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
 }
 
+/// Resolve a troubleshooting selection by row identity against the exact media version.
+pub(crate) async fn select_next_troubleshooting_subtitle(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    subtitle_id: i64,
+) -> Result<PlaybackSubtitle> {
+    let mut subtitle = load_subtitles_for_media_version(pool, media_item_id, media_version_id)
+        .await?
+        .into_iter()
+        .find(|subtitle| subtitle.id == subtitle_id)
+        .ok_or_else(|| {
+            RepositoryError::unavailable(
+                "Next troubleshooting subtitle",
+                "selection is unavailable for this media version",
+            )
+        })?;
+    if !next_subtitle_supported(
+        &subtitle,
+        is_media_server_subtitle_item(pool, media_item_id).await?,
+    ) {
+        return Err(RepositoryError::unavailable(
+            "Next troubleshooting subtitle",
+            "selected subtitle is unsupported by Next",
+        ));
+    }
+    subtitle.forced = true;
+    Ok(subtitle)
+}
+
 /// Upstream classifies the persisted provider item, not its resolved transport:
 /// path replacement can make a media-server item locally accessible.
 async fn is_media_server_subtitle_item(pool: &DbPool, media_item_id: i64) -> Result<bool> {

@@ -109,21 +109,12 @@ async fn real_next_troubleshooting_finishes_with_reports_and_selected_tracks() {
     tokio::fs::create_dir(&playout).await.unwrap();
     let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
     let finish = start + chrono::Duration::seconds(10);
-    let source = serde_json::json!({
-        "source_type": "local", "path": clip,
-        "in_point_ms": 5000, "out_point_ms": 15000,
-    });
-    let item = serde_json::json!({
-        "version": super::super::protocol::PLAYOUT_VERSION,
-        "items": [{ "id": "troubleshooting-fixture", "start": start, "finish": finish,
-            "tracks": {
-                "video": { "source": source, "stream_index": 0 },
-                "audio": { "source": source, "stream_index": 2 },
-                "subtitle": { "source": { "source_type": "local", "path": subtitle,
-                    "in_point_ms": 5000, "out_point_ms": 15000 }, "stream_index": 0 }
-            }
-        }]
-    });
+    let item = super::super::protocol::Playout {
+        version: super::super::protocol::PLAYOUT_VERSION.to_owned(),
+        items: vec![
+            prepare_troubleshooting_fixture(&clip, &subtitle, &ffmpeg, start, finish).await,
+        ],
+    };
     tokio::fs::write(
         playout.join(format!(
             "{}_{}.json",
@@ -197,6 +188,56 @@ fn assert_troubleshooting_dossier(output: &Path) {
         reports > 0,
         "successful troubleshooting must retain its report dossier"
     );
+}
+
+async fn prepare_troubleshooting_fixture(
+    clip: &Path,
+    subtitle: &Path,
+    ffmpeg: &Path,
+    start: chrono::DateTime<chrono::Utc>,
+    finish: chrono::DateTime<chrono::Utc>,
+) -> super::super::protocol::PlayoutItem {
+    use ersatzrs_core::repositories::ChannelRepository as _;
+    let (pool, locker) = prepare_schedule(clip, false, &FFmpegProfile::default()).await;
+    sqlx::query(r#"UPDATE "Subtitle" SET "Path"=? WHERE "Id"=2"#)
+        .bind(subtitle.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let channel = crate::repositories::make_repositories(pool.clone())
+        .channel
+        .get_with_profile(1)
+        .await
+        .unwrap();
+    let profile = crate::playback::load_playback_profile(&pool, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    let media = schedule::bind_media(
+        &pool,
+        ersatzrs_domain::PlayoutItem {
+            start,
+            finish,
+            in_point: chrono::Duration::seconds(5),
+            out_point: chrono::Duration::seconds(15),
+            ..selection::tests::item()
+        },
+    )
+    .await
+    .unwrap();
+    let host = host::NextHost::new(pool, locker, clip.parent().unwrap().join("preview-host"));
+    host.prepare_troubleshooting(super::super::troubleshooting::TroubleshootingPreview {
+        media: &media,
+        channel: &channel,
+        profile: &profile,
+        subtitle_id: Some(2),
+        watermark_ids: &[],
+        replacements: &[],
+        ffmpeg,
+        deadline: Instant::now() + Duration::from_secs(30),
+    })
+    .await
+    .unwrap()
 }
 
 async fn prepare_schedule(

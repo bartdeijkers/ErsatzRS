@@ -29,6 +29,72 @@ pub(crate) struct PendingBurn {
     pub source: wire::Source,
 }
 
+pub(crate) struct TroubleshootingSelection<'a> {
+    pub channel: &'a Channel,
+    pub item: &'a PlayoutItem,
+    pub media_version_id: i64,
+    pub source: wire::Source,
+    pub resolution: &'a Resolution,
+    /// None keeps channel preferences; zero means explicitly disabled.
+    pub subtitle_id: Option<i64>,
+}
+
+/// Reuse normal track selection, then apply an explicit troubleshooting subtitle.
+pub(crate) async fn project_troubleshooting_item(
+    pool: &DbPool,
+    request: TroubleshootingSelection<'_>,
+) -> Result<DeferredProjection> {
+    let mut projected = project_deferred_item(
+        pool,
+        request.channel,
+        request.item,
+        request.media_version_id,
+        request.source,
+        request.resolution,
+    )
+    .await?;
+    if let Some(id) = request.subtitle_id {
+        if id < 0 {
+            return Err(invalid("troubleshooting subtitle identity is invalid"));
+        }
+        let selected = if id > 0 {
+            Some(
+                crate::playback::select_next_troubleshooting_subtitle(
+                    pool,
+                    request.item.media_item_id,
+                    request.media_version_id,
+                    id,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        let tracks = projected
+            .item
+            .tracks
+            .as_mut()
+            .ok_or_else(|| invalid("troubleshooting tracks are unavailable"))?;
+        let source = tracks
+            .video
+            .as_ref()
+            .and_then(|track| track.source.as_ref())
+            .ok_or_else(|| invalid("troubleshooting source is unavailable"))?;
+        let (subtitle, pending) = project_deferred_subtitle(
+            pool,
+            selected.as_ref(),
+            source,
+            request.channel.next_engine_text_subtitle_mode,
+            request.item,
+        )
+        .await?;
+        tracks.subtitle = subtitle;
+        projected.pending_burn = pending;
+        projected.selected_subtitle = selected;
+    }
+    Ok(projected)
+}
+
 /// Project one persisted item's timing and tracks using its resolved media version/source.
 ///
 /// The caller resolves source access and applies mirror timestamps before this

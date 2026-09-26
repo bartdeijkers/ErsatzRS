@@ -9783,6 +9783,17 @@ access for Next's internal proxy. Strict infra all-target Clippy, format and
 Clippy-allow policy pass. Review confirms bounded stdin delivery, managed-tree
 ownership, retained finite-run exit status and unchanged live readiness behavior.
 Application request/projection, endpoint and page integration remain open.
+Row 93 adds isolated local/provider item projection through the shared selectors,
+source resolver and subtitle cache. Explicit subtitle IDs are checked against
+the resolved media version; explicit off disables subtitles.
+Preparation revalidates metadata after provider retrieval or embedded extraction,
+without holding scheduler locks or writing a persisted playout. Focused fixtures
+prove selected Dutch audio and seeks, stale subtitle rejection, one-watermark
+validation, unchanged playout row count and authenticated Jellyfin subtitle
+content refresh. Official Next runs the production projection with decoded
+selected audio, visible sought subtitle cues, ended playlist and report dossier
+(Nextest 2ff45e4e). Strict infra all-target Clippy passes. Remote Stream projection,
+application request/host wiring, API/UI and browser acceptance remain open.
 """
 
 [[milestone]]

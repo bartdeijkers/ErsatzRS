@@ -31,6 +31,7 @@ pub mod selection;
 pub mod session;
 pub mod session_transfers;
 mod source;
+pub mod troubleshooting;
 pub mod version;
 
 mod watermark;
