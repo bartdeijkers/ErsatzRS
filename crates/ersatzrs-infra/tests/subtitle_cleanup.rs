@@ -77,7 +77,7 @@ async fn subtitle_cleanup_preserves_every_owner_and_removes_only_invalid_rows() 
     subtitle(&pool, 1001, 0, Some("cache.srt")).await;
     subtitle(&pool, 1002, 99, None).await;
     subtitle(&pool, 1003, 1, None).await;
-    assert_eq!(clean_orphaned_subtitles(&pool, 100_000).await.unwrap(), 23);
+    assert_eq!(clean_orphaned_subtitles(&pool, 100_000).await.unwrap(), 11);
     let ids: Vec<i64> = sqlx::query_scalar(r#"SELECT "Id" FROM "Subtitle" ORDER BY "Id""#)
         .fetch_all(&pool)
         .await
@@ -85,10 +85,48 @@ async fn subtitle_cleanup_preserves_every_owner_and_removes_only_invalid_rows() 
     assert_eq!(
         ids,
         (0..10)
-            .flat_map(|base| (1..=3).map(move |offset| base * 10 + offset))
+            .flat_map(|base| {
+                let last = if [1, 3, 4, 5].contains(&base) { 3 } else { 5 };
+                (1..=last).map(move |offset| base * 10 + offset)
+            })
             .collect::<Vec<_>>()
     );
     assert_eq!(clean_orphaned_subtitles(&pool, 100_000).await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn subtitle_cleanup_preserves_provider_sidecars_without_paths() {
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (1);
+        INSERT INTO "JellyfinMediaSource" ("Id") VALUES (1);
+        INSERT INTO "Library" ("Id","Name","MediaKind","MediaSourceId")
+            VALUES (1,'provider','Movies',1);
+        INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (1,1);
+        INSERT INTO "LibraryPath" ("Id","LibraryId") VALUES (1,1);
+        INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (1,1,0);
+        INSERT INTO "Movie" ("Id") VALUES (1);
+        INSERT INTO "JellyfinMovie" ("Id","ItemId") VALUES (1,'synthetic-movie');
+        INSERT INTO "MovieMetadata" ("Id","MovieId","MetadataKind","DateAdded","DateUpdated")
+            VALUES (1,1,0,'2026-09-26','2026-09-26');"#,
+    )
+    .await
+    .unwrap();
+    for (id, path) in [(1, None), (2, Some(""))] {
+        subtitle(&pool, id, 1, path).await;
+        sqlx::query(r#"UPDATE "Subtitle" SET "MovieMetadataId" = 1, "StreamIndex" = ?, "IsExtracted" = 1 WHERE "Id" = ?"#)
+            .bind(id).bind(id).execute(&pool).await.unwrap();
+    }
+    for _ in 0..2 {
+        assert_eq!(clean_orphaned_subtitles(&pool, 100_000).await.unwrap(), 0);
+        let rows: Vec<(i64, Option<String>, i64)> = sqlx::query_as(
+            r#"SELECT "StreamIndex","Path","IsExtracted" FROM "Subtitle" ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(rows, vec![(1, None, 1), (2, Some(String::new()), 1)]);
+    }
 }
 
 #[tokio::test]

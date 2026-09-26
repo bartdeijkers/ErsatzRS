@@ -71,6 +71,7 @@ pub mod music_video_credits;
 pub mod next_engine;
 pub mod playback;
 pub mod plex;
+pub mod provider_subtitles;
 pub mod published_interval_source;
 pub mod remote_stream;
 pub mod repositories;

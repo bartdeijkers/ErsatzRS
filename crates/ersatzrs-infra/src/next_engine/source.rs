@@ -11,6 +11,8 @@ use ersatzrs_core::{
 use sqlx::Row;
 use url::Url;
 
+pub(super) use crate::media_server::scoped_credential;
+
 use super::{probe_hint, protocol::Source, schedule::ScheduledMedia};
 use crate::{
     db::DbPool,
@@ -246,43 +248,6 @@ fn http_source(uri: &Url, header: String) -> Result<Source> {
         in_point_ms: None,
         out_point_ms: None,
     })
-}
-
-// The administration contract also supports one legacy global credential.
-// Never apply that fallback to one of several configured servers. In particular,
-// a global Jellyfin Authorization value must not override a source-specific key.
-pub(super) async fn scoped_credential(
-    pool: &DbPool,
-    kind: RemoteMediaSourceKind,
-    keys: &[String],
-    legacy: String,
-) -> Result<String> {
-    for key in keys {
-        if let Some(value) = sqlx::query_scalar::<_, String>(
-            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ? AND "Value" <> ''"#,
-        )
-        .bind(key)
-        .fetch_optional(pool)
-        .await
-        .repository()?
-        {
-            return Ok(value);
-        }
-    }
-    let query = match kind {
-        RemoteMediaSourceKind::Plex => r#"SELECT COUNT(*) FROM "PlexMediaSource""#,
-        RemoteMediaSourceKind::Jellyfin => r#"SELECT COUNT(*) FROM "JellyfinMediaSource""#,
-        RemoteMediaSourceKind::Emby => r#"SELECT COUNT(*) FROM "EmbyMediaSource""#,
-    };
-    let count: i64 = sqlx::query_scalar(query)
-        .fetch_one(pool)
-        .await
-        .repository()?;
-    if count == 1 {
-        Ok(legacy)
-    } else {
-        Err(unavailable("source-specific credential is required"))
-    }
 }
 
 async fn provider_item_id(pool: &DbPool, id: i64, kind: RemoteMediaSourceKind) -> Result<String> {

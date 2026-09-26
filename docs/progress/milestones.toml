@@ -9743,6 +9743,26 @@ Clippy, format and progress validation pass. Row 91 is Port; pin, ledger and
 upstream checkout advance together to 5ab81525. This is scoped script playback
 evidence, not full Windows app or UCU-06 window acceptance. Upstream's FFmpeg 8.1.2 archive revision is superseded by the
 accepted FFmpeg 9 runtime contract (ADR 0063).
+2026-09-26: row 92 (f737de89) implementation restores provider external
+subtitles. Provider identity uses stream index; local identity remains filename.
+Cleanup and health share a local-video-only empty-path predicate. A one-time
+migration invalidates affected Jellyfin/Emby movie and episode Etags, retaining
+subtitle rows and caches. Thirty affected database/provider tests pass (Nextest
+0 skipped); initial regressions reproduced deletion and track collapse.
+Provider ownership and endpoint resolution preserve Emby source IDs and raw
+Jellyfin indexes. Authenticated retrieval is bounded, rejects redirects, redacts
+errors and preserves source-specific credential isolation. Native and
+troubleshooting playback use atomic artifacts and propagate retrieval failures.
+Next uses demand-time preparation, bounded leases, content-specific cache keys
+and publication revalidation. Deferral/off, changed-content and stale-publication
+regressions pass. Official Next 802f2d8 and FFmpeg 9 pass decoded Jellyfin/Emby
+Burn/Convert, source-clock seek and Dutch audio; native FFmpeg decodes the same
+prepared subtitle artifacts with visible glyphs and Dutch audio (Nextest
+4f135f0e). The web-host check and progress validation pass. Final strict infra/web all-target
+Clippy passes. Review verifies provider credential scoping, redirect refusal,
+stale-selection rejection, atomic cache reuse, local identity preservation and
+network work outside schedule locks. Row 92 is Port; the pin, ledger and upstream
+checkout advance together to f737de89. Row 93 is next. Window gates remain open.
 """
 
 [[milestone]]

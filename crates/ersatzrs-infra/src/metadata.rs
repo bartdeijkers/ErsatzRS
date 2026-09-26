@@ -640,10 +640,10 @@ async fn update_subtitle(
 ///
 /// Diffs the just-written subtitle/external-subtitle `MediaStream`s for the
 /// episode's media version against existing `Subtitle` rows keyed by subtitle
-/// kind plus stream index, or by sidecar path when a sidecar path is available:
+/// kind plus provider stream index, independently of the sidecar path:
 /// adds new rows, removes stale ones, and updates the rest. When the kind,
 /// codec, language, or flags
-/// (`Default`/`Forced`/`SDH`) change on a previously extracted row — or the
+/// (`Default`/`Forced`/`SDH`) change on a previously extracted embedded row — or the
 /// path changes — `IsExtracted` is reset to 0 so the extractor re-runs.
 ///
 /// # Errors
@@ -776,21 +776,12 @@ fn subtitle_identity(
     path: Option<&str>,
     local: bool,
 ) -> Option<(i32, String)> {
-    if kind == subtitle_kind::SIDECAR {
-        if let Some(path) = path.filter(|path| !path.is_empty()) {
-            // Local identities follow the filename across moves and platform
-            // separators; provider URLs retain their complete identity.
-            let path = if local {
-                path.rsplit(['/', '\\']).next()?.to_lowercase()
-            } else {
-                path.to_owned()
-            };
-            return Some((kind, format!("file:{path}")));
-        }
-        if local {
-            return None;
-        }
+    if local && kind == subtitle_kind::SIDECAR {
+        let path = path.filter(|path| !path.is_empty())?;
+        let filename = path.rsplit(['/', '\\']).next()?.to_lowercase();
+        return Some((kind, format!("file:{filename}")));
     }
+    // Provider sidecars can share a source path or have no path at all.
     Some((kind, format!("idx:{index}")))
 }
 

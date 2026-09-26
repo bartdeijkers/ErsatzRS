@@ -2,12 +2,12 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..d7b265e0 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 174 commits, 91 reconciled, 83 pending. Bootstrap and AMM-N-03 are
+Ledger: 174 commits, 92 reconciled, 82 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
-UCU-06 row 91 is Port; row 92 is next.
+UCU-06: rows 91-92 Port; row 93 next.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -108,6 +108,14 @@ discovered  = '2026-09-23'
 resolved    = true
 adr         = '0095'
 evidence    = 'UCU-04 owns current evidence: ordinary finite/live A/V and absolute/relative external Burn/Convert, direct finite/live HTTP and RTSP sidecar Burn/Convert, retained requested cuts and mapped captions, fresh metadata and one-shot producer ownership have runtime proof. Production response EOF and the authenticated finite producer route pass, including single claims, independent normal/preview lifetimes and active producer cleanup. A real HTTP body disconnect reaps its producer before session stop. Finite/live embedded image rendering and explicit off pass the fresh-index PGS fixture. Scoped review corrected retained preflight cancellation under database contention; focused tests and Clippy pass. Next Burn/Convert and native lifecycle smoke pass. Row 39 is Adapt under ADRs 0066/0100; only the separately tracked embedded text exception remains open. Full window and supported-platform gates are not claimed.'
+
+[[debt]]
+id = 'ucu92-provider-subtitle-recovery'
+description = 'Restore provider external subtitle identity, ordinary-scan recovery and native/Next playback.'
+discovered = '2026-09-26'
+resolved = true
+adr = '0101'
+evidence = 'All 30 affected tests pass, including ordinary-scan repair, ownership cleanup, identity, authenticated retrieval and stale-selection rejection. Web compilation, global credential isolation, Next deferral/off and cache validation pass. Native and official Next decoded provider subtitles, seek timing and Dutch audio pass. Format, whitespace, progress and Clippy-allow policy checks pass. Strict infra/web all-target Clippy passes; row 92 is Port. UCU-06 window acceptance remains open.'
 
 [[debt]]
 id          = 'ucu-native-pipeline-decision'

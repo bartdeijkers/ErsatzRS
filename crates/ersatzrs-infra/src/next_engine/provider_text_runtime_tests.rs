@@ -2,6 +2,154 @@
 use super::*;
 use ersatzrs_core::repositories::RemoteMediaSourceKind;
 
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; disposable authenticated provider sidecars"]
+async fn real_next_provider_external_text_burns_and_converts_after_seek() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = bilingual_clip(&ffmpeg, root.path()).await;
+    let bytes = std::sync::Arc::new(tokio::fs::read(&clip).await.unwrap());
+    for kind in [RemoteMediaSourceKind::Jellyfin, RemoteMediaSourceKind::Emby] {
+        for convert in [false, true] {
+            let server = fixture_media_server().await;
+            let (pool, locker) = provider_text_pool(&clip, &text_profile(), kind).await;
+            sqlx::query(
+                r#"UPDATE "Subtitle" SET "SubtitleKind"=1,"Path"=? WHERE "Language"='nld'"#,
+            )
+            .bind((kind == RemoteMediaSourceKind::Emby).then_some("source-id"))
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(r#"UPDATE "MediaStream" SET "MediaStreamKind"=5 WHERE "Language"='nld' AND "MediaStreamKind"=3"#)
+                .execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "Channel" SET "NextEngineTextSubtitleMode"=? WHERE "Id"=1"#)
+                .bind(i32::from(convert))
+                .execute(&pool)
+                .await
+                .unwrap();
+            let (header, value, subtitle_path) = if kind == RemoteMediaSourceKind::Jellyfin {
+                (
+                    "Authorization",
+                    "MediaBrowser Token=\"<api-key>\"",
+                    "/Videos/fixture-item/fixture-item/Subtitles/3/3/Stream.srt",
+                )
+            } else {
+                (
+                    "X-Emby-Token",
+                    "<api-key>",
+                    "/Videos/fixture-item/source-id/Subtitles/3/Stream.srt",
+                )
+            };
+            let media = server
+                .mock_async(|when, then| {
+                    when.method(httpmock::Method::GET)
+                        .path("/Videos/fixture-item/stream")
+                        .header(header, value);
+                    let bytes = bytes.clone();
+                    then.respond_with(move |request| fixture_range_response(request, &bytes));
+                })
+                .await;
+            let subtitle = server
+                .mock_async(|when, then| {
+                    when.method(httpmock::Method::GET)
+                        .path(subtitle_path)
+                        .header(header, value);
+                    then.status(200).body(CUES);
+                })
+                .await;
+            let _unused_plex = fixture_provider_connection(&pool, kind, &server).await;
+            if !convert {
+                assert_native_provider_sidecar(&pool, &ffmpeg, &clip, root.path()).await;
+            }
+            let host = std::sync::Arc::new(host::NextHost::new(
+                pool,
+                locker,
+                root.path()
+                    .join(format!("{}-{convert}-playout", kind.provider_name())),
+            ));
+            let mut callback = callback_listener(host.clone()).await;
+            assert_provider_conversion(
+                &host,
+                host::NextStart {
+                    channel_id: 1,
+                    preview: false,
+                    number: "1".into(),
+                    executable: binary.clone(),
+                    output: root
+                        .path()
+                        .join(format!("{}-{convert}-output", kind.provider_name())),
+                    ffmpeg: ffmpeg.clone(),
+                    ffprobe: ffprobe.clone(),
+                    replacements: Vec::new(),
+                    idle_timeout: None,
+                    deadline: Instant::now() + Duration::from_secs(30),
+                },
+                convert,
+            )
+            .await;
+            assert!(
+                subtitle.calls_async().await > 0,
+                "callback must fetch the selected provider sidecar"
+            );
+            assert!(media.calls_async().await > 0);
+            callback.stop().await;
+        }
+    }
+}
+
+async fn assert_native_provider_sidecar(
+    pool: &crate::db::DbPool,
+    ffmpeg: &Path,
+    clip: &Path,
+    root: &Path,
+) {
+    let selected = crate::playback::select_playback_subtitle(
+        pool,
+        10,
+        &["nld".into()],
+        ersatzrs_domain::ChannelSubtitleMode::Any,
+        ersatzrs_domain::StreamingMode::TransportStream,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let prepared =
+        crate::provider_subtitles::prepare(pool, &selected, &root.join("native-captions"))
+            .await
+            .unwrap();
+    let input = crate::playback::subtitle_input_for_stream(
+        &prepared,
+        clip.to_str().unwrap(),
+        ersatzrs_ffmpeg::OutputFormat::MpegTs,
+        ersatzrs_domain::StreamingMode::TransportStream,
+    )
+    .unwrap();
+    let output = root.join("native-provider.ts");
+    let mut command = Command::new(ffmpeg);
+    command
+        .args(["-v", "error", "-nostdin", "-y", "-i"])
+        .arg(clip)
+        .args([
+            "-ss", "5", "-t", "3", "-map", "0:v:0", "-map", "0:a:1", "-vf",
+        ])
+        .arg(format!("subtitles={}", input.path))
+        .args([
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "aac",
+            "-f",
+            "mpegts",
+        ])
+        .arg(&output);
+    tool(command).await;
+    assert_text_video_and_audio(ffmpeg, &output, true).await;
+}
+
 pub(super) async fn bilingual_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
     let dutch = generate_text_clip(ffmpeg, folder).await;
     let english = folder.join("english.srt");
@@ -77,6 +225,7 @@ pub(super) async fn provider_text_pool(
 async fn assert_provider_conversion(
     host: &std::sync::Arc<host::NextHost>,
     request: host::NextStart,
+    convert: bool,
 ) {
     let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
     let task = host.start(registry.clone(), request.clone()).await.unwrap();
@@ -120,9 +269,9 @@ async fn assert_provider_conversion(
     })
     .await
     .unwrap();
-    assert_text_vtt(&body, true, duration);
+    assert_text_vtt(&body, convert, duration);
     assert!(!body.contains("UNSELECTED ENGLISH"));
-    assert_text_video_and_audio(&request.ffmpeg, &request.output.join(segment), false).await;
+    assert_text_video_and_audio(&request.ffmpeg, &request.output.join(segment), !convert).await;
     assert!(registry.stop_channel("1").await);
     task.await.unwrap();
     assert!(!request.output.exists());
@@ -205,6 +354,7 @@ async fn real_next_provider_embedded_text_converts_selected_language_with_seek_a
                 idle_timeout: None,
                 deadline: Instant::now() + Duration::from_secs(30),
             },
+            true,
         )
         .await;
         assert!(

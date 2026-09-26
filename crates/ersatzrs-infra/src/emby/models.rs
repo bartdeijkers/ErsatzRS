@@ -113,6 +113,7 @@ pub(super) struct EmbyPlaybackInfoResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(super) struct EmbyMediaSourceResponse {
+    pub(super) id: Option<String>,
     #[serde(default)]
     pub(super) run_time_ticks: i64,
     #[serde(default)]

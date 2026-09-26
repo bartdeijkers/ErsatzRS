@@ -49,6 +49,68 @@ pub(crate) fn item() -> PlayoutItem {
     }
 }
 
+#[tokio::test]
+async fn provider_sidecar_projection_defers_burn_and_convert_without_network_access() {
+    let pool = fixture_pool().await;
+    for sql in [
+        r#"INSERT INTO "JellyfinMediaSource" ("Id") VALUES (1)"#,
+        r#"INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (1,1)"#,
+        r#"INSERT INTO "JellyfinMovie" ("Id","ItemId") VALUES (10,'synthetic-movie')"#,
+        r#"UPDATE "Subtitle" SET "Path" = NULL WHERE "Id" = 2"#,
+        r#"INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Default","Forced","MediaVersionId") VALUES (9,'subrip',5,'nld',0,1,0,100)"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    // There is deliberately no connection or credential: projection must do SQL
+    // selection only; the authenticated callback supplies the actual artifact.
+    for mode in [
+        ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
+        ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
+    ] {
+        let channel = Channel {
+            subtitle_mode: ChannelSubtitleMode::Any,
+            preferred_subtitle_language_code: Some("nld".into()),
+            next_engine_text_subtitle_mode: mode,
+            ..Default::default()
+        };
+        let source = wire::Source::Local {
+            path: "synthetic.mkv".into(),
+            in_point_ms: None,
+            out_point_ms: None,
+            probe_hint: None,
+        };
+        let projected = project_deferred_item(
+            &pool,
+            &channel,
+            &item(),
+            100,
+            source.clone(),
+            &Resolution::default(),
+        )
+        .await
+        .unwrap();
+        let pending = projected
+            .pending_burn
+            .expect("provider preparation is deferred");
+        assert_eq!(pending.subtitle.id, 2);
+        assert_eq!(pending.subtitle.stream_index, 9);
+        assert!(pending.subtitle.path.is_none());
+        let mut off = item();
+        off.pinned_stream_selection = Some(PinnedStreamSelection {
+            media_version_id: 100,
+            video_stream_index: 0,
+            audio_stream_index: Some(1),
+            subtitle_stream_index: None,
+        });
+        let projected =
+            project_deferred_item(&pool, &channel, &off, 100, source, &Resolution::default())
+                .await
+                .unwrap();
+        assert!(projected.pending_burn.is_none());
+        assert!(projected.item.tracks.unwrap().subtitle.is_none());
+    }
+}
+
 async fn project(
     pool: &DbPool,
     channel: &Channel,

@@ -392,6 +392,13 @@ pub(super) fn project_playback(response: EmbyPlaybackInfoResponse) -> Option<Emb
             .media_streams
             .into_iter()
             .filter_map(project_stream)
+            .map(|mut stream| {
+                if stream.kind == MediaStreamKind::ExternalSubtitle {
+                    // Emby's subtitle endpoint uses this source ID, not a file path.
+                    stream.file_name.clone_from(&media_source.id);
+                }
+                stream
+            })
             .collect(),
     })
 }

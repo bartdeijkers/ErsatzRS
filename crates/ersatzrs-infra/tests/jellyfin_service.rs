@@ -1276,3 +1276,202 @@ async fn jellyfin_collection_rows(pool: &SqlitePool) -> serde_json::Value {
             .collect(),
     )
 }
+
+#[tokio::test]
+async fn jellyfin_external_subtitles_recover_on_ordinary_scan_after_repair() {
+    let server = MockServer::start_async().await;
+    let _items = mock_detailed_movie_items(&server).await;
+    let playback = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/Items/movie-1/PlaybackInfo");
+            then.status(200).json_body(json!({"MediaSources": [{
+            "Id": "shared-provider-source", "RunTimeTicks": 120_000_000,
+            "MediaStreams": [
+                {"Type":"Video","Index":0,"Codec":"h264","Width":320,"Height":180},
+                {"Type":"Audio","Index":1,"Codec":"aac","Language":"eng","Channels":2},
+                {"Type":"Subtitle","Index":2,"Codec":"subrip","Language":"eng","IsExternal":true},
+                {"Type":"Subtitle","Index":3,"Codec":"subrip","Language":"nld","IsExternal":true}
+            ]
+        }]}));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: server.base_url(),
+        authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
+    };
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+    sqlx::query(r#"DELETE FROM "Subtitle" WHERE "SubtitleKind" = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // The unchanged provider Etag reproduces missing tracks staying missing.
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+    assert_eq!(playback.calls_async().await, 1);
+    assert_eq!(count(&pool, "Subtitle").await, 0);
+    sqlx::query(
+        r#"INSERT INTO "JellyfinConnection" ("Address","JellyfinMediaSourceId") VALUES (?,1)"#,
+    )
+    .bind(server.base_url())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?, 'synthetic-subtitle-key')"#,
+    )
+    .bind(format!("jellyfin.api_key.{}", server.base_url()))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let subtitles = server
+        .mock_async(|when, then| {
+            when.method(GET).path_includes("/Subtitles/").header(
+                "Authorization",
+                r#"MediaBrowser Token="synthetic-subtitle-key""#,
+            );
+            then.status(200)
+                .body("1\n00:00:00,000 --> 00:00:01,000\nSynthetic captions\n");
+        })
+        .await;
+    let artifact_cache = tempfile::tempdir().unwrap();
+    // Apply the exact data repair to a populated fixture, then use a normal scan.
+    sqlx::raw_sql(include_str!(
+        "../../../migrations/202609260808_provider_external_subtitle_rescan.sql"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+    assert_eq!(playback.calls_async().await, 2);
+    for _ in 0..2 {
+        assert_eq!(
+            ersatzrs_infra::subtitle_cleanup::clean_orphaned_subtitles(&pool, 100_000)
+                .await
+                .unwrap(),
+            0
+        );
+        let tracks: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+            r#"SELECT "StreamIndex","Language","Path" FROM "Subtitle" WHERE "SubtitleKind" = 1 ORDER BY "StreamIndex""#,
+        ).fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            tracks,
+            vec![(2, "eng".into(), None), (3, "nld".into(), None)]
+        );
+        assert_restored_provider_inputs(&pool, &artifact_cache).await;
+        sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        playback.calls_async().await,
+        2,
+        "subsequent ordinary scans retain the refreshed Etag"
+    );
+    assert_eq!(subtitles.calls_async().await, 8);
+    subtitles.delete_async().await;
+    assert_provider_retrieval_fails_closed(&pool, &server).await;
+}
+
+async fn assert_restored_provider_inputs(pool: &SqlitePool, artifact_cache: &tempfile::TempDir) {
+    let item_id: i64 = sqlx::query_scalar(r#"SELECT "Id" FROM "Movie""#)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    for (language, index) in [("eng", 2), ("nld", 3)] {
+        let selected = ersatzrs_infra::playback::select_playback_subtitle(
+            pool,
+            item_id,
+            &[language.into()],
+            ersatzrs_domain::ChannelSubtitleMode::Any,
+            ersatzrs_domain::StreamingMode::TransportStream,
+        )
+        .await
+        .unwrap()
+        .expect("restored provider track is selectable");
+        assert_eq!(selected.stream_index, index);
+        assert_eq!(selected.language.as_deref(), Some(language));
+        let binding = ersatzrs_infra::provider_subtitles::binding(pool, selected.id)
+            .await
+            .unwrap()
+            .expect("provider subtitle binding");
+        assert_eq!(binding.media_source_id, 1);
+        let content = ersatzrs_infra::provider_subtitles::fetch(pool, selected.id)
+            .await
+            .unwrap()
+            .expect("authenticated provider subtitle content");
+        assert_eq!(content.extension, "srt");
+        assert!(content.bytes.ends_with(b"Synthetic captions\n"));
+        let prepared =
+            ersatzrs_infra::provider_subtitles::prepare(pool, &selected, artifact_cache.path())
+                .await
+                .unwrap();
+        assert_eq!(prepared.id, selected.id);
+        assert_eq!(prepared.stream_index, selected.stream_index);
+        let path = prepared.path.as_ref().expect("complete provider artifact");
+        assert_eq!(tokio::fs::read(path).await.unwrap(), content.bytes);
+        let input = ersatzrs_infra::playback::subtitle_input_for_stream(
+            &prepared,
+            "synthetic.mkv",
+            ersatzrs_ffmpeg::OutputFormat::MpegTs,
+            ersatzrs_domain::StreamingMode::TransportStream,
+        )
+        .expect("restored provider subtitle produces a native playback input");
+        assert_eq!(&input.path, path);
+        let mut stale_selection = selected.clone();
+        stale_selection.stream_index += 1;
+        assert!(
+            ersatzrs_infra::provider_subtitles::prepare(
+                pool,
+                &stale_selection,
+                artifact_cache.path(),
+            )
+            .await
+            .is_err(),
+            "a changed selected provider index must not silently fetch another track"
+        );
+
+        let endpoint = binding.endpoint("https://example.test/server/").unwrap();
+        assert_eq!(endpoint.as_str(), format!("https://example.test/server/Videos/movie-1/movie-1/Subtitles/{index}/{index}/Stream.srt"));
+    }
+}
+
+async fn assert_provider_retrieval_fails_closed(pool: &SqlitePool, server: &MockServer) {
+    let subtitle_id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "Subtitle" WHERE "StreamIndex" = 2"#)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let unexpected = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/unexpected-subtitle-redirect");
+            then.status(200).body("must not be requested");
+        })
+        .await;
+    for status in [401, 302] {
+        let rejected = server
+            .mock_async(|when, then| {
+                when.method(GET).path_includes("/Subtitles/");
+                then.status(status).header(
+                    "Location",
+                    format!("{}/unexpected-subtitle-redirect", server.base_url()),
+                );
+            })
+            .await;
+        let error = ersatzrs_infra::provider_subtitles::fetch(pool, subtitle_id)
+            .await
+            .err()
+            .expect("authentication and redirects must fail closed");
+        let message = error.to_string();
+        assert!(!message.contains("synthetic-subtitle-key"));
+        assert!(!message.contains(&server.base_url()));
+        rejected.delete_async().await;
+    }
+    assert_eq!(unexpected.calls_async().await, 0);
+}

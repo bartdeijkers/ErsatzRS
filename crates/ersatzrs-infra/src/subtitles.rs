@@ -189,7 +189,7 @@ fn build_seek_subtitle_args(
 }
 
 #[derive(Debug, thiserror::Error)]
-enum SubtitleTextSourceError {
+pub(crate) enum SubtitleTextSourceError {
     #[error("failed to read local subtitle: {0}")]
     Io(#[from] std::io::Error),
     #[error("failed to fetch remote subtitle: {0}")]
@@ -225,7 +225,7 @@ async fn read_subtitle_text_source(
     decode_subtitle_text(bytes)
 }
 
-fn decode_subtitle_text(
+pub(crate) fn decode_subtitle_text(
     mut bytes: Vec<u8>,
 ) -> std::result::Result<String, SubtitleTextSourceError> {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {

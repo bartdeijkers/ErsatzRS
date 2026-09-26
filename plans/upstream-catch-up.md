@@ -28,7 +28,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 row 91 (`5ab81525`) is Port; row 92 (`f737de89`) is next.
+  at `81bcd649`. UCU-06 rows 91-92 are Port; row 93 (`ad9848cc`) is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -38,6 +38,70 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 92 source map: provider external subtitle recovery
+
+- Upstream `f737de89` changes `DeleteOrphanedSubtitlesHandler`,
+  `MetadataRepository.UpdateSubtitles`, its local and media-server callers,
+  and the `Fix_MediaServerExternalSubtitles` data migration.
+- Provider subtitle identity is owner, subtitle kind and stream index. Local
+  sidecars retain case-insensitive filename identity. Repeated scans preserve
+  row identities; changed sidecar paths update metadata without collapsing
+  distinct language streams that share a provider path.
+- Empty-path cleanup applies only to local Movie, Episode, MusicVideo and
+  OtherVideo owners. Provider sidecars can be fetched by index without a path.
+  Ownerless cleanup, bounded atomic batches and cached files remain protected.
+- ErsatzRS targets: infra metadata persistence, the shared cleanup/health
+  predicate, and a one-time SQLite repair invalidating Jellyfin/Emby movie and
+  episode Etags only where external MediaStreams exist. Existing subtitle rows
+  and cached files survive the repair; ordinary scans restore missing rows.
+- Acceptance: distinct provider streams, stable rescans, cache invalidation,
+  local/provider cleanup ownership, repair targeting and idempotence, ordinary
+  provider scan recovery, and playback availability. No browser UI change or
+  MySQL migration is required. Audit and implementation are in progress.
+- Playback audit: upstream `GetSubtitlePathByIdHandler` resolves provider
+  endpoints before input construction. Jellyfin uses item identity and stream
+  index; Emby additionally needs the media-source identity stored in `Path`.
+  ErsatzRS currently selects restored rows but `subtitle_input_for_stream`
+  cannot construct text input from their absent paths. Emby stream projection
+  also omits that source identity. Port the missing resolution through existing
+  protected provider access, shared by native playback, troubleshooting and
+  Next; do not expose credentials in stored subtitle paths or diagnostics.
+- Index mapping: ErsatzTV adds `JellyfinStream.ExternalStreamOffset` (100,000)
+  when scanning, then subtracts it for the provider URL. ErsatzRS stores the
+  provider's raw index, so endpoint construction must use that raw index without
+  subtraction. Emby's `EmbyApiClient` puts the media-source ID in external
+  stream `FileName`; the matching local projection is now implemented and its
+  HTTP rescan test passes. Shared provider subtitle bindings now resolve exact
+  owning-server and item identities, encode endpoint path segments and preserve
+  configured server base paths. Both provider HTTP tests prove language
+  selection and endpoint mapping; SQLite uses primary-key lookups throughout.
+  Authenticated retrieval now shares the existing owning-server credential
+  selection with Next media opens. HTTP fixtures pass downloads, failed
+  authentication, redirect refusal and redacted errors. Downloads have a
+  15-second deadline and 32 MiB limit. Native/Next artifact integration and
+  runtime availability remain open.
+- Native playback now prepares an atomically published local artifact before
+  constructing subtitle input, retaining the provider row/index in the database.
+  Both provider HTTP tests prove artifact bytes and native input construction.
+  Next projection now records pending provider preparation without network I/O;
+  programme and fallback callbacks fetch into the existing bounded subtitle
+  cache, then revalidate publication identity. The cache key includes downloaded
+  content. Next checks and runtime proof remain pending, as does troubleshooting
+  integration.
+- Troubleshooting now prepares provider artifacts and propagates preparation
+  failures. The web-host check passes. Official Next `802f2d8` (staged release
+  archive SHA-256 `f4f06196f7ecb751ee973d6754cf3292f22ab1a7f92e85e836ee490056631808`)
+  passes authenticated Jellyfin/Emby external subtitle Burn and Convert through
+  real demand-time callbacks, with decoded glyph/WebVTT, seek and Dutch audio
+  checks. Native decoded artifact proof and final row review are running.
+
+Row 92 closeout: all 30 affected tests, native and official Next decoded
+playback, strict infra/web all-target Clippy, format, progress and policy checks
+pass. Review confirms source-scoped credentials, no redirect forwarding,
+stale-selection rejection, atomic reusable artifacts, no network under schedule
+locks and unchanged local subtitle identity. Verdict: Port. Pin, ledger and
+upstream checkout advance together to `f737de89`; row 93 is next.
 
 ## Row 91 source map: Unicode MPEG-TS script inputs
 
@@ -1729,7 +1793,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | Covered | support-pages | `docs(porting): record existing playback archive engine versions` | ucu-05; row-80 f6f076a2 already writes both top-level keys to troubleshooting_info.json and includes it in playback ZIPs. Shared detected-version tests cover present/absent optional Next under ADR 0095; source and progress checks pass. |
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.1 release metadata` | ucu-05; only CHANGELOG adds a 26.7.1 heading and comparison links, despite the 26.7.0 commit subject. ErsatzRS keeps its own release history. Source and progress checks pass; UCU-05 window acceptance remains open. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | Port | mpeg-ts-channel-streaming | `fix(web): preserve Unicode MPEG-TS script inputs` | ucu-06; ETV_* environment values, bundled script upgrade and custom-template compatibility. Fourteen focused tests, strict web Clippy and native Windows/Unix FFmpeg 9 Unicode playback pass with both audio tracks. The upstream FFmpeg 8.1.2 archive is superseded by ADR 0063. |
-| 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | | | | ucu-06; provisional: Port candidate. |
+| 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | Port | upstream-baseline-catch-up | `fix(infra): restore provider external subtitle playback` | ucu-06; ADR 0101, provider stream identity, local-only cleanup, targeted rescan repair, authenticated subtitle artifacts and native/Next/troubleshooting integration. Thirty affected tests, native and official Next decoded playback, scoped strict Clippy and review pass. |
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 95 | `7b43e2f7` | chore: update next channel config model (#2975) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |

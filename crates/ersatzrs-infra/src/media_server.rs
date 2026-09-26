@@ -12,6 +12,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
+use crate::repositories::SqlxResultExt as _;
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
     classify_alternate_version, classify_extra_file_stem, classify_extra_video_path,
@@ -478,6 +479,52 @@ pub(crate) async fn flag_media_items(
     }
     query.execute(pool).await?;
     Ok(())
+}
+
+// The administration contract also supports one legacy global credential.
+// Never apply that fallback to one of several configured servers. In particular,
+// a global Jellyfin Authorization value must not override a source-specific key.
+pub(crate) async fn scoped_credential(
+    pool: &DbPool,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    keys: &[String],
+    legacy: String,
+) -> ersatzrs_core::repositories::Result<String> {
+    for key in keys {
+        if let Some(value) = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ? AND "Value" <> ''"#,
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .repository()?
+        {
+            return Ok(value);
+        }
+    }
+    let query = match kind {
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Plex => {
+            r#"SELECT COUNT(*) FROM "PlexMediaSource""#
+        }
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Jellyfin => {
+            r#"SELECT COUNT(*) FROM "JellyfinMediaSource""#
+        }
+        ersatzrs_core::repositories::RemoteMediaSourceKind::Emby => {
+            r#"SELECT COUNT(*) FROM "EmbyMediaSource""#
+        }
+    };
+    let count: i64 = sqlx::query_scalar(query)
+        .fetch_one(pool)
+        .await
+        .repository()?;
+    if count == 1 {
+        Ok(legacy)
+    } else {
+        Err(ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "media provider",
+            value: "source-specific credential is required".into(),
+        })
+    }
 }
 
 #[cfg(test)]

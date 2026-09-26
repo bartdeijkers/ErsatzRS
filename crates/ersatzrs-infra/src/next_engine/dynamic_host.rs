@@ -144,39 +144,51 @@ impl NextHost {
             .ok_or_else(|| unavailable("subtitle preparation changed"))?;
         let stream = u32::try_from(pending.subtitle.stream_index)
             .map_err(|_| unavailable("subtitle stream is invalid"))?;
-        let prepared = self
-            .burn_cache
-            .prepare(
-                &before.identity.cache_key,
-                &pending.source,
-                stream,
-                pending.subtitle.codec.as_deref().unwrap_or("subrip"),
-                &request.ffmpeg,
-                before.projection.item.finish,
-                // Reserve five seconds for managed-child cleanup plus one for
-                // final identity validation before the outer handler timeout.
-                deadline - std::time::Duration::from_secs(6),
-                || async {
-                    dynamic_projection::project_snapshot(
-                        &self.pool,
-                        &self.locker,
-                        &self.media,
-                        channel_id,
-                        item_id,
-                        now,
-                        until,
-                        &request.replacements,
-                        audio,
-                    )
-                    .await
-                    .is_ok_and(|current| {
-                        &current.identity.descriptor == digest
-                            && current.identity.cache_key == before.identity.cache_key
-                    })
-                },
+        let validate = || async {
+            dynamic_projection::project_snapshot(
+                &self.pool,
+                &self.locker,
+                &self.media,
+                channel_id,
+                item_id,
+                now,
+                until,
+                &request.replacements,
+                audio,
             )
             .await
-            .map_err(|_| unavailable("subtitle preparation failed"))?;
+            .is_ok_and(|current| {
+                &current.identity.descriptor == digest
+                    && current.identity.cache_key == before.identity.cache_key
+            })
+        };
+        let preparation_deadline = deadline - std::time::Duration::from_secs(6);
+        let prepared = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
+        {
+            self.burn_cache
+                .prepare_provider(
+                    &self.pool,
+                    (&before.identity.cache_key, pending.subtitle.id),
+                    before.projection.item.finish,
+                    preparation_deadline,
+                    validate,
+                )
+                .await
+        } else {
+            self.burn_cache
+                .prepare(
+                    &before.identity.cache_key,
+                    &pending.source,
+                    stream,
+                    pending.subtitle.codec.as_deref().unwrap_or("subrip"),
+                    &request.ffmpeg,
+                    before.projection.item.finish,
+                    preparation_deadline,
+                    validate,
+                )
+                .await
+        }
+        .map_err(|_| unavailable("subtitle preparation failed"))?;
         // Metadata and membership may change while FFmpeg is running. Never
         // attach a completed artifact to a different selection or publication.
         let after = dynamic_projection::project_snapshot(

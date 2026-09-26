@@ -20,6 +20,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve provider external subtitle tracks during scans and hourly cleanup,
+  including tracks with shared or missing paths. Affected Jellyfin and Emby
+  movies and episodes refresh on their next ordinary library scan.
 - Preserve Unicode channel names and FFmpeg paths in MPEG-TS wrapper scripts
   through the upstream-compatible `ETV_*` environment variables; upgrade
   unchanged bundled scripts while preserving custom templates.

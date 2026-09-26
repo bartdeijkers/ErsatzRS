@@ -10,13 +10,38 @@ pub(crate) const INVALID_SUBTITLE: &str = r#"
     AND "MusicVideoMetadataId" IS NULL AND "OtherVideoMetadataId" IS NULL
     AND "RemoteStreamMetadataId" IS NULL AND "SeasonMetadataId" IS NULL
     AND "ShowMetadataId" IS NULL AND "SongMetadataId" IS NULL)
-    OR ("SubtitleKind" = 1 AND ("Path" IS NULL OR "Path" = ''))"#;
+    OR ("SubtitleKind" = 1 AND ("Path" IS NULL OR "Path" = '') AND (
+        EXISTS (SELECT 1 FROM "MovieMetadata" M
+            INNER JOIN "MediaItem" I ON I."Id" = M."MovieId"
+            INNER JOIN "LibraryPath" P ON P."Id" = I."LibraryPathId"
+            INNER JOIN "LocalLibrary" L ON L."Id" = P."LibraryId"
+            WHERE M."Id" = "Subtitle"."MovieMetadataId")
+        OR
+        EXISTS (SELECT 1 FROM "EpisodeMetadata" M
+            INNER JOIN "MediaItem" I ON I."Id" = M."EpisodeId"
+            INNER JOIN "LibraryPath" P ON P."Id" = I."LibraryPathId"
+            INNER JOIN "LocalLibrary" L ON L."Id" = P."LibraryId"
+            WHERE M."Id" = "Subtitle"."EpisodeMetadataId")
+        OR
+        EXISTS (SELECT 1 FROM "MusicVideoMetadata" M
+            INNER JOIN "MediaItem" I ON I."Id" = M."MusicVideoId"
+            INNER JOIN "LibraryPath" P ON P."Id" = I."LibraryPathId"
+            INNER JOIN "LocalLibrary" L ON L."Id" = P."LibraryId"
+            WHERE M."Id" = "Subtitle"."MusicVideoMetadataId")
+        OR
+        EXISTS (SELECT 1 FROM "OtherVideoMetadata" M
+            INNER JOIN "MediaItem" I ON I."Id" = M."OtherVideoId"
+            INNER JOIN "LibraryPath" P ON P."Id" = I."LibraryPathId"
+            INNER JOIN "LocalLibrary" L ON L."Id" = P."LibraryId"
+            WHERE M."Id" = "Subtitle"."OtherVideoMetadataId")
+    ))"#;
 
-/// Remove ownerless subtitles and sidecars without a path, preserving cached files.
+/// Remove ownerless subtitles and local video sidecars without a path.
 ///
 /// Each batch of at most 5,000 rows is an atomic SQL statement. At most `limit`
 /// rows are removed per pass; subsequent scheduled passes drain any remainder.
-/// Attached embedded and generated subtitles may legitimately have no path.
+/// Cached files are preserved. Provider sidecars, embedded and generated
+/// subtitles may legitimately have no path.
 /// A failed batch rolls back; earlier batches remain committed.
 ///
 /// # Errors

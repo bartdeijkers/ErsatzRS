@@ -944,6 +944,31 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     };
+    let subtitle = match subtitle {
+        Some(selected) => {
+            let Ok(Ok(prepared)) = tokio::time::timeout_at(
+                startup_deadline,
+                ersatzrs_infra::provider_subtitles::prepare(
+                    &state.pool,
+                    &selected,
+                    &ersatzrs_infra::file_system_layout::subtitle_seek_cache_folder(),
+                ),
+            )
+            .await
+            else {
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "selected provider subtitle is unavailable",
+                )
+                    .into_response();
+            };
+            Some(prepared)
+        }
+        None => None,
+    };
     let mut retained_subtitle_input = None;
     let retained_subtitle_verified =
         if let (Some(source), Some(subtitle)) = (&interval_source, &subtitle) {

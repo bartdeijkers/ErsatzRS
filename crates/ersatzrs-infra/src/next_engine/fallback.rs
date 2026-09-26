@@ -395,25 +395,39 @@ impl NextHost {
             });
         }
         if let Some(pending) = projected.pending_burn.as_ref() {
-            let path = self
-                .burn_cache
-                .prepare(
-                    &identity.cache_key,
-                    &pending.source,
-                    u32::try_from(pending.subtitle.stream_index).map_err(|_| unavailable())?,
-                    pending.subtitle.codec.as_deref().unwrap_or("subrip"),
-                    &request.ffmpeg,
-                    item.finish,
-                    deadline - std::time::Duration::from_secs(6),
-                    || async {
-                        Box::pin(self.fallback_preparation_unchanged(
-                            channel, item, request, gap, instance, audio, identity,
-                        ))
-                        .await
-                    },
-                )
+            let validate = || async {
+                Box::pin(self.fallback_preparation_unchanged(
+                    channel, item, request, gap, instance, audio, identity,
+                ))
                 .await
-                .map_err(|_| unavailable())?;
+            };
+            let preparation_deadline = deadline - std::time::Duration::from_secs(6);
+            let path = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
+            {
+                self.burn_cache
+                    .prepare_provider(
+                        &self.pool,
+                        (&identity.cache_key, pending.subtitle.id),
+                        item.finish,
+                        preparation_deadline,
+                        validate,
+                    )
+                    .await
+            } else {
+                self.burn_cache
+                    .prepare(
+                        &identity.cache_key,
+                        &pending.source,
+                        u32::try_from(pending.subtitle.stream_index).map_err(|_| unavailable())?,
+                        pending.subtitle.codec.as_deref().unwrap_or("subrip"),
+                        &request.ffmpeg,
+                        item.finish,
+                        preparation_deadline,
+                        validate,
+                    )
+                    .await
+            }
+            .map_err(|_| unavailable())?;
             projected.item =
                 super::dynamic_host::install_prepared_track(projected.item.clone(), &path)?;
         }

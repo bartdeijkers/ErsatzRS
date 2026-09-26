@@ -245,13 +245,15 @@ async fn sidecar_rows(pool: &sqlx::SqlitePool) -> Vec<(i64, Option<String>, Opti
 }
 
 #[tokio::test]
-async fn provider_sidecars_with_equal_filenames_keep_distinct_url_identities() {
+async fn provider_sidecars_with_equal_filenames_keep_distinct_stream_identities() {
     let pool = common::test_db().await;
     seed_local_movie(&pool).await;
     let streams: Vec<_> = [("one", "eng"), ("two", "spa")]
         .into_iter()
-        .map(|(directory, language)| MediaStream {
-            index: 0,
+        .enumerate()
+        // Provider streams have distinct indexes even when filenames coincide.
+        .map(|(index, (directory, language))| MediaStream {
+            index: i32::try_from(index).unwrap(),
             kind: MediaStreamKind::ExternalSubtitle,
             codec: Some("subrip".into()),
             language: Some(language.into()),
@@ -274,6 +276,52 @@ async fn provider_sidecars_with_equal_filenames_keep_distinct_url_identities() {
         assert_eq!(rows[0].1.as_deref(), Some("eng"));
         assert_eq!(rows[1].1.as_deref(), Some("spa"));
         assert_ne!(rows[0].2, rows[1].2);
+    }
+}
+
+#[tokio::test]
+async fn provider_sidecars_sharing_a_path_keep_languages_and_stable_rows() {
+    let pool = common::test_db().await;
+    seed_local_movie(&pool).await;
+    let mut previous_ids = None;
+    for path in [Some("provider-source"), Some("provider-source"), None] {
+        let streams: Vec<_> = [(2, "eng"), (3, "nld")]
+            .into_iter()
+            .map(|(index, language)| MediaStream {
+                index,
+                kind: MediaStreamKind::ExternalSubtitle,
+                codec: Some("subrip".into()),
+                language: Some(language.into()),
+                file_name: path.map(str::to_owned),
+                ..MediaStream::default()
+            })
+            .collect();
+        let mut tx = pool.begin().await.unwrap();
+        ersatzrs_infra::metadata::update_metadata_subtitles(
+            &mut tx,
+            SubtitleMetadataOwner::Movie(10),
+            &streams,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let rows = sidecar_rows(&pool).await;
+        assert_eq!(rows.len(), 2, "shared provider paths must not merge tracks");
+        assert_eq!(rows[0], (2, Some("eng".into()), path.map(str::to_owned)));
+        assert_eq!(rows[1], (3, Some("nld".into()), path.map(str::to_owned)));
+        let ids: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "Subtitle" WHERE "MovieMetadataId" = 10 ORDER BY "StreamIndex""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        if let Some(previous) = &previous_ids {
+            assert_eq!(
+                &ids, previous,
+                "provider path changes preserve stream identity"
+            );
+        }
+        previous_ids = Some(ids);
     }
 }
 

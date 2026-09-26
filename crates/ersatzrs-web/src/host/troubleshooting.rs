@@ -260,7 +260,7 @@ async fn start_playback_preview(
             seek_seconds,
             content_start_time: Utc::now(),
         })
-        .await;
+        .await?;
     let selected_audio_stream_index = match selected_audio_stream_index {
         Some(index) => Some(index),
         None => {
@@ -452,20 +452,17 @@ async fn start_channel_playback_preview(
         )
         .await
         {
-            Ok(Some(selection)) => {
-                let subtitle_input = selection.subtitle.as_ref().and_then(|subtitle| {
-                    subtitle_input_for_stream(
-                        subtitle,
-                        &media_path,
-                        output_format,
-                        StreamingMode::HttpLiveStreamingSegmenter,
-                    )
-                });
-                (
-                    selection.audio_stream_index,
-                    rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
+            Ok(Some(selection)) => (
+                selection.audio_stream_index,
+                subtitle_input_from_optional_subtitle(
+                    &state.pool,
+                    selection.subtitle,
+                    &media_path,
+                    output_format,
+                    start_seconds,
                 )
-            }
+                .await?,
+            ),
             Ok(_) => {
                 let subtitle_input = fallback_channel_subtitle_input(
                     &state.pool,
@@ -475,7 +472,7 @@ async fn start_channel_playback_preview(
                     &media_path,
                     output_format,
                 )
-                .await;
+                .await?;
                 (
                     None,
                     rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
@@ -491,7 +488,7 @@ async fn start_channel_playback_preview(
                     &media_path,
                     output_format,
                 )
-                .await;
+                .await?;
                 (
                     None,
                     rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
@@ -507,7 +504,7 @@ async fn start_channel_playback_preview(
             &media_path,
             output_format,
         )
-        .await;
+        .await?;
         (
             None,
             rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await,
@@ -956,7 +953,7 @@ struct PreviewSelectedStreamsRequest<'a> {
 
 async fn preview_selected_streams(
     request: PreviewSelectedStreamsRequest<'_>,
-) -> (Option<usize>, Option<InputFile>) {
+) -> ApiResult<(Option<usize>, Option<InputFile>)> {
     let PreviewSelectedStreamsRequest {
         pool,
         channel,
@@ -991,55 +988,64 @@ async fn preview_selected_streams(
                 };
                 let (audio_stream_index, subtitle) =
                     resolve_custom_media_selection(selection, explicit_subtitle);
-                return (
+                return Ok((
                     audio_stream_index,
                     subtitle_input_from_optional_subtitle(
+                        pool,
                         subtitle,
                         media_path,
                         output_format,
                         seek_seconds,
                     )
-                    .await,
-                );
+                    .await?,
+                ));
             }
             Ok(_) => {
                 let subtitle =
                     fallback_media_item_selector_subtitle(pool, media_item_id, subtitle_id).await;
-                return (
+                return Ok((
                     None,
                     subtitle_input_from_optional_subtitle(
+                        pool,
                         subtitle,
                         media_path,
                         output_format,
                         seek_seconds,
                     )
-                    .await,
-                );
+                    .await?,
+                ));
             }
             Err(error) => {
                 tracing::warn!(%error, media_item_id, "failed to execute troubleshooting media stream selector");
                 let subtitle =
                     fallback_media_item_selector_subtitle(pool, media_item_id, subtitle_id).await;
-                return (
+                return Ok((
                     None,
                     subtitle_input_from_optional_subtitle(
+                        pool,
                         subtitle,
                         media_path,
                         output_format,
                         seek_seconds,
                     )
-                    .await,
-                );
+                    .await?,
+                ));
             }
         }
     }
 
     let subtitle = fallback_explicit_media_item_subtitle(pool, media_item_id, subtitle_id).await;
-    (
+    Ok((
         None,
-        subtitle_input_from_optional_subtitle(subtitle, media_path, output_format, seek_seconds)
-            .await,
-    )
+        subtitle_input_from_optional_subtitle(
+            pool,
+            subtitle,
+            media_path,
+            output_format,
+            seek_seconds,
+        )
+        .await?,
+    ))
 }
 
 fn resolve_custom_media_selection(
@@ -1102,11 +1108,23 @@ async fn load_preview_subtitle(
 }
 
 async fn subtitle_input_from_optional_subtitle(
+    pool: &ersatzrs_infra::db::DbPool,
     subtitle: Option<PlaybackSubtitle>,
     media_path: &str,
     output_format: OutputFormat,
     seek_seconds: i64,
-) -> Option<InputFile> {
+) -> ApiResult<Option<InputFile>> {
+    let subtitle = match subtitle {
+        Some(selected) => Some(
+            ersatzrs_infra::provider_subtitles::prepare(
+                pool,
+                &selected,
+                &ersatzrs_infra::file_system_layout::subtitle_seek_cache_folder(),
+            )
+            .await?,
+        ),
+        None => None,
+    };
     let input = subtitle.as_ref().and_then(|subtitle| {
         subtitle_input_for_stream(
             subtitle,
@@ -1115,7 +1133,7 @@ async fn subtitle_input_from_optional_subtitle(
             StreamingMode::HttpLiveStreamingSegmenter,
         )
     });
-    rebase_burned_text_subtitle_input(input, seek_seconds).await
+    Ok(rebase_burned_text_subtitle_input(input, seek_seconds).await)
 }
 
 async fn fallback_channel_subtitle_input(
@@ -1125,12 +1143,12 @@ async fn fallback_channel_subtitle_input(
     subtitle_mode: ChannelSubtitleMode,
     media_path: &str,
     output_format: OutputFormat,
-) -> Option<InputFile> {
+) -> ApiResult<Option<InputFile>> {
     let preferences = match playback_language_preferences(pool).await {
         Ok(preferences) => preferences,
         Err(error) => {
             tracing::warn!(%error, media_item_id, "failed to load troubleshooting playback language preferences");
-            return None;
+            return Ok(None);
         }
     };
     let preferred_languages = preferences.subtitle_languages(None, preferred_language);
@@ -1143,16 +1161,20 @@ async fn fallback_channel_subtitle_input(
     )
     .await
     {
-        Ok(Some(subtitle)) => subtitle_input_for_stream(
-            &subtitle,
-            media_path,
-            output_format,
-            StreamingMode::HttpLiveStreamingSegmenter,
-        ),
-        Ok(None) => None,
+        Ok(Some(subtitle)) => {
+            subtitle_input_from_optional_subtitle(
+                pool,
+                Some(subtitle),
+                media_path,
+                output_format,
+                0,
+            )
+            .await
+        }
+        Ok(None) => Ok(None),
         Err(error) => {
             tracing::warn!(%error, media_item_id, "failed to select troubleshooting channel subtitle");
-            None
+            Ok(None)
         }
     }
 }

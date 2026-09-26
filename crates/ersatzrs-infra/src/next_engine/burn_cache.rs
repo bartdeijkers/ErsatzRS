@@ -8,6 +8,9 @@ use std::{
     sync::Arc,
 };
 
+use sha2::Digest as _;
+use std::fmt::Write as _;
+
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::Instant};
@@ -54,6 +57,44 @@ struct Manifest {
 }
 
 impl BurnCache {
+    /// Fetch provider text only during demand-time preparation, outside schedule locks.
+    pub(crate) async fn prepare_provider<F, Fut>(
+        &self,
+        pool: &crate::db::DbPool,
+        identity: (&str, i64),
+        expires: DateTime<Utc>,
+        deadline: Instant,
+        validate: F,
+    ) -> Result<PathBuf, CacheError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = bool>,
+    {
+        let content =
+            tokio::time::timeout_at(deadline, crate::provider_subtitles::fetch(pool, identity.1))
+                .await
+                .map_err(|_| CacheError::Deadline)?
+                .map_err(|_| CacheError::Stale)?
+                .ok_or(CacheError::Stale)?;
+        let format = if content.extension == "ssa" {
+            "ass"
+        } else {
+            content.extension
+        };
+        let text = crate::subtitles::decode_subtitle_text(content.bytes)
+            .map_err(|_| CacheError::Storage)?;
+        let mut digest = sha2::Sha256::new();
+        digest.update(identity.0.as_bytes());
+        digest.update(format.as_bytes());
+        digest.update(text.as_bytes());
+        let mut key = String::with_capacity(64);
+        for byte in digest.finalize() {
+            write!(key, "{byte:02x}").map_err(|_| CacheError::Storage)?;
+        }
+        self.prepare_text(&key, format, &text, expires, deadline, validate)
+            .await
+    }
+
     pub(crate) fn new(root: PathBuf) -> Self {
         Self {
             root,

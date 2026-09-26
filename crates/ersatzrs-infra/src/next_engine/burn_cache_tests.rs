@@ -1,5 +1,82 @@
 use super::*;
 
+#[tokio::test]
+async fn provider_preparation_refreshes_content_and_rejects_stale_publication() {
+    use httpmock::prelude::*;
+    let server = MockServer::start_async().await;
+    let pool = crate::next_engine::selection::tests::fixture_pool().await;
+    for sql in [
+        r#"INSERT INTO "JellyfinMediaSource" ("Id") VALUES (1)"#,
+        r#"INSERT INTO "JellyfinLibrary" ("Id","ShouldSyncItems") VALUES (1,1)"#,
+        r#"INSERT INTO "JellyfinMovie" ("Id","ItemId") VALUES (10,'movie')"#,
+        r#"UPDATE "Subtitle" SET "Path" = NULL WHERE "Id" = 2"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    sqlx::query(
+        r#"INSERT INTO "JellyfinConnection" ("Address","JellyfinMediaSourceId") VALUES (?,1)"#,
+    )
+    .bind(server.base_url())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?, '<synthetic-key>')"#)
+        .bind(format!("jellyfin.api_key.{}", server.base_url()))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let cache = BurnCache::new(root.path().to_owned());
+    let expiry = Utc::now() + Duration::minutes(5);
+    let mut previous = None;
+    for text in ["First captions", "Changed captions"] {
+        let body = format!("1\n00:00:00,000 --> 00:00:03,000\n{text}\n");
+        let endpoint = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path("/Videos/movie/movie/Subtitles/9/9/Stream.srt");
+                then.status(200).body(&body);
+            })
+            .await;
+        let path = cache
+            .prepare_provider(
+                &pool,
+                (&key(1), 2),
+                expiry,
+                Instant::now() + std::time::Duration::from_secs(10),
+                || async { true },
+            )
+            .await
+            .unwrap();
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), body);
+        if let Some(previous) = &previous {
+            assert_ne!(
+                &path, previous,
+                "changed provider bytes need a distinct artifact"
+            );
+            assert!(tokio::fs::read_to_string(previous)
+                .await
+                .unwrap()
+                .contains("First captions"));
+        }
+        assert_eq!(
+            cache
+                .prepare_provider(
+                    &pool,
+                    (&key(1), 2),
+                    expiry,
+                    Instant::now() + std::time::Duration::from_secs(10),
+                    || async { false },
+                )
+                .await
+                .unwrap_err(),
+            CacheError::Stale
+        );
+        previous = Some(path);
+        endpoint.delete_async().await;
+    }
+}
+
 fn key(value: u8) -> String {
     format!("{value:064x}")
 }

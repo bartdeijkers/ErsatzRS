@@ -23,7 +23,7 @@ pub(crate) struct DeferredProjection {
     pub selected_subtitle: Option<PlaybackSubtitle>,
 }
 
-/// Exact selected embedded track and its original, sought media source.
+/// Exact selected embedded/provider track and its original, sought media source.
 pub(crate) struct PendingBurn {
     pub subtitle: PlaybackSubtitle,
     pub source: wire::Source,
@@ -53,6 +53,9 @@ pub async fn project_item(
     let mut projected =
         project_deferred_item(pool, channel, item, media_version_id, source, resolution).await?;
     if let Some(pending) = projected.pending_burn {
+        if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR {
+            return Err(invalid("provider subtitles require deferred preparation"));
+        }
         let track = subtitle_track(
             &pending.subtitle,
             &pending.source,
@@ -69,7 +72,7 @@ pub async fn project_item(
 }
 
 /// Select tracks without running extraction. Pending projections must not be
-/// published until their exact embedded text track has a prepared sidecar.
+/// published until their exact embedded/provider text track has a prepared sidecar.
 /// Legacy extraction metadata does not establish version-scoped cache identity;
 /// the preparation caller must validate that separately.
 pub(crate) async fn project_deferred_item(
@@ -181,12 +184,14 @@ pub(crate) async fn project_deferred_item_with_audio(
         None => silent_audio(duration_ms),
     };
     let selected_subtitle = subtitle;
-    let (subtitle, pending_burn) = project_subtitle(
+    let (subtitle, pending_burn) = project_deferred_subtitle(
+        pool,
         selected_subtitle.as_ref(),
         &source,
         channel.next_engine_text_subtitle_mode,
         item,
-    )?;
+    )
+    .await?;
     Ok(DeferredProjection {
         pending_burn,
         selected_subtitle,
@@ -205,6 +210,39 @@ pub(crate) async fn project_deferred_item_with_audio(
                 subtitle,
             }),
         },
+    })
+}
+
+async fn project_deferred_subtitle(
+    pool: &DbPool,
+    selected_subtitle: Option<&PlaybackSubtitle>,
+    source: &wire::Source,
+    mode: ersatzrs_domain::NextEngineTextSubtitleMode,
+    item: &PlayoutItem,
+) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
+    let provider = if let Some(selected) = selected_subtitle {
+        crate::provider_subtitles::binding(pool, selected.id)
+            .await?
+            .is_some()
+    } else {
+        false
+    };
+    Ok(if provider {
+        let selected = selected_subtitle.ok_or_else(|| invalid("provider subtitle changed"))?;
+        // A placeholder is never published directly: the existing deferred
+        // callback fetches and validates the exact provider subtitle first.
+        (
+            Some(wire::Track {
+                source: Some(source.clone()),
+                stream_index: Some(0),
+            }),
+            Some(PendingBurn {
+                subtitle: selected.clone(),
+                source: source.clone(),
+            }),
+        )
+    } else {
+        project_subtitle(selected_subtitle, source, mode, item)?
     })
 }
 
