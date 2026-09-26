@@ -54,6 +54,9 @@
   virtual start, publishes one isolated preview item, supplies config on stdin,
   applies default overlays and starts `run --troubleshoot`. Reports belong to
   the preview directory; redirect to `ffmpeg.m3u8` instead of `live.m3u8`.
+- Lifetime: upstream preparation rejects overlapping troubleshooting and the
+  worker releases ownership after process completion and diagnostic writes.
+  Share that ownership across Legacy and Next before clearing preview files.
 - Archive contract: inspect the root and immediate child directories; include
   existing native diagnostics plus names containing `ffreport` and `outcome`.
   An FFmpeg or ffreport file is required before returning an archive. Preserve

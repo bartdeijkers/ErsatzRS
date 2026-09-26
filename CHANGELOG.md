@@ -23,6 +23,8 @@ release section when tagging a release.
 - Decode stored media durations correctly when starting playback troubleshooting
   previews, including fractional seconds. Accept empty subtitle selections and
   multiple watermark or graphics selections, and honor Start From Beginning.
+- Keep playback troubleshooting output reserved until its process and diagnostic
+  writes finish, preventing overlapping previews from clearing active files.
 - Include Next FFmpeg reports and outcome diagnostics from immediate report
   subdirectories in playback troubleshooting downloads.
 - Preserve provider external subtitle tracks during scans and hourly cleanup,

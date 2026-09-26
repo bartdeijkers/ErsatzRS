@@ -9804,6 +9804,12 @@ optional IDs, honors the checkbox, and keeps invalid/duplicate scalar rejection.
 All four query regressions pass (Nextest 0743c16a); strict infra/web all-target
 Clippy passes. These are preview prerequisite fixes; Next host/API/UI and browser
 acceptance remain open.
+The process-lifetime audit identifies missing shared troubleshooting ownership:
+concurrent requests could clear an active preview's files. The runtime now
+acquires ownership before preparation and transfers it to the process/log task.
+Clone contention, preparation-error release and ownership through diagnostic
+writes pass (Nextest 87f8b09b); strict web all-target Clippy passes. Next integration
+and browser proof remain open.
 """
 
 [[milestone]]

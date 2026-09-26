@@ -42,7 +42,7 @@ use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
 
 use crate::transport::iptv::stream;
 
@@ -54,6 +54,7 @@ pub struct NativeAdminTroubleshootingRuntime {
     repositories: Arc<Repositories>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     next_version: Arc<OnceLock<String>>,
+    preview_lock: Arc<Mutex<()>>,
 }
 
 impl NativeAdminTroubleshootingRuntime {
@@ -68,6 +69,7 @@ impl NativeAdminTroubleshootingRuntime {
             repositories,
             ffmpeg_runtime,
             next_version,
+            preview_lock: Arc::default(),
         }
     }
 }
@@ -149,7 +151,14 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
         &self,
         request: PlaybackPreviewRequest,
     ) -> Result<(), AdminTroubleshootingRuntimeError> {
-        start_playback_preview(self, &request.into())
+        let ownership = Arc::clone(&self.preview_lock)
+            .try_lock_owned()
+            .map_err(|_| {
+                AdminTroubleshootingRuntimeError::NotFound(
+                    "troubleshooting playback is already running".to_owned(),
+                )
+            })?;
+        start_playback_preview(self, &request.into(), ownership)
             .await
             .map_err(map_runtime_error)
     }
@@ -187,9 +196,10 @@ fn map_runtime_error(
 async fn start_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
+    ownership: OwnedMutexGuard<()>,
 ) -> ApiResult<()> {
     if query.channel.is_some_and(|id| id > 0) {
-        return start_channel_playback_preview(state, query).await;
+        return start_channel_playback_preview(state, query, ownership).await;
     }
 
     let media_item_id = query
@@ -344,7 +354,7 @@ async fn start_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers)?;
+    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
     wait_for_preview_output(&working_dir, output_format).await?;
     Ok(())
 }
@@ -353,6 +363,7 @@ async fn start_playback_preview(
 async fn start_channel_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
+    ownership: OwnedMutexGuard<()>,
 ) -> ApiResult<()> {
     let channel_id = query.channel.filter(|id| *id > 0).ok_or(PreviewNotFound(
         "channel troubleshooting preview requires channel",
@@ -601,7 +612,7 @@ async fn start_channel_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers)?;
+    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
     wait_for_preview_output(&working_dir, output_format).await?;
     Ok(())
 }
@@ -1414,6 +1425,7 @@ fn spawn_preview_ffmpeg(
     working_dir: &FsPath,
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
+    ownership: OwnedMutexGuard<()>,
 ) -> ApiResult<()> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
@@ -1440,6 +1452,7 @@ fn spawn_preview_ffmpeg(
         stderr,
         child,
         dynamic_text_controllers,
+        ownership,
     ));
     Ok(())
 }
@@ -1449,6 +1462,7 @@ async fn write_preview_logs(
     stderr: Option<tokio::process::ChildStderr>,
     mut child: tokio::process::Child,
     dynamic_text_controllers: Vec<DynamicTextController>,
+    _ownership: OwnedMutexGuard<()>,
 ) {
     let mut logs = Vec::new();
     if let Some(stderr) = stderr {
@@ -1718,6 +1732,56 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn preview_ownership_is_shared_by_runtime_clones_and_released_on_preparation_error() {
+        use super::*;
+
+        let pool = ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").unwrap();
+        let runtime = NativeAdminTroubleshootingRuntime::new(
+            pool.clone(),
+            Arc::new(ersatzrs_infra::repositories::make_repositories(pool)),
+            Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
+            Arc::default(),
+        );
+        let clone = runtime.clone();
+        let ownership = Arc::clone(&runtime.preview_lock).try_lock_owned().unwrap();
+        let error = clone
+            .start_playback_preview(PlaybackPreviewRequest::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("already running"));
+        drop(ownership);
+        let error = clone
+            .start_playback_preview(PlaybackPreviewRequest::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("requires mediaItem"));
+        assert!(runtime.preview_lock.try_lock().is_ok());
+    }
+
+    // The shell is only a deterministic exited-child fixture; ownership itself
+    // uses Tokio on every supported host platform.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn preview_ownership_outlives_process_exit_until_diagnostics_are_written() {
+        use super::*;
+
+        let root = tempfile::tempdir().unwrap();
+        let log = root.path().join("logs.txt");
+        let lock = Arc::new(Mutex::new(()));
+        let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+        let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+        child.wait().await.unwrap();
+        let completion = write_preview_logs(log.clone(), None, child, Vec::new(), ownership);
+        assert!(lock.try_lock().is_err());
+        completion.await;
+        assert!(lock.try_lock().is_ok());
+        assert!(tokio::fs::read_to_string(log)
+            .await
+            .unwrap()
+            .contains("exit status:"));
+    }
+
     #[test]
     fn diagnostic_versions_preserve_contract_and_optional_engine_absence() {
         let ffmpeg = ersatzrs_ffmpeg::version::FfmpegVersion {
