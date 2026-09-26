@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-06: reconcile upstream through 7b7a19a2'
+current_focus = 'UCU-07: reconcile upstream through 49b68314'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -103,10 +103,11 @@ managed runtime and Docker smoke defaults adopt it. All required local window
 gates and matched-bundle checks pass. Row 109 is N/A: upstream release bookkeeping only. All 19 window rows are
 reconciled and reviewed. First push eab5a09e reached CI 36271807135; Chromium
 containment and one Next provider fixture failed. Corrections pass focused
-Chromium/Firefox and decoded audio/subtitle proof. Next: finish correction
-commit/push and require terminal green exact-SHA CI before UCU-07.
+Chromium/Firefox and decoded audio/subtitle proof. UCU-06 is Complete:
+correction 0e482f66 is pushed with terminal green exact-SHA CI 36274614736.
+Next: publish the documentation closeout, then start UCU-07 at row 110.
 The refreshed
-tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-06 window gates remain open.
+tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone

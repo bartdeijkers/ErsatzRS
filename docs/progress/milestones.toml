@@ -9703,7 +9703,7 @@ UCU-06. The already-running browser jobs remain observed for real regressions.
 id         = 'ucu-06'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 7b7a19a2'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-05']
@@ -10431,6 +10431,31 @@ the subtitle-fixture setup into a helper; no new lint exemptions were added.
 The final helper form passes decoded provider playback again (4ab412d5, 7.072s).
 Correction commit/push and terminal green CI remain pending. Do not advance
 to UCU-07 until UCU-06 acceptance is complete.
+
+2026-09-27: UCU-06 acceptance is complete. The original CI run finished with
+the same narrow-screen failure in Firefox as Chromium; its browser teardown
+messages did not establish a separate product defect. Correction commit
+0e482f66550899f7091d352d3b01c856c5f2202d is on remote main, with local HEAD,
+tracking main and live remote main verified equal. CI run 36274614736 is
+terminal success at that exact SHA:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/36274614736
+Preflight, Format/policy, Documentation links, Test, Next engine, Clippy,
+Chromium, Firefox and Cargo deny all pass. Test runs 3078 selected tests
+(471effed, 339 excluded/opt-in skips); Next runs all 276 selected tests,
+including the repaired authenticated provider audio/subtitle fixture, then
+passes HTTP playback/burned subtitles/preview and Hybrid Convert playback.
+Chromium passes 249 cases with 7 declared skips; Firefox passes 225 with 31
+declared skips. Both include the unchanged 320-pixel containment assertion.
+The browser CI environment omits the optional official Next runtime; the
+recorded local four-case runs include that playback case in both browsers.
+Conditional Commit lint and the unused test-matrix job are skipped, not proof.
+Local window gates retain their recorded revisions and scope; the focused
+correction checks and full correction CI cover the final changes. Accepted
+behavioral debt and hardware/platform limitations remain visible. All 19 rows
+are reconciled, with pin, row 109 and upstream checkout equal at
+7b7a19a234ad04ce592a9a43013a62ee96a5adda. This documentation-only closeout
+preserves the verified code and CI evidence; no redundant full CI run is
+required. UCU-07 is now eligible, beginning with pending row 110.
 
 
 

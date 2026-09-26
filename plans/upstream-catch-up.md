@@ -31,7 +31,12 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 ports image graphics; row 107 fixes Next on-demand progress; row 108 ports sparse-stream pacing through published v2.0.2; row 109 is N/A (upstream release bookkeeping). All window rows are reconciled; milestone push and exact-SHA CI remain.
+  at `81bcd649`. UCU-06 is Complete: rows 91-109 are reconciled, local window
+  gates pass, and correction `0e482f66` has terminal green exact-SHA CI
+  [36274614736](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36274614736).
+  Its milestone owns the runtime publication, browser correction and decoded
+  audio/subtitle evidence. UCU-07 begins with pending row 110; accepted debt
+  and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
