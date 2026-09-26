@@ -9,29 +9,60 @@ use serde::Deserialize;
 
 use crate::host::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default)]
 pub struct PlaybackPreviewQuery {
-    #[serde(rename = "mediaItem")]
     media_item: Option<i64>,
     channel: Option<i64>,
-    #[serde(rename = "ffmpegProfile")]
     ffmpeg_profile: Option<i64>,
-    #[serde(default, rename = "streamingMode")]
     streaming_mode: Option<String>,
-    #[serde(default)]
     watermark: Vec<i64>,
-    #[serde(default, rename = "graphicsElement")]
     graphics_element: Vec<i64>,
-    #[serde(default, rename = "streamSelector")]
     stream_selector: Option<String>,
-    #[serde(default, rename = "preferredAudioTitle")]
     preferred_audio_title: Option<String>,
-    #[serde(default, rename = "subtitleId")]
     subtitle_id: Option<i64>,
-    #[serde(default, rename = "seekSeconds")]
     seek_seconds: Option<i64>,
-    #[serde(default)]
     start: Option<String>,
+    start_from_beginning: bool,
+}
+
+impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // HTML multi-selects submit repeated keys; an unselected subtitle is empty.
+        let fields = Vec::<(String, String)>::deserialize(deserializer)?;
+        let mut query = Self::default();
+        let mut seen = std::collections::HashSet::new();
+        for (key, value) in fields {
+            if !matches!(key.as_str(), "watermark" | "graphicsElement") && !seen.insert(key.clone())
+            {
+                return Err(serde::de::Error::custom("duplicate preview query field"));
+            }
+            let integer = || -> Result<Option<i64>, D::Error> {
+                if value.is_empty() {
+                    Ok(None)
+                } else {
+                    value.parse().map(Some).map_err(serde::de::Error::custom)
+                }
+            };
+            match key.as_str() {
+                "mediaItem" => query.media_item = integer()?,
+                "channel" => query.channel = integer()?,
+                "ffmpegProfile" => query.ffmpeg_profile = integer()?,
+                "subtitleId" => query.subtitle_id = integer()?,
+                "seekSeconds" => query.seek_seconds = integer()?,
+                "watermark" => query.watermark.extend(integer()?),
+                "graphicsElement" => query.graphics_element.extend(integer()?),
+                "streamingMode" => query.streaming_mode = Some(value),
+                "streamSelector" => query.stream_selector = Some(value),
+                "preferredAudioTitle" => query.preferred_audio_title = Some(value),
+                "start" => query.start = Some(value),
+                "startFromBeginning" => {
+                    query.start_from_beginning = value.parse().map_err(serde::de::Error::custom)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(query)
+    }
 }
 
 impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
@@ -46,7 +77,11 @@ impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
             stream_selector: query.stream_selector,
             preferred_audio_title: query.preferred_audio_title,
             subtitle_id: query.subtitle_id,
-            seek_seconds: query.seek_seconds,
+            seek_seconds: if query.start_from_beginning {
+                Some(0)
+            } else {
+                query.seek_seconds
+            },
             start: query.start,
         }
     }
@@ -124,4 +159,55 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
             .insert(header::CONTENT_DISPOSITION, value);
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_query_accepts_empty_subtitle_and_repeated_watermarks_from_html_forms() {
+        let query: PlaybackPreviewQuery = serde_urlencoded::from_str(
+            "mediaItem=10&ffmpegProfile=1&subtitleId=&watermark=1&watermark=2",
+        )
+        .unwrap();
+        assert_eq!(query.subtitle_id, None);
+        assert_eq!(query.watermark, [1, 2]);
+    }
+
+    #[test]
+    fn preview_query_start_from_beginning_overrides_the_default_seek() {
+        let query: PlaybackPreviewQuery = serde_urlencoded::from_str(
+            "mediaItem=10&ffmpegProfile=1&seekSeconds=15&startFromBeginning=true",
+        )
+        .unwrap();
+        let request: PlaybackPreviewRequest = query.into();
+        assert_eq!(request.seek_seconds, Some(0));
+    }
+
+    #[test]
+    fn preview_query_preserves_track_titles_and_multiple_graphics() {
+        let query: PlaybackPreviewQuery = serde_urlencoded::from_str(
+            "preferredAudioTitle=Dutch+%26+English&graphicsElement=3&graphicsElement=4&seekSeconds=15",
+        )
+        .unwrap();
+        let request: PlaybackPreviewRequest = query.into();
+        assert_eq!(
+            request.preferred_audio_title.as_deref(),
+            Some("Dutch & English")
+        );
+        assert_eq!(request.graphics_element_ids, [3, 4]);
+        assert_eq!(request.seek_seconds, Some(15));
+    }
+
+    #[test]
+    fn preview_query_rejects_invalid_numbers_and_ambiguous_scalar_fields() {
+        for query in [
+            "subtitleId=invalid",
+            "watermark=invalid",
+            "mediaItem=1&mediaItem=2",
+        ] {
+            assert!(serde_urlencoded::from_str::<PlaybackPreviewQuery>(query).is_err());
+        }
+    }
 }

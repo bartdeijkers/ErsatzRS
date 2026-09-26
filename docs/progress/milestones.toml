@@ -9794,6 +9794,16 @@ content refresh. Official Next runs the production projection with decoded
 selected audio, visible sought subtitle cues, ended playlist and report dossier
 (Nextest 2ff45e4e). Strict infra all-target Clippy passes. Remote Stream projection,
 application request/host wiring, API/UI and browser acceptance remain open.
+Host wiring audit reproduces an existing preview startup defect: the repository
+decodes the TEXT MediaVersion.Duration column as Option<f64>, causing a SQL type
+mismatch. It now uses the shared strict time-span decoder. The same database
+fixture passes for whole and fractional seconds (Nextest ed27fa29).
+The same audit reproduces blank-subtitle query rejection and ignored Start From
+Beginning. Query decoding now accepts HTML multi-select repetition and empty
+optional IDs, honors the checkbox, and keeps invalid/duplicate scalar rejection.
+All four query regressions pass (Nextest 0743c16a); strict infra/web all-target
+Clippy passes. These are preview prerequisite fixes; Next host/API/UI and browser
+acceptance remain open.
 """
 
 [[milestone]]

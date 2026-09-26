@@ -73,6 +73,27 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn troubleshooting_media_context_decodes_the_persisted_duration() {
+    use ersatzrs_core::repositories::TroubleshootingRepository as _;
+    let fixture = Fixture::new().await;
+    let repositories = crate::repositories::make_repositories(fixture.pool.clone());
+    for (duration, expected) in [("00:01:00", 60.0), ("00:01:00.125", 60.125)] {
+        sqlx::query(r#"UPDATE "MediaVersion" SET "Duration"=? WHERE "Id"=100"#)
+            .bind(duration)
+            .execute(&fixture.pool)
+            .await
+            .unwrap();
+        let media = repositories
+            .troubleshooting
+            .load_preview_media_admin(10)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!((media.duration_seconds - expected).abs() < f64::EPSILON);
+    }
+}
+
+#[tokio::test]
 async fn troubleshooting_preserves_explicit_tracks_and_seek_without_persisting_a_playout() {
     let fixture = Fixture::new().await;
     let count_before: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)

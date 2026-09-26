@@ -502,6 +502,13 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
         .await
         .repository()?;
         row.map(|row| {
+            let duration = row.try_get::<Option<String>, _>("Duration").repository()?;
+            let duration =
+                super::common::try_decode_duration_text(duration.as_deref().unwrap_or("00:00:00"))?
+                    .to_std()
+                    .map_err(|_| {
+                        RepositoryError::unavailable("preview duration", "invalid time span")
+                    })?;
             Ok(TroubleshootingPreviewMediaAdmin {
                 media_item_id,
                 media_version_id: row.try_get("MediaVersionId").repository()?,
@@ -510,10 +517,7 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                     .repository()?
                     .unwrap_or_default(),
                 kind: row.try_get("Kind").repository()?,
-                duration_seconds: row
-                    .try_get::<Option<f64>, _>("Duration")
-                    .repository()?
-                    .unwrap_or(0.0),
+                duration_seconds: duration.as_secs_f64(),
             })
         })
         .transpose()
