@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `080039be0487da076aba19c1581b40138503ad48` |
-| **Commit subject** | `chore: update windows ffmpeg (#2982)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/080039be0487da076aba19c1581b40138503ad48 |
+| **Pinned commit** | `3a02c39b119faf0225c5540ba52633dff72bde8b` |
+| **Commit subject** | `feat: support multiple watermarks using next engine (#2983)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3a02c39b119faf0225c5540ba52633dff72bde8b |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,8 +59,8 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd` (verified 2026-09-26),
-currently **175 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff` (verified 2026-09-26),
+currently **176 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's

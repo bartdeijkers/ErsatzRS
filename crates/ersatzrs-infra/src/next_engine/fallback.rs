@@ -89,6 +89,7 @@ pub(super) fn insert_gaps(
                     )?),
                     tracks: None,
                     watermark: None,
+                    graphics: Vec::new(),
                 });
             }
         }
@@ -518,7 +519,7 @@ impl NextHost {
                 stream_index: Some(0),
             });
         }
-        projected.item.watermark = super::watermark::project(&watermarks)?;
+        projected.item.graphics = super::watermark::project(&watermarks)?;
         let mut identity =
             dynamic_projection::fingerprint(&self.pool, &media, &projected, channel).await?;
         if let Some(content) = &credits {

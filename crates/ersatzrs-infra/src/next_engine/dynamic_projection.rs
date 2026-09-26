@@ -110,7 +110,7 @@ pub(crate) async fn project_snapshot(
     )
     .await?;
     super::credits::attach(pool, relay, &channel, &media.item, &mut projection).await?;
-    projection.item.watermark = super::watermark::project(&watermarks)?;
+    projection.item.graphics = super::watermark::project(&watermarks)?;
     let identity = fingerprint(pool, media, &projection, &channel).await?;
     drop(schedule_snapshot);
     Ok(Snapshot {

@@ -212,6 +212,7 @@ async fn project_deferred_item_selected(
         selected_subtitle,
         item: wire::PlayoutItem {
             watermark: None,
+            graphics: Vec::new(),
             id: item.id.to_string(),
             start: item.start,
             finish: item.finish,

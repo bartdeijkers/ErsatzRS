@@ -390,6 +390,7 @@ mod tests {
                 start,
                 finish: start + chrono::Duration::seconds(30),
                 watermark: None,
+                graphics: Vec::new(),
                 source: None,
                 tracks: Some(protocol::Tracks {
                     video: None,

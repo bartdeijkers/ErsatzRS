@@ -13,16 +13,6 @@ function updateEngine(form) {
       control.disabled = next || originalDisabled.get(control);
     }
   }
-  const watermark = form.elements.watermark;
-  if (watermark) {
-    // Preserve the first selected real watermark when switching from multiple
-    // selections. An empty option keeps single selection clearable.
-    const selected = Array.from(watermark.selectedOptions).find(option => option.value);
-    watermark.multiple = !next;
-    if (next) watermark.value = selected?.value ?? "";
-    const label = form.querySelector("[data-watermark-label]");
-    label.textContent = next ? label.dataset.single : label.dataset.multiple;
-  }
 }
 
 function status(form, state) {

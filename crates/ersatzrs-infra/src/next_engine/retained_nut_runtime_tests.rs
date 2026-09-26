@@ -255,6 +255,7 @@ fn prepare_config(
                 finish: start + chrono::Duration::seconds(24),
                 source: Some(source),
                 watermark: None,
+                graphics: Vec::new(),
                 tracks: Some(protocol::Tracks {
                     video: Some(protocol::Track {
                         source: None,

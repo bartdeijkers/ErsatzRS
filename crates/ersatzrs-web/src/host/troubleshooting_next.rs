@@ -31,7 +31,6 @@ pub(super) async fn start(
     mut ownership: PreviewOwnership,
 ) -> Result<(), AdminTroubleshootingRuntimeError> {
     query.graphics_element.clear();
-    query.watermark.truncate(1);
     let (sender, receiver) = oneshot::channel();
     tokio::spawn(async move {
         let mut ready = Some(sender);

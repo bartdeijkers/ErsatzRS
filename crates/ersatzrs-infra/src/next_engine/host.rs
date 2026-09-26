@@ -457,7 +457,7 @@ impl NextHost {
                             &mut projection,
                         )
                         .await?;
-                        projection.item.watermark = super::watermark::project(&watermarks)?;
+                        projection.item.graphics = super::watermark::project(&watermarks)?;
                         if projection.pending_burn.is_some() {
                             let identity = super::dynamic_projection::fingerprint(
                                 &self.pool,

@@ -32,6 +32,7 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
                 finish: start + chrono::Duration::seconds(60),
                 source: None,
                 watermark: None,
+                graphics: Vec::new(),
                 tracks: Some(protocol::Tracks {
                     video: Some(protocol::Track {
                         source: Some(Source::Rtsp {

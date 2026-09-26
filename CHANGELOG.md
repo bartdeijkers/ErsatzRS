@@ -171,6 +171,8 @@ release section when tagging a release.
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
 ### Added
+- Support ordered permanent and intermittent watermarks together in Next
+  playback, including all selected troubleshooting watermarks.
 
 - Support the Next engine in the playback troubleshooting API for local and
   media-server items, with isolated finite previews, selected profiles and

@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.2";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.3";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -184,6 +184,9 @@ pub struct PlayoutItem {
     pub tracks: Option<Tracks>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watermark: Option<Watermark>,
+    /// Ordered overlays, lowest first, above the compatibility watermark.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graphics: Vec<Watermark>,
 }
 
 /// A single image/video overlay, always visible unless periodic timing is set.

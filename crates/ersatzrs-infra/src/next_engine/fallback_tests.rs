@@ -11,6 +11,7 @@ fn wire(start: DateTime<Utc>, a: i64, b: i64) -> protocol::PlayoutItem {
         source: None,
         tracks: None,
         watermark: None,
+        graphics: Vec::new(),
     }
 }
 

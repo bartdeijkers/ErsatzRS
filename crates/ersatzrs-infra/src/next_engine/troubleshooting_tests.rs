@@ -209,7 +209,7 @@ async fn troubleshooting_preserves_explicit_tracks_and_seek_without_persisting_a
 }
 
 #[tokio::test]
-async fn troubleshooting_rejects_stale_subtitle_version_and_invalid_watermark_count() {
+async fn troubleshooting_rejects_stale_subtitle_version_and_expired_deadline() {
     let fixture = Fixture::new().await;
     sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100 AND "Index"=3"#)
         .execute(&fixture.pool)
@@ -222,9 +222,6 @@ async fn troubleshooting_rejects_stale_subtitle_version_and_invalid_watermark_co
             .await
             .is_err());
     }
-    let mut request = fixture.request(Some(0));
-    request.watermark_ids = &[1, 2];
-    assert!(fixture.host.prepare_troubleshooting(request).await.is_err());
     let mut request = fixture.request(Some(0));
     request.deadline = Instant::now();
     assert!(fixture.host.prepare_troubleshooting(request).await.is_err());
@@ -292,4 +289,37 @@ async fn troubleshooting_fetches_selected_provider_text_and_refreshes_changed_co
         download.assert_calls_async(1).await;
         download.delete_async().await;
     }
+}
+
+#[tokio::test]
+async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
+    let fixture = Fixture::new().await;
+    sqlx::raw_sql(
+        r#"INSERT INTO "ChannelWatermark" (
+        "Id","Name","Mode","ImageSource","Location","Size","WidthPercent",
+        "HorizontalMarginPercent","VerticalMarginPercent","FrequencyMinutes",
+        "DurationSeconds","Opacity","PlaceWithinSourceContent","ZIndex") VALUES
+        (1,'Upper',1,1,0,0,20,5,5,0,0,100,0,10),
+        (2,'Lower',2,1,8,0,30,5,5,1,10,70,0,-10);
+        INSERT INTO "Artwork" ("ArtworkKind","ChannelId","Path","DateAdded","DateUpdated")
+        VALUES (2,1,'https://example.test/logo.png','2026-09-26','2026-09-26');"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .unwrap();
+    let mut request = fixture.request(Some(0));
+    request.watermark_ids = &[1, 2];
+    let snapshot = fixture
+        .host
+        .troubleshooting_snapshot(&request)
+        .await
+        .unwrap();
+    let item = serde_json::to_value(snapshot.projection.item).unwrap();
+    assert!(item.get("watermark").is_none());
+    assert_eq!(item["graphics"].as_array().unwrap().len(), 2);
+    assert_eq!(item["graphics"][0]["opacity_percent"], 70.0);
+    assert_eq!(item["graphics"][0]["timing"]["hold_ms"], 10_000);
+    assert_eq!(item["graphics"][1]["opacity_percent"], 100.0);
+    assert!(item["graphics"][1].get("timing").is_none());
+    assert_eq!(item["tracks"]["audio"]["stream_index"], 2);
 }

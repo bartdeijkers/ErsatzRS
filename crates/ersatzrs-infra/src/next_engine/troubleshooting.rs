@@ -69,9 +69,6 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
-        if self.watermark_ids.len() > 1 {
-            return Err(unavailable("Next troubleshooting accepts one watermark"));
-        }
         if let Some(at) = self.selection_time {
             let source_time =
                 crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
@@ -211,7 +208,7 @@ impl NextHost {
     ///
     /// # Errors
     /// Returns redacted failures for stale selections, unsupported sources,
-    /// multiple watermarks or preparation beyond the shared deadline.
+    /// unsupported watermark modes or preparation beyond the shared deadline.
     pub async fn prepare_troubleshooting(
         &self,
         request: TroubleshootingPreview<'_>,
@@ -285,9 +282,6 @@ impl NextHost {
         &self,
         request: &TroubleshootingPreview<'_>,
     ) -> Result<Snapshot> {
-        if request.watermark_ids.len() > 1 {
-            return Err(unavailable("Next troubleshooting accepts one watermark"));
-        }
         let source = source::resolve_published(
             &self.pool,
             request.media,
@@ -309,7 +303,7 @@ impl NextHost {
         )
         .await?;
         let watermarks = Context::new(request).watermarks(&self.pool).await?;
-        projection.item.watermark = watermark::project(&watermarks)?;
+        projection.item.graphics = watermark::project(&watermarks)?;
         let identity = dynamic_projection::fingerprint(
             &self.pool,
             request.media,

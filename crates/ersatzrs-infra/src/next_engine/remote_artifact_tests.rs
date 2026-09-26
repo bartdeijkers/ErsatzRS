@@ -94,13 +94,43 @@ async fn published(
 #[tokio::test]
 async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_artifact() {
     let (root, pool, locker, channel, start) = fixture().await;
+    sqlx::raw_sql(
+        r#"INSERT INTO "ChannelWatermark" (
+        "Id","Name","Mode","ImageSource","Location","Size","WidthPercent",
+        "HorizontalMarginPercent","VerticalMarginPercent","FrequencyMinutes",
+        "DurationSeconds","Opacity","PlaceWithinSourceContent","ZIndex") VALUES
+        (1,'Upper',1,1,0,0,20,5,5,0,0,100,0,10),
+        (2,'Lower',2,1,8,0,30,5,5,1,10,70,0,-10);
+        INSERT INTO "Artwork" ("ArtworkKind","ChannelId","Path","DateAdded","DateUpdated")
+        VALUES (2,1,'https://example.test/logo.png','2026-09-26','2026-09-26');
+        INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId","WatermarkId")
+        SELECT "Id",1 FROM "PlayoutItem";
+        INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId","WatermarkId")
+        SELECT "Id",2 FROM "PlayoutItem";"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Artwork participates in the channel's publication identity. Read the
+    // channel after seeding the logo, as the real publication path does.
+    let channel = make_repositories(pool.clone())
+        .channel
+        .get_with_profile(channel.id)
+        .await
+        .unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
+    assert_eq!(initial.projection.item.graphics.len(), 2);
+    let graphics = serde_json::to_value(&initial.projection.item.graphics).unwrap();
     let original_key = initial.identity.cache_key.clone();
     let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
         .await
         .unwrap();
     assert_ne!(ready.identity.cache_key, original_key);
     assert!(ready.prepared_remote.is_none());
+    assert_eq!(
+        serde_json::to_value(&ready.projection.item.graphics).unwrap(),
+        graphics
+    );
     let tracks = ready.projection.item.tracks.unwrap();
     let audio = tracks.audio.unwrap();
     assert_eq!(audio.stream_index, Some(2));

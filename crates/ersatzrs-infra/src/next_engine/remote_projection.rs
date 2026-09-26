@@ -150,6 +150,7 @@ pub(crate) async fn materialize_prepared(
     ))
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
+    concrete.item.graphics = std::mem::take(&mut projected.projection.item.graphics);
     let current = Box::pin(context.origin.snapshot(
         pool,
         locker,
@@ -430,7 +431,7 @@ pub(super) async fn project_for_origin(
     if !graphics.is_empty() {
         return Err(unavailable());
     }
-    projection.item.watermark = super::watermark::project(&watermarks)?;
+    projection.item.graphics = super::watermark::project(&watermarks)?;
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;

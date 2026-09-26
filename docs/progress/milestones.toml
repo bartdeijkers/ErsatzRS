@@ -10176,6 +10176,60 @@ Source map, full diff review and progress validation pass. No Rust, argv,
 package rebuild or user-visible behavior change is required for this row.
 Pin, ledger and upstream checkout advance together to 080039be; row 105 is next.
 UCU-06 window gates, push and exact-SHA CI remain open.
+
+2026-09-26 row 105 implementation checkpoint (not yet accepted): source/visual
+map covers schema 0.0.3, stable ZIndex layers, all projection paths and plural
+troubleshooting selection. Ordered permanent/intermittent layers now survive
+normal, dynamic, remote and fallback projection; legacy watermark decoding is
+retained. API/host/UI truncation is removed. The 210 affected Next tests pass
+(b49d16a5); 13 focused watermark tests also pass.
+Official Next 802f2d8 with released ErsatzRS-ffmpeg v2.0.1 passes decoded
+multilayer overlap order, dynamic Burn captions, Dutch audio and DisableWatermarks;
+it also preserves a permanent layer during another layer's visible/fade/hidden
+wall-clock phases (e24b40ba). The existing caption-race regression had an obsolete
+message expectation after ca55f37f introduced session-bound snapshots; exact
+branch-specific rejection assertions now pass without changing runtime behavior.
+Infrastructure all-target Clippy passes after extracting focused fixture helpers.
+Prepared-remote source replacement retains both ordered layers and the selected
+audio/sidecar (cc26505a). Strict infra/web all-target Clippy and hydration lint
+pass. Its fixture reloads channel identity after seeding
+artwork, preserving the stale-publication rejection. All five preview API tests
+pass (7d28d9cc), including both selected watermark IDs. The matched SSR/WASM
+bundle passes all eight Chromium/Firefox cases with zero skips/retries: both
+selected overlays are visible in decoded Legacy and Next video; multiple IDs
+survive engine switching and native no-JS submission; narrow controls, preview
+reports and completion speed remain correct. An initial synthetic red-pixel
+failure used BottomRight (0) instead of TopLeft (3); correcting the fixture enum
+makes the unchanged pixel assertions pass. The complete web parity gate remains
+running, so row 105 and the pin remain pending. The first runtime fixture exceeded its raw-frame output cap; cropping only the
+sampled region fixes the fixture while retaining that cap. Browser/web checks,
+review and row acceptance remain open; the pin is still row 104.
+Upstream refresh adds pending UCU-09 row 176 (6f0449c2); all 176 ordered SHA/subject
+pairs match fetched history. No milestone push or CI is claimed.
+
+Row 105 (3a02c39b) final acceptance: Port. Schema 0.0.3 publishes all permanent
+and intermittent watermarks in stable ascending ZIndex order. Normal, fallback,
+dynamic and remote paths share projection and validation; prepared source
+replacement retains the complete layer array. Publication fingerprints include
+layers, and joined media seeks leave independent overlay timing intact. Legacy
+watermark JSON remains readable. Troubleshooting API, host and responsive SSR
+form retain all selected IDs in both engines, including no-JavaScript submission.
+Existing plural translations are reused in every culture; no shared island/CSS
+or hardware capability changes are introduced. Unsupported/invalid active modes
+still fail explicitly. Existing accepted RGB-opacity debt is unchanged.
+Evidence: 210 Next tests (b49d16a5), prepared-remote audio/sidecar/layer regression
+(cc26505a), five preview API tests (7d28d9cc), and official Next 802f2d8 with
+released ErsatzRS-ffmpeg v2.0.1 decoded multilayer and mixed timing checks
+(e24b40ba). The matched bundle passes all eight Chromium/Firefox cases, with
+zero skips/flaky retries, including visible red/green pixels in both engines,
+selection persistence, native no-JS submission, reports and narrow layout.
+Full web parity passes: progress, formatting, architecture, hydration, all 716
+web tests (4a066a3d; 20 opt-in tests skipped) and strict web all-target Clippy.
+Strict infra all-target Clippy also passes. Review covers stable ties, unchanged
+percentage/timing validation, source revalidation, audio/subtitle retention,
+all publication call sites and removal of every one-watermark guard.
+Pin, ledger and clean upstream checkout advance together to 3a02c39b. Row 106
+is next. UCU-06 window gates, milestone push and exact-SHA CI remain open.
 """
 
 [[milestone]]
@@ -10237,7 +10291,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through d7b265e0 (latest fetched tip) in order,
+Process every ledger row in this release window through 6f0449c2 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve

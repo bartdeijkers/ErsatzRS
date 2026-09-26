@@ -22,7 +22,7 @@ fn channel_logo_url_projects_an_http_source_without_media_seeks() {
     let mut selected = selected();
     let uri = "https://example.test/logo%20image.png?revision=2";
     selected.image = PlaybackWatermarkImage::Http(uri.to_owned());
-    let projected = project(&[selected]).unwrap().unwrap();
+    let projected = project(&[selected]).unwrap().remove(0);
     let source = serde_json::to_value(projected.source).unwrap();
     assert_eq!(source["source_type"], "http");
     assert_eq!(source["uri"], uri);
@@ -33,7 +33,7 @@ fn channel_logo_url_projects_an_http_source_without_media_seeks() {
 
 #[test]
 fn permanent_watermark_wire_preserves_percentages_and_omits_source_seeks() {
-    let projected = project(&[selected()]).unwrap().unwrap();
+    let projected = project(&[selected()]).unwrap().remove(0);
     let value = serde_json::to_value(projected).unwrap();
     assert_eq!(
         value,
@@ -63,7 +63,7 @@ fn every_anchor_matches_next_wire_names() {
     ] {
         let mut selection = selected();
         selection.watermark.location = location;
-        let projected = project(&[selection]).unwrap().unwrap();
+        let projected = project(&[selection]).unwrap().remove(0);
         assert_eq!(
             serde_json::to_value(projected).unwrap()["location"],
             expected
@@ -76,7 +76,7 @@ fn actual_size_omits_width_and_valid_percentage_endpoints_are_preserved() {
     let mut selection = selected();
     selection.watermark.size = WatermarkSize::ActualSize;
     selection.watermark.width_percent = f64::NAN; // Inactive field is not projected.
-    let projected = project(&[selection]).unwrap().unwrap();
+    let projected = project(&[selection]).unwrap().remove(0);
     assert!(serde_json::to_value(projected)
         .unwrap()
         .get("width_percent")
@@ -87,7 +87,7 @@ fn actual_size_omits_width_and_valid_percentage_endpoints_are_preserved() {
         selection.watermark.horizontal_margin_percent = percent;
         selection.watermark.vertical_margin_percent = percent;
         selection.watermark.opacity = opacity;
-        let projected = project(&[selection]).unwrap().unwrap();
+        let projected = project(&[selection]).unwrap().remove(0);
         assert_eq!(projected.width_percent, Some(percent));
         assert_eq!(projected.opacity_percent, Some(percent));
     }
@@ -119,12 +119,12 @@ fn invalid_active_percentages_and_empty_paths_fail_redacted() {
 
 #[test]
 fn absent_and_disabled_selections_are_empty_but_unsupported_active_modes_fail() {
-    assert!(project(&[]).unwrap().is_none());
+    assert!(project(&[]).unwrap().is_empty());
     let mut disabled = selected();
     disabled.watermark.mode = ChannelWatermarkMode::None;
-    assert!(project(&[disabled.clone()]).unwrap().is_none());
-    assert!(project(&[disabled, selected()]).unwrap().is_some());
-    assert!(project(&[selected(), selected()]).is_err());
+    assert!(project(&[disabled.clone()]).unwrap().is_empty());
+    assert_eq!(project(&[disabled, selected()]).unwrap().len(), 1);
+    assert_eq!(project(&[selected(), selected()]).unwrap().len(), 2);
     let mut selection = selected();
     selection.watermark.mode = ChannelWatermarkMode::OpacityExpression;
     assert!(project(&[selection]).is_err());
@@ -151,7 +151,7 @@ fn intermittent_timing_uses_wall_clock_and_preserves_next_defaults() {
     selection.watermark.mode = ChannelWatermarkMode::Intermittent;
     selection.watermark.frequency_minutes = 5;
     selection.watermark.duration_seconds = 30;
-    let projected = project(&[selection]).unwrap().unwrap();
+    let projected = project(&[selection]).unwrap().remove(0);
     let value = serde_json::to_value(projected).unwrap();
     assert_eq!(
         value["timing"],
@@ -181,7 +181,7 @@ fn intermittent_timing_rejects_unintended_permanent_output_and_widens_units() {
         selection.watermark.mode = ChannelWatermarkMode::Intermittent;
         selection.watermark.frequency_minutes = minutes;
         selection.watermark.duration_seconds = seconds;
-        let value = serde_json::to_value(project(&[selection]).unwrap().unwrap()).unwrap();
+        let value = serde_json::to_value(project(&[selection]).unwrap().remove(0)).unwrap();
         assert_eq!(
             value["timing"]["frequency_ms"],
             u64::try_from(minutes).unwrap() * 60_000
@@ -195,7 +195,7 @@ fn intermittent_timing_rejects_unintended_permanent_output_and_widens_units() {
     permanent.watermark.frequency_minutes = -1;
     permanent.watermark.duration_seconds = -1;
     assert!(
-        serde_json::to_value(project(&[permanent]).unwrap().unwrap())
+        serde_json::to_value(project(&[permanent]).unwrap().remove(0))
             .unwrap()
             .get("timing")
             .is_none()
@@ -219,7 +219,7 @@ fn source_content_placement_preserves_every_anchor_and_legacy_omission() {
             let mut selection = selected();
             selection.watermark.location = location;
             selection.watermark.place_within_source_content = within;
-            let projected = project(&[selection]).unwrap().unwrap();
+            let projected = project(&[selection]).unwrap().remove(0);
             assert_eq!(projected.within_source_content, within.then_some(true));
             let wire = serde_json::to_value(projected).unwrap();
             assert_eq!(
@@ -244,9 +244,39 @@ fn channel_logo_watermark_projects_the_resolved_artwork_path() {
     selection.watermark.image = None;
     selection.image =
         crate::playback::PlaybackWatermarkImage::Local("synthetic/iptv/logos/channel.png".into());
-    let projected = project(&[selection]).unwrap().unwrap();
+    let projected = project(&[selection]).unwrap().remove(0);
     assert_eq!(
         serde_json::to_value(projected).unwrap()["source"],
         json!({"source_type": "local", "path": "synthetic/iptv/logos/channel.png"})
     );
+}
+
+#[test]
+fn multiple_layers_are_stably_ordered_and_preserve_independent_timing() {
+    let mut upper = selected();
+    upper.watermark.z_index = 20;
+    upper.watermark.location = WatermarkLocation::TopLeft;
+    let mut lower = selected();
+    lower.watermark.z_index = -2;
+    lower.watermark.mode = ChannelWatermarkMode::Intermittent;
+    lower.watermark.frequency_minutes = 1;
+    lower.watermark.duration_seconds = 10;
+    lower.watermark.location = WatermarkLocation::BottomLeft;
+    let mut equal = upper.clone();
+    equal.watermark.location = WatermarkLocation::TopRight;
+    let layers = project(&[upper, lower, equal]).unwrap();
+    let wire = serde_json::to_value(layers).unwrap();
+    assert_eq!(wire[0]["location"], "bottom_left");
+    assert_eq!(wire[1]["location"], "top_left");
+    assert_eq!(wire[2]["location"], "top_right");
+    assert_eq!(wire[0]["timing"]["hold_ms"], 10_000);
+    assert!(wire[1].get("timing").is_none());
+    assert!(wire[2].get("timing").is_none());
+}
+
+#[test]
+fn unsupported_layer_does_not_silently_drop_other_overlays() {
+    let mut invalid = selected();
+    invalid.watermark.mode = ChannelWatermarkMode::OpacityExpression;
+    assert!(project(&[selected(), invalid]).is_err());
 }

@@ -80,6 +80,7 @@ fn fixture() -> (
         }),
         tracks: None,
         watermark: None,
+        graphics: Vec::new(),
     };
     (probe, previous, item)
 }

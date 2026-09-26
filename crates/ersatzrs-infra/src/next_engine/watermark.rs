@@ -1,4 +1,4 @@
-//! Single permanent or intermittent watermark projection from the shared selector.
+//! Ordered permanent and intermittent overlays from the shared watermark selector.
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{ChannelWatermarkMode, WatermarkLocation, WatermarkSize};
@@ -10,21 +10,21 @@ use super::protocol;
 /// Preserve selection precedence; unsupported active combinations fail closed.
 /// Disabled selections do not contribute an overlay. The shared image resolver
 /// preserves local cached files and operator-supplied channel-logo URLs.
-pub(super) fn project(
-    selected: &[ResolvedPlaybackWatermark],
-) -> Result<Option<protocol::Watermark>> {
-    let mut active = selected
+pub(super) fn project(selected: &[ResolvedPlaybackWatermark]) -> Result<Vec<protocol::Watermark>> {
+    let mut active: Vec<_> = selected
         .iter()
-        .filter(|selected| selected.watermark.mode != ChannelWatermarkMode::None);
-    let Some(selected) = active.next() else {
-        return Ok(None);
-    };
-    if active.next().is_some()
-        || !matches!(
-            selected.watermark.mode,
-            ChannelWatermarkMode::Permanent | ChannelWatermarkMode::Intermittent
-        )
-    {
+        .filter(|selected| selected.watermark.mode != ChannelWatermarkMode::None)
+        .collect();
+    // Match PlayoutItemConverter.OrderBy(ZIndex), retaining selection order on ties.
+    active.sort_by_key(|selected| selected.watermark.z_index);
+    active.into_iter().map(project_layer).collect()
+}
+
+fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<protocol::Watermark> {
+    if !matches!(
+        selected.watermark.mode,
+        ChannelWatermarkMode::Permanent | ChannelWatermarkMode::Intermittent
+    ) {
         return Err(unavailable());
     }
     let watermark = &selected.watermark;
@@ -32,7 +32,7 @@ pub(super) fn project(
         WatermarkSize::Scaled => Some(percent(watermark.width_percent)?),
         WatermarkSize::ActualSize => None,
     };
-    Ok(Some(protocol::Watermark {
+    Ok(protocol::Watermark {
         timing: timing(watermark)?,
         source: image_source(&selected.image)?,
         stream_index: Some(0),
@@ -52,7 +52,7 @@ pub(super) fn project(
         horizontal_margin_percent: Some(percent(watermark.horizontal_margin_percent)?),
         vertical_margin_percent: Some(percent(watermark.vertical_margin_percent)?),
         opacity_percent: Some(percent(f64::from(watermark.opacity))?),
-    }))
+    })
 }
 
 fn image_source(image: &PlaybackWatermarkImage) -> Result<protocol::Source> {

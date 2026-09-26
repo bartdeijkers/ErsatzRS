@@ -226,7 +226,17 @@ async fn logo_server(image: &Path) -> httpmock::MockServer {
     server
 }
 
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; synthetic ordered overlays with audio/subtitles"]
+async fn real_next_multiple_watermarks_preserve_order_dynamic_tracks_and_disable() {
+    watermark_runtime_layers(false, false, true).await;
+}
+
 async fn watermark_runtime_cases(remote_logo: bool, generated_logo: bool) {
+    watermark_runtime_layers(remote_logo, generated_logo, false).await;
+}
+
+async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, multiple: bool) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -252,6 +262,9 @@ async fn watermark_runtime_cases(remote_logo: bool, generated_logo: bool) {
         let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
         configure_text_tracks(&pool, true, !dynamic, false).await;
         seed_watermark(&pool, &image, scaled, disabled).await;
+        if multiple {
+            seed_lower_watermark(&ffmpeg, root.path(), &pool).await;
+        }
         if generated_logo {
             sqlx::raw_sql(r#"DELETE FROM "Artwork" WHERE "ChannelId"=1;
                 UPDATE "ChannelWatermark" SET "Size"=0,"WidthPercent"=50,"Location"=3,"Opacity"=100 WHERE "Id"=1;"#)
@@ -301,25 +314,104 @@ async fn watermark_runtime_cases(remote_logo: bool, generated_logo: bool) {
             }
         }).await.unwrap();
         let playlist = handle.trim_playlist().await.unwrap();
-        let segment = playlist
-            .lines()
-            .find(|line| {
-                !line.starts_with('#')
-                    && Path::new(line)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-            })
-            .unwrap();
+        let segment = first_transport_segment(&playlist);
         if generated_logo {
             assert_generated_overlay(&ffmpeg, &output.join(segment), disabled).await;
         } else {
             assert_overlay(&ffmpeg, &output.join(segment), scaled, disabled).await;
+        }
+        if multiple {
+            assert_lower_watermark(&ffmpeg, &output.join(segment), disabled).await;
         }
         assert_text_video_and_audio(&ffmpeg, &output.join(segment), dynamic).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         callback.stop().await;
         assert!(!output.exists());
+    }
+}
+
+fn first_transport_segment(playlist: &str) -> &str {
+    playlist
+        .lines()
+        .find(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+        })
+        .expect("ready playlist must contain a transport stream")
+}
+
+async fn seed_lower_watermark(ffmpeg: &Path, root: &Path, pool: &crate::db::DbPool) {
+    let green = root.join("green.png");
+    let mut generate = Command::new(ffmpeg);
+    generate
+        .args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=lime:size=60x30",
+            "-frames:v",
+            "1",
+        ])
+        .arg(&green);
+    tool(generate).await;
+    sqlx::query(
+        r#"INSERT INTO "ChannelWatermark" (
+        "Id","Name","Mode","ImageSource","Image","Location","Size","WidthPercent",
+        "HorizontalMarginPercent","VerticalMarginPercent","FrequencyMinutes",
+        "DurationSeconds","Opacity","PlaceWithinSourceContent","ZIndex")
+        VALUES (2,'Synthetic lower green',1,0,?,2,1,20,5,5,0,0,100,0,-1)"#,
+    )
+    .bind(green.to_str().unwrap())
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId","WatermarkId")
+        SELECT "Id",1 FROM "PlayoutItem";
+        INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId","WatermarkId")
+        SELECT "Id",2 FROM "PlayoutItem";"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn assert_lower_watermark(ffmpeg: &Path, segment: &Path, disabled: bool) {
+    let mut decode = Command::new(ffmpeg);
+    decode
+        .args(["-v", "error", "-nostdin", "-ss", "0.5", "-i"])
+        .arg(segment)
+        .args([
+            "-frames:v",
+            "1",
+            "-vf",
+            "crop=320:120:0:0",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixels = tool(decode).await;
+    assert_eq!(pixels.len(), 320 * 120 * 3);
+    let index = (14 * 320 + 248) * 3;
+    let pixel = &pixels[index..index + 3];
+    if disabled {
+        assert!(pixel[1] < 100, "disabled lower layer remains: {pixel:?}");
+    } else {
+        assert!(
+            pixel[1] > 180 && pixel[0] < 40,
+            "lower green layer missing: {pixel:?}"
+        );
+        // assert_overlay above also proves opaque red covers the overlapping
+        // portion, even though the green layer has the larger database ID.
     }
 }
 

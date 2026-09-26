@@ -16,6 +16,7 @@ fn item() -> PlayoutItem {
     let start = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
     PlayoutItem {
         watermark: None,
+        graphics: Vec::new(),
         id: "synthetic".into(),
         start,
         finish: start + Duration::seconds(60),
@@ -219,6 +220,14 @@ fn joining_programme_does_not_seek_the_independent_watermark() {
         }))
         .unwrap(),
     );
+    original.graphics = vec![
+        original.watermark.clone().unwrap(),
+        original.watermark.clone().unwrap(),
+    ];
+    original.graphics[1].opacity_percent = Some(25.0);
+    let graphics = serde_json::to_value(&original.graphics).unwrap();
+    let resolved = resolve_at(&original, original.start + Duration::seconds(15)).unwrap();
+    assert_eq!(serde_json::to_value(&resolved.graphics).unwrap(), graphics);
     let expected = serde_json::to_value(&original.watermark).unwrap();
     let resolved = resolve_at(&original, original.start + Duration::seconds(15)).unwrap();
     assert_eq!(serde_json::to_value(&resolved.watermark).unwrap(), expected);

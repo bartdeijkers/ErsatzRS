@@ -727,7 +727,7 @@ fn playback_watermark_field(
 ) -> impl IntoView {
     view! {
         <label class=style::playbackField>
-            <span data-watermark-label data-single=tr(TextKey::Watermark) data-multiple=tr(TextKey::Watermarks)>
+            <span data-watermark-label>
                 {tr(TextKey::Watermarks)}
             </span>
             <select class=style::select name="watermark" multiple>

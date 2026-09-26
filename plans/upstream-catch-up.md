@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
-  — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **71 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-26): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
+  — build: package libvpl (from next) on windows (#3042).
+- Ledger: **176 commits**, **71 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -16,13 +16,14 @@
   The 2026-09-26 refresh appends Next engine subtitles as pending row 174.
   A subsequent refresh appends MPEG-TS script line endings as pending row 175;
   all 174 existing SHA/subject pairs remain an exact prefix.
+  The latest refresh appends Windows libvpl packaging as pending row 176.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **104**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **105**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +31,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +41,29 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 105 source and visual map: multiple Next watermarks
+
+- Upstream `3a02c39b`: `SyncNextPlayoutHandler` and troubleshooting publish
+  schema 0.0.3. `Core/Next/Playout.cs` adds ordered `graphics` layers, with the
+  legacy `watermark` below them. `PlayoutItemConverter` projects permanent and
+  intermittent watermarks in ascending ZIndex. Opacity-expression support is
+  unchanged; invalid/unsupported selections still fail explicitly in ErsatzRS.
+- `PrepareTroubleshootingPlaybackHandler` carries all selected watermarks;
+  `TroubleshootController` stops truncating the selection. The Razor page keeps
+  its responsive label/select row and uses the plural label and multiselect
+  for both engines. No schema, persisted selection or scheduling reset changes.
+- Rust targets: `next_engine/protocol.rs`, `watermark.rs`, host, dynamic/remote
+  projection, fallback and troubleshooting; preserve all layers during source
+  replacement. Reuse shared watermark selection, paths, geometry and timing.
+- Web targets: system troubleshooting SSR wrapper, existing enhancement script,
+  host/API preview boundaries. Keep the mounted form and existing responsive
+  controls; reuse localized Watermarks in every culture. No new island or CSS.
+- Proof targets: stable ZIndex ordering, geometry/timing and unsupported modes,
+  publication/dynamic/fallback preservation, all selected preview IDs, decoded
+  official Next multilayer output and unchanged audio/subtitles, plus Chromium
+  and Firefox engine switching and narrow-screen/no-JS controls. Full window
+  gates remain required. Row 105 is Port; UCU-06 owns passing scoped evidence.
 
 ## Row 104 source map: Windows bitmap-subtitle readrate
 
@@ -2117,7 +2141,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 102 | `33c33587` | feat: enable vulkan in docker (#2981) | Port | upstream-baseline-catch-up | `fix(docker): enable Vulkan runtime and driver exposure` | ucu-06; no blanket engine disable; minimal Vulkan libraries/ICDs and NVIDIA graphics capability added, old probe caches invalidated on capability change. amd64/arm64/ARMv7 and alternate package layers pass; non-root software Vulkan and CUDA/NVENC controls pass. WSL exposes no matching NVIDIA Vulkan UUID, so physical NVIDIA Docker interop is not claimed. Scoped tests/Clippy/binary checks pass; window owns full application gates. |
 | 103 | `5febb943` | docs: update changelog | N/A (upstream release notes) | upstream-baseline-catch-up | `docs(porting): reconcile Next engine release notes` | ucu-06; changelog-only QSV overlays, audio synchronization and anamorphic scaling announcements. No engine source, pin or host integration changes. Release notes are not runtime proof; existing Next acceptance remains unchanged. Full diff review and progress validation pass. |
 | 104 | `080039be` | chore: update windows ffmpeg (#2982) | Covered | upstream-baseline-catch-up | `docs(porting): verify bitmap subtitle readrate coverage` | ucu-06; complete upstream readrate patch already in FFmpeg n9.0. Published v2.0.1 Windows/Linux executables pass sparse PGS gap, all 400 frames, selected alternate audio and decode checks. No runtime rebuild or host changes required; window gates remain open. |
-| 105 | `3a02c39b` | feat: support multiple watermarks using next engine (#2983) | | | | ucu-06; provisional: Next behavior triage. |
+| 105 | `3a02c39b` | feat: support multiple watermarks using next engine (#2983) | Port | upstream-baseline-catch-up | `feat(next): support ordered watermark layers` | ucu-06; schema 0.0.3, stable ZIndex layers across publication/dynamic/fallback/remote paths, all troubleshooting selections and unchanged strict mode validation. 210 Next tests, decoded overlap/periodic/audio/subtitle proof, prepared-remote preservation, 8 Chromium/Firefox cases and full web parity gate pass. Window gates remain open. |
 | 106 | `cd30ac4a` | feat: image graphics element support in next (#2984) | | | | ucu-06; provisional: Next behavior triage. |
 | 107 | `b36e94cc` | fix: on-demand channel progress using next engine (#2985) | | | | ucu-06; provisional: Next behavior triage. |
 | 108 | `c0e4c4ac` | chore: update windows ffmpeg (#2988) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
@@ -2188,3 +2212,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; provisional: Covered candidate; upstream skips its graphics canvas when every selected graphic is a plain permanent or intermittent watermark and maps them straight to Next media layers. ErsatzRS already projects watermarks as wire layers in `next_engine/watermark.rs`; confirm no canvas stage is built for watermark-only playouts before closing the row. |
 | 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; pending source audit in ledger order. |
 | 175 | `04f49b0a` | fix: mpegts script line endings (#3041) | | | | ucu-09; pending source audit in ledger order. |
+| 176 | `6f0449c2` | build: package libvpl (from next) on windows (#3042) | | | | ucu-09; pending source audit in ledger order. |

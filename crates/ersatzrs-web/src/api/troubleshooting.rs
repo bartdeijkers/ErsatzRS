@@ -75,10 +75,7 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
 }
 
 impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
-    fn from(mut query: PlaybackPreviewQuery) -> Self {
-        if query.streaming_engine == StreamingEngine::Next {
-            query.watermark.truncate(1);
-        }
+    fn from(query: PlaybackPreviewQuery) -> Self {
         Self {
             streaming_engine: query.streaming_engine,
             media_item_id: query.media_item,
@@ -193,7 +190,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preview_engine_defaults_to_legacy_and_next_retains_only_the_first_watermark() {
+    fn preview_engine_defaults_to_legacy_and_both_engines_retain_all_watermarks() {
         let legacy: PlaybackPreviewQuery =
             serde_urlencoded::from_str("watermark=1&watermark=2").unwrap();
         let legacy: PlaybackPreviewRequest = legacy.into();
@@ -206,7 +203,7 @@ mod tests {
             .unwrap();
             let next: PlaybackPreviewRequest = next.into();
             assert_eq!(next.streaming_engine, StreamingEngine::Next);
-            assert_eq!(next.watermark_ids, [1]);
+            assert_eq!(next.watermark_ids, [1, 2]);
         }
         assert!(
             serde_urlencoded::from_str::<PlaybackPreviewQuery>("streamingEngine=unknown").is_err()

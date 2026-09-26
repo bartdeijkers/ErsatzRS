@@ -91,10 +91,12 @@ Software Vulkan and CUDA/NVENC controls pass; this WSL host cannot expose a
 matching NVIDIA Vulkan device. Row 103 is N/A for upstream-only Next release
 notes; no runtime acceptance is inferred. Row 104 is Covered: FFmpeg 9 includes
 the readrate fix, and released Windows/Linux packages pass sparse bitmap playback
-with selected alternate audio. Continue with row 105;
+with selected alternate audio. Row 105 is Port: ordered watermarks pass 210
+Next tests, decoded multilayer/periodic playback, prepared-remote preservation,
+eight Chromium/Firefox cases and full web parity. Continue with row 106;
 UCU-06 window acceptance remains open.
 The refreshed
-tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.
+tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-06 window gates remain open.
 
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone

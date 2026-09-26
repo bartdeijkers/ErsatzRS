@@ -102,9 +102,14 @@ async fn live_caption_callback_rechecks_publication_and_session_after_http_read(
         let Err(error) = result else {
             panic!("stale caption preparation was returned");
         };
-        assert!(error
-            .to_string()
-            .contains("publication or session changed during caption preparation"));
+        // Session-bound snapshot projection rejects a stopped session before
+        // reading the publication again. Both races must still reject the item.
+        let expected = if stop_session {
+            "Next dynamic item is unavailable: session is unavailable"
+        } else {
+            "Next dynamic item is unavailable: publication or session changed during caption preparation"
+        };
+        assert_eq!(error.to_string(), expected);
     }
 }
 

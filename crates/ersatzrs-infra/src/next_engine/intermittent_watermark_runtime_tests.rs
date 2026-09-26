@@ -2,7 +2,7 @@
 use super::*;
 use ersatzrs_core::repositories::ChannelRepository;
 
-async fn frame_red(ffmpeg: &Path, segment: &Path) -> u8 {
+async fn frame_red(ffmpeg: &Path, segment: &Path, x: u32) -> u8 {
     let mut decode = Command::new(ffmpeg);
     decode
         .args(["-v", "error", "-nostdin", "-i"])
@@ -15,7 +15,7 @@ async fn frame_red(ffmpeg: &Path, segment: &Path) -> u8 {
             "-frames:v",
             "1",
             "-vf",
-            "crop=2:2:282:18",
+            &format!("crop=2:2:{x}:18"),
             "-pix_fmt",
             "rgb24",
             "-f",
@@ -135,11 +135,16 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
     )
     .await
     .unwrap();
-    let selected =
+    let mut selected =
         crate::playback::select_playback_watermarks(&pool, &channel, 1, false, item.start)
             .await
             .unwrap();
-    projected.watermark = watermark::project(&selected).unwrap();
+    let mut permanent = selected[0].clone();
+    permanent.watermark.mode = ersatzrs_domain::ChannelWatermarkMode::Permanent;
+    permanent.watermark.location = ersatzrs_domain::WatermarkLocation::TopLeft;
+    permanent.watermark.z_index = -1;
+    selected.push(permanent);
+    projected.graphics = watermark::project(&selected).unwrap();
     let playout = root.path().join("playout");
     publication::publish_playout(
         &playout,
@@ -170,11 +175,16 @@ async fn real_next_intermittent_watermark_joins_wall_cycle_and_preserves_fade_au
         .await
         .unwrap();
         let segment = first_segment(&output).await;
-        let red = frame_red(&ffmpeg, &segment).await;
+        let red = frame_red(&ffmpeg, &segment, 282).await;
+        let permanent_red = frame_red(&ffmpeg, &segment, 34).await;
         // Read pixels before stopping, then confirm process-tree cleanup even if
         // a later assertion reveals an official-engine timing regression.
         assert_text_video_and_audio(&ffmpeg, &segment, true).await;
         process.stop().await.unwrap();
+        assert!(
+            permanent_red > 210,
+            "permanent layer must survive every periodic phase: {permanent_red}"
+        );
         match expected {
             "visible" => assert!(red > 210, "wall-second 1.5 must be visible, red={red}"),
             "fade" => assert!(

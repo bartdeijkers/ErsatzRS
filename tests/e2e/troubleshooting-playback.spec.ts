@@ -37,6 +37,11 @@ test.describe('playback troubleshooting engines', () => {
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=nld',
       '-metadata:s:a:0', 'title=Dutch', clip]);
     writeFileSync(subtitle, '1\n00:00:01,000 --> 00:00:06,000\nPreview subtitle proof\n');
+    for (const color of ['red', 'lime']) {
+      execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', `color=${color}:s=40x20`, '-frames:v', '1',
+        '-threads', '1', path.join(root, `${color}.png`)]);
+    }
     profile = `${id}`;
     sql(`
 INSERT INTO "Resolution" ("Id","Name","Width","Height") VALUES (${id},'Preview fixture',320,180);
@@ -69,9 +74,9 @@ INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channel
 VALUES (0,'h264',1,NULL,0,NULL,1,0,${id}),(1,'aac',2,'nld',1,'Dutch',1,0,${id});
 INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated")
 VALUES (${id},${id},1,'Dutch',9,'subrip',1,0,0,'nld',0,'${quote(subtitle)}','2026-09-26 00:00:00','2026-09-26 00:00:00');
-INSERT INTO "ChannelWatermark" ("Id","Name","DurationSeconds","FrequencyMinutes","HorizontalMarginPercent","ImageSource","Location","Mode","Opacity","PlaceWithinSourceContent","Size","VerticalMarginPercent","WidthPercent","ZIndex")
-VALUES (${id},'Preview watermark A',15,15,5,0,0,1,100,0,1,5,15,0),
-(${id + 1},'Preview watermark B',15,15,5,0,0,1,100,0,1,5,15,0);
+INSERT INTO "ChannelWatermark" ("Id","Name","DurationSeconds","FrequencyMinutes","HorizontalMarginPercent","ImageSource","Image","Location","Mode","Opacity","PlaceWithinSourceContent","Size","VerticalMarginPercent","WidthPercent","ZIndex")
+VALUES (${id},'Preview watermark A',15,15,5,0,'${quote(path.join(root, 'red.png'))}',3,1,100,0,1,5,15,0),
+(${id + 1},'Preview watermark B',15,15,5,0,'${quote(path.join(root, 'lime.png'))}',2,1,100,0,1,5,15,1);
 `);
   });
 
@@ -90,7 +95,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     });
   });
 
-  test('switches engine controls, preserves the first watermark and fits narrow screens', async ({ page }, info) => {
+  test('switches engine controls, preserves all watermarks and fits narrow screens', async ({ page }, info) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
@@ -113,8 +118,11 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     expect(await selector.isDisabled()).toBe(disabled);
     await expect(selector).toHaveValue('preview-fixture.yml');
     await expect(page.locator('select[name="graphicsElement"]')).toBeHidden();
-    await expect(watermarks).not.toHaveAttribute('multiple');
-    await expect(watermarks).toHaveValue(`${id}`);
+    await expect(watermarks).toHaveAttribute('multiple');
+    await expect(watermarks).toHaveValues([`${id}`, `${id + 1}`]);
+    expect(await page.locator('form[data-playback-troubleshooting]').evaluate(form =>
+      new FormData(form as HTMLFormElement).getAll('watermark'),
+    )).toEqual([`${id}`, `${id + 1}`]);
     expect(await page.locator('form[data-playback-troubleshooting]').evaluate(form =>
       Array.from(new FormData(form as HTMLFormElement).keys()),
     )).not.toContain('graphicsElement');
@@ -154,6 +162,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
       await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="seekSeconds"]').fill('1');
+      await page.locator('select[name="watermark"]').selectOption([`${id}`, `${id + 1}`]);
       const requests: string[] = [];
       page.on('request', request => {
         if (new URL(request.url()).pathname === '/api/troubleshoot/playback.m3u8') requests.push(request.url());
@@ -168,6 +177,20 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       expect(query.get('subtitleId')).toBe(`${id}`);
       expect(query.get('preferredAudioTitle')).toBe('Dutch');
       expect(query.get('seekSeconds')).toBe('1');
+      expect(query.getAll('watermark')).toEqual([`${id}`, `${id + 1}`]);
+      await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 180;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(video, 0, 0, 320, 180);
+        const red = context.getImageData(25, 15, 1, 1).data;
+        const green = context.getImageData(285, 15, 1, 1).data;
+        return {
+          red: red[0] > 180 && red[1] < 50 && red[2] < 50,
+          green: green[1] > 180 && green[0] < 50 && green[2] < 50,
+        };
+      })).toEqual({ red: true, green: true });
       await expect(page).toHaveURL(/\/system\/troubleshooting\/playback/);
       const playlist = engine === 'Next' ? 'ffmpeg.m3u8' : 'live.m3u8';
       await expect.poll(async () => {
@@ -197,7 +220,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     });
   }
 
-  test('no-JavaScript form submits the selected engine and tracks', async ({ browser, baseURL }) => {
+  test('no-JavaScript form submits the selected engine, tracks and all watermarks', async ({ browser, baseURL }) => {
     const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
     try {
       const page = await context.newPage();
@@ -212,12 +235,14 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption('Next');
       await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="startFromBeginning"]').check();
+      await page.locator('select[name="watermark"]').selectOption([`${id}`, `${id + 1}`]);
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await expect(page.locator('body')).toContainText('Captured preview submission');
       expect(submitted?.searchParams.get('streamingEngine')).toBe('Next');
       expect(submitted?.searchParams.get('streamSelector')).toBe('preview-fixture.yml');
       expect(submitted?.searchParams.get('subtitleId')).toBe(`${id}`);
       expect(submitted?.searchParams.get('startFromBeginning')).toBe('true');
+      expect(submitted?.searchParams.getAll('watermark')).toEqual([`${id}`, `${id + 1}`]);
     } finally {
       await context.close();
     }
