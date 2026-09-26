@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **72 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **71 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **103**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **104**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,26 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 104 source map: Windows bitmap-subtitle readrate
+
+- Upstream `080039be` changes only the Windows FFmpeg archive from build
+  `20138c8f` to `25d21b2c` and release notes. The new fix is
+  `ErsatzTV/ErsatzTV-ffmpeg` commit `f85014496b6697e8cc156a0785c25a7fa3a53424`,
+  `patches/0003-ffmpeg_demux-only-throttle-readrate-on-the-slowest-stream.patch`.
+- It skips finished/unstarted streams, moves resume/lag state to the demuxer,
+  and sleeps once based on the slowest active stream. This avoids the old
+  per-stream sleep after sparse bitmap subtitle timestamps jump.
+- ErsatzRS's published v2.0.1 packages build FFmpeg `n9.0`, which already
+  contains the complete fix: reverse dry-run applies all three patch hunks
+  with zero fuzz (three-line offsets). Row 99 covers the retained Vulkan fix.
+  No host UI, schema, handler, selection or FFmpeg argv change is required.
+- Verdict: Covered. Synthetic sparse PGS playback passes with the released
+  Windows and Linux executables: 16 seconds/400 frames, left/right bitmap
+  transitions across an eight-second packet gap, selected 880 Hz alternate
+  audio and error-free full decode. This proves this row's stall fix for the
+  fixture; it does not claim every sparse-stream pacing edge case is fixed.
+  UCU-06 owns exact evidence; later archive updates remain pending.
 
 ## Row 103 source map: Next release notes
 
@@ -2096,7 +2116,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 101 | `11789e8d` | chore: update dependencies (#2980) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency patches` | ucu-06; .NET Extensions/ASP.NET/CLI patches, test-only NSubstitute update and removal of a .NET OpenAPI override. Rust dependencies and application consumers unchanged. Docker Vulkan release note proves no container change; row 102 owns that acceptance. Source/manifest review and progress validation pass. |
 | 102 | `33c33587` | feat: enable vulkan in docker (#2981) | Port | upstream-baseline-catch-up | `fix(docker): enable Vulkan runtime and driver exposure` | ucu-06; no blanket engine disable; minimal Vulkan libraries/ICDs and NVIDIA graphics capability added, old probe caches invalidated on capability change. amd64/arm64/ARMv7 and alternate package layers pass; non-root software Vulkan and CUDA/NVENC controls pass. WSL exposes no matching NVIDIA Vulkan UUID, so physical NVIDIA Docker interop is not claimed. Scoped tests/Clippy/binary checks pass; window owns full application gates. |
 | 103 | `5febb943` | docs: update changelog | N/A (upstream release notes) | upstream-baseline-catch-up | `docs(porting): reconcile Next engine release notes` | ucu-06; changelog-only QSV overlays, audio synchronization and anamorphic scaling announcements. No engine source, pin or host integration changes. Release notes are not runtime proof; existing Next acceptance remains unchanged. Full diff review and progress validation pass. |
-| 104 | `080039be` | chore: update windows ffmpeg (#2982) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 104 | `080039be` | chore: update windows ffmpeg (#2982) | Covered | upstream-baseline-catch-up | `docs(porting): verify bitmap subtitle readrate coverage` | ucu-06; complete upstream readrate patch already in FFmpeg n9.0. Published v2.0.1 Windows/Linux executables pass sparse PGS gap, all 400 frames, selected alternate audio and decode checks. No runtime rebuild or host changes required; window gates remain open. |
 | 105 | `3a02c39b` | feat: support multiple watermarks using next engine (#2983) | | | | ucu-06; provisional: Next behavior triage. |
 | 106 | `cd30ac4a` | feat: image graphics element support in next (#2984) | | | | ucu-06; provisional: Next behavior triage. |
 | 107 | `b36e94cc` | fix: on-demand channel progress using next engine (#2985) | | | | ucu-06; provisional: Next behavior triage. |

@@ -89,7 +89,9 @@ Row 102 ports Vulkan runtime packages and NVIDIA driver exposure, preserving
 minimal-image/ARMv7 boundaries and invalidating caches on capability changes.
 Software Vulkan and CUDA/NVENC controls pass; this WSL host cannot expose a
 matching NVIDIA Vulkan device. Row 103 is N/A for upstream-only Next release
-notes; no runtime acceptance is inferred. Continue with row 104;
+notes; no runtime acceptance is inferred. Row 104 is Covered: FFmpeg 9 includes
+the readrate fix, and released Windows/Linux packages pass sparse bitmap playback
+with selected alternate audio. Continue with row 105;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.

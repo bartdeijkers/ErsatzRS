@@ -10155,6 +10155,27 @@ these notes do not prove the announced external-engine behavior in ErsatzRS.
 Existing Next runtime/hardware acceptance stays unchanged. Diff and structured
 progress checks pass. Pin, ledger and upstream checkout advance together to
 5febb943; row 104 is next. UCU-06 window gates, push and exact-SHA CI remain open.
+
+Row 104 (080039be) is Covered: its Windows archive update adds the upstream
+readrate fix from ErsatzTV-ffmpeg f8501449, patch 0003. The n9.0 source used by
+both published ErsatzRS-ffmpeg v2.0.1 packages already has the complete change:
+reverse patch dry-run succeeds for all three hunks with --fuzz=0 and offsets of
+three lines. The existing row-99 runtime source/build provenance remains valid.
+The exact Windows executable hash remains ae2d9010789a61a1c91cdd4c77ca1c09a436f2d1b57c9e2b4329167de0e73787.
+Disposable synthetic media reuses the repository's PGS segment format, with
+bitmap packets at 0/2/10/14 seconds, black video at 25 fps, English 440 Hz and
+Dutch 880 Hz audio. Each released executable burns the sparse bitmap with
+-readrate 1 -readrate_initial_burst 0, explicitly mapping the second audio track.
+Linux completes the 16-second source in 13.864 seconds, Windows in 17.489 seconds.
+Both outputs contain all 400 frames and exactly 16 seconds, render more than
+1300 white rectangle pixels at the expected left/right positions before/after
+the eight-second packet gap, retain 879.94 Hz selected audio across the output,
+and pass -xerror full decode. This is scoped no-stall/selection evidence; it
+is not a claim of exact wall-clock pacing for every sparse-stream case.
+Source map, full diff review and progress validation pass. No Rust, argv,
+package rebuild or user-visible behavior change is required for this row.
+Pin, ledger and upstream checkout advance together to 080039be; row 105 is next.
+UCU-06 window gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]
