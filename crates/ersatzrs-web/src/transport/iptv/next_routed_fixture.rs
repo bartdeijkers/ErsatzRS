@@ -76,7 +76,7 @@ pub(super) async fn seed(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
         .unwrap();
 }
 
-async fn install(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
+pub(crate) async fn install(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
     use std::os::unix::fs::PermissionsExt as _;
     let package = root.join("package");
     tokio::fs::create_dir_all(&package).await.unwrap();

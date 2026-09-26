@@ -8,8 +8,8 @@ Ledger: 175 commits, 92 reconciled, 83 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
 UCU-06: rows 91-92 Port; row 93 is in progress. Its finite Next troubleshooting
-host/API and Remote Stream callbacks are implemented; decoded remote runtime and UI/browser acceptance
-remain open. UCU-06 owns the focused and decoded runtime evidence.
+host/API and Remote Stream callbacks pass focused and decoded runtime checks;
+UI/browser acceptance remains open. UCU-06 owns the current evidence.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -193,8 +193,8 @@ evidence = 'UCU-05 owns row 84. Typed HTTP/local sources and an atomically cache
 
 [[debt]]
 id          = 'ucu93-next-troubleshooting-acceptance'
-description = 'Complete row 93 Remote Stream troubleshooting lifetimes, engine controls and browser/no-JS acceptance.'
+description = 'Complete row 93 engine controls and integrated browser/no-JS acceptance.'
 discovered  = '2026-09-26'
 resolved    = false
 adr         = '0095'
-evidence    = 'UCU-06 owns current evidence. The host/API now projects isolated finite media/channel previews with selected profiles, exact versions, subtitle/audio policy, capacity admission and bounded process ownership. Focused regressions and decoded official Next local playback pass. Remote Stream callbacks now reuse session and producer ownership with an owned preview selection; 95 focused regressions pass. Decoded direct/prepared/producer preview playback and cleanup still need runtime proof. The UI selector and integrated browser/no-JS proof remain open, so row 93 and its pin are not advanced.'
+evidence    = 'UCU-06 owns current evidence. Isolated finite media/channel previews retain selected profiles, exact versions, subtitle/audio policy, capacity and bounded ownership. Decoded official Next local, direct HTTP, prepared-artifact, ordinary producer and retained-interval previews pass. Explicit subtitle selection preserves metadata required by retained-caption provenance. Focused regressions and strict Clippy pass. The UI selector and integrated browser/no-JS proof remain open, so row 93 and its pin are not advanced.'

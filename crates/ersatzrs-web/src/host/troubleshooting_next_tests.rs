@@ -202,13 +202,124 @@ async fn preparation_writes_one_isolated_item_with_matching_virtual_start() {
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg 9 runtime paths"]
 async fn real_next_host_preview_finishes_with_selected_tracks_and_downloadable_reports() {
+    run_real_preview(remote_runtime::Mode::Local).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; isolated routed HTTP preview"]
+async fn real_next_remote_preview_preserves_tracks_and_revokes_callbacks() {
+    run_real_preview(remote_runtime::Mode::Direct).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; isolated prepared artifact preview"]
+async fn real_next_prepared_preview_preserves_tracks_and_revokes_callbacks() {
+    remote_runtime::isolated("fixture_child_prepared_preview").await;
+}
+
+#[tokio::test]
+#[ignore = "child of real_next_prepared_preview_preserves_tracks_and_revokes_callbacks"]
+async fn fixture_child_prepared_preview() {
+    run_real_preview(remote_runtime::Mode::Prepared).await;
+}
+
+// Reuses the existing installed POSIX producer fixture; other preview cases are portable.
+#[cfg(unix)]
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; installed producer preview"]
+async fn real_next_producer_preview_preserves_tracks_and_revokes_callbacks() {
+    remote_runtime::isolated("fixture_child_producer_preview").await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+#[ignore = "child of real_next_producer_preview_preserves_tracks_and_revokes_callbacks"]
+async fn fixture_child_producer_preview() {
+    run_real_preview(remote_runtime::Mode::Producer).await;
+}
+
+async fn run_real_preview(mode: remote_runtime::Mode) {
     let fixture = Fixture::new().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(ffmpeg.to_str().unwrap(), ffprobe.to_str().unwrap());
     let mut paths = fixture.paths();
     paths.executable = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let clip = fixture.root.path().join("fixture.mkv");
-    let mut generate = Command::new(&ffmpeg);
+    generate_clip(&ffmpeg, &clip).await;
+    let subtitle = fixture.root.path().join("fixture.nl.srt");
+    tokio::fs::write(
+        &subtitle,
+        "1\n00:00:01,000 --> 00:00:06,000\nNext host subtitle proof\n",
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"UPDATE "MediaVersion" SET "Duration"='00:00:06' WHERE "Id"=100"#)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (2,20,1,'Dutch',9,'subrip',1,0,0,'nld',0,?,'2026-09-26 00:00:00','2026-09-26 00:00:00')"#)
+        .bind(subtitle.to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
+    {
+        let mut runtime = fixture.state.ffmpeg_runtime.write().await;
+        runtime.ffmpeg.path = ffmpeg.to_str().unwrap().to_owned();
+        runtime.ffprobe.path = ffprobe.to_str().unwrap().to_owned();
+    }
+    // Upstream applies language before title; explicitly request Dutch for this decode proof.
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,'nld')"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    let mut query = Fixture::query();
+    query.seek_seconds = Some(1);
+    query.subtitle_id = Some(2);
+    let origin = if mode == remote_runtime::Mode::Local {
+        None
+    } else {
+        Some(remote_runtime::Origin::start(&fixture, mode).await)
+    };
+    let mut ownership = Arc::clone(&fixture.state.preview_lock)
+        .try_lock_owned()
+        .unwrap();
+    let (sender, receiver) = oneshot::channel();
+    let mut ready = Some(sender);
+    if let Err(error) =
+        run_with_paths(&fixture.state, &query, &mut ownership, &mut ready, &paths).await
+    {
+        let root = fixture.root.keep();
+        panic!(
+            "synthetic preview failed: {error}; reports retained at {}",
+            root.display()
+        );
+    }
+    receiver.await.unwrap().unwrap();
+    let playlist = paths.output.join("ffmpeg.m3u8");
+    assert!(tokio::fs::read_to_string(&playlist)
+        .await
+        .unwrap()
+        .contains("#EXT-X-ENDLIST"));
+    assert!(build_troubleshooting_archive_from(&paths.output)
+        .await
+        .unwrap()
+        .is_some());
+    assert_decoded_tracks(&ffmpeg, &playlist).await;
+    if let Some(origin) = origin {
+        origin.verify_revoked_and_stop().await;
+    }
+    remote_runtime::verify_producer(mode, fixture.root.path()).await;
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&fixture.state.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[path = "troubleshooting_remote_runtime_tests.rs"]
+mod remote_runtime;
+
+async fn generate_clip(ffmpeg: &FsPath, clip: &FsPath) {
+    let mut generate = Command::new(ffmpeg);
     generate
         .args([
             "-v",
@@ -243,62 +354,15 @@ async fn real_next_host_preview_finishes_with_selected_tracks_and_downloadable_r
             "aac",
             "-metadata:s:a:0",
             "language=eng",
+            "-metadata:s:a:0",
+            "title=English",
             "-metadata:s:a:1",
             "language=nld",
+            "-metadata:s:a:1",
+            "title=Dutch",
         ])
-        .arg(&clip);
+        .arg(clip);
     output(generate).await;
-    let subtitle = fixture.root.path().join("fixture.nl.srt");
-    tokio::fs::write(
-        &subtitle,
-        "1\n00:00:01,000 --> 00:00:06,000\nNext host subtitle proof\n",
-    )
-    .await
-    .unwrap();
-    sqlx::query(r#"UPDATE "MediaVersion" SET "Duration"='00:00:06' WHERE "Id"=100"#)
-        .execute(&fixture.state.pool)
-        .await
-        .unwrap();
-    sqlx::query(r#"INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (2,20,1,'Dutch',9,'subrip',1,0,0,'nld',0,?,'2026-09-26 00:00:00','2026-09-26 00:00:00')"#)
-        .bind(subtitle.to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
-    {
-        let mut runtime = fixture.state.ffmpeg_runtime.write().await;
-        runtime.ffmpeg.path = ffmpeg.to_str().unwrap().to_owned();
-        runtime.ffprobe.path = ffprobe.to_str().unwrap().to_owned();
-    }
-    // Upstream applies language before title; explicitly request Dutch for this decode proof.
-    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,'nld')"#)
-        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE)
-        .execute(&fixture.state.pool)
-        .await
-        .unwrap();
-    let mut query = Fixture::query();
-    query.seek_seconds = Some(1);
-    query.subtitle_id = Some(2);
-    let mut ownership = Arc::clone(&fixture.state.preview_lock)
-        .try_lock_owned()
-        .unwrap();
-    let (sender, receiver) = oneshot::channel();
-    let mut ready = Some(sender);
-    run_with_paths(&fixture.state, &query, &mut ownership, &mut ready, &paths)
-        .await
-        .unwrap();
-    receiver.await.unwrap().unwrap();
-    let playlist = paths.output.join("ffmpeg.m3u8");
-    assert!(tokio::fs::read_to_string(&playlist)
-        .await
-        .unwrap()
-        .contains("#EXT-X-ENDLIST"));
-    assert!(build_troubleshooting_archive_from(&paths.output)
-        .await
-        .unwrap()
-        .is_some());
-    assert_decoded_tracks(&ffmpeg, &playlist).await;
-    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
-        .fetch_one(&fixture.state.pool)
-        .await
-        .unwrap();
-    assert_eq!(count, 1);
 }
 
 async fn output(mut command: Command) -> Vec<u8> {

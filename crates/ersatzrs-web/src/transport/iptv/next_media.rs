@@ -475,4 +475,4 @@ mod prepared_runtime_tests;
 // Installed POSIX fixture add-on; native Windows behavior remains covered by portable route tests.
 #[cfg(all(test, unix))]
 #[path = "next_routed_runtime_tests.rs"]
-mod routed_runtime_tests;
+pub(crate) mod routed_runtime_tests;

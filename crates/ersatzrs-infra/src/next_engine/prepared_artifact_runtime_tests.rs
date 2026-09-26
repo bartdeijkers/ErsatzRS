@@ -53,7 +53,8 @@ pub(super) async fn run_isolated_test(test: &str) {
     };
     assert!(
         status.success(),
-        "isolated artifact fixture failed: {output}"
+        "isolated artifact fixture failed: {output}; retained at {}",
+        root.keep().display()
     );
     assert!(
         output.contains("1 passed"),

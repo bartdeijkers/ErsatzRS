@@ -1927,7 +1927,7 @@ pub(crate) async fn select_next_troubleshooting_subtitle(
     media_version_id: i64,
     subtitle_id: i64,
 ) -> Result<PlaybackSubtitle> {
-    let mut subtitle = load_subtitles_for_media_version(pool, media_item_id, media_version_id)
+    let subtitle = load_subtitles_for_media_version(pool, media_item_id, media_version_id)
         .await?
         .into_iter()
         .find(|subtitle| subtitle.id == subtitle_id)
@@ -1946,7 +1946,8 @@ pub(crate) async fn select_next_troubleshooting_subtitle(
             "selected subtitle is unsupported by Next",
         ));
     }
-    subtitle.forced = true;
+    // Selection is already explicit. Preserve the persisted metadata used by
+    // retained-caption provenance checks; Next needs no native forced override.
     Ok(subtitle)
 }
 

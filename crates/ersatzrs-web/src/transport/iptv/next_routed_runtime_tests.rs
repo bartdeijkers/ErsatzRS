@@ -23,7 +23,7 @@ mod concurrent;
 #[path = "next_routed_disconnect_tests.rs"]
 mod disconnect;
 #[path = "next_routed_fixture.rs"]
-mod fixture;
+pub(crate) mod fixture;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in runtime locations only.
 fn runtime_path(name: &str) -> PathBuf {

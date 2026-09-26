@@ -97,6 +97,18 @@ async fn troubleshooting_media_context_decodes_the_persisted_duration() {
 #[tokio::test]
 async fn troubleshooting_preserves_explicit_tracks_and_seek_without_persisting_a_playout() {
     let fixture = Fixture::new().await;
+    let snapshot = fixture
+        .host
+        .troubleshooting_snapshot(&fixture.request(Some(2)))
+        .await
+        .unwrap();
+    let stored = playback::load_subtitles_for_media_item(&fixture.pool, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|subtitle| subtitle.id == 2)
+        .unwrap();
+    assert_eq!(snapshot.projection.selected_subtitle, Some(stored));
     let count_before: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
         .fetch_one(&fixture.pool)
         .await

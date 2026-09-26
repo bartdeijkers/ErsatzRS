@@ -29,6 +29,8 @@ release section when tagging a release.
   cleanup cannot be confirmed.
 - Keep Remote Stream troubleshooting callbacks bound to their preview selection
   and revoke them before releasing producer resources and transcode capacity.
+- Preserve subtitle metadata during explicit Next troubleshooting selection so
+  retained-interval caption provenance remains valid.
 - Include Next FFmpeg reports and outcome diagnostics from immediate report
   subdirectories in playback troubleshooting downloads.
 - Preserve provider external subtitle tracks during scans and hourly cleanup,

@@ -9840,6 +9840,28 @@ troubleshooting, remote projection, dynamic callback, fallback and process
 regressions pass (Nextest dea338ed). Strict infra/web all-target Clippy, formatting,
 progress validation and the staged Clippy-allow policy pass. Decoded Remote
 Stream runtime evidence remains pending; this is not row acceptance.
+Row 93 decoded remote runtime proof now passes direct HTTP (Nextest 49348c26),
+an immutable prepared artifact with a disabled provider/unreachable original URL
+(06520035, prepared case), and an installed ordinary producer (1444ca3d).
+Each uses the real web callback route and official Next, produces an ended
+playlist and downloadable reports, decodes selected Dutch 880 Hz audio and
+the sought subtitle cue, and rejects its callback after completion. The producer
+starts once with the one-second seek and is reaped before the host returns.
+Its first fixture run exposed missing audio titles in generated media; adding
+the titles already recorded in the fixture database preserves the production
+remapper's strict matching. Retained-interval preview proof and UI/browser
+acceptance remain open.
+The retained-interval preview initially failed because explicit Next subtitle
+selection changed its forced flag, invalidating the exact persisted-caption
+provenance check. Selection now preserves metadata; provenance validation is
+unchanged. A focused regression compares the selected record with its stored
+metadata. Official Next now passes the retained preview (50fdd63a), including
+the requested source intervals, decoded cut colors/Dutch audio/burned captions,
+single producer start, ended playlist and report dossier. All 51 focused caption
+and troubleshooting regressions (3e6b74d2) and strict infra/web all-target Clippy pass.
+Runtime evidence is local Linux; installed producer fixtures explicitly use
+their existing Unix shell/Python boundary. Row 93 engine controls and integrated
+browser/no-JS proof remain open; its verdict and the pin are not advanced.
 """
 
 [[milestone]]
