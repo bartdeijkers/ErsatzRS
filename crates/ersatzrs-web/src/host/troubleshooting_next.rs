@@ -8,6 +8,7 @@ use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_domain::{PlayoutItem, StreamingEngine};
 use ersatzrs_infra::next_engine::{
     config,
+    diagnostics::SelectionLog,
     host::channel_binary,
     process::{NextProcess, ProcessError},
     protocol, schedule,
@@ -202,7 +203,12 @@ async fn prepare(
     paths: &RuntimePaths,
     deadline: Instant,
     session: &mut Option<uuid::Uuid>,
-) -> ApiResult<(tempfile::TempDir, protocol::ChannelConfig, String)> {
+) -> ApiResult<(
+    tempfile::TempDir,
+    protocol::ChannelConfig,
+    String,
+    SelectionLog,
+)> {
     Box::pin(prepare_inner(state, query, paths, deadline, session)).await
 }
 
@@ -212,10 +218,16 @@ async fn prepare_inner(
     paths: &RuntimePaths,
     deadline: Instant,
     session: &mut Option<uuid::Uuid>,
-) -> ApiResult<(tempfile::TempDir, protocol::ChannelConfig, String)> {
+) -> ApiResult<(
+    tempfile::TempDir,
+    protocol::ChannelConfig,
+    String,
+    SelectionLog,
+)> {
     let selected = select(state, query).await?;
     let runtime = state.ffmpeg_runtime.read().await.clone();
     let replacements = stream::load_path_replacements(&state.repositories.media_source).await?;
+    let diagnostics = SelectionLog::default();
     let request = TroubleshootingPreview {
         media: &selected.media,
         channel: &selected.channel,
@@ -226,6 +238,7 @@ async fn prepare_inner(
         replacements: &replacements,
         ffmpeg: FsPath::new(&runtime.ffmpeg.path),
         deadline,
+        diagnostics: Some(diagnostics.clone()),
     };
     let item = if selected.media.remote_stream_id.is_some() {
         let start = ersatzrs_infra::next_engine::host::NextStart {
@@ -284,7 +297,12 @@ async fn prepare_inner(
     tokio::fs::write(manifest.path().join(name), serde_json::to_vec(&playout)?).await?;
     prepare_troubleshooting_folder(working).await?;
     write_preview_artifacts(state, query, &selected.info, &selected.profile, working).await?;
-    Ok((manifest, configuration, selected.channel.number))
+    Ok((
+        manifest,
+        configuration,
+        selected.channel.number,
+        diagnostics,
+    ))
 }
 
 struct RuntimePaths {
@@ -359,7 +377,7 @@ async fn run_admitted(
     session: &mut Option<uuid::Uuid>,
 ) -> ApiResult<()> {
     let deadline = Instant::now() + Duration::from_secs(30);
-    let (manifest, configuration, number) =
+    let (manifest, configuration, number, diagnostics) =
         timeout_at(deadline, prepare(state, query, paths, deadline, session))
             .await
             .map_err(|_| "Next troubleshooting preparation timed out")??;
@@ -390,7 +408,7 @@ async fn run_admitted(
             return Err(error.into());
         }
     };
-    let result = supervise(&mut process, &paths.output, ownership, ready).await;
+    let result = supervise(&mut process, &paths.output, ownership, ready, &diagnostics).await;
     if matches!(**ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
         let _ = manifest.keep();
     }
@@ -402,6 +420,7 @@ async fn supervise(
     working: &FsPath,
     ownership: &mut PreviewOwnership,
     ready: &mut Readiness,
+    diagnostics: &SelectionLog,
 ) -> ApiResult<()> {
     let result = timeout_at(Instant::now() + Duration::from_mins(2), async {
         tokio::select! {
@@ -429,7 +448,9 @@ async fn supervise(
     } else {
         "Next troubleshooting failed or timed out"
     };
-    let mut log = outcome.to_owned();
+    let mut log = diagnostics.text();
+    log.push_str(&process.diagnostics());
+    log.push_str(outcome);
     if let Some(speed) = progress::completed_speed(working, "").await {
         log.push_str(&progress::speed_diagnostic(speed));
     }

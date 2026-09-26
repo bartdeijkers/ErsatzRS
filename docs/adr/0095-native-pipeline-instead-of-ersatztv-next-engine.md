@@ -185,9 +185,15 @@ Reuse the existing managed Unix process group and Windows Job Object owner.
 Send configuration on stdin, remove stale readiness before spawn, share one
 startup deadline across configuration delivery and readiness, and await bounded
 whole-tree cleanup on startup failure or normal stop. Raw child stdout/stderr
-are discarded because they can contain private source URLs; adapter errors
-contain static operation labels, error kinds and exit codes. The host session
-must own admission, idle policy, shutdown and heartbeat scheduling.
+must not be emitted or retained directly because they can contain private source
+URLs. Upstream row 94 adds diagnostic levels and targets: process-owned readers
+discard oversized lines, sanitize complete messages with the existing Remote
+Stream redactor plus exact configured path/session redactions, and retain only
+a bounded tail. Reader completion is bounded after managed tree cleanup; dropping
+the owner aborts readers. Troubleshooting additionally opts into bounded stream
+selection decisions without making scheduled conversion verbose. Adapter errors
+still contain static operation labels, error kinds and exit codes. The host
+session owns admission, idle policy, shutdown and heartbeat scheduling.
 
 Track projection uses explicit video/audio/subtitle sources and omits the
 general item source, so an absent track cannot inherit it. Exact pins are

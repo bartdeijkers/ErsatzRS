@@ -10,6 +10,7 @@ pub mod config;
 pub mod connections;
 pub mod coordinator;
 mod credits;
+pub mod diagnostics;
 mod dynamic_host;
 mod dynamic_item;
 mod dynamic_projection;

@@ -1287,7 +1287,7 @@ pub async fn select_custom_playback_streams(
         content_start_time,
         streaming_mode,
         SubtitleSelectionEngine::Native,
-        None,
+        CustomSelectionContext::default(),
     )
     .await
 }
@@ -1312,13 +1312,19 @@ pub async fn select_custom_playback_streams_for_version(
         channel,
         content_start_time,
         streaming_mode,
-        None,
+        CustomSelectionContext::default(),
     )
     .await
 }
 
 /// Troubleshooting restricts candidates before evaluating custom selector rules.
 /// The selected record retains its stored metadata for later provenance checks.
+#[derive(Default)]
+pub(crate) struct CustomSelectionContext<'a> {
+    pub subtitles: Option<&'a [PlaybackSubtitle]>,
+    pub diagnostics: Option<&'a crate::next_engine::diagnostics::SelectionLog>,
+}
+
 pub(crate) async fn select_custom_playback_streams_with_subtitle_candidates(
     pool: &DbPool,
     media_version_id: i64,
@@ -1326,7 +1332,7 @@ pub(crate) async fn select_custom_playback_streams_with_subtitle_candidates(
     channel: &Channel,
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
-    candidates: Option<&[PlaybackSubtitle]>,
+    context: CustomSelectionContext<'_>,
 ) -> Result<Option<CustomStreamSelection>> {
     select_custom_playback_streams_inner(
         pool,
@@ -1336,7 +1342,7 @@ pub(crate) async fn select_custom_playback_streams_with_subtitle_candidates(
         content_start_time,
         streaming_mode,
         SubtitleSelectionEngine::Next,
-        candidates,
+        context,
     )
     .await
 }
@@ -1350,7 +1356,7 @@ async fn select_custom_playback_streams_inner(
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
     engine: SubtitleSelectionEngine,
-    candidates: Option<&[PlaybackSubtitle]>,
+    context: CustomSelectionContext<'_>,
 ) -> Result<Option<CustomStreamSelection>> {
     let Some(selector) = channel
         .stream_selector
@@ -1367,7 +1373,12 @@ async fn select_custom_playback_streams_inner(
     let selector_path = crate::file_system_layout::channel_stream_selectors_folder().join(selector);
     let yaml = match tokio::fs::read_to_string(&selector_path).await {
         Ok(yaml) => yaml,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(log) = context.diagnostics {
+                log.debug("Custom selector file is absent; using normal stream preferences");
+            }
+            return Ok(None);
+        }
         Err(error) => {
             return Err(RepositoryError::Decode {
                 kind: "channel stream selector",
@@ -1382,7 +1393,7 @@ async fn select_custom_playback_streams_inner(
         })?;
 
     let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = if let Some(candidates) = candidates {
+    let mut subtitles = if let Some(candidates) = context.subtitles {
         candidates.to_vec()
     } else if engine == SubtitleSelectionEngine::Next {
         load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
@@ -1413,9 +1424,10 @@ async fn select_custom_playback_streams_inner(
         selector,
         &audio_streams,
         &mut subtitles,
-        candidates.is_some(),
+        context.subtitles.is_some(),
         channel,
         content_start_time,
+        context.diagnostics,
     ))
 }
 
@@ -1426,6 +1438,7 @@ fn select_custom_stream_candidates(
     explicit: bool,
     channel: &Channel,
     content_start_time: DateTime<Utc>,
+    diagnostics: Option<&crate::next_engine::diagnostics::SelectionLog>,
 ) -> Option<CustomStreamSelection> {
     // ErsatzTV treats an explicitly supplied troubleshooting track as forced
     // during selection. Do not mutate the record returned to artifact validation.
@@ -1436,15 +1449,25 @@ fn select_custom_stream_candidates(
         }
     }
 
-    for item in selector.items {
+    for (index, item) in selector.items.into_iter().enumerate() {
         if !item.content_condition.trim().is_empty()
             && !content_matches_condition(channel, content_start_time, &item.content_condition)
         {
+            if let Some(log) = diagnostics {
+                log.debug(&format!(
+                    "Custom selector rule {}: content condition did not match",
+                    index + 1
+                ));
+            }
             continue;
         }
 
-        let audio = select_custom_audio(audio_streams, &item);
-        let subtitles = select_custom_subtitle(subtitles, &item);
+        let rule_log = diagnostics.map(|log| (log, index + 1));
+        let audio = select_custom_audio(audio_streams, &item, rule_log);
+        let subtitles = select_custom_subtitle(subtitles, &item, rule_log);
+        if let Some(log) = diagnostics {
+            log.debug(&format!("Custom selector rule {}: audio matched={}, subtitle matched={}, subtitles disabled={}", index + 1, audio.passed, subtitles.passed, item.disable_subtitles));
+        }
         if audio.passed && subtitles.passed {
             return Some(CustomStreamSelection {
                 audio_stream_index: audio
@@ -1462,6 +1485,9 @@ fn select_custom_stream_candidates(
         }
     }
 
+    if let Some(log) = diagnostics {
+        log.debug("No custom selector rule matched; using normal stream preferences");
+    }
     None
 }
 
@@ -1504,6 +1530,7 @@ struct RankedSelection<'a, T> {
 fn select_custom_audio<'a>(
     audio_streams: &'a [PlaybackAudioStream],
     item: &StreamSelectorItem,
+    diagnostics: Option<(&crate::next_engine::diagnostics::SelectionLog, usize)>,
 ) -> RankedSelection<'a, PlaybackAudioStream> {
     let mut candidates = Vec::new();
     let mut passed = false;
@@ -1546,6 +1573,9 @@ fn select_custom_audio<'a>(
         {
             matches = false;
         }
+        if let Some((log, rule)) = diagnostics {
+            log.debug(&format!("Custom selector rule {rule}: audio stream {}, language={safe_language}, matched={matches}", stream.stream_index));
+        }
         if matches {
             passed = true;
             candidates.push((rank, stream.stream_index, stream));
@@ -1561,6 +1591,7 @@ fn select_custom_audio<'a>(
 fn select_custom_subtitle<'a>(
     subtitles: &'a [PlaybackSubtitle],
     item: &StreamSelectorItem,
+    diagnostics: Option<(&crate::next_engine::diagnostics::SelectionLog, usize)>,
 ) -> RankedSelection<'a, PlaybackSubtitle> {
     if item.disable_subtitles {
         return RankedSelection {
@@ -1609,6 +1640,9 @@ fn select_custom_subtitle<'a>(
             && !subtitle_matches_condition(subtitle, &item.subtitle_condition)
         {
             matches = false;
+        }
+        if let Some((log, rule)) = diagnostics {
+            log.debug(&format!("Custom selector rule {rule}: subtitle {}, language={safe_language}, matched={matches}", subtitle.id));
         }
         if matches {
             passed = true;
@@ -4465,7 +4499,7 @@ mod tests {
             },
         ];
 
-        let selected = select_custom_audio(&streams, &item);
+        let selected = select_custom_audio(&streams, &item, None);
 
         assert!(selected.passed);
         assert_eq!(selected.selected.map(|stream| stream.stream_index), Some(2));
@@ -4696,8 +4730,8 @@ mod tests {
             path: Some("commentary.srt".to_owned()),
         }];
 
-        let audio = select_custom_audio(&streams, &item);
-        let subtitle = select_custom_subtitle(&subtitles, &item);
+        let audio = select_custom_audio(&streams, &item, None);
+        let subtitle = select_custom_subtitle(&subtitles, &item, None);
 
         assert!(audio.passed);
         assert_eq!(audio.selected.map(|stream| stream.stream_index), Some(2));
@@ -4737,7 +4771,7 @@ mod tests {
             is_extracted: false,
             path: Some("movie.srt".to_owned()),
         }];
-        let selected = select_custom_subtitle(&subtitles, &item);
+        let selected = select_custom_subtitle(&subtitles, &item, None);
 
         assert!(content_matches_condition(
             &channel,

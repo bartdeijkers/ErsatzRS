@@ -36,6 +36,8 @@ pub struct TroubleshootingPreview<'a> {
     pub replacements: &'a [PathReplacement],
     pub ffmpeg: &'a Path,
     pub deadline: Instant,
+    /// Opt-in bounded selection decisions; scheduled conversion stays quiet.
+    pub diagnostics: Option<super::diagnostics::SelectionLog>,
 }
 
 /// Owned selection for authenticated callbacks; never holds schedule guards.
@@ -47,6 +49,7 @@ pub(super) struct Context {
     pub subtitle_id: Option<i64>,
     selection_time: Option<chrono::DateTime<chrono::Utc>>,
     watermark_ids: Vec<i64>,
+    pub diagnostics: Option<super::diagnostics::SelectionLog>,
 }
 
 impl Context {
@@ -58,6 +61,7 @@ impl Context {
             subtitle_id: request.subtitle_id,
             selection_time: request.selection_time,
             watermark_ids: request.watermark_ids.to_vec(),
+            diagnostics: request.diagnostics.clone(),
         }
     }
 
@@ -300,6 +304,7 @@ impl NextHost {
                 source,
                 resolution: &request.profile.resolution,
                 subtitle_id: request.subtitle_id,
+                diagnostics: request.diagnostics.clone(),
             },
         )
         .await?;

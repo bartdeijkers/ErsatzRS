@@ -69,6 +69,7 @@ impl Fixture {
             replacements: &[],
             ffmpeg: Path::new("unused-ffmpeg"),
             deadline: Instant::now() + std::time::Duration::from_secs(10),
+            diagnostics: None,
         }
     }
 }
@@ -96,9 +97,12 @@ async fn troubleshooting_custom_rules_see_only_explicit_subtitle_candidates() {
             .unwrap()
             .to_owned(),
     );
+    let log = super::super::diagnostics::SelectionLog::default();
+    let mut request = fixture.request(Some(2));
+    request.diagnostics = Some(log.clone());
     let snapshot = fixture
         .host
-        .troubleshooting_snapshot(&fixture.request(Some(2)))
+        .troubleshooting_snapshot(&request)
         .await
         .unwrap();
     let tracks = snapshot.projection.item.tracks.unwrap();
@@ -113,6 +117,12 @@ async fn troubleshooting_custom_rules_see_only_explicit_subtitle_candidates() {
         !subtitle.forced,
         "forced matching must not change stored provenance"
     );
+    let messages = log.text();
+    assert!(messages.contains("audio stream 1, language=eng, matched=true"));
+    assert!(messages.contains("subtitle 2, language=nld, matched=false"));
+    assert!(messages.contains("Custom selector rule 1: audio matched=true, subtitle matched=false"));
+    assert!(messages.contains("Custom selector rule 2: audio matched=true, subtitle matched=true"));
+    assert!(messages.contains("audio stream=Some(2), subtitle id=Some(2)"));
     let off = fixture
         .host
         .troubleshooting_snapshot(&fixture.request(Some(0)))

@@ -236,6 +236,7 @@ async fn prepare_troubleshooting_fixture(
         replacements: &[],
         ffmpeg,
         deadline: Instant::now() + Duration::from_secs(30),
+        diagnostics: None,
     })
     .await
     .unwrap()

@@ -38,6 +38,7 @@ pub(super) fn fixture_command(mode: &str, folder: &Path) -> Command {
             "--nocapture",
         ])
         .env(HELPER_MODE, mode)
+        .env(super::super::media::SESSION_ENV, "fixture-log-session")
         .env(HELPER_FOLDER, folder);
     command
 }
@@ -58,6 +59,8 @@ fn fixture_child() {
     // Emitting readiness requires complete stdin delivery, including EOF.
     let _: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     std::fs::write(folder.join("received.json"), bytes).unwrap();
+    println!("[time INFO fixture::stdout] configuration received");
+    eprintln!("[time WARN fixture::stderr] session fixture-log-session");
     if mode == "fail" {
         std::process::exit(7);
     }
@@ -150,6 +153,10 @@ async fn finite_troubleshooting_delivers_stdin_and_preserves_exit_and_artifacts_
             .unwrap()
             .unwrap();
         assert_eq!(status.code(), Some(expected_code));
+        let diagnostics = process.diagnostics();
+        assert!(diagnostics.contains("INFO] [fixture::stdout] configuration received"));
+        assert!(diagnostics.contains("WARN] [fixture::stderr] session [redacted]"));
+        assert!(!diagnostics.contains("fixture-log-session"));
         assert!(!folder.path().join(".ready").exists());
         let received: serde_json::Value = serde_json::from_slice(
             &tokio::fs::read(folder.path().join("received.json"))

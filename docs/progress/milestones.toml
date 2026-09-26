@@ -9920,6 +9920,31 @@ layout and completed speed display have screenshot review. Next stdout/stderr
 level/target capture and troubleshooting selection messages remain open, along
 with row 94 integrated acceptance and the UCU-06 window gates/push/CI. No row
 verdict or pin is advanced by this checkpoint.
+
+Row 94 diagnostics: process-owned readers now preserve Next log levels and
+targets from both output streams, sanitize before tracing or retention, discard
+oversized lines intact and retain at most 256 KiB with an omission notice.
+Reader completion is bounded within managed process cleanup. Troubleshooting
+alone enables stream-selection diagnostics, including effective preferences,
+per-candidate and per-rule matches, selected IDs and deferred remote selection.
+Strict infra/web library and test Clippy passes. All 88 focused process,
+redaction, selection and troubleshooting tests pass (70e5ccb3). An initial
+sandbox run blocked synthetic selector writes and loopback mock servers;
+the unchanged suite passes with those fixture permissions. All five official
+Next runtime previews pass (0333efa5): local, custom Dutch selection over the
+English default, direct remote, prepared artifact and producer. They verify
+decoded audio/subtitles, selection logs, positive completion speed, archives,
+callback revocation and producer cleanup. The matched Leptos build and all four
+Chromium plus four Firefox cases pass with real Legacy/Next playback, selection
+messages, speed, archives and no-JS submission. A focused DEBUG-level preview
+retains 11 real Next log lines with original targets alongside five selection
+messages; this successful fixture emits no engine lines at INFO/WARN. The web
+parity gate passes: 716 tests (4033deb3), strict all-target web Clippy, format,
+architecture, hydration and progress checks. Review confirms bounded draining,
+redaction before tracing/retention, managed cleanup deadlines, opt-in scheduled
+selection behavior and shared deferred callback diagnostics. Row 94 is Port;
+pin, ledger and upstream checkout advance together to 9088ae1a. Continue with
+row 95. UCU-06 window gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]

@@ -70,10 +70,10 @@ playback and scoped checks pass. Row 92 (f737de89) is also Port: provider subtit
 identity, cleanup, scan recovery and native/Next playback pass focused tests,
 decoded runtime checks and strict scoped Clippy. Row 93 (ad9848cc) is Port: isolated Next troubleshooting, decoded local/Remote
 Stream proof, engine controls, completion logs and Chromium/Firefox/no-JS
-acceptance pass. Row 94 (9088ae1a) has verified custom selection, decoded
-audio/subtitles, selector UI and completion-speed reporting in both browsers.
-Continue with bounded Next stdout/stderr diagnostics and selection messages;
-row 94 remains pending until integrated acceptance passes.
+acceptance pass. Row 94 (9088ae1a) is Port: custom selection, decoded
+audio/subtitles, selector UI, completion speed and bounded sanitized process/
+selection diagnostics pass focused, runtime, both browsers and full web parity
+checks. Continue with row 95; UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.
 

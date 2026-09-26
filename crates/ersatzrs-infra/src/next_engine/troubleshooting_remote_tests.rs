@@ -54,6 +54,7 @@ impl Fixture {
             replacements: &[],
             ffmpeg: Path::new("unused-ffmpeg"),
             deadline,
+            diagnostics: None,
         };
         let start = super::super::host::NextStart {
             channel_id: 0,

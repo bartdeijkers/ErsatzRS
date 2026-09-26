@@ -199,7 +199,7 @@ async fn channel_preview_rebases_pinned_version_and_keeps_persisted_schedule() {
 async fn preparation_writes_one_isolated_item_with_matching_virtual_start() {
     let fixture = Fixture::new().await;
     let paths = fixture.paths();
-    let (manifest, config, number) = prepare(
+    let (manifest, config, number, _) = prepare(
         &fixture.state,
         &Fixture::query(),
         &paths,
@@ -348,6 +348,11 @@ async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
     let log = tokio::fs::read_to_string(paths.output.join("logs.txt"))
         .await
         .unwrap();
+    assert!(log.contains("[selection]"));
+    if custom {
+        assert!(log.contains("Custom selector rule 1: audio matched=true, subtitle matched=true"));
+        assert!(log.contains("audio stream=Some(2), subtitle id=Some(2)"));
+    }
     assert!(progress::completed_speed(&paths.output, &log)
         .await
         .is_some_and(|speed| speed > 0.0));
@@ -553,7 +558,7 @@ async fn channel_manifest_keeps_pinned_silence_and_configured_track_policy() {
     query.channel = Some(1);
     query.start = Some(fixture.at.to_rfc3339());
     let paths = fixture.paths();
-    let (manifest, _, _) = prepare(
+    let (manifest, _, _, _) = prepare(
         &fixture.state,
         &query,
         &paths,

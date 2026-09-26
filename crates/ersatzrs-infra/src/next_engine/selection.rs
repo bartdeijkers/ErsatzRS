@@ -37,6 +37,7 @@ pub(crate) struct TroubleshootingSelection<'a> {
     pub resolution: &'a Resolution,
     /// None keeps channel preferences; zero means explicitly disabled.
     pub subtitle_id: Option<i64>,
+    pub diagnostics: Option<super::diagnostics::SelectionLog>,
 }
 
 /// Restrict troubleshooting subtitle candidates before normal track selection.
@@ -62,6 +63,7 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
         SelectionDirectives {
             audio,
             subtitle_id: request.subtitle_id,
+            diagnostics: request.diagnostics,
         },
     )
     .await
@@ -161,6 +163,7 @@ pub(crate) async fn project_deferred_item_with_audio(
         SelectionDirectives {
             audio,
             subtitle_id: None,
+            diagnostics: None,
         },
     )
     .await
@@ -169,6 +172,7 @@ pub(crate) async fn project_deferred_item_with_audio(
 struct SelectionDirectives {
     audio: AudioDirective,
     subtitle_id: Option<i64>,
+    diagnostics: Option<super::diagnostics::SelectionLog>,
 }
 
 async fn project_deferred_item_selected(
@@ -249,6 +253,12 @@ async fn select_projection_tracks(
     .await?;
     let audio_streams = load_source_audio_streams(pool, media_version_id).await?;
     let preferences = playback_language_preferences(pool).await?;
+    if let Some(log) = &directives.diagnostics {
+        log.debug(&format!("Media {} version {media_version_id}: selector={:?}, pinned={}, audio language={:?}, subtitle language={:?}, explicit subtitle={:?}",
+            item.media_item_id, channel.stream_selector_mode, pin.is_some(),
+            channel.preferred_audio_language_code.as_ref().or(preferences.default_audio_language.as_ref()),
+            channel.preferred_subtitle_language_code.as_ref().or(preferences.default_subtitle_language.as_ref()), directives.subtitle_id));
+    }
     let explicit = troubleshooting_subtitles(
         pool,
         item.media_item_id,
@@ -265,7 +275,10 @@ async fn select_projection_tracks(
                 channel,
                 item.start,
                 StreamingMode::HttpLiveStreamingSegmenter,
-                explicit.as_deref(),
+                crate::playback::CustomSelectionContext {
+                    subtitles: explicit.as_deref(),
+                    diagnostics: directives.diagnostics.as_ref(),
+                },
             )
             .await?
         } else {
@@ -310,6 +323,10 @@ async fn select_projection_tracks(
         )
         .await?
     };
+    if let Some(log) = &directives.diagnostics {
+        log.debug(&format!("Selected video stream={:?}, audio stream={audio_index:?}, subtitle id={:?}; custom rule matched={}",
+            video.as_ref().map(|stream| stream.index), subtitle.as_ref().map(|subtitle| subtitle.id), custom.is_some()));
+    }
     Ok(SelectedProjectionTracks {
         video: video.map(|stream| stream.index),
         audio: audio_index,

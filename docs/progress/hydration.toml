@@ -348,7 +348,7 @@ notes  = '`tests/e2e/support-pages.spec.ts` covers the ErsatzTV-style tools and 
 name   = 'PlaybackTroubleshootingPage'
 status = '✅'
 routes = ['/system/troubleshooting/playback']
-notes  = '`tests/e2e/hydration-pending-routes.spec.ts`, `content-variants.spec.ts`, and `media-browser-actions.spec.ts` cover seeded media-item context and stream-selection parameters. UCU-06 row 93 adds `troubleshooting-playback.spec.ts`: Chromium/Firefox engine controls, Hls.js playback, report downloads, completion logs, narrow geometry and in-order SSR/no-JS submission pass. Row 94 extends this proof to custom selectors with either engine and measured completion speed; the milestone owns remaining diagnostic work.'
+notes  = '`tests/e2e/hydration-pending-routes.spec.ts`, `content-variants.spec.ts`, and `media-browser-actions.spec.ts` cover seeded media-item context and stream-selection parameters. UCU-06 row 93 adds `troubleshooting-playback.spec.ts`: Chromium/Firefox engine controls, Hls.js playback, report downloads, completion logs, narrow geometry and in-order SSR/no-JS submission pass. Row 94 extends this proof to custom selectors with either engine, measured completion speed and selection diagnostics. Both browser suites and the full web parity gate pass; UCU-06 owns the runtime and process-log evidence.'
 
 [[page]]
 name   = 'ShowsPage'

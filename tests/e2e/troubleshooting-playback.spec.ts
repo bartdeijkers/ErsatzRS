@@ -181,6 +181,10 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await expect(page.locator('textarea')).toHaveValue(
         engine === 'Next' ? /Next troubleshooting completed/ : /exit status:/,
       );
+      if (engine === 'Next') {
+        await expect(page.locator('textarea')).toHaveValue(/\[selection\]/);
+        await expect(page.locator('textarea')).toHaveValue(/Custom selector rule 1: audio matched=true, subtitle matched=true/);
+      }
       await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
       await expect(page.locator('[data-preview-speed]')).toBeVisible();
       expect(Number(await page.locator('[data-preview-speed] output').textContent())).toBeGreaterThan(0);

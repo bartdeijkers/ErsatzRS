@@ -4,12 +4,12 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 175 commits, 93 reconciled, 82 pending. Bootstrap/AMM-N-03 Complete.
+Ledger: 175 commits, 94 reconciled, 81 pending. Bootstrap/AMM-N-03 Complete.
 UCU-03/04 green CI: 8f722099/a14ada80. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
-UCU-06 rows 91-93 are Port. Row 94 custom selection, decoded tracks, selector UI
-and completion speed pass focused and Chromium/Firefox/no-JS checks. Next
-stdout/stderr diagnostics and selection messages remain open; row 94 is pending.
+UCU-06 rows 91-94 are Port. Row 94 custom selection, decoded tracks, selector UI,
+completion speed and bounded sanitized process/selection diagnostics pass focused,
+official Next runtime, Chromium/Firefox/no-JS and full web parity checks.
 Window gates/push/CI open.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,

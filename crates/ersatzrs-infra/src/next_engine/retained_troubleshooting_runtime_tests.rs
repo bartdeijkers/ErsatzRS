@@ -48,6 +48,7 @@ async fn fixture_child_retained_preview() {
                 replacements: &[],
                 ffmpeg: &ffmpeg,
                 deadline: request.deadline,
+                diagnostics: None,
             },
             request.clone(),
         )

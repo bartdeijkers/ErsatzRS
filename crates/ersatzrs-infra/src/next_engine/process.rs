@@ -41,6 +41,7 @@ pub enum ProcessError {
 pub struct NextProcess {
     child: ManagedAddonChild,
     output_folder: PathBuf,
+    diagnostics: super::diagnostics::Diagnostics,
 }
 
 #[derive(Clone, Copy)]
@@ -118,7 +119,7 @@ impl NextProcess {
     /// output directory before calling. Next clears its output directory on
     /// startup; this adapter removes the old ready marker before spawning, so it
     /// cannot acknowledge an earlier session. Generated configuration travels on stdin.
-    /// Raw child output is discarded: it can contain provider URLs and paths.
+    /// Child output is bounded and sanitized before logging or retention.
     ///
     /// # Errors
     /// Returns a redacted setup, exit or timeout error. Startup failure kills and
@@ -216,13 +217,21 @@ impl NextProcess {
             .map_err(|_| ProcessError::StartupTimeout)??;
         command
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let child =
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut diagnostics = super::diagnostics::Diagnostics::new(&command, config, output_folder);
+        let mut child =
             spawn_managed_addon_process(command).map_err(|error| io_error("spawn", &error))?;
+        if let Some(stdout) = child.stdout().take() {
+            diagnostics.read(stdout);
+        }
+        if let Some(stderr) = child.stderr().take() {
+            diagnostics.read(stderr);
+        }
         let mut process = Self {
             child,
             output_folder: output_folder.to_owned(),
+            diagnostics,
         };
         let started = timeout_at(deadline, process.initialize(&json, mode))
             .await
@@ -279,10 +288,19 @@ impl NextProcess {
     /// # Errors
     /// Returns a redacted process wait/cleanup error.
     pub async fn wait(&mut self) -> Result<ExitStatus, ProcessError> {
-        self.child
+        let status = self
+            .child
             .wait()
             .await
-            .map_err(|error| io_error("wait", &error))
+            .map_err(|error| io_error("wait", &error))?;
+        self.diagnostics.finish().await;
+        Ok(status)
+    }
+
+    /// Bounded, sanitized output collected from both engine streams.
+    #[must_use]
+    pub fn diagnostics(&self) -> String {
+        self.diagnostics.text()
     }
 
     /// Kill the complete process tree and bound the cleanup confirmation wait.
@@ -290,10 +308,14 @@ impl NextProcess {
     /// # Errors
     /// Returns an explicit error if cleanup cannot be confirmed within five seconds.
     pub async fn stop(&mut self) -> Result<(), ProcessError> {
-        timeout(CLEANUP_TIMEOUT, self.child.kill())
-            .await
-            .map_err(|_| ProcessError::CleanupTimeout)?
-            .map_err(|error| io_error("stop", &error))
+        timeout(CLEANUP_TIMEOUT, async {
+            self.child.kill().await?;
+            self.diagnostics.finish().await;
+            Ok::<_, io::Error>(())
+        })
+        .await
+        .map_err(|_| ProcessError::CleanupTimeout)?
+        .map_err(|error| io_error("stop", &error))
     }
 }
 

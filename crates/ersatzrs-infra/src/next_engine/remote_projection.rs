@@ -489,6 +489,7 @@ async fn project_selection(
                 source,
                 resolution,
                 subtitle_id: context.subtitle_id,
+                diagnostics: context.diagnostics.clone(),
             },
             audio,
         )
