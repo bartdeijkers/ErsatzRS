@@ -25,6 +25,8 @@ release section when tagging a release.
   multiple watermark or graphics selections, and honor Start From Beginning.
 - Keep playback troubleshooting output reserved until its process and diagnostic
   writes finish, preventing overlapping previews from clearing active files.
+  Bound stalled previews to two minutes and retain the reservation when process
+  cleanup cannot be confirmed.
 - Include Next FFmpeg reports and outcome diagnostics from immediate report
   subdirectories in playback troubleshooting downloads.
 - Preserve provider external subtitle tracks during scans and hourly cleanup,
@@ -138,6 +140,9 @@ release section when tagging a release.
 
 ### Added
 
+- Support the Next engine in the playback troubleshooting API for local and
+  media-server items, with isolated finite previews, selected profiles and
+  tracks, exact-version diagnostics, and engine-specific playlist responses.
 - Sort add-on list review items by clicking the playlist, item date, or name
   heading in either direction; select or deselect the visible page from the
   checkbox above item selections while skipping excluded videos. Pagination

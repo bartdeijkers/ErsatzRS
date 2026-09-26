@@ -132,6 +132,7 @@ pub trait TroubleshootingRepository: Send + Sync {
     async fn load_preview_media_admin(
         &self,
         media_item_id: EntityId,
+        media_version_id: Option<EntityId>,
     ) -> Result<Option<TroubleshootingPreviewMediaAdmin>>;
     async fn load_preview_channel_admin(&self, channel_id: EntityId) -> Result<Option<Channel>>;
     async fn load_media_item_path_admin(&self, media_item_id: EntityId) -> Result<Option<String>>;

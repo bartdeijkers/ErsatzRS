@@ -713,6 +713,7 @@ pub trait AddonRuntime: Send + Sync {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackPreviewRequest {
+    pub streaming_engine: ersatzrs_domain::StreamingEngine,
     pub media_item_id: Option<EntityId>,
     pub channel_id: Option<EntityId>,
     pub ffmpeg_profile_id: Option<EntityId>,

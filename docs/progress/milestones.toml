@@ -9810,6 +9810,24 @@ acquires ownership before preparation and transfers it to the process/log task.
 Clone contention, preparation-error release and ownership through diagnostic
 writes pass (Nextest 87f8b09b); strict web all-target Clippy passes. Next integration
 and browser proof remain open.
+Row 93 host/API checkpoint now forwards typed engine selection and returns the
+matching playlist. The shared Next host prepares isolated finite manifests using
+the selected profile, exact media version/file, seek, subtitle and audio policy;
+channel previews retain pins and scheduled decorations without persisting a new
+playout. Both engines retain output ownership through completion. Native logging
+is memory-bounded and a two-minute process deadline reaps stalled previews; Next
+also retains transcode capacity and prevents reuse if cleanup is unconfirmed.
+All 47 focused infra/web troubleshooting tests pass (Nextest 7a627e34), including
+provider text refresh, version-bound duration, pinned silence, isolated manifests
+and deadline cleanup. Official Next host execution produces an ended playlist
+and downloadable reports with decoded 880 Hz Dutch audio and visible subtitle
+glyphs on the sought first frame (Nextest 3a6aced5). Fixture language is explicitly
+Dutch because upstream applies language preference before title preference; the
+production selector was preserved. Extreme seeks with unknown duration fail
+without overflow (Nextest ed595a0e). Strict core/infra/app/web all-target Clippy,
+architecture lint, format and progress validation pass. Remote Stream session/
+producer lifetimes, engine UI and browser/no-JS acceptance remain open; row 93
+and the pin are not advanced.
 """
 
 [[milestone]]

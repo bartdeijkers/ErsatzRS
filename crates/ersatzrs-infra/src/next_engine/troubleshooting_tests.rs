@@ -64,6 +64,7 @@ impl Fixture {
             channel: &self.channel,
             profile: &self.profile,
             subtitle_id,
+            selection_time: None,
             watermark_ids: &[],
             replacements: &[],
             ffmpeg: Path::new("unused-ffmpeg"),
@@ -85,7 +86,7 @@ async fn troubleshooting_media_context_decodes_the_persisted_duration() {
             .unwrap();
         let media = repositories
             .troubleshooting
-            .load_preview_media_admin(10)
+            .load_preview_media_admin(10, None)
             .await
             .unwrap()
             .unwrap();

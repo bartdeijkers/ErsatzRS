@@ -464,6 +464,7 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
     async fn load_preview_media_admin(
         &self,
         media_item_id: EntityId,
+        media_version_id: Option<EntityId>,
     ) -> Result<Option<TroubleshootingPreviewMediaAdmin>> {
         let row = sqlx::query(
             r#"SELECT mv."Id" AS "MediaVersionId",
@@ -481,13 +482,14 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                       END AS "Kind"
                FROM "MediaVersion" mv
                JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-               WHERE mv."MovieId" = ?
+               WHERE (mv."MovieId" = ?
                   OR mv."EpisodeId" = ?
                   OR mv."OtherVideoId" = ?
                   OR mv."MusicVideoId" = ?
                   OR mv."SongId" = ?
                   OR mv."ImageId" = ?
-                  OR mv."RemoteStreamId" = ?
+                  OR mv."RemoteStreamId" = ?)
+                 AND (? IS NULL OR mv."Id" = ?)
                ORDER BY mv."Id", mf."Id"
                LIMIT 1"#,
         )
@@ -498,6 +500,8 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
         .bind(media_item_id)
         .bind(media_item_id)
         .bind(media_item_id)
+        .bind(media_version_id)
+        .bind(media_version_id)
         .fetch_optional(&self.0)
         .await
         .repository()?;

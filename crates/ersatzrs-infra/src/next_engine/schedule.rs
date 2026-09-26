@@ -123,7 +123,13 @@ const MEDIA_QUERY: &str = r#"
     LIMIT 1
 "#;
 
-pub(crate) async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMedia> {
+/// Resolve the deterministic version/file binding for a persisted or transient item.
+/// Does not persist the supplied item or take scheduler locks. An explicit pinned
+/// version must still belong to the media item and have a usable file.
+///
+/// # Errors
+/// Returns read/decode failures or an unavailable version/file binding.
+pub async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMedia> {
     let mut query = sqlx::query(MEDIA_QUERY);
     for _ in 0..7 {
         query = query.bind(item.media_item_id);

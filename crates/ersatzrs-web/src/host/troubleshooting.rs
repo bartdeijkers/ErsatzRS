@@ -46,6 +46,20 @@ use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
 
 use crate::transport::iptv::stream;
 
+#[path = "troubleshooting_next.rs"]
+mod next;
+
+#[derive(Default)]
+enum PreviewAvailability {
+    #[default]
+    Available,
+    CleanupUnconfirmed {
+        _reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
+    },
+}
+
+type PreviewOwnership = OwnedMutexGuard<PreviewAvailability>;
+
 type ApiResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Clone)]
@@ -54,7 +68,8 @@ pub struct NativeAdminTroubleshootingRuntime {
     repositories: Arc<Repositories>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     next_version: Arc<OnceLock<String>>,
-    preview_lock: Arc<Mutex<()>>,
+    preview_lock: Arc<Mutex<PreviewAvailability>>,
+    next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
 }
 
 impl NativeAdminTroubleshootingRuntime {
@@ -63,6 +78,7 @@ impl NativeAdminTroubleshootingRuntime {
         repositories: Arc<Repositories>,
         ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
         next_version: Arc<OnceLock<String>>,
+        next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
     ) -> Self {
         Self {
             pool,
@@ -70,6 +86,7 @@ impl NativeAdminTroubleshootingRuntime {
             ffmpeg_runtime,
             next_version,
             preview_lock: Arc::default(),
+            next_engine,
         }
     }
 }
@@ -97,8 +114,9 @@ impl TroubleshootingVersions {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct PlaybackPreviewQuery {
+    streaming_engine: ersatzrs_domain::StreamingEngine,
     media_item: Option<i64>,
     channel: Option<i64>,
     ffmpeg_profile: Option<i64>,
@@ -115,6 +133,7 @@ struct PlaybackPreviewQuery {
 impl From<PlaybackPreviewRequest> for PlaybackPreviewQuery {
     fn from(request: PlaybackPreviewRequest) -> Self {
         Self {
+            streaming_engine: request.streaming_engine,
             media_item: request.media_item_id,
             channel: request.channel_id,
             ffmpeg_profile: request.ffmpeg_profile_id,
@@ -158,6 +177,14 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
                     "troubleshooting playback is already running".to_owned(),
                 )
             })?;
+        if matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
+            return Err(AdminTroubleshootingRuntimeError::unavailable(
+                "troubleshooting process cleanup is unconfirmed; restart is required",
+            ));
+        }
+        if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+            return next::start(self.clone(), request.into(), ownership).await;
+        }
         start_playback_preview(self, &request.into(), ownership)
             .await
             .map_err(map_runtime_error)
@@ -196,7 +223,7 @@ fn map_runtime_error(
 async fn start_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: OwnedMutexGuard<()>,
+    ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     if query.channel.is_some_and(|id| id > 0) {
         return start_channel_playback_preview(state, query, ownership).await;
@@ -217,7 +244,7 @@ async fn start_playback_preview(
     let media = state
         .repositories
         .troubleshooting
-        .load_preview_media_admin(media_item_id)
+        .load_preview_media_admin(media_item_id, None)
         .await?
         .ok_or(PreviewNotFound("media item does not exist"))?;
     if media.path.trim().is_empty() {
@@ -363,7 +390,7 @@ async fn start_playback_preview(
 async fn start_channel_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: OwnedMutexGuard<()>,
+    ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     let channel_id = query.channel.filter(|id| *id > 0).ok_or(PreviewNotFound(
         "channel troubleshooting preview requires channel",
@@ -392,7 +419,7 @@ async fn start_channel_playback_preview(
     let media = state
         .repositories
         .troubleshooting
-        .load_preview_media_admin(active.media_item_id)
+        .load_preview_media_admin(active.media_item_id, Some(active.media_version_id))
         .await?
         .ok_or(PreviewNotFound("active media item does not exist"))?;
     let working_dir = troubleshooting_folder();
@@ -732,6 +759,7 @@ async fn write_preview_artifacts(
             "Path": runtime.ffprobe.path,
         },
         "SelectedWatermarks": query.watermark,
+        "StreamingEngine": query.streaming_engine,
     });
     if let (Some(info), Some(details)) = (
         troubleshooting_info.as_object_mut(),
@@ -1425,7 +1453,7 @@ fn spawn_preview_ffmpeg(
     working_dir: &FsPath,
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
-    ownership: OwnedMutexGuard<()>,
+    ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
@@ -1453,6 +1481,7 @@ fn spawn_preview_ffmpeg(
         child,
         dynamic_text_controllers,
         ownership,
+        tokio::time::Instant::now() + Duration::from_mins(2),
     ));
     Ok(())
 }
@@ -1462,17 +1491,37 @@ async fn write_preview_logs(
     stderr: Option<tokio::process::ChildStderr>,
     mut child: tokio::process::Child,
     dynamic_text_controllers: Vec<DynamicTextController>,
-    _ownership: OwnedMutexGuard<()>,
+    mut ownership: PreviewOwnership,
+    deadline: tokio::time::Instant,
 ) {
     let mut logs = Vec::new();
-    if let Some(stderr) = stderr {
-        use tokio::io::AsyncReadExt;
-        let mut reader = tokio::io::BufReader::new(stderr);
-        let _ = reader.read_to_end(&mut logs).await;
+    let result = tokio::time::timeout_at(deadline, async {
+        if let Some(stderr) = stderr {
+            use tokio::io::AsyncReadExt;
+            const LOG_LIMIT: u64 = 4 * 1024 * 1024;
+            let mut reader = tokio::io::BufReader::new(stderr);
+            let _ = (&mut reader).take(LOG_LIMIT).read_to_end(&mut logs).await;
+            // Drain excess stderr so the bounded diagnostic buffer cannot block FFmpeg.
+            let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
+        }
+        child.wait().await
+    })
+    .await;
+    let needs_cleanup = !matches!(&result, Ok(Ok(_)));
+    match result {
+        Ok(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
+        Ok(Err(error)) => {
+            logs.extend_from_slice(format!("\nwait error: {:?}\n", error.kind()).as_bytes());
+        }
+        Err(_) => logs.extend_from_slice(b"\ntroubleshooting deadline expired\n"),
     }
-    match child.wait().await {
-        Ok(status) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
-        Err(error) => logs.extend_from_slice(format!("\nwait error: {error}\n").as_bytes()),
+    if needs_cleanup
+        && !matches!(
+            tokio::time::timeout(Duration::from_secs(5), child.kill()).await,
+            Ok(Ok(()))
+        )
+    {
+        *ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
     }
     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
     let _ = tokio::fs::write(log_path, logs).await;
@@ -1739,9 +1788,16 @@ mod tests {
         let pool = ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").unwrap();
         let runtime = NativeAdminTroubleshootingRuntime::new(
             pool.clone(),
-            Arc::new(ersatzrs_infra::repositories::make_repositories(pool)),
+            Arc::new(ersatzrs_infra::repositories::make_repositories(
+                pool.clone(),
+            )),
             Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
             Arc::default(),
+            Arc::new(ersatzrs_infra::next_engine::host::NextHost::new(
+                pool,
+                ersatzrs_core::locking::EntityLocker::default(),
+                std::env::temp_dir().join("preview-ownership-unused"),
+            )),
         );
         let clone = runtime.clone();
         let ownership = Arc::clone(&runtime.preview_lock).try_lock_owned().unwrap();
@@ -1757,6 +1813,13 @@ mod tests {
             .unwrap_err();
         assert!(error.to_string().contains("requires mediaItem"));
         assert!(runtime.preview_lock.try_lock().is_ok());
+        *runtime.preview_lock.lock().await =
+            PreviewAvailability::CleanupUnconfirmed { _reservation: None };
+        let error = clone
+            .start_playback_preview(PlaybackPreviewRequest::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("cleanup is unconfirmed"));
     }
 
     // The shell is only a deterministic exited-child fixture; ownership itself
@@ -1768,11 +1831,18 @@ mod tests {
 
         let root = tempfile::tempdir().unwrap();
         let log = root.path().join("logs.txt");
-        let lock = Arc::new(Mutex::new(()));
+        let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
         let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
         let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
         child.wait().await.unwrap();
-        let completion = write_preview_logs(log.clone(), None, child, Vec::new(), ownership);
+        let completion = write_preview_logs(
+            log.clone(),
+            None,
+            child,
+            Vec::new(),
+            ownership,
+            tokio::time::Instant::now() + Duration::from_mins(2),
+        );
         assert!(lock.try_lock().is_err());
         completion.await;
         assert!(lock.try_lock().is_ok());
@@ -1780,6 +1850,39 @@ mod tests {
             .await
             .unwrap()
             .contains("exit status:"));
+    }
+
+    // Unix shell fixture only; the deadline/kill path is shared Tokio code on all hosts.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn preview_deadline_terminates_a_stalled_child_before_releasing_ownership() {
+        use super::*;
+        let root = tempfile::tempdir().unwrap();
+        let log = root.path().join("logs.txt");
+        let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
+        let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+        let child = Command::new("sh")
+            .args(["-c", "exec sleep 30"])
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        write_preview_logs(
+            log.clone(),
+            None,
+            child,
+            Vec::new(),
+            ownership,
+            tokio::time::Instant::now(),
+        )
+        .await;
+        assert!(matches!(
+            *lock.try_lock().unwrap(),
+            PreviewAvailability::Available
+        ));
+        assert!(tokio::fs::read_to_string(log)
+            .await
+            .unwrap()
+            .contains("deadline expired"));
     }
 
     #[test]

@@ -30,6 +30,8 @@ pub struct TroubleshootingPreview<'a> {
     pub profile: &'a PlaybackProfile,
     /// None uses channel preferences; zero explicitly disables subtitles.
     pub subtitle_id: Option<i64>,
+    /// Channel preview selection time; None uses the explicit media-preview overlays.
+    pub selection_time: Option<chrono::DateTime<chrono::Utc>>,
     pub watermark_ids: &'a [i64],
     pub replacements: &'a [PathReplacement],
     pub ffmpeg: &'a Path,
@@ -42,6 +44,28 @@ struct Snapshot {
 }
 
 impl NextHost {
+    /// Read one channel occurrence for a finite preview, releasing scheduler locks
+    /// before returning its exact version/file binding to the process adapter.
+    /// # Errors
+    /// Returns schedule read failures or a busy scheduler; absence means no item.
+    pub async fn troubleshooting_channel_media(
+        &self,
+        channel: &Channel,
+        at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<ScheduledMedia>> {
+        let until = at
+            .checked_add_signed(chrono::Duration::milliseconds(1))
+            .ok_or_else(|| unavailable("invalid preview start"))?;
+        let locked = super::schedule::read_locked(&self.pool, &self.locker, channel, at, until)
+            .await?
+            .ok_or_else(|| unavailable("channel schedule is busy"))?;
+        Ok(locked
+            .items
+            .into_iter()
+            .rev()
+            .find(|media| media.item.start <= at && media.item.finish > at))
+    }
+
     /// Prepare an ad-hoc item using normal provider, audio and subtitle contracts.
     /// Network and extraction work runs without holding scheduler locks. Exact
     /// metadata and track bindings are checked again before returning an artifact.
@@ -144,12 +168,39 @@ impl NextHost {
             },
         )
         .await?;
-        let watermarks = playback::resolve_playback_watermarks_by_ids(
-            &self.pool,
-            request.channel.id,
-            request.watermark_ids.to_vec(),
-        )
-        .await?;
+        let watermarks = if let Some(at) = request.selection_time {
+            let source_time =
+                crate::channel_playout::ChannelPlayoutContext::for_channel(request.channel)
+                    .source_time(at)?;
+            if !playback::select_playback_graphics(
+                &self.pool,
+                request.channel,
+                request.media.item.id,
+                source_time,
+            )
+            .await?
+            .is_empty()
+            {
+                return Err(unavailable(
+                    "Next troubleshooting cannot render graphics elements",
+                ));
+            }
+            playback::select_playback_watermarks(
+                &self.pool,
+                request.channel,
+                request.media.item.id,
+                request.media.item.disable_watermarks,
+                source_time,
+            )
+            .await?
+        } else {
+            playback::resolve_playback_watermarks_by_ids(
+                &self.pool,
+                request.channel.id,
+                request.watermark_ids.to_vec(),
+            )
+            .await?
+        };
         projection.item.watermark = watermark::project(&watermarks)?;
         let identity = dynamic_projection::fingerprint(
             &self.pool,

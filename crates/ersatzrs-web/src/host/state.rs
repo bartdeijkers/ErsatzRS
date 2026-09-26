@@ -143,6 +143,7 @@ impl AppState {
         let next_version = Arc::new(OnceLock::new());
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
+        let next_engine = next_engine_host(pool.clone(), playout_locker.clone());
         let application = Arc::new(ApplicationServices::new(
             ApplicationPorts::new(
                 Arc::new(repositories.channel.clone()),
@@ -190,6 +191,7 @@ impl AppState {
                     Arc::clone(&repositories),
                     Arc::clone(&ffmpeg_runtime),
                     Arc::clone(&next_version),
+                    Arc::clone(&next_engine),
                 )),
                 Arc::new(NativeRemoteStreamPlaylistRuntime::new(pool.clone())),
                 Arc::new(NativeAddonRuntime::new(pool.clone())),
@@ -208,14 +210,6 @@ impl AppState {
                 ersatzrs_core::locking::PlayoutBuildActivity::default(),
             ),
         ));
-        let next_engine = Arc::new(
-            ersatzrs_infra::next_engine::host::NextHost::new(
-                pool.clone(),
-                application.operations().entity_locker(),
-                file_system_layout::data_folder().join("next-playouts"),
-            )
-            .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
-        );
         Self {
             next_version,
             artwork_cleanup: Arc::new(TokioArtworkCleanupQueue::channel().0),
@@ -276,6 +270,20 @@ impl AppState {
     pub fn set_tuner_count(&self, tuner_count: i32) {
         self.tuner_count.store(tuner_count, Ordering::Relaxed);
     }
+}
+
+fn next_engine_host(
+    pool: DbPool,
+    locker: ersatzrs_core::locking::EntityLocker,
+) -> Arc<ersatzrs_infra::next_engine::host::NextHost> {
+    Arc::new(
+        ersatzrs_infra::next_engine::host::NextHost::new(
+            pool,
+            locker,
+            file_system_layout::data_folder().join("next-playouts"),
+        )
+        .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
+    )
 }
 
 #[cfg(test)]

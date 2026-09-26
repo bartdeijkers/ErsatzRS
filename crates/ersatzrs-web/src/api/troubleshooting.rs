@@ -5,12 +5,14 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use ersatzrs_app::{AdminTroubleshootingRuntimeError, PlaybackPreviewRequest};
+use ersatzrs_domain::StreamingEngine;
 use serde::Deserialize;
 
 use crate::host::state::AppState;
 
 #[derive(Debug, Default)]
 pub struct PlaybackPreviewQuery {
+    streaming_engine: StreamingEngine,
     media_item: Option<i64>,
     channel: Option<i64>,
     ffmpeg_profile: Option<i64>,
@@ -44,6 +46,13 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
                 }
             };
             match key.as_str() {
+                "streamingEngine" => {
+                    query.streaming_engine = match value.as_str() {
+                        "Legacy" | "0" => StreamingEngine::Legacy,
+                        "Next" | "1" => StreamingEngine::Next,
+                        _ => return Err(serde::de::Error::custom("invalid streaming engine")),
+                    }
+                }
                 "mediaItem" => query.media_item = integer()?,
                 "channel" => query.channel = integer()?,
                 "ffmpegProfile" => query.ffmpeg_profile = integer()?,
@@ -66,8 +75,12 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
 }
 
 impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
-    fn from(query: PlaybackPreviewQuery) -> Self {
+    fn from(mut query: PlaybackPreviewQuery) -> Self {
+        if query.streaming_engine == StreamingEngine::Next {
+            query.watermark.truncate(1);
+        }
         Self {
+            streaming_engine: query.streaming_engine,
             media_item_id: query.media_item,
             channel_id: query.channel,
             ffmpeg_profile_id: query.ffmpeg_profile,
@@ -91,8 +104,12 @@ pub async fn playback_preview(
     State(state): State<AppState>,
     Query(query): Query<PlaybackPreviewQuery>,
 ) -> Response {
+    let playlist = match query.streaming_engine {
+        StreamingEngine::Legacy => "/iptv/session/.troubleshooting/live.m3u8",
+        StreamingEngine::Next => "/iptv/session/.troubleshooting/ffmpeg.m3u8",
+    };
     match state.application.start_playback_preview(query.into()).await {
-        Ok(()) => Redirect::temporary("/iptv/session/.troubleshooting/live.m3u8").into_response(),
+        Ok(()) => Redirect::temporary(playlist).into_response(),
         Err(AdminTroubleshootingRuntimeError::NotFound(error)) => {
             tracing::warn!(%error, "playback troubleshooting preview cannot be started");
             StatusCode::NOT_FOUND.into_response()
@@ -164,6 +181,27 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_engine_defaults_to_legacy_and_next_retains_only_the_first_watermark() {
+        let legacy: PlaybackPreviewQuery =
+            serde_urlencoded::from_str("watermark=1&watermark=2").unwrap();
+        let legacy: PlaybackPreviewRequest = legacy.into();
+        assert_eq!(legacy.streaming_engine, StreamingEngine::Legacy);
+        assert_eq!(legacy.watermark_ids, [1, 2]);
+        for value in ["Next", "1"] {
+            let next: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
+                "streamingEngine={value}&watermark=1&watermark=2"
+            ))
+            .unwrap();
+            let next: PlaybackPreviewRequest = next.into();
+            assert_eq!(next.streaming_engine, StreamingEngine::Next);
+            assert_eq!(next.watermark_ids, [1]);
+        }
+        assert!(
+            serde_urlencoded::from_str::<PlaybackPreviewQuery>("streamingEngine=unknown").is_err()
+        );
+    }
 
     #[test]
     fn preview_query_accepts_empty_subtitle_and_repeated_watermarks_from_html_forms() {

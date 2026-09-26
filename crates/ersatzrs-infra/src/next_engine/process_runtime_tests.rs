@@ -231,6 +231,7 @@ async fn prepare_troubleshooting_fixture(
         channel: &channel,
         profile: &profile,
         subtitle_id: Some(2),
+        selection_time: None,
         watermark_ids: &[],
         replacements: &[],
         ffmpeg,

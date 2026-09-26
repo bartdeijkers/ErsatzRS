@@ -47,8 +47,8 @@
   `TroubleshootController`, Prepare/Start troubleshooting commands and handlers,
   `ChannelConfigConverter`, `ArchiveTroubleshootingResultsHandler`, and
   `FileSystemLayout`. Native behavior remains available as Legacy.
-- Request contract: engine defaults to Legacy; Next accepts at most one
-  watermark. Stream selector and graphics controls are Legacy-only. Preserve
+- Request contract: engine defaults to Legacy; the Next API retains the first
+  supplied watermark. Stream selector and graphics controls are Legacy-only. Preserve
   media/channel selection, profile override, subtitles, audio and seek/start.
 - Next preparation shares normal channel config conversion, sets whole-second
   virtual start, publishes one isolated preview item, supplies config on stdin,
@@ -56,7 +56,8 @@
   the preview directory; redirect to `ffmpeg.m3u8` instead of `live.m3u8`.
 - Lifetime: upstream preparation rejects overlapping troubleshooting and the
   worker releases ownership after process completion and diagnostic writes.
-  Share that ownership across Legacy and Next before clearing preview files.
+  Share that ownership across Legacy and Next before clearing preview files;
+  bound the process run to upstream's two-minute limit.
 - Archive contract: inspect the root and immediate child directories; include
   existing native diagnostics plus names containing `ffreport` and `outcome`.
   An FFmpeg or ffreport file is required before returning an archive. Preserve
