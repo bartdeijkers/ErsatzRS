@@ -250,6 +250,13 @@ coordinates fail projection explicitly. Remaining graphics integration is open
 parity work; UCU-06 owns row-105/106 acceptance. The accepted RGB opacity
 limitation is tracked separately in upstream catch-up debt.
 
+On-demand Next sessions shift the stored timeline before manifest publication,
+then checkpoint viewer touches every five minutes and on exit. The saved point
+retains the configured segmenter safety interval and cannot move backward or
+before the first item. Startup shifts and bounded writes share the playout
+rebuild lock; heartbeat/idle time and preview sessions do not advance normal
+playback. UCU-06 row 107 owns restart and decoded resume acceptance.
+
 ## Consequences
 
 ErsatzRS must operate and verify two selectable streaming paths. Packaging,

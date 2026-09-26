@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `cd30ac4aff28657f823a09a9c65874d6fc3fa110` |
-| **Commit subject** | `feat: image graphics element support in next (#2984)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cd30ac4aff28657f823a09a9c65874d6fc3fa110 |
+| **Pinned commit** | `b36e94cc565c9634c6051f504efc35b088a783f2` |
+| **Commit subject** | `fix: on-demand channel progress using next engine (#2985)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b36e94cc565c9634c6051f504efc35b088a783f2 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

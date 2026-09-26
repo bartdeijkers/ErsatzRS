@@ -20,6 +20,7 @@ mod graphics;
 pub mod host;
 mod live_subtitles;
 pub mod media;
+mod on_demand;
 pub mod probe_hint;
 pub mod process;
 mod producer_host;

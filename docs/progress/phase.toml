@@ -95,7 +95,9 @@ with selected alternate audio. Row 105 is Port: ordered watermarks pass 210
 Next tests, decoded multilayer/periodic playback, prepared-remote preservation,
 eight Chromium/Firefox cases and full web parity. Row 106 ports image graphics
 through shared templates/selection; 213 Next tests, decoded local/HTTP playback,
-eight browser cases, 716 web tests and strict Clippy pass. Continue with row 107;
+eight browser cases, 716 web tests and strict Clippy pass. Row 107 ports Next
+on-demand time-shift/checkpoint semantics with production SQLite restart, 221
+regressions, decoded resume and strict Clippy proof. Continue with row 108;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-06 window gates remain open.

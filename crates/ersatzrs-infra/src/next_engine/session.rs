@@ -22,6 +22,7 @@ pub struct NextSession {
     output: PathBuf,
     deadline: Instant,
     last_access: Mutex<Instant>,
+    last_playback_touch: Mutex<Option<chrono::DateTime<chrono::Utc>>>,
     state: AtomicU8,
     admission: AtomicI32,
     started: AtomicBool,
@@ -62,6 +63,7 @@ impl NextSession {
             output,
             deadline,
             last_access: Mutex::new(Instant::now()),
+            last_playback_touch: Mutex::new(None),
             state: AtomicU8::new(0),
             admission: AtomicI32::new(0),
             started: AtomicBool::new(false),
@@ -103,8 +105,8 @@ impl NextSession {
                 process.stop().await?;
                 return Err(ProcessError::StartupTimeout.into());
             }
-            self.touch();
             self.state.store(1, Ordering::Release);
+            self.touch();
             let refreshes = async {
                 loop {
                     self.refresh.notified().await;
@@ -160,6 +162,13 @@ impl NextSession {
             }
         }
     }
+
+    pub(super) fn checkpoint_time(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        *self
+            .last_playback_touch
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 struct TerminalState<'a>(&'a AtomicU8);
@@ -180,6 +189,12 @@ impl HlsSessionHandle for NextSession {
             .last_access
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Instant::now();
+        if self.state.load(Ordering::Acquire) == 1 {
+            *self
+                .last_playback_touch
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(chrono::Utc::now());
+        }
     }
     fn startup_readiness(&self) -> HlsStartupReadiness {
         match self.state.load(Ordering::Acquire) {

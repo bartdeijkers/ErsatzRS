@@ -4548,7 +4548,7 @@ async fn load_channel_name(pool: &DbPool, channel_id: i64) -> RepositoryResult<O
     Ok(value.flatten())
 }
 
-async fn time_shift_on_demand_playout(
+pub(crate) async fn time_shift_on_demand_playout(
     pool: &DbPool,
     channel_id: i64,
     now: DateTime<Utc>,

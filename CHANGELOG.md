@@ -21,6 +21,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Resume Next on-demand channels from their saved viewer position. Shift the
+  timeline before publishing it and checkpoint viewer demand periodically and
+  on shutdown, without advancing normal playback from previews or heartbeat time.
+
 - Include the Vulkan loader and supported Mesa drivers in the minimal Docker
   images, and expose NVIDIA graphics capabilities alongside CUDA/video support.
   Recheck cached hardware results when the container's driver capabilities

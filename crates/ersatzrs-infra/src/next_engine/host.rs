@@ -234,11 +234,14 @@ impl NextHost {
                 .clone();
             drop(publishers);
             let mut reservation = None;
+            let checkpoints = super::on_demand::Checkpoints::new(
+                host.pool.clone(),
+                host.locker.clone(),
+                request.channel_id,
+                request.preview,
+            );
             let startup = async {
                 let config = host.configuration(&request).await?;
-                host.refresh(&publisher, request.channel_id, &request.replacements)
-                    .await
-                    .map_err(|_| ProcessError::Preparation("playout publication"))?;
                 loop {
                     let limit = load_active_transcode_limit(&host.pool)
                         .await
@@ -262,6 +265,10 @@ impl NextHost {
                     session.set_admission(HlsAdmissionStatus::AtCapacity);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
+                checkpoints.prepare().await?;
+                host.refresh(&publisher, request.channel_id, &request.replacements)
+                    .await
+                    .map_err(|_| ProcessError::Preparation("playout publication"))?;
                 NextProcess::start_with_session(
                     &request.executable,
                     &request.number,
@@ -273,10 +280,13 @@ impl NextHost {
                 )
                 .await
             };
-            let outcome = Box::pin(session.run(startup, request.idle_timeout, || {
-                host.refresh(&publisher, request.channel_id, &request.replacements)
-            }))
-            .await;
+            let outcome = tokio::select! {
+                outcome = Box::pin(session.run(startup, request.idle_timeout, || {
+                    host.refresh(&publisher, request.channel_id, &request.replacements)
+                })) => outcome,
+                never = checkpoints.run(&session) => match never {},
+            };
+            checkpoints.finish(&session).await;
             if let Err(error) = outcome {
                 tracing::warn!(channel_id = request.channel_id, %error, "Next session failed");
             }

@@ -5,6 +5,12 @@ use ersatzrs_domain::{ChannelPlayoutSource, FFmpegProfile, PinnedStreamSelection
 
 pub(crate) async fn fixture() -> (DbPool, EntityLocker, Channel, DateTime<Utc>) {
     let pool = super::super::selection::tests::fixture_pool().await;
+    fixture_with_pool(pool).await
+}
+
+pub(crate) async fn fixture_with_pool(
+    pool: DbPool,
+) -> (DbPool, EntityLocker, Channel, DateTime<Utc>) {
     sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, 'Fixture', 320, 180)"#)
         .execute(&pool).await.unwrap();
     let repos = crate::repositories::make_repositories(pool.clone());

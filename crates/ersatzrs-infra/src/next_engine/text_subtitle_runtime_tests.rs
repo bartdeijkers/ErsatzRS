@@ -1,6 +1,9 @@
 //! Real Next text burn/convert proof with generated media and seeked SRT cues.
 use super::*;
 
+#[path = "on_demand_runtime_tests.rs"]
+mod on_demand_runtime_tests;
+
 const CUES: &str = "1\n00:00:00,000 --> 00:00:05,000\nBEFORE SEEK\n\n2\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n\n3\n00:00:55,000 --> 00:01:00,000\nAFTER SEEK\n";
 
 async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {

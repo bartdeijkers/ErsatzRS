@@ -9,6 +9,10 @@ pub(crate) async fn fixture_pool() -> DbPool {
         .connect("sqlite::memory:")
         .await
         .unwrap();
+    seed_fixture_pool(pool).await
+}
+
+pub(crate) async fn seed_fixture_pool(pool: DbPool) -> DbPool {
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
     for sql in [
         r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#,

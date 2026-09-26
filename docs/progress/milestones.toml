@@ -10262,6 +10262,42 @@ lint suppressions. Review covers all publication call sites, cancellation bounds
 version binding, source replacement, layer ordering and no silent graphics loss.
 Pin, ledger and clean upstream checkout advance together to cd30ac4a; continue
 row 107. UCU-06 window gates, milestone push and exact-SHA CI remain open.
+
+Row 107 (b36e94cc) final acceptance: Port. Normal Next on-demand startup acquires
+capacity, serializes native time-shifting with the playout rebuild lock, then
+publishes the shifted manifest before starting the engine. The session records
+UTC viewer touches only after playback starts. A session-owned five-minute loop
+and final save preserve the latest touch, subtract the configured segmenter
+timeout, never rewind and clamp to the first item, matching upstream's shared
+UpdateOnDemandCheckpoint handler. Writes have a five-second budget; cancellation
+drops periodic work, and cleanup retains session/capacity ownership through the
+bounded final save. Heartbeats and idle grace do not advance the position.
+Continuous channels and previews neither shift nor checkpoint normal state.
+No schema, FFmpeg argv, UI or scheduling Reset change; existing native shift
+operations preserve item/guide/history/gap/anchor timestamps and track settings.
+Evidence: 11 focused session/checkpoint tests (337a76ab), followed by all 221
+Next and native on-demand regressions (3d1f851e). Production PlayoutBuilder YAML
+output is persisted to a real temporary SQLite file, checkpointed, closed and
+reopened; resume retains future row/media identities, in/out points and track
+settings, 15 seconds into the next item. Other checks cover five-minute writes,
+last-touch/final-save behavior, default 60-second safety interval, monotonicity,
+preview/continuous isolation, startup cancellation/deadline, lock timeout and
+native gap/anchor shifting. The initial fixture omitted YAML repetition; it was
+corrected without weakening the generated-timeline requirement. Restart uses an
+actual database file rather than VACUUM from a memory-only connection, and the
+virtual-time lock test resumes real time before SQL pool assertions.
+Official Next 802f2d8 and published ErsatzRS-ffmpeg v2.0.1 pass decoded stop/resume
+(7ca64964, 16.4s): initial red opening, resumed blue remainder, selected Dutch
+880 Hz audio, burned subtitles, saved-touch bounds and no idle-time progress.
+The fixture uses an explicit one-second segmenter timeout; default timeout
+semantics are covered separately. Its original two-second phase was too short
+for ordinary engine startup; the ten-second opening and twelve-second viewing
+period preserve the unchanged opening/resume distinction. Strict infra
+all-target Clippy, formatting, progress validation and staged lint policy pass.
+Review covers startup ordering, shared lock ownership, periodic cancellation,
+monotonic atomic updates, retained capacity through cleanup and preview isolation.
+Pin, ledger and clean upstream checkout advance together to b36e94cc; continue
+row 108. UCU-06 window gates, milestone push and exact-SHA CI remain open.
 """
 
 [[milestone]]

@@ -110,11 +110,19 @@ async fn idle_deadline_tracks_recent_demand() {
     entered_rx.await.unwrap();
     tokio::time::advance(Duration::from_secs(8)).await;
     session.touch();
+    let last_touch = session.checkpoint_time().unwrap();
     tokio::time::advance(Duration::from_secs(3)).await;
     assert!(!task.is_finished());
     tokio::time::advance(Duration::from_secs(8)).await;
     tokio::time::resume();
     assert_eq!(task.await.unwrap().unwrap(), SessionExit::Idle);
+    assert_eq!(session.checkpoint_time(), Some(last_touch));
+    session.touch();
+    assert_eq!(
+        session.checkpoint_time(),
+        Some(last_touch),
+        "terminal access cannot advance demand"
+    );
 }
 
 #[tokio::test]
