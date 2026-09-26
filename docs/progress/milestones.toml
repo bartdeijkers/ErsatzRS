@@ -10392,6 +10392,16 @@ subtitle behavior are covered by the recorded evidence. No additional container
 build or broader hardware claim is made. Existing local window evidence remains
 valid. Row 109 and milestone push/terminal exact-SHA CI remain outstanding.
 
+Row 109 (7b7a19a2) is N/A: exact source review shows only upstream CHANGELOG
+release heading/date and comparison links. No product, runtime, package or
+configuration change requires a Rust port. All 19 UCU-06 rows are reconciled;
+review confirms verdicts, retained behavioral debt, scoped runtime evidence,
+audio/subtitle preservation and pin alignment. All local window gates recorded
+above apply to the final code unchanged. Progress validation and diff checks pass.
+Upstream refresh is unchanged at 6f0449c2. Milestone push and terminal green
+exact-SHA CI are the remaining acceptance steps; UCU-06 stays In progress.
+
+
 """
 
 [[milestone]]

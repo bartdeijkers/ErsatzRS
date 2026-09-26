@@ -4,14 +4,14 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 176 commits, 108 reconciled, 68 pending. AMM-N-03 Complete.
+Ledger: 176 commits, 109 reconciled, 67 pending. AMM-N-03 Complete.
 UCU-03/04 green CI: 8f722099/a14ada80. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
 Row 102 Port: Docker Vulkan; GPU limits recorded.
 Row 99 Port: runtime v2.0.1 verified; probe/cache fixed. Rows 100-101 N/A (.NET/CI).
 Rows 103/104: N/A notes / Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
 Row 108 Port: v2.0.2 published with verified public hashes and managed adoption.
-Local window gates pass; row 109 and exact-SHA CI remain pending in UCU-06.
+Row 109 N/A: release bookkeeping. Local window gates pass; exact-SHA CI remains.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.

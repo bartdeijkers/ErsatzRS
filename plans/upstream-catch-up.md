@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **68 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **67 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **108**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **109**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -31,7 +31,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 ports image graphics; row 107 fixes Next on-demand progress; row 108 ports sparse-stream pacing through published v2.0.2; row 109 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 ports image graphics; row 107 fixes Next on-demand progress; row 108 ports sparse-stream pacing through published v2.0.2; row 109 is N/A (upstream release bookkeeping). All window rows are reconciled; milestone push and exact-SHA CI remain.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -2213,7 +2213,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 106 | `cd30ac4a` | feat: image graphics element support in next (#2984) | Port | upstream-baseline-catch-up | `feat(next): project image graphics through shared selection` | ucu-06; shared templates and image/watermark ZIndex order across scheduled/dynamic/remote/fallback/preview paths; prepared source replacement and identity preserved. 213 Next tests, decoded local/HTTP image playback with selected tracks, eight Chromium/Firefox cases, 716 web tests and strict Clippy pass. Unsupported definitions fail explicitly; window gates remain open. |
 | 107 | `b36e94cc` | fix: on-demand channel progress using next engine (#2985) | Port | upstream-baseline-catch-up | `fix(next): persist on-demand viewer checkpoints` | ucu-06; startup time-shift precedes publication after capacity admission; five-minute/final saves use viewer touch with configured timeout, monotonic and first-item clamps. Preview/continuous isolation, locked rebuilds and bounded cleanup preserved. Production-generated SQLite restart, 221 regressions, decoded official Next resume with audio/subtitles, and strict Clippy pass. |
 | 108 | `c0e4c4ac` | chore: update windows ffmpeg (#2988) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt sparse-stream pacing runtime` | ucu-06; published first-party v2.0.2 applies the upstream sparse-pacing fix on FFmpeg 9. Source fallback/exclusion tests and decoded Windows/Linux bitmap/alternate-audio regressions pass; both v2.0.1 controls fail unchanged pacing bounds. Public downloads match tested archives. Managed default adopted; all local window gates pass. |
-| 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-06; only upstream CHANGELOG release heading and compare links change. No source, runtime or package behavior changes; reviewed exact diff. Existing window gates remain valid; no release acceptance is inferred from these notes. |
 | 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | | | | ucu-07; provisional: Port candidate. |
 | 111 | `a5937386` | fix: plex sign in (#2990) | | | | ucu-07; provisional: Port candidate. |
 | 112 | `c27a8d50` | feat: require api key (#2991) | | | | ucu-07; provisional: Port candidate. |
