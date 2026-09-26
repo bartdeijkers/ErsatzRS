@@ -235,6 +235,12 @@ async fn real_next_host_preview_finishes_with_selected_tracks_and_downloadable_r
 }
 
 #[tokio::test]
+#[ignore = "requires official Next and FFmpeg 9 runtime paths"]
+async fn real_next_custom_preview_selects_dutch_audio_and_subtitle_over_english_default() {
+    run_real_preview_selected(remote_runtime::Mode::Local, true).await;
+}
+
+#[tokio::test]
 #[ignore = "requires official Next and FFmpeg; isolated routed HTTP preview"]
 async fn real_next_remote_preview_preserves_tracks_and_revokes_callbacks() {
     run_real_preview(remote_runtime::Mode::Direct).await;
@@ -268,6 +274,10 @@ async fn fixture_child_producer_preview() {
 }
 
 async fn run_real_preview(mode: remote_runtime::Mode) {
+    run_real_preview_selected(mode, false).await;
+}
+
+async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
     let fixture = Fixture::new().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -294,15 +304,17 @@ async fn run_real_preview(mode: remote_runtime::Mode) {
         runtime.ffmpeg.path = ffmpeg.to_str().unwrap().to_owned();
         runtime.ffprobe.path = ffprobe.to_str().unwrap().to_owned();
     }
-    // Upstream applies language before title; explicitly request Dutch for this decode proof.
-    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,'nld')"#)
+    // Custom selection must beat the English default without a title override.
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,?)"#)
         .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE)
+        .bind(if custom { "eng" } else { "nld" })
         .execute(&fixture.state.pool)
         .await
         .unwrap();
     let mut query = Fixture::query();
     query.seek_seconds = Some(1);
     query.subtitle_id = Some(2);
+    let _selector = custom.then(|| configure_runtime_selector(&mut query));
     let origin = if mode == remote_runtime::Mode::Local {
         None
     } else {
@@ -333,6 +345,12 @@ async fn run_real_preview(mode: remote_runtime::Mode) {
         .unwrap()
         .is_some());
     assert_decoded_tracks(&ffmpeg, &playlist).await;
+    let log = tokio::fs::read_to_string(paths.output.join("logs.txt"))
+        .await
+        .unwrap();
+    assert!(progress::completed_speed(&paths.output, &log)
+        .await
+        .is_some_and(|speed| speed > 0.0));
     if let Some(origin) = origin {
         origin.verify_revoked_and_stop().await;
     }
@@ -342,6 +360,29 @@ async fn run_real_preview(mode: remote_runtime::Mode) {
         .await
         .unwrap();
     assert_eq!(count, 1);
+}
+
+fn configure_runtime_selector(query: &mut PlaybackPreviewQuery) -> tempfile::NamedTempFile {
+    use std::io::Write as _;
+    let folder = channel_stream_selectors_folder();
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut file = tempfile::Builder::new()
+        .prefix("ucu94-runtime-")
+        .suffix(".yml")
+        .tempfile_in(folder)
+        .unwrap();
+    file.write_all(b"items:\n  - audio_language: [nld]\n    subtitle_language: [nld]\n    subtitle_condition: forced\n").unwrap();
+    file.flush().unwrap();
+    query.stream_selector = Some(
+        file.path()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned(),
+    );
+    query.preferred_audio_title = None;
+    file
 }
 
 #[path = "troubleshooting_remote_runtime_tests.rs"]

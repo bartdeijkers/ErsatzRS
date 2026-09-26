@@ -332,11 +332,19 @@ pub trait AdminTroubleshootingRuntime: Send + Sync {
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
     async fn playback_preview_log(
         &self,
-    ) -> Result<Option<String>, AdminTroubleshootingRuntimeError>;
+    ) -> Result<Option<PlaybackPreviewLog>, AdminTroubleshootingRuntimeError>;
     async fn build_media_sample_archive(
         &self,
         media_item_id: EntityId,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
+}
+
+/// Completed preview diagnostics, read under the preview's output ownership.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackPreviewLog {
+    pub text: String,
+    /// Last reported `FFmpeg` processing speed relative to real time.
+    pub speed: Option<f64>,
 }
 
 /// One materialized entry shown by Remote Stream playlist administration.

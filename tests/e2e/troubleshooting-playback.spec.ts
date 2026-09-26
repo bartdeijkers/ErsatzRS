@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -18,8 +18,14 @@ test.describe('playback troubleshooting engines', () => {
   test.describe.configure({ mode: 'serial' });
   let root: string;
   let profile: string;
+  let selectorFile: string;
   test.beforeAll(() => {
+    if (!process.env.E2E_APP_STATE_DIR) throw new Error('Isolated E2E_APP_STATE_DIR required');
     root = mkdtempSync(path.join(tmpdir(), 'ersatzrs-preview-e2e-'));
+    const selectorFolder = path.join(process.env.E2E_APP_STATE_DIR, 'data', 'scripts', 'channel-stream-selectors');
+    mkdirSync(selectorFolder, { recursive: true });
+    selectorFile = path.join(selectorFolder, 'preview-fixture.yml');
+    writeFileSync(selectorFile, 'items:\n  - audio_language: [nld]\n    subtitle_language: [nld]\n');
     const clip = path.join(root, 'preview.mkv');
     const subtitle = path.join(root, 'preview.nl.srt');
     const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
@@ -75,6 +81,7 @@ DELETE FROM "ChannelWatermark" WHERE "Id" IN (${id},${id + 1});
 DELETE FROM "FFmpegProfile" WHERE "Id"=${id};
 DELETE FROM "Resolution" WHERE "Id"=${id};`);
     if (root) rmSync(root, { recursive: true, force: true });
+    if (selectorFile) rmSync(selectorFile, { force: true });
   });
 
   test.beforeEach(async ({ page }) => {
@@ -96,12 +103,15 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     const watermarks = page.locator('select[name="watermark"]');
     const selector = page.locator('select[name="streamSelector"]');
     const disabled = await selector.isDisabled();
+    expect(disabled).toBe(false);
+    await selector.selectOption('preview-fixture.yml');
     await expect(engine).toHaveValue('Legacy');
     await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
     await watermarks.selectOption([`${id}`, `${id + 1}`]);
     await engine.selectOption('Next');
-    await expect(selector).toBeHidden();
-    await expect(selector).toBeDisabled();
+    await expect(selector).toBeVisible();
+    expect(await selector.isDisabled()).toBe(disabled);
+    await expect(selector).toHaveValue('preview-fixture.yml');
     await expect(page.locator('select[name="graphicsElement"]')).toBeHidden();
     await expect(watermarks).not.toHaveAttribute('multiple');
     await expect(watermarks).toHaveValue(`${id}`);
@@ -116,7 +126,9 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
     await page.setViewportSize({ width: 320, height: 720 });
     const navigation = page.getByRole('button', { name: 'Toggle navigation' });
-    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    // Crossing the mobile breakpoint closes the drawer asynchronously. Clicking
+    // from its old desktop state can reopen it after that media-query event.
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
     await expect.poll(async () => {
       const drawer = await page.locator('[data-nav-drawer]').boundingBox();
       return drawer ? drawer.x + drawer.width : 0;
@@ -132,7 +144,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
   });
 
   for (const engine of ['Legacy', 'Next']) {
-    test(`${engine} plays in the page and provides reports`, async ({ page }) => {
+    test(`${engine} plays in the page and provides reports`, async ({ page }, info) => {
       test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,
         'Official Next runtime acceptance requires ETV_NEXT_FOLDER.');
       const errors: string[] = [];
@@ -140,6 +152,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.goto(`/system/troubleshooting/playback?mediaItem=${id}&preferredAudioTitle=Dutch&subtitleId=${id}`);
       await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption(engine);
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+      await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="seekSeconds"]').fill('1');
       const requests: string[] = [];
       page.on('request', request => {
@@ -151,6 +164,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       expect(requests).toHaveLength(1);
       const query = new URL(requests[0]).searchParams;
       expect(query.get('streamingEngine')).toBe(engine);
+      expect(query.get('streamSelector')).toBe('preview-fixture.yml');
       expect(query.get('subtitleId')).toBe(`${id}`);
       expect(query.get('preferredAudioTitle')).toBe('Dutch');
       expect(query.get('seekSeconds')).toBe('1');
@@ -168,6 +182,13 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         engine === 'Next' ? /Next troubleshooting completed/ : /exit status:/,
       );
       await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      await expect(page.locator('[data-preview-speed]')).toBeVisible();
+      expect(Number(await page.locator('[data-preview-speed] output').textContent())).toBeGreaterThan(0);
+      await page.locator('[data-preview-speed]').scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: `test-results/troubleshooting-speed-${engine.toLowerCase()}-${info.project.name}.png`,
+        fullPage: true,
+      });
       expect(errors).toEqual([]);
     });
   }
@@ -185,10 +206,12 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       });
       await page.goto(`/system/troubleshooting/playback?mediaItem=${id}&subtitleId=${id}`);
       await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption('Next');
+      await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="startFromBeginning"]').check();
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await expect(page.locator('body')).toContainText('Captured preview submission');
       expect(submitted?.searchParams.get('streamingEngine')).toBe('Next');
+      expect(submitted?.searchParams.get('streamSelector')).toBe('preview-fixture.yml');
       expect(submitted?.searchParams.get('subtitleId')).toBe(`${id}`);
       expect(submitted?.searchParams.get('startFromBeginning')).toBe('true');
     } finally {

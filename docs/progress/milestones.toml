@@ -9897,6 +9897,29 @@ exact-version validation and unchanged unsupported-track rejection. This is
 a backend checkpoint: selector UI, bounded diagnostic logging, speed reporting
 and browser/runtime acceptance remain open. Row 94 stays pending; the pin and
 upstream checkout remain at row 93.
+
+Row 94 UI/speed checkpoint: custom selectors remain available with either
+engine, and the completed log API returns text plus optional finite speed under
+preview ownership. Native previews explicitly enable stdout progress, drain
+both bounded pipes and save the launched argument order; Next reads only
+immediate child reports with bounded tails and a deadline. Both paths record
+upstream's unthrottled slow-transcode warnings. The speed label is translated
+for all nine cultures. Missing or malformed values stay hidden.
+The 66 focused troubleshooting/localization tests pass (62158b2c); after the
+native progress correction, all 46 troubleshooting tests and the final-argv
+snapshot pass (15480f1b). Strict app/web library and test Clippy, hydration lint
+and the matched Leptos build pass. Official Next runtime proof (6876d5d9)
+decodes Dutch 880 Hz audio and the selected subtitle when the custom selector
+overrides the English default, and confirms positive report speed.
+All four Chromium and four Firefox cases pass with actual custom selectors,
+Legacy/Next Hls.js playback, measured speed, archives and native no-JS submits.
+The mobile test now waits for the media-query handler's closed state before
+checking drawer geometry; its old conditional click raced that automatic close
+and reopened navigation. No assertions or deadlines were weakened. The narrow
+layout and completed speed display have screenshot review. Next stdout/stderr
+level/target capture and troubleshooting selection messages remain open, along
+with row 94 integrated acceptance and the UCU-06 window gates/push/CI. No row
+verdict or pin is advanced by this checkpoint.
 """
 
 [[milestone]]

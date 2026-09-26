@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use ersatzrs_app::{
-    AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, PlaybackPreviewRequest,
+    AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, PlaybackPreviewLog,
+    PlaybackPreviewRequest,
 };
 use ersatzrs_core::{
     path_replacement::{replace_path, PathPlatform, PathReplacement},
@@ -48,6 +49,9 @@ use crate::transport::iptv::stream;
 
 #[path = "troubleshooting_next.rs"]
 mod next;
+
+#[path = "troubleshooting_progress.rs"]
+mod progress;
 
 #[derive(Default)]
 enum PreviewAvailability {
@@ -200,7 +204,7 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
 
     async fn playback_preview_log(
         &self,
-    ) -> Result<Option<String>, AdminTroubleshootingRuntimeError> {
+    ) -> Result<Option<PlaybackPreviewLog>, AdminTroubleshootingRuntimeError> {
         read_preview_log_from(&transcode_troubleshooting_folder(), &self.preview_lock)
             .await
             .map_err(map_runtime_error)
@@ -1452,9 +1456,17 @@ fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
 async fn write_ffmpeg_arguments(working_dir: &FsPath, command: &FfmpegCommand) -> ApiResult<()> {
     let mut args = Vec::with_capacity(command.arguments.len() + 2);
     args.push(command.executable.clone());
-    args.extend(command.arguments.clone());
+    args.extend(preview_command_arguments(command));
     tokio::fs::write(working_dir.join("ffmpeg-arguments.txt"), args.join(" ")).await?;
     Ok(())
+}
+
+fn preview_command_arguments(command: &FfmpegCommand) -> Vec<String> {
+    // The ordinary HLS worker disables progress. A finite troubleshooting run
+    // consumes it on stdout while retaining FFmpeg diagnostics on stderr.
+    let mut arguments = vec!["-report".into(), "-progress".into(), "pipe:1".into()];
+    arguments.extend(command.arguments.iter().cloned());
+    arguments
 }
 
 fn spawn_preview_ffmpeg(
@@ -1466,15 +1478,14 @@ fn spawn_preview_ffmpeg(
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
     process
-        .arg("-report")
-        .args(&command.arguments)
+        .args(preview_command_arguments(&command))
         .current_dir(working_dir)
         .env(
             "FFREPORT",
             format!("file={}:level=32", report_path.to_string_lossy()),
         )
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     for variable in command.environment {
@@ -1483,9 +1494,11 @@ fn spawn_preview_ffmpeg(
 
     let mut child = process.spawn()?;
     let stderr = child.stderr.take();
+    let stdout = child.stdout.take();
     tokio::spawn(write_preview_logs(
         working_dir.join("logs.txt"),
         stderr,
+        stdout,
         child,
         dynamic_text_controllers,
         ownership,
@@ -1497,21 +1510,19 @@ fn spawn_preview_ffmpeg(
 async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
+    stdout: Option<tokio::process::ChildStdout>,
     mut child: tokio::process::Child,
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
 ) {
     let mut logs = Vec::new();
+    let mut progress_output = Vec::new();
     let result = tokio::time::timeout_at(deadline, async {
-        if let Some(stderr) = stderr {
-            use tokio::io::AsyncReadExt;
-            const LOG_LIMIT: u64 = 4 * 1024 * 1024;
-            let mut reader = tokio::io::BufReader::new(stderr);
-            let _ = (&mut reader).take(LOG_LIMIT).read_to_end(&mut logs).await;
-            // Drain excess stderr so the bounded diagnostic buffer cannot block FFmpeg.
-            let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
-        }
+        tokio::join!(
+            read_preview_pipe(stderr, &mut logs),
+            read_preview_pipe(stdout, &mut progress_output)
+        );
         child.wait().await
     })
     .await;
@@ -1532,7 +1543,26 @@ async fn write_preview_logs(
         *ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
     }
     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+    if let Some(speed) = progress::parse_speed(&String::from_utf8_lossy(&progress_output)) {
+        logs.extend_from_slice(progress::speed_diagnostic(speed).as_bytes());
+    }
     let _ = tokio::fs::write(log_path, logs).await;
+}
+
+async fn read_preview_pipe(
+    stream: Option<impl tokio::io::AsyncRead + Unpin>,
+    output: &mut Vec<u8>,
+) {
+    use tokio::io::AsyncReadExt as _;
+    if let Some(stream) = stream {
+        let mut reader = tokio::io::BufReader::new(stream);
+        let _ = (&mut reader)
+            .take(4 * 1024 * 1024)
+            .read_to_end(output)
+            .await;
+        // Keep both pipes draining after their diagnostic buffers reach the cap.
+        let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
+    }
 }
 
 async fn wait_for_preview_output(
@@ -1577,7 +1607,7 @@ async fn count_segments(working_dir: &PathBuf, extension: &str) -> ApiResult<usi
 async fn read_preview_log_from(
     folder: &FsPath,
     ownership: &Arc<Mutex<PreviewAvailability>>,
-) -> ApiResult<Option<String>> {
+) -> ApiResult<Option<PlaybackPreviewLog>> {
     use tokio::io::AsyncReadExt as _;
 
     // Keep completed diagnostics stable during the read. Active owners are still
@@ -1594,7 +1624,9 @@ async fn read_preview_log_from(
     file.take(4 * 1024 * 1024 + 4096)
         .read_to_end(&mut bytes)
         .await?;
-    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let speed = progress::completed_speed(folder, &text).await;
+    Ok(Some(PlaybackPreviewLog { text, speed }))
 }
 
 async fn build_troubleshooting_archive() -> ApiResult<Option<Vec<u8>>> {
@@ -1812,6 +1844,20 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preview_command_reports_progress_without_changing_hls_output() {
+        use super::*;
+        let command = FfmpegCommand {
+            executable: "ffmpeg".into(),
+            environment: Vec::new(),
+            arguments: ["-nostats", "-f", "hls", "live.m3u8"]
+                .map(str::to_owned)
+                .to_vec(),
+        };
+        insta::assert_snapshot!(preview_command_arguments(&command).join(" "),
+            @"-report -progress pipe:1 -nostats -f hls live.m3u8");
+    }
+
     #[tokio::test]
     async fn completion_log_waits_for_ownership_and_bounds_file_reads() {
         use super::*;
@@ -1835,8 +1881,8 @@ mod tests {
             read_preview_log_from(root.path(), &ownership)
                 .await
                 .unwrap()
-                .as_deref(),
-            Some("completed")
+                .map(|log| log.text),
+            Some("completed".to_owned())
         );
         tokio::fs::write(root.path().join("logs.txt"), vec![b'x'; 5 * 1024 * 1024])
             .await
@@ -1846,6 +1892,7 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap()
+                .text
                 .len(),
             4 * 1024 * 1024 + 4096
         );
@@ -1908,6 +1955,7 @@ mod tests {
         let completion = write_preview_logs(
             log.clone(),
             None,
+            None,
             child,
             Vec::new(),
             ownership,
@@ -1938,6 +1986,7 @@ mod tests {
             .unwrap();
         write_preview_logs(
             log.clone(),
+            None,
             None,
             child,
             Vec::new(),

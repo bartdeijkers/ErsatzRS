@@ -41,7 +41,11 @@ async function loadLogs(form, signal) {
       const log = await response.json();
       if (signal.aborted || !form.isConnected) return;
       if (log !== null) {
-        output.value = log;
+        output.value = log.text;
+        const speed = form.querySelector("[data-preview-speed]");
+        speed.hidden = !Number.isFinite(log.speed);
+        speed.querySelector("output").textContent = speed.hidden ? "" : log.speed.toFixed(2);
+        speed.dataset.speedState = log.speed < 0.9 ? "slow" : log.speed > 1.1 ? "fast" : "normal";
         return;
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -85,6 +89,7 @@ document.addEventListener("submit", async event => {
   };
   button.disabled = true;
   form.querySelector("textarea").value = "";
+  form.querySelector("[data-preview-speed]").hidden = true;
   destroy(video);
   status(form, "connecting");
   try {

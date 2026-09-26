@@ -646,7 +646,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                 context.ffmpeg_profiles,
                 false,
             )}
-            <label class=style::playbackField data-legacy-preview-field>
+            <label class=style::playbackField>
                 <span>{tr(TextKey::StreamSelector)}</span>
                 <select class=style::select name="streamSelector" disabled=stream_selectors_disabled>
                     <option value="">{tr(TextKey::DefaultOption)}</option>
@@ -704,6 +704,9 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
 
             <section class=style::wideSection>
                 <h2 class=style::subheading>{tr(TextKey::Logs)}</h2>
+                <p data-preview-speed hidden aria-live="polite">
+                    {tr(TextKey::PlaybackSpeed)}": "<output></output>"x"
+                </p>
                 <div class=style::divider></div>
                 <textarea class=style::logs readonly rows="20"></textarea>
             </section>

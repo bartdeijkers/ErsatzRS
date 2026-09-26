@@ -420,6 +420,18 @@
   margin: 0;
 }
 
+.playbackForm [data-preview-speed][data-speed-state="slow"] {
+  color: color-mix(in srgb, var(--color-error) 50%, var(--color-gray-100));
+}
+
+.playbackForm [data-preview-speed][data-speed-state="normal"] {
+  color: color-mix(in srgb, var(--color-warning) 50%, var(--color-gray-100));
+}
+
+.playbackForm [data-preview-speed][data-speed-state="fast"] {
+  color: color-mix(in srgb, var(--color-primary) 50%, var(--color-gray-100));
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 1rem 0;

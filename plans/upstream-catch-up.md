@@ -76,8 +76,19 @@
   metadata for retained-caption validation. Existing channel pins and scheduled
   projection keep their selection policy. All 76 focused troubleshooting and
   Next selection regressions pass (Nextest `a8e22597`), as does strict library
-  Clippy for infra/web. Selector UI, bounded
-  diagnostic logging and completion speed remain open.
+  Clippy for infra/web. That checkpoint left UI and diagnostics acceptance open.
+- Completion-speed implementation: the existing log API returns a typed
+  completed result (`text`, optional finite `speed`) under the same preview
+  ownership. Native stdout progress and Next's immediate `ffreport.log`
+  children supply the measured speed. The mounted Logs section shows the
+  localized value; missing/malformed progress remains absent. Keep reads,
+  directory traversal and process-pipe buffers bounded, and drain excess output.
+  Serialized Chromium/Firefox cases now submit a synthetic custom selector
+  with both engines and require real measured speed. The official Next fixture
+  also decodes selected Dutch audio/subtitles over an English default. UCU-06
+  owns this checkpoint's evidence. Remaining work: bounded Next stdout/stderr
+  capture with preserved levels/targets, troubleshooting selection messages,
+  then integrated row acceptance. Row 94 and the upstream pin remain pending.
 
 ## Row 93 source map: Next troubleshooting playback
 

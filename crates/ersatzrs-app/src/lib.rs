@@ -23,10 +23,10 @@ pub use ports::{
     AdminFfmpegRuntimeRead, AdminHealthRead, AdminHealthRuntime, AdminHealthRuntimeError,
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
     AvailableAddonRead, BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError,
-    InstalledAddonRead, MediaSourceRuntime, MediaSourceRuntimeError, PlaybackPreviewRequest,
-    PlayoutBuildQueue, PlayoutBuildQueueError, PlexPinFlow, RemoteServerInfo,
-    RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead,
-    RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
+    InstalledAddonRead, MediaSourceRuntime, MediaSourceRuntimeError, PlaybackPreviewLog,
+    PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError, PlexPinFlow,
+    RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
+    RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
     RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
     ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     SourceAddonRouting, WindowsStartupStatus,
@@ -2237,7 +2237,7 @@ impl ApplicationServices {
 
     pub async fn playback_preview_log(
         &self,
-    ) -> std::result::Result<Option<String>, AdminTroubleshootingRuntimeError> {
+    ) -> std::result::Result<Option<PlaybackPreviewLog>, AdminTroubleshootingRuntimeError> {
         self.ports
             .troubleshooting_runtime()
             .playback_preview_log()

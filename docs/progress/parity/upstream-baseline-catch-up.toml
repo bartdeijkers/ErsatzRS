@@ -4,12 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 175 commits, 93 reconciled, 82 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
-rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
-UCU-06 rows 91-93 are Port; row 94 is next. Next troubleshooting passes decoded
-runtime proof, the web gate and Chromium/Firefox/no-JS checks. UCU-06 owns the
-evidence; window gates and milestone push/CI remain open.
+Ledger: 175 commits, 93 reconciled, 82 pending. Bootstrap/AMM-N-03 Complete.
+UCU-03/04 green CI: 8f722099/a14ada80. UCU-05 Complete: rows 68-90,
+local gates and exact-SHA green CI 36190815587 at 81bcd649.
+UCU-06 rows 91-93 are Port. Row 94 custom selection, decoded tracks, selector UI
+and completion speed pass focused and Chromium/Firefox/no-JS checks. Next
+stdout/stderr diagnostics and selection messages remain open; row 94 is pending.
+Window gates/push/CI open.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next

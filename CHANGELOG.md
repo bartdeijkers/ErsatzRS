@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep custom stream selectors available for Next playback troubleshooting and
+  show measured completion speed for both engines. Capture native FFmpeg
+  progress without blocking either output pipe, and read Next reports with
+  bounded memory and a deadline.
 - Apply explicit subtitle candidates before custom Next troubleshooting rules
   choose audio, preserving stored subtitle metadata and explicit subtitle-off
   selection. Retain custom selectors submitted to the preview API.

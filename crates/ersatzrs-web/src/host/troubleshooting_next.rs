@@ -429,7 +429,11 @@ async fn supervise(
     } else {
         "Next troubleshooting failed or timed out"
     };
-    tokio::fs::write(working.join("logs.txt"), outcome).await?;
+    let mut log = outcome.to_owned();
+    if let Some(speed) = progress::completed_speed(working, "").await {
+        log.push_str(&progress::speed_diagnostic(speed));
+    }
+    tokio::fs::write(working.join("logs.txt"), log).await?;
     if !success {
         return Err("Next troubleshooting failed or timed out".into());
     }
