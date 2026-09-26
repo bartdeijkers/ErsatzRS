@@ -10105,6 +10105,47 @@ source and runtime acceptance. Source/manifest review and progress validation
 pass; no browser/runtime rerun is warranted for a documentation-only verdict.
 Pin, ledger and upstream checkout advance together to 11789e8d; continue row
 102. UCU-06 window gates, push and exact-SHA CI remain open.
+
+Row 102 (33c33587) is Port: upstream removes ETV_DISABLE_VULKAN from application
+and FFmpeg-test images. ErsatzRS already has no blanket disable: native
+selection uses functional graph proof (ADR 0014), and Next's configuration has
+no disabled filters and its process inherits the image environment. The audit
+found a missing Vulkan loader/ICDs in the minimal runtime bases and omitted
+NVIDIA graphics capability in the alternate image. Released FFmpeg 9 reproduced
+"Unable to open the libvulkan library" in the unchanged Debian base.
+All image recipes now request compute/video/graphics/utility. Minimal images
+include the loader and amd64/arm64 Mesa runtime libraries, ICDs, driver settings
+and licenses. Debian's full Mesa package also installs Python solely for its
+overlay-control utility; the minimal installer retains declared library
+dependencies and stages runtime files without that utility. This preserves the
+existing no-Python/no-compiler boundary; ARMv7 remains CPU-only. The alternate
+recipe's removed mysql feature was confirmed rejected by Cargo and removed.
+Actual production package-layer fragments build for minimal amd64/arm64/ARMv7
+and alternate amd64; root/release package layers are equivalent. ARM64 ICD,
+license, capability and no-Python/no-compiler checks pass; ARMv7 has no Mesa ICDs
+or Python/compiler. The unchanged Intel stack reuses row-56 evidence; these are
+package-layer checks, not a claim that complete application images were rebuilt.
+Both amd64 package variants execute 25 Vulkan upload/scale/readback frames.
+The original smoke graph incorrectly requested YUV420P directly from RGBA
+hardware frames; corrected RGBA download followed by conversion passes. The
+NVENC script's 128x72 fixture was rejected as below the hardware minimum;
+256x144 produces 25 encoded frames. Managed smoke defaults now use v2.0.1.
+The CUDA upload/scale/NVENC control and software Vulkan graph also pass as a
+non-root container user. The new NVIDIA Vulkan smoke derives Vulkan from CUDA
+and fails on this Docker Desktop/WSL host: no Vulkan device matches the NVIDIA
+UUID. CUDA availability and software Vulkan do not establish NVIDIA Vulkan
+interop. No physical NVIDIA Linux-container interop or Intel/AMD hardware
+rendering claim is made; host driver/device exposure remains required.
+Persisted runtime identity now includes NVIDIA_DRIVER_CAPABILITIES through the
+configuration boundary, so old denials cannot survive a change in injected
+libraries. Nineteen hardware_graph tests pass (0e02af92); the final boundary-based
+cache regression passes (282b4f1a). Strict infra all-target Clippy, both-binary
+type checks, formatting, shell syntax, diff and progress checks pass. Review
+covers dependency/ICD/license staging, architecture branches, cache compatibility,
+non-root execution, unchanged engine selection and health reporting. Subtitle
+and alternate-audio contracts are unchanged. Pin, ledger and upstream checkout
+advance together to 33c33587; continue row 103. UCU-06 full application/window
+gates, milestone push and exact-SHA CI remain open.
 """
 
 [[milestone]]

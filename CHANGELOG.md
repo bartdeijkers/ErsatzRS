@@ -21,6 +21,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Include the Vulkan loader and supported Mesa drivers in the minimal Docker
+  images, and expose NVIDIA graphics capabilities alongside CUDA/video support.
+  Recheck cached hardware results when the container's driver capabilities
+  change. Hardware smoke checks use the current managed FFmpeg package and
+  valid NVENC frame dimensions, and download Vulkan frames in their actual
+  pixel format before conversion.
+  Remove the obsolete MySQL feature from the alternate Docker build command.
 - Use ErsatzRS-ffmpeg v2.0.1 for fresh managed runtime installs, including the
   Windows Vulkan/CUDA external-memory export correction.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,

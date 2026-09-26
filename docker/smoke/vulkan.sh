@@ -17,5 +17,5 @@ exec docker run --rm \
     -init_hw_device vulkan=vk:0 \
     -filter_hw_device vk \
     -f lavfi -i testsrc2=s=128x72:d=1 \
-    -vf format=rgba,hwupload,scale_vulkan=128:72,hwdownload,format=yuv420p \
+    -vf format=rgba,hwupload,scale_vulkan=128:72,hwdownload,format=rgba,format=yuv420p \
     -f null -

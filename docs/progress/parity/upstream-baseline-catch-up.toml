@@ -4,13 +4,12 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 175 commits, 101 reconciled, 74 pending. Bootstrap/AMM-N-03 Complete.
+Ledger: 175 commits, 102 reconciled, 73 pending. Bootstrap/AMM-N-03 Complete.
 UCU-03/04 green CI: 8f722099/a14ada80. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
-UCU-06 owns row 91-101 acceptance evidence.
-Rows 96-97: dependency acceptance recorded in UCU-06.
-Row 98 Covered: live/Dolby Vision hints.
-Row 99 Port: runtime v2.0.1 verified; probe/cache fixed. Rows 100-101 N/A (.NET/CI). Row 102 next.
+UCU-06 owns rows 91-102 evidence, including dependency acceptance.
+Row 98 Covered: live/DV hints. Row 102 Port: Docker Vulkan setup; GPU limits recorded.
+Row 99 Port: runtime v2.0.1 verified; probe/cache fixed. Rows 100-101 N/A (.NET/CI).
 Window gates/push/CI open.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,

@@ -7,7 +7,7 @@ script_dir="$(dirname "$0")"
 
 exec docker run --rm --gpus all --entrypoint sh "$IMAGE" \
     -c "$MANAGED_FFMPEG_BOOTSTRAP" sh \
-    -hide_banner \
-    -f lavfi -i testsrc2=s=128x72:d=1 \
+    -hide_banner -nostdin \
+    -f lavfi -i testsrc2=s=256x144:d=1 \
     -c:v h264_nvenc \
     -f null -

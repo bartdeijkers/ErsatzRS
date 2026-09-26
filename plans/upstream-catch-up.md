@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **74 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **73 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **101**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **102**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,38 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 102 source map: Vulkan in containers
+
+- Upstream `33c33587` removes `ETV_DISABLE_VULKAN=1` from its application and
+  FFmpeg-test images, enabling the normal native/Next selection paths. There
+  are no UI, schema, media-selection or scheduling changes.
+- ErsatzRS has no blanket Vulkan disable. Native playback uses functional
+  graph proofs (`graph_probe.rs`, `hardware_graph.rs`, pipeline selection);
+  Next inherits the container environment through `next_engine/process.rs`.
+  Preserve these checks and their existing health/troubleshooting reporting.
+  Include NVIDIA driver capabilities in persisted runtime identity so enabling
+  graphics invalidates old denials even when the binary and GPU are unchanged.
+- The root and release runtime bases omit the Vulkan loader and Mesa ICDs.
+  Released FFmpeg n9.0 fails in the Debian base with "Unable to open the
+  libvulkan library". The alternate runtime has these libraries but requests
+  NVIDIA compute/video/utility without graphics. NVIDIA's container contract
+  requires graphics to inject Vulkan driver components.
+- Targets: all three image recipes, hardware smoke scripts and Docker guidance.
+  Provide Vulkan runtime libraries on supported GPU architectures and request
+  compute/video/graphics/utility for NVIDIA. Keep ARMv7 CPU-only. Use the
+  current managed FFmpeg package in validation. No new engine or host-driver
+  installation policy is introduced.
+- Minimal images stage Mesa's libraries/manifests/settings and declared library
+  dependencies without the unrelated Python overlay-control utility, preserving
+  their no-Python/no-compiler contract. The alternate build's obsolete `mysql`
+  feature is removed after Cargo rejects it; SQLite remains the sole backend.
+- Package-layer builds pass for amd64/arm64/ARMv7 and the alternate amd64 image.
+  Actual Vulkan upload/scale/readback and CUDA/NVENC control pass. On this WSL
+  host, Vulkan derived from CUDA fails because no Vulkan device matches the
+  NVIDIA UUID; this is not a positive NVIDIA interop result. Native selection
+  remains gated by functional proof; Next receives the driver environment with
+  no blanket filter disable. UCU-06 owns detailed evidence and remaining gates.
 
 ## Row 101 source map: .NET dependency patches
 
@@ -2048,7 +2080,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt corrected Windows Vulkan runtime` | ucu-06; first-party n9.0 export patch, shared playback/probe transfer and cache revision; focused tests and strict Clippy pass. Native Windows control/interop/25-frame decode and both package contracts pass. Approved v2.0.1 public downloads match tested hashes; managed default updated. GPU comparison isolates the old probe defect, not a before/after runtime-patch effect. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dependency automation` | ucu-06; deletes only upstream daily NuGet/Docker automation. ErsatzRS retains its independent weekly Cargo/GitHub Actions rollup. No product behavior change; source/diff review and progress validation pass. |
 | 101 | `11789e8d` | chore: update dependencies (#2980) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency patches` | ucu-06; .NET Extensions/ASP.NET/CLI patches, test-only NSubstitute update and removal of a .NET OpenAPI override. Rust dependencies and application consumers unchanged. Docker Vulkan release note proves no container change; row 102 owns that acceptance. Source/manifest review and progress validation pass. |
-| 102 | `33c33587` | feat: enable vulkan in docker (#2981) | | | | ucu-06; provisional: Adapt candidate. |
+| 102 | `33c33587` | feat: enable vulkan in docker (#2981) | Port | upstream-baseline-catch-up | `fix(docker): enable Vulkan runtime and driver exposure` | ucu-06; no blanket engine disable; minimal Vulkan libraries/ICDs and NVIDIA graphics capability added, old probe caches invalidated on capability change. amd64/arm64/ARMv7 and alternate package layers pass; non-root software Vulkan and CUDA/NVENC controls pass. WSL exposes no matching NVIDIA Vulkan UUID, so physical NVIDIA Docker interop is not claimed. Scoped tests/Clippy/binary checks pass; window owns full application gates. |
 | 103 | `5febb943` | docs: update changelog | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 104 | `080039be` | chore: update windows ffmpeg (#2982) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 105 | `3a02c39b` | feat: support multiple watermarks using next engine (#2983) | | | | ucu-06; provisional: Next behavior triage. |

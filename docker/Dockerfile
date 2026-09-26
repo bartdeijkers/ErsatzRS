@@ -99,7 +99,7 @@ RUN set -eux; \
 
 COPY . .
 RUN set -eux; \
-    cargo build --release --features mysql --bin ersatzrs-web --bin ersatzrs-scanner
+    cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner
 
 FROM debian:${DEBIAN_VERSION}-slim AS runtime-base
 ARG TARGETARCH
@@ -114,7 +114,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db \
     LIBVA_MESSAGING_LEVEL=0 \
     LIBVA_DISPLAY=drm \
-    NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+    NVIDIA_DRIVER_CAPABILITIES=compute,video,graphics,utility \
     NVIDIA_VISIBLE_DEVICES=all
 
 RUN set -eux; \

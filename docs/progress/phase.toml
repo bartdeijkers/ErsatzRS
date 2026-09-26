@@ -85,7 +85,10 @@ playback and both package contracts pass; approved v2.0.1 public archives match
 tested hashes. Row 100 is N/A for upstream-only dependency automation;
 ErsatzRS retains its own Cargo/GitHub Actions policy. Row 101 is N/A for .NET
 dependency patches; its Docker Vulkan note is not implementation evidence.
-Continue with row 102;
+Row 102 ports Vulkan runtime packages and NVIDIA driver exposure, preserving
+minimal-image/ARMv7 boundaries and invalidating caches on capability changes.
+Software Vulkan and CUDA/NVENC controls pass; this WSL host cannot expose a
+matching NVIDIA Vulkan device. Continue with row 103;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.

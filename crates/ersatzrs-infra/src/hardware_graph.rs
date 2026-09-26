@@ -1220,6 +1220,40 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn changed_container_driver_capabilities_discard_old_denials() {
+        let pool = test_pool().await;
+        let mut previous = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        let device = previous.hardware_graph_device();
+        previous.prove_hardware_graph(HardwareGraphOperation::NvencCudaScale, &device);
+        previous.deny_hardware_graph(HardwareGraphDenial::new(
+            HardwareGraphOperation::NvencHdrVulkanLibplacebo,
+            &device,
+            GraphFailureKind::VulkanDevice,
+        ));
+        let encoded = encode_hardware_graph_state("/opt/ffmpeg", &previous).expect("encode");
+        let mut value: serde_json::Value = serde_json::from_str(&encoded).expect("state");
+        let capabilities = &mut value["runtime_identity"]["nvidia_driver_capabilities"];
+        // Do not mutate process-global environment in parallel tests. Seed the
+        // same runtime/GPU identity with a different container driver exposure.
+        *capabilities = if capabilities.as_str() == Some("compute,video,graphics,utility") {
+            "compute,video,utility".into()
+        } else {
+            "compute,video,graphics,utility".into()
+        };
+        upsert_config(&pool, &value.to_string())
+            .await
+            .expect("seed");
+        let mut current = probed_report("NVIDIA GeForce RTX 3080 Ti");
+        assert!(
+            !apply_hardware_graph_denials(&pool, "/opt/ffmpeg", &mut current)
+                .await
+                .expect("apply")
+        );
+        assert!(current.hardware_graph_denials.is_empty());
+        assert!(load_config(&pool).await.expect("load").is_none());
+    }
+
     /// A row written before completion tracking existed cannot be attributed.
     #[tokio::test]
     async fn a_legacy_record_is_discarded_rather_than_trusted() {

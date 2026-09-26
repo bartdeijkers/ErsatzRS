@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Publication generations are deliberately excluded: they scope in-process
 /// feedback, while this value decides whether evidence may survive a restart.
+/// Container driver exposure is included because identical binaries and GPUs
+/// can have different usable libraries after an image/environment change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PersistedRuntimeIdentity {
     ffmpeg_path: String,
@@ -12,6 +14,9 @@ pub(crate) struct PersistedRuntimeIdentity {
     ffprobe_path: String,
     ffprobe_sha256: String,
     selected_nvidia_device: Option<PersistedNvidiaDeviceIdentity>,
+    /// Changes which host driver libraries the NVIDIA container runtime exposes.
+    #[serde(default)]
+    nvidia_driver_capabilities: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +46,10 @@ impl PersistedRuntimeIdentity {
                 .selected_nvidia_device
                 .as_ref()
                 .map(PersistedNvidiaDeviceIdentity::from),
+            nvidia_driver_capabilities: crate::startup_config::environment_variable(
+                "NVIDIA_DRIVER_CAPABILITIES",
+            )
+            .and_then(|value| value.into_string().ok()),
         })
     }
 

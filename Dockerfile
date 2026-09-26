@@ -128,11 +128,19 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime-base
+ARG TARGETARCH
+
+# The NVIDIA runtime injects Vulkan driver components only with graphics enabled.
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,graphics,utility \
+    NVIDIA_VISIBLE_DEVICES=all
+COPY docker/install-vulkan-runtime.sh /install-vulkan-runtime.sh
 
 # Runtime library dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 libdrm2 libpciaccess0 libstdc++6 \
+    ca-certificates curl \
+    libssl3 libdrm2 libpciaccess0 libstdc++6 libvulkan1 \
+    && bash /install-vulkan-runtime.sh "$TARGETARCH" \
+    && rm /install-vulkan-runtime.sh \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=intel-media /out/ /

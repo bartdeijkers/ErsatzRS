@@ -138,7 +138,19 @@ verified on the deployment host.
   versions and checksums. Licenses and this manifest are installed under
   `/usr/local/share/licenses/intel-media/` inside the image.
 - For NVIDIA, install and configure the NVIDIA Container Toolkit, then expose
-  the GPU with Docker's GPU option.
+  the GPU with Docker's GPU option (`--gpus all`, or a selected device).
+  The images request `compute,video,graphics,utility` driver capabilities;
+  retain `graphics` if overriding `NVIDIA_DRIVER_CAPABILITIES`, because
+  [NVIDIA requires it for Vulkan](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html#driver-capabilities).
+  Vulkan/CUDA tone mapping also requires support from the selected GPU and host
+  driver. CUDA encoding alone does not establish Vulkan interop support.
+- The amd64 and arm64 images include the Vulkan loader and Mesa Vulkan drivers
+  for Intel/AMD. Pass the relevant `/dev/dri` device and grant the service user
+  permission to access it. Native playback verifies the actual hardware graph;
+  the Next engine also receives the container's driver environment.
+  Minimal images contain Mesa's libraries, ICD manifests and driver settings,
+  without its Python overlay-control utility. Package identity and copyright
+  are recorded under `/usr/local/share/licenses/mesa-vulkan/`.
 - `linux/arm/v7` is CPU-only in the published image.
 
 After changing device access, restart ErsatzRS and check **Support** ->
