@@ -21,6 +21,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Use ErsatzRS-ffmpeg v2.0.1 for fresh managed runtime installs, including the
+  Windows Vulkan/CUDA external-memory export correction.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,
   avoiding false capability failures from an unsupported direct mapping.
   Recheck cached results from the old probe when the server starts.

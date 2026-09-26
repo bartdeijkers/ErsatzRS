@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **77 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **76 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **98**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **99**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Row 100 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -64,8 +64,9 @@
   and pass the upstream CUDA-upload path on the tested Windows GPU. Thus the
   -40 failure proves probe drift, not the runtime patch's effect. The patched
   candidate also passes a 25-frame BT.709 encode/decode check with the corrected
-  graph. UCU-06 owns detailed evidence. Row 99 remains
-  pending; the accepted pin stays at row 98 until the replacement is verified.
+  graph. UCU-06 owns detailed evidence. The approved v2.0.1 release is public;
+  both downloaded archives match the tested hashes. The managed default selects
+  that release. Row 99 is Port, with no new behavior deviation.
 
 ## Row 98 source map: live sources and Dolby Vision probe hints
 
@@ -2020,7 +2021,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream package patches` | ucu-06; .NET CliWrap, Testably, Scriban, MudCalendar and Scalar patch versions only; Rust counterparts and application consumers unchanged. Mesa note changes no container artifact and proves no new hardware acceptance. Scoped diff review and progress check pass. |
 | 97 | `aae2529f` | chore: update dependencies (#2977) | Adapt (ADRs 0009/0096/0098) | upstream-baseline-catch-up; classic-scheduling | `test(deps): retain SQLite safety and expression contracts` | ucu-06; Refit generated-client construction maps to existing reqwest, retained SQLite 3.51.3 includes WAL-reset fix, and the runtime guard protects that floor. NCalc remains the accepted deterministic 6.2 profile. All 34 provider/SQLite and 19 expression tests plus strict infra Clippy pass. |
 | 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | Covered | upstream-baseline-catch-up | `test(next): verify Dolby Vision hint preservation` | ucu-06; typed HTTP is_live and video dv_profile already exist. Persisted/fresh producer profile 5/7/8 and absent-profile regression plus live seek/callback checks pass (15 tests); strict infra Clippy passes. Model-only coverage, no new GPU-rendering claim. |
-| 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt corrected Windows Vulkan runtime` | ucu-06; first-party n9.0 export patch, shared playback/probe transfer and cache revision; focused tests and strict Clippy pass. Native Windows control/interop/25-frame decode and both package contracts pass. Approved v2.0.1 public downloads match tested hashes; managed default updated. GPU comparison isolates the old probe defect, not a before/after runtime-patch effect. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 101 | `11789e8d` | chore: update dependencies (#2980) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 102 | `33c33587` | feat: enable vulkan in docker (#2981) | | | | ucu-06; provisional: Adapt candidate. |

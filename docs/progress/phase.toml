@@ -79,7 +79,10 @@ patches and a Mesa release note without container changes. Row 97 is Adapt:
 existing reqwest/SQL-search/QuickJS and deterministic expression contracts remain;
 SQLite WAL safety, provider and expression tests pass. Row 98 is Covered:
 existing live-source and Dolby Vision probe fields pass 15 focused regressions
-and strict infra Clippy. Continue with row 99;
+and strict infra Clippy. Row 99 ports the Windows Vulkan/CUDA runtime patch,
+corrects the capability probe and invalidates old probe caches. Native Windows
+playback and both package contracts pass; approved v2.0.1 public archives match
+tested hashes. Continue with row 100;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.

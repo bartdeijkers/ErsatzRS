@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7c96203b1ad1158add51b2b611edceb20eb33f83` |
-| **Commit subject** | `chore: update playout model to get new next version (#2978)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7c96203b1ad1158add51b2b611edceb20eb33f83 |
+| **Pinned commit** | `9f83c8d21ea1cf6e415f7ed273aaa1bf573f8f0e` |
+| **Commit subject** | `fix: new ffmpeg for windows vulkan/cuda interop (#2979)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9f83c8d21ea1cf6e415f7ed273aaa1bf573f8f0e |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,8 +59,8 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `27f9d2174f377e27baa553872c73fcac863a52d7` (verified 2026-09-25),
-currently **172 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd` (verified 2026-09-26),
+currently **175 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's

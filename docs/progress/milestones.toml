@@ -10053,6 +10053,36 @@ Strict infrastructure all-target Clippy and workspace formatting pass.
 The companion Linux candidate is building from the unchanged first-party
 recipe. Runtime delivery/default pin and row acceptance remain pending;
 processed pin, ledger and upstream checkout remain at row 98.
+The Linux companion build subsequently completed successfully. A local cache
+symlink initially prevented Docker from reading downloaded sources; replacing
+it with a real cache directory allowed reuse of the completed toolchain.
+The unchanged first-party Linux package contract passes on Debian Bookworm:
+both tools execute as FFmpeg n9.0, drawvg/drawtext and Cairo plus the complete
+text-shaping flags are present, and file-backed reloadable drawtext renders.
+Prepared release source is ErsatzRS-ffmpeg 200feefa3061fcd52c74e4c55f5cc516d2574843.
+Final local v2.0.1 archive identities (not published):
+linux-x64 76de2263c0bdbf0ff6147d355da6b02744288465a3b8761239d56ab649ae5ac2;
+win-x64 79b82123a403a2209a9f85571b99a5c4c8cd9f38de50bf5c82ca5c475ada29f0.
+The final Windows ZIP has valid CRCs and contains the same tested executable
+bytes as the candidate above. Runtime publication/default pin and row-99
+acceptance remain open; UCU-06 is not complete.
+The maintainer explicitly approved the separate ErsatzRS-ffmpeg v2.0.1
+publication. Source 200feef is pushed to main and tagged v2.0.1. Draft downloads
+and subsequent anonymous public downloads exactly match both final archive
+hashes above. Release: https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/tag/v2.0.1
+The tag automatically queued Release run 36255586294; it was cancelled before
+execution to prevent its clobber upload from replacing the approved binaries.
+Acceptance rests on the recorded exact-package local/native gates, not that
+cancelled run. The source push also queued Docker Publish Multi-Platform run
+36255511421; its completion is not claimed here.
+The managed default now selects v2.0.1. Its focused default-manager regression
+passes (0b3994d0), as does strict FFmpeg all-target Clippy. Review confirms the
+FFmpeg 9 adaptation retains modifier diagnostics and dedicated allocation,
+the probe uses the production transfer, legacy cache denials are discarded,
+and subtitle/alternate-audio selection is unchanged. Row 99 is Port under the
+existing first-party FFmpeg 9 contract (ADRs 0008/0063), with no new deviation.
+Pin, row verdict and upstream checkout advance together to 9f83c8d2. Continue
+row 100; UCU-06 window gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]
