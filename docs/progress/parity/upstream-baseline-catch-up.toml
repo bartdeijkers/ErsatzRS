@@ -5,8 +5,9 @@ status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
 Ledger: 173 commits, 90 reconciled, 83 pending. Bootstrap and AMM-N-03 are
-Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 has processed
-rows 68-90; local gates pass; push/CI precede UCU-06 row 91.
+Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
+rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
+UCU-06 starts at row 91.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -53,13 +54,12 @@ Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
 Rows 68-71 port Plex title refresh and Classic playlist continuity. Row 75
 drops FFmpeg crop metadata workarounds; NVIDIA overlay output passes, with AMD
 live output unproven. Rows 76-77 fix Classic checkpoints and dormant anchors.
-UCU-05 acceptance remains open.
+UCU-05 acceptance is complete.
 The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Unsupported graphics integration remains refused. Later endpoint/platform acceptance remains open. ADR 0095 retains the
-optional Next engine alongside native playback. Milestones own acceptance;
+explicitly refused. Unsupported graphics integration remains refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
@@ -182,4 +182,4 @@ id = 'ucu84-generated-channel-logo-watermark'
 description = 'Row 84: channel-logo watermark fallback is absent when artwork is missing. The generated SVG logo endpoint is not a playable image input for the supported FFmpeg build.'
 discovered = '2026-09-25'
 resolved = true
-evidence = 'UCU-05 owns row 84. Typed HTTP/local sources and an atomically cached generated PNG preserve external and generated channel-logo watermarks. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. Window acceptance remains open.'
+evidence = 'UCU-05 owns row 84. Typed HTTP/local sources and an atomically cached generated PNG preserve external and generated channel-logo watermarks. Native and official Next decoded output, selected audio, Next subtitles and DisableWatermarks pass. UCU-05 acceptance is complete.'

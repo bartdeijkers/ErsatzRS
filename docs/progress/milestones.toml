@@ -9256,7 +9256,7 @@ correction and require terminal green CI at its new exact SHA before UCU-05.
 id         = 'ucu-05'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 35b5a259'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-04']
@@ -9677,6 +9677,16 @@ segment durations. All 11 fallback scenarios pass after correction (b80d9231,
 retained/prepared/ordinary media and pinned silence. Strict infra library/test
 Clippy, format and progress validation pass. UCU-05 stays In progress and UCU-06
 is unopened until integrated exact-SHA CI is proven.
+2026-09-26: UCU-05 acceptance is complete. Corrective commit
+81bcd649056450c8d1ba4a61d7f709ccb2f93b12 is on remote main and CI run
+36190815587 is terminal success at that exact SHA: Next engine (including
+HTTP/Hybrid smoke), Chromium, Firefox, Test, Clippy, Cargo deny, Format,
+Documentation links and Preflight all pass. Conditional Commit lint and the
+unused test-matrix job are skipped, not counted as proof. Earlier local window
+gates retain their stated revisions; the correction changes only fallback test
+sampling and records. Pin, last processed row 90 and upstream checkout agree at
+35b5a2599f8d9577bbffe5ccaee7829604f2fe74. The maintainer-requested pause after
+green CI ended on 2026-09-26. UCU-06 starts at row 91 after closeout publication.
 """
 
 [[milestone]]

@@ -25,7 +25,9 @@
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
   at `a14ada80` are recorded in its milestone. The earlier Clippy-policy and
   Firefox failures were corrected without changing product logic. UCU-05 has
-  processed rows 68-90; local window gates pass. Push/CI remain open before UCU-06 row 91 (`5ab81525`).
+  completed rows 68-90, local window gates and terminal green exact-SHA CI
+  [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
+  at `81bcd649`. UCU-06 begins at row 91 (`5ab81525`).
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)

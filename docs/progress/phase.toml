@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-05: reconcile upstream through 35b5a259'
+current_focus = 'UCU-06: reconcile upstream through 7b7a19a2'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI
+36190815587 at 81bcd649 are recorded in its milestone. The maintainer resumed
+after the requested pause. Publish the closeout and verify its CI, then refresh
+the upstream tail and continue UCU-06 at row 91 (5ab81525).
+
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone
 push and require terminal green exact-SHA CI. Do not start UCU-06 row 91 before
