@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `9f83c8d21ea1cf6e415f7ed273aaa1bf573f8f0e` |
-| **Commit subject** | `fix: new ffmpeg for windows vulkan/cuda interop (#2979)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9f83c8d21ea1cf6e415f7ed273aaa1bf573f8f0e |
+| **Pinned commit** | `24eab260b18888787251def3bf8500748105299d` |
+| **Commit subject** | `ci: remove dependabot [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/24eab260b18888787251def3bf8500748105299d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

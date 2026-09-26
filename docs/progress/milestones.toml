@@ -10083,6 +10083,15 @@ and subtitle/alternate-audio selection is unchanged. Row 99 is Port under the
 existing first-party FFmpeg 9 contract (ADRs 0008/0063), with no new deviation.
 Pin, row verdict and upstream checkout advance together to 9f83c8d2. Continue
 row 100; UCU-06 window gates, push and exact-SHA CI remain open.
+
+Row 100 (24eab260) is N/A (upstream tooling): its complete diff deletes only
+upstream .github/dependabot.yml, which scheduled daily NuGet and three Docker
+update jobs for that repository's maintainer. ErsatzRS .github/dependabot.yml
+owns an independent weekly Cargo/GitHub Actions rollup; no runtime/product
+behavior is ported and that local policy is preserved. Source/diff review
+finds no application, schema, subtitle or alternate-audio surface affected.
+Progress validation passes. Pin, ledger and upstream checkout advance together
+to 24eab260; continue row 101. UCU-06 window gates/push/CI remain open.
 """
 
 [[milestone]]
