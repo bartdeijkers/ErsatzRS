@@ -9772,6 +9772,17 @@ fb630dcf); all three archive-focused tests pass after correction (5f466dfc).
 Media segments and deeper directories remain excluded. Strict web all-target
 Clippy, format, Clippy-allow policy and progress validation pass. Engine/UI integration,
 runtime/browser proof and row closeout remain open; the pin stays at row 92.
+Row 93 process adapter now separates finite troubleshooting startup from live
+readiness. All 14 process/overlay tests pass. Portable tests cover complete stdin delivery, successful and failed
+exit status without a readiness marker, retained artifacts, default-only
+overlays and unchanged live startup/cleanup. Official Next 802f2d8 with FFmpeg 9
+passes a finite one-item preview with source seek, decoded subtitle glyphs,
+selected Dutch audio, ended HLS playlist and success report dossier (Nextest
+60ab547a; cue begins at the selected seek point). This runtime requires localhost
+access for Next's internal proxy. Strict infra all-target Clippy, format and
+Clippy-allow policy pass. Review confirms bounded stdin delivery, managed-tree
+ownership, retained finite-run exit status and unchanged live readiness behavior.
+Application request/projection, endpoint and page integration remain open.
 """
 
 [[milestone]]

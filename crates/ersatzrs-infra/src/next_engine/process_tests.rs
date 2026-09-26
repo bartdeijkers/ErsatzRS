@@ -61,6 +61,11 @@ fn fixture_child() {
     if mode == "fail" {
         std::process::exit(7);
     }
+    if mode == "troubleshoot" {
+        std::fs::write(folder.join("ffmpeg.m3u8"), b"#EXTM3U\n#EXT-X-ENDLIST\n").unwrap();
+        std::fs::write(folder.join("ffreport.log"), b"completed fixture").unwrap();
+        return;
+    }
     if mode == "ready" || mode == "ready-exit" {
         std::fs::write(folder.join(".ready"), b"").unwrap();
     }
@@ -123,6 +128,77 @@ async fn early_exit_is_reported_without_waiting_for_the_startup_deadline() {
         result,
         Err(ProcessError::ExitedBeforeReady(Some(7)))
     ));
+}
+
+#[tokio::test]
+async fn finite_troubleshooting_delivers_stdin_and_preserves_exit_and_artifacts_without_readiness()
+{
+    for (mode, expected_code) in [("troubleshoot", 0), ("fail", 7)] {
+        let folder = tempfile::tempdir().unwrap();
+        let config = config();
+        let mut process = NextProcess::start_configured(
+            fixture_command(mode, folder.path()),
+            folder.path(),
+            &config,
+            Instant::now() + Duration::from_secs(10),
+            StartupMode::Troubleshooting,
+        )
+        .await
+        .unwrap();
+        let status = timeout(Duration::from_secs(10), process.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(status.code(), Some(expected_code));
+        assert!(!folder.path().join(".ready").exists());
+        let received: serde_json::Value = serde_json::from_slice(
+            &tokio::fs::read(folder.path().join("received.json"))
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(received, serde_json::to_value(config).unwrap());
+        if status.success() {
+            assert!(folder.path().join("ffmpeg.m3u8").is_file());
+            assert!(folder.path().join("ffreport.log").is_file());
+        }
+    }
+}
+
+#[tokio::test]
+async fn troubleshooting_uses_only_default_overlay_and_explicit_run_mode() {
+    let root = tempfile::tempdir().unwrap();
+    let default = root.path().join("default.json");
+    tokio::fs::write(&default, "{}").await.unwrap();
+    tokio::fs::write(root.path().join("1.json"), "{}")
+        .await
+        .unwrap();
+    let command = troubleshooting_command(
+        Path::new("fixture-next"),
+        "1",
+        Path::new("fixture-output"),
+        Some(root.path()),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    let args: Vec<_> = command
+        .as_std()
+        .get_args()
+        .map(std::ffi::OsStr::to_os_string)
+        .collect();
+    assert_eq!(
+        args,
+        [
+            "run".into(),
+            "--output-folder".into(),
+            "fixture-output".into(),
+            "--number=1".into(),
+            "-".into(),
+            "--troubleshoot".into(),
+            default.into_os_string(),
+        ]
+    );
 }
 
 #[tokio::test]

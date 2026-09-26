@@ -43,7 +43,50 @@ pub struct NextProcess {
     output_folder: PathBuf,
 }
 
+#[derive(Clone, Copy)]
+enum StartupMode {
+    Live,
+    Troubleshooting,
+}
+
 impl NextProcess {
+    /// Start a finite troubleshooting run, delivering configuration before returning.
+    ///
+    /// A short successful run can exit before the live readiness marker exists.
+    /// The caller owns a bounded wait for completion and retains its playlist and
+    /// reports. Only the default overlay applies to this isolated preview.
+    /// The caller must exclusively own and clear the preview output directory
+    /// before startup; troubleshooting preserves existing diagnostic inputs there.
+    ///
+    /// # Errors
+    /// Returns redacted preparation, configuration, spawn or stdin deadline errors.
+    pub async fn start_troubleshooting(
+        executable: &Path,
+        number: &str,
+        output_folder: &Path,
+        config: &ChannelConfig,
+        overlay_directory: Option<&Path>,
+        deadline: Instant,
+    ) -> Result<Self, ProcessError> {
+        let mut command = troubleshooting_command(
+            executable,
+            number,
+            output_folder,
+            overlay_directory,
+            deadline,
+        )
+        .await?;
+        set_session_environment(&mut command, None);
+        Self::start_configured(
+            command,
+            output_folder,
+            config,
+            deadline,
+            StartupMode::Troubleshooting,
+        )
+        .await
+    }
+
     /// Start Next and wait for its ready marker within one shared deadline.
     ///
     /// The caller must reserve the channel's session and exclusively own the
@@ -121,10 +164,20 @@ impl NextProcess {
     }
 
     async fn start_command(
+        command: Command,
+        output_folder: &Path,
+        config: &ChannelConfig,
+        deadline: Instant,
+    ) -> Result<Self, ProcessError> {
+        Self::start_configured(command, output_folder, config, deadline, StartupMode::Live).await
+    }
+
+    async fn start_configured(
         mut command: Command,
         output_folder: &Path,
         config: &ChannelConfig,
         deadline: Instant,
+        mode: StartupMode,
     ) -> Result<Self, ProcessError> {
         if Instant::now() >= deadline {
             return Err(ProcessError::StartupTimeout);
@@ -146,7 +199,7 @@ impl NextProcess {
             child,
             output_folder: output_folder.to_owned(),
         };
-        let started = timeout_at(deadline, process.initialize(&json))
+        let started = timeout_at(deadline, process.initialize(&json, mode))
             .await
             .unwrap_or(Err(ProcessError::StartupTimeout));
         if let Err(error) = started {
@@ -156,7 +209,7 @@ impl NextProcess {
         Ok(process)
     }
 
-    async fn initialize(&mut self, config: &[u8]) -> Result<(), ProcessError> {
+    async fn initialize(&mut self, config: &[u8], mode: StartupMode) -> Result<(), ProcessError> {
         let mut stdin = self.child.stdin().take().ok_or_else(|| {
             io_error(
                 "open configuration input",
@@ -172,6 +225,9 @@ impl NextProcess {
             .await
             .map_err(|error| io_error("close configuration", &error))?;
         drop(stdin);
+        if matches!(mode, StartupMode::Troubleshooting) {
+            return Ok(());
+        }
         let ready = self.output_folder.join(".ready");
         tokio::select! {
             biased;
@@ -246,20 +302,7 @@ async fn channel_command(
         }
         timeout_at(deadline, async {
             for filename in ["default.json".to_owned(), format!("{number}.json")] {
-                let path = directory.join(filename);
-                match tokio::fs::metadata(&path).await {
-                    Ok(metadata) if metadata.is_file() => {
-                        command.arg(path);
-                    }
-                    Ok(_) => {
-                        return Err(io_error(
-                            "inspect configuration overlay",
-                            &io::Error::from(io::ErrorKind::InvalidData),
-                        ));
-                    }
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(io_error("inspect configuration overlay", &error)),
-                }
+                append_overlay(&mut command, &directory.join(filename)).await?;
             }
             Ok(())
         })
@@ -267,6 +310,41 @@ async fn channel_command(
         .map_err(|_| ProcessError::StartupTimeout)??;
     }
     Ok(command)
+}
+
+async fn troubleshooting_command(
+    executable: &Path,
+    number: &str,
+    output_folder: &Path,
+    overlay_directory: Option<&Path>,
+    deadline: Instant,
+) -> Result<Command, ProcessError> {
+    let mut command = channel_command(executable, number, output_folder, None, deadline).await?;
+    command.arg("--troubleshoot");
+    if let Some(directory) = overlay_directory {
+        timeout_at(
+            deadline,
+            append_overlay(&mut command, &directory.join("default.json")),
+        )
+        .await
+        .map_err(|_| ProcessError::StartupTimeout)??;
+    }
+    Ok(command)
+}
+
+async fn append_overlay(command: &mut Command, path: &Path) -> Result<(), ProcessError> {
+    match tokio::fs::metadata(path).await {
+        Ok(metadata) if metadata.is_file() => {
+            command.arg(path);
+            Ok(())
+        }
+        Ok(_) => Err(io_error(
+            "inspect configuration overlay",
+            &io::Error::from(io::ErrorKind::InvalidData),
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error("inspect configuration overlay", &error)),
+    }
 }
 
 async fn prepare_output(folder: &Path) -> Result<(), ProcessError> {

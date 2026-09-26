@@ -88,6 +88,117 @@ async fn generate_clip(ffmpeg: &Path, clip: &Path) {
     tool(command).await;
 }
 
+#[tokio::test]
+#[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
+async fn real_next_troubleshooting_finishes_with_reports_and_selected_tracks() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    let subtitle = root.path().join("fixture.nl.srt");
+    let playout = root.path().join("playout");
+    let output = root.path().join("output");
+    generate_clip(&ffmpeg, &clip).await;
+    tokio::fs::write(
+        &subtitle,
+        "1\n00:00:05,000 --> 00:00:15,000\nNext subtitle proof\n",
+    )
+    .await
+    .unwrap();
+    tokio::fs::create_dir(&playout).await.unwrap();
+    let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
+    let finish = start + chrono::Duration::seconds(10);
+    let source = serde_json::json!({
+        "source_type": "local", "path": clip,
+        "in_point_ms": 5000, "out_point_ms": 15000,
+    });
+    let item = serde_json::json!({
+        "version": super::super::protocol::PLAYOUT_VERSION,
+        "items": [{ "id": "troubleshooting-fixture", "start": start, "finish": finish,
+            "tracks": {
+                "video": { "source": source, "stream_index": 0 },
+                "audio": { "source": source, "stream_index": 2 },
+                "subtitle": { "source": { "source_type": "local", "path": subtitle,
+                    "in_point_ms": 5000, "out_point_ms": 15000 }, "stream_index": 0 }
+            }
+        }]
+    });
+    tokio::fs::write(
+        playout.join(format!(
+            "{}_{}.json",
+            start.timestamp_millis(),
+            finish.timestamp_millis()
+        )),
+        serde_json::to_vec(&item).unwrap(),
+    )
+    .await
+    .unwrap();
+    let mut config = super::tests::config();
+    config.playout.folder = playout.to_str().unwrap().to_owned();
+    config.playout.virtual_start = Some(start);
+    config.ffmpeg.ffmpeg_path = ffmpeg.to_str().unwrap().to_owned();
+    config.ffmpeg.ffprobe_path = ffprobe.to_str().unwrap().to_owned();
+    config.ffmpeg.reports_folder = Some(output.to_str().unwrap().to_owned());
+    config.normalization.audio.sample_rate_hz = Some(48_000);
+    tokio::fs::write(
+        root.path().join("config.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .await
+    .unwrap();
+    let mut process = NextProcess::start_troubleshooting(
+        &binary,
+        "1",
+        &output,
+        &config,
+        None,
+        Instant::now() + Duration::from_secs(30),
+    )
+    .await
+    .unwrap();
+    let status = timeout(Duration::from_mins(1), process.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    if !status.success() {
+        let retained = root.keep();
+        panic!(
+            "finite troubleshooting failed with {status}; synthetic fixture retained at {}",
+            retained.display()
+        );
+    }
+    let playlist = tokio::fs::read_to_string(output.join("ffmpeg.m3u8"))
+        .await
+        .unwrap();
+    assert!(playlist.contains("#EXT-X-ENDLIST"));
+    assert_audio_and_subtitle(&ffmpeg, &ffprobe, &output.join("ffmpeg.m3u8"), false, "aac").await;
+    assert_troubleshooting_dossier(&output);
+}
+
+fn assert_troubleshooting_dossier(output: &Path) {
+    let mut reports = 0;
+    for entry in std::fs::read_dir(output).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_dir() {
+            for report in std::fs::read_dir(entry.path()).unwrap() {
+                if report
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("ffreport")
+                {
+                    reports += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        reports > 0,
+        "successful troubleshooting must retain its report dossier"
+    );
+}
+
 async fn prepare_schedule(
     clip: &Path,
     muted: bool,
