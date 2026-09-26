@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-25): `c0184f000095c9801dcf9c238010d9f13ed0c104`
-  — perf: watermark improvements (#3039).
-- Ledger: **173 commits**, **83 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-26): `d7b265e07cbcfcf67dca69724f69349491b67ea9`
+  — fix: next engine subtitles (#3040).
+- Ledger: **174 commits**, **84 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -13,6 +13,7 @@
   correction audit appends graphics-subtitle performance and Jellyfin 12 collection
   handling as two pending tail rows; neither is processed by the row-39 audit.
   The row-80 refresh appends watermark improvements as pending row 173.
+  The 2026-09-26 refresh appends Next engine subtitles as pending row 174.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
@@ -1790,3 +1791,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 171 | `62b7a5e9` | perf: graphics engine subtitles (#3037) | | | | ucu-09; provisional: Covered (ADR 0005); the upstream gain is in the managed SkiaSharp compositor (premultiplied alpha, pipe back-pressure, visible-region subset). ErsatzRS renders subtitles through native FFmpeg filters and never composites a full ARGB frame across a pipe, as row 52 already established. Confirm the image-subtitle producer hands Next no full frames. |
 | 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; provisional: Port; `crates/ersatzrs-infra/src/jellyfin/client.rs` issues the same `sortBy=SortName` item queries without `collapseBoxSetItems=false`, so Jellyfin 12 collapses collection members into their BoxSet for user-less queries. The season `ShowId` refresh when the etag is unchanged has a matching television repository path. Emby is untouched upstream. |
 | 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; provisional: Covered candidate; upstream skips its graphics canvas when every selected graphic is a plain permanent or intermittent watermark and maps them straight to Next media layers. ErsatzRS already projects watermarks as wire layers in `next_engine/watermark.rs`; confirm no canvas stage is built for watermark-only playouts before closing the row. |
+| 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; pending source audit in ledger order. |

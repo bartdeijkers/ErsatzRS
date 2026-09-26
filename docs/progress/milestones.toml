@@ -9687,6 +9687,13 @@ gates retain their stated revisions; the correction changes only fallback test
 sampling and records. Pin, last processed row 90 and upstream checkout agree at
 35b5a2599f8d9577bbffe5ccaee7829604f2fe74. The maintainer-requested pause after
 green CI ended on 2026-09-26. UCU-06 starts at row 91 after closeout publication.
+Closeout publication 80509c78 triggered manual CI 36226639089 because the
+workflow excludes documentation-only pushes. Next engine, Test, Clippy,
+Cargo deny, format and documentation checks pass; browser jobs are still live.
+Commit lint fails because the closeout message used unsupported scope
+"progress". Published history is preserved; this follow-up records the failure
+with the permitted "status" scope and refreshes the pending upstream tail.
+UCU-06 row processing remains gated on terminal green CI for the new head.
 """
 
 [[milestone]]
@@ -9773,7 +9780,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through c0184f00 (latest fetched tip) in order,
+Process every ledger row in this release window through d7b265e0 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -9804,4 +9811,7 @@ is processed and the pin remains at row 38 while row 39 acceptance continues.
 2026-09-25 row-80 refresh appends row 173 (c0184f00, watermark improvements).
 All 173 ordered SHA/subject pairs match upstream history, preserving the prior
 172 rows as an exact prefix. The new row remains pending in UCU-09.
+2026-09-26 refresh appends row 174 (d7b265e0, Next engine subtitles).
+All previous 173 SHA/subject pairs remain an exact prefix; the new row is
+pending in UCU-09 and the processed pin stays at row 90 (35b5a259).
 """
