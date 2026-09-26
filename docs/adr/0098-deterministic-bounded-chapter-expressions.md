@@ -14,6 +14,10 @@ change numeric coercion in `in` comparisons; the accepted deterministic 6.2
 profile remains in force. This row does not claim compatibility with later
 NCalc package semantics. See the [NCalc changelog](https://github.com/ncalc/ncalc/blob/master/CHANGELOG.md).
 
+Upstream row 97 raises NCalcSync to 7.1.0, adding null helpers/coalescing and
+changing its .NET configuration API. The same accepted 6.2 profile remains in
+force; this package update does not expand the saved-expression language.
+
 The maintainer explicitly accepted this deterministic expression contract on
 2026-09-23 and requested implementation. ADR 0097 accepts the separate no-match
 padding correction; implementation and platform/runtime acceptance remain distinct.

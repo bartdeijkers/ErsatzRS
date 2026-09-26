@@ -1,7 +1,9 @@
 // The application statically links SQLite through SQLx on every target.
 // CVE-2025-6965 affects SQLite releases before 3.50.2.
+// The WAL-reset corruption fix is included in our bundled 3.51.3 line.
+// https://sqlite.org/releaselog/3_51_3.html
 #[tokio::test]
-async fn bundled_sqlite_version_excludes_cve_2025_6965() {
+async fn bundled_sqlite_version_includes_security_and_wal_reset_fixes() {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:")
         .await
         .expect("open the bundled SQLite runtime");
@@ -19,5 +21,9 @@ async fn bundled_sqlite_version_excludes_cve_2025_6965() {
     assert!(
         (*major, *minor, *patch) >= (3, 50, 2),
         "bundled SQLite {version} is older than the CVE-2025-6965 fix"
+    );
+    assert!(
+        (*major, *minor, *patch) >= (3, 51, 3),
+        "bundled SQLite {version} is older than the retained WAL-reset fix"
     );
 }

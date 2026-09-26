@@ -9966,6 +9966,26 @@ Cargo dependency changes are needed. Review does not interpret the Mesa note
 as evidence of a shipped driver upgrade or AMD hardware acceptance. Source
 review and progress validation pass. Pin, ledger and checkout advance together
 to 3b53b69e; continue row 97. UCU-06 window gates/push/CI remain open.
+
+Row 97 (aae2529f) is Adapt under existing ADRs 0009/0096/0098. Refit 15 source
+changes only select generated construction/registration; endpoints, headers,
+timeouts, serializers and projections are unchanged. Existing reqwest clients
+need no equivalent migration. NuGet SQLitePCLRaw 3.0.5 bundles SQLite 3.53.4;
+its release notes target 3.53.x regressions. The retained libsqlite3-sys 0.37.0
+bundles 3.51.3, already containing the WAL-reset corruption fix, and SQLx 0.9
+requires a binding below 0.38. No new binding fork or package-version equivalence
+is claimed. The linked runtime regression now guards both CVE-2025-6965 and
+the retained WAL fix. NCalc 7.1's null/coalescing/configuration changes remain
+outside ADR 0098's accepted deterministic 6.2 language; ADRs 0005/0009/0096
+retain FFmpeg graphics, SQL search and QuickJS for other package bumps.
+Primary release sources and exact scope are in the row source map. All 34
+provider/SQLite integration tests pass (f8c99d27), including synthetic Jellyfin,
+Emby and Plex; all 19 chapter-expression tests pass (66aef96a), including the
+119-case 6.2 oracle corpus. Strict infra Clippy for the changed integration test,
+format, progress and diff checks pass. Review confirms unchanged production
+code/dependencies, explicit newer-language exclusions and actual linked SQLite
+verification. Pin, ledger and upstream checkout advance to aae2529f; row 98
+is next. UCU-06 window gates/push/CI remain open.
 """
 
 [[milestone]]

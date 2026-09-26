@@ -75,7 +75,9 @@ audio/subtitles, selector UI, completion speed and bounded sanitized process/
 selection diagnostics pass focused, runtime, both browsers and full web parity
 checks. Row 95 adds optional Next force_style wire support with passing
 config/protocol tests and strict infra/web Clippy. Row 96 is N/A: .NET package
-patches and a Mesa release note without container changes. Continue with row 97;
+patches and a Mesa release note without container changes. Row 97 is Adapt:
+existing reqwest/SQL-search/QuickJS and deterministic expression contracts remain;
+SQLite WAL safety, provider and expression tests pass. Continue with row 98;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.

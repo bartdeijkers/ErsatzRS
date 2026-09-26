@@ -17,6 +17,7 @@ release section when tagging a release.
 
 - Update the bundled SQLite used by the server and tooling to 3.51.3, above
   the 3.50.2 fix for CVE-2025-6965, without requiring a system SQLite install.
+  Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
 

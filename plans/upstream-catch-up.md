@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **79 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **78 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **96**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **97**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,32 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 97 source map: provider client generation and dependency contracts
+
+- Upstream `aae2529f` upgrades .NET packages and changes only Refit client
+  construction/registration to `ForGenerated`/`AddRefitGeneratedClient` for
+  Emby, Jellyfin, Plex, GitHub and Trakt. Routes, headers, timeout policies,
+  serializers and projections are unchanged. Rust uses explicit reqwest clients.
+- SQLitePCLRaw 3.0.5 selects SQLite 3.53.4. ErsatzRS's shared SQLx/rusqlite
+  binding uses SQLite 3.51.3, which already includes the WAL-reset fix.
+  SQLx 0.9 requires libsqlite3-sys below 0.38; no unsupported binding fork is
+  justified by this patch's fixes for 3.53.x regressions. Extend the linked
+  runtime guard to protect the existing WAL fix as well as CVE-2025-6965.
+- NCalc 7.1 adds null helpers/coalescing and changes its .NET configuration
+  API; ADR 0098 deliberately retains the tested deterministic 6.2 expression
+  profile. Jint/Skia/search/UI/test package changes map to the existing
+  QuickJS, FFmpeg graphics, SQL search and Leptos alternatives (ADRs 0005,
+  0009, 0096). No new behavior or exact newer-package equivalence is claimed.
+- Evidence sources: [SQLitePCLRaw 3.0.5](https://github.com/ericsink/SQLitePCL.raw/releases/tag/v3.0.5),
+  [SQLite 3.51.3](https://sqlite.org/releaselog/3_51_3.html),
+  [SQLite 3.53.4](https://sqlite.org/releaselog/3_53_4.html),
+  [Refit 15](https://github.com/reactiveui/refit/releases/tag/v15.0.0),
+  [NCalc 7.1](https://github.com/ncalc/ncalc/blob/v7.1.0/CHANGELOG.md), and
+  [Jint 4.15.3](https://github.com/sebastienros/jint/releases/tag/v4.15.3).
+- Acceptance: linked SQLite guard, retained expression corpus and focused
+  provider-client regressions, plus strict affected-crate Clippy. All pass;
+  UCU-06 owns the evidence. Verdict: Adapt (ADRs 0009/0096/0098).
 
 ## Row 96 source map: .NET package patches and changelog note
 
@@ -1952,7 +1978,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | Port | support-pages; upstream-baseline-catch-up | `feat(next): complete troubleshooting selection and diagnostics` | ucu-06; custom selectors and explicit subtitle precedence, localized completion speed, bounded sanitized process levels/targets and opt-in selection decisions. 88 focused tests, five decoded Next runtime cases, eight browser cases and the 716-test web parity gate pass. Pin and checkout advance together; window gates remain open. |
 | 95 | `7b43e2f7` | chore: update next channel config model (#2975) | Port | upstream-baseline-catch-up | `feat(next): preserve optional subtitle force style` | ucu-06; optional force_style wire field, exact populated/empty value preservation and absent/null compatibility. Eleven config/protocol tests and strict infra/web Clippy pass; generated defaults remain unchanged. |
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream package patches` | ucu-06; .NET CliWrap, Testably, Scriban, MudCalendar and Scalar patch versions only; Rust counterparts and application consumers unchanged. Mesa note changes no container artifact and proves no new hardware acceptance. Scoped diff review and progress check pass. |
-| 97 | `aae2529f` | chore: update dependencies (#2977) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 97 | `aae2529f` | chore: update dependencies (#2977) | Adapt (ADRs 0009/0096/0098) | upstream-baseline-catch-up; classic-scheduling | `test(deps): retain SQLite safety and expression contracts` | ucu-06; Refit generated-client construction maps to existing reqwest, retained SQLite 3.51.3 includes WAL-reset fix, and the runtime guard protects that floor. NCalc remains the accepted deterministic 6.2 profile. All 34 provider/SQLite and 19 expression tests plus strict infra Clippy pass. |
 | 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
