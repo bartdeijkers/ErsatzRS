@@ -19,7 +19,7 @@ use super::{
     protocol,
     schedule::ScheduledMedia,
     selection::{self, DeferredProjection, TroubleshootingSelection},
-    source, watermark,
+    source,
 };
 
 /// Exact transient selection supplied by the troubleshooting host.
@@ -33,6 +33,7 @@ pub struct TroubleshootingPreview<'a> {
     /// Channel preview selection time; None uses the explicit media-preview overlays.
     pub selection_time: Option<chrono::DateTime<chrono::Utc>>,
     pub watermark_ids: &'a [i64],
+    pub graphics_ids: &'a [i64],
     pub replacements: &'a [PathReplacement],
     pub ffmpeg: &'a Path,
     pub deadline: Instant,
@@ -49,6 +50,7 @@ pub(super) struct Context {
     pub subtitle_id: Option<i64>,
     selection_time: Option<chrono::DateTime<chrono::Utc>>,
     watermark_ids: Vec<i64>,
+    graphics_ids: Vec<i64>,
     pub diagnostics: Option<super::diagnostics::SelectionLog>,
 }
 
@@ -61,7 +63,23 @@ impl Context {
             subtitle_id: request.subtitle_id,
             selection_time: request.selection_time,
             watermark_ids: request.watermark_ids.to_vec(),
+            graphics_ids: request.graphics_ids.to_vec(),
             diagnostics: request.diagnostics.clone(),
+        }
+    }
+
+    pub(super) async fn graphics(
+        &self,
+        pool: &crate::db::DbPool,
+    ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
+        if let Some(at) = self.selection_time {
+            let source_time =
+                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
+                    .source_time(at)?;
+            playback::select_playback_graphics(pool, &self.channel, self.media.item.id, source_time)
+                .await
+        } else {
+            playback::resolve_playback_graphics_by_ids(pool, self.graphics_ids.clone()).await
         }
     }
 
@@ -73,19 +91,6 @@ impl Context {
             let source_time =
                 crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
                     .source_time(at)?;
-            if !playback::select_playback_graphics(
-                pool,
-                &self.channel,
-                self.media.item.id,
-                source_time,
-            )
-            .await?
-            .is_empty()
-            {
-                return Err(unavailable(
-                    "Next troubleshooting cannot render graphics elements",
-                ));
-            }
             playback::select_playback_watermarks(
                 pool,
                 &self.channel,
@@ -302,8 +307,19 @@ impl NextHost {
             },
         )
         .await?;
-        let watermarks = Context::new(request).watermarks(&self.pool).await?;
-        projection.item.graphics = watermark::project(&watermarks)?;
+        let context = Context::new(request);
+        let watermarks = context.watermarks(&self.pool).await?;
+        let graphics = context.graphics(&self.pool).await?;
+        projection.item.graphics = super::graphics::project(
+            &self.pool,
+            request.channel,
+            request.media,
+            &request.profile.resolution,
+            &projection.item,
+            &watermarks,
+            &graphics,
+        )
+        .await?;
         let identity = dynamic_projection::fingerprint(
             &self.pool,
             request.media,

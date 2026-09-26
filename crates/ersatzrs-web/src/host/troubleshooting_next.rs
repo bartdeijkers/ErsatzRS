@@ -27,10 +27,9 @@ type Readiness = Option<oneshot::Sender<Result<(), &'static str>>>;
 
 pub(super) async fn start(
     state: NativeAdminTroubleshootingRuntime,
-    mut query: PlaybackPreviewQuery,
+    query: PlaybackPreviewQuery,
     mut ownership: PreviewOwnership,
 ) -> Result<(), AdminTroubleshootingRuntimeError> {
-    query.graphics_element.clear();
     let (sender, receiver) = oneshot::channel();
     tokio::spawn(async move {
         let mut ready = Some(sender);
@@ -234,6 +233,7 @@ async fn prepare_inner(
         subtitle_id: selected.subtitle_id,
         selection_time: selected.selected_at,
         watermark_ids: &query.watermark,
+        graphics_ids: &query.graphics_element,
         replacements: &replacements,
         ffmpeg: FsPath::new(&runtime.ffmpeg.path),
         deadline,

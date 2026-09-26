@@ -171,6 +171,9 @@ release section when tagging a release.
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
 ### Added
+- Render image graphics in Next alongside ordered watermarks, using shared
+  template and decoration selections. Allow graphics selections in Next
+  playback troubleshooting, including the form without JavaScript.
 - Support ordered permanent and intermittent watermarks together in Next
   playback, including all selected troubleshooting watermarks.
 

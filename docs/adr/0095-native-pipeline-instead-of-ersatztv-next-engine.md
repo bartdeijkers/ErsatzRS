@@ -240,11 +240,14 @@ Burn/Convert and lifecycle checks pass; UCU-02 window gates remain open.
 The health engine checks executable availability and profile compatibility only
 when an enabled channel selects Next. These checks are not playback acceptance.
 Local-library sources reuse native path replacement and track selectors. Provider
-inputs use the authenticated media-open integration described above. Exactly one
-permanent or intermittent watermark is projected with its own independent source
-timeline; intermittent timing uses wall-clock cycles and Next's default fades.
-Unsupported graphics and active watermark combinations fail projection explicitly.
-Remaining graphics integration is open parity work. The accepted RGB opacity
+inputs use the authenticated media-open integration described above. Permanent
+and intermittent watermarks and image graphics share stable ZIndex ordering and
+independent source timelines. Intermittent timing uses wall-clock cycles and
+Next's default fades. Images reuse native selection and template variables,
+including per-item overrides and source geometry, for scheduled and preview
+playback. Unsupported element kinds, image opacity expressions and absolute
+coordinates fail projection explicitly. Remaining graphics integration is open
+parity work; UCU-06 owns row-105/106 acceptance. The accepted RGB opacity
 limitation is tracked separately in upstream catch-up debt.
 
 ## Consequences

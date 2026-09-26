@@ -473,12 +473,7 @@ impl NextHost {
             .source_time(item.start)?;
         let watermarks =
             playback::select_fallback_watermarks(&self.pool, channel, item, selection_time).await?;
-        if !playback::select_fallback_graphics(&self.pool, item, selection_time)
-            .await?
-            .is_empty()
-        {
-            return Err(unavailable());
-        }
+        let graphics = playback::select_fallback_graphics(&self.pool, item, selection_time).await?;
         let mut projected = selection::project_deferred_item_with_audio(
             &self.pool,
             channel,
@@ -519,7 +514,16 @@ impl NextHost {
                 stream_index: Some(0),
             });
         }
-        projected.item.graphics = super::watermark::project(&watermarks)?;
+        projected.item.graphics = super::graphics::project(
+            &self.pool,
+            channel,
+            &media,
+            &profile.resolution,
+            &projected.item,
+            &watermarks,
+            &graphics,
+        )
+        .await?;
         let mut identity =
             dynamic_projection::fingerprint(&self.pool, &media, &projected, channel).await?;
         if let Some(content) = &credits {

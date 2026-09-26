@@ -51,6 +51,7 @@ impl Fixture {
             subtitle_id: Some(0),
             selection_time: None,
             watermark_ids: &[],
+            graphics_ids: &[],
             replacements: &[],
             ffmpeg: Path::new("unused-ffmpeg"),
             deadline,

@@ -679,7 +679,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                         </select>
                     </label>
                     {playback_watermark_field(context.watermarks)}
-                    <div class=style::wideField data-legacy-preview-field>
+                    <div class=style::wideField>
                         {playback_multi_select_field(tr(TextKey::GraphicsElements), "graphicsElement", context.graphics_elements)}
                     </div>
                     <label class=style::playbackCheck>

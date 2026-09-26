@@ -93,6 +93,8 @@ async fn published(
 
 #[tokio::test]
 async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_artifact() {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig};
     let (root, pool, locker, channel, start) = fixture().await;
     sqlx::raw_sql(
         r#"INSERT INTO "ChannelWatermark" (
@@ -111,6 +113,19 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
     .execute(&pool)
     .await
     .unwrap();
+    let image_id = crate::repositories::SqliteGraphicsRepository(pool.clone())
+        .create_element(&GraphicsElement {
+            name: "Remote image".into(),
+            z_index: 0,
+            config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+                image: Some("https://example.test/image.png".into()),
+            }),
+            ..GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") SELECT "Id",? FROM "PlayoutItem""#)
+        .bind(image_id).execute(&pool).await.unwrap();
     // Artwork participates in the channel's publication identity. Read the
     // channel after seeding the logo, as the real publication path does.
     let channel = make_repositories(pool.clone())
@@ -119,7 +134,7 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
         .await
         .unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
-    assert_eq!(initial.projection.item.graphics.len(), 2);
+    assert_eq!(initial.projection.item.graphics.len(), 3);
     let graphics = serde_json::to_value(&initial.projection.item.graphics).unwrap();
     let original_key = initial.identity.cache_key.clone();
     let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())

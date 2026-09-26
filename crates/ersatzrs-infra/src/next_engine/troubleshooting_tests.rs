@@ -66,6 +66,7 @@ impl Fixture {
             subtitle_id,
             selection_time: None,
             watermark_ids: &[],
+            graphics_ids: &[],
             replacements: &[],
             ffmpeg: Path::new("unused-ffmpeg"),
             deadline: Instant::now() + std::time::Duration::from_secs(10),
@@ -293,6 +294,8 @@ async fn troubleshooting_fetches_selected_provider_text_and_refreshes_changed_co
 
 #[tokio::test]
 async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig};
     let fixture = Fixture::new().await;
     sqlx::raw_sql(
         r#"INSERT INTO "ChannelWatermark" (
@@ -307,19 +310,50 @@ async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
     .execute(&fixture.pool)
     .await
     .unwrap();
+    let graphics = crate::repositories::SqliteGraphicsRepository(fixture.pool.clone());
+    let mut image = GraphicsElement {
+        name: "Templated image".into(),
+        z_index: -10,
+        scale: true,
+        config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+            image: Some("https://example.test/{{ Channel_Number }}.png".into()),
+        }),
+        ..GraphicsElement::default()
+    };
+    let image_id = graphics.create_element(&image).await.unwrap();
     let mut request = fixture.request(Some(0));
     request.watermark_ids = &[1, 2];
+    let ids = [image_id];
+    request.graphics_ids = &ids;
     let snapshot = fixture
         .host
         .troubleshooting_snapshot(&request)
         .await
         .unwrap();
+    let identity = snapshot.identity.descriptor;
     let item = serde_json::to_value(snapshot.projection.item).unwrap();
     assert!(item.get("watermark").is_none());
-    assert_eq!(item["graphics"].as_array().unwrap().len(), 2);
+    assert_eq!(item["graphics"].as_array().unwrap().len(), 3);
     assert_eq!(item["graphics"][0]["opacity_percent"], 70.0);
     assert_eq!(item["graphics"][0]["timing"]["hold_ms"], 10_000);
-    assert_eq!(item["graphics"][1]["opacity_percent"], 100.0);
+    assert_eq!(
+        item["graphics"][1]["source"]["uri"],
+        format!("https://example.test/{}.png", fixture.channel.number)
+    );
+    assert_eq!(item["graphics"][1]["width_percent"], 100.0);
+    assert_eq!(item["graphics"][2]["opacity_percent"], 100.0);
     assert!(item["graphics"][1].get("timing").is_none());
     assert_eq!(item["tracks"]["audio"]["stream_index"], 2);
+    image.id = image_id;
+    image.opacity_percent = Some(45);
+    graphics.upsert_element(&image).await.unwrap();
+    let changed = fixture
+        .host
+        .troubleshooting_snapshot(&request)
+        .await
+        .unwrap();
+    assert_ne!(
+        identity, changed.identity.descriptor,
+        "graphics edits invalidate preparation"
+    );
 }

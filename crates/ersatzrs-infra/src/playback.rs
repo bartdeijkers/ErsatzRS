@@ -2630,7 +2630,7 @@ async fn graphics_motion_probe_cancellable(
     }
 }
 
-fn render_graphics_element_templates(
+pub(crate) fn render_graphics_element_templates(
     element: &GraphicsElement,
     variables: &serde_json::Value,
 ) -> Result<GraphicsElement> {

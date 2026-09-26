@@ -233,6 +233,7 @@ async fn prepare_troubleshooting_fixture(
         subtitle_id: Some(2),
         selection_time: None,
         watermark_ids: &[],
+        graphics_ids: &[],
         replacements: &[],
         ffmpeg,
         deadline: Instant::now() + Duration::from_secs(30),

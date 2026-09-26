@@ -45,6 +45,7 @@ async fn fixture_child_retained_preview() {
                 subtitle_id: Some(subtitle),
                 selection_time: None,
                 watermark_ids: &[],
+                graphics_ids: &[],
                 replacements: &[],
                 ffmpeg: &ffmpeg,
                 deadline: request.deadline,

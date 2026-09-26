@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `3a02c39b119faf0225c5540ba52633dff72bde8b` |
-| **Commit subject** | `feat: support multiple watermarks using next engine (#2983)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/3a02c39b119faf0225c5540ba52633dff72bde8b |
+| **Pinned commit** | `cd30ac4aff28657f823a09a9c65874d6fc3fa110` |
+| **Commit subject** | `feat: image graphics element support in next (#2984)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cd30ac4aff28657f823a09a9c65874d6fc3fa110 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

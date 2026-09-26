@@ -20,7 +20,7 @@ pub(super) fn project(selected: &[ResolvedPlaybackWatermark]) -> Result<Vec<prot
     active.into_iter().map(project_layer).collect()
 }
 
-fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<protocol::Watermark> {
+pub(super) fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<protocol::Watermark> {
     if !matches!(
         selected.watermark.mode,
         ChannelWatermarkMode::Permanent | ChannelWatermarkMode::Intermittent
@@ -37,17 +37,7 @@ fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<protocol::Water
         source: image_source(&selected.image)?,
         stream_index: Some(0),
         within_source_content: watermark.place_within_source_content.then_some(true),
-        location: match watermark.location {
-            WatermarkLocation::TopLeft => protocol::WatermarkLocation::TopLeft,
-            WatermarkLocation::TopMiddle => protocol::WatermarkLocation::TopCenter,
-            WatermarkLocation::TopRight => protocol::WatermarkLocation::TopRight,
-            WatermarkLocation::LeftMiddle => protocol::WatermarkLocation::CenterLeft,
-            WatermarkLocation::MiddleCenter => protocol::WatermarkLocation::Center,
-            WatermarkLocation::RightMiddle => protocol::WatermarkLocation::CenterRight,
-            WatermarkLocation::BottomLeft => protocol::WatermarkLocation::BottomLeft,
-            WatermarkLocation::BottomMiddle => protocol::WatermarkLocation::BottomCenter,
-            WatermarkLocation::BottomRight => protocol::WatermarkLocation::BottomRight,
-        },
+        location: location(watermark.location),
         width_percent,
         horizontal_margin_percent: Some(percent(watermark.horizontal_margin_percent)?),
         vertical_margin_percent: Some(percent(watermark.vertical_margin_percent)?),
@@ -55,7 +45,21 @@ fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<protocol::Water
     })
 }
 
-fn image_source(image: &PlaybackWatermarkImage) -> Result<protocol::Source> {
+pub(super) fn location(value: WatermarkLocation) -> protocol::WatermarkLocation {
+    match value {
+        WatermarkLocation::TopLeft => protocol::WatermarkLocation::TopLeft,
+        WatermarkLocation::TopMiddle => protocol::WatermarkLocation::TopCenter,
+        WatermarkLocation::TopRight => protocol::WatermarkLocation::TopRight,
+        WatermarkLocation::LeftMiddle => protocol::WatermarkLocation::CenterLeft,
+        WatermarkLocation::MiddleCenter => protocol::WatermarkLocation::Center,
+        WatermarkLocation::RightMiddle => protocol::WatermarkLocation::CenterRight,
+        WatermarkLocation::BottomLeft => protocol::WatermarkLocation::BottomLeft,
+        WatermarkLocation::BottomMiddle => protocol::WatermarkLocation::BottomCenter,
+        WatermarkLocation::BottomRight => protocol::WatermarkLocation::BottomRight,
+    }
+}
+
+pub(super) fn image_source(image: &PlaybackWatermarkImage) -> Result<protocol::Source> {
     match image {
         PlaybackWatermarkImage::Local(path) => Ok(protocol::Source::Local {
             path: path
@@ -111,7 +115,7 @@ fn timing(
     }))
 }
 
-fn percent(value: f64) -> Result<f64> {
+pub(super) fn percent(value: f64) -> Result<f64> {
     if value.is_finite() && (0.0..=100.0).contains(&value) {
         Ok(value)
     } else {

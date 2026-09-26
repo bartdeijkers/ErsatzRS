@@ -10230,6 +10230,38 @@ percentage/timing validation, source revalidation, audio/subtitle retention,
 all publication call sites and removal of every one-watermark guard.
 Pin, ledger and clean upstream checkout advance together to 3a02c39b. Row 106
 is next. UCU-06 window gates, milestone push and exact-SHA CI remain open.
+
+Row 106 (cd30ac4a) final acceptance: Port. Next projects persisted image graphics
+through the shared template/deco/item selectors and template-variable renderer.
+Images and watermarks share stable ZIndex order; local paths, absolute HTTP(S),
+scale, margins, opacity and source-content placement preserve configuration.
+Selected media-version geometry and per-item variables are regression-tested.
+Scheduled, dynamic, fallback, remote and troubleshooting paths share projection;
+prepared source replacement retains layers and publication identities detect
+image/variable edits without throwing away reusable subtitle artifacts. Disabling
+watermarks leaves images visible. Unsupported kinds, opacity expressions and
+absolute coordinates still fail explicitly under the existing safety contract.
+Canonical parsed database definitions cover upstream's YAML cache; the shared
+template loader already omits EPG queries when no entries are requested.
+No schema, hardware capability, native FFmpeg argv or scheduling-state change.
+Troubleshooting retains graphics IDs for both engines; the same localized SSR
+multiselect stays visible and submits correctly without JavaScript.
+Evidence: all 213 Next tests (c994ad07), including source geometry, template
+variables, mixed stable ties, changed-image identity and prepared-remote layers.
+Official Next 802f2d8 with released ErsatzRS-ffmpeg v2.0.1 passes decoded local
+and HTTP images, Convert/dynamic Burn, selected alternate audio and watermarks-off
+(0a52bb55). A fixture initially reused red for the image and confused the existing
+red-watermark geometry detector; using blue preserves every pixel assertion.
+Matched SSR/WASM browser proof passes all eight Chromium/Firefox cases in 15.1s,
+zero skips/failures/flaky retries, including visible red/green/blue pixels in
+both engines, selection persistence, reports, narrow layout and no-JS submission.
+Full web parity passes progress/fmt/architecture/hydration, 716 web tests
+(f922cfe7; 20 opt-in skips) and strict web all-target Clippy. Strict infra
+all-target Clippy passes after extracting runtime fixture helpers without
+lint suppressions. Review covers all publication call sites, cancellation bounds,
+version binding, source replacement, layer ordering and no silent graphics loss.
+Pin, ledger and clean upstream checkout advance together to cd30ac4a; continue
+row 107. UCU-06 window gates, milestone push and exact-SHA CI remain open.
 """
 
 [[milestone]]

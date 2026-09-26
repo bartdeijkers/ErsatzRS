@@ -229,14 +229,21 @@ async fn logo_server(image: &Path) -> httpmock::MockServer {
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg; synthetic ordered overlays with audio/subtitles"]
 async fn real_next_multiple_watermarks_preserve_order_dynamic_tracks_and_disable() {
-    watermark_runtime_layers(false, false, true).await;
+    watermark_runtime_layers(false, false, Layers::Watermarks).await;
 }
 
 async fn watermark_runtime_cases(remote_logo: bool, generated_logo: bool) {
-    watermark_runtime_layers(remote_logo, generated_logo, false).await;
+    watermark_runtime_layers(remote_logo, generated_logo, Layers::Single).await;
 }
 
-async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, multiple: bool) {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Layers {
+    Single,
+    Watermarks,
+    Images,
+}
+
+async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, layers: Layers) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -245,25 +252,27 @@ async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, multi
     let image = root.path().join("red.png");
     red_logo(&ffmpeg, &image).await;
     let server = logo_server(&image).await;
-    let profile = FFmpegProfile {
-        video_format: FFmpegProfileVideoFormat::H264,
-        audio_format: FFmpegProfileAudioFormat::Aac,
-        video_bitrate: 1000,
-        video_buffer_size: 2000,
-        audio_sample_rate: 48,
-        audio_channels: 1,
-        ..Default::default()
-    };
+    let blue = root.path().join("blue.png");
+    let image_server = image_graphics_server(&ffmpeg, &blue, layers == Layers::Images).await;
     for (dynamic, scaled, disabled) in [
         (false, false, false),
         (true, true, false),
         (true, true, true),
     ] {
-        let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+        let (pool, locker) = prepare_schedule(&clip, false, &overlay_profile()).await;
         configure_text_tracks(&pool, true, !dynamic, false).await;
         seed_watermark(&pool, &image, scaled, disabled).await;
-        if multiple {
+        if layers != Layers::Single {
             seed_lower_watermark(&ffmpeg, root.path(), &pool).await;
+        }
+        if layers == Layers::Images {
+            seed_image_graphics(
+                &pool,
+                &blue,
+                &image_server.as_ref().unwrap().url("/logo.png"),
+                dynamic,
+            )
+            .await;
         }
         if generated_logo {
             sqlx::raw_sql(r#"DELETE FROM "Artwork" WHERE "ChannelId"=1;
@@ -320,8 +329,11 @@ async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, multi
         } else {
             assert_overlay(&ffmpeg, &output.join(segment), scaled, disabled).await;
         }
-        if multiple {
+        if layers != Layers::Single {
             assert_lower_watermark(&ffmpeg, &output.join(segment), disabled).await;
+        }
+        if layers == Layers::Images {
+            assert_image_graphics(&ffmpeg, &output.join(segment)).await;
         }
         assert_text_video_and_audio(&ffmpeg, &output.join(segment), dynamic).await;
         assert!(registry.stop_channel("1").await);
@@ -455,3 +467,97 @@ async fn assert_generated_overlay(ffmpeg: &Path, segment: &Path, disabled: bool)
 
 #[path = "intermittent_watermark_runtime_tests.rs"]
 mod intermittent_watermark_runtime_tests;
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; synthetic image templates and selected tracks"]
+async fn real_next_image_graphics_preserve_templates_dynamic_tracks_and_disabled_watermarks() {
+    watermark_runtime_layers(false, false, Layers::Images).await;
+}
+
+async fn seed_image_graphics(pool: &crate::db::DbPool, image: &Path, remote: &str, http: bool) {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::{
+        GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig, WatermarkLocation,
+    };
+    let id = crate::repositories::SqliteGraphicsRepository(pool.clone())
+        .create_element(&GraphicsElement {
+            name: "Synthetic image template".into(),
+            z_index: 5,
+            location: WatermarkLocation::TopMiddle,
+            vertical_margin_percent: Some(5.0),
+            opacity_percent: Some(100),
+            config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+                image: Some("{{ FixtureImage }}".into()),
+            }),
+            ..GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+    let variables =
+        serde_json::json!({"FixtureImage": if http { remote } else { image.to_str().unwrap() }})
+            .to_string();
+    sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId","Variables") SELECT "Id",?,? FROM "PlayoutItem""#)
+        .bind(id).bind(variables).execute(pool).await.unwrap();
+}
+
+async fn assert_image_graphics(ffmpeg: &Path, segment: &Path) {
+    let mut decode = Command::new(ffmpeg);
+    decode
+        .args(["-v", "error", "-nostdin", "-ss", "0.5", "-i"])
+        .arg(segment)
+        .args([
+            "-frames:v",
+            "1",
+            "-vf",
+            "format=rgb24,crop=1:1:160:15",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixel = tool(decode).await;
+    assert_eq!(pixel.len(), 3);
+    assert!(
+        pixel[2] > 180 && pixel[0] < 50 && pixel[1] < 50,
+        "image stays visible even with watermarks disabled: {pixel:?}"
+    );
+}
+
+async fn image_graphics_server(
+    ffmpeg: &Path,
+    blue: &Path,
+    enabled: bool,
+) -> Option<httpmock::MockServer> {
+    if enabled {
+        let mut generate = Command::new(ffmpeg);
+        generate
+            .args([
+                "-v",
+                "error",
+                "-nostdin",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=blue:size=40x20",
+                "-frames:v",
+                "1",
+            ])
+            .arg(blue);
+        tool(generate).await;
+        Some(logo_server(blue).await)
+    } else {
+        None
+    }
+}
+
+fn overlay_profile() -> FFmpegProfile {
+    FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        video_bitrate: 1000,
+        video_buffer_size: 2000,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    }
+}

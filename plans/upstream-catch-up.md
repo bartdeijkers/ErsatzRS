@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **71 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **70 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **105**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **106**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -31,7 +31,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 ports container Vulkan runtime/driver exposure. Row 103 is N/A (upstream release notes); row 104 is Covered by FFmpeg 9; row 105 ports ordered Next watermarks; row 106 ports image graphics; row 107 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -41,6 +41,32 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 106 source and visual map: Next image graphics
+
+- Upstream `cd30ac4a`: `PlayoutItemConverter.SelectGraphics` selects image
+  elements through the shared template/deco/item selector, renders their
+  templates using media, timing, output/source geometry and EPG variables,
+  and merges images with watermarks in stable ascending ZIndex order.
+  Absolute HTTP/HTTPS image sources are remote; local paths stay local.
+- `GraphicsElementLoader` caches imported YAML and threads cancellation;
+  ErsatzRS already persists parsed definitions as canonical database state.
+  The shared Rust template loader already avoids EPG queries for zero entries.
+  Reuse it without introducing a second YAML cache or graphics process.
+- Rust targets: shared playback template rendering and a Next image adapter;
+  scheduled, dynamic, remote, retained/prepared, fallback and troubleshooting
+  projections must carry the same ordered layers into their identity checks.
+  Preserve media-version binding, subtitle/audio choices, disabled watermarks
+  independent of graphics, and explicit errors for unsupported graphics.
+- Upstream troubleshooting exposes the existing graphics multiselect for both
+  engines. Keep the current SSR form, localized label and responsive control;
+  remove engine-specific hiding/clearing and pass every selected ID. No new
+  island, CSS, schema migration or scheduling reset is required.
+- Required proof: template and selection precedence, mixed image/watermark
+  ordering, local/HTTP sources, source geometry and unsupported definitions;
+  decoded official Next output with audio/subtitles preserved; Chromium and
+  Firefox selection, engine switching and no-JS preview. Row 106 is Port;
+  UCU-06 owns passing scoped evidence and remaining window/publication gates.
 
 ## Row 105 source and visual map: multiple Next watermarks
 
@@ -2142,7 +2168,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 103 | `5febb943` | docs: update changelog | N/A (upstream release notes) | upstream-baseline-catch-up | `docs(porting): reconcile Next engine release notes` | ucu-06; changelog-only QSV overlays, audio synchronization and anamorphic scaling announcements. No engine source, pin or host integration changes. Release notes are not runtime proof; existing Next acceptance remains unchanged. Full diff review and progress validation pass. |
 | 104 | `080039be` | chore: update windows ffmpeg (#2982) | Covered | upstream-baseline-catch-up | `docs(porting): verify bitmap subtitle readrate coverage` | ucu-06; complete upstream readrate patch already in FFmpeg n9.0. Published v2.0.1 Windows/Linux executables pass sparse PGS gap, all 400 frames, selected alternate audio and decode checks. No runtime rebuild or host changes required; window gates remain open. |
 | 105 | `3a02c39b` | feat: support multiple watermarks using next engine (#2983) | Port | upstream-baseline-catch-up | `feat(next): support ordered watermark layers` | ucu-06; schema 0.0.3, stable ZIndex layers across publication/dynamic/fallback/remote paths, all troubleshooting selections and unchanged strict mode validation. 210 Next tests, decoded overlap/periodic/audio/subtitle proof, prepared-remote preservation, 8 Chromium/Firefox cases and full web parity gate pass. Window gates remain open. |
-| 106 | `cd30ac4a` | feat: image graphics element support in next (#2984) | | | | ucu-06; provisional: Next behavior triage. |
+| 106 | `cd30ac4a` | feat: image graphics element support in next (#2984) | Port | upstream-baseline-catch-up | `feat(next): project image graphics through shared selection` | ucu-06; shared templates and image/watermark ZIndex order across scheduled/dynamic/remote/fallback/preview paths; prepared source replacement and identity preserved. 213 Next tests, decoded local/HTTP image playback with selected tracks, eight Chromium/Firefox cases, 716 web tests and strict Clippy pass. Unsupported definitions fail explicitly; window gates remain open. |
 | 107 | `b36e94cc` | fix: on-demand channel progress using next engine (#2985) | | | | ucu-06; provisional: Next behavior triage. |
 | 108 | `c0e4c4ac` | chore: update windows ffmpeg (#2988) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |

@@ -228,3 +228,30 @@ async fn watermark_changes_fence_dynamic_publication_without_discarding_subtitle
     assert_ne!(changed.descriptor, periodic.descriptor);
     assert_eq!(changed.cache_key, periodic.cache_key);
 }
+
+#[tokio::test]
+async fn image_templates_use_bound_source_geometry_and_item_variables() {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig};
+    let (pool, locker, _channel, start, _file) = fixture().await;
+    sqlx::query(r#"UPDATE "MediaVersion" SET "Width"=720,"Height"=576,"SampleAspectRatio"='16:15',"DisplayAspectRatio"='4:3' WHERE "Id"=100"#)
+        .execute(&pool).await.unwrap();
+    let id = crate::repositories::SqliteGraphicsRepository(pool.clone()).create_element(&GraphicsElement {
+        name: "Source geometry template".into(),
+        config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+            image: Some("{{ FixtureRoot }}/{{ Resolution.Width }}-{{ ScaledResolution.Width }}-{{ ScaledResolution.Height }}.png".into()),
+        }),
+        ..GraphicsElement::default()
+    }).await.unwrap();
+    sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId","Variables") VALUES (1,?,'{"FixtureRoot":"synthetic"}')"#)
+        .bind(id).execute(&pool).await.unwrap();
+    let first = snapshot(&pool, &locker, start).await;
+    let graphics = serde_json::to_value(&first.projection.item.graphics).unwrap();
+    assert_eq!(graphics[0]["source"]["path"], "synthetic/320-240-180.png");
+    assert!(first.projection.pending_burn.is_some());
+    sqlx::query(r#"UPDATE "PlayoutItemGraphicsElement" SET "Variables"='{"FixtureRoot":"changed"}' WHERE "PlayoutItemId"=1"#)
+        .execute(&pool).await.unwrap();
+    let changed = snapshot(&pool, &locker, start).await;
+    assert_ne!(first.identity.descriptor, changed.identity.descriptor);
+    assert_eq!(first.identity.cache_key, changed.identity.cache_key);
+}

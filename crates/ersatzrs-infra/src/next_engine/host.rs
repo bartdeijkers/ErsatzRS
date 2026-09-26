@@ -437,9 +437,6 @@ impl NextHost {
                             selection_time,
                         )
                         .await?;
-                        if !graphics.is_empty() {
-                            return Err(unavailable("graphics projection is not integrated"));
-                        }
                         let mut projection = selection::project_deferred_item(
                             &self.pool,
                             &channel,
@@ -457,7 +454,16 @@ impl NextHost {
                             &mut projection,
                         )
                         .await?;
-                        projection.item.graphics = super::watermark::project(&watermarks)?;
+                        projection.item.graphics = super::graphics::project(
+                            &self.pool,
+                            &channel,
+                            &media,
+                            &profile.resolution,
+                            &projection.item,
+                            &watermarks,
+                            &graphics,
+                        )
+                        .await?;
                         if projection.pending_burn.is_some() {
                             let identity = super::dynamic_projection::fingerprint(
                                 &self.pool,

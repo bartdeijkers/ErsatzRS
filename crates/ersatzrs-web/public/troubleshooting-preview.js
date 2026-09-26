@@ -1,19 +1,7 @@
 import { start, destroy } from "./channel-preview.js";
 
 const pending = new WeakSet();
-const originalDisabled = new WeakMap();
 let releasePreview = () => {};
-
-function updateEngine(form) {
-  const next = form.elements.streamingEngine.value === "Next";
-  for (const field of form.querySelectorAll("[data-legacy-preview-field]")) {
-    field.hidden = next;
-    for (const control of field.querySelectorAll("select, input")) {
-      if (!originalDisabled.has(control)) originalDisabled.set(control, control.disabled);
-      control.disabled = next || originalDisabled.get(control);
-    }
-  }
-}
 
 function status(form, state) {
   const root = form.querySelector("[data-channel-preview]");
@@ -48,18 +36,12 @@ async function loadLogs(form, signal) {
 }
 
 // Delegation also covers SSR pages reached through client-side navigation.
-document.addEventListener("change", event => {
-  const form = event.target.closest("form[data-playback-troubleshooting]");
-  if (form && event.target.name === "streamingEngine") updateEngine(form);
-});
-
 document.addEventListener("submit", async event => {
   const form = event.target;
   if (!form.matches("form[data-playback-troubleshooting]")) return;
   event.preventDefault();
   if (pending.has(form)) return;
   pending.add(form);
-  updateEngine(form);
   const video = form.querySelector("video");
   const button = form.querySelector('button[type="submit"]');
   const url = new URL(form.action);
@@ -104,6 +86,3 @@ document.addEventListener("submit", async event => {
 });
 
 window.addEventListener("pagehide", () => releasePreview());
-window.addEventListener("pageshow", () => {
-  document.querySelectorAll("form[data-playback-troubleshooting]").forEach(updateEngine);
-});

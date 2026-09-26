@@ -426,12 +426,21 @@ pub(super) async fn project_for_origin(
             playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
                 .await?,
         ),
-        Origin::Troubleshooting(context) => (Vec::new(), context.watermarks(pool).await?),
+        Origin::Troubleshooting(context) => (
+            context.graphics(pool).await?,
+            context.watermarks(pool).await?,
+        ),
     };
-    if !graphics.is_empty() {
-        return Err(unavailable());
-    }
-    projection.item.graphics = super::watermark::project(&watermarks)?;
+    projection.item.graphics = super::graphics::project(
+        pool,
+        channel,
+        media,
+        resolution,
+        &projection.item,
+        &watermarks,
+        &graphics,
+    )
+    .await?;
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;

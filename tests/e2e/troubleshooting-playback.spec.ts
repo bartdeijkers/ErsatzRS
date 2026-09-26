@@ -37,7 +37,7 @@ test.describe('playback troubleshooting engines', () => {
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=nld',
       '-metadata:s:a:0', 'title=Dutch', clip]);
     writeFileSync(subtitle, '1\n00:00:01,000 --> 00:00:06,000\nPreview subtitle proof\n');
-    for (const color of ['red', 'lime']) {
+    for (const color of ['red', 'lime', 'blue']) {
       execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
         '-f', 'lavfi', '-i', `color=${color}:s=40x20`, '-frames:v', '1',
         '-threads', '1', path.join(root, `${color}.png`)]);
@@ -77,11 +77,14 @@ VALUES (${id},${id},1,'Dutch',9,'subrip',1,0,0,'nld',0,'${quote(subtitle)}','202
 INSERT INTO "ChannelWatermark" ("Id","Name","DurationSeconds","FrequencyMinutes","HorizontalMarginPercent","ImageSource","Image","Location","Mode","Opacity","PlaceWithinSourceContent","Size","VerticalMarginPercent","WidthPercent","ZIndex")
 VALUES (${id},'Preview watermark A',15,15,5,0,'${quote(path.join(root, 'red.png'))}',3,1,100,0,1,5,15,0),
 (${id + 1},'Preview watermark B',15,15,5,0,'${quote(path.join(root, 'lime.png'))}',2,1,100,0,1,5,15,1);
+INSERT INTO "GraphicsElement" ("Id","Name","Kind","ZIndex","Location","Scale","PlaceWithinSourceContent","EpgEntries","Config","HorizontalMarginPercent","VerticalMarginPercent","OpacityPercent")
+VALUES (${id},'Preview image',0,2,4,0,0,0,'${quote(JSON.stringify({ kind: 'image', image: path.join(root, 'blue.png') }))}',0,5,100);
 `);
   });
 
   test.afterAll(() => {
     if (db) sql(`DELETE FROM "MediaSource" WHERE "Id"=${id};
+DELETE FROM "GraphicsElement" WHERE "Id"=${id};
 DELETE FROM "ChannelWatermark" WHERE "Id" IN (${id},${id + 1});
 DELETE FROM "FFmpegProfile" WHERE "Id"=${id};
 DELETE FROM "Resolution" WHERE "Id"=${id};`);
@@ -95,7 +98,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     });
   });
 
-  test('switches engine controls, preserves all watermarks and fits narrow screens', async ({ page }, info) => {
+  test('switches engine controls, preserves watermarks and graphics and fits narrow screens', async ({ page }, info) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
@@ -113,11 +116,13 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     await expect(engine).toHaveValue('Legacy');
     await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
     await watermarks.selectOption([`${id}`, `${id + 1}`]);
+    await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
     await engine.selectOption('Next');
     await expect(selector).toBeVisible();
     expect(await selector.isDisabled()).toBe(disabled);
     await expect(selector).toHaveValue('preview-fixture.yml');
-    await expect(page.locator('select[name="graphicsElement"]')).toBeHidden();
+    await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
+    await expect(page.locator('select[name="graphicsElement"]')).toHaveValues([`${id}`]);
     await expect(watermarks).toHaveAttribute('multiple');
     await expect(watermarks).toHaveValues([`${id}`, `${id + 1}`]);
     expect(await page.locator('form[data-playback-troubleshooting]').evaluate(form =>
@@ -125,7 +130,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     )).toEqual([`${id}`, `${id + 1}`]);
     expect(await page.locator('form[data-playback-troubleshooting]').evaluate(form =>
       Array.from(new FormData(form as HTMLFormElement).keys()),
-    )).not.toContain('graphicsElement');
+    )).toContain('graphicsElement');
     await watermarks.selectOption('');
     await expect(watermarks).toHaveValue('');
     await engine.selectOption('Legacy');
@@ -163,6 +168,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="seekSeconds"]').fill('1');
       await page.locator('select[name="watermark"]').selectOption([`${id}`, `${id + 1}`]);
+      await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
       const requests: string[] = [];
       page.on('request', request => {
         if (new URL(request.url()).pathname === '/api/troubleshoot/playback.m3u8') requests.push(request.url());
@@ -178,6 +184,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       expect(query.get('preferredAudioTitle')).toBe('Dutch');
       expect(query.get('seekSeconds')).toBe('1');
       expect(query.getAll('watermark')).toEqual([`${id}`, `${id + 1}`]);
+      expect(query.getAll('graphicsElement')).toEqual([`${id}`]);
       await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => {
         const canvas = document.createElement('canvas');
         canvas.width = 320;
@@ -186,11 +193,13 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         context.drawImage(video, 0, 0, 320, 180);
         const red = context.getImageData(25, 15, 1, 1).data;
         const green = context.getImageData(285, 15, 1, 1).data;
+        const blue = context.getImageData(160, 15, 1, 1).data;
         return {
+          blue: blue[2] > 180 && blue[0] < 50 && blue[1] < 50,
           red: red[0] > 180 && red[1] < 50 && red[2] < 50,
           green: green[1] > 180 && green[0] < 50 && green[2] < 50,
         };
-      })).toEqual({ red: true, green: true });
+      })).toEqual({ red: true, green: true, blue: true });
       await expect(page).toHaveURL(/\/system\/troubleshooting\/playback/);
       const playlist = engine === 'Next' ? 'ffmpeg.m3u8' : 'live.m3u8';
       await expect.poll(async () => {
@@ -236,6 +245,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
       await page.locator('input[name="startFromBeginning"]').check();
       await page.locator('select[name="watermark"]').selectOption([`${id}`, `${id + 1}`]);
+      await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await expect(page.locator('body')).toContainText('Captured preview submission');
       expect(submitted?.searchParams.get('streamingEngine')).toBe('Next');
@@ -243,6 +253,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       expect(submitted?.searchParams.get('subtitleId')).toBe(`${id}`);
       expect(submitted?.searchParams.get('startFromBeginning')).toBe('true');
       expect(submitted?.searchParams.getAll('watermark')).toEqual([`${id}`, `${id + 1}`]);
+      expect(submitted?.searchParams.getAll('graphicsElement')).toEqual([`${id}`]);
     } finally {
       await context.close();
     }

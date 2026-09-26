@@ -4,13 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 176 commits, 105 reconciled, 71 pending. AMM-N-03 Complete.
+Ledger: 176 commits, 106 reconciled, 70 pending. AMM-N-03 Complete.
 UCU-03/04 green CI: 8f722099/a14ada80. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
-UCU-06 owns rows 91-105 evidence.
-Row 98 Covered: live/DV hints. Row 102 Port: Docker Vulkan; GPU limits recorded.
+UCU-06 owns rows 91-106 evidence.
+Row 102 Port: Docker Vulkan; GPU limits recorded.
 Row 99 Port: runtime v2.0.1 verified; probe/cache fixed. Rows 100-101 N/A (.NET/CI).
-Rows 103/104: N/A notes / Covered FFmpeg 9. Row 105 Port: multiple watermarks.
+Rows 103/104: N/A notes / Covered FFmpeg 9. Rows 105/106 Port: ordered watermarks and image graphics.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next
@@ -59,7 +59,7 @@ The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Unsupported graphics integration remains refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
+explicitly refused. Unsupported graphics kinds/settings remain refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
