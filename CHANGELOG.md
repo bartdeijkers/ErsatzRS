@@ -20,6 +20,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve Unicode channel names and FFmpeg paths in MPEG-TS wrapper scripts
+  through the upstream-compatible `ETV_*` environment variables; upgrade
+  unchanged bundled scripts while preserving custom templates.
+
 - Sample complete observation windows in Next fallback playback tests so short
   programme-boundary segments do not cause false audio/video decoding failures.
 - Keep excluded add-on list items individually selectable for bulk inclusion;

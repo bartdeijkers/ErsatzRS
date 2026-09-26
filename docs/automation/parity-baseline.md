@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `35b5a2599f8d9577bbffe5ccaee7829604f2fe74` |
-| **Commit subject** | `prep for release v26.7.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/35b5a2599f8d9577bbffe5ccaee7829604f2fe74 |
+| **Pinned commit** | `5ab81525a31cb7e7867f4e77bcddc4efdd62baaf` |
+| **Commit subject** | `fix: mpeg-ts playback with multi-byte characters (#2971)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5ab81525a31cb7e7867f4e77bcddc4efdd62baaf |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

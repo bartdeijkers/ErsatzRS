@@ -4,10 +4,10 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100']
 summary    = """
-Ledger: 174 commits, 90 reconciled, 84 pending. Bootstrap and AMM-N-03 are
+Ledger: 174 commits, 91 reconciled, 83 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
-UCU-06 starts at row 91.
+UCU-06 row 91 is Port; row 92 is next.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
 native defaults and a localized SSR editor with browser/no-JS proof. The Next

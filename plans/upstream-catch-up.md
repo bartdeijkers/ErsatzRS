@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `d7b265e07cbcfcf67dca69724f69349491b67ea9`
   — fix: next engine subtitles (#3040).
-- Ledger: **174 commits**, **84 pending**. The original plan covered 152 through
+- Ledger: **174 commits**, **83 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -20,7 +20,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **90**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **91**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -28,7 +28,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 begins at row 91 (`5ab81525`).
+  at `81bcd649`. UCU-06 row 91 (`5ab81525`) is Port; row 92 (`f737de89`) is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -38,6 +38,26 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 91 source map: Unicode MPEG-TS script inputs
+
+- ErsatzTV service: `ErsatzTV.Infrastructure/FFmpeg/MpegTsScriptService.cs`
+  at `5ab81525`, plus `ErsatzTV/Resources/Scripts/MpegTs/run.bat` and `run.sh`.
+- Upstream behavior: pass `ETV_CHANNEL_NAME`, `ETV_HLS_URL` and
+  `ETV_FFMPEG_PATH` through the process environment; remove double quotes from
+  the channel name. Built-in scripts consume these variables; legacy custom
+  template substitution remains available. The row also updates the Windows
+  FFmpeg 8.1.2 archive, superseded by accepted ADR 0063's FFmpeg 9 runtime.
+- ErsatzRS target: `assets/Scripts/MpegTs/run.*` and the MPEG-TS script command
+  renderer in `crates/ersatzrs-web/src/transport/iptv/stream.rs`.
+- Process boundary: `FfmpegCommand.environment` already reaches the managed
+  child process. Both Windows batch and Unix bash commands must carry all three
+  exact variables without putting Unicode values into the bundled script body.
+- UI, database and track selection: unchanged. Preserve wrapper muxrate/PCR
+  options, authenticated HLS URLs, all-stream copy, script cleanup and fallback.
+- Acceptance: cross-platform command environment and template compatibility,
+  real child-process Unicode value propagation, focused checks and review.
+  Native Windows and Unix batch/shell playback both pass; UCU-06 owns evidence.
 
 ## Row 90 source map: upstream release metadata
 
@@ -1708,7 +1728,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 88 | `57a0c40d` | fix: bundle newly patched ffmpeg for qsv on windows (#2969) | N/A (ADR 0063) | ffmpeg-command-generation; upstream-baseline-catch-up | `docs(porting): classify upstream Windows FFmpeg archive update` | ucu-05; sole runtime-facing diff changes the upstream FFmpeg 8.1.2 Windows archive revision. ErsatzRS uses its first-party FFmpeg 9 line under ADR 0063; no native QSV execution claim is inferred. Source and progress checks pass. |
 | 89 | `b5fd035b` | feat: show next and ffmpeg versions in troubleshooting results (#2970) | Covered | support-pages | `docs(porting): record existing playback archive engine versions` | ucu-05; row-80 f6f076a2 already writes both top-level keys to troubleshooting_info.json and includes it in playback ZIPs. Shared detected-version tests cover present/absent optional Next under ADR 0095; source and progress checks pass. |
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | N/A (upstream release metadata) | upstream-baseline-catch-up | `docs(porting): classify upstream 26.7.1 release metadata` | ucu-05; only CHANGELOG adds a 26.7.1 heading and comparison links, despite the 26.7.0 commit subject. ErsatzRS keeps its own release history. Source and progress checks pass; UCU-05 window acceptance remains open. |
-| 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | | | | ucu-06; provisional: Port candidate. |
+| 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | Port | mpeg-ts-channel-streaming | `fix(web): preserve Unicode MPEG-TS script inputs` | ucu-06; ETV_* environment values, bundled script upgrade and custom-template compatibility. Fourteen focused tests, strict web Clippy and native Windows/Unix FFmpeg 9 Unicode playback pass with both audio tracks. The upstream FFmpeg 8.1.2 archive is superseded by ADR 0063. |
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | | | | ucu-06; provisional: Port candidate. |
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |

@@ -2183,11 +2183,22 @@ async fn render_mpegts_script_command(
     let temp_path = temp_mpegts_script_path(cfg!(windows));
     tokio::fs::write(&temp_path, rendered).await?;
 
+    // MpegTsScriptService: environment values avoid cmd.exe's batch-file
+    // code-page decoding of Unicode channel names and executable paths.
+    let environment = vec![
+        ersatzrs_ffmpeg::EnvironmentVariable::new("ETV_HLS_URL", &data.hls_url),
+        ersatzrs_ffmpeg::EnvironmentVariable::new(
+            "ETV_CHANNEL_NAME",
+            data.channel_name.replace('"', ""),
+        ),
+        ersatzrs_ffmpeg::EnvironmentVariable::new("ETV_FFMPEG_PATH", &data.ffmpeg_path),
+    ];
+
     if cfg!(windows) {
         Ok((
             FfmpegCommand::new_with_executable(
                 temp_path.to_string_lossy().into_owned(),
-                Vec::new(),
+                environment,
                 Vec::new(),
             ),
             vec![temp_path],
@@ -2196,7 +2207,7 @@ async fn render_mpegts_script_command(
         Ok((
             FfmpegCommand::new_with_executable(
                 "bash",
-                Vec::new(),
+                environment,
                 vec![temp_path.to_string_lossy().into_owned()],
             ),
             vec![temp_path],
@@ -5553,6 +5564,65 @@ mod tests {
             );
         }
         cleanup_stream_artifact(rendered_path).await;
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_command_preserves_unicode_in_environment() {
+        let root = tempfile::tempdir().unwrap();
+        let script = MpegTsScript {
+            id: "unicode".into(),
+            folder: root.path().to_owned(),
+            definition: MpegTsScriptDefinition {
+                name: "Unicode".into(),
+                linux_script: Some("run.sh".into()),
+                windows_script: Some("run.bat".into()),
+            },
+        };
+        let data = MpegTsScriptRenderData {
+            hls_url:
+                "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=synthetic"
+                    .into(),
+            channel_name: "Télévision \"日本語\"".into(),
+            ffmpeg_path: "outils été/映像/ffmpeg".into(),
+            muxrate_bps: 9_830_400,
+            pcr_period_ms: 20,
+        };
+        for (name, template) in [
+            (
+                "run.sh",
+                include_str!("../../../../../assets/Scripts/MpegTs/run.sh"),
+            ),
+            (
+                "run.bat",
+                include_str!("../../../../../assets/Scripts/MpegTs/run.bat"),
+            ),
+        ] {
+            tokio::fs::write(root.path().join(name), template)
+                .await
+                .unwrap();
+            let rendered = render_mpegts_script_template(template, &data);
+            assert!(rendered.trim_start_matches('\u{feff}').is_ascii());
+            assert!(rendered.contains("ETV_CHANNEL_NAME"));
+            assert!(rendered.contains("ETV_HLS_URL"));
+            assert!(rendered.contains("ETV_FFMPEG_PATH"));
+            assert!(rendered.contains("-muxrate 9830400 -pcr_period 20"));
+            insta::assert_snapshot!(
+                format!("mpegts_builtin_{}", name.replace('.', "_")),
+                rendered
+            );
+        }
+        let (command, cleanup) = render_mpegts_script_command(&script, &data).await.unwrap();
+        for (name, value) in [
+            ("ETV_CHANNEL_NAME", "Télévision 日本語"),
+            ("ETV_HLS_URL", data.hls_url.as_str()),
+            ("ETV_FFMPEG_PATH", data.ffmpeg_path.as_str()),
+        ] {
+            assert!(command
+                .environment
+                .iter()
+                .any(|variable| variable.name == name && variable.value == value));
+        }
+        cleanup_stream_artifacts(&cleanup).await;
     }
 
     #[tokio::test]

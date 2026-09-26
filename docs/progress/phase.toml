@@ -63,8 +63,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 next_steps = '''
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI
 36190815587 at 81bcd649 are recorded in its milestone. The maintainer resumed
-after the requested pause. Publish the closeout and verify its CI, then refresh
-the upstream tail and continue UCU-06 at row 91 (5ab81525).
+after the requested pause. Reuse that green code evidence across documentation
+closeout; the extra CI rerun is not a prerequisite. UCU-06 row 91 (5ab81525)
+is Port: Unicode script inputs, safe default upgrades, native Windows/Unix
+playback and scoped checks pass. Continue at row 92 (f737de89). The refreshed
+tail adds pending UCU-09 row 174 (d7b265e0). UCU-06 window gates remain open.
 
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone
