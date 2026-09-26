@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **81 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **80 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **94**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **95**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-94 are Port; row 95 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 95 source map: optional Next subtitle style model
+
+- Upstream `7b43e2f7` adds nullable `force_style` to
+  `ErsatzTV.Core/Next/Config/ChannelConfig.cs`; it adds no producer or UI use.
+- Target: `next_engine::protocol::SubtitleNormalization` and the existing
+  profile-to-config constructor. Preserve optional values through JSON, leaving
+  generated configurations unset and existing Burn/Convert selection unchanged.
+- Acceptance: populated, empty, null and absent style serialization coverage,
+  existing config/protocol tests and strict infra Clippy. No UI, scheduler,
+  native FFmpeg, health requirement or dependency change is needed.
+- Null omission matches upstream `Converter.Settings.WhenWritingNull`. All 11
+  config/protocol tests and strict infra/web library/test Clippy pass. Review
+  confirms the only constructor leaves styling unset; UCU-06 owns evidence.
 
 ## Row 94 source map: Next troubleshooting selection and diagnostics
 
@@ -1922,7 +1936,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | Port | upstream-baseline-catch-up | `fix(infra): restore provider external subtitle playback` | ucu-06; ADR 0101, provider stream identity, local-only cleanup, targeted rescan repair, authenticated subtitle artifacts and native/Next/troubleshooting integration. Thirty affected tests, native and official Next decoded playback, scoped strict Clippy and review pass. |
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | Port | support-pages; upstream-baseline-catch-up | `feat(web): complete Next playback troubleshooting` | ucu-06; isolated finite Next previews, selected tracks/seek/profile, remote callback lifetime, nested reports and bounded completion logs. Decoded local/provider/direct/prepared/producer/retained proof, 712 web tests, strict Clippy, matched build and eight Chromium/Firefox browser cases pass. Pin and checkout advance together; window gates remain open. |
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | Port | support-pages; upstream-baseline-catch-up | `feat(next): complete troubleshooting selection and diagnostics` | ucu-06; custom selectors and explicit subtitle precedence, localized completion speed, bounded sanitized process levels/targets and opt-in selection decisions. 88 focused tests, five decoded Next runtime cases, eight browser cases and the 716-test web parity gate pass. Pin and checkout advance together; window gates remain open. |
-| 95 | `7b43e2f7` | chore: update next channel config model (#2975) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
+| 95 | `7b43e2f7` | chore: update next channel config model (#2975) | Port | upstream-baseline-catch-up | `feat(next): preserve optional subtitle force style` | ucu-06; optional force_style wire field, exact populated/empty value preservation and absent/null compatibility. Eleven config/protocol tests and strict infra/web Clippy pass; generated defaults remain unchanged. |
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 97 | `aae2529f` | chore: update dependencies (#2977) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |

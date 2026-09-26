@@ -43,6 +43,9 @@ pub struct SubtitleNormalization {
     pub mode: SubtitleMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fonts_folder: Option<String>,
+    /// Optional ASS style override, matching upstream Next's channel config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub force_style: Option<String>,
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]

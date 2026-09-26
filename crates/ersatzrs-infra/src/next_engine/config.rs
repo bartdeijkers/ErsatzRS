@@ -71,6 +71,7 @@ pub fn channel_config(
             video: video(playback)?,
             subtitle: wire::SubtitleNormalization {
                 fonts_folder: None,
+                force_style: None,
                 mode: match subtitle_mode {
                     NextEngineTextSubtitleMode::Burn => wire::SubtitleMode::Burn,
                     NextEngineTextSubtitleMode::Convert => wire::SubtitleMode::Convert,

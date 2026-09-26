@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve optional Next subtitle style overrides in the channel-config model,
+  including empty values, without changing the default subtitle appearance.
 - Keep custom stream selectors available for Next playback troubleshooting and
   show measured completion speed for both engines. Capture native FFmpeg
   progress without blocking either output pipe, and read Next reports with

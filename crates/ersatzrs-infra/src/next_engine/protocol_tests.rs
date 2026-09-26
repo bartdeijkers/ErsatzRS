@@ -2,6 +2,29 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn subtitle_style_preserves_explicit_values_and_accepts_older_configs() {
+    for mode in ["burn", "convert"] {
+        for style in [
+            "",
+            "FontName=Déjà Vu Sans,FontSize=24,PrimaryColour=&H00FFFFFF",
+        ] {
+            let wire = json!({"mode": mode, "force_style": style});
+            let parsed: SubtitleNormalization = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(parsed.force_style.as_deref(), Some(style));
+            assert_eq!(serde_json::to_value(parsed).unwrap(), wire);
+        }
+        for wire in [
+            json!({"mode": mode}),
+            json!({"mode": mode, "force_style": null}),
+        ] {
+            let parsed: SubtitleNormalization = serde_json::from_value(wire).unwrap();
+            assert!(parsed.force_style.is_none());
+            assert_eq!(serde_json::to_value(parsed).unwrap(), json!({"mode": mode}));
+        }
+    }
+}
+
+#[test]
 fn probe_hint_publication_uses_upstream_schema_version() {
     assert_eq!(
         PLAYOUT_VERSION,

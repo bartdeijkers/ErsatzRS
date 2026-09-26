@@ -9945,6 +9945,17 @@ redaction before tracing/retention, managed cleanup deadlines, opt-in scheduled
 selection behavior and shared deferred callback diagnostics. Row 94 is Port;
 pin, ledger and upstream checkout advance together to 9088ae1a. Continue with
 row 95. UCU-06 window gates, push and exact-SHA CI remain open.
+
+Row 95 (7b43e2f7) is Port: optional subtitle force_style now survives the typed
+Next config model. Absent/null values remain omitted, matching upstream's
+Converter.Settings; empty and Unicode ASS style strings round-trip in Burn
+and Convert modes. The profile constructor leaves the field unset, preserving
+default output. Source audit confirms upstream adds no caller, UI or runtime
+policy in this row. The Next source at f6350a0 also exposes the same optional
+field. All 11 config/protocol tests pass (739fe38c), as does strict infra/web
+library/test Clippy. Review found no platform, health or native-pipeline change.
+Pin, ledger and upstream checkout advance together to 7b43e2f7; continue row 96.
+UCU-06 window gates/push/CI remain open.
 """
 
 [[milestone]]
