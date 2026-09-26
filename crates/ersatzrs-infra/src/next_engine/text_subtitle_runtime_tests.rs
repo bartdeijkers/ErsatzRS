@@ -179,7 +179,7 @@ fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) {
 
 /// Keep only transport framing in the fixture; authentication, SQL selection,
 /// extraction, cache admission and callback timing use the production host.
-struct CallbackListener(tokio::task::JoinHandle<()>);
+pub(super) struct CallbackListener(tokio::task::JoinHandle<()>);
 
 impl CallbackListener {
     async fn stop(&mut self) {
@@ -197,7 +197,7 @@ impl Drop for CallbackListener {
     }
 }
 
-async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
+pub(super) async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
         .unwrap();

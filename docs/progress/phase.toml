@@ -101,7 +101,10 @@ regressions, decoded resume and strict Clippy proof. Row 108 ports sparse-stream
 v2.0.2 release. Linux/Windows public downloads match the tested archives;
 managed runtime and Docker smoke defaults adopt it. All required local window
 gates and matched-bundle checks pass. Row 109 is N/A: upstream release bookkeeping only. All 19 window rows are
-reconciled and reviewed. Next: push UCU-06 and require terminal green exact-SHA CI.
+reconciled and reviewed. First push eab5a09e reached CI 36271807135; Chromium
+containment and one Next provider fixture failed. Corrections pass focused
+Chromium/Firefox and decoded audio/subtitle proof. Next: finish correction
+commit/push and require terminal green exact-SHA CI before UCU-07.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-06 window gates remain open.
 

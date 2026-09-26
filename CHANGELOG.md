@@ -21,6 +21,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep playback troubleshooting controls within narrow screens when option
+  labels would otherwise expand the form's grid columns.
+
 - Resume Next on-demand channels from their saved viewer position. Shift the
   timeline before publishing it and checkpoint viewer demand periodically and
   on shutdown, without advancing normal playback from previews or heartbeat time.
@@ -32,7 +35,7 @@ release section when tagging a release.
   valid NVENC frame dimensions, and download Vulkan frames in their actual
   pixel format before conversion.
   Remove the obsolete MySQL feature from the alternate Docker build command.
-- Use ErsatzRS-ffmpeg v2.0.2 for fresh managed runtime installs, including the
+- Use ErsatzRS-ffmpeg v2.0.2 for fresh managed runtime installs and Next CI, including the
   Windows Vulkan/CUDA external-memory export correction and smooth audio/video
   pacing across sparse subtitle gaps.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,

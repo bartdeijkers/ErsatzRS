@@ -227,6 +227,16 @@
   padding-block: 0.5rem;
 }
 
+.playbackField {
+  min-width: 0;
+}
+
+.playbackField .select,
+.playbackField .input {
+  min-width: 0;
+  width: 100%;
+}
+
 .wideSection {
   grid-column: 1 / -1;
   margin-top: 1.5rem;
@@ -460,7 +470,7 @@
   .playbackField,
   .playbackCheck,
   .playbackForm {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .previewFrame {

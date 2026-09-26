@@ -78,7 +78,7 @@ INSERT INTO "ChannelWatermark" ("Id","Name","DurationSeconds","FrequencyMinutes"
 VALUES (${id},'Preview watermark A',15,15,5,0,'${quote(path.join(root, 'red.png'))}',3,1,100,0,1,5,15,0),
 (${id + 1},'Preview watermark B',15,15,5,0,'${quote(path.join(root, 'lime.png'))}',2,1,100,0,1,5,15,1);
 INSERT INTO "GraphicsElement" ("Id","Name","Kind","ZIndex","Location","Scale","PlaceWithinSourceContent","EpgEntries","Config","HorizontalMarginPercent","VerticalMarginPercent","OpacityPercent")
-VALUES (${id},'Preview image',0,2,4,0,0,0,'${quote(JSON.stringify({ kind: 'image', image: path.join(root, 'blue.png') }))}',0,5,100);
+VALUES (${id},'Preview image with programme information and broadcast branding',0,2,4,0,0,0,'${quote(JSON.stringify({ kind: 'image', image: path.join(root, 'blue.png') }))}',0,5,100);
 `);
   });
 

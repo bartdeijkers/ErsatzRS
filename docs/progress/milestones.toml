@@ -10401,6 +10401,38 @@ above apply to the final code unchanged. Progress validation and diff checks pas
 Upstream refresh is unchanged at 6f0449c2. Milestone push and terminal green
 exact-SHA CI are the remaining acceptance steps; UCU-06 stays In progress.
 
+First milestone push: eab5a09efc9434c1459c7ed6aeaff34b51e7cf85, CI run
+36271807135. Format, policy, dependency checks, strict workspace Clippy and
+Test pass. Chromium fails the troubleshooting 320-pixel containment assertion
+(control right edge 345); its other completed cases pass. Next passes 275/276
+component/runtime tests but the provider audio/subtitle case decodes silence
+at Jellyfin. Firefox is still running at this checkpoint; this run is not green.
+
+Audio diagnosis reproduces on both Next df41692 (CI) and 802f2d8 with FFmpeg
+v2.0.0/v2.0.2. The synthetic media-only relay returns 404 for the demand-time
+provider subtitle callback, causing the real engine's black/silence fallback.
+The fixture now reuses the existing production callback harness and serves
+exact authenticated Jellyfin/Emby subtitle endpoints, retaining Plex sidecar
+behavior. It additionally asserts provider subtitle retrieval. The unchanged
+880-Hz audio and burned-subtitle gates pass with CI's original runtime
+(1c91c5ae, 7.145s), then with FFmpeg v2.0.2 (752f2989, 7.253s). CI's stale
+v2.0.0 override is aligned with the published v2.0.2 managed default; this pin
+change is not credited as the audio fix. No product playback policy changes.
+
+The scoped troubleshooting CSS correction removes mobile grid/control intrinsic
+minimum widths. Its existing browser test now supplies a long graphics label;
+viewport bounds, selection retention and hydration assertions are unchanged.
+The four focused Chromium cases pass (6.6s), followed by all four Firefox cases
+(12.2s), with zero skips/retries: long-label 320-pixel containment, engine and
+watermark/graphics retention, Legacy/Next playback/reporting and no-JS submit.
+Stylance regenerated the CSS and the runner synchronized it into the matched
+SSR/WASM site. Strict infrastructure all-target Clippy passes after extracting
+the subtitle-fixture setup into a helper; no new lint exemptions were added.
+The final helper form passes decoded provider playback again (4ab412d5, 7.072s).
+Correction commit/push and terminal green CI remain pending. Do not advance
+to UCU-07 until UCU-06 acceptance is complete.
+
+
 
 """
 

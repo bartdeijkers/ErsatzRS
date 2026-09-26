@@ -42,6 +42,22 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-06 CI follow-up: troubleshooting containment
+
+- Route: `/system/troubleshooting/playback`; SSR wrapper
+  `PlaybackTroubleshootingPage` and `render_playback_form` in the system
+  troubleshooting page module. The form uses the existing preview JavaScript;
+  no island or server-function boundary changes.
+- Data boundary: existing troubleshooting context/options; native GET fallback
+  remains `/api/troubleshoot/playback.m3u8`. Shared primitives are unchanged.
+- CI Chromium trace proves the first select ends at x=345 in a 320-pixel
+  viewport. Mobile grid tracks used an intrinsic minimum; constrain them to
+  `minmax(0, 1fr)` and allow native controls to shrink within their field.
+- Browser proof target: the existing troubleshooting playback specification,
+  including engine/graphics/watermark retention and the unchanged 320-pixel
+  containment assertion. Four Chromium cases (6.6s) and four Firefox cases
+  (12.2s) pass, with zero skips or retries, using regenerated served CSS.
+
 ## Row 108 source map: sparse-stream pacing
 
 - Upstream `c0e4c4ac` replaces the Windows archive build `25d21b2c` with

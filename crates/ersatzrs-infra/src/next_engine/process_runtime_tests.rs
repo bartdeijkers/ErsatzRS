@@ -521,14 +521,18 @@ async fn assert_media_server_sessions(
             .await
             .unwrap();
         source::tests::seed_provider(&pool, kind).await;
-        // An inaccessible server path forces HTTP; the local subtitle is a
-        // separately resolved source and must still burn into the output.
+        // An inaccessible server path forces HTTP. Plex uses the local sidecar;
+        // Jellyfin/Emby retain provider identities and fetch authenticated text.
         sqlx::query(r#"UPDATE "MediaFile" SET "Path" = 'server-only/fixture.mkv' WHERE "Id" = 1"#)
             .execute(&pool)
             .await
             .unwrap();
         sqlx::query(r#"UPDATE "Subtitle" SET "Path" = ? WHERE "Id" = 2"#)
-            .bind(subtitle.to_str().unwrap())
+            .bind(if kind == RemoteMediaSourceKind::Plex {
+                subtitle.to_str().unwrap()
+            } else {
+                "fixture-source"
+            })
             .execute(&pool)
             .await
             .unwrap();
@@ -554,13 +558,14 @@ async fn assert_media_server_sessions(
                 then.respond_with(move |request| fixture_range_response(request, &bytes));
             })
             .await;
+        let subtitle_mock = fixture_provider_subtitle(&server, kind, subtitle, header, value).await;
         let _wrong_plex_server = fixture_provider_connection(&pool, kind, &server).await;
         let host = std::sync::Arc::new(host::NextHost::new(
             pool.clone(),
             locker,
             root.join("remote-playout"),
         ));
-        let _relay_server = fixture_media_relay(host.clone(), pool).await;
+        let _relay_server = text_subtitle_runtime_tests::callback_listener(host.clone()).await;
         assert_next_session(
             &host,
             host::NextStart {
@@ -582,7 +587,48 @@ async fn assert_media_server_sessions(
             mock.calls_async().await > 0,
             "Next must fetch authenticated media"
         );
+        if let Some(subtitle_mock) = subtitle_mock {
+            assert!(
+                subtitle_mock.calls_async().await > 0,
+                "Next must fetch the authenticated provider subtitle"
+            );
+            subtitle_mock.delete_async().await;
+        }
         mock.delete_async().await;
+    }
+}
+
+async fn fixture_provider_subtitle<'a>(
+    server: &'a httpmock::MockServer,
+    kind: ersatzrs_core::repositories::RemoteMediaSourceKind,
+    subtitle: &Path,
+    header: &str,
+    value: &str,
+) -> Option<httpmock::Mock<'a>> {
+    use ersatzrs_core::repositories::RemoteMediaSourceKind;
+    let subtitle_path = match kind {
+        RemoteMediaSourceKind::Plex => None,
+        RemoteMediaSourceKind::Jellyfin => {
+            Some("/Videos/fixture-item/fixture-item/Subtitles/9/9/Stream.srt")
+        }
+        RemoteMediaSourceKind::Emby => {
+            Some("/Videos/fixture-item/fixture-source/Subtitles/9/Stream.srt")
+        }
+    };
+    if let Some(path) = subtitle_path {
+        let text = tokio::fs::read(subtitle).await.unwrap();
+        Some(
+            server
+                .mock_async(|when, then| {
+                    when.method(httpmock::Method::GET)
+                        .path(path)
+                        .header(header, value);
+                    then.status(200).body(text);
+                })
+                .await,
+        )
+    } else {
+        None
     }
 }
 
