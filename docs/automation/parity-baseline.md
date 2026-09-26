@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `33c3358742eefa579d9631484c273306346311cf` |
-| **Commit subject** | `feat: enable vulkan in docker (#2981)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/33c3358742eefa579d9631484c273306346311cf |
+| **Pinned commit** | `5febb943ed00efcd325853e7917077232ff41993` |
+| **Commit subject** | `docs: update changelog` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5febb943ed00efcd325853e7917077232ff41993 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
