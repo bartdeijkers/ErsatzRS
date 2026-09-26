@@ -13,6 +13,7 @@ use crate::repositories::{SqlitePlayoutRepository, SqlxResultExt as _};
 /// One logical scheduled item and its deterministic persisted source binding.
 /// Remote bindings require the existing provider resolver before wire publication.
 /// Deliberately no `Debug`: a media path can contain a private provider URL.
+#[derive(Clone)]
 pub struct ScheduledMedia {
     pub item: PlayoutItem,
     pub media_version_id: i64,

@@ -7,6 +7,70 @@ use tokio::time::{timeout_at, Instant};
 use super::{dynamic_item, dynamic_projection, host::NextHost, protocol};
 
 impl NextHost {
+    async fn project_session_snapshot(
+        &self,
+        request: &super::host::NextStart,
+        instance: uuid::Uuid,
+        item_id: i64,
+        now: DateTime<Utc>,
+        until: DateTime<Utc>,
+        audio: Option<usize>,
+    ) -> Result<dynamic_projection::Snapshot> {
+        let context = self
+            .dynamic_contexts
+            .lock()
+            .await
+            .get(&instance)
+            .ok_or_else(|| unavailable("session is unavailable"))?
+            .troubleshooting
+            .clone();
+        let Some(context) = context else {
+            return dynamic_projection::project_snapshot(
+                &self.pool,
+                &self.locker,
+                &self.media,
+                request.channel_id,
+                item_id,
+                now,
+                until,
+                &request.replacements,
+                audio,
+            )
+            .await;
+        };
+        if item_id != context.media.item.id
+            || now < context.media.item.start
+            || now >= context.media.item.finish
+            || until <= now
+        {
+            return Err(unavailable("preview occurrence is unavailable"));
+        }
+        let media = super::schedule::bind_media(&self.pool, context.media.item.clone()).await?;
+        if media.media_version_id != context.media.media_version_id
+            || media.media_file_id != context.media.media_file_id
+            || media.path != context.media.path
+        {
+            return Err(unavailable("preview source changed"));
+        }
+        let projected = super::remote_projection::project_publishable_for_origin(
+            &self.pool,
+            &context.channel,
+            &media,
+            &context.profile.resolution,
+            super::selection::AudioDirective::Published(audio),
+            super::remote_projection::Origin::Troubleshooting(context.clone()),
+        )
+        .await?;
+        Box::pin(super::remote_projection::materialize_prepared(
+            &self.pool,
+            &self.locker,
+            projected,
+            audio,
+            &crate::file_system_layout::addon_processed_media_folder(),
+        ))
+        .await
+    }
+
     /// Resolve a published item for the currently registered Next session.
     /// Authentication belongs to the internal transport boundary. No caller paths
     /// or executable names are accepted; all bindings are reconstructed from SQL.
@@ -61,34 +125,16 @@ impl NextHost {
             .map(|context| context.request.clone())
             .filter(|request| request.channel_id == channel_id && request.number == number)
             .ok_or_else(|| unavailable("session is unavailable"))?;
-        let mut before = dynamic_projection::project_snapshot(
-            &self.pool,
-            &self.locker,
-            &self.media,
-            channel_id,
-            item_id,
-            now,
-            until,
-            &request.replacements,
-            audio,
-        )
-        .await?;
+        let mut before = self
+            .project_session_snapshot(&request, instance, item_id, now, until, audio)
+            .await?;
         if before.identity.descriptor != digest {
             return Err(unavailable("publication changed"));
         }
         if super::live_subtitles::prepare(&self.burn_cache, &mut before, now, deadline).await? {
-            let current = dynamic_projection::project_snapshot(
-                &self.pool,
-                &self.locker,
-                &self.media,
-                channel_id,
-                item_id,
-                now,
-                until,
-                &request.replacements,
-                audio,
-            )
-            .await?;
+            let current = self
+                .project_session_snapshot(&request, instance, item_id, now, until, audio)
+                .await?;
             if current.identity.descriptor != digest
                 || !self.dynamic_contexts.lock().await.contains_key(&instance)
             {
@@ -130,7 +176,6 @@ impl NextHost {
         until: DateTime<Utc>,
         deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
-        let channel_id = request.channel_id;
         let digest = &before.identity.descriptor;
         if before.projection.pending_burn.is_none() {
             return self
@@ -145,22 +190,12 @@ impl NextHost {
         let stream = u32::try_from(pending.subtitle.stream_index)
             .map_err(|_| unavailable("subtitle stream is invalid"))?;
         let validate = || async {
-            dynamic_projection::project_snapshot(
-                &self.pool,
-                &self.locker,
-                &self.media,
-                channel_id,
-                item_id,
-                now,
-                until,
-                &request.replacements,
-                audio,
-            )
-            .await
-            .is_ok_and(|current| {
-                &current.identity.descriptor == digest
-                    && current.identity.cache_key == before.identity.cache_key
-            })
+            self.project_session_snapshot(request, instance, item_id, now, until, audio)
+                .await
+                .is_ok_and(|current| {
+                    &current.identity.descriptor == digest
+                        && current.identity.cache_key == before.identity.cache_key
+                })
         };
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let prepared = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
@@ -191,18 +226,9 @@ impl NextHost {
         .map_err(|_| unavailable("subtitle preparation failed"))?;
         // Metadata and membership may change while FFmpeg is running. Never
         // attach a completed artifact to a different selection or publication.
-        let after = dynamic_projection::project_snapshot(
-            &self.pool,
-            &self.locker,
-            &self.media,
-            channel_id,
-            item_id,
-            now,
-            until,
-            &request.replacements,
-            audio,
-        )
-        .await?;
+        let after = self
+            .project_session_snapshot(request, instance, item_id, now, until, audio)
+            .await?;
         if &after.identity.descriptor != digest
             || after.identity.cache_key != before.identity.cache_key
             || !self.dynamic_contexts.lock().await.contains_key(&instance)

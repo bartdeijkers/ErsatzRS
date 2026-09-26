@@ -44,13 +44,22 @@ pub(crate) async fn project_troubleshooting_item(
     pool: &DbPool,
     request: TroubleshootingSelection<'_>,
 ) -> Result<DeferredProjection> {
-    let mut projected = project_deferred_item(
+    project_troubleshooting_item_with_audio(pool, request, AudioDirective::Select).await
+}
+
+pub(crate) async fn project_troubleshooting_item_with_audio(
+    pool: &DbPool,
+    request: TroubleshootingSelection<'_>,
+    audio: AudioDirective,
+) -> Result<DeferredProjection> {
+    let mut projected = project_deferred_item_with_audio(
         pool,
         request.channel,
         request.item,
         request.media_version_id,
         request.source,
         request.resolution,
+        audio,
     )
     .await?;
     if let Some(id) = request.subtitle_id {

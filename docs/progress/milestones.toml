@@ -9828,6 +9828,18 @@ without overflow (Nextest ed595a0e). Strict core/infra/app/web all-target Clippy
 architecture lint, format and progress validation pass. Remote Stream session/
 producer lifetimes, engine UI and browser/no-JS acceptance remain open; row 93
 and the pin are not advanced.
+Row 93 Remote Stream integration now registers an owned transient selection in
+the existing callback/session registry. Prepared-artifact and producer projections
+retain the selected profile and explicit subtitle policy. The finite process
+receives its session identity; its owner revokes callbacks and awaits producer
+cleanup before releasing capacity, retaining quarantine for unconfirmed cleanup.
+Two callback regressions pass (Nextest 756cdb61): no persisted channel/playout is
+required, selected Dutch audio and subtitle-off survive, changed URLs and foreign
+sessions are rejected, and cleanup revokes the callback. All 95 focused
+troubleshooting, remote projection, dynamic callback, fallback and process
+regressions pass (Nextest dea338ed). Strict infra/web all-target Clippy, formatting,
+progress validation and the staged Clippy-allow policy pass. Decoded Remote
+Stream runtime evidence remains pending; this is not row acceptance.
 """
 
 [[milestone]]

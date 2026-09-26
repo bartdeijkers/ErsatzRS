@@ -70,7 +70,7 @@ playback and scoped checks pass. Row 92 (f737de89) is also Port: provider subtit
 identity, cleanup, scan recovery and native/Next playback pass focused tests,
 decoded runtime checks and strict scoped Clippy. Row 93 (ad9848cc) now has the
 finite Next troubleshooting host/API path and decoded local runtime proof.
-Continue with Remote Stream lifetimes, engine controls and browser/no-JS proof.
+Prove Remote Stream preview playback and cleanup, then finish engine controls and browser/no-JS proof.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.
 

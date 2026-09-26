@@ -38,10 +38,11 @@ pub(crate) struct Snapshot {
 }
 
 /// Distinguishes persisted programmes from session-owned filler without fake SQL rows.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) enum Origin {
     Persisted,
     Fallback(super::fallback::Gap),
+    Troubleshooting(std::sync::Arc<super::troubleshooting::Context>),
 }
 
 impl Origin {
@@ -68,6 +69,24 @@ impl Origin {
             }
             Self::Fallback(gap) => {
                 super::fallback::remote_snapshot(pool, locker, channel_id, item, gap, audio).await
+            }
+            Self::Troubleshooting(context) => {
+                let media = schedule::bind_media(pool, context.media.item.clone()).await?;
+                if media.media_version_id != context.media.media_version_id
+                    || media.media_file_id != context.media.media_file_id
+                    || media.path != context.media.path
+                {
+                    return Err(unavailable());
+                }
+                project_for_origin(
+                    pool,
+                    &context.channel,
+                    &media,
+                    &context.profile.resolution,
+                    selection::AudioDirective::Published(audio),
+                    Self::Troubleshooting(context.clone()),
+                )
+                .await
             }
         }
     }
@@ -114,21 +133,21 @@ pub(crate) async fn materialize_prepared(
         return Err(unavailable());
     };
     let file_identity = artifact_file_identity(&path).await?;
-    let mut concrete = selection::project_deferred_item_with_audio(
+    let source = Source::Local {
+        path: path.to_str().ok_or_else(unavailable)?.to_owned(),
+        in_point_ms: None,
+        out_point_ms: None,
+        probe_hint: None,
+    };
+    let mut concrete = Box::pin(project_selection(
         pool,
         &context.channel,
-        &context.media.item,
-        context.media.media_version_id,
-        Source::Local {
-            path: path.to_str().ok_or_else(unavailable)?.to_owned(),
-            in_point_ms: None,
-            out_point_ms: None,
-
-            probe_hint: None,
-        },
+        &context.media,
+        source,
         &context.resolution,
         selection::AudioDirective::Published(audio),
-    )
+        &context.origin,
+    ))
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
     let current = Box::pin(context.origin.snapshot(
@@ -210,13 +229,14 @@ pub(super) async fn project_publishable_for_origin(
         )
         .map_err(|_| unavailable())?;
     }
-    let snapshot = project_for_origin(pool, channel, media, resolution, audio, origin).await?;
+    let snapshot =
+        project_for_origin(pool, channel, media, resolution, audio, origin.clone()).await?;
     validate_live_subtitles(&snapshot)?;
     validate_producer_subtitles(&snapshot, managed)?;
     let producer = managed && !snapshot.prepared && !snapshot.retained;
     let mut owned_remote = if snapshot.retained || producer {
         Some(RetainedContext {
-            origin,
+            origin: origin.clone(),
             previous_audio: playback::load_source_audio_streams(pool, media.media_version_id)
                 .await?,
             media: ScheduledMedia {
@@ -383,19 +403,11 @@ pub(super) async fn project_for_origin(
     }
     let (publication, liveness, prepared, retained) = publication_binding(pool, &binding).await?;
     let source = selection_source(&binding, media, liveness, prepared)?;
-    let mut projection = selection::project_deferred_item_with_audio(
-        pool,
-        channel,
-        &media.item,
-        media.media_version_id,
-        source,
-        resolution,
-        audio,
-    )
-    .await?;
+    let mut projection =
+        project_selection(pool, channel, media, source, resolution, audio, &origin).await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
-    let (graphics, watermarks) = match origin {
+    let (graphics, watermarks) = match &origin {
         Origin::Persisted => (
             playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
                 .await?,
@@ -413,6 +425,7 @@ pub(super) async fn project_for_origin(
             playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
                 .await?,
         ),
+        Origin::Troubleshooting(context) => (Vec::new(), context.watermarks(pool).await?),
     };
     if !graphics.is_empty() {
         return Err(unavailable());
@@ -421,9 +434,12 @@ pub(super) async fn project_for_origin(
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
-    let profile = playback::load_channel_playback_profile(pool, channel.id)
-        .await?
-        .ok_or_else(unavailable)?;
+    let profile = match &origin {
+        Origin::Troubleshooting(context) => context.profile.clone(),
+        _ => playback::load_channel_playback_profile(pool, channel.id)
+            .await?
+            .ok_or_else(unavailable)?,
+    };
     let descriptor = digest(&json!({
         "binding":material, "item":media.item, "selection":projection.item,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
@@ -448,6 +464,47 @@ pub(super) async fn project_for_origin(
         prepared,
         retained,
     })
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Shared selection carries the exact source, profile resolution, audio choice and origin."
+)]
+async fn project_selection(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &ScheduledMedia,
+    source: Source,
+    resolution: &Resolution,
+    audio: selection::AudioDirective,
+    origin: &Origin,
+) -> Result<selection::DeferredProjection> {
+    if let Origin::Troubleshooting(context) = origin {
+        selection::project_troubleshooting_item_with_audio(
+            pool,
+            selection::TroubleshootingSelection {
+                channel,
+                item: &media.item,
+                media_version_id: media.media_version_id,
+                source,
+                resolution,
+                subtitle_id: context.subtitle_id,
+            },
+            audio,
+        )
+        .await
+    } else {
+        selection::project_deferred_item_with_audio(
+            pool,
+            channel,
+            &media.item,
+            media.media_version_id,
+            source,
+            resolution,
+            audio,
+        )
+        .await
+    }
 }
 
 async fn load_binding(pool: &DbPool, id: i64) -> Result<Binding> {

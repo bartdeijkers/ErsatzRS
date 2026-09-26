@@ -8,7 +8,7 @@ Ledger: 175 commits, 92 reconciled, 83 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
 UCU-06: rows 91-92 Port; row 93 is in progress. Its finite Next troubleshooting
-host/API path is implemented; Remote Stream integration and UI/browser acceptance
+host/API and Remote Stream callbacks are implemented; decoded remote runtime and UI/browser acceptance
 remain open. UCU-06 owns the focused and decoded runtime evidence.
 
 UCU-02 is Complete. Rows 11-20 cover persisted optional-engine selection,
@@ -197,4 +197,4 @@ description = 'Complete row 93 Remote Stream troubleshooting lifetimes, engine c
 discovered  = '2026-09-26'
 resolved    = false
 adr         = '0095'
-evidence    = 'UCU-06 owns current evidence. The host/API now projects isolated finite media/channel previews with selected profiles, exact versions, subtitle/audio policy, capacity admission and bounded process ownership. Focused regressions and decoded official Next local playback pass. Remote Stream preparation must reuse existing authenticated session and producer ownership; no fake playout rows or weaker source lifecycle are accepted. The UI selector and integrated browser/no-JS proof remain open, so row 93 and its pin are not advanced.'
+evidence    = 'UCU-06 owns current evidence. The host/API now projects isolated finite media/channel previews with selected profiles, exact versions, subtitle/audio policy, capacity admission and bounded process ownership. Focused regressions and decoded official Next local playback pass. Remote Stream callbacks now reuse session and producer ownership with an owned preview selection; 95 focused regressions pass. Decoded direct/prepared/producer preview playback and cleanup still need runtime proof. The UI selector and integrated browser/no-JS proof remain open, so row 93 and its pin are not advanced.'

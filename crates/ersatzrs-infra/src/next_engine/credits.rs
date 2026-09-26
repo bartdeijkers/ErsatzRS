@@ -320,6 +320,7 @@ mod tests {
                 transfers: Arc::default(),
                 fallback: Arc::default(),
                 gaps: Arc::default(),
+                troubleshooting: None,
             },
         );
         let rendered = host

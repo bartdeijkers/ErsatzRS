@@ -38,12 +38,147 @@ pub struct TroubleshootingPreview<'a> {
     pub deadline: Instant,
 }
 
+/// Owned selection for authenticated callbacks; never holds schedule guards.
+/// No Debug because source bindings can contain private provider paths.
+pub(super) struct Context {
+    pub media: ScheduledMedia,
+    pub channel: Channel,
+    pub profile: PlaybackProfile,
+    pub subtitle_id: Option<i64>,
+    selection_time: Option<chrono::DateTime<chrono::Utc>>,
+    watermark_ids: Vec<i64>,
+}
+
+impl Context {
+    fn new(request: &TroubleshootingPreview<'_>) -> Self {
+        Self {
+            media: request.media.clone(),
+            channel: request.channel.clone(),
+            profile: request.profile.clone(),
+            subtitle_id: request.subtitle_id,
+            selection_time: request.selection_time,
+            watermark_ids: request.watermark_ids.to_vec(),
+        }
+    }
+
+    pub(super) async fn watermarks(
+        &self,
+        pool: &crate::db::DbPool,
+    ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
+        if self.watermark_ids.len() > 1 {
+            return Err(unavailable("Next troubleshooting accepts one watermark"));
+        }
+        if let Some(at) = self.selection_time {
+            let source_time =
+                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
+                    .source_time(at)?;
+            if !playback::select_playback_graphics(
+                pool,
+                &self.channel,
+                self.media.item.id,
+                source_time,
+            )
+            .await?
+            .is_empty()
+            {
+                return Err(unavailable(
+                    "Next troubleshooting cannot render graphics elements",
+                ));
+            }
+            playback::select_playback_watermarks(
+                pool,
+                &self.channel,
+                self.media.item.id,
+                self.media.item.disable_watermarks,
+                source_time,
+            )
+            .await
+        } else {
+            playback::resolve_playback_watermarks_by_ids(
+                pool,
+                self.channel.id,
+                self.watermark_ids.clone(),
+            )
+            .await
+        }
+    }
+}
+
 struct Snapshot {
     projection: DeferredProjection,
     identity: Identity,
 }
 
 impl NextHost {
+    /// Publish one transient Remote Stream occurrence and admit its exact process
+    /// instance. The caller must revoke the session after stopping that process,
+    /// including on startup failure, before releasing output or transcode capacity.
+    /// # Errors
+    /// Rejects mismatched session identity or unavailable source/track selections.
+    pub async fn prepare_troubleshooting_session(
+        &self,
+        request: TroubleshootingPreview<'_>,
+        start: super::host::NextStart,
+    ) -> Result<(uuid::Uuid, protocol::PlayoutItem)> {
+        if start.channel_id != request.channel.id || start.number != request.channel.number {
+            return Err(unavailable("preview session identity differs"));
+        }
+        let context = std::sync::Arc::new(Context::new(&request));
+        let before = timeout_at(
+            request.deadline,
+            super::remote_projection::project_publishable_for_origin(
+                &self.pool,
+                &context.channel,
+                &context.media,
+                &context.profile.resolution,
+                selection::AudioDirective::Select,
+                super::remote_projection::Origin::Troubleshooting(context.clone()),
+            ),
+        )
+        .await
+        .map_err(|_| unavailable("preparation deadline expired"))??;
+        let item = self.defer_item(
+            context.channel.id,
+            context.media.item.id,
+            &before.identity.descriptor,
+            before.projection.item,
+        )?;
+        let instance = uuid::Uuid::new_v4();
+        self.dynamic_contexts.lock().await.insert(
+            instance,
+            super::host::DynamicContext {
+                request: start,
+                troubleshooting: Some(context),
+                transfers: std::sync::Arc::default(),
+                fallback: std::sync::Arc::default(),
+                gaps: std::sync::Arc::default(),
+            },
+        );
+        Ok((instance, item))
+    }
+
+    /// Revoke preview callbacks before awaiting all producer cleanup.
+    /// # Errors
+    /// Unconfirmed cleanup requires the caller to retain capacity and output.
+    pub async fn finish_troubleshooting_session(
+        &self,
+        instance: uuid::Uuid,
+    ) -> std::result::Result<(), crate::remote_stream::RemoteStreamError> {
+        let mut contexts = self.dynamic_contexts.lock().await;
+        if contexts
+            .get(&instance)
+            .is_none_or(|context| context.troubleshooting.is_none())
+        {
+            return Ok(());
+        }
+        let context = contexts.remove(&instance);
+        drop(contexts);
+        if let Some(context) = context {
+            context.transfers.shutdown().await?;
+        }
+        Ok(())
+    }
+
     /// Read one channel occurrence for a finite preview, releasing scheduler locks
     /// before returning its exact version/file binding to the process adapter.
     /// # Errors
@@ -168,39 +303,7 @@ impl NextHost {
             },
         )
         .await?;
-        let watermarks = if let Some(at) = request.selection_time {
-            let source_time =
-                crate::channel_playout::ChannelPlayoutContext::for_channel(request.channel)
-                    .source_time(at)?;
-            if !playback::select_playback_graphics(
-                &self.pool,
-                request.channel,
-                request.media.item.id,
-                source_time,
-            )
-            .await?
-            .is_empty()
-            {
-                return Err(unavailable(
-                    "Next troubleshooting cannot render graphics elements",
-                ));
-            }
-            playback::select_playback_watermarks(
-                &self.pool,
-                request.channel,
-                request.media.item.id,
-                request.media.item.disable_watermarks,
-                source_time,
-            )
-            .await?
-        } else {
-            playback::resolve_playback_watermarks_by_ids(
-                &self.pool,
-                request.channel.id,
-                request.watermark_ids.to_vec(),
-            )
-            .await?
-        };
+        let watermarks = Context::new(request).watermarks(&self.pool).await?;
         projection.item.watermark = watermark::project(&watermarks)?;
         let identity = dynamic_projection::fingerprint(
             &self.pool,
@@ -223,3 +326,7 @@ fn unavailable(reason: &str) -> RepositoryError {
 #[cfg(test)]
 #[path = "troubleshooting_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "troubleshooting_remote_tests.rs"]
+mod remote_tests;

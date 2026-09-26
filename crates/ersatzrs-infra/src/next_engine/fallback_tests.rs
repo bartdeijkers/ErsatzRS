@@ -120,6 +120,7 @@ async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_ch
                     transfers: Arc::default(),
                     fallback: Arc::default(),
                     gaps: Arc::default(),
+                    troubleshooting: None,
                 },
             );
         }
@@ -209,6 +210,7 @@ pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::
             },
             transfers: Arc::default(),
             fallback: Arc::default(),
+            troubleshooting: None,
             gaps: Arc::new(tokio::sync::Mutex::new(vec![Gap {
                 start: start + Duration::seconds(60),
                 finish: start + Duration::seconds(180),

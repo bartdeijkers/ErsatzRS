@@ -47,6 +47,7 @@ pub struct NextHost {
 /// One exact Next process instance; normal playback and preview never share it.
 pub(super) struct DynamicContext {
     pub request: NextStart,
+    pub troubleshooting: Option<Arc<super::troubleshooting::Context>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
     pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
     pub gaps: Arc<Mutex<Vec<super::fallback::Gap>>>,
@@ -64,6 +65,7 @@ fn retain_dynamic_context(
             transfers: Arc::default(),
             fallback: Arc::default(),
             gaps: Arc::default(),
+            troubleshooting: None,
         },
     );
     instance
@@ -342,7 +344,7 @@ impl NextHost {
         }
     }
 
-    fn defer_item(
+    pub(super) fn defer_item(
         &self,
         channel_id: i64,
         item_id: i64,

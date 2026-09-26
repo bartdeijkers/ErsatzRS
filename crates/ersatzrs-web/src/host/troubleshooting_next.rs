@@ -190,24 +190,54 @@ async fn prepare(
     query: &PlaybackPreviewQuery,
     paths: &RuntimePaths,
     deadline: Instant,
+    session: &mut Option<uuid::Uuid>,
+) -> ApiResult<(tempfile::TempDir, protocol::ChannelConfig, String)> {
+    Box::pin(prepare_inner(state, query, paths, deadline, session)).await
+}
+
+async fn prepare_inner(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+    paths: &RuntimePaths,
+    deadline: Instant,
+    session: &mut Option<uuid::Uuid>,
 ) -> ApiResult<(tempfile::TempDir, protocol::ChannelConfig, String)> {
     let selected = select(state, query).await?;
     let runtime = state.ffmpeg_runtime.read().await.clone();
     let replacements = stream::load_path_replacements(&state.repositories.media_source).await?;
-    let item = state
-        .next_engine
-        .prepare_troubleshooting(TroubleshootingPreview {
-            media: &selected.media,
-            channel: &selected.channel,
-            profile: &selected.profile,
-            subtitle_id: query.subtitle_id,
-            selection_time: selected.selected_at,
-            watermark_ids: &query.watermark,
-            replacements: &replacements,
-            ffmpeg: FsPath::new(&runtime.ffmpeg.path),
+    let request = TroubleshootingPreview {
+        media: &selected.media,
+        channel: &selected.channel,
+        profile: &selected.profile,
+        subtitle_id: query.subtitle_id,
+        selection_time: selected.selected_at,
+        watermark_ids: &query.watermark,
+        replacements: &replacements,
+        ffmpeg: FsPath::new(&runtime.ffmpeg.path),
+        deadline,
+    };
+    let item = if selected.media.remote_stream_id.is_some() {
+        let start = ersatzrs_infra::next_engine::host::NextStart {
+            channel_id: selected.channel.id,
+            preview: true,
+            number: selected.channel.number.clone(),
+            executable: paths.executable.clone(),
+            output: paths.output.clone(),
+            ffmpeg: runtime.ffmpeg.path.clone().into(),
+            ffprobe: runtime.ffprobe.path.clone().into(),
+            replacements: replacements.clone(),
+            idle_timeout: None,
             deadline,
-        })
-        .await?;
+        };
+        let (instance, item) = state
+            .next_engine
+            .prepare_troubleshooting_session(request, start)
+            .await?;
+        *session = Some(instance);
+        item
+    } else {
+        state.next_engine.prepare_troubleshooting(request).await?
+    };
     let manifest = tempfile::tempdir()?;
     let working = &paths.output;
     let mut configuration = config::channel_config(
@@ -275,7 +305,6 @@ async fn run_with_paths(
     ready: &mut Readiness,
     paths: &RuntimePaths,
 ) -> ApiResult<()> {
-    let deadline = Instant::now() + Duration::from_secs(30);
     let limit = load_active_transcode_limit(&state.pool)
         .await?
         .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
@@ -287,16 +316,49 @@ async fn run_with_paths(
         ),
     )
     .ok_or("Next troubleshooting capacity is unavailable")?;
+    let mut session = None;
+    let result = run_admitted(state, query, ownership, ready, paths, &mut session).await;
+    let cleanup = if let Some(instance) = session {
+        state
+            .next_engine
+            .finish_troubleshooting_session(instance)
+            .await
+    } else {
+        Ok(())
+    };
+    if matches!(
+        cleanup,
+        Err(ersatzrs_infra::remote_stream::RemoteStreamError::PreparedTerminationUnconfirmed)
+    ) || matches!(**ownership, PreviewAvailability::CleanupUnconfirmed { .. })
+    {
+        **ownership = PreviewAvailability::CleanupUnconfirmed {
+            _reservation: Some(reservation),
+        };
+    }
+    cleanup.map_err(|_| "Next troubleshooting producer cleanup failed")?;
+    result
+}
+
+async fn run_admitted(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+    ownership: &mut PreviewOwnership,
+    ready: &mut Readiness,
+    paths: &RuntimePaths,
+    session: &mut Option<uuid::Uuid>,
+) -> ApiResult<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
     let (manifest, configuration, number) =
-        timeout_at(deadline, prepare(state, query, paths, deadline))
+        timeout_at(deadline, prepare(state, query, paths, deadline, session))
             .await
             .map_err(|_| "Next troubleshooting preparation timed out")??;
-    let mut process = match NextProcess::start_troubleshooting(
+    let mut process = match NextProcess::start_troubleshooting_with_session(
         &paths.executable,
         &number,
         &paths.output,
         &configuration,
         paths.overlays.as_deref(),
+        *session,
         deadline,
     )
     .await
@@ -311,9 +373,7 @@ async fn run_with_paths(
                         ..
                     }
             ) {
-                **ownership = PreviewAvailability::CleanupUnconfirmed {
-                    _reservation: Some(reservation),
-                };
+                **ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
                 let _ = manifest.keep();
             }
             return Err(error.into());
@@ -321,9 +381,6 @@ async fn run_with_paths(
     };
     let result = supervise(&mut process, &paths.output, ownership, ready).await;
     if matches!(**ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
-        **ownership = PreviewAvailability::CleanupUnconfirmed {
-            _reservation: Some(reservation),
-        };
         let _ = manifest.keep();
     }
     result

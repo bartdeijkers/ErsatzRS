@@ -67,6 +67,11 @@
   `NextHost::start` handles channel previews but currently loads persisted
   channel/profile/playout state; an ad-hoc troubleshooting request must not
   mutate the normal channel playout or silently use its profile.
+- Remote Stream previews own a transient selection in the existing authenticated
+  callback registry. Preserve that selection through prepared-artifact and
+  producer track remapping, and revalidate source identity after preparation.
+  Pass the admitted session to the finite Next process, revoke callbacks after
+  process termination, and await producer cleanup before releasing capacity.
 - Exclusions: no provider scan changes, production channel mutation, alternate
   engine replacement, or acceptance reduction. No deliberate deviation planned.
 

@@ -68,6 +68,31 @@ impl NextProcess {
         overlay_directory: Option<&Path>,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
+        Self::start_troubleshooting_with_session(
+            executable,
+            number,
+            output_folder,
+            config,
+            overlay_directory,
+            None,
+            deadline,
+        )
+        .await
+    }
+
+    /// Start a finite preview with an already admitted callback session.
+    /// The host must revoke the session and await its producers after process exit.
+    /// # Errors
+    /// Returns the same bounded startup and cleanup errors as `start_troubleshooting`.
+    pub async fn start_troubleshooting_with_session(
+        executable: &Path,
+        number: &str,
+        output_folder: &Path,
+        config: &ChannelConfig,
+        overlay_directory: Option<&Path>,
+        instance: Option<uuid::Uuid>,
+        deadline: Instant,
+    ) -> Result<Self, ProcessError> {
         let mut command = troubleshooting_command(
             executable,
             number,
@@ -76,7 +101,7 @@ impl NextProcess {
             deadline,
         )
         .await?;
-        set_session_environment(&mut command, None);
+        set_session_environment(&mut command, instance);
         Self::start_configured(
             command,
             output_folder,

@@ -175,6 +175,7 @@ async fn preparation_writes_one_isolated_item_with_matching_virtual_start() {
         &Fixture::query(),
         &paths,
         Instant::now() + Duration::from_secs(30),
+        &mut None,
     )
     .await
     .unwrap();
@@ -423,6 +424,7 @@ async fn channel_manifest_keeps_pinned_silence_and_configured_track_policy() {
         &query,
         &paths,
         Instant::now() + Duration::from_secs(30),
+        &mut None,
     )
     .await
     .unwrap();

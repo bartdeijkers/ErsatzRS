@@ -27,6 +27,8 @@ release section when tagging a release.
   writes finish, preventing overlapping previews from clearing active files.
   Bound stalled previews to two minutes and retain the reservation when process
   cleanup cannot be confirmed.
+- Keep Remote Stream troubleshooting callbacks bound to their preview selection
+  and revoke them before releasing producer resources and transcode capacity.
 - Include Next FFmpeg reports and outcome diagnostics from immediate report
   subdirectories in playback troubleshooting downloads.
 - Preserve provider external subtitle tracks during scans and hourly cleanup,
