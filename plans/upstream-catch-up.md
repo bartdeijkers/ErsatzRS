@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **80 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **79 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **95**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **96**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 96 source map: .NET package patches and changelog note
+
+- Upstream `3b53b69e` changes eight `.csproj` files and `CHANGELOG.md` only.
+  CliWrap moves 3.10.2 to 3.10.4, Testably 7.0.1 to 7.0.2, Scriban.Signed
+  7.2.5 to 7.2.6, Heron.MudCalendar 4.0.0 to 4.0.1 and Scalar 2.16.16 to 2.16.18.
+- ErsatzRS uses Tokio/process-wrap for process ownership, Rust test fixtures,
+  minijinja under ADRs 0058/0076, and Leptos admin components. No corresponding
+  package or changed application consumer requires a port.
+- The Mesa 25.2.8-to-26.0.3 sentence is a release note; this commit modifies no
+  Dockerfile, driver package or runtime artifact. This verdict makes no new
+  Mesa-version or AMD hardware acceptance claim.
+- Verdict: N/A (upstream tooling). Source/diff review and progress validation
+  are the relevant checks; UCU-06 window acceptance remains separate.
 
 ## Row 95 source map: optional Next subtitle style model
 
@@ -1937,7 +1951,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | Port | support-pages; upstream-baseline-catch-up | `feat(web): complete Next playback troubleshooting` | ucu-06; isolated finite Next previews, selected tracks/seek/profile, remote callback lifetime, nested reports and bounded completion logs. Decoded local/provider/direct/prepared/producer/retained proof, 712 web tests, strict Clippy, matched build and eight Chromium/Firefox browser cases pass. Pin and checkout advance together; window gates remain open. |
 | 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | Port | support-pages; upstream-baseline-catch-up | `feat(next): complete troubleshooting selection and diagnostics` | ucu-06; custom selectors and explicit subtitle precedence, localized completion speed, bounded sanitized process levels/targets and opt-in selection decisions. 88 focused tests, five decoded Next runtime cases, eight browser cases and the 716-test web parity gate pass. Pin and checkout advance together; window gates remain open. |
 | 95 | `7b43e2f7` | chore: update next channel config model (#2975) | Port | upstream-baseline-catch-up | `feat(next): preserve optional subtitle force style` | ucu-06; optional force_style wire field, exact populated/empty value preservation and absent/null compatibility. Eleven config/protocol tests and strict infra/web Clippy pass; generated defaults remain unchanged. |
-| 96 | `3b53b69e` | chore: update dependencies (#2976) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 96 | `3b53b69e` | chore: update dependencies (#2976) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream package patches` | ucu-06; .NET CliWrap, Testably, Scriban, MudCalendar and Scalar patch versions only; Rust counterparts and application consumers unchanged. Mesa note changes no container artifact and proves no new hardware acceptance. Scoped diff review and progress check pass. |
 | 97 | `aae2529f` | chore: update dependencies (#2977) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |

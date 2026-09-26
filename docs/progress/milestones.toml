@@ -9956,6 +9956,16 @@ field. All 11 config/protocol tests pass (739fe38c), as does strict infra/web
 library/test Clippy. Review found no platform, health or native-pipeline change.
 Pin, ledger and upstream checkout advance together to 7b43e2f7; continue row 96.
 UCU-06 window gates/push/CI remain open.
+
+Row 96 (3b53b69e) is N/A (upstream tooling). The complete diff changes only
+eight .NET project manifests (CliWrap, Testably, Scriban.Signed, MudCalendar,
+Scalar patch releases) and a Mesa changelog sentence. No application source,
+container build or artifact changes occur. Rust uses Tokio/process-wrap,
+ordinary test fixtures, minijinja (ADRs 0058/0076) and Leptos; no matching
+Cargo dependency changes are needed. Review does not interpret the Mesa note
+as evidence of a shipped driver upgrade or AMD hardware acceptance. Source
+review and progress validation pass. Pin, ledger and checkout advance together
+to 3b53b69e; continue row 97. UCU-06 window gates/push/CI remain open.
 """
 
 [[milestone]]
