@@ -9763,6 +9763,15 @@ Clippy passes. Review verifies provider credential scoping, redirect refusal,
 stale-selection rejection, atomic cache reuse, local identity preservation and
 network work outside schedule locks. Row 92 is Port; the pin, ledger and upstream
 checkout advance together to f737de89. Row 93 is next. Window gates remain open.
+2026-09-26: refreshed upstream target 04f49b0a adds pending UCU-09 row 175;
+all 174 existing SHA/subject pairs match the fetched history prefix. Row 93
+source and visual maps identify engine selection, isolated one-item preview,
+finite Next process lifetime and nested diagnostic archives. The archive
+regression first fails because an immediate-child ffreport is ignored (Nextest
+fb630dcf); all three archive-focused tests pass after correction (5f466dfc).
+Media segments and deeper directories remain excluded. Strict web all-target
+Clippy, format, Clippy-allow policy and progress validation pass. Engine/UI integration,
+runtime/browser proof and row closeout remain open; the pin stays at row 92.
 """
 
 [[milestone]]

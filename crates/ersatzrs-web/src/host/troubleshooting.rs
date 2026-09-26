@@ -1505,27 +1505,38 @@ async fn count_segments(working_dir: &PathBuf, extension: &str) -> ApiResult<usi
 
 async fn build_troubleshooting_archive() -> ApiResult<Option<Vec<u8>>> {
     let folder = troubleshooting_folder();
+    build_troubleshooting_archive_from(&folder).await
+}
+
+async fn build_troubleshooting_archive_from(folder: &FsPath) -> ApiResult<Option<Vec<u8>>> {
     let mut files = Vec::new();
-    let Ok(mut entries) = tokio::fs::read_dir(&folder).await else {
+    let Ok(mut entries) = tokio::fs::read_dir(folder).await else {
         return Ok(None);
     };
-
+    let mut directories = vec![folder.to_owned()];
     while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if is_archive_member(file_name) {
-            files.push((file_name.to_owned(), tokio::fs::read(&path).await?));
+        if entry.file_type().await?.is_dir() {
+            directories.push(entry.path());
         }
     }
-
-    let has_ffmpeg_report = files
-        .iter()
-        .any(|(name, _)| name.to_ascii_lowercase().starts_with("ffmpeg-"));
+    let mut has_ffmpeg_report = false;
+    for directory in directories {
+        let mut entries = tokio::fs::read_dir(directory).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            if !entry.file_type().await?.is_file() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if is_archive_member(name) {
+                let lower = name.to_ascii_lowercase();
+                has_ffmpeg_report |= lower.starts_with("ffmpeg-") || lower.contains("ffreport");
+                files.push((name.to_owned(), tokio::fs::read(entry.path()).await?));
+            }
+        }
+    }
     if !has_ffmpeg_report {
         return Ok(None);
     }
@@ -1541,6 +1552,8 @@ fn is_archive_member(file_name: &str) -> bool {
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
         || lower.contains("capabilities")
         || lower.contains("stream-selector")
+        || lower.contains("ffreport")
+        || lower.contains("outcome")
 }
 
 async fn build_media_sample_archive(
@@ -1732,8 +1745,48 @@ mod tests {
         assert!(is_archive_member("media_info.json"));
         assert!(is_archive_member("capabilities_qsv.txt"));
         assert!(is_archive_member("stream-selector.yml"));
+        assert!(is_archive_member("FFREPORT.log"));
+        assert!(is_archive_member("playback-outcome.txt"));
         assert!(!is_archive_member("live.m3u8"));
         assert!(!is_archive_member("seg00001.ts"));
+    }
+
+    #[tokio::test]
+    async fn troubleshooting_archive_collects_next_reports_one_level_deep() {
+        let root = tempfile::tempdir().unwrap();
+        let report_dir = root.path().join("next-report");
+        let deeper = report_dir.join("deeper");
+        tokio::fs::create_dir_all(&deeper).await.unwrap();
+        for (path, bytes) in [
+            (root.path().join("logs.txt"), "native-log"),
+            (report_dir.join("playback-outcome.txt"), "next-outcome"),
+            (report_dir.join("channel.json"), "next-config"),
+            (report_dir.join("seg00001.ts"), "excluded-media"),
+            (deeper.join("ffreport.log"), "excluded-deep-report"),
+        ] {
+            tokio::fs::write(path, bytes).await.unwrap();
+        }
+        assert!(build_troubleshooting_archive_from(root.path())
+            .await
+            .unwrap()
+            .is_none());
+        tokio::fs::write(report_dir.join("FFREPORT.log"), "next-report")
+            .await
+            .unwrap();
+        let zip = build_troubleshooting_archive_from(root.path())
+            .await
+            .unwrap()
+            .expect("Next report makes the archive downloadable");
+        for expected in ["native-log", "next-outcome", "next-config", "FFREPORT.log"] {
+            assert!(zip
+                .windows(expected.len())
+                .any(|bytes| bytes == expected.as_bytes()));
+        }
+        for excluded in ["excluded-media", "excluded-deep-report"] {
+            assert!(!zip
+                .windows(excluded.len())
+                .any(|bytes| bytes == excluded.as_bytes()));
+        }
     }
 
     #[test]

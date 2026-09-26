@@ -1,10 +1,10 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..d7b265e0 (latest fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..04f49b0a (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
 summary    = """
-Ledger: 174 commits, 92 reconciled, 82 pending. Bootstrap and AMM-N-03 are
+Ledger: 175 commits, 92 reconciled, 83 pending. Bootstrap and AMM-N-03 are
 Complete. UCU-03/04 have green CI at 8f722099/a14ada80. UCU-05 is Complete:
 rows 68-90, local gates and green exact-SHA CI 36190815587 at 81bcd649.
 UCU-06: rows 91-92 Port; row 93 next.

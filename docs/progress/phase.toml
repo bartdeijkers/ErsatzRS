@@ -69,7 +69,7 @@ is Port: Unicode script inputs, safe default upgrades, native Windows/Unix
 playback and scoped checks pass. Row 92 (f737de89) is also Port: provider subtitle
 identity, cleanup, scan recovery and native/Next playback pass focused tests,
 decoded runtime checks and strict scoped Clippy. Continue at row 93 (ad9848cc). The refreshed
-tail adds pending UCU-09 row 174 (d7b265e0). UCU-06 window gates remain open.
+tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.
 
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone

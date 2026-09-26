@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-26): `d7b265e07cbcfcf67dca69724f69349491b67ea9`
-  — fix: next engine subtitles (#3040).
-- Ledger: **174 commits**, **83 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
+  — fix: mpegts script line endings (#3041).
+- Ledger: **175 commits**, **83 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -14,13 +14,15 @@
   handling as two pending tail rows; neither is processed by the row-39 audit.
   The row-80 refresh appends watermark improvements as pending row 173.
   The 2026-09-26 refresh appends Next engine subtitles as pending row 174.
+  A subsequent refresh appends MPEG-TS script line endings as pending row 175;
+  all 174 existing SHA/subject pairs remain an exact prefix.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **91**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **92**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -38,6 +40,55 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 93 source map: Next troubleshooting playback
+
+- Upstream `ad9848cc`: `PlaybackTroubleshooting.razor`,
+  `TroubleshootController`, Prepare/Start troubleshooting commands and handlers,
+  `ChannelConfigConverter`, `ArchiveTroubleshootingResultsHandler`, and
+  `FileSystemLayout`. Native behavior remains available as Legacy.
+- Request contract: engine defaults to Legacy; Next accepts at most one
+  watermark. Stream selector and graphics controls are Legacy-only. Preserve
+  media/channel selection, profile override, subtitles, audio and seek/start.
+- Next preparation shares normal channel config conversion, sets whole-second
+  virtual start, publishes one isolated preview item, supplies config on stdin,
+  applies default overlays and starts `run --troubleshoot`. Reports belong to
+  the preview directory; redirect to `ffmpeg.m3u8` instead of `live.m3u8`.
+- Archive contract: inspect the root and immediate child directories; include
+  existing native diagnostics plus names containing `ffreport` and `outcome`.
+  An FFmpeg or ffreport file is required before returning an archive. Preserve
+  upstream basename ZIP entries and exclude media segments.
+- ErsatzRS targets: app `PlaybackPreviewRequest`, web API and host
+  `troubleshooting`, infra Next config/process/session/projection. Existing
+  `NextHost::start` handles channel previews but currently loads persisted
+  channel/profile/playout state; an ad-hoc troubleshooting request must not
+  mutate the normal channel playout or silently use its profile.
+- Exclusions: no provider scan changes, production channel mutation, alternate
+  engine replacement, or acceptance reduction. No deliberate deviation planned.
+
+### Row 93 visual and hydration source map
+
+- Route/page: playback troubleshooting; SSR `PlaybackTroubleshootingPage` and
+  `render_playback_form` in `admin/pages/system/troubleshooting.rs`.
+- Upstream geometry: toolbar download actions above the settings panel;
+  divided sections; labelled field rows that stack on narrow viewports; engine
+  selector before profile; preview player and Play action below settings.
+- Data: blocking troubleshooting context resource, existing server function,
+  repository-backed profiles, watermarks, media and subtitle options.
+- API/fallback: GET form `/api/troubleshoot/playback.m3u8`; archive GET remains
+  usable without JavaScript. Preserve this fallback when adding engine controls.
+- Current page has no form island. Reuse its CSS module, field helpers and
+  existing preview handling; any hydrated visibility controls must keep DOM
+  nodes mounted and avoid prop-bearing islands across unresolved Suspense.
+- Browser proof: engine selection, Legacy-only fields, single Next watermark,
+  serialized request and successful preview/report download; native regression,
+  no-JS submission, narrow-screen geometry and no hydration errors.
+- Source audit is in progress; no row verdict or pin advancement yet.
+- Next source audit (`$ERSATZTV_NEXT_SRC`, `f6350a0`): troubleshooting exits
+  after its first transcode, writes a dossier on success as well as failure,
+  and retains an ended FFmpeg playlist. The ordinary `NextProcess` readiness
+  race treats exit-before-ready as failure, so its live-session startup must
+  not be blindly reused for a short successful troubleshooting process.
 
 ## Row 92 source map: provider external subtitle recovery
 
@@ -1876,3 +1927,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; provisional: Port; `crates/ersatzrs-infra/src/jellyfin/client.rs` issues the same `sortBy=SortName` item queries without `collapseBoxSetItems=false`, so Jellyfin 12 collapses collection members into their BoxSet for user-less queries. The season `ShowId` refresh when the etag is unchanged has a matching television repository path. Emby is untouched upstream. |
 | 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; provisional: Covered candidate; upstream skips its graphics canvas when every selected graphic is a plain permanent or intermittent watermark and maps them straight to Next media layers. ErsatzRS already projects watermarks as wire layers in `next_engine/watermark.rs`; confirm no canvas stage is built for watermark-only playouts before closing the row. |
 | 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; pending source audit in ledger order. |
+| 175 | `04f49b0a` | fix: mpegts script line endings (#3041) | | | | ucu-09; pending source audit in ledger order. |

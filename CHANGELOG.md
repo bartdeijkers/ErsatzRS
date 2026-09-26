@@ -20,6 +20,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Include Next FFmpeg reports and outcome diagnostics from immediate report
+  subdirectories in playback troubleshooting downloads.
 - Preserve provider external subtitle tracks during scans and hourly cleanup,
   including tracks with shared or missing paths. Affected Jellyfin and Emby
   movies and episodes refresh on their next ordinary library scan.
