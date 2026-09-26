@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `24eab260b18888787251def3bf8500748105299d` |
-| **Commit subject** | `ci: remove dependabot [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/24eab260b18888787251def3bf8500748105299d |
+| **Pinned commit** | `11789e8daa8c75e47f94a349ceae093f60769433` |
+| **Commit subject** | `chore: update dependencies (#2980)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/11789e8daa8c75e47f94a349ceae093f60769433 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

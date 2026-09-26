@@ -83,7 +83,9 @@ and strict infra Clippy. Row 99 ports the Windows Vulkan/CUDA runtime patch,
 corrects the capability probe and invalidates old probe caches. Native Windows
 playback and both package contracts pass; approved v2.0.1 public archives match
 tested hashes. Row 100 is N/A for upstream-only dependency automation;
-ErsatzRS retains its own Cargo/GitHub Actions policy. Continue with row 101;
+ErsatzRS retains its own Cargo/GitHub Actions policy. Row 101 is N/A for .NET
+dependency patches; its Docker Vulkan note is not implementation evidence.
+Continue with row 102;
 UCU-06 window acceptance remains open.
 The refreshed
 tail adds pending UCU-09 rows 174-175 (d7b265e0, 04f49b0a). UCU-06 window gates remain open.

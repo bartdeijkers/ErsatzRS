@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `04f49b0a1b33ca5f5b7cb2968360a07a928d64cd`
   — fix: mpegts script line endings (#3041).
-- Ledger: **175 commits**, **75 pending**. The original plan covered 152 through
+- Ledger: **175 commits**, **74 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -22,7 +22,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **100**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **101**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -30,7 +30,7 @@
   Firefox failures were corrected without changing product logic. UCU-05 has
   completed rows 68-90, local window gates and terminal green exact-SHA CI
   [36190815587](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36190815587)
-  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Row 100 is N/A (upstream CI policy). Row 101 is next.
+  at `81bcd649`. UCU-06 rows 91-95 are Port; row 96 is N/A (upstream tooling). Row 97 is Adapt under existing ADRs; row 98 is Covered. Row 99 ports the Windows Vulkan/CUDA runtime fix and corrects the capability probe. Rows 100-101 are N/A (upstream CI and .NET dependencies). Row 102 is next.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -40,6 +40,20 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 101 source map: .NET dependency patches
+
+- Upstream `11789e8d` changes nine `.csproj` files plus the changelog, with no
+  C# application code, media model, FFmpeg graph or container artifact changes.
+  Microsoft Extensions/ASP.NET packages move 10.0.10 to 10.0.11,
+  System.CommandLine 2.0.10 to 2.0.11, and test-only NSubstitute 6.1.0 to 6.2.0.
+  The explicit Microsoft.OpenApi 2.7.5 transitive override is removed.
+- ErsatzRS uses Tokio/Axum, reqwest, tracing, clap and jsonwebtoken rather than
+  those .NET packages. The removed override is not present in its Cargo graph.
+  No Rust dependency change follows from these upstream package numbers.
+- Verdict: N/A (upstream tooling). The Docker Vulkan changelog addition does
+  not prove implementation; row 102 owns container changes and acceptance.
+  Source/diff and Cargo-manifest review plus progress validation cover this row.
 
 ## Row 100 source map: upstream dependency automation
 
@@ -2033,7 +2047,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | Covered | upstream-baseline-catch-up | `test(next): verify Dolby Vision hint preservation` | ucu-06; typed HTTP is_live and video dv_profile already exist. Persisted/fresh producer profile 5/7/8 and absent-profile regression plus live seek/callback checks pass (15 tests); strict infra Clippy passes. Model-only coverage, no new GPU-rendering claim. |
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt corrected Windows Vulkan runtime` | ucu-06; first-party n9.0 export patch, shared playback/probe transfer and cache revision; focused tests and strict Clippy pass. Native Windows control/interop/25-frame decode and both package contracts pass. Approved v2.0.1 public downloads match tested hashes; managed default updated. GPU comparison isolates the old probe defect, not a before/after runtime-patch effect. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dependency automation` | ucu-06; deletes only upstream daily NuGet/Docker automation. ErsatzRS retains its independent weekly Cargo/GitHub Actions rollup. No product behavior change; source/diff review and progress validation pass. |
-| 101 | `11789e8d` | chore: update dependencies (#2980) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
+| 101 | `11789e8d` | chore: update dependencies (#2980) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dotnet dependency patches` | ucu-06; .NET Extensions/ASP.NET/CLI patches, test-only NSubstitute update and removal of a .NET OpenAPI override. Rust dependencies and application consumers unchanged. Docker Vulkan release note proves no container change; row 102 owns that acceptance. Source/manifest review and progress validation pass. |
 | 102 | `33c33587` | feat: enable vulkan in docker (#2981) | | | | ucu-06; provisional: Adapt candidate. |
 | 103 | `5febb943` | docs: update changelog | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 104 | `080039be` | chore: update windows ffmpeg (#2982) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |

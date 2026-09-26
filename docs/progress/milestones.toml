@@ -10092,6 +10092,19 @@ behavior is ported and that local policy is preserved. Source/diff review
 finds no application, schema, subtitle or alternate-audio surface affected.
 Progress validation passes. Pin, ledger and upstream checkout advance together
 to 24eab260; continue row 101. UCU-06 window gates/push/CI remain open.
+
+Row 101 (11789e8d) is N/A (upstream tooling). Complete diff: nine .csproj
+files and CHANGELOG.md only. Microsoft Extensions/ASP.NET packages advance
+10.0.10 to 10.0.11, System.CommandLine 2.0.10 to 2.0.11, test-only NSubstitute
+6.1.0 to 6.2.0, and the explicit Microsoft.OpenApi 2.7.5 override is removed.
+Cargo manifests confirm independent Tokio/Axum, reqwest, tracing, clap and
+jsonwebtoken consumers, with no corresponding .NET package/override. No Rust
+package version or behavior change is justified by this diff. The Docker
+Vulkan changelog line has no container implementation here; row 102 owns that
+source and runtime acceptance. Source/manifest review and progress validation
+pass; no browser/runtime rerun is warranted for a documentation-only verdict.
+Pin, ledger and upstream checkout advance together to 11789e8d; continue row
+102. UCU-06 window gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]
