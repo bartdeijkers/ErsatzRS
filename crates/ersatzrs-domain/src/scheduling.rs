@@ -335,6 +335,9 @@ pub struct PlayoutHistory {
     pub when: DateTime<Utc>,
     pub finish: Option<DateTime<Utc>>,
     pub index: i32,
+    /// Shuffle cycle seed; absent for history created before seed persistence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i32>,
     pub details: String,
     pub is_current_child: bool,
 }

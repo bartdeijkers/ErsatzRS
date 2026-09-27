@@ -1113,6 +1113,7 @@ fn add_block_start_break_content(
             result,
             break_content,
             block.start + inserted_duration,
+            playout_seed,
         );
         let mut enumerator = lookup_media(reference_data, &break_content.content);
         enumerator.set_index(usize::try_from(playout_seed.unsigned_abs()).unwrap_or_default());
@@ -1373,9 +1374,11 @@ fn restored_break_playlist(
     result: &SchedulingResult,
     content: &EffectiveBreakContent,
     start: DateTime<Utc>,
+    seed: i32,
 ) -> Option<super::PlaylistEnumerator> {
     let children = reference.playlist_items_by_key.get(&content.content)?;
-    let mut playlist = super::PlaylistEnumerator::new(children.clone());
+    let mut playlist =
+        super::PlaylistEnumerator::new(children.clone()).with_child_shuffle_seed(seed);
     let key = history_key_for_break_content(content);
     let mut histories = reference
         .existing_history

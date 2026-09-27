@@ -20,3 +20,10 @@ description = 'UCU-08 row 122 audit finds that block deco playlist sources are f
 discovered  = '2026-09-27'
 evidence    = 'Upstream 34b0d954 BlockPlayoutEnumerator.PlaylistForFiller and PlaylistHistoryTests. The SQL loader regression passes (f2e8b93f-945e-4e01-8395-0bd1b1f94164). Production-builder SQLite close/reopen matches the uninterrupted timeline and preserves full audio/subtitle item settings (10bd4431-7cce-4d12-9d1f-b60ce99f3595). Upstream Reset-only block-start admission is unchanged. Final SQLite restart proof passes (8e86b59d-3145-43bc-8f5f-1600c84884d2), as do 220 scheduling tests, seven builder tests and strict affected lint. Row 122 source map records substantive review.'
 resolved    = true
+
+[[debt]]
+id          = 'playlist-shuffle-cycle-history'
+description = 'UCU-08 row 123 covers parent and independently shuffled child cycle seeds, repeated-source slots, safe history positioning and marathon source validation. Ordinary history lacks seeds and scripted group shuffling runs only once; shared playlist children do not reshuffle when they wrap. Resolved with nullable history seeds, compatible cycle/checkpoint state, runtime validation and additive SQLite migration.'
+discovered  = '2026-09-27'
+evidence    = 'UCU-08 row 123: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c), 55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy migration (66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected lint pass. Real SQL later-cycle restart matches 100 uninterrupted items, including independently wrapping children. Source map records substantive review and remaining milestone gates.'
+resolved    = true

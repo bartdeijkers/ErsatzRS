@@ -242,6 +242,7 @@ pub fn playout_gap(id: i64, playout_id: i64) -> PlayoutGap {
 #[must_use]
 pub fn playout_history(id: i64, playout_id: i64) -> PlayoutHistory {
     PlayoutHistory {
+        seed: None,
         id,
         playout_id,
         block_id: None,

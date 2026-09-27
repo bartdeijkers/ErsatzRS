@@ -534,6 +534,8 @@ pub(super) struct ClassicPlaylistCheckpoint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct ClassicPlaylistChildCheckpoint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shuffle_seed: Option<i32>,
     collection_key: SchedulingCollectionKey,
     items_taken_from_current: usize,
     current_index: usize,
@@ -688,7 +690,13 @@ impl ClassicContext {
                     }
                     let order = child.enumerator.playback_order;
                     let child_seed = seed_to_u64(seed).wrapping_add(child_index as u64);
-                    prepare_enumerator_items(&mut child.enumerator, order, child_seed, None);
+                    if order == PlaybackOrder::Shuffle {
+                        child.enumerator.restore_shuffle_seed(
+                            seed.wrapping_add(i32::try_from(child_index).unwrap_or_default()),
+                        );
+                    } else {
+                        prepare_enumerator_items(&mut child.enumerator, order, child_seed, None);
+                    }
                     if request.reference_data.classic_random_start_point
                         && item.playback_order != PlaybackOrder::Marathon
                         && matches!(
@@ -3085,6 +3093,7 @@ pub(super) fn playlist_checkpoint(playlist: &PlaylistEnumerator) -> ClassicPlayl
             .children
             .iter()
             .map(|child| ClassicPlaylistChildCheckpoint {
+                shuffle_seed: child.enumerator.shuffle_seed,
                 collection_key: child.collection_key.clone(),
                 items_taken_from_current: child.items_taken_from_current,
                 current_index: child.enumerator.current_index(),
@@ -3137,6 +3146,9 @@ pub(super) fn restore_playlist_checkpoint(
             ordered_items: child_checkpoint.ordered_items.clone(),
         };
         restore_media_checkpoint(&mut child.enumerator, &media_checkpoint);
+        child.enumerator.shuffle_seed = child_checkpoint
+            .shuffle_seed
+            .or(child.enumerator.shuffle_seed);
         child.items_taken_from_current = child_checkpoint.items_taken_from_current;
         if checkpoint_index == checkpoint.child_index {
             restored_child_index = Some(children.len());
@@ -6223,6 +6235,72 @@ mod tests {
             .expect("fill group state");
         assert_eq!(state.index, 5);
         assert_ne!(state.seed, 11);
+    }
+
+    #[test]
+    fn classic_nonpositive_tail_and_fallback_do_not_stall_builds() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        for duration in [Duration::zero(), Duration::seconds(-1)] {
+            let first = ProgramScheduleItem {
+                start_type: StartType::Fixed,
+                start_time: Some(Duration::hours(6)),
+                tail_filler_id: Some(93),
+                fallback_filler_id: Some(94),
+                ..schedule_item(1, PlayoutMode::One, 1, None)
+            };
+            let next = ProgramScheduleItem {
+                start_type: StartType::Fixed,
+                start_time: Some(Duration::hours(7)),
+                ..schedule_item(2, PlayoutMode::One, 2, None)
+            };
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![first, next],
+                ..SchedulingReferenceData::default()
+            };
+            for item in &reference_data.classic_schedule_items {
+                reference_data.media_by_key.insert(
+                    item_key(item),
+                    vec![SchedulingMediaItem::new(
+                        item.id * 100 + 1,
+                        Duration::minutes(10),
+                    )],
+                );
+            }
+            for (id, kind) in [(93, FillerKind::Tail), (94, FillerKind::Fallback)] {
+                let mut preset = filler_preset(
+                    id,
+                    kind,
+                    FillerMode::Duration,
+                    None,
+                    Some(Duration::hours(1)),
+                );
+                preset
+                    .media_items
+                    .push(SchedulingMediaItem::new(id, duration));
+                reference_data.classic_filler_presets.insert(id, preset);
+            }
+            let result = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 50,
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::minutes(70),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                })
+                .unwrap();
+            assert!(result
+                .added_items
+                .iter()
+                .any(|item| item.media_item_id == 201));
+            assert!(result
+                .added_items
+                .iter()
+                .all(|item| item.finish > item.start && matches!(item.media_item_id, 101 | 201)));
+        }
     }
 
     #[test]

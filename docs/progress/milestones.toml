@@ -11047,6 +11047,21 @@ substantive review pass. Row 122 is Port; source map and resolved parity debts
 record details. Pin/ledger advance to 34b0d954 in the coherent local row commit;
 align the clean upstream checkout afterwards. Next is row 123. UCU-08 window
 gates and authorized milestone push/terminal green CI remain; no interim push.
+Row 123 is Port. Nullable PlayoutHistory.Seed and compatible parent/child
+checkpoint state preserve later shuffled cycles and repeated collection slots.
+Classic, YAML, scripted and block playlist children retain independent shuffle
+seeds; scripted marathon groups use the persisted playout seed and reshuffle at
+cycle boundaries. Marathon source deduplication, grouping validation, removed
+history positions and existing missing-item/filler safety are covered.
+Final focused evidence: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c),
+55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy SQLite migration
+(66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected Clippy pass. A real SQL
+uneven shuffled marathon restarts after 41 items and matches the 100-item
+uninterrupted timeline; assertions require parent/child seed changes. Both
+history persistence paths and audio/subtitle restart proof pass. Source map
+records substantive review, covered existing guards and compatibility limits.
+Pin/ledger advance to b0f313ee in the authorized local row commit, followed by
+clean reference-checkout alignment. Next is row 124; no intermediate push/CI.
 """
 
 [[milestone]]

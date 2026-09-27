@@ -462,6 +462,15 @@ impl YamlPlayoutEngine {
             ),
             ..SchedulingResult::default()
         };
+        for content in &definition.content {
+            if content
+                .group_by
+                .as_deref()
+                .is_some_and(|group| !super::valid_marathon_group_by(group))
+            {
+                result.warnings.push(format!("Unable to add marathon {}; group_by must be show, season, artist, album or director", content.key));
+            }
+        }
         if request.mode == PlayoutBuildMode::Reset {
             result.history_to_remove.extend(
                 request
@@ -933,7 +942,8 @@ impl YamlContext {
                     }
                 )
             });
-            let mut playlist = PlaylistEnumerator::new(items);
+            let mut playlist =
+                PlaylistEnumerator::new(items).with_child_shuffle_seed(self.playout.seed);
             if should_shuffle {
                 playlist.shuffle_groups(self.playout.seed);
             }

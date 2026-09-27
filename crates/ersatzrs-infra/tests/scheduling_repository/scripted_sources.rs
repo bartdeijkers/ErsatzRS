@@ -118,6 +118,99 @@ async fn sql_scripted_registration_resolves_remaining_source_kinds() {
 }
 
 #[tokio::test]
+async fn sql_scripted_shuffled_marathon_restores_later_cycle_seeds() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("schedule.lua");
+    std::fs::write(&path, "add_marathon('pl', {}, {'title contains CycleFixture'}, 'director', {shuffle_groups=true, item_order='shuffle'})\nwhile not is_done() do add_count('pl', 1) end").unwrap();
+    let url = format!("sqlite://{}", directory.path().join("cycles.db").display());
+    let pool = database(&url, &path).await;
+    for (group, count) in [(1, 2), (2, 3), (3, 2), (4, 4)] {
+        for offset in 0..count {
+            let id = 100 + group * 10 + offset;
+            common::seed_media_item(&pool, id, 1).await;
+            insert_movie(&pool, id, id * 10, "CycleFixture", "2026-01-01T00:00:00Z").await;
+            sqlx::query(
+                r#"INSERT INTO "Director" ("Id", "Name", "MovieMetadataId") VALUES (?, ?, ?)"#,
+            )
+            .bind(id)
+            .bind(format!("Director {group}"))
+            .bind(id * 10)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    }
+    let repos = make_repositories(pool.clone());
+    let playout = repos.playout.get_with_anchor(903).await.unwrap();
+    let start = common::fixed_time();
+    let finish = start + Duration::hours(100);
+    let full = build(
+        &pool,
+        playout.clone(),
+        start,
+        finish,
+        PlayoutBuildMode::Reset,
+    )
+    .await;
+    let first = build(
+        &pool,
+        playout.clone(),
+        start,
+        start + Duration::hours(41),
+        PlayoutBuildMode::Reset,
+    )
+    .await;
+    let parent_seeds = first
+        .added_history
+        .iter()
+        .filter(|row| row.child_key.is_none())
+        .filter_map(|row| row.seed)
+        .collect::<BTreeSet<_>>();
+    assert!(parent_seeds.len() > 1, "must cross shuffled parent cycles");
+    assert!(
+        first
+            .added_history
+            .iter()
+            .filter(|row| row.child_key.is_some())
+            .filter_map(|row| row.seed)
+            .collect::<BTreeSet<_>>()
+            .len()
+            > 1
+    );
+    repos
+        .playout
+        .apply_build_result(&first, &playout, Duration::zero())
+        .await
+        .unwrap();
+    drop(repos);
+    pool.close().await;
+    let pool = ersatzrs_infra::db::init(&url).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    let playout = repos.playout.get_with_anchor(903).await.unwrap();
+    let continued = build(
+        &pool,
+        playout,
+        first.added_items.last().unwrap().finish,
+        finish,
+        PlayoutBuildMode::Continue,
+    )
+    .await;
+    let combined = first
+        .added_items
+        .iter()
+        .chain(&continued.added_items)
+        .map(|item| (item.media_item_id, item.start, item.finish))
+        .collect::<Vec<_>>();
+    let expected = full
+        .added_items
+        .iter()
+        .map(|item| (item.media_item_id, item.start, item.finish))
+        .collect::<Vec<_>>();
+    assert_eq!(combined, expected);
+    pool.close().await;
+}
+
+#[tokio::test]
 async fn sql_scripted_lookup_failure_or_cancellation_returns_no_partial_build() {
     for cancelled in [false, true] {
         let directory = tempfile::tempdir().unwrap();

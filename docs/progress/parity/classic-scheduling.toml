@@ -193,3 +193,10 @@ description = 'Row 86 requires nearest flexible fixed-start occurrence within 12
 discovered = '2026-09-25'
 resolved = true
 evidence = 'Row 86 Port: explicit ClassicClock with production system-zone loading and Jiff transition offsets; flexible tomorrow resolution and 12-hour bound, preserved Strict semantics and UTC complete checkpoints. Core and SQLite restart DST Continue/Refresh tests pass (ccc204b9, 8aa5dab9); Clippy, architecture and license checks pass. UCU-05 owns detailed evidence and remaining window gates.'
+
+[[debt]]
+id          = 'classic-playlist-child-shuffle-cycle'
+description = 'UCU-08 row 123 review found that Classic playlist children were shuffled initially but did not select new orders on subsequent child wraps. Resolved with per-child cycle seeds preserved in existing Classic checkpoints; ordinary Classic source cycle management is unchanged.'
+discovered  = '2026-09-27'
+evidence    = 'The Continue oracle covers chronological/shuffled children and parent groups at four split positions, preserving complete generated items and language settings. All 228 scheduling tests, 55 affected repository tests and strict affected Clippy pass; UCU-08 row 123 source map records review and SQLite evidence.'
+resolved    = true

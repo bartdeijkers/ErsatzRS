@@ -602,6 +602,12 @@ pub fn classic_marathon_playlist_items(
     group_marathon_media(media_items, group_by, order, count.is_none(), count)
 }
 
+fn valid_marathon_group_by(value: &str) -> bool {
+    ["show", "season", "artist", "album", "director"]
+        .iter()
+        .any(|valid| value.eq_ignore_ascii_case(valid))
+}
+
 fn group_marathon_media(
     media_items: Vec<SchedulingMediaItem>,
     group_by: &str,
@@ -610,7 +616,11 @@ fn group_marathon_media(
     count: Option<usize>,
 ) -> Vec<SchedulingPlaylistItem> {
     let mut groups: Vec<(SchedulingCollectionKey, Vec<SchedulingMediaItem>)> = Vec::new();
+    let mut seen_ids = BTreeSet::new();
     for media_item in media_items {
+        if !seen_ids.insert(media_item.id) {
+            continue;
+        }
         let Some(collection_key) = marathon_collection_key(&media_item, group_by) else {
             continue;
         };
@@ -830,6 +840,8 @@ pub(super) struct MediaEnumerator {
     items: Vec<SchedulingMediaItem>,
     index: usize,
     playback_order: PlaybackOrder,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shuffle_seed: Option<i32>,
 }
 
 impl MediaEnumerator {
@@ -838,6 +850,7 @@ impl MediaEnumerator {
             items,
             index: 0,
             playback_order: PlaybackOrder::None,
+            shuffle_seed: None,
         }
     }
 
@@ -906,7 +919,31 @@ impl MediaEnumerator {
 
     fn advance(&mut self) {
         if !self.items.is_empty() {
+            let previous_id = self.current().map(|item| item.id);
             self.index = (self.index + 1) % self.items.len();
+            if self.index == 0 {
+                if let Some(seed) = self.shuffle_seed {
+                    let mut next_seed = classic::next_i32_seed(seed);
+                    self.restore_shuffle_seed(next_seed);
+                    if self.items.iter().any(|item| Some(item.id) != previous_id) {
+                        while self
+                            .current()
+                            .is_some_and(|item| Some(item.id) == previous_id)
+                        {
+                            next_seed = classic::next_i32_seed(next_seed);
+                            self.restore_shuffle_seed(next_seed);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn restore_shuffle_seed(&mut self, seed: i32) {
+        if self.playback_order == PlaybackOrder::Shuffle {
+            self.shuffle_seed = Some(seed);
+            self.items.sort_by_key(|item| item.id);
+            shuffle_with_seed(&mut self.items, i64::from(seed).cast_unsigned());
         }
     }
 
@@ -963,18 +1000,27 @@ impl MediaEnumerator {
 
     fn index_for_details(&self, details: &HistoryDetails) -> Option<usize> {
         if let Some(media_item_id) = details.media_item_id {
-            return self.items.iter().position(|item| item.id == media_item_id);
+            if let Some(index) = self.items.iter().position(|item| item.id == media_item_id) {
+                return Some(index);
+            }
         }
         if let (Some(season), Some(episode)) = (details.season_number, details.episode_number) {
-            return self
+            let exact = self
                 .items
                 .iter()
                 .position(|item| item.season == Some(season) && item.episode == Some(episode));
+            return Some(exact.unwrap_or_else(|| {
+                self.items
+                    .iter()
+                    .position(|item| (item.season, item.episode) > (Some(season), Some(episode)))
+                    .unwrap_or_default()
+            }));
         }
-        details.release_date.and_then(|release_date| {
+        details.release_date.map(|release_date| {
             self.items
                 .iter()
-                .position(|item| item.release_date == Some(release_date))
+                .position(|item| item.release_date.is_some_and(|date| date >= release_date))
+                .unwrap_or_default()
         })
     }
 }
@@ -1014,6 +1060,15 @@ struct HistoryDetails {
     season_number: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     episode_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    playlist_cycle: Option<PlaylistCycleHistory>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct PlaylistCycleHistory {
+    all_media_ids: BTreeSet<EntityId>,
+    remaining_media_ids: BTreeSet<EntityId>,
 }
 
 fn history_details_for_media_item(media_item: &SchedulingMediaItem) -> String {
@@ -1022,6 +1077,7 @@ fn history_details_for_media_item(media_item: &SchedulingMediaItem) -> String {
         release_date: media_item.release_date,
         season_number: media_item.season,
         episode_number: media_item.episode,
+        playlist_cycle: None,
     };
     serde_json::to_string(&details).unwrap_or_default()
 }
@@ -1264,6 +1320,13 @@ pub(super) struct PlaylistEnumerator {
 }
 
 impl PlaylistEnumerator {
+    pub fn with_child_shuffle_seed(mut self, seed: i32) -> Self {
+        for child in &mut self.children {
+            child.enumerator.restore_shuffle_seed(seed);
+        }
+        self
+    }
+
     pub fn new(playlist_items: Vec<SchedulingPlaylistItem>) -> Self {
         let mut children = playlist_items
             .into_iter()
@@ -1504,6 +1567,27 @@ impl PlaylistEnumerator {
             history_details_for_media_item(media),
             false,
         )];
+        records[0].seed = self.shuffle_seed;
+        if self
+            .children
+            .iter()
+            .any(|child| child.enumerator.shuffle_seed.is_some())
+        {
+            // Child shuffles can wrap independently of the parent cycle. Replaying
+            // with today's child seeds cannot reconstruct which IDs were consumed.
+            let details = HistoryDetails {
+                media_item_id: Some(media.id),
+                release_date: media.release_date,
+                season_number: media.season,
+                episode_number: media.episode,
+                playlist_cycle: Some(PlaylistCycleHistory {
+                    all_media_ids: self.all_media_ids.clone(),
+                    remaining_media_ids: self.remaining_media_ids.clone(),
+                }),
+            };
+            records[0].details =
+                serde_json::to_string(&details).expect("playlist history serializes");
+        }
         for (position, child) in self.children.iter().enumerate() {
             let Some(current) = child.enumerator.current() else {
                 continue;
@@ -1517,6 +1601,8 @@ impl PlaylistEnumerator {
                 history_details_for_media_item(current),
                 position == self.child_index,
             ));
+            records.last_mut().expect("child history was inserted").seed =
+                child.enumerator.shuffle_seed;
         }
         records
     }
@@ -1570,32 +1656,56 @@ impl PlaylistEnumerator {
         };
         // The primary index counts the whole playlist, including counted and
         // play-all batches. Replay once before reconciling individual children.
+        if let Some(seed) = primary.seed {
+            self.shuffle_groups(seed);
+        }
         self.replay_to(usize::try_from(primary.index).unwrap_or_default());
         for child_history in history.iter().filter(|history| history.child_key.is_some()) {
             let Some(child_key) = child_history.child_key.as_deref() else {
                 continue;
             };
-            let Some((child_index, child)) =
-                self.children.iter_mut().enumerate().find(|(_, child)| {
-                    history_key_for_collection_key(&child.collection_key) == child_key
-                })
-            else {
-                continue;
-            };
-            child
-                .enumerator
-                .set_index(usize::try_from(child_history.index).unwrap_or_default());
-            if child.enumerator.playback_order == PlaybackOrder::Chronological {
+            for child in self
+                .children
+                .iter_mut()
+                .filter(|child| history_key_for_collection_key(&child.collection_key) == child_key)
+            {
+                if let Some(seed) = child_history.seed {
+                    child.enumerator.restore_shuffle_seed(seed);
+                }
                 child
                     .enumerator
-                    .move_to_history_details(&child_history.details);
+                    .set_index(usize::try_from(child_history.index).unwrap_or_default());
+                if child.enumerator.playback_order == PlaybackOrder::Chronological {
+                    child
+                        .enumerator
+                        .move_to_history_details(&child_history.details);
+                }
             }
-            if child_history.is_current_child {
-                self.child_index = child_index;
+            if child_history.is_current_child
+                && self.current_child().is_none_or(|child| {
+                    history_key_for_collection_key(&child.collection_key) != child_key
+                })
+            {
+                if let Some(index) = self.children.iter().position(|child| {
+                    history_key_for_collection_key(&child.collection_key) == child_key
+                }) {
+                    self.child_index = index;
+                    self.children[index].items_taken_from_current = 0;
+                }
             }
         }
         // Saved children describe the position before the last emitted item.
         // Advance its active child exactly once after all restoration is done.
+        if let Ok(details) = serde_json::from_str::<HistoryDetails>(&primary.details) {
+            if let Some(cycle) = details.playlist_cycle {
+                self.remaining_media_ids = cycle
+                    .remaining_media_ids
+                    .intersection(&self.all_media_ids)
+                    .copied()
+                    .chain(self.all_media_ids.difference(&cycle.all_media_ids).copied())
+                    .collect();
+            }
+        }
         self.advance();
     }
 }

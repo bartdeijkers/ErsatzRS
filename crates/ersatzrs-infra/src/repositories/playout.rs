@@ -382,8 +382,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             sqlx::query(
                 r#"INSERT INTO "PlayoutHistory" (
                     "BlockId", "Details", "Index", "Key", "PlaybackOrder",
-                    "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild"
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                    "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild", "Seed"
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(entry.block_id)
             .bind(&entry.details)
@@ -395,6 +395,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .bind(encode_optional_datetime(entry.finish))
             .bind(&entry.child_key)
             .bind(entry.is_current_child)
+            .bind(entry.seed)
             .execute(&mut *tx)
             .await
             .repository()?;
@@ -2382,8 +2383,8 @@ async fn replace_history(
         sqlx::query(
             r#"REPLACE INTO "PlayoutHistory" (
                 "Id", "BlockId", "Details", "Index", "Key", "PlaybackOrder",
-                "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild", "Seed"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(entry.id)
         .bind(entry.block_id)
@@ -2396,6 +2397,7 @@ async fn replace_history(
         .bind(encode_optional_datetime(entry.finish))
         .bind(&entry.child_key)
         .bind(entry.is_current_child)
+        .bind(entry.seed)
         .execute(&mut **tx)
         .await
         .repository()?;

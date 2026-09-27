@@ -11,7 +11,7 @@ pub use resolver::ScriptedContentResolver;
 
 use super::{
     history, history_details_for_media_item, history_key_for_content,
-    history_key_for_marathon_content, parse_duration, parse_hhmm, playout_item, shuffle_with_seed,
+    history_key_for_marathon_content, parse_duration, parse_hhmm, playout_item,
     CurrentHistoryContext, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
     PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid, SchedulingError,
     SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
@@ -97,6 +97,7 @@ impl ScriptedSchedulingEngine {
             smart_shuffle_state,
         )));
         state.borrow_mut().resolver = resolver;
+        state.borrow_mut().seed = request.playout.seed;
         let lua = Lua::new();
         register_all(&lua, &state).map_err(lua_error)?;
         run_lua_script(&lua, script).map_err(lua_error)?;
@@ -475,6 +476,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
 
 #[derive(Debug, Clone)]
 struct ScriptState {
+    seed: i32,
     resolver: Option<Arc<dyn ScriptedContentResolver>>,
     warnings: Vec<String>,
     playout_id: EntityId,
@@ -512,6 +514,7 @@ impl ScriptState {
         smart_shuffle_state: super::SchedulingSmartShuffleState,
     ) -> Self {
         let mut st = Self {
+            seed: 0,
             resolver: None,
             warnings: Vec::new(),
             playout_id,

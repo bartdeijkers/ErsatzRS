@@ -21,3 +21,10 @@ description = 'The production scripted reference-data loader returns configurati
 discovered  = '2026-09-27'
 evidence    = 'UCU-08 row 122 audit: maintenance::load_scheduling_reference_data calls scripted_reference_data, then generates the playout directly; scripted/api/sources.rs reads unpopulated reference maps. The new SQLite history regression explicitly injects synthetic membership and does not prove this missing production path. Real-source SQLite tests pass without injected membership (2b771d24-2770-4ebb-bbb0-38f59e038717): dynamic names, all source types, overlays, repeated registration, restart, lookup failure and cancellation. Strict affected Clippy passes.'
 resolved    = true
+
+[[debt]]
+id          = 'playlist-shuffle-cycle-history'
+description = 'UCU-08 row 123 covers parent and independently shuffled child cycle seeds, repeated-source slots, safe history positioning and marathon source validation. Ordinary history lacks seeds and scripted group shuffling runs only once; shared playlist children do not reshuffle when they wrap. Resolved with nullable history seeds, compatible cycle/checkpoint state, runtime validation and additive SQLite migration.'
+discovered  = '2026-09-27'
+evidence    = 'UCU-08 row 123: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c), 55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy migration (66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected lint pass. Real SQL later-cycle restart matches 100 uninterrupted items, including independently wrapping children. Source map records substantive review and remaining milestone gates.'
+resolved    = true

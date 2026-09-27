@@ -58,6 +58,66 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-08 row 123 source map: shuffle cycles and scheduling safety
+
+- Upstream `b0f313eec89774fecc7e88cb1fc0cdea29c507a4` adds nullable parent
+  and child history seeds; restores later shuffled cycles; keeps child metadata
+  aligned with the shuffled order; preserves the current repeated collection
+  slot and resets per-child counters when changing slots. It also clamps stale
+  indices, fixes history positioning after removed items/specials, deduplicates
+  marathon sources, validates grouping and tolerates absent album metadata.
+- Scheduling safety changes bound equal-entry shuffle behavior, handle empty
+  playlists, reject nonpositive filler durations and preserve Skip Missing Items
+  filtering across playlist/multi-collection reloads. API validation rejects
+  invalid marathon grouping. SQLite adds `PlayoutHistory.Seed` compatibly; the
+  MySQL migration maps to the existing SQLite-only deployment contract.
+- Rust targets: shared media/playlist enumerators, YAML snapshot/history and
+  scripted/block history writers, domain/repository history persistence,
+  marathon construction/validation, Classic filler and source filtering.
+  Existing YAML snapshots already preserve full playlist cycles; existing Rust
+  shuffle has no retry loop and media indices wrap safely. These must be proved
+  alongside the gaps, not used to skip the broader row audit.
+- Demonstrated source gaps: ordinary playlist history has no seed; scripted
+  marathon group shuffle is a one-time permutation outside the enumerator;
+  history lookup chooses the first repeated collection slot. Shared media
+  enumerators tag Shuffle but do not reshuffle children when they wrap.
+- Acceptance: later-cycle and uneven-child continuation through real SQLite
+  restart, legacy null-seed history, repeated children, removed/special media,
+  equal/empty playlists, invalid grouping, duplicate sources and missing-item
+  filtering; preserve audio/subtitle settings and existing cancellation. Follow
+  the additive migration contract.
+
+- Working evidence: the later-cycle regression fails before correction and passes
+  for chronological and shuffled uneven children with saved seeds. Independent
+  child wraps also require preserving consumed media in Rust's explicit parent
+  cycle state; legacy history retains the earlier replay fallback. YAML's existing
+  full snapshots/checkpoints retain child seeds compatibly. Migration acceptance
+  preserves existing rows with null seeds and stored seed values on rerun
+  (`66eb5b6e-71f7-4472-a912-c74cf96ab4db`). Final 228 scheduling tests pass
+  (`ec549a1a-2de1-405a-b4ca-66bde7d70b4c`), including repeated-slot batches,
+  equal/empty playlists, cycle-boundary repeat avoidance, invalid groups,
+  overlapping marathon sources, removed/special media and nonpositive filler.
+  Classic playlist child shuffles retain seeds in their existing checkpoints;
+  the Continue oracle covers shuffled and chronological children/groups.
+- Real SQLite acceptance: all 55 affected repository tests pass
+  (`c9e9fba2-31fe-4e2b-b00c-e5cb08315421`). An uneven shuffled marathon resumes
+  after 41 items across closed/reopened SQLite and matches all 100 uninterrupted
+  media/time tuples. Assertions require multiple parent and child seeds. Both
+  history write paths preserve seeds; existing audio/subtitle restart proofs and
+  extended multi-collection/structured-playlist missing-item checks pass. Strict
+  affected core/infra Clippy passes.
+- Substantive review: no duplicate shuffle list exists in Rust; owned child order
+  is always authoritative. Equal/empty cases are bounded, and duplicate media IDs
+  cannot trap the child boundary-repeat guard. Existing Classic duration guards
+  already cover tail/fallback hangs; the regression proves progress. Repository
+  filtering applies before grouped ordering and structured playlist generation,
+  so missing files are not reintroduced. Missing album metadata was already
+  represented safely with Option. SQLite migration is additive, legacy seeds stay
+  null, existing YAML checkpoints remain readable, and current schema health
+  checks remain applicable. No browser, new dependency, FFmpeg or platform-specific
+  change. Verdict: Port. Advance the pin with the coherent local commit, then
+  align the reference checkout. Row 124 and window gates/push/CI remain.
+
 ## UCU-08 row 122 source map: playlist continuation state
 
 - Upstream `34b0d954324395e9b6472bc9eae8ad2c99673687` changes playlist
@@ -2716,7 +2776,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve YAML sequence order across builds` | ucu-08; stable declaration fingerprints and complete-order restoration preserve shuffled default/named lists; nested slots remain intact. All 64 YAML tests and production-builder SQLite restart/oracle comparison pass, including audio/subtitle settings; strict affected lint and substantive review pass. |
 | 121 | `06ee45ff` | fix: text subtitle playback (#2994) | Covered | upstream-baseline-catch-up | `test(subtitles): preserve source queries during seek rebasing` | ucu-08; existing ADR 0061 seek cache avoids upstream callback query concatenation. Strengthened HTTP query-preservation and separate FFmpeg seek assertions pass with all 50 selected subtitle tests and strict infra lint. No runtime behavior change. |
 | 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | Port | block-scheduling; scripted-scheduling; upstream-baseline-catch-up | `fix(scheduling): restore playlist state through real sources` | ucu-08; parent replay and all-child history preserve counted/play-all continuation. Block deco retains structured children; Lua resolves real SQL sources through the awaited worker. 220 scheduling tests, seven builder tests, SQLite restart/source regressions and strict affected lint pass. Remote Stream checks, audio/subtitle settings and Reset-only block filler admission are preserved. |
-| 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | | | | ucu-08; provisional: Port candidate. |
+| 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | Port | classic-scheduling; yaml-scheduling; scripted-scheduling; block-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist shuffled playlist cycles` | ucu-08; nullable history seeds and compatible checkpoint state preserve parent/child cycles, repeated slots and source settings. Shuffled Lua marathons use persisted playout seeds. 228 scheduling tests, 55 repository tests, legacy migration and strict lint pass; real SQL restart matches 100 uninterrupted items. Marathon validation/deduplication and empty/equal/missing-item/filler boundaries are covered. |
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | | | | ucu-08; provisional: Port candidate. |
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | | | | ucu-08; provisional: Port candidate. |
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | | | | ucu-08; provisional: Port candidate. |

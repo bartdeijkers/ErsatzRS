@@ -4082,6 +4082,7 @@ fn map_playout_history(row: &DbRow) -> Result<PlayoutHistory> {
         )?,
         index: row.try_get("Index").repository()?,
         details: row.try_get("Details").repository()?,
+        seed: row.try_get("Seed").repository()?,
         is_current_child: row.try_get("IsCurrentChild").repository()?,
     })
 }

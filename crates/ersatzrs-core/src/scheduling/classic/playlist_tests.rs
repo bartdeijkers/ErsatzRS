@@ -68,8 +68,14 @@ fn build(
 #[test]
 fn classic_playlist_continue_matches_uninterrupted_across_cycles() {
     let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
-    for shuffle in [false, true] {
-        let (_, data) = fixture(shuffle);
+    for (shuffle, shuffle_children) in [(false, false), (true, false), (false, true), (true, true)]
+    {
+        let (_, mut data) = fixture(shuffle);
+        if shuffle_children {
+            for child in data.playlist_items_by_key.values_mut().flatten() {
+                child.playback_order = PlaybackOrder::Shuffle;
+            }
+        }
         let full = build(start, start + Duration::hours(8), data.clone(), None);
         for split in [4, 9, 17, 31] {
             let seam = start + Duration::minutes(split * 10);

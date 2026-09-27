@@ -117,6 +117,32 @@ async fn scheduling_repository_skips_missing_items_when_configured() {
         filtered.iter().any(|item| item.id == 12),
         "present items are kept"
     );
+    let repos = make_repositories(pool.clone());
+    for source in [
+        SchedulingContentSource::MultiCollection("multi-prime".to_owned()),
+        SchedulingContentSource::Playlist {
+            group: Some("prime".to_owned()),
+            name: "nightly".to_owned(),
+        },
+    ] {
+        let items = repos
+            .scheduling
+            .media_items_for_source(&source)
+            .await
+            .unwrap();
+        assert!(!items.iter().any(|item| item.id == 20));
+        assert!(items.iter().any(|item| item.id == 12));
+        if let Some(children) = repos
+            .scheduling
+            .playlist_items_for_source(&source)
+            .await
+            .unwrap()
+        {
+            assert!(children
+                .iter()
+                .all(|child| child.media_items.iter().all(|item| item.id != 20)));
+        }
+    }
 }
 
 #[tokio::test]

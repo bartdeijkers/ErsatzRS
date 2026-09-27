@@ -139,7 +139,10 @@ YAML tests, SQLite oracle comparison and strict lint pass. Row 121 is Covered:
 subtitle query/seek separation has 50 passing tests and strict lint. Row 122 is
 Port: persisted parent/child restoration and real SQL-backed Lua sources pass
 220 scheduling tests, seven builder tests, SQLite restart/source regressions and
-strict affected lint. Next is row 123; milestone gates and push/CI remain.
+strict affected lint. Row 123 is Port: shuffled cycle seeds, repeated children,
+marathon validation and scheduling boundaries pass 228 scheduling tests, 55
+repository tests, legacy migration and strict lint. Next is row 124; milestone
+gates and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 

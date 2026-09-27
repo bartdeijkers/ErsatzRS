@@ -111,7 +111,10 @@ async fn playout_repository_replaces_runtime_state_tables() {
         .replace_runtime_state(
             &playout,
             &[common::playout_gap(21, 1)],
-            &[common::playout_history(31, 1)],
+            &[ersatzrs_domain::PlayoutHistory {
+                seed: Some(12345),
+                ..common::playout_history(31, 1)
+            }],
             &[common::program_schedule_anchor(41, 1)],
             &[common::fill_group_index(51, 1, 30)],
         )
@@ -390,7 +393,7 @@ async fn assert_runtime_state_rows(pool: &sqlx::SqlitePool) {
 
 async fn assert_history_row(pool: &sqlx::SqlitePool) {
     let history_row = sqlx::query(
-        r#"SELECT "PlaybackOrder", "ChildKey", "IsCurrentChild"
+        r#"SELECT "PlaybackOrder", "ChildKey", "IsCurrentChild", "Seed"
            FROM "PlayoutHistory"
            WHERE "Id" = 31"#,
     )
@@ -405,6 +408,10 @@ async fn assert_history_row(pool: &sqlx::SqlitePool) {
         Some("child-key".to_owned())
     );
     assert!(history_row.try_get::<bool, _>("IsCurrentChild").unwrap());
+    assert_eq!(
+        history_row.try_get::<Option<i32>, _>("Seed").unwrap(),
+        Some(12345)
+    );
 }
 
 async fn assert_anchor_state_row(pool: &sqlx::SqlitePool) {

@@ -39,6 +39,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve shuffled playlist and marathon cycle seeds across rebuilds, including
+  independently wrapping children and repeated collection slots. Deduplicate
+  overlapping marathon sources and reject invalid Lua marathon grouping.
+
 - Preserve every scripted-playlist child position in build history and restore
   the playlist cycle before advancing, preventing replayed or skipped items on
   continuation. Load persisted scripted history on rebuild and retain structured

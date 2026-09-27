@@ -1,7 +1,7 @@
 use super::super::{
-    history_key_for_content, history_key_for_marathon_content, parse_playback_order,
-    shuffle_with_seed, Lua, MediaEnumerator, PlaybackOrder, PlaylistEnumerator, Rc, RefCell,
-    SchedulingCollectionKey, SchedulingContentGuid, SchedulingPlaylistItem, ScriptState, Table,
+    history_key_for_content, history_key_for_marathon_content, parse_playback_order, Lua,
+    MediaEnumerator, PlaybackOrder, PlaylistEnumerator, Rc, RefCell, SchedulingCollectionKey,
+    SchedulingContentGuid, SchedulingPlaylistItem, ScriptState, Table,
 };
 use crate::scheduling::SchedulingContentSource;
 
@@ -145,7 +145,8 @@ pub(in crate::scheduling::scripted) fn register(
                     let source = SchedulingContentSource::Playlist { group, name };
                     let history_key = history_key_for_content(&key, PlaybackOrder::None);
                     if let Some(children) = st.source_playlist(&source)? {
-                        let mut playlist = PlaylistEnumerator::new(children);
+                        let mut playlist =
+                            PlaylistEnumerator::new(children).with_child_shuffle_seed(st.seed);
                         playlist.apply_history(&st.collect_playlist_history(&history_key));
                         st.playlist_history_keys.insert(key.clone(), history_key);
                         st.playlist_enumerators.insert(key, playlist);
@@ -186,7 +187,7 @@ pub(in crate::scheduling::scripted) fn register(
     }
 
     // add_marathon(key, guids_table, searches_table, group_by, opts?)
-    // opts = {shuffle_groups=false, item_order="season_episode", play_all=false}
+    // opts = {shuffle_groups=false, item_order="shuffle", play_all=false}
     {
         let s = Rc::clone(state);
         globals.set(
@@ -201,6 +202,9 @@ pub(in crate::scheduling::scripted) fn register(
                     Option<Table>,
                 )| {
                     let mut st = s.borrow_mut();
+                    if !crate::scheduling::valid_marathon_group_by(&group_by) {
+                        return Err(mlua::Error::runtime("Invalid marathon group_by; valid values are show, season, artist, album, director"));
+                    }
                     if st.enumerators.contains_key(&key)
                         || st.playlist_enumerators.contains_key(&key)
                     {
@@ -218,7 +222,7 @@ pub(in crate::scheduling::scripted) fn register(
                     let item_order = parse_playback_order(
                         opts.as_ref()
                             .and_then(|t| t.get::<Option<String>>("item_order").ok().flatten())
-                            .as_deref(),
+                            .as_deref().or(Some("shuffle")),
                     );
 
                     let mut guids: Vec<SchedulingContentGuid> = Vec::new();
@@ -247,20 +251,16 @@ pub(in crate::scheduling::scripted) fn register(
                         play_all_items: play_all,
                     };
                     let media = st.source_media(&source)?;
-                    let mut items = source.marathon_playlist_items(media).unwrap_or_default();
-
-                    if shuffle_groups {
-                        let seed = st
-                            .playout_id
-                            .unsigned_abs()
-                            .wrapping_add(st.enumerators.len() as u64);
-                        shuffle_with_seed(&mut items, seed);
-                    }
+                    let items = source.marathon_playlist_items(media).unwrap_or_default();
 
                     let history_key = history_key_for_marathon_content(&key, item_order, &group_by);
                     let relevant_history = st.collect_playlist_history(&history_key);
 
-                    let mut playlist = PlaylistEnumerator::new(items);
+                    let mut playlist =
+                        PlaylistEnumerator::new(items).with_child_shuffle_seed(st.seed);
+                    if shuffle_groups {
+                        playlist.shuffle_groups(st.seed);
+                    }
                     if !relevant_history.is_empty() {
                         playlist.apply_history(&relevant_history);
                     }
@@ -318,7 +318,8 @@ pub(in crate::scheduling::scripted) fn register(
                 let history_key = history_key_for_content(&key, PlaybackOrder::None);
                 let relevant_history = st.collect_playlist_history(&history_key);
 
-                let mut playlist = PlaylistEnumerator::new(playlist_items);
+                let mut playlist =
+                    PlaylistEnumerator::new(playlist_items).with_child_shuffle_seed(st.seed);
                 if !relevant_history.is_empty() {
                     playlist.apply_history(&relevant_history);
                 }
