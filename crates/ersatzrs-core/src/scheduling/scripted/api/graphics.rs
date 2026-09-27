@@ -57,7 +57,7 @@ pub(in crate::scheduling::scripted) fn register_paths(
             "graphics_on_path",
             lua.create_function_mut(move |_, (path, vars): (String, Option<String>)| {
                 let mut st = s.borrow_mut();
-                if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&path) {
+                if let Some(id) = st.graphics_id(&path)? {
                     if !st.graphics_element_ids.contains(&id) {
                         st.graphics_element_ids.push(id);
                     }
@@ -76,7 +76,7 @@ pub(in crate::scheduling::scripted) fn register_paths(
             lua.create_function_mut(move |_, path: Option<String>| {
                 let mut st = s.borrow_mut();
                 if let Some(p) = path {
-                    if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&p) {
+                    if let Some(id) = st.graphics_id(&p)? {
                         st.graphics_element_ids.retain(|c| *c != id);
                         st.graphics_element_variables.remove(&id);
                     }

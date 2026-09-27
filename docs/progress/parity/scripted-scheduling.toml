@@ -4,6 +4,20 @@ rs_target  = '`crates/ersatzrs-core`'
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`.
+Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`. Lua resolves database sources and overlays through the awaited scheduling worker; playlist continuation restores persisted parent and every child position.
 Continuous scripted builds remove played items older than the build start minus four hours, preserving the existing mirror-offset retention window. On-demand scripted builds defer played-item cleanup to the checkpoint-based time shifter.
 '''
+
+[[debt]]
+id          = 'scripted-playlist-child-history-continuation'
+description = 'UCU-08 row 122 regression reproduces playlist children restarting after a split build. Scripted history records only the active child, and restoration does not reconstruct the parent cycle before advancing. The working correction writes every child and replays the parent once; SQLite restart and real-source execution now pass.'
+discovered  = '2026-09-27'
+evidence    = 'The production Lua scheduler regression fails before correction after seven items and passes after correction across splits 1/7/11/15. All 218 scheduling tests pass (Nextest 52dc0f7b-6173-4d5c-8713-0ae4b0d47667), including counted/play-all parent-cycle restoration; strict core Clippy passes. SQLite playlist/marathon restart acceptance passes (8e86b59d-3145-43bc-8f5f-1600c84884d2); the final 220 scheduling tests and strict affected Clippy pass. UCU-08 row 122 records review and source-resolution evidence.'
+resolved    = true
+
+[[debt]]
+id          = 'scripted-production-source-resolution'
+description = 'The production scripted reference-data loader returns configuration and history but no collection, show, playlist or search membership. Lua registration reads those maps without a repository resolver, so production scripts can receive empty sources despite engine tests with injected fixtures passing. Resolved by a fallible source port backed by the existing SQL repository, called from the awaited blocking worker.'
+discovered  = '2026-09-27'
+evidence    = 'UCU-08 row 122 audit: maintenance::load_scheduling_reference_data calls scripted_reference_data, then generates the playout directly; scripted/api/sources.rs reads unpopulated reference maps. The new SQLite history regression explicitly injects synthetic membership and does not prove this missing production path. Real-source SQLite tests pass without injected membership (2b771d24-2770-4ebb-bbb0-38f59e038717): dynamic names, all source types, overlays, repeated registration, restart, lookup failure and cancellation. Strict affected Clippy passes.'
+resolved    = true

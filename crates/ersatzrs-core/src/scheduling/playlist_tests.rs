@@ -1,5 +1,63 @@
 use super::*;
 
+#[test]
+fn playlist_history_restores_cycle_batches_and_all_children() {
+    for order in [PlaybackOrder::Chronological, PlaybackOrder::None] {
+        for cutoff in [1, 7, 11, 17] {
+            let mut items = vec![
+                child(1, &[10, 11, 12, 13], false),
+                child(2, &[20, 21, 22], true),
+                child(3, &[30, 31, 32, 33], false),
+            ];
+            items[0].count = Some(2);
+            for item in &mut items {
+                item.playback_order = order;
+            }
+            let mut uninterrupted = PlaylistEnumerator::new(items.clone());
+            for _ in 0..cutoff - 1 {
+                uninterrupted.advance();
+            }
+            let mut history = vec![PlayoutHistory {
+                index: i32::try_from(uninterrupted.index).unwrap(),
+                ..PlayoutHistory::default()
+            }];
+            history.extend(
+                uninterrupted
+                    .children
+                    .iter()
+                    .enumerate()
+                    .map(|(index, child)| PlayoutHistory {
+                        child_key: Some(history_key_for_collection_key(&child.collection_key)),
+                        index: i32::try_from(child.enumerator.current_index()).unwrap(),
+                        is_current_child: index == uninterrupted.child_index,
+                        details: history_details_for_media_item(
+                            child.enumerator.current().unwrap(),
+                        ),
+                        ..PlayoutHistory::default()
+                    }),
+            );
+            uninterrupted.advance();
+            let mut restored = PlaylistEnumerator::new(items);
+            restored.apply_history(&history);
+            for _ in 0..24 {
+                assert_eq!(
+                    restored.current(),
+                    uninterrupted.current(),
+                    "{order:?}, cutoff={cutoff}"
+                );
+                assert_eq!(restored.index, uninterrupted.index);
+                assert_eq!(restored.child_index, uninterrupted.child_index);
+                assert_eq!(
+                    restored.remaining_media_ids,
+                    uninterrupted.remaining_media_ids
+                );
+                restored.advance();
+                uninterrupted.advance();
+            }
+        }
+    }
+}
+
 fn child(id: i64, ids: &[i64], play_all: bool) -> SchedulingPlaylistItem {
     SchedulingPlaylistItem {
         collection_key: SchedulingCollectionKey::fake_playlist_item(id),

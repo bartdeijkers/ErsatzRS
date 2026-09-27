@@ -58,6 +58,70 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-08 row 122 source map: playlist continuation state
+
+- Upstream `34b0d954324395e9b6472bc9eae8ad2c99673687` changes playlist
+  history restoration in `SchedulingEngine`, `YamlPlayoutApplyHistoryHandler`
+  and `BlockPlayoutEnumerator`: restore the parent cycle position once, retain
+  each child's position, then advance once. Scripted/YAML history must record
+  the cycle index rather than the current child slot. Tests cover marathons,
+  scripted playlists, all child positions and block deco playlist filler.
+- Rust targets: shared `PlaylistEnumerator`, scripted history collection and
+  writing, YAML checkpoint/history restoration, block deco scheduling and the
+  scheduling repository's playlist reference-data loader. YAML already stores
+  complete sparse snapshots and anchor checkpoints. The scripted writer only
+  saved the active child at the latest timestamp; restoration did not replay
+  the parent and could advance a non-chronological active child twice.
+  Block deco playlists are flattened into media lists and restarted from the
+  playout seed, with no playlist child-state restoration.
+- Acceptance: production-builder uninterrupted versus Continue/restart proof
+  across these consumers, distinct child positions and parent cycle index,
+  preserved count/play-all semantics and audio/subtitle settings, focused
+  regressions and strict lint. Preserve existing safe handling of invalidated
+  state; no UI/schema change is proposed.
+- Working correction: scripted history now includes every child; shared
+  restoration replays the parent cycle before restoring children and advancing
+  once. The production Lua split-build test failed before correction at seven
+  items, and passes after correction at splits 1/7/11/15. All 218 scheduling
+  tests pass (Nextest `52dc0f7b-6173-4d5c-8713-0ae4b0d47667`), including
+  chronological/unordered counted and play-all child restoration. Strict core
+  Clippy passes. Block/scripted parity records are reopened with explicit debt.
+- Block loading now retains structured playlist children. Reset-time block-start
+  filler restores the latest complete parent/child history and shares the
+  scripted history writer. The existing upstream Reset-only admission remains
+  unchanged. The SQL loader regression passes (Nextest
+  `f2e8b93f-945e-4e01-8395-0bd1b1f94164`), and SQLite close/reopen tests pass
+  for block filler and scripted playlists/marathons (Nextest
+  `10bd4431-7cce-4d12-9d1f-b60ce99f3595`), preserving audio/subtitle settings.
+  The scripted loader now supplies persisted items/history, previously absent.
+- Production source resolution now uses the existing scheduling repository via
+  a fallible core port, injected through the existing playout builder into its
+  awaited blocking worker. No source-name parsing or preloaded membership is
+  required. Named playlists retain structured children; all media source types,
+  watermark names and graphics paths resolve from SQLite. Repository failures,
+  cancellation and a bounded lookup timeout fail the build without persisting
+  partial output. Runtime-loaded sources retain Remote Stream duration filtering
+  and the non-Classic live-source restriction.
+- Real-source acceptance: three SQLite tests pass (Nextest
+  `2b771d24-2770-4ebb-bbb0-38f59e038717`). Named playlists, inline playlists and
+  marathons match uninterrupted media/times and audio/subtitle settings after
+  closing and reopening the database; registrations use no injected membership.
+  Dynamic names, every source kind, repeated playlist registration, overlays,
+  closed-pool failure and cancellation are covered. All 220 core scheduling tests
+  pass (`26fab6b4-6159-447b-a968-3298231da8ac`), including runtime-source
+  Remote Stream safety. Strict affected core/infra Clippy, all seven shared
+  builder tests and both SQLite history restart tests also pass (restart run
+  `8e86b59d-3145-43bc-8f5f-1600c84884d2`).
+- Substantive review: parent replay and the single final advance match upstream;
+  all child histories share the emitted item's timestamp. Count/play-all and
+  chronological media identity are preserved. Production resolution stays behind
+  the existing core/infra repository boundary and awaited worker; SQL errors are
+  redacted and cannot yield a partial successful build. Existing Reset-only block
+  filler admission, cancellation ownership, health prerequisites and playback
+  pipeline remain unchanged. No new dependency, schema, platform assumption or
+  browser surface. Verdict: Port. Row 123 and window acceptance remain pending;
+  no intermediate push or CI.
+
 ## UCU-08 row 121 source map: text subtitle query preservation
 
 - Upstream `06ee45ff06203988acb68339850c73f30167104d` changes one
@@ -2651,7 +2715,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 119 | `2cf8e56a` | update changelog [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream Next QSV release note` | ucu-08; two CHANGELOG lines describe external Next QSV detection. No source, runtime pin or package changes; existing hardware acceptance limits remain, with no new QSV claim. |
 | 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve YAML sequence order across builds` | ucu-08; stable declaration fingerprints and complete-order restoration preserve shuffled default/named lists; nested slots remain intact. All 64 YAML tests and production-builder SQLite restart/oracle comparison pass, including audio/subtitle settings; strict affected lint and substantive review pass. |
 | 121 | `06ee45ff` | fix: text subtitle playback (#2994) | Covered | upstream-baseline-catch-up | `test(subtitles): preserve source queries during seek rebasing` | ucu-08; existing ADR 0061 seek cache avoids upstream callback query concatenation. Strengthened HTTP query-preservation and separate FFmpeg seek assertions pass with all 50 selected subtitle tests and strict infra lint. No runtime behavior change. |
-| 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | | | | ucu-08; provisional: Port candidate. |
+| 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | Port | block-scheduling; scripted-scheduling; upstream-baseline-catch-up | `fix(scheduling): restore playlist state through real sources` | ucu-08; parent replay and all-child history preserve counted/play-all continuation. Block deco retains structured children; Lua resolves real SQL sources through the awaited worker. 220 scheduling tests, seven builder tests, SQLite restart/source regressions and strict affected lint pass. Remote Stream checks, audio/subtitle settings and Reset-only block filler admission are preserved. |
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | | | | ucu-08; provisional: Port candidate. |
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | | | | ucu-08; provisional: Port candidate. |
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | | | | ucu-08; provisional: Port candidate. |

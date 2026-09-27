@@ -3,6 +3,7 @@ use super::super::{
     shuffle_with_seed, Lua, MediaEnumerator, PlaybackOrder, PlaylistEnumerator, Rc, RefCell,
     SchedulingCollectionKey, SchedulingContentGuid, SchedulingPlaylistItem, ScriptState, Table,
 };
+use crate::scheduling::SchedulingContentSource;
 
 #[allow(clippy::too_many_lines)]
 pub(in crate::scheduling::scripted) fn register(
@@ -23,12 +24,7 @@ pub(in crate::scheduling::scripted) fn register(
                     if st.enumerators.contains_key(&key) {
                         return Ok(());
                     }
-                    let items = st
-                        .reference_data
-                        .collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
+                    let items = st.source_media(&SchedulingContentSource::Collection(name))?;
                     let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
                     st.apply_history(&key, &mut e, po);
                     st.enumerators.insert(key, e);
@@ -50,12 +46,7 @@ pub(in crate::scheduling::scripted) fn register(
                     if st.enumerators.contains_key(&key) {
                         return Ok(());
                     }
-                    let items = st
-                        .reference_data
-                        .multi_collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
+                    let items = st.source_media(&SchedulingContentSource::MultiCollection(name))?;
                     let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
                     st.apply_history(&key, &mut e, po);
                     st.enumerators.insert(key, e);
@@ -77,12 +68,7 @@ pub(in crate::scheduling::scripted) fn register(
                     if st.enumerators.contains_key(&key) {
                         return Ok(());
                     }
-                    let items = st
-                        .reference_data
-                        .smart_collections_by_name
-                        .get(&name)
-                        .cloned()
-                        .unwrap_or_default();
+                    let items = st.source_media(&SchedulingContentSource::SmartCollection(name))?;
                     let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
                     st.apply_history(&key, &mut e, po);
                     st.enumerators.insert(key, e);
@@ -104,12 +90,7 @@ pub(in crate::scheduling::scripted) fn register(
                     if st.enumerators.contains_key(&key) {
                         return Ok(());
                     }
-                    let items = st
-                        .reference_data
-                        .searches_by_query
-                        .get(&query)
-                        .cloned()
-                        .unwrap_or_default();
+                    let items = st.source_media(&SchedulingContentSource::Search(query))?;
                     let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
                     st.apply_history(&key, &mut e, po);
                     st.enumerators.insert(key, e);
@@ -131,21 +112,14 @@ pub(in crate::scheduling::scripted) fn register(
                     if st.enumerators.contains_key(&key) {
                         return Ok(());
                     }
-                    let mut items = Vec::new();
-                    let mut seen = std::collections::BTreeSet::new();
+                    let mut guids = Vec::new();
                     for pair in guids_table.pairs::<String, String>() {
                         let (source, value) = pair?;
-                        let guid_key = format!("{source}://{value}");
-                        if let Some(show_items) =
-                            st.reference_data.media_by_show_guid.get(&guid_key)
-                        {
-                            for item in show_items {
-                                if seen.insert(item.id) {
-                                    items.push(item.clone());
-                                }
-                            }
-                        }
+                        guids.push(SchedulingContentGuid { source, value });
                     }
+                    guids.sort();
+                    let items =
+                        st.source_media(&SchedulingContentSource::Show { name: None, guids })?;
                     let mut e = MediaEnumerator::new(&key, items).with_playback_order(po);
                     st.apply_history(&key, &mut e, po);
                     st.enumerators.insert(key, e);
@@ -163,24 +137,25 @@ pub(in crate::scheduling::scripted) fn register(
             lua.create_function_mut(
                 move |_, (key, name, group): (String, String, Option<String>)| {
                     let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key) {
+                    if st.enumerators.contains_key(&key)
+                        || st.playlist_enumerators.contains_key(&key)
+                    {
                         return Ok(());
                     }
-                    let items = st
-                        .reference_data
-                        .playlists_by_group_and_name
-                        .get(&(group.clone(), name.clone()))
-                        .or_else(|| {
-                            st.reference_data
-                                .playlists_by_group_and_name
-                                .get(&(None, name.clone()))
-                        })
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut e =
-                        MediaEnumerator::new(&key, items).with_playback_order(PlaybackOrder::None);
-                    st.apply_history(&key, &mut e, PlaybackOrder::None);
-                    st.enumerators.insert(key, e);
+                    let source = SchedulingContentSource::Playlist { group, name };
+                    let history_key = history_key_for_content(&key, PlaybackOrder::None);
+                    if let Some(children) = st.source_playlist(&source)? {
+                        let mut playlist = PlaylistEnumerator::new(children);
+                        playlist.apply_history(&st.collect_playlist_history(&history_key));
+                        st.playlist_history_keys.insert(key.clone(), history_key);
+                        st.playlist_enumerators.insert(key, playlist);
+                    } else {
+                        let items = st.source_media(&source)?;
+                        let mut e = MediaEnumerator::new(&key, items)
+                            .with_playback_order(PlaybackOrder::None);
+                        st.apply_history(&key, &mut e, PlaybackOrder::None);
+                        st.enumerators.insert(key, e);
+                    }
                     Ok(())
                 },
             )?,
@@ -262,9 +237,17 @@ pub(in crate::scheduling::scripted) fn register(
                         searches.push(v?);
                     }
 
-                    let mut items = st.reference_data.marathon_playlist_items(
-                        None, &guids, &searches, &group_by, item_order, play_all,
-                    );
+                    let source = SchedulingContentSource::Marathon {
+                        name: None,
+                        guids,
+                        searches,
+                        group_by: group_by.clone(),
+                        shuffle_groups,
+                        item_order,
+                        play_all_items: play_all,
+                    };
+                    let media = st.source_media(&source)?;
+                    let mut items = source.marathon_playlist_items(media).unwrap_or_default();
 
                     if shuffle_groups {
                         let seed = st

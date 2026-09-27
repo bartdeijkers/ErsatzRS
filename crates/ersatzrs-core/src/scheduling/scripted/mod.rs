@@ -4,6 +4,10 @@ use chrono::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
 use ersatzrs_domain::{ChannelPlayoutMode, EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
 use mlua::{Lua, Table};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+mod resolver;
+pub use resolver::ScriptedContentResolver;
 
 use super::{
     history, history_details_for_media_item, history_key_for_content,
@@ -20,6 +24,20 @@ pub struct ScriptedSchedulingEngine;
 
 impl PlayoutSchedulingEngine for ScriptedSchedulingEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        self.schedule_with_resolver(request, None)
+    }
+}
+
+impl ScriptedSchedulingEngine {
+    /// Run a script with optional storage-backed source resolution.
+    ///
+    /// # Errors
+    /// Returns file, source resolution or Lua execution errors.
+    pub fn schedule_with_resolver(
+        &self,
+        request: SchedulingRequest,
+        resolver: Option<Arc<dyn ScriptedContentResolver>>,
+    ) -> Result<SchedulingResult, SchedulingError> {
         let script_file = request
             .playout
             .schedule_file
@@ -27,7 +45,7 @@ impl PlayoutSchedulingEngine for ScriptedSchedulingEngine {
             .ok_or(SchedulingError::MissingScheduleFile)?;
         let script = fs::read_to_string(&script_file)
             .map_err(|_| SchedulingError::ScheduleFileMissing(script_file.clone()))?;
-        self.schedule_script(&script, request)
+        Self::schedule_script_resolved(&script, request, resolver)
     }
 }
 
@@ -37,11 +55,18 @@ impl ScriptedSchedulingEngine {
     /// # Errors
     ///
     /// Returns an error when Lua compilation or execution fails.
-    #[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
     pub fn schedule_script(
         &self,
         script: &str,
+        request: SchedulingRequest,
+    ) -> Result<SchedulingResult, SchedulingError> {
+        Self::schedule_script_resolved(script, request, None)
+    }
+
+    fn schedule_script_resolved(
+        script: &str,
         mut request: SchedulingRequest,
+        resolver: Option<Arc<dyn ScriptedContentResolver>>,
     ) -> Result<SchedulingResult, SchedulingError> {
         let (item_policies, legacy_policy) = Self::smart_shuffle_policies_from_script(script)?;
         request
@@ -71,6 +96,7 @@ impl ScriptedSchedulingEngine {
             request.reference_data,
             smart_shuffle_state,
         )));
+        state.borrow_mut().resolver = resolver;
         let lua = Lua::new();
         register_all(&lua, &state).map_err(lua_error)?;
         run_lua_script(&lua, script).map_err(lua_error)?;
@@ -105,6 +131,7 @@ impl ScriptedSchedulingEngine {
             added_items: std::mem::take(&mut state.added_items),
             added_history: std::mem::take(&mut state.added_history),
             history_to_remove: std::mem::take(&mut state.history_to_remove),
+            warnings: std::mem::take(&mut state.warnings),
             ..SchedulingResult::default()
         })
     }
@@ -448,6 +475,8 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
 
 #[derive(Debug, Clone)]
 struct ScriptState {
+    resolver: Option<Arc<dyn ScriptedContentResolver>>,
+    warnings: Vec<String>,
     playout_id: EntityId,
     start: DateTime<Utc>,
     current_time: DateTime<Utc>,
@@ -483,6 +512,8 @@ impl ScriptState {
         smart_shuffle_state: super::SchedulingSmartShuffleState,
     ) -> Self {
         let mut st = Self {
+            resolver: None,
+            warnings: Vec::new(),
             playout_id,
             start,
             current_time: start,
@@ -651,6 +682,7 @@ impl ScriptState {
 
     fn push_history_ctx(
         &mut self,
+        content_key: &str,
         item: &ersatzrs_domain::PlayoutItem,
         media_item: &super::SchedulingMediaItem,
         ctx: &CurrentHistoryContext,
@@ -668,30 +700,13 @@ impl ScriptState {
                     false,
                 ));
             }
-            CurrentHistoryContext::Playlist {
-                index,
-                child_key,
-                child_index,
-                child_details,
-            } => {
-                self.added_history.push(history(
-                    self.playout_id,
-                    history_key,
-                    item,
-                    None,
-                    *index,
-                    history_details_for_media_item(media_item),
-                    false,
-                ));
-                self.added_history.push(history(
-                    self.playout_id,
-                    history_key,
-                    item,
-                    Some(child_key.clone()),
-                    *child_index,
-                    child_details.clone(),
-                    true,
-                ));
+            CurrentHistoryContext::Playlist { .. } => {
+                self.added_history
+                    .extend(self.playlist_enumerators[content_key].history_for_item(
+                        self.playout_id,
+                        history_key,
+                        item,
+                    ));
             }
         }
     }
@@ -818,7 +833,7 @@ impl ScriptState {
         );
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
-        self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
+        self.push_history_ctx(key, &item, &media_item, &history_ctx, &history_key);
         self.record_smart_shuffle_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
@@ -859,7 +874,7 @@ impl ScriptState {
         );
         item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
-        self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
+        self.push_history_ctx(key, &item, &media_item, &history_ctx, &history_key);
         self.record_smart_shuffle_item(key, &item);
         self.current_time = item.finish;
         self.added_items.push(item);
@@ -1010,6 +1025,66 @@ mod tests {
 
     use super::*;
     use crate::scheduling::{SchedulingMediaItem, SchedulingReferenceData};
+
+    #[test]
+    fn scripted_playlist_continue_preserves_every_child_position() {
+        let script = r#"
+add_collection("a", "A", "chronological")
+add_collection("b", "B", "chronological")
+add_collection("c", "C", "chronological")
+create_playlist("pl", {a=1, b=1, c=1})
+while not is_done() do add_count("pl", 1) end
+"#;
+        let mut reference = SchedulingReferenceData::default();
+        for (name, base) in [("A", 10), ("B", 20), ("C", 30)] {
+            reference.collections_by_name.insert(
+                name.to_owned(),
+                (0..4)
+                    .map(|index| SchedulingMediaItem::new(base + index, Duration::minutes(1)))
+                    .collect(),
+            );
+        }
+        let request = SchedulingRequest {
+            playout: Playout {
+                id: 100,
+                ..Playout::default()
+            },
+            start: base_start(),
+            finish: base_start() + Duration::minutes(24),
+            mode: PlayoutBuildMode::Reset,
+            reference_data: reference,
+        };
+        let full = ScriptedSchedulingEngine
+            .schedule_script(script, request.clone())
+            .unwrap();
+        for split in [1, 7, 11, 15] {
+            let mut first_request = request.clone();
+            first_request.finish = request.start + Duration::minutes(split);
+            let first = ScriptedSchedulingEngine
+                .schedule_script(script, first_request)
+                .unwrap();
+            let mut continued_request = request.clone();
+            continued_request.mode = PlayoutBuildMode::Continue;
+            continued_request.start = first.added_items.last().unwrap().finish;
+            continued_request.playout.anchor = first.anchor;
+            continued_request.reference_data.existing_history = first.added_history;
+            let continued = ScriptedSchedulingEngine
+                .schedule_script(script, continued_request)
+                .unwrap();
+            let actual = first
+                .added_items
+                .iter()
+                .chain(&continued.added_items)
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>();
+            let expected = full
+                .added_items
+                .iter()
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "split after {split} items");
+        }
+    }
 
     macro_rules! assert_scripted_json_snapshot {
         ($($tokens:tt)*) => {

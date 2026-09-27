@@ -664,10 +664,27 @@ impl SqliteSchedulingContentRepository {
             .block_template_schedules(playout_id, &mut media_by_key)
             .await?;
         let effective_blocks = EffectiveBlock::from_templates(&schedules, start, days_to_build);
+        let mut playlist_items_by_key = BTreeMap::new();
+        for content in effective_blocks
+            .iter()
+            .filter_map(|block| block.deco.as_ref())
+            .flat_map(|deco| &deco.break_content)
+            .filter(|content| content.collection_key.collection_type == CollectionType::Playlist)
+        {
+            if !playlist_items_by_key.contains_key(&content.content) {
+                if let Some(id) = content.collection_key.playlist_id {
+                    playlist_items_by_key.insert(
+                        content.content.clone(),
+                        self.playlist_items_by_id(id).await?,
+                    );
+                }
+            }
+        }
 
         let reference_data = self
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
+                playlist_items_by_key,
                 effective_blocks,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
@@ -815,7 +832,9 @@ impl SqliteSchedulingContentRepository {
         definition_policies: BTreeMap<String, SchedulingSmartShufflePolicy>,
         definition_legacy_policy: Option<SchedulingSmartShufflePolicy>,
     ) -> Result<SchedulingReferenceData> {
-        let reference_data = self.configured_playout_options().await?;
+        let mut reference_data = self.configured_playout_options().await?;
+        reference_data.existing_items = self.playout_items(playout_id).await?;
+        reference_data.existing_history = self.playout_history(playout_id).await?;
         let legacy_policy = if let Some(policy) = definition_legacy_policy {
             policy
         } else {

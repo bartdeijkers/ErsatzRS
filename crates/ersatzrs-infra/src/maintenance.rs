@@ -9,7 +9,6 @@ use ersatzrs_core::maintenance::{
     PLAYOUT_BUILD_INTERVAL, PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
     SUBTITLE_CLEANUP_INTERVAL,
 };
-use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{
     audit_classic_refresh_checkpoint, audit_classic_runtime_state,
@@ -641,15 +640,21 @@ fn log_build_warnings(playout_id: EntityId, result: &SchedulingResult) {
 }
 
 async fn generate_playout(
+    pool: &Pool<Db>,
     request: SchedulingRequest,
     cancelled: Option<&PlayoutBuildCancellation>,
 ) -> Result<SchedulingResult> {
     let worker_cancelled = cancelled.cloned();
+    let builder = crate::scripted_scheduling::playout_builder(
+        pool.clone(),
+        tokio::runtime::Handle::current(),
+        worker_cancelled.clone(),
+    );
     // Keep CPU-bound scheduling off the async executor so shutdown can set
     // the cancellation signal even on a single-thread runtime. Await ownership
     // of this worker before releasing the playout lock.
     let result = tokio::task::spawn_blocking(move || {
-        PlayoutBuilder::default().build_cancellable(request, &|| {
+        builder.build_cancellable(request, &|| {
             worker_cancelled.as_ref().is_some_and(|check| check())
         })
     })
@@ -756,7 +761,7 @@ async fn build_playout(
         mode,
         reference_data,
     };
-    let result = generate_playout(request, cancelled).await?;
+    let result = generate_playout(pool, request, cancelled).await?;
     log_build_warnings(playout_id, &result);
     let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
         || (mode != PlayoutBuildMode::Continue

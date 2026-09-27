@@ -1,4 +1,6 @@
 mod common;
+#[path = "scheduling_repository/scripted_sources.rs"]
+mod scripted_sources;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1159,6 +1161,24 @@ async fn scheduling_repository_expands_nested_smart_collection_queries_and_break
     assert!(cycle.is_empty());
 }
 
+fn assert_block_playlist_children(
+    reference_data: &ersatzrs_core::scheduling::SchedulingReferenceData,
+) {
+    let children = &reference_data.playlist_items_by_key["deco-break-content:751"];
+    assert_eq!(children.len(), 2);
+    assert_eq!(
+        children
+            .iter()
+            .map(|child| child
+                .media_items
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        [vec![12, 13, 20], vec![21]]
+    );
+}
+
 #[tokio::test]
 async fn scheduling_repository_loads_block_reference_data_from_sql() {
     let pool = common::test_db().await;
@@ -1233,6 +1253,7 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
     );
     assert_eq!(deco.break_content.len(), 1);
     assert_eq!(deco.break_content[0].content, "deco-break-content:751");
+    assert_block_playlist_children(&reference_data);
     assert_eq!(
         reference_data
             .media_by_key

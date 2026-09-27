@@ -13,3 +13,10 @@ description = 'Row 79 source comparison finds no native counterpart for Reset re
 discovered  = '2026-09-25'
 evidence    = 'Upstream a2f54ef1 BlockPlayoutFillerBuilder.Build and AddDefaultFiller; native scheduling/block.rs, playout_builder.rs and maintenance::build_playout. Checkpoint ee8f7c34 fixes invalid duration and expiration handling. Final core coverage includes Reset/Continue, UTC retention, changed break duration, missing-history refusal and cancellation inside a filler loop. SQLite proof preserves items/history and releases the lock after worker cancellation. Acceptance is recorded in UCU-05.'
 resolved    = true
+
+[[debt]]
+id          = 'block-deco-playlist-continuation'
+description = 'UCU-08 row 122 audit finds that block deco playlist sources are flattened into media lists and restarted from the playout seed. The working correction retains structured children and restores persisted parent/child history; SQLite restart acceptance, strict affected lint and row review pass.'
+discovered  = '2026-09-27'
+evidence    = 'Upstream 34b0d954 BlockPlayoutEnumerator.PlaylistForFiller and PlaylistHistoryTests. The SQL loader regression passes (f2e8b93f-945e-4e01-8395-0bd1b1f94164). Production-builder SQLite close/reopen matches the uninterrupted timeline and preserves full audio/subtitle item settings (10bd4431-7cce-4d12-9d1f-b60ce99f3595). Upstream Reset-only block-start admission is unchanged. Final SQLite restart proof passes (8e86b59d-3145-43bc-8f5f-1600c84884d2), as do 220 scheduling tests, seven builder tests and strict affected lint. Row 122 source map records substantive review.'
+resolved    = true

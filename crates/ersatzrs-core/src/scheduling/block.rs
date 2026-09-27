@@ -1099,21 +1099,7 @@ fn add_block_start_break_content(
                 && !result.items_to_remove.contains(&item.id)
         })
         .collect::<Vec<_>>();
-    let retained_duration = retained
-        .iter()
-        .map(|item| item.finish - item.start)
-        .fold(Duration::zero(), |sum, duration| sum + duration);
-    let remaining = block.duration
-        - retained_duration
-        - result
-            .added_items
-            .iter()
-            .filter(|item| {
-                item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
-                    && item.guide_start == Some(block.start)
-            })
-            .map(|item| item.finish - item.start)
-            .fold(Duration::zero(), |left, right| left + right);
+    let remaining = block_remaining_duration(block, &retained, &result.added_items);
     let mut inserted = Vec::new();
     let mut inserted_duration = Duration::zero();
 
@@ -1122,12 +1108,19 @@ fn add_block_start_break_content(
         .iter()
         .filter(|content| content.placement == DecoBreakPlacement::BlockStart)
     {
+        let playlist = restored_break_playlist(
+            reference_data,
+            result,
+            break_content,
+            block.start + inserted_duration,
+        );
         let mut enumerator = lookup_media(reference_data, &break_content.content);
-        if enumerator.is_empty() {
-            continue;
-        }
         enumerator.set_index(usize::try_from(playout_seed.unsigned_abs()).unwrap_or_default());
-        let Some(media_item) = enumerator.current().cloned() else {
+        let Some(media_item) = playlist
+            .as_ref()
+            .map_or_else(|| enumerator.current(), super::PlaylistEnumerator::current)
+            .cloned()
+        else {
             continue;
         };
         if media_item.duration > remaining - inserted_duration {
@@ -1150,14 +1143,12 @@ fn add_block_start_break_content(
         filler.guide_finish = Some(block_finish);
         filler.collection_key = Some(collection_key_json(&break_content.collection_key));
         inserted_duration += media_item.duration;
-        result.added_history.push(history(
+        result.added_history.extend(break_content_history(
             playout_id,
-            history_key_for_break_content(break_content),
+            break_content,
             &filler,
-            None,
-            enumerator.current_index(),
-            super::history_details_for_media_item(&media_item),
-            false,
+            &enumerator,
+            playlist.as_ref(),
         ));
         inserted.push(filler);
     }
@@ -1327,6 +1318,78 @@ fn add_default_filler(
 struct FillerRuntime {
     playout_id: EntityId,
     playout_seed: i32,
+}
+
+fn block_remaining_duration(
+    block: &EffectiveBlock,
+    retained: &[&ersatzrs_domain::PlayoutItem],
+    added: &[ersatzrs_domain::PlayoutItem],
+) -> Duration {
+    let retained_duration = retained
+        .iter()
+        .map(|item| item.finish - item.start)
+        .fold(Duration::zero(), |sum, duration| sum + duration);
+    let added_duration = added
+        .iter()
+        .filter(|item| {
+            item.guide_group == i32::try_from(block.template_item_id).unwrap_or_default()
+                && item.guide_start == Some(block.start)
+        })
+        .map(|item| item.finish - item.start)
+        .fold(Duration::zero(), |sum, duration| sum + duration);
+    block.duration - retained_duration - added_duration
+}
+
+fn break_content_history(
+    playout_id: EntityId,
+    content: &EffectiveBreakContent,
+    filler: &ersatzrs_domain::PlayoutItem,
+    enumerator: &super::MediaEnumerator,
+    playlist: Option<&super::PlaylistEnumerator>,
+) -> Vec<ersatzrs_domain::PlayoutHistory> {
+    let key = history_key_for_break_content(content);
+    if let Some(playlist) = playlist {
+        return playlist.history_for_item(playout_id, &key, filler);
+    }
+    enumerator
+        .current()
+        .map(|media| {
+            history(
+                playout_id,
+                key,
+                filler,
+                None,
+                enumerator.current_index(),
+                super::history_details_for_media_item(media),
+                false,
+            )
+        })
+        .into_iter()
+        .collect()
+}
+
+fn restored_break_playlist(
+    reference: &super::SchedulingReferenceData,
+    result: &SchedulingResult,
+    content: &EffectiveBreakContent,
+    start: DateTime<Utc>,
+) -> Option<super::PlaylistEnumerator> {
+    let children = reference.playlist_items_by_key.get(&content.content)?;
+    let mut playlist = super::PlaylistEnumerator::new(children.clone());
+    let key = history_key_for_break_content(content);
+    let mut histories = reference
+        .existing_history
+        .iter()
+        .filter(|entry| !result.history_to_remove.contains(&entry.id))
+        .chain(result.added_history.iter())
+        .filter(|entry| entry.key == key && entry.when < start)
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(latest) = histories.iter().map(|entry| entry.when).max() {
+        histories.retain(|entry| entry.when == latest);
+        playlist.apply_history(&histories);
+    }
+    Some(playlist)
 }
 
 fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
@@ -1691,6 +1754,88 @@ mod tests {
                 "finish": history.finish.map(|finish| finish.to_rfc3339()),
             })).collect::<Vec<_>>(),
         }));
+    }
+
+    #[test]
+    fn block_deco_playlist_rebuild_preserves_every_child_position() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference = SchedulingReferenceData::default();
+        reference.media_by_key.insert(
+            "movies".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::minutes(20))],
+        );
+        let children = (0..3)
+            .map(|child| super::super::SchedulingPlaylistItem {
+                collection_key: SchedulingCollectionKey::fake_playlist_item(child),
+                playback_order: PlaybackOrder::Chronological,
+                play_all: false,
+                count: Some(2),
+                media_items: (0..4)
+                    .map(|index| {
+                        SchedulingMediaItem::new(10 + child * 10 + index, Duration::minutes(1))
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        reference.media_by_key.insert(
+            "bumper".to_owned(),
+            children
+                .iter()
+                .flat_map(|child| child.media_items.clone())
+                .collect(),
+        );
+        reference
+            .playlist_items_by_key
+            .insert("bumper".to_owned(), children);
+        for index in 0..18 {
+            reference.effective_blocks.push(EffectiveBlock {
+                block_id: 10,
+                block_key: Some(block_key(10, 20, 30)),
+                template_item_id: 20,
+                name: "Synthetic playlist block".to_owned(),
+                start: start + Duration::minutes(index * 30),
+                duration: Duration::minutes(30),
+                stop_scheduling: BlockStopScheduling::BeforeDurationEnd,
+                items: vec![block_item(1, 10, "movies", true)],
+                deco: Some(EffectiveDeco {
+                    id: 70,
+                    default_filler_content: None,
+                    default_filler_collection_key: None,
+                    default_filler_trim_to_fit: false,
+                    break_content: vec![EffectiveBreakContent {
+                        id: 71,
+                        placement: DecoBreakPlacement::BlockStart,
+                        content: "bumper".to_owned(),
+                        collection_key: collection_key(CollectionType::Playlist, 71),
+                    }],
+                }),
+            });
+        }
+        let full = schedule(reference.clone(), start, Duration::hours(9), 100, 0);
+        let split = start + Duration::minutes(7 * 30);
+        let mut initial = reference.clone();
+        initial.effective_blocks.retain(|block| block.start < split);
+        let first = schedule(initial, start, split - start, 100, 0);
+        reference
+            .effective_blocks
+            .retain(|block| block.start >= split);
+        reference.existing_history = first.added_history.clone();
+        let continued = schedule(reference, split, start + Duration::hours(9) - split, 100, 0);
+        let fillers = |items: &[PlayoutItem]| {
+            items
+                .iter()
+                .filter(|item| item.filler_kind == FillerKind::DecoDefault)
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>()
+        };
+        let mut actual = fillers(&first.added_items);
+        actual.extend(fillers(&continued.added_items));
+        assert_eq!(actual.len(), 18);
+        assert_eq!(actual, fillers(&full.added_items));
+        assert_eq!(
+            actual.iter().take(8).map(|item| item.0).collect::<Vec<_>>(),
+            [10, 11, 20, 21, 30, 31, 12, 13]
+        );
     }
 
     #[test]

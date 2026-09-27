@@ -183,13 +183,17 @@ fn classic_source_has_media(
 /// or when it is finite without a positive duration — the C# `isZero` arm for
 /// `RemoteStream`. Returning the removals as warnings keeps them visible on the
 /// playout instead of failing the whole channel over one unusable item.
+pub(crate) fn unschedulable_remote_stream(item: &SchedulingMediaItem) -> bool {
+    match item.liveness {
+        Some(RemoteStreamLiveness::Unknown) => true,
+        Some(RemoteStreamLiveness::Finite) => item.duration <= Duration::zero(),
+        Some(RemoteStreamLiveness::Live) | None => false,
+    }
+}
+
 fn drop_unschedulable_remote_streams(reference: &mut SchedulingReferenceData) -> Vec<String> {
     let unschedulable = scheduling_media_items(reference)
-        .filter(|item| match item.liveness {
-            Some(RemoteStreamLiveness::Unknown) => true,
-            Some(RemoteStreamLiveness::Finite) => item.duration <= Duration::zero(),
-            Some(RemoteStreamLiveness::Live) | None => false,
-        })
+        .filter(|item| unschedulable_remote_stream(item))
         .map(|item| item.id)
         .collect::<BTreeSet<_>>();
     if unschedulable.is_empty() {

@@ -46,7 +46,7 @@ pub(in crate::scheduling::scripted) fn register_named(
             "watermark_on",
             lua.create_function_mut(move |_, name: String| {
                 let mut st = s.borrow_mut();
-                if let Some(&id) = st.reference_data.watermark_ids_by_name.get(&name) {
+                if let Some(id) = st.watermark_id(&name)? {
                     if !st.watermark_ids.contains(&id) {
                         st.watermark_ids.push(id);
                     }
@@ -65,7 +65,7 @@ pub(in crate::scheduling::scripted) fn register_named(
                 let mut st = s.borrow_mut();
                 match name {
                     Some(n) => {
-                        if let Some(&id) = st.reference_data.watermark_ids_by_name.get(&n) {
+                        if let Some(id) = st.watermark_id(&n)? {
                             st.watermark_ids.retain(|c| *c != id);
                         }
                     }

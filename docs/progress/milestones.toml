@@ -11011,6 +11011,42 @@ production change, authentication-policy change or new playback claim. Existing
 runtime evidence remains applicable. Verdict Covered; pin/ledger move together
 to 06ee45ff with the local row commit, then align upstream. Row 122 is next;
 UCU-08 milestone gates, push and exact-SHA CI remain outstanding.
+Row 122 audit and regression reproduce lost scripted-playlist child positions:
+a split after seven items replays the inactive collections from their starts.
+The working correction writes every child position and restores the parent
+cycle once before child reconciliation and one final advance. The Lua builder
+regression now passes at splits 1/7/11/15. All 218 scheduling tests pass
+(Nextest 52dc0f7b-6173-4d5c-8713-0ae4b0d47667), including counted/play-all
+cycle and all-child restoration; strict core Clippy passes. Block audit finds
+an additional gap: deco playlist reference data is flattened and filler restarts
+from the seed without playlist history. Block and Scripted parity records are
+reopened with explicit debt. Next: retain structured block-deco playlist data,
+restore its history, and prove production-builder SQLite restart plus marathon
+continuation. Row 122 stays pending; pin remains at row 121. No push/CI.
+Block deco now retains structured playlist children from SQL and restores the
+latest full parent/child history for Reset-time block-start filler; upstream's
+Reset-only admission is preserved. The loader regression passes (Nextest
+f2e8b93f-945e-4e01-8395-0bd1b1f94164). Scripted reference loading now includes
+persisted items/history, previously missing. Production-builder SQLite tests
+close/reopen the database and prove block filler and scripted playlist/marathon
+history continuation, including audio/subtitle settings. Final focused checks
+pass: 219 scheduling tests (749eaa84-1a01-4bd6-82ab-dae3dfa64c56), both SQLite
+restart tests (4b2342e5-4432-459c-b79f-b488fa1e3663), and strict affected core/infra
+Clippy. Scripted membership is explicitly synthetic in these history tests.
+The source gap is now resolved: a fallible core port delegates to the existing
+SQL repository from the awaited blocking scheduling worker. Dynamic Lua source
+names, named playlists with structured children, all source kinds and named
+overlays resolve without injected membership. Three real-source SQLite tests
+pass (2b771d24-2770-4ebb-bbb0-38f59e038717), including restart comparison,
+repeated registration, lookup failure and cancellation. Runtime-loaded media
+retain the existing Remote Stream duration/live-placement safety checks.
+Final acceptance: 220 scheduling tests (26fab6b4-6159-447b-a968-3298231da8ac),
+seven shared builder tests, both SQLite history restart tests
+(8e86b59d-3145-43bc-8f5f-1600c84884d2), strict affected core/infra Clippy and
+substantive review pass. Row 122 is Port; source map and resolved parity debts
+record details. Pin/ledger advance to 34b0d954 in the coherent local row commit;
+align the clean upstream checkout afterwards. Next is row 123. UCU-08 window
+gates and authorized milestone push/terminal green CI remain; no interim push.
 """
 
 [[milestone]]

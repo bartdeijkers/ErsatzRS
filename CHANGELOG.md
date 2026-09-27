@@ -39,6 +39,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve every scripted-playlist child position in build history and restore
+  the playlist cycle before advancing, preventing replayed or skipped items on
+  continuation. Load persisted scripted history on rebuild and retain structured
+  block-deco playlist children when restoring filler positions. Resolve Lua
+  sources and named overlays from the database during scheduling, including
+  dynamically constructed names; reject failed or cancelled source lookups without
+  saving a partial timeline.
+
 - Preserve shuffled YAML sequence order across continuation builds and restarts,
   keep nested instructions in their original slots, and reset only affected
   list positions when saved orders or schedule definitions are invalidated.

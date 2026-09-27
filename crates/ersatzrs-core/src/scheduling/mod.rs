@@ -32,7 +32,7 @@ pub use classic::{
     ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
     ClassicSchedulingEngine,
 };
-pub use scripted::ScriptedSchedulingEngine;
+pub use scripted::{ScriptedContentResolver, ScriptedSchedulingEngine};
 pub use smart_shuffle::{
     block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
@@ -1486,6 +1486,41 @@ impl PlaylistEnumerator {
         }
     }
 
+    pub fn history_for_item(
+        &self,
+        playout_id: EntityId,
+        key: &str,
+        item: &PlayoutItem,
+    ) -> Vec<PlayoutHistory> {
+        let Some(media) = self.current() else {
+            return Vec::new();
+        };
+        let mut records = vec![history(
+            playout_id,
+            key,
+            item,
+            None,
+            self.index,
+            history_details_for_media_item(media),
+            false,
+        )];
+        for (position, child) in self.children.iter().enumerate() {
+            let Some(current) = child.enumerator.current() else {
+                continue;
+            };
+            records.push(history(
+                playout_id,
+                key,
+                item,
+                Some(history_key_for_collection_key(&child.collection_key)),
+                child.enumerator.current_index(),
+                history_details_for_media_item(current),
+                position == self.child_index,
+            ));
+        }
+        records
+    }
+
     pub fn advance(&mut self) {
         if let Some(id) = self.current().map(|media| media.id) {
             self.remaining_media_ids.remove(&id);
@@ -1533,8 +1568,9 @@ impl PlaylistEnumerator {
         let Some(primary) = history.iter().find(|history| history.child_key.is_none()) else {
             return;
         };
-        self.index = usize::try_from(primary.index).unwrap_or_default();
-        let mut has_set_child = false;
+        // The primary index counts the whole playlist, including counted and
+        // play-all batches. Replay once before reconciling individual children.
+        self.replay_to(usize::try_from(primary.index).unwrap_or_default());
         for child_history in history.iter().filter(|history| history.child_key.is_some()) {
             let Some(child_key) = child_history.child_key.as_deref() else {
                 continue;
@@ -1546,34 +1582,20 @@ impl PlaylistEnumerator {
             else {
                 continue;
             };
-            let next_index = if child_history.is_current_child {
-                child_history.index.saturating_add(1)
-            } else {
-                child_history.index
-            };
             child
                 .enumerator
-                .set_index(usize::try_from(next_index).unwrap_or_default());
+                .set_index(usize::try_from(child_history.index).unwrap_or_default());
             if child.enumerator.playback_order == PlaybackOrder::Chronological {
-                if child_history.is_current_child {
-                    child
-                        .enumerator
-                        .move_to_history_details(&child_history.details);
-                } else {
-                    child
-                        .enumerator
-                        .move_after_history_details(&child_history.details);
-                }
+                child
+                    .enumerator
+                    .move_to_history_details(&child_history.details);
             }
             if child_history.is_current_child {
                 self.child_index = child_index;
-                has_set_child = true;
             }
         }
-        if !has_set_child && !self.children.is_empty() {
-            self.child_index =
-                usize::try_from(primary.index).unwrap_or_default() % self.children.len();
-        }
+        // Saved children describe the position before the last emitted item.
+        // Advance its active child exactly once after all restoration is done.
         self.advance();
     }
 }
