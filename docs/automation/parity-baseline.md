@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `c27a8d5031c30bb3557a959db55a959ab2aa2aae` |
-| **Commit subject** | `feat: require api key (#2991)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c27a8d5031c30bb3557a959db55a959ab2aa2aae |
+| **Pinned commit** | `cefd715c28e31d003fe5ccd3a113f93672486b41` |
+| **Commit subject** | `fix: mirror channels falling out of sync when using the next streaming engine` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cefd715c28e31d003fe5ccd3a113f93672486b41 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

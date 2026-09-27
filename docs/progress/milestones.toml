@@ -10731,6 +10731,29 @@ Row 112 is Adapt under accepted ADR 0103, with coherent checkpoint
 Next is row 113. Rows 113-115 and the window gates remain open before push/CI.
 Final strict all-target web Clippy, formatting, progress validation, staged diff
 checks and the new-Clippy-allow policy pass after the approved header rename.
+Row 112 landed as 06e94e17; pin, last reconciled row and upstream HEAD agreed
+at c27a8d50 before row 113. Upstream fetch is unchanged at 6f0449c2 and all
+176 ledger SHA/subject pairs match the fetched history.
+Row 113 cefd715c moves mirror lookup outside guide-cache invalidation and
+sends SyncNextPlayout to each mirror after a successful source build.
+ErsatzRS already notifies source and mirrors after persisted scheduling changes,
+filtering Continue notifications to Next channels regardless of source engine.
+The existing shared registry reaches both normal and preview sessions; each Next
+session refreshes its own publisher, which locks source playouts and applies
+mirror offsets through atomic publication. The upstream failure path is covered.
+The production scheduler regression now checks two Next mirrors, one native
+mirror, one unrelated Next channel and both source-engine configurations. It
+passes while preserving existing future items and proving horizon extension
+(Nextest c7220163-709f-4c71-a577-a1694ce01ddb). Seven downstream mirror-offset,
+publication-lock/cancellation and session-notification regressions pass
+(0d9b2ab7-150c-45e2-93c5-518d4294bc11). No production code, FFmpeg argv,
+track selection, schema or browser behavior changes, so existing runtime and
+browser evidence remains applicable. Substantive review confirms notification
+occurs after persistence and no unrelated/native Continue session is restarted.
+Row 113 is Covered with checkpoint `test(next): verify source builds synchronize every mirror`.
+The pin advances to cefd715c; row 114 is next. Window gates and push/CI remain open.
+Strict Clippy for the changed maintenance integration-test target, formatting,
+progress validation and diff checks pass.
 """
 
 [[milestone]]

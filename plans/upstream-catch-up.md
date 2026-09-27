@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **64 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **63 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **112**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **113**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -38,7 +38,7 @@
   audio/subtitle evidence. UCU-07 row 110 is Adapt under accepted ADR 0102;
   row 111 is Port (Plex reauthentication and retained missing sources); row 112
   is Adapt under accepted ADR 0103 (machine API key and browser route separation).
-  Row 113 is next. Existing debt
+  Row 113 is Covered (Next mirror build notifications); row 114 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -49,6 +49,28 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 113 source map: Next mirror synchronization
+
+- Upstream: `cefd715c28e31d003fe5ccd3a113f93672486b41` moves mirror lookup
+  outside guide-cache invalidation and enqueues `SyncNextPlayout` for every
+  mirror after a successful source build. Its only other change is a changelog
+  entry; no UI, schema, track-selection or FFmpeg argument changes are present.
+- Rust: `infra/maintenance.rs` notifies source and mirror channels after
+  persisted scheduling changes. Continue filters this set to Next channels,
+  independently of the source engine, preserving native playback continuity.
+  The shared HLS registry also forwards notifications to preview sessions.
+- `next_engine/session.rs` consumes each notification through its refresh loop;
+  `host.rs` binds that loop to the requested channel publisher. The coordinator
+  locks source playouts through atomic publication, while `schedule.rs` reads
+  source items with the mirror offset. Refresh is event-driven, not periodic.
+- Existing behavior covers the upstream defect. Extend the production scheduler
+  regression to multiple Next mirrors, a native mirror and an unrelated Next
+  channel; verify the dependent set and preservation of already scheduled rows.
+  Existing session and mirror-offset regressions cover the downstream handoff.
+- Covered: the production scheduler regression and seven downstream checks pass.
+  No production behavior, track-selection or scheduling-state change is needed.
+  The pin advances with row 113; row 114 and window acceptance remain pending.
 
 ## UCU-07 row 112 source map: mandatory machine API keys
 
@@ -2417,7 +2439,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | Adapt (ADR 0102) | upstream-baseline-catch-up | `fix(web): isolate streaming and internal callback listeners` | ucu-07; actual-peer loopback and separate streaming route boundaries, trusted callback origins, direct/HLS lifecycle isolation. Listener/regression tests, decoded native/Next smoke, troubleshooting samples, TSDuck 87/87, browser 7 passed/3 existing skips and web parity 724/724 pass. ADR explicitly accepted; substantive review passes. Window gates remain open. |
 | 111 | `a5937386` | fix: plex sign in (#2990) | Port | upstream-baseline-catch-up | `fix(plex): preserve sources during reauthentication` | ucu-07; bounded fresh-device authentication, stale/sign-out race protection, retained missing-source inventory, scan/health guards, localized refresh/removal UI and live SQL search cleanup. Focused backend/scanner tests, strict lint, hydration lint and six Chromium/Firefox cases pass; substantive review fixes returned-source and running-scan removal races. Window gates remain open. |
 | 112 | `c27a8d50` | feat: require api key (#2991) | Adapt (ADR 0103) | upstream-baseline-catch-up | `feat(api): require the ErsatzRS machine API key` | ucu-07; accepted X-Ers-Api-Key, atomic persistent credentials, fail-closed startup and routing, authenticated OpenAPI, separate browser actions and trusted-network/authenticated-proxy management. Key/router/listener tests, strict lint and matched Chromium/Firefox (480 passed, 38 existing skips) pass. Storage-failure browser fixture is isolated; window gates remain open. |
-| 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | | | | ucu-07; provisional: Next behavior triage. |
+| 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | Covered | upstream-baseline-catch-up | `test(next): verify source builds synchronize every mirror` | ucu-07; existing persisted-build notifications include all dependent Next mirrors independently of source engine. Expanded production scheduler regression covers two Next mirrors, a native mirror, an unrelated Next channel and preserved timeline; seven downstream offset/publication/session checks pass. No production behavior changes. |
 | 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | | | | ucu-07; provisional: Port candidate. |
 | 115 | `49b68314` | prep for release v26.8.1 [no ci] | | | | ucu-07; provisional: Upstream tooling candidate. |
 | 116 | `39e39ef6` | changelog update [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |

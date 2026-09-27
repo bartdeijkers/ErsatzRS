@@ -453,7 +453,7 @@ async fn refresh_and_continue_builds_preserve_playout_seed() {
 async fn continue_notifies_only_dependent_next_channels_after_extending_persisted_items() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
-    for id in 1..=3 {
+    for id in 1..=5 {
         common::seed_profile_and_channel(&repos, id).await;
     }
     seed_refresh_rebuild_fixture(&pool, &repos).await;
@@ -461,6 +461,14 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
     pool.execute(r#"UPDATE "Channel" SET "StreamingEngine"=1 WHERE "Id"=3"#)
         .await
         .unwrap();
+    // Upstream cefd715c: every Next mirror must follow its source build, even
+    // when the source and another mirror use the native engine.
+    pool.execute(
+        r#"UPDATE "Channel" SET "PlayoutSource"=1, "MirrorSourceChannelId"=1,
+        "StreamingEngine"=CASE WHEN "Id"=4 THEN 1 ELSE 0 END WHERE "Id" IN (4,5)"#,
+    )
+    .await
+    .unwrap();
     let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
     let locker = EntityLocker::new();
     run_requested_playout_build(
@@ -476,7 +484,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
     .await
     .unwrap();
     let registry = FakeHlsRegistry::default();
-    for (day, expected) in [(1, "2"), (2, "1")] {
+    for (day, expected) in [(1, ["2", "4"]), (2, ["1", "4"])] {
         if day == 2 {
             pool.execute(r#"UPDATE "Channel" SET "StreamingEngine"=CASE WHEN "Id"=1 THEN 1 ELSE 0 END WHERE "Id" IN (1,2)"#).await.unwrap();
         }
@@ -503,7 +511,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
         .unwrap());
         assert_eq!(
             *registry.playout_updates.lock().unwrap(),
-            vec![expected.to_owned()]
+            expected.map(str::to_owned).to_vec()
         );
         let preserved = repos
             .playout
