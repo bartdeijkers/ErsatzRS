@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `463a4c808aaaccb925036b0236ff88c14c516a78` |
-| **Commit subject** | `fix: disable hdhr controller when jwt is used (#2999)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/463a4c808aaaccb925036b0236ff88c14c516a78 |
+| **Pinned commit** | `165c39ec04e814c8fc5bf6c84c867d49b25eeb15` |
+| **Commit subject** | `fix: give slow test more time (#3000)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/165c39ec04e814c8fc5bf6c84c867d49b25eeb15 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

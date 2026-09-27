@@ -151,7 +151,8 @@ guide-group and track-preference regressions pass in both engines, with 96
 scheduler tests and strict core lint green. Row 127 ports JWT-dependent HDHR
 HTTP/UDP availability and localized inactive settings with rejected saves. Eight
 Chromium/Firefox hydrated/no-JS cases, mobile/desktop inspection and web parity
-(742 tests, 20 existing skips) pass. Next is row 128; milestone gates and push/CI remain.
+(742 tests, 20 existing skips) pass. Row 128 is N/A (upstream-only NUnit fixture deadline). Next is row 129;
+milestone gates and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 

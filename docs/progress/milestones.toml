@@ -11135,7 +11135,16 @@ in test-results/ucu08-row127-jwt-visual. Final web parity passes 742 tests with
 progress checks (Nextest 682f6459-b482-4699-ab3f-8bf287752dd8).
 The unchanged v2.0.2 runtime package checksum matches; no FFmpeg build/release.
 Pin/ledger advance to 463a4c80 in the coherent local commit, followed by clean
-reference-checkout alignment. Row 128 and full window gates/push/CI remain due.
+reference-checkout alignment.
+Row 128 is N/A. The complete one-file/four-line upstream diff adds a SetUp
+method replacing the multiday NUnit fixture's inherited 10-second cancellation
+token with 30 seconds. Scenarios/assertions and production code are unchanged.
+The native synchronous Classic multiday/hourly continuation tests do not use
+that fixture deadline. Existing Nextest slow reporting (60 seconds, no forced
+termination) and zero retries are unchanged. Full diff/base fixture/native
+runner review and structured validation pass; no runtime rerun is warranted.
+Pin/ledger advance to 165c39ec in the local documentation commit, followed by
+clean reference alignment. Row 129 and window gates/push/CI remain due.
 """
 
 [[milestone]]

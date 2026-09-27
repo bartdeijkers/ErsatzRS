@@ -47,7 +47,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -58,6 +58,23 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 128 source map: upstream test deadline
+
+- Full upstream `165c39ec04e814c8fc5bf6c84c867d49b25eeb15` changes only
+  `ErsatzTV.Core.Tests/Scheduling/ClassicScheduling/MultiDayBuildTests.cs`.
+  Its four added lines override the base fixture's 10-second cancellation
+  source with 30 seconds. No test scenarios/assertions or runtime code change.
+- Verdict N/A: the Rust Classic tests are synchronous scheduling calls and do
+  not inherit the NUnit fixture cancellation token. Existing multiday/hourly
+  continuation tests remain; `.config/nextest.toml` reports slow tests at 60
+  seconds without terminating them and specifies zero retries. No timeout,
+  assertion, production or runtime-artifact changes are warranted.
+- Exact diff, base fixture and native test/runner contracts were reviewed.
+  Structured progress and diff validation are the appropriate row checks;
+  existing scheduler evidence remains valid. Pin/ledger advance in the local
+  documentation commit, then align the clean reference checkout. Row 129 and
+  full milestone gates/push/CI remain outstanding.
 
 ## UCU-08 row 127 source map: HDHomeRun with IPTV JWT protection
 
@@ -3023,7 +3040,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | Adapt (ADR 0103) | upstream-baseline-catch-up | `test(artwork): verify management and IPTV authorization boundaries` | ucu-08; accepted trusted-network/authenticated-proxy management policy covers UI images; public artwork retains independent optional IPTV JWTs. Four production-router tests prove GET/HEAD admission and streaming exclusions even with a valid machine key; strict lint and source review pass. Row 124 image/browser evidence remains valid. |
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | Port | yaml-scheduling | `fix(scheduling): fill the complete YAML fallback interval` | ucu-08; correct a short YAML fallback leaving an uncovered interval. Existing native helpers already preserve fallback history identity and advance unlocked guide groups. Two-engine duration/history/group/track-preference matrix, all 96 YAML/scripted tests and strict core lint pass. |
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | Port | hdhomerun-http-endpoints; hdhomerun-udp-discovery | `fix(hdhr): disable discovery with IPTV JWT protection` | ucu-08; omit HTTP routes on both listeners and UDP startup under JWT, localize disabled settings and reject crafted saves. Eight Chromium/Firefox hydrated/no-JS cases, desktop/mobile inspection and final web parity (742 passed, 20 existing skips) with strict lint pass. In-order SSR fixes the demonstrated native-form fallback defect. |
-| 128 | `165c39ec` | fix: give slow test more time (#3000) | | | | ucu-08; provisional: Upstream tooling candidate. |
+| 128 | `165c39ec` | fix: give slow test more time (#3000) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream test fixture deadline` | ucu-08; only upstream NUnit multiday fixture cancellation increases from 10 to 30 seconds. No runtime or assertion changes. Native synchronous scheduling tests do not inherit this deadline; Nextest reporting and zero retries remain unchanged. Full diff/base fixture/runner review and structured validation pass. |
 | 129 | `9067cde8` | fix: tag maintenance (#3001) | | | | ucu-08; provisional: Port candidate. |
 | 130 | `1681d1ad` | fix: channel startup (#3002) | | | | ucu-08; provisional: Port candidate. |
 | 131 | `6ebcaf80` | fix: multiday seek | | | | ucu-08; provisional: Port candidate. |
