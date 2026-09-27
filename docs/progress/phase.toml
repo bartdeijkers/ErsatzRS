@@ -133,7 +133,8 @@ Firefox 228 passes/31 skips, with no unexpected or flaky results. UCU-08 starts
 with row 116 N/A release wording after the unchanged upstream refresh and
 176-entry ledger audit. Row 117 is Port: block cleanup cannot advance beyond
 build start; core and persisted retention regressions plus strict lint pass.
-Row 118 is next; milestone gates and push/CI remain.
+Row 118 is N/A: empty upstream build trigger. Row 119 is next; milestone
+gates and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 
