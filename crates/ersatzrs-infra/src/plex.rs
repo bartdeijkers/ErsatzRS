@@ -23,6 +23,8 @@ pub const PLEX_USER_AUTH_TOKEN_KEY: &str = "plex.user_auth_token";
 const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
 const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
 
+mod authentication;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexConnectionConfig {
     pub uri: String,
@@ -144,6 +146,7 @@ pub struct PlexPage<T> {
 #[derive(Debug, Clone)]
 pub struct PlexService {
     client: Client,
+    plex_tv_base: String,
 }
 
 impl Default for PlexService {
@@ -157,6 +160,7 @@ impl PlexService {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            plex_tv_base: PLEX_TV_BASE.to_owned(),
         }
     }
 
@@ -530,10 +534,13 @@ impl PlexService {
         }
         let resp: PinResponse = self
             .client
-            .post(format!("{PLEX_TV_BASE}/api/v2/pins"))
+            .post(format!("{}/api/v2/pins", self.plex_tv_base))
+            .timeout(std::time::Duration::from_secs(10))
             .header(ACCEPT, APPLICATION_JSON)
             .header("X-Plex-Product", PLEX_APP_NAME)
+            .header("X-Plex-Version", env!("CARGO_PKG_VERSION"))
             .header("X-Plex-Client-Identifier", client_identifier)
+            .query(&[("strong", "true")])
             .send()
             .await
             .map_err(provider_error)?
@@ -573,11 +580,12 @@ impl PlexService {
         #[serde(rename_all = "camelCase")]
         struct PinStatusResponse {
             #[serde(default)]
-            auth_token: String,
+            auth_token: Option<String>,
         }
         let resp: PinStatusResponse = self
             .client
-            .get(format!("{PLEX_TV_BASE}/api/v2/pins/{pin_id}"))
+            .get(format!("{}/api/v2/pins/{pin_id}", self.plex_tv_base))
+            .timeout(std::time::Duration::from_secs(10))
             .header(ACCEPT, APPLICATION_JSON)
             .header("X-Plex-Client-Identifier", client_identifier)
             .query(&[("code", pin_code)])
@@ -589,11 +597,7 @@ impl PlexService {
             .json()
             .await
             .map_err(provider_error)?;
-        Ok(if resp.auth_token.is_empty() {
-            None
-        } else {
-            Some(resp.auth_token)
-        })
+        Ok(resp.auth_token.filter(|token| !token.trim().is_empty()))
     }
 
     /// Discovers Plex media servers accessible with `user_auth_token`.
@@ -627,7 +631,8 @@ impl PlexService {
         }
         let resources: Vec<ResourceResponse> = self
             .client
-            .get(format!("{PLEX_TV_BASE}/api/v2/resources"))
+            .get(format!("{}/api/v2/resources", self.plex_tv_base))
+            .timeout(std::time::Duration::from_secs(10))
             .header(ACCEPT, APPLICATION_JSON)
             .header("X-Plex-Token", user_auth_token)
             .header("X-Plex-Client-Identifier", client_identifier)
@@ -654,7 +659,10 @@ impl PlexService {
     }
 
     /// Upserts `PlexMediaSource` and `PlexConnection` rows for each discovered
-    /// server, storing per-server auth tokens in `ConfigElement`.
+    /// server, storing per-server auth tokens in `ConfigElement` atomically.
+    /// Missing servers retain their content and receive a first-missing timestamp.
+    /// Call only after a successful complete inventory, never for authentication
+    /// failure or an unavailable provider.
     ///
     /// Mirrors `SynchronizePlexMediaSourcesHandler.SynchronizeAllServers`.
     ///
@@ -662,105 +670,153 @@ impl PlexService {
     ///
     /// Returns a database error on any write failure.
     pub async fn upsert_sources(pool: &DbPool, servers: &[PlexServerResource]) -> Result<()> {
-        for server in servers {
-            let existing: Option<i64> = sqlx::query_scalar(
-                r#"SELECT "Id" FROM "PlexMediaSource" WHERE "ClientIdentifier" = ?"#,
-            )
-            .bind(&server.client_identifier)
-            .fetch_optional(pool)
+        let mut tx = crate::db::begin_write(pool).await.repository()?;
+        reconcile_plex_sources(&mut tx, servers).await?;
+        tx.commit().await.repository()
+    }
+}
+
+async fn reconcile_plex_sources(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    servers: &[PlexServerResource],
+) -> Result<()> {
+    let existing_sources: Vec<(i64, Option<String>)> =
+        sqlx::query_as(r#"SELECT "Id", "ClientIdentifier" FROM "PlexMediaSource""#)
+            .fetch_all(&mut **tx)
             .await
             .repository()?;
-
-            let ms_id = if let Some(id) = existing {
-                sqlx::query(r#"UPDATE "PlexMediaSource" SET "ServerName" = ? WHERE "Id" = ?"#)
-                    .bind(&server.name)
-                    .bind(id)
-                    .execute(pool)
-                    .await
-                    .repository()?;
-                id
-            } else {
-                let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
-                    .execute(pool)
-                    .await
-                    .repository()?;
-                let ms_id = crate::db::last_insert_id(ms);
-                sqlx::query(
-                    r#"INSERT INTO "PlexMediaSource"
-                       ("Id", "ServerName", "ClientIdentifier")
-                       VALUES (?, ?, ?)"#,
-                )
-                .bind(ms_id)
-                .bind(&server.name)
-                .bind(&server.client_identifier)
-                .execute(pool)
-                .await
-                .repository()?;
-                ms_id
-            };
-
-            for uri in &server.uris {
-                let already: bool = sqlx::query_scalar::<_, i64>(
-                    r#"SELECT COUNT(*) FROM "PlexConnection"
-                       WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
-                )
-                .bind(ms_id)
-                .bind(uri)
-                .fetch_one(pool)
-                .await
-                .repository()?
-                    > 0;
-                if !already {
-                    sqlx::query(
-                        r#"INSERT INTO "PlexConnection"
-                           ("IsActive", "Uri", "PlexMediaSourceId")
-                           VALUES (0, ?, ?)"#,
-                    )
-                    .bind(uri)
-                    .bind(ms_id)
-                    .execute(pool)
-                    .await
-                    .repository()?;
-                }
-            }
-
-            if let Some(first_uri) = server.uris.first() {
-                sqlx::query(
-                    r#"UPDATE "PlexConnection" SET "IsActive" = 1
-                       WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
-                )
-                .bind(ms_id)
-                .bind(first_uri)
-                .execute(pool)
-                .await
-                .repository()?;
-            }
-
+    for server in servers {
+        upsert_discovered_plex_source(tx, server).await?;
+    }
+    // A successful inventory can omit an unclaimed server. Retain its
+    // libraries/media and preserve the first absence time until it returns.
+    // Upstream: SynchronizePlexMediaSourcesHandler (#2990).
+    let discovered: std::collections::HashSet<_> = servers
+        .iter()
+        .map(|server| server.client_identifier.as_str())
+        .collect();
+    let now = Utc::now();
+    for (id, identifier) in existing_sources {
+        if !identifier
+            .as_deref()
+            .is_some_and(|id| discovered.contains(id))
+        {
             sqlx::query(
-                r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-                   "#,
+                r#"UPDATE "PlexMediaSource"
+                   SET "MissingSince" = COALESCE("MissingSince", ?)
+                   WHERE "Id" = ?"#,
             )
-            .bind(format!(
-                "{PLEX_SERVER_AUTH_TOKEN_PREFIX}{}",
-                server.client_identifier
-            ))
-            .bind(&server.server_auth_token)
-            .execute(pool)
-            .await
-            .repository()?;
-
-            sqlx::query(
-                r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-                   "#,
-            )
-            .bind(PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY)
-            .bind(&server.server_auth_token)
-            .execute(pool)
+            .bind(now)
+            .bind(id)
+            .execute(&mut **tx)
             .await
             .repository()?;
         }
-        Ok(())
     }
+    Ok(())
+}
+
+// One server write belongs to the inventory transaction; no partial credentials
+// or source records are published if any later inventory write fails.
+async fn upsert_discovered_plex_source(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    server: &PlexServerResource,
+) -> Result<()> {
+    let existing: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "PlexMediaSource" WHERE "ClientIdentifier" = ?"#)
+            .bind(&server.client_identifier)
+            .fetch_optional(&mut **tx)
+            .await
+            .repository()?;
+
+    let ms_id = if let Some(id) = existing {
+        sqlx::query(r#"UPDATE "PlexMediaSource" SET "ServerName" = ?, "MissingSince" = NULL WHERE "Id" = ?"#)
+            .bind(&server.name)
+            .bind(id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+        id
+    } else {
+        let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+        let ms_id = crate::db::last_insert_id(ms);
+        sqlx::query(
+            r#"INSERT INTO "PlexMediaSource"
+               ("Id", "ServerName", "ClientIdentifier")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(ms_id)
+        .bind(&server.name)
+        .bind(&server.client_identifier)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        ms_id
+    };
+
+    for uri in &server.uris {
+        let already: bool = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "PlexConnection"
+               WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
+        )
+        .bind(ms_id)
+        .bind(uri)
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?
+            > 0;
+        if !already {
+            sqlx::query(
+                r#"INSERT INTO "PlexConnection"
+                   ("IsActive", "Uri", "PlexMediaSourceId")
+                   VALUES (0, ?, ?)"#,
+            )
+            .bind(uri)
+            .bind(ms_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+        }
+    }
+
+    if let Some(first_uri) = server.uris.first() {
+        sqlx::query(
+            r#"UPDATE "PlexConnection" SET "IsActive" = 1
+               WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
+        )
+        .bind(ms_id)
+        .bind(first_uri)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    }
+
+    sqlx::query(
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+           "#,
+    )
+    .bind(format!(
+        "{PLEX_SERVER_AUTH_TOKEN_PREFIX}{}",
+        server.client_identifier
+    ))
+    .bind(&server.server_auth_token)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+
+    sqlx::query(
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+           "#,
+    )
+    .bind(PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY)
+    .bind(&server.server_auth_token)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    Ok(())
 }
 
 /// Sync Plex movies into media rows.
@@ -1870,6 +1926,18 @@ pub async fn sync_plex_libraries(
     media_source_id: i64,
     incoming: &[PlexLibrarySummary],
 ) -> Result<()> {
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    let missing: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "PlexMediaSource"
+           WHERE "Id" = ? AND "MissingSince" IS NOT NULL)"#,
+    )
+    .bind(media_source_id)
+    .fetch_one(&mut *tx)
+    .await
+    .repository()?;
+    if missing {
+        return Ok(());
+    }
     let existing_rows = sqlx::query(
         r#"SELECT "pl"."Id" AS "Id", "pl"."Key" AS "Key",
                   "pl"."ShouldSyncItems" AS "ShouldSyncItems",
@@ -1879,7 +1947,7 @@ pub async fn sync_plex_libraries(
            WHERE "l"."MediaSourceId" = ?"#,
     )
     .bind(media_source_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await
     .repository()?;
 
@@ -1895,7 +1963,6 @@ pub async fn sync_plex_libraries(
         })
         .collect();
 
-    let mut tx = crate::db::begin_write(pool).await.repository()?;
     for incoming_library in incoming {
         let position = existing
             .iter()
@@ -2880,6 +2947,39 @@ async fn replace_streams(
     Ok(())
 }
 
+async fn plex_source_is_missing(pool: &DbPool, media_source_id: i64) -> Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "PlexMediaSource"
+           WHERE "Id" = ? AND "MissingSince" IS NOT NULL)"#,
+    )
+    .bind(media_source_id)
+    .fetch_one(pool)
+    .await
+    .repository()
+}
+
+/// Refresh library metadata for an available Plex server without scanning its media.
+///
+/// # Errors
+/// Returns a provider/storage error or rejects a missing server.
+pub async fn refresh_plex_libraries(pool: &DbPool, media_source_id: i64) -> Result<()> {
+    if plex_source_is_missing(pool, media_source_id).await? {
+        return Err(RepositoryError::unavailable(
+            "Plex libraries",
+            "server is missing",
+        ));
+    }
+    let config = load_active_plex_connection_config(pool, media_source_id).await?;
+    let service = PlexService::new();
+    let libraries = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        service.list_libraries(&config),
+    )
+    .await
+    .map_err(|_| RepositoryError::unavailable("Plex libraries", "request timed out"))??;
+    sync_plex_libraries(pool, media_source_id, &libraries).await
+}
+
 /// Loads all configuration from the database and synchronizes one Plex library.
 ///
 /// Dispatches to movie, show, or collection sync based on `MediaKind`.
@@ -2938,6 +3038,10 @@ pub async fn sync_library_by_id_with_progress(
     })?;
     let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
     let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+
+    if plex_source_is_missing(pool, media_source_id).await? {
+        return Ok(0);
+    }
 
     let conn_row = sqlx::query(
         r#"SELECT pc."Uri", pms."ClientIdentifier"
@@ -3051,6 +3155,9 @@ pub async fn sync_plex_show_by_id(
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
     let target = load_target_plex_show_scan(pool, library_id, show_id).await?;
+    if plex_source_is_missing(pool, target.media_source_id).await? {
+        return Ok(0);
+    }
     if !target.should_sync_items {
         tracing::warn!(
             library_id,
@@ -3225,6 +3332,9 @@ pub async fn sync_collections_for_media_source(
     media_source_id: i64,
     _deep_scan: bool,
 ) -> Result<usize> {
+    if plex_source_is_missing(pool, media_source_id).await? {
+        return Ok(0);
+    }
     let library_ids: Vec<i64> = sqlx::query_scalar(
         r#"SELECT l."Id"
            FROM "Library" l
@@ -3307,6 +3417,9 @@ pub(crate) async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> R
 
 #[allow(clippy::needless_pass_by_value)]
 fn provider_error(error: reqwest::Error) -> RepositoryError {
+    if error.status() == Some(reqwest::StatusCode::UNAUTHORIZED) {
+        return RepositoryError::unavailable("Plex authorization", "Plex rejected the credentials");
+    }
     RepositoryError::Decode {
         kind: "plex http",
         value: error.without_url().to_string(),

@@ -10580,6 +10580,86 @@ under ADR 0102, landed with the ledger and pin in the coherent checkpoint
 `fix(web): isolate streaming and internal callback listeners`.
 The refreshed upstream target is unchanged; all 176 SHA/subject pairs match.
 Rows 111-115 and window gates remain open; no intermediate push or CI run.
+Row 111 (a5937386) source audit covers forced device identity during sign-in,
+account authorization/error recovery, bounded PIN polling, missing-source
+retention and scan exclusion, page alerts and explicit missing-server removal.
+Explicit upstream sign-out remains destructive and is separate from
+reauthentication. Rust gaps and visual/behavioral mapping are in the plan.
+Working-tree checkpoint: the additive MissingSince migration and atomic
+resource reconciliation preserve existing source/library/media/override IDs,
+retain the first missing timestamp across repeated successful inventories,
+and clear it on return. Red Nextest 58920812-6b5e-4ff8-82bc-0276bfdbdcbf
+reproduces absent missing-state and a partial update surviving a later failure.
+The correction passes both regressions (3232b270-56ae-4d0b-a539-5f5e0763fb8e)
+and all 16 new/existing Plex service tests
+(7c672e96-db80-4c63-9aad-6794e170a177). Strict infra lint flagged function
+length; extracting per-server persistence preserves the inventory transaction
+without a suppression. All-target infra lint and the 16 tests pass after that
+refactor (c4253c88-dde9-443d-9a2b-e8760c8fbe5b). Prior-schema migration and
+rerun preservation plus both reconciliation regressions pass 3/3
+(69340b52-968b-4815-86c5-c638f653ac73).
+Authentication now persists a flow-bound two-minute deadline, validates the
+authorized account before atomically replacing credentials, and rejects stale
+completion/401 responses. Ten authentication regressions pass
+(fb78a0b7-ff3a-4289-9063-c0078df34d91). Application/web completion returns only
+a boolean; the web check passes. MissingSince round-trips through domain/admin
+repositories; missing-source library/collection refreshes skip safely. Scheduled
+scan admission resumes after return without changing stored sync preferences
+(80b86442-9763-43a2-90a3-f9f8d822ebfb, 5/5). The separate scanner executable
+also skips missing sources without contacting their old address
+(a3861826-ec3d-4396-a185-a8316306b02b, 2/2); its initial sandbox-only run could
+not bind mock sockets, and the permitted loopback rerun passed.
+The existing provider poll now refreshes account inventory; health reports
+missing account authorization and retained missing servers. Authentication plus
+health regressions pass 12/12 (74f77fa3-34ea-4886-a531-718a4e8769fd).
+Review found that explicit sign-out also needs to invalidate the pending PIN,
+otherwise a late completion could restore credentials. Sign-out now clears that
+flow transactionally. The complete focused backend selection passes 22/22,
+including sign-out racing with authorization, successful discovery absence and
+return, timestamp round-trips/clearing, scan admission, migration and health
+(a5ada354-40ab-4c34-be95-b4d4cd4cf477). Strict all-target Clippy passes for
+infra, app, scanner and web after correcting test naming/length; no new
+suppression was added. Target-size and diff whitespace checks pass.
+Row 111 remains pending: localized reauthentication/missing-state UI, explicit
+removal, browser evidence, final integration checks and review.
+The working-tree page now exposes reauthentication, missing-server guidance,
+disabled refresh for missing sources, and explicit named removal confirmation
+in all nine supported cultures. Polling stops after component disposal; sign-in
+errors provide localized retry guidance. Removal checks missing state inside its
+transaction, cascades owned libraries/media, clears the source token and removes
+items from the live SQL search projection, retaining other sources. Library
+metadata refresh is bounded and rechecks missing state in the reconciliation
+transaction. Five focused regressions pass
+(d1f7f9ba-41fc-4ea5-b2a6-c4c79c1a297e), including actual search disappearance,
+stale removal rejection, current-token refresh and retained missing libraries.
+The configured target exceeded 60 GiB and was cleaned per repository policy.
+Matched Chromium/Firefox verification uses the checksum-verified ErsatzRS-ffmpeg
+v2.0.2 archive. The first run passed both removal/narrow-layout scenarios; four
+authentication assertions omitted the rendered Error prefix. Captured DOM proved
+the expected message and Retry control were present. Correcting only the exact
+locator yields 6/6 passing tests in test-results/ucu07-plex/playwright-results.json,
+including PIN polling failure/retry/completion and retained content. Visual review
+then prompted normal contrast for missing-server guidance; source review prompted
+disabling conflicting source actions while authentication is pending. Verification
+of those final UI adjustments and strict lint are in progress. The row/pin remain
+unchanged and no intermediate push occurred.
+Final row-111 acceptance: all six Chromium/Firefox cases pass after the
+action-lock and contrast changes; the matched build uses the verified public
+FFmpeg v2.0.2 package. PIN UI tests intercept server-function replies to prove
+request selection, failure/retry/completion and action locking; isolated HTTP
+provider tests prove actual credential validation/replacement. Removal browser
+tests use the real application and SQLite mutations, including cancel, returned-
+source rejection, content retention and deletion. Both 360-pixel screenshots
+were inspected. Strict all-target infra/app/web Clippy passes; hydration lint
+has no new findings (32 existing baseline suppressions). Substantive review
+identified a running scan recreating removed provider rows: removal now rejects
+running managed operations in its transaction, covering web and scanner CLI.
+All five removal/refresh/migration/reconciliation tests pass again with that
+guard (7d567cd8-70ff-4df0-abba-d2978c560820). No test timeout, retry or assertion
+was weakened. Upstream fetch remains unchanged; all 176 SHA/subject pairs match.
+Row 111 is Port, closed with `fix(plex): preserve sources during reauthentication`.
+The pin advances to a593738637bbc1b186f40395697882969bb4664e with this row; next
+is row 112. No intermediate push or CI was launched. UCU-07 remains In progress.
 """
 
 [[milestone]]

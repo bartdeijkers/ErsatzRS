@@ -553,6 +553,7 @@ pub struct PlexSourceRow {
     pub id: i64,
     pub name: String,
     pub address: String,
+    pub missing_since: Option<String>,
 }
 
 #[server]
@@ -569,6 +570,7 @@ pub async fn list_plex_sources() -> Result<Vec<PlexSourceRow>, ServerFnError> {
             id: row.id,
             name: row.name,
             address: row.address,
+            missing_since: row.missing_since.map(|timestamp| timestamp.to_rfc3339()),
         })
         .collect())
 }
@@ -582,6 +584,23 @@ pub async fn has_plex_token() -> Result<bool, ServerFnError> {
 }
 
 #[server]
+pub async fn delete_missing_plex_source(source_id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    Ok(state
+        .application
+        .delete_missing_plex_source(source_id)
+        .await?)
+}
+
+#[server]
+pub async fn refresh_plex_libraries(source_id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    Ok(state.application.refresh_plex_libraries(source_id).await?)
+}
+
+#[server]
 pub async fn sign_out_plex() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -591,22 +610,27 @@ pub async fn sign_out_plex() -> Result<(), ServerFnError> {
 
 /// Begins a Plex PIN auth flow. Returns `(pin_id, auth_url)`.
 ///
-/// Calls `IPlexTvApiClient.StartPinFlow()` equivalent in infra, stores the
-/// pending pin code in `ConfigElement` for later polling.
+/// Stores a bounded, client-identity-bound pending flow without replacing
+/// existing credentials until authorization succeeds.
 #[server]
-pub async fn start_plex_pin_flow() -> Result<(String, String), ServerFnError> {
+pub async fn start_plex_pin_flow(
+    force_new_credentials: bool,
+) -> Result<(String, String), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    Ok(state.application.start_plex_pin_flow().await?)
+    Ok(state
+        .application
+        .start_plex_pin_flow(force_new_credentials)
+        .await?)
 }
 
-/// Polls Plex for PIN completion. Returns `Some(token)` when the user has
-/// authorized, `None` if still pending.
+/// Polls Plex for PIN completion. Returns only authorization status;
+/// account tokens remain on the server.
 ///
 /// On success, calls `PlexService::get_servers` (mirrors
 /// `SynchronizePlexMediaSources`) to discover and upsert PlexMediaSource rows.
 #[server]
-pub async fn check_plex_pin(pin_id: String) -> Result<Option<String>, ServerFnError> {
+pub async fn check_plex_pin(pin_id: String) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
     Ok(state.application.check_plex_pin(&pin_id).await?)

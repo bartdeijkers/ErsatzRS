@@ -27,6 +27,17 @@ release section when tagging a release.
 
 ### Fixed
 
+- Make Plex server discovery transactional and retain the first missing-server
+  timestamp until the server returns, preserving synchronized content and path
+  overrides when a server disappears from plex.tv (ErsatzTV #2990).
+  Bound sign-in attempts to two minutes, validate replacement credentials before
+  switching the active account, and prevent stale authorization responses from
+  erasing newer credentials. Missing servers skip scans without changing stored
+  library sync preferences.
+  Add localized reauthentication, missing-server guidance, bounded library
+  refresh, and explicit removal with a named confirmation that preserves files
+  on Plex. Reject removal if the server has returned since confirmation opened.
+
 - Keep direct MPEG-TS responses separate from HLS worker lookup, preventing
   legacy-to-Hybrid switching from reusing a closing direct stream. Channel Stop
   still reaches every viewer, and one response's cleanup preserves other streams.

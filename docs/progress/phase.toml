@@ -109,8 +109,13 @@ Documentation closeout 99cd14e2 is published. UCU-07 row 110 listener isolation
 and direct-stream registry corrections have focused tests, strict lint, native
 and Next Convert smoke, actual MPEG troubleshooting samples, TSDuck and matched
 browser proof. Web parity passes 724/724 and ADR 0102 is explicitly accepted.
-Row 110 is Adapt; UCU-07 owns the detailed evidence. Next: audit row 111 in
-order, then finish rows 112-115 and the milestone gates before push and CI.
+Row 110 is Adapt; UCU-07 owns the detailed evidence. Row 111 source audit and
+transactional missing-server reconciliation have passing Plex tests. Bounded
+authentication, periodic discovery, missing-source scan admission/return and
+health have focused proof; strict backend/web lint passes.
+Row 111 is Port after final action-lock/contrast browser proof and substantive
+review. All six Chromium/Firefox scenarios pass; next is row 112. Rows 112-115 and milestone gates
+remain pending before push and CI.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 

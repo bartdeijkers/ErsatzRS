@@ -51,6 +51,7 @@ pub struct PlexMediaSource {
     pub media_source: MediaSource,
     pub server_name: Option<String>,
     pub machine_identifier: Option<String>,
+    pub missing_since: Option<DateTime<Utc>>,
     pub connections: Vec<PlexConnection>,
     pub path_replacements: Vec<PlexPathReplacement>,
 }

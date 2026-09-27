@@ -23,6 +23,7 @@ async fn media_source_repository_round_trips_provider_children() {
             },
             server_name: Some("plex-server".to_owned()),
             machine_identifier: Some("machine".to_owned()),
+            missing_since: Some(common::fixed_time()),
             connections: vec![PlexConnection {
                 id: 10,
                 plex_media_source_id: 1,
@@ -110,6 +111,37 @@ async fn media_source_repository_round_trips_provider_children() {
         repos.media_source.get_emby(3).await.unwrap().connections[0].address,
         "http://emby"
     );
+}
+
+#[tokio::test]
+async fn plex_missing_timestamp_round_trips_in_domain_and_admin_rows() {
+    let repos = make_repositories(common::test_db().await);
+    let mut source = PlexMediaSource {
+        media_source: MediaSource {
+            id: 1,
+            kind: MediaSourceKind::Plex,
+            ..Default::default()
+        },
+        missing_since: Some(common::fixed_time()),
+        ..Default::default()
+    };
+    for expected in [Some(common::fixed_time()), None] {
+        source.missing_since = expected;
+        repos.media_source.upsert_plex(&source).await.unwrap();
+        assert_eq!(
+            repos.media_source.get_plex(1).await.unwrap().missing_since,
+            expected
+        );
+        assert_eq!(
+            repos
+                .media_source
+                .list_remote_sources_admin(ersatzrs_core::repositories::RemoteMediaSourceKind::Plex)
+                .await
+                .unwrap()[0]
+                .missing_since,
+            expected
+        );
+    }
 }
 
 #[tokio::test]

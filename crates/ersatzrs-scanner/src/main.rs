@@ -262,8 +262,22 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         info!(library_id = args.library_id, provider = "plex", "dry run");
         return Ok(());
     }
-    let config = load_plex_config(pool, args.library_id).await?;
     let media_source_id = load_library_media_source_id(pool, args.library_id).await?;
+    let missing: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "PlexMediaSource"
+           WHERE "Id" = ? AND "MissingSince" IS NOT NULL)"#,
+    )
+    .bind(media_source_id)
+    .fetch_one(pool)
+    .await?;
+    if missing {
+        info!(
+            media_source_id,
+            "Plex scan skipped because the server is missing"
+        );
+        return Ok(());
+    }
+    let config = load_plex_config(pool, args.library_id).await?;
     let library_key =
         load_provider_library_key(pool, "PlexLibrary", "Key", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
@@ -778,6 +792,26 @@ mod tests {
         scan_emby(&pool, &dry_run_args(Provider::Emby))
             .await
             .expect("emby dry run should short-circuit");
+    }
+
+    #[tokio::test]
+    async fn plex_scan_skips_missing_server_without_contacting_old_address() {
+        let server = MockServer::start_async().await;
+        let plex_page = mock_plex_scan_page(&server).await;
+        let pool = test_db().await;
+        seed_plex_scan_db(&pool, &server.base_url()).await;
+        sqlx::query(r#"UPDATE "PlexMediaSource" SET "MissingSince" = '2026-01-02T03:04:05Z'"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        scan_plex(&pool, &plex_scan_args()).await.unwrap();
+        plex_page.assert_calls_async(0).await;
+        let preference: i64 =
+            sqlx::query_scalar(r#"SELECT "ShouldSyncItems" FROM "PlexLibrary" WHERE "Id" = 5"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(preference, 1);
     }
 
     #[tokio::test]

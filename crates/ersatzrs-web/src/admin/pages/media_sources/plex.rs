@@ -6,11 +6,12 @@ use crate::admin::i18n::{
     provider_path_replacements_title, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::media_sources::{
-    check_plex_pin, has_plex_token, list_plex_libraries, list_plex_paths, list_plex_sources,
-    save_plex_library_prefs, save_plex_paths, sign_out_plex, start_plex_pin_flow, LibraryPrefRow,
-    PathReplacementRow, PlexSourceRow,
+    check_plex_pin, delete_missing_plex_source, has_plex_token, list_plex_libraries,
+    list_plex_paths, list_plex_sources, refresh_plex_libraries, save_plex_library_prefs,
+    save_plex_paths, sign_out_plex, start_plex_pin_flow, LibraryPrefRow, PathReplacementRow,
+    PlexSourceRow,
 };
-use crate::admin::ui::primitives::dialog::DeleteDialog;
+use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::toast::{load_failed_message, load_or_notify, use_toast};
 
 use super::jellyfin::PathsEditor;
@@ -71,12 +72,39 @@ fn PlexSourcesIsland() -> impl IntoView {
 
     let sign_out_action = Action::new(|()| sign_out_plex());
     let sign_out_open = RwSignal::new(false);
+    let remove_open = RwSignal::new(false);
+    let remove_target = RwSignal::new((0_i64, String::new()));
+    let remove_action = Action::new(|id: &i64| delete_missing_plex_source(*id));
+    let remove_error = RwSignal::new(String::new());
+    let authenticating = RwSignal::new(false);
+    let refresh_action = Action::new(|id: &i64| refresh_plex_libraries(*id));
+    Effect::new(move |_| match refresh_action.value().get() {
+        Some(Ok(())) => {
+            rows.refetch();
+            remove_error.set(String::new());
+        }
+        Some(Err(_)) => remove_error.set(tr(TextKey::PlexRefreshFailed).to_owned()),
+        None => {}
+    });
+    Effect::new(move |_| match remove_action.value().get() {
+        Some(Ok(())) => {
+            rows.refetch();
+            remove_error.set(String::new());
+        }
+        Some(Err(_)) => {
+            remove_error.set(tr(TextKey::RemoveFailed).to_owned());
+            rows.refetch();
+        }
+        None => {}
+    });
 
     Effect::new(move |_| {
         if matches!(sign_out_action.value().get(), Some(Ok(()))) {
             rows.refetch();
             has_token.refetch();
             sign_out_open.set(false);
+        } else if matches!(sign_out_action.value().get(), Some(Err(_))) {
+            remove_error.set(tr(TextKey::RemoveFailed).to_owned());
         }
     });
 
@@ -90,8 +118,8 @@ fn PlexSourcesIsland() -> impl IntoView {
                 let sources = current_sources.get();
                 let authorized = current_authorized.get();
                 let loaded = sources_loaded.get() && token_loaded.get();
-                let show_sign_in = loaded && (sources.is_empty() || !authorized);
                 let show_sources = loaded && !sources.is_empty();
+                let show_missing = sources.iter().any(|source| source.missing_since.is_some());
                 let show_loading = !loaded;
 
                 view! {
@@ -102,18 +130,30 @@ fn PlexSourcesIsland() -> impl IntoView {
                         {tr(TextKey::Loading)}
                     </p>
                     <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
-                        <div style:display=move || if show_sign_in { "" } else { "none" }>
-                            <PlexSignInControls/>
+                        <div style:display=move || if loaded { "" } else { "none" }>
+                            <PlexSignInControls force_new_credentials=authorized || show_sources
+                                busy=authenticating
+                                blocked=Signal::derive(move || refresh_action.pending().get()
+                                    || remove_action.pending().get() || sign_out_action.pending().get())/>
                         </div>
                         <button
                             class=style::btn_danger
-                            style:display=move || if show_sign_in { "none" } else { "" }
-                            disabled=move || show_sign_in
+                            style:display=move || if loaded && (authorized || show_sources) { "" } else { "none" }
+                            disabled=move || !loaded || authenticating.get() || sign_out_action.pending().get()
                             on:click=move |_| sign_out_open.set(true)
                         >
                             {tr(TextKey::SignOutOfPlex)}
                         </button>
                     </div>
+
+                    <p class=style::error_msg role="status"
+                        style:display=move || if show_sources && !authorized { "" } else { "none" }>
+                        {tr(TextKey::PlexSignedOutHelp)}
+                    </p>
+                    <p role="status"
+                        style:display=move || if show_missing { "" } else { "none" }>
+                        {tr(TextKey::PlexMissingHelp)}
+                    </p>
 
                     <p
                         class=style::cell_muted
@@ -122,6 +162,7 @@ fn PlexSourcesIsland() -> impl IntoView {
                         {tr(TextKey::PlexSignInHelp)}
                     </p>
 
+                    <div style="overflow-x:auto">
                     <table
                         style:display=move || if show_sources { "" } else { "none" }
                         style="width:100%;border-collapse:collapse"
@@ -136,14 +177,30 @@ fn PlexSourcesIsland() -> impl IntoView {
                         <tbody>
                             {sources.into_iter().map(|r| {
                                 let id = r.id;
+                                let missing = r.missing_since.is_some();
+                                let name = r.name.clone();
                                 view! {
                                     <tr>
-                                        <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
-                                        <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
+                                        <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}
+                                            <p style:display=move || if missing { "" } else { "none" }
+                                                title=tr(TextKey::PlexMissingHelp)>{tr(TextKey::PlexMissingServer)}</p>
+                                        </td>
+                                        <td style="padding:0.5rem;font-size:0.875rem;overflow-wrap:anywhere" class=style::cell_muted>{r.address.clone()}</td>
                                         <td style="padding:0.5rem;text-align:right">
-                                            <div class=style::row_actions>
+                                            <div class=style::row_actions style="flex-wrap:wrap">
+                                                <button class=style::row_btn
+                                                    disabled=move || missing || !authorized || authenticating.get() || refresh_action.pending().get()
+                                                    on:click=move |_| { refresh_action.dispatch(id); }>
+                                                    {tr(TextKey::Refresh)}
+                                                </button>
                                                 <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
                                                 <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                                <button class=style::btn_danger
+                                                    style:display=move || if missing { "" } else { "none" }
+                                                    disabled=move || !missing || authenticating.get() || remove_action.pending().get()
+                                                    on:click=move |_| { remove_target.set((id, name.clone())); remove_open.set(true); }>
+                                                    {tr(TextKey::Delete)}
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -151,8 +208,20 @@ fn PlexSourcesIsland() -> impl IntoView {
                             }).collect::<Vec<_>>()}
                         </tbody>
                     </table>
+                    </div>
                 }
             }}
+
+            <p class=style::error_msg role="alert">{move || remove_error.get()}</p>
+            <Modal dialog_id="plex-remove-server-dialog" open=remove_open
+                title=tr(TextKey::ConfirmDelete).to_string()
+                confirm_label=Some(tr(TextKey::Delete)) destructive=true
+                on_close=Callback::new(move |confirmed: bool| {
+                    if confirmed { remove_action.dispatch(remove_target.get().0); }
+                })>
+                <p><strong>{move || remove_target.get().1}</strong></p>
+                <p>{tr(TextKey::PlexRemoveServerHelp)}</p>
+            </Modal>
 
             <DeleteDialog
                 dialog_id="plex-sign-out-dialog"
@@ -175,7 +244,11 @@ fn PlexSourcesIsland() -> impl IntoView {
 /// clicks, then polls `check_plex_pin` every 2 s via `spawn_local` +
 /// `gloo-timers`. On success navigates to `/media/sources/plex` to reload.
 #[component]
-fn PlexSignInControls() -> impl IntoView {
+fn PlexSignInControls(
+    force_new_credentials: bool,
+    busy: RwSignal<bool>,
+    blocked: Signal<bool>,
+) -> impl IntoView {
     #[derive(Clone)]
     enum State {
         Idle,
@@ -185,35 +258,50 @@ fn PlexSignInControls() -> impl IntoView {
     }
 
     let state: RwSignal<State> = RwSignal::new(State::Idle);
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let cleanup_active = active.clone();
+    on_cleanup(move || cleanup_active.store(false, std::sync::atomic::Ordering::Relaxed));
 
-    let start_action = Action::new(|()| async move { start_plex_pin_flow().await });
+    let start_action =
+        Action::new(move |()| async move { start_plex_pin_flow(force_new_credentials).await });
+    Effect::new(move |_| {
+        busy.set(start_action.pending().get() || matches!(state.get(), State::Waiting { .. }));
+    });
 
     Effect::new(move |_| {
         match start_action.value().get() {
             Some(Ok((pin_id, auth_url))) => {
                 let pin = pin_id.clone();
+                let active = active.clone();
                 state.set(State::Waiting { auth_url });
 
                 // Poll every 2 s until Plex confirms the PIN.
                 leptos::task::spawn_local(async move {
                     loop {
                         gloo_timers::future::TimeoutFuture::new(2_000).await;
-                        match check_plex_pin(pin.clone()).await {
-                            Ok(Some(_token)) => {
+                        if !active.load(std::sync::atomic::Ordering::Relaxed) {
+                            break;
+                        }
+                        let result = check_plex_pin(pin.clone()).await;
+                        if !active.load(std::sync::atomic::Ordering::Relaxed) {
+                            break;
+                        }
+                        match result {
+                            Ok(true) => {
                                 state.set(State::Done);
                                 set_browser_location("/media/sources/plex");
                                 break;
                             }
-                            Ok(None) => {}
-                            Err(e) => {
-                                state.set(State::Error(e.to_string()));
+                            Ok(false) => {}
+                            Err(_) => {
+                                state.set(State::Error(tr(TextKey::PlexSignInFailed).to_owned()));
                                 break;
                             }
                         }
                     }
                 });
             }
-            Some(Err(e)) => state.set(State::Error(e.to_string())),
+            Some(Err(_)) => state.set(State::Error(tr(TextKey::PlexSignInFailed).to_owned())),
             None => {}
         }
     });
@@ -225,10 +313,10 @@ fn PlexSignInControls() -> impl IntoView {
         <button
             class=style::btn_primary
             style:display=move || if matches!(state.get(), State::Idle) { "" } else { "none" }
-            disabled=move || !matches!(state.get(), State::Idle)
+            disabled=move || !matches!(state.get(), State::Idle) || start_action.pending().get() || blocked.get()
             on:click=move |_| { let _ = start_action.dispatch(()); }
         >
-            {tr(TextKey::SignInToPlex)}
+            {tr(if force_new_credentials { TextKey::ReauthenticatePlex } else { TextKey::SignInToPlex })}
         </button>
 
         // Waiting: authorization link + polling message
@@ -273,7 +361,7 @@ fn PlexSignInControls() -> impl IntoView {
             </p>
             <button
                 class=style::btn_secondary
-                disabled=move || !matches!(state.get(), State::Error(_))
+                disabled=move || !matches!(state.get(), State::Error(_)) || blocked.get()
                 on:click=move |_| {
                     state.set(State::Idle);
                     let _ = start_action.dispatch(());

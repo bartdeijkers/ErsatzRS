@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `14372575160a58672a44c9ff52034904b5ace156` |
-| **Commit subject** | `fix: close hole that allowed management ui over streaming port (#2989)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/14372575160a58672a44c9ff52034904b5ace156 |
+| **Pinned commit** | `a593738637bbc1b186f40395697882969bb4664e` |
+| **Commit subject** | `fix: plex sign in (#2990)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a593738637bbc1b186f40395697882969bb4664e |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,7 +59,7 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff` (verified 2026-09-26),
+The latest fetched target is `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff` (verified 2026-09-27),
 currently **176 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original

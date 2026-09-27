@@ -1082,6 +1082,12 @@ async fn dispatch_due_library_refreshes(
 }
 
 async fn poll_provider_connectivity(pool: &Pool<Db>) -> Result<ProviderPollReport> {
+    if let Err(error) = crate::plex::PlexService::new()
+        .refresh_account_servers(pool)
+        .await
+    {
+        tracing::warn!(%error, "Plex account inventory refresh failed; retaining synchronized sources");
+    }
     let endpoints = provider_endpoints(pool).await?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

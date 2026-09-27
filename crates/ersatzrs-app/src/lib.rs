@@ -2565,6 +2565,37 @@ impl ApplicationServices {
             .map_err(Into::into)
     }
 
+    pub async fn delete_missing_plex_source(&self, id: i64) -> Result<()> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "source_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_sources()
+            .delete_missing_plex_source_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn refresh_plex_libraries(&self, source_id: i64) -> Result<()> {
+        if source_id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "source_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .media_source_runtime()
+            .refresh_plex_libraries(source_id)
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "refresh Plex libraries",
+                message: error.to_string(),
+            })
+    }
+
     pub async fn save_jellyfin_connection(
         &self,
         connection: ersatzrs_core::repositories::RemoteConnectionAdmin,
@@ -2646,46 +2677,36 @@ impl ApplicationServices {
 
     pub async fn has_plex_token(&self) -> Result<bool> {
         Ok(self
-            .get_optional_setting("plex.current_server_auth_token")
+            .get_optional_setting("plex.user_auth_token")
             .await?
-            .is_some_and(|value| !value.is_empty()))
+            .is_some_and(|value| !value.trim().is_empty()))
     }
 
-    pub async fn start_plex_pin_flow(&self) -> Result<(String, String)> {
+    pub async fn start_plex_pin_flow(
+        &self,
+        force_new_credentials: bool,
+    ) -> Result<(String, String)> {
         let pin = self
             .ports
             .media_source_runtime()
-            .start_plex_pin()
+            .start_plex_pin(force_new_credentials)
             .await
             .map_err(|error| ApplicationError::Unavailable {
                 operation: "start plex pin flow",
                 message: error.to_string(),
             })?;
-        self.ports
-            .admin_settings()
-            .set_string("plex.pending_pin_code", &pin.code)
-            .await?;
         Ok((pin.id, pin.auth_url))
     }
 
-    pub async fn check_plex_pin(&self, pin_id: &str) -> Result<Option<String>> {
-        let pin_code = self.get_string_setting("plex.pending_pin_code", "").await?;
-        let token = self
-            .ports
+    pub async fn check_plex_pin(&self, pin_id: &str) -> Result<bool> {
+        self.ports
             .media_source_runtime()
-            .complete_plex_pin(pin_id, &pin_code)
+            .complete_plex_pin(pin_id)
             .await
             .map_err(|error| ApplicationError::Unavailable {
                 operation: "complete plex pin flow",
                 message: error.to_string(),
-            })?;
-        if let Some(token) = &token {
-            self.ports
-                .admin_settings()
-                .set_string("plex.user_auth_token", token)
-                .await?;
-        }
-        Ok(token)
+            })
     }
 
     pub async fn delete_media_items(&self, ids: &[i64]) -> Result<u64> {

@@ -154,15 +154,16 @@ impl LibraryRepository for SqliteLibraryRepository {
                           WHEN el."Id" IS NOT NULL THEN 'Emby'
                           ELSE NULL
                       END AS "Provider",
-                      COALESCE(
+                      CASE WHEN pms."MissingSince" IS NOT NULL THEN 0 ELSE COALESCE(
                           pl."ShouldSyncItems",
                           jl."ShouldSyncItems",
                           el."ShouldSyncItems",
                           1
-                      ) AS "ShouldSyncItems"
+                      ) END AS "ShouldSyncItems"
                FROM "Library" l
                LEFT JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
                LEFT JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+               LEFT JOIN "PlexMediaSource" pms ON pms."Id" = l."MediaSourceId"
                LEFT JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
                LEFT JOIN "EmbyLibrary" el ON el."Id" = l."Id"
                WHERE l."Id" = ?

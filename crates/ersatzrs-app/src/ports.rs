@@ -780,6 +780,7 @@ impl MediaSourceRuntimeError {
 /// Remote provider calls and background synchronization effects.
 #[async_trait]
 pub trait MediaSourceRuntime: Send + Sync {
+    async fn refresh_plex_libraries(&self, source_id: i64) -> Result<(), MediaSourceRuntimeError>;
     async fn validate_jellyfin(
         &self,
         address: &str,
@@ -807,13 +808,12 @@ pub trait MediaSourceRuntime: Send + Sync {
         guard: OperationGuard,
     );
 
-    async fn start_plex_pin(&self) -> Result<PlexPinFlow, MediaSourceRuntimeError>;
-
-    async fn complete_plex_pin(
+    async fn start_plex_pin(
         &self,
-        pin_id: &str,
-        pin_code: &str,
-    ) -> Result<Option<String>, MediaSourceRuntimeError>;
+        force_new_credentials: bool,
+    ) -> Result<PlexPinFlow, MediaSourceRuntimeError>;
+
+    async fn complete_plex_pin(&self, pin_id: &str) -> Result<bool, MediaSourceRuntimeError>;
 }
 
 /// Bounded repository port set for the next playout and scan vertical slices.

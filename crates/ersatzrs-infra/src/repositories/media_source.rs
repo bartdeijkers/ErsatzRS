@@ -27,7 +27,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_plex(&self, id: EntityId) -> Result<PlexMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Plex).await?;
         let row = sqlx::query(
-            r#"SELECT "ServerName", "ClientIdentifier" FROM "PlexMediaSource" WHERE "Id" = ?"#,
+            r#"SELECT "ServerName", "ClientIdentifier", "MissingSince" FROM "PlexMediaSource" WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_one(&self.0)
@@ -60,6 +60,10 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
             media_source: base,
             server_name: row.try_get("ServerName").repository()?,
             machine_identifier: row.try_get("ClientIdentifier").repository()?,
+            missing_since: decode_optional_datetime(
+                "plex media source missing_since",
+                row.try_get("MissingSince").repository()?,
+            )?,
             connections: connection_rows
                 .iter()
                 .map(|connection| PlexConnection {
@@ -555,7 +559,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                    FROM "EmbyMediaSource" source ORDER BY source."Id""#
             }
             RemoteMediaSourceKind::Plex => {
-                r#"SELECT source."Id",
+                r#"SELECT source."Id", source."MissingSince",
                           COALESCE(source."ServerName", 'Plex') AS "Name",
                           COALESCE((SELECT "Uri" FROM "PlexConnection"
                             WHERE "PlexMediaSourceId" = source."Id" AND "IsActive" = 1
@@ -570,6 +574,14 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                     id: row.try_get("Id").repository()?,
                     name: row.try_get("Name").repository()?,
                     address: row.try_get("Address").repository()?,
+                    missing_since: if kind == RemoteMediaSourceKind::Plex {
+                        decode_optional_datetime(
+                            "plex media source missing_since",
+                            row.try_get("MissingSince").repository()?,
+                        )?
+                    } else {
+                        None
+                    },
                 })
             })
             .collect()
@@ -738,6 +750,53 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         Ok(())
     }
 
+    async fn delete_missing_plex_source_admin(&self, id: EntityId) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let scanning: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS(SELECT 1 FROM "ManagedLibraryOperation" operation
+               JOIN "Library" library ON library."Id" = operation."LibraryId"
+               WHERE library."MediaSourceId" = ? AND operation."State" = ?)"#,
+        )
+        .bind(id)
+        .bind(super::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Running,
+        ))
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        if scanning {
+            return Err(RepositoryError::unavailable(
+                "Plex removal",
+                "source scan is still running",
+            ));
+        }
+        let identifier: Option<String> = sqlx::query_scalar(
+            r#"SELECT "ClientIdentifier" FROM "PlexMediaSource"
+               WHERE "Id" = ? AND "MissingSince" IS NOT NULL"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::unavailable("Plex removal", "server is no longer missing")
+        })?;
+        if let Some(identifier) = identifier {
+            sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(format!("plex.server_auth_token.{identifier}"))
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
+        // Library/media rows cascade; search reads the live SQL projection.
+        sqlx::query(r#"DELETE FROM "MediaSource" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        tx.commit().await.repository()
+    }
+
     async fn list_library_preferences_admin(
         &self,
         kind: RemoteMediaSourceKind,
@@ -892,7 +951,10 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn delete_all_plex_sources_admin(&self) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" LIKE 'plex.%auth_token%'"#)
+        sqlx::query(
+            r#"DELETE FROM "ConfigElement" WHERE "Key" LIKE 'plex.%auth_token%'
+               OR "Key" IN ('plex.client_identifier', 'plex.pending_flow', 'plex.pending_pin_code')"#,
+        )
             .execute(&mut *tx)
             .await
             .repository()?;
@@ -942,13 +1004,14 @@ impl ProviderUpsert for PlexMediaSource {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(upsert_sql!(
-                r#"INSERT INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
-                 VALUES (?, ?, ?)"#,
+                r#"INSERT INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier", "MissingSince")
+                 VALUES (?, ?, ?, ?)"#,
                 &[&["Id"]],
             ))
             .bind(self.media_source.id)
             .bind(&self.server_name)
             .bind(&self.machine_identifier)
+            .bind(encode_optional_datetime(self.missing_since))
             .execute(&mut **tx)
             .await
             .repository()?;

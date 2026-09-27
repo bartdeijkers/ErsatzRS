@@ -4,14 +4,14 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102']
 summary    = """
-Ledger: 176 commits, 110 reconciled, 66 pending. AMM-N-03 Complete.
+176 commits, 111 reconciled, 65 pending. AMM-N-03 Complete.
 UCU-03/04 Complete. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
 Rows 99/102 Port: runtime v2.0.1, probe/cache and Docker Vulkan; GPU limits recorded.
 Rows 100-101/103 N/A; row 104 Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
 Row 108 Port: v2.0.2 published; public hashes verified and managed default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
-green CI 36274614736 at 0e482f66. Row 110 Adapt (ADR 0102); row 111 next.
+green CI 36274614736 at 0e482f66. Row 110 Adapt (ADR 0102); row 111 Port; row 112 next.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.
@@ -61,6 +61,13 @@ independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Unsupported graphics kinds/settings remain refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id          = 'ucu-plex-reauthentication'
+description = 'UCU-07 row 111: fresh-device reauthentication without deleting synchronized content, bounded PIN lifetime and credential-error recovery, visible missing-server state, scan exclusion, health reporting and explicit missing-server removal.'
+discovered  = '2026-09-27'
+resolved    = true
+evidence    = 'Row 111 is Port. UCU-07 records bounded fresh-device authentication, stale/sign-out protection, periodic inventory retention, scan/health and guarded removal/search/refresh regressions. All nine cultures include the UI text; six matched Chromium/Firefox cases, strict infra/app/web lint, hydration lint and substantive review pass. Milestone window gates and CI remain separate.'
 
 [[debt]]
 id          = 'ucu-listener-boundaries'

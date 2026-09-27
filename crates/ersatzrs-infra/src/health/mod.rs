@@ -1178,6 +1178,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn provider_connectivity_reports_plex_account_and_missing_state_without_a_poll() {
+        let pool = test_pool().await;
+        sqlx::raw_sql(
+            r#"INSERT INTO "MediaSource" ("Id") VALUES (60);
+               INSERT INTO "PlexMediaSource" ("Id", "ClientIdentifier", "MissingSince")
+               VALUES (60, 'synthetic-server', '2026-01-02T03:04:05Z');"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let check = ProviderConnectivityHealthCheck::new(pool.clone());
+        let result = check.check().await.unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("authorization is missing"));
+        upsert_config(&pool, "plex.client_identifier", "synthetic-client")
+            .await
+            .unwrap();
+        upsert_config(&pool, "plex.user_auth_token", "synthetic-secret-token")
+            .await
+            .unwrap();
+        let result = check.check().await.unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("scans are paused"));
+        assert!(!result.message.contains("synthetic-secret-token"));
+        sqlx::query(r#"UPDATE "PlexMediaSource" SET "MissingSince" = NULL"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::NotApplicable
+        );
+    }
+
+    #[tokio::test]
     async fn provider_connectivity_check_warns_when_endpoints_are_unreachable() {
         let pool = test_pool().await;
         let check = ProviderConnectivityHealthCheck::new(pool.clone());
@@ -1196,6 +1231,13 @@ mod tests {
         )
         .await
         .expect("seed plex media source");
+
+        upsert_config(&pool, "plex.client_identifier", "synthetic-client")
+            .await
+            .unwrap();
+        upsert_config(&pool, "plex.user_auth_token", "synthetic-token")
+            .await
+            .unwrap();
 
         let payload = serde_json::to_string(&vec![
             ProviderConnectivityResult {

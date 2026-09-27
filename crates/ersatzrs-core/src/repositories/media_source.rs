@@ -60,6 +60,7 @@ pub struct RemoteSourceAdminRow {
     pub id: EntityId,
     pub name: String,
     pub address: String,
+    pub missing_since: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -127,6 +128,7 @@ pub trait MediaSourceRepository: Send + Sync {
         operating_system: &str,
     ) -> Result<EntityId>;
     async fn delete_remote_source_admin(&self, id: EntityId) -> Result<()>;
+    async fn delete_missing_plex_source_admin(&self, id: EntityId) -> Result<()>;
     async fn list_library_preferences_admin(
         &self,
         kind: RemoteMediaSourceKind,

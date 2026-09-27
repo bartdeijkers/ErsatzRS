@@ -21,6 +21,11 @@ impl NativeMediaSourceRuntime {
 
 #[async_trait]
 impl MediaSourceRuntime for NativeMediaSourceRuntime {
+    async fn refresh_plex_libraries(&self, source_id: i64) -> Result<(), MediaSourceRuntimeError> {
+        ersatzrs_infra::plex::refresh_plex_libraries(&self.pool, source_id)
+            .await
+            .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))
+    }
     async fn validate_jellyfin(
         &self,
         address: &str,
@@ -132,13 +137,12 @@ impl MediaSourceRuntime for NativeMediaSourceRuntime {
         });
     }
 
-    async fn start_plex_pin(&self) -> Result<PlexPinFlow, MediaSourceRuntimeError> {
-        let client_id =
-            ersatzrs_infra::plex::PlexService::get_or_create_client_identifier(&self.pool)
-                .await
-                .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
+    async fn start_plex_pin(
+        &self,
+        force_new_credentials: bool,
+    ) -> Result<PlexPinFlow, MediaSourceRuntimeError> {
         let pin = ersatzrs_infra::plex::PlexService::new()
-            .start_pin_flow(&client_id)
+            .start_account_authentication(&self.pool, force_new_credentials)
             .await
             .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
         Ok(PlexPinFlow {
@@ -148,29 +152,18 @@ impl MediaSourceRuntime for NativeMediaSourceRuntime {
         })
     }
 
-    async fn complete_plex_pin(
-        &self,
-        pin_id: &str,
-        pin_code: &str,
-    ) -> Result<Option<String>, MediaSourceRuntimeError> {
-        let client_id =
-            ersatzrs_infra::plex::PlexService::get_or_create_client_identifier(&self.pool)
-                .await
-                .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
+    async fn complete_plex_pin(&self, pin_id: &str) -> Result<bool, MediaSourceRuntimeError> {
         let service = ersatzrs_infra::plex::PlexService::new();
-        let token = service
-            .complete_pin_flow(pin_id, pin_code, &client_id)
+        let completed = service
+            .complete_account_authentication(&self.pool, pin_id)
             .await
             .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
-        if let Some(token) = &token {
-            let servers = service
-                .get_servers(token, &client_id)
-                .await
-                .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
-            ersatzrs_infra::plex::PlexService::upsert_sources(&self.pool, &servers)
+        if completed {
+            service
+                .refresh_account_servers(&self.pool)
                 .await
                 .map_err(|error| MediaSourceRuntimeError::new(error.to_string()))?;
         }
-        Ok(token)
+        Ok(completed)
     }
 }

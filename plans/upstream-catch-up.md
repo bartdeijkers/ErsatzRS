@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-26): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
+- Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **66 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **65 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **110**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **111**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -36,7 +36,8 @@
   [36274614736](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36274614736).
   Its milestone owns the runtime publication, browser correction and decoded
   audio/subtitle evidence. UCU-07 row 110 is Adapt under accepted ADR 0102;
-  row 111 is next. Existing debt
+  row 111 is Port (Plex reauthentication and retained missing sources); row 112
+  is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -47,6 +48,64 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 111 source map: Plex reauthentication and missing servers
+
+- Upstream: `a593738637bbc1b186f40395697882969bb4664e` (#2990). Reviewed the
+  commands, Plex API/secret store, domain/view model, repository, additive
+  `MissingSince` migration, scheduler, page/dialog and changelog diff. The
+  generated EF designers/snapshots repeat the nullable timestamp schema.
+- Outcome: obtain a new Plex device token without deleting synchronized
+  content; retain temporarily unclaimed servers, identify them visibly, resume
+  when they return, and remove them only through an explicit destructive action.
+- Authentication: a forced flow uses a new client identifier, committed only
+  after authorization. Abandonment, provider errors and the two-minute polling
+  deadline release flow state. Use HTTP status 401 to invalidate credentials;
+  absence of credentials or a failed discovery must not mean an empty server
+  inventory. Include product/version identity on Plex authentication calls.
+- Reconciliation: keep source/library/media IDs and path overrides. Mark the
+  first successful-inventory absence with `MissingSince`, retain its original
+  timestamp on repeats, clear it on return, and skip missing sources in scheduled
+  and requested scans. Explicit server removal includes search cleanup.
+- Upstream explicit `SignOutOfPlexHandler` still deletes all Plex sources and
+  search entries. Preserve that distinct, confirmed action; reauthentication
+  and an upstream 401 must never use the destructive sign-out operation.
+- Rust map: `infra/plex.rs`, media-source domain/repository and scan selection,
+  `app` media-source ports/handlers, web host adapter, media-source server
+  functions and `admin/pages/media_sources/plex.rs`. Health must report missing
+  source/authentication state without exposing credential values.
+- Confirmed gaps: polling has no deadline; the account/client ID is reused;
+  pending PIN state is not bound to a flow; authorization checks a cached server
+  token; no missing-server timestamp, disabled refresh or explicit missing-server
+  removal exists. Existing resource upserts already retain absent source rows,
+  but lack the state needed to pause their scans or explain their absence.
+- Visual source map: upstream toolbar keeps sign-out and reauthentication
+  alongside the source table; signed-out/missing alerts precede it. Rows retain
+  name/address, library/path actions, warning status and conditional removal.
+  Removal uses a small confirmation dialog naming the source and destructive
+  consequences. Reuse the existing Rust shared media-source styles/dialogs;
+  keep narrow layouts usable and localize every new label/message.
+- Required evidence: synthetic PIN/provider tests for new-device identity,
+  abandoned/error/expired flows and successful credential replacement; SQLite
+  missing/return/repeat/rollback tests retaining media and overrides; scan and
+  health tests; hydrated browser reauthentication, warning/removal confirmation,
+  provider failures and narrow layout. No real credentials enter fixtures or logs.
+- Exclusions: rows 112-115 and broader admin API-key policy. No new service or
+  dependency is proposed. Row 111 remains pending until all layers are proven.
+
+### Row 111 hydration source map
+
+- Route/wrapper: `/media/sources/plex`, `PlexSourcesPage`.
+- Island: `PlexSourcesIsland`; `PlexSignInControls` stays a child component.
+- Data boundary: existing media-source server functions through the app port;
+  authorization returns a boolean, never an account token.
+- Mutations: start/check PIN, explicit sign-out, missing-source removal with a
+  transaction-time missing-state check. Search uses the live SQL projection.
+- Fallback: this existing management route requires hydration; prove actual
+  interactions in the matched browser bundle rather than adding a second flow.
+- Shared primitives: reuse mounted `Modal`/`DeleteDialog`, toast and source CSS.
+- Browser target: reauthentication request, provider failure/retry, missing-source
+  warning, cancel/confirm removal, retained content, stale removal and narrow view.
 
 ## UCU-07 row 110 source map: listener and internal-route isolation
 
@@ -2291,7 +2350,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 108 | `c0e4c4ac` | chore: update windows ffmpeg (#2988) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt sparse-stream pacing runtime` | ucu-06; published first-party v2.0.2 applies the upstream sparse-pacing fix on FFmpeg 9. Source fallback/exclusion tests and decoded Windows/Linux bitmap/alternate-audio regressions pass; both v2.0.1 controls fail unchanged pacing bounds. Public downloads match tested archives. Managed default adopted; all local window gates pass. |
 | 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-06; only upstream CHANGELOG release heading and compare links change. No source, runtime or package behavior changes; reviewed exact diff. Existing window gates remain valid; no release acceptance is inferred from these notes. |
 | 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | Adapt (ADR 0102) | upstream-baseline-catch-up | `fix(web): isolate streaming and internal callback listeners` | ucu-07; actual-peer loopback and separate streaming route boundaries, trusted callback origins, direct/HLS lifecycle isolation. Listener/regression tests, decoded native/Next smoke, troubleshooting samples, TSDuck 87/87, browser 7 passed/3 existing skips and web parity 724/724 pass. ADR explicitly accepted; substantive review passes. Window gates remain open. |
-| 111 | `a5937386` | fix: plex sign in (#2990) | | | | ucu-07; provisional: Port candidate. |
+| 111 | `a5937386` | fix: plex sign in (#2990) | Port | upstream-baseline-catch-up | `fix(plex): preserve sources during reauthentication` | ucu-07; bounded fresh-device authentication, stale/sign-out race protection, retained missing-source inventory, scan/health guards, localized refresh/removal UI and live SQL search cleanup. Focused backend/scanner tests, strict lint, hydration lint and six Chromium/Firefox cases pass; substantive review fixes returned-source and running-scan removal races. Window gates remain open. |
 | 112 | `c27a8d50` | feat: require api key (#2991) | | | | ucu-07; provisional: Port candidate. |
 | 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | | | | ucu-07; provisional: Next behavior triage. |
 | 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | | | | ucu-07; provisional: Port candidate. |
@@ -2354,6 +2413,6 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 171 | `62b7a5e9` | perf: graphics engine subtitles (#3037) | | | | ucu-09; provisional: Covered (ADR 0005); the upstream gain is in the managed SkiaSharp compositor (premultiplied alpha, pipe back-pressure, visible-region subset). ErsatzRS renders subtitles through native FFmpeg filters and never composites a full ARGB frame across a pipe, as row 52 already established. Confirm the image-subtitle producer hands Next no full frames. |
 | 172 | `27f9d217` | fix: jellyfin 12 collections as shows (#3038) | | | | ucu-09; provisional: Port; `crates/ersatzrs-infra/src/jellyfin/client.rs` issues the same `sortBy=SortName` item queries without `collapseBoxSetItems=false`, so Jellyfin 12 collapses collection members into their BoxSet for user-less queries. The season `ShowId` refresh when the etag is unchanged has a matching television repository path. Emby is untouched upstream. |
 | 173 | `c0184f00` | perf: watermark improvements (#3039) | | | | ucu-09; provisional: Covered candidate; upstream skips its graphics canvas when every selected graphic is a plain permanent or intermittent watermark and maps them straight to Next media layers. ErsatzRS already projects watermarks as wire layers in `next_engine/watermark.rs`; confirm no canvas stage is built for watermark-only playouts before closing the row. |
-| 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; pending source audit in ledger order. |
-| 175 | `04f49b0a` | fix: mpegts script line endings (#3041) | | | | ucu-09; pending source audit in ledger order. |
-| 176 | `6f0449c2` | build: package libvpl (from next) on windows (#3042) | | | | ucu-09; pending source audit in ledger order. |
+| 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; provisional: Port; ErsatzRS repeats the defect: `crates/ersatzrs-infra/src/playback.rs:1819` gates both embedded-subtitle filters on `engine == SubtitleSelectionEngine::Native`, so Next channels ignore `ffmpeg.use_embedded_subtitles` and still admit embedded text subtitles that were never extracted (or carry an empty path); those win over a usable sidecar and are then dropped, leaving no subtitles. Upstream now applies both filters to every engine and exempts only `HttpLiveStreamingDirect` from the extraction requirement. Claude 2026-09-27 triage. |
+| 175 | `04f49b0a` | fix: mpegts script line endings (#3041) | | | | ucu-09; provisional: Port (small); `.gitattributes` normalizes everything with `* text=auto eol=lf`, so the tracked Windows scripts check out with LF: `assets/Scripts/MpegTs/run.bat`, `run.cmd`, `run.ps1` and `scripts/release/*.ps1`. Upstream's counterpart is `*.bat text eol=crlf`; the `*.sh text eol=lf` half is already covered by our global rule. Claude 2026-09-27 triage. |
+| 176 | `6f0449c2` | build: package libvpl (from next) on windows (#3042) | | | | ucu-09; provisional: Port; `scripts/release/stage-next.py` stages only `BINARIES = ("ersatztv-channel",)`, so the win-x64 release ships `ersatztv-channel.exe` without the `libvpl.dll` and `libvpl-LICENSE.txt` that upstream now moves out of the same Next zip, leaving Windows Next playback with no oneVPL/QSV runtime beside the binary. Linux and macOS artifacts are unaffected. Claude 2026-09-27 triage. |
