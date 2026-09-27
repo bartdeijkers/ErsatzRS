@@ -10465,7 +10465,7 @@ required. UCU-07 is now eligible, beginning with pending row 110.
 id         = 'ucu-07'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 49b68314'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-06']
@@ -10880,6 +10880,17 @@ runtime path correction. Pin, last reconciled row 115 and clean upstream HEAD
 agree at 49b68314299ea9961c1914ca41b3016a62f2ed73. UCU-07 remains In progress
 pending its authorized main push and terminal green exact-SHA CI; UCU-08 has
 not started.
+2026-09-27: Published b4d659eb319d2d683e7d5c62cba9a1d882da1162 to main.
+CI run 36321494841 completed successfully for that exact SHA: Preflight,
+Documentation links, Format, Test, Cargo deny, Next engine, both Playwright
+browsers and Clippy passed. The alternative hosted test shard and PR-only
+commit lint jobs were not selected by this main-push configuration.
+Downloaded browser reports independently confirm Chromium 252 passed/7 skipped
+and Firefox 228 passed/31 skipped, with zero unexpected failures, flaky tests
+or report errors. Next CI includes real-engine decoding, HTTP EOF, burned
+subtitles/preview and Hybrid converted subtitles. All local window gates and
+ordered row acceptance above are satisfied. UCU-07 is Complete; UCU-08 is now
+eligible, beginning with pending row 116. No new release is implied.
 """
 
 [[milestone]]

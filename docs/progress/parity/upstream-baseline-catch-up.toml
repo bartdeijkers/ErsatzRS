@@ -6,11 +6,13 @@ adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0
 summary    = """
 176 commits, 115 reconciled, 61 pending. AMM-N-03 Complete.
 UCU-03/04/05 Complete; UCU-05 CI 36190815587 at 81bcd649.
-Rows 99/102 Port: runtime v2.0.1, probe/cache and Docker Vulkan; GPU limits recorded.
-Rows 100-101/103 N/A; row 104 Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
-Row 108 Port: v2.0.2 published; public hashes verified and managed default adopted.
+Rows 99/102 Port: runtime, probe/cache, Docker Vulkan; GPU limits recorded.
+Rows 100-101/103 N/A; 104 Covered; 105-107 Port: watermarks, images, on-demand.
+Row 108 Port: v2.0.2 published, hashes verified, managed default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
-green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A. UCU-07 gates next.
+green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
+UCU-07 Complete: gates and green CI 36321494841 at b4d659eb.
+Next: row 116.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.

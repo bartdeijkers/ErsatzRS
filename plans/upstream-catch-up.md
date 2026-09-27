@@ -40,7 +40,9 @@
   is Adapt under accepted ADR 0103 (machine API key and browser route separation).
   Row 113 is Covered (Next mirror build notifications); row 114 is Adapt
   (internal media authentication under ADRs 0095/0102); row 115 is N/A release
-  bookkeeping. UCU-07 window gates and exact-SHA CI are next. Existing debt
+  bookkeeping. UCU-07 is Complete: local window gates and terminal green CI
+  [36321494841](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36321494841)
+  at `b4d659eb` satisfy acceptance. UCU-08 begins with row 116. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -60,8 +62,8 @@
 - N/A: no executable source, configuration, dependency or package changes.
   ErsatzRS retains its own Unreleased security notes and release lifecycle;
   this upstream release does not establish an ErsatzRS release or CI result.
-- All UCU-07 rows are reconciled. Milestone closeout gates, push and terminal
-  exact-SHA green CI remain required before UCU-08 starts.
+- All UCU-07 rows, local closeout gates, push and terminal exact-SHA green CI
+  are complete; the milestone owns the final evidence. UCU-08 is eligible.
 
 ## UCU-07 closeout correction: Next executable path resolution
 

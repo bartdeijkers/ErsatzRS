@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-07: reconcile upstream through 49b68314'
+current_focus = 'UCU-08: reconcile upstream through 5bb3ddfc'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -127,10 +127,12 @@ retain absolute selected tools. All 23 focused tests, strict crate lint and the
 original bare-ffprobe decoded smoke pass. Refreshed workspace Clippy, full
 test closeout (3,341 passed), native playback smoke and the default parity
 gate (730 web tests passed) now pass. The final matched Leptos build and
-bundle verification also pass. Publish the coherent UCU-07 window and require
-terminal green exact-SHA CI before completing UCU-07 or starting UCU-08.
+bundle verification also pass. UCU-07 is Complete: b4d659eb is published with
+terminal green exact-SHA CI 36321494841. Chromium has 252 passes/7 skips and
+Firefox 228 passes/31 skips, with no unexpected or flaky results. Start UCU-08
+with pending row 116 after refreshing the upstream target and agreement checks.
 The refreshed
-tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
+tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 
 2026-09-25: UCU-05 rows 68-90 are reconciled through 35b5a259. Run its
 full window acceptance gates, record evidence, then use the authorized milestone
