@@ -247,6 +247,7 @@ pub async fn run() {
 
     let task_handles = super::tasks::spawn_background_tasks(
         super::tasks::HdhrTaskInputs {
+            enabled: !app_state.iptv_access_token_verifier.is_enabled(),
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
             listen_port: listeners.streaming_addr.port(),

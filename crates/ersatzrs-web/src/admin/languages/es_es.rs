@@ -2088,6 +2088,7 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         }
         TextKey::Troubleshooting => "Diagnóstico",
         TextKey::TunerCount => "Número de sintonizadores",
+        TextKey::HdhrDisabledByJwt => "Los puntos de conexión de HDHomeRun están desactivados porque la protección JWT de IPTV está activada. Estos ajustes no tienen efecto.",
         TextKey::TvShows => "Series",
         TextKey::Ui => "UI",
         TextKey::Unavailable => "No disponible",

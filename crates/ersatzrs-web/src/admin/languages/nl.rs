@@ -2783,6 +2783,7 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         }
         TextKey::Troubleshooting => "Probleemoplossing",
         TextKey::TunerCount => "Aantal tuners",
+        TextKey::HdhrDisabledByJwt => "HDHomeRun-eindpunten zijn uitgeschakeld omdat JWT-beveiliging voor IPTV is ingeschakeld. Deze instellingen hebben geen effect.",
         TextKey::TvShows => "Series",
         TextKey::Ui => "Interface",
         TextKey::Unavailable => "Niet beschikbaar",

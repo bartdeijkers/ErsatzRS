@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Security
 
+- Disable HDHomeRun HTTP endpoints and UDP discovery while IPTV JWT protection
+  is enabled. Explain the inactive settings in the selected UI language and
+  reject changes to them until JWT protection is disabled.
+
 - Reject invalid artwork-cache, watermark and channel-logo filenames before reading files,
   while preserving registered local artwork and existing uploaded logos.
   Provider artwork URLs now resolve persisted artwork IDs; callers cannot select
@@ -46,6 +50,9 @@ release section when tagging a release.
   Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
+
+- Render HDHomeRun and UI settings forms completely on the server so they
+  remain usable with JavaScript disabled.
 
 - Fill the complete remaining YAML schedule interval with fallback content,
   keeping its playback duration, history and guide grouping aligned with the

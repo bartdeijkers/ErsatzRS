@@ -46,7 +46,8 @@
   row 117 is Port (safe block cleanup cutoff); row 118 is N/A (empty build trigger).
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
-  Row 122 is next. Existing debt
+  Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
+  Row 128 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -57,6 +58,70 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 127 source map: HDHomeRun with IPTV JWT protection
+
+- Upstream `463a4c808aaaccb925036b0236ff88c14c516a78` removes HdhrController
+  when JWT is enabled. HDHRSettings disables Save and Tuner Count and explains
+  that the endpoints are disabled and those settings have no effect. Its
+  Startup convention and changelog complete the four-file change.
+- Native build_app and build_streaming_app currently register discover.json,
+  device.xml, lineup_status.json and lineup.json unconditionally. The existing
+  immutable IptvAccessTokenVerifier is the runtime policy source. Registration
+  must omit HDHR routes under JWT on both listeners, independent of a supplied
+  JWT or machine key, while preserving the unprotected protocol responses.
+  Audit UDP task startup as well so discovery does not advertise disabled HTTP
+  endpoints; preserve the existing UDP packet format and shutdown behavior.
+- Hydration/visual source map: `/settings/hdhr` uses the HdhrSettingsPage SSR
+  wrapper, blocking Resource/Suspense and render_hdhr, with an ordinary native
+  SettingsForm POST. There is no new island. Load runtime availability through
+  the existing settings server function; disable the shared form's save control
+  via a default-false prop and disable only this page's Tuner Count input. Add
+  the upstream warning through TextKey and every supported culture. Preserve
+  UUID display, labels, layout, stored settings and ordinary no-JS submission.
+  Native `/admin-api/settings/hdhr/save` and generated save_hdhr_settings share
+  save_hdhr_settings_with_state; reject disabled saves there using trusted state,
+  never a client-submitted availability flag.
+- Acceptance: production router GET/HEAD tests for all four endpoints on both
+  listeners with JWT enabled/disabled; no disabled lineup DB access; enabled
+  discovery payload unchanged. Verify settings load/disabled-save behavior,
+  localized SSR/hydrated/no-JS browser behavior with a disposable JWT-enabled
+  host and the ordinary editable case. Check UDP startup policy, affected strict
+  lint and required web parity. No existing health check depends on HDHR; no
+  FFmpeg artifact/build or media data change is needed. Row 127 is Port;
+  do not push before full UCU-08 acceptance.
+- Working implementation omits the HDHR route group on both listeners, gates
+  the UDP task before spawning, carries trusted runtime availability in separate
+  settings page data, disables the native form/input and rejects saves in the
+  shared server handler. All nine cultures include the warning, and native-form
+  rejection maps back to the selected language. All 15 initial focused HDHR
+  tests pass (Nextest `356ddabc-5b5e-4979-b6fa-6cd026f1cdd1`), including both
+  listener modes and existing protocol/shutdown tests. The full web parity gate
+  passes against the subsequently strengthened valid-credential fixture,
+  no-runtime UDP no-spawn test and final localization handling: 742 tests pass,
+  20 existing skips, strict web Clippy, formatting, architecture, progress and
+  hydration checks pass (Nextest `55c43114-bff6-408e-8763-e972d2d73b86`).
+  `tests/e2e/hdhr-jwt.spec.ts` discovers four cases covering Chromium/Firefox and
+  hydrated/no-JS behavior; run it against isolated JWT-enabled and disabled hosts.
+  It checks English/Dutch notices, crafted-save rejection without persistence,
+  and editable tuner settings with live discovery updates when JWT is disabled.
+- The first browser run exposed an existing no-JS rendering defect: UI settings
+  remained at the Suspense loading fallback. HDHomeRun and UI settings now use
+  the existing InOrder SSR route mode so native forms arrive without a script
+  replacement. The Firefox trace also showed navigation aborting UI hydration;
+  the fixture now waits for hydration before leaving each hydrated settings
+  page. Assertions and timeouts remain unchanged.
+- Final evidence: all four Chromium/Firefox hydrated/no-JS cases pass against
+  each isolated JWT-disabled and JWT-enabled host (eight cases total).
+  `test-results/ucu08-row127-open-final/playwright-results.json` and
+  `test-results/ucu08-row127-jwt/playwright-results.json` record the runs.
+  Desktop and fresh-mobile warning layouts are visually checked; the focused
+  Chromium capture also passes (`test-results/ucu08-row127-jwt-visual`).
+  Final web parity passes 742 tests with 20 existing skips and strict Clippy
+  after the SSR route correction (Nextest
+  `682f6459-b482-4699-ab3f-8bf287752dd8`). Pin and ledger advance together
+  in the coherent local row commit, followed by clean reference-checkout
+  alignment. Row 128 and milestone gates/push/CI remain.
 
 ## UCU-08 row 126 source map: fallback duration, history and guide groups
 
@@ -2957,7 +3022,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | Port | media-browsers | `fix(artwork): resolve provider images by persisted identity` | ucu-08; typed IDs retained through cards/details/collections/XMLTV; stored-row provider paths and resize, source ownership, bounded redirects and credential isolation, cache guards and valid episode poster output. Focused SQL/HTTP regressions, eight Chromium/Firefox cases, web parity 738 passed/20 existing skips and strict lint pass. |
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | Adapt (ADR 0103) | upstream-baseline-catch-up | `test(artwork): verify management and IPTV authorization boundaries` | ucu-08; accepted trusted-network/authenticated-proxy management policy covers UI images; public artwork retains independent optional IPTV JWTs. Four production-router tests prove GET/HEAD admission and streaming exclusions even with a valid machine key; strict lint and source review pass. Row 124 image/browser evidence remains valid. |
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | Port | yaml-scheduling | `fix(scheduling): fill the complete YAML fallback interval` | ucu-08; correct a short YAML fallback leaving an uncovered interval. Existing native helpers already preserve fallback history identity and advance unlocked guide groups. Two-engine duration/history/group/track-preference matrix, all 96 YAML/scripted tests and strict core lint pass. |
-| 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | | | | ucu-08; provisional: Port candidate. |
+| 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | Port | hdhomerun-http-endpoints; hdhomerun-udp-discovery | `fix(hdhr): disable discovery with IPTV JWT protection` | ucu-08; omit HTTP routes on both listeners and UDP startup under JWT, localize disabled settings and reject crafted saves. Eight Chromium/Firefox hydrated/no-JS cases, desktop/mobile inspection and final web parity (742 passed, 20 existing skips) with strict lint pass. In-order SSR fixes the demonstrated native-form fallback defect. |
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 129 | `9067cde8` | fix: tag maintenance (#3001) | | | | ucu-08; provisional: Port candidate. |
 | 130 | `1681d1ad` | fix: channel startup (#3002) | | | | ucu-08; provisional: Port candidate. |

@@ -4,9 +4,9 @@ use crate::admin::i18n::{log_level_text, supported_ui_language_options, tr, use_
 use crate::admin::server_fns::settings::{
     load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
     load_scanner_settings, load_ui_settings, load_xmltv_settings, ActiveTranscodeCapacityStatus,
-    ActiveTranscodeSuggestionReason, FfmpegSettingsPageData, HdhrSettingsForm, LoggingSettingsForm,
-    PlayoutSettingsForm, ScannerSettingsForm, SelectOption, UiSettingsPageData,
-    WindowsStartupStatusForm, XmltvSettingsForm,
+    ActiveTranscodeSuggestionReason, FfmpegSettingsPageData, HdhrSettingsPageData,
+    LoggingSettingsForm, PlayoutSettingsForm, ScannerSettingsForm, SelectOption,
+    UiSettingsPageData, WindowsStartupStatusForm, XmltvSettingsForm,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::resource_state::{
@@ -44,7 +44,7 @@ pub fn LoggingSettingsPage() -> impl IntoView {
 
 #[component]
 pub fn HdhrSettingsPage() -> impl IntoView {
-    let data: Resource<Result<HdhrSettingsForm, ServerFnError>> =
+    let data: Resource<Result<HdhrSettingsPageData, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_hdhr_settings());
     view! {
         <SettingsPageLayout>
@@ -381,15 +381,18 @@ fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
     }
 }
 
-fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
+fn render_hdhr(data: HdhrSettingsPageData) -> impl IntoView {
+    let form = data.form;
+    let disabled = data.disabled_by_jwt;
     view! {
-        <SettingsForm title=tr(TextKey::HdHomeRun) action="/admin-api/settings/hdhr/save">
+        <SettingsForm title=tr(TextKey::HdHomeRun) action="/admin-api/settings/hdhr/save" disabled=disabled>
             <SettingsSection title=tr(TextKey::General)>
+                <p class=style::warning role="status" hidden=!disabled>{tr(TextKey::HdhrDisabledByJwt)}</p>
                 <Field label=tr(TextKey::Uuid)>
                     <input class=style::input name="uuid" disabled value=form.uuid/>
                 </Field>
                 <Field label=tr(TextKey::TunerCount)>
-                    <input class=style::input name="tuner_count" type="number" min="1" required value=form.tuner_count/>
+                    <input class=style::input name="tuner_count" type="number" min="1" required disabled=disabled value=form.tuner_count/>
                 </Field>
             </SettingsSection>
         </SettingsForm>
@@ -527,12 +530,17 @@ fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
 }
 
 #[component]
-fn SettingsForm(title: &'static str, action: &'static str, children: Children) -> impl IntoView {
+fn SettingsForm(
+    title: &'static str,
+    action: &'static str,
+    #[prop(default = false)] disabled: bool,
+    children: Children,
+) -> impl IntoView {
     view! {
         <form method="post" action=action class=style::form>
             <div class=style::action_bar>
                 <strong class=style::action_title>{title}</strong>
-                <button class=style::button type="submit">
+                <button class=style::button type="submit" disabled=disabled>
                     <span style=icon_style(IconName::Save, "1rem") aria-hidden="true"></span>
                     {tr(TextKey::SaveSettings)}
                 </button>

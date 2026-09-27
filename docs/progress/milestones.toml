@@ -11116,7 +11116,26 @@ groups and fallback audio/subtitle preferences. All 96 YAML/scripted tests pass
 formatting and substantive source review. Existing SQL history persistence and
 restart evidence from rows 122/123 remains valid; no storage/restore code changes.
 Pin/ledger advance to fd2171ad in the local correction commit, followed by clean
-reference-checkout alignment. Row 127 and full window gates/push/CI remain due.
+reference-checkout alignment.
+Row 127 is Port. Both production listeners omit all four HDHR GET/HEAD routes
+when IPTV JWT is enabled, including requests with valid JWT/machine credentials.
+UDP discovery is not spawned; its packet format and enabled shutdown behavior
+remain unchanged. Trusted server state disables tuner/save controls and rejects
+crafted saves without changing persistence. All nine cultures have the notice.
+The first browser run exposed UI settings stuck at a streamed loading fallback
+without JavaScript. HDHR/UI routes now use existing InOrder SSR. Firefox's trace
+showed navigation aborting hydration; the fixture waits for it before leaving.
+Eight final Chromium/Firefox hydrated/no-JS cases pass across JWT-enabled and
+JWT-disabled isolated hosts, including English/Dutch notices, save rejection,
+editable tuner persistence and live discovery updates. Reports are under
+test-results/ucu08-row127-open-final and test-results/ucu08-row127-jwt.
+Desktop/mobile warning layouts were inspected; the fresh-mobile capture passes
+in test-results/ucu08-row127-jwt-visual. Final web parity passes 742 tests with
+20 existing skips, strict web Clippy, formatting, architecture, hydration and
+progress checks (Nextest 682f6459-b482-4699-ab3f-8bf287752dd8).
+The unchanged v2.0.2 runtime package checksum matches; no FFmpeg build/release.
+Pin/ledger advance to 463a4c80 in the coherent local commit, followed by clean
+reference-checkout alignment. Row 128 and full window gates/push/CI remain due.
 """
 
 [[milestone]]

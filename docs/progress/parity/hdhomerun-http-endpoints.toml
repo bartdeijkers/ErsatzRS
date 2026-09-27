@@ -4,9 +4,16 @@ rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/http.rs`'
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: `/discover.json`, `/device.xml`, `/lineup_status.json`, and `/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names (DeviceID/LineupURL/GuideNumber/...). Device UUID seeded into `ConfigElement` under `HDHR.DeviceUuid`; tuner count read from `HDHR.TunerCount`.
+Ported: `/discover.json`, `/device.xml`, `/lineup_status.json`, and `/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names (DeviceID/LineupURL/GuideNumber/...). Device UUID seeded into `ConfigElement` under `hdhr.uuid`; tuner count read from `hdhr.tuner_count`.
 UCU-01 row 2 ports upstream PR #2848's repository-link correction using the
 ErsatzRS repository declared in Cargo.toml. ManufacturerURL is corrected while
 the remaining discovery and lineup/device shapes are preserved. The four
 HDHomeRun HTTP snapshots pass; UCU-01 owns the review and verification evidence.
 '''
+
+[[debt]]
+id          = 'disable-hdhr-with-iptv-jwt'
+description = 'UCU-08 row 127 disables HDHomeRun HTTP endpoints when IPTV JWT is enabled and disables the corresponding settings controls with a localized explanation.'
+discovered  = '2026-09-27'
+evidence    = 'Full upstream four-file diff reviewed. Route omission, UDP spawn guard, trusted settings availability, localized disabled controls and server-side save rejection are implemented. Final web parity passes: 742 tests, 20 existing skips, strict web Clippy and structural checks; Nextest 682f6459-b482-4699-ab3f-8bf287752dd8. Eight isolated JWT-enabled/disabled Chromium/Firefox hydrated/no-JS cases pass; desktop/mobile warning layouts checked. plans/upstream-catch-up.md records the source map and evidence. The owning ucu-08 milestone records final acceptance evidence.'
+resolved    = true

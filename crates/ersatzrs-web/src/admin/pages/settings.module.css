@@ -220,6 +220,19 @@
     background: var(--color-primary-h);
 }
 
+.button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.warning {
+    margin: 0;
+    padding: 0.75rem;
+    border-inline-start: 0.25rem solid var(--color-warning);
+    background: var(--color-warning-20);
+    color: var(--color-gray-100);
+}
+
 .button:focus-visible,
 .icon-button:focus-visible {
     outline: 2px solid var(--color-primary);

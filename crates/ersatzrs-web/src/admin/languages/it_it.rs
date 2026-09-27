@@ -2085,6 +2085,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         }
         TextKey::Troubleshooting => "Risoluzione problemi",
         TextKey::TunerCount => "Numero di sintonizzatori",
+        TextKey::HdhrDisabledByJwt => "Gli endpoint HDHomeRun sono disabilitati perché la protezione JWT per IPTV è attiva. Queste impostazioni non hanno effetto.",
         TextKey::TvShows => "Programmi TV",
         TextKey::Ui => "Interfaccia utente",
         TextKey::Unavailable => "Non disponibile",

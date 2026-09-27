@@ -9,6 +9,130 @@ use tower::ServiceExt;
 use crate::host::state::{AppState, IptvAccessTokenVerifier};
 
 #[tokio::test]
+async fn hdhr_routes_are_absent_with_jwt_even_when_credentials_are_supplied() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("api-secrets.json"),
+        br#"{"ApiKey":"synthetic-key"}"#,
+    )
+    .unwrap();
+    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
+    let token = jsonwebtoken::encode(
+        &jsonwebtoken::Header::default(),
+        &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+        &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
+    )
+    .unwrap();
+    for app in [
+        super::build_app(state.clone()),
+        super::build_streaming_app(state.clone()),
+    ] {
+        for path in [
+            "/discover.json",
+            "/device.xml",
+            "/lineup_status.json",
+            "/lineup.json",
+        ] {
+            for method in ["GET", "HEAD"] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(format!("{path}?access_token={token}"))
+                            .header("X-Ers-Api-Key", "synthetic-key")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+            }
+        }
+    }
+    let result = crate::admin::server_fns::settings::save_hdhr_settings_with_state(
+        &state,
+        crate::admin::server_fns::settings::HdhrSettingsForm {
+            uuid: String::new(),
+            tuner_count: 8,
+        },
+    )
+    .await;
+    assert!(result.is_err());
+    assert_eq!(state.tuner_count(), 2);
+    assert_eq!(
+        state.pool.size(),
+        0,
+        "disabled HDHR never accesses the database"
+    );
+}
+
+#[tokio::test]
+async fn hdhr_routes_remain_available_without_jwt() {
+    use crate::host::state::SystemStartup;
+    use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
+    let pool = ersatzrs_infra::db::init("sqlite::memory:").await.unwrap();
+    let (build_tx, _build_rx) = tokio::sync::mpsc::unbounded_channel();
+    let state = AppState::new(
+        pool,
+        DatabaseBackend::Sqlite,
+        SystemStartup {
+            database_ready: true,
+            schema_status: DatabaseSchemaStatus::default(),
+        },
+        ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+        uuid::Uuid::nil(),
+        2,
+        IptvAccessTokenVerifier::disabled(),
+        build_tx,
+        ersatzrs_core::locking::EntityLocker::default(),
+    );
+    for app in [
+        super::build_app(state.clone()),
+        super::build_streaming_app(state.clone()),
+    ] {
+        for path in [
+            "/discover.json",
+            "/device.xml",
+            "/lineup_status.json",
+            "/lineup.json",
+        ] {
+            for method in ["GET", "HEAD"] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(path)
+                            .header("host", "fixture.example:8409")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::OK, "{method} {path}");
+                let body = axum::body::to_bytes(response.into_body(), 16384)
+                    .await
+                    .unwrap();
+                if method == "HEAD" {
+                    assert!(body.is_empty());
+                } else if path == "/discover.json" {
+                    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                    assert_eq!(value["TunerCount"], 2);
+                    assert_eq!(
+                        value["LineupURL"],
+                        "http://fixture.example:8409/lineup.json"
+                    );
+                } else if path == "/lineup.json" {
+                    assert_eq!(body, "[]");
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn public_iptv_routes_never_dispatch_internal_callbacks_for_forged_local_headers() {
     let state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
     let app = super::build_iptv_router(&state).with_state(state.clone());

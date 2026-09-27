@@ -199,16 +199,14 @@ pub fn spawn_background_tasks(
     maintenance: MaintenanceTaskInputs,
     shutdown: CancellationToken,
 ) -> Vec<JoinHandle<()>> {
-    vec![
+    let mut tasks = Vec::new();
+    if let Some(task) = hdhr.spawn(shutdown.clone()) {
+        tasks.push(task);
+    }
+    tasks.extend([
         tokio::spawn(super::artwork_cleanup::run_artwork_cleanup_worker(
             maintenance.pool.clone(),
             maintenance.artwork_cleanup_rx,
-            shutdown.clone(),
-        )),
-        tokio::spawn(crate::transport::hdhr::run_udp_discovery(
-            hdhr.device_uuid,
-            hdhr.tuner_count,
-            hdhr.listen_port,
             shutdown.clone(),
         )),
         tokio::spawn(run_addon_media_list_maintenance(
@@ -244,7 +242,8 @@ pub fn spawn_background_tasks(
             maintenance.application,
             shutdown,
         )),
-    ]
+    ]);
+    tasks
 }
 
 async fn run_addon_media_list_imports(
@@ -391,9 +390,36 @@ async fn run_addon_item_operations(pool: DbPool, shutdown: CancellationToken) {
 }
 
 pub struct HdhrTaskInputs {
+    pub enabled: bool,
     pub device_uuid: uuid::Uuid,
     pub tuner_count: Arc<AtomicI32>,
     pub listen_port: u16,
+}
+
+impl HdhrTaskInputs {
+    fn spawn(self, shutdown: CancellationToken) -> Option<JoinHandle<()>> {
+        if !self.enabled {
+            return None;
+        }
+        Some(tokio::spawn(crate::transport::hdhr::run_udp_discovery(
+            self.device_uuid,
+            self.tuner_count,
+            self.listen_port,
+            shutdown,
+        )))
+    }
+}
+
+#[test]
+fn disabled_hdhr_does_not_spawn_or_bind_udp() {
+    // No Tokio runtime: even trying to spawn the disabled task would panic.
+    let inputs = HdhrTaskInputs {
+        enabled: false,
+        device_uuid: uuid::Uuid::nil(),
+        tuner_count: Arc::new(AtomicI32::new(2)),
+        listen_port: 8409,
+    };
+    assert!(inputs.spawn(CancellationToken::new()).is_none());
 }
 
 pub struct MaintenanceTaskInputs {

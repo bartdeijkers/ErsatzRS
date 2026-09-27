@@ -177,7 +177,7 @@ routed  = true
 
 [[route]]
 nav     = '/settings/hdhr'
-backing = 'settings page with generated UUID display, tuner count persistence, and HTML POST fallback'
+backing = 'in-order SSR settings page with UUID display, tuner count persistence and HTML POST fallback; IPTV JWT disables controls and rejects saves'
 routed  = true
 
 [[route]]
@@ -192,7 +192,7 @@ routed  = true
 
 [[route]]
 nav     = '/settings/ui'
-backing = 'settings page with theme/language persistence and HTML POST fallback'
+backing = 'in-order SSR settings page with theme/language persistence and HTML POST fallback'
 routed  = true
 
 [[route]]

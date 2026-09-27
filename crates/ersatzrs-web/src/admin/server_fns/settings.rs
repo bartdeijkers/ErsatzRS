@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "ssr")]
-use crate::admin::i18n::{normalize_ui_language, UiLanguage};
+use crate::admin::i18n::{normalize_ui_language, tr, TextKey, UiLanguage};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectOption {
@@ -90,6 +90,12 @@ pub struct LoggingSettingsForm {
 pub struct HdhrSettingsForm {
     pub uuid: String,
     pub tuner_count: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HdhrSettingsPageData {
+    pub form: HdhrSettingsForm,
+    pub disabled_by_jwt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -183,7 +189,7 @@ pub async fn save_logging_settings(form: LoggingSettingsForm) -> Result<(), Serv
 }
 
 #[server(prefix = "/admin-api")]
-pub async fn load_hdhr_settings() -> Result<HdhrSettingsForm, ServerFnError> {
+pub async fn load_hdhr_settings() -> Result<HdhrSettingsPageData, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -192,7 +198,10 @@ pub async fn load_hdhr_settings() -> Result<HdhrSettingsForm, ServerFnError> {
         .load_hdhr_settings()
         .await
         .map_err(ServerFnError::new)?;
-    Ok(hdhr_settings_form(settings))
+    Ok(HdhrSettingsPageData {
+        form: hdhr_settings_form(settings),
+        disabled_by_jwt: state.iptv_access_token_verifier.is_enabled(),
+    })
 }
 
 #[server(prefix = "/admin-api")]
@@ -531,6 +540,9 @@ pub async fn save_hdhr_settings_with_state(
     state: &crate::host::state::AppState,
     form: HdhrSettingsForm,
 ) -> Result<(), ServerFnError> {
+    if state.iptv_access_token_verifier.is_enabled() {
+        return Err(ServerFnError::new(tr(TextKey::HdhrDisabledByJwt)));
+    }
     state
         .application
         .save_hdhr_settings(ersatzrs_app::commands::SaveHdhrSettings {

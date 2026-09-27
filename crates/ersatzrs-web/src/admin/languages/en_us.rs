@@ -2030,6 +2030,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         }
         TextKey::Troubleshooting => "Troubleshooting",
         TextKey::TunerCount => "Tuner Count",
+        TextKey::HdhrDisabledByJwt => "HDHomeRun endpoints are disabled because IPTV JWT protection is enabled. These settings have no effect.",
         TextKey::TvShows => "TV Shows",
         TextKey::Ui => "UI",
         TextKey::Unavailable => "Unavailable",

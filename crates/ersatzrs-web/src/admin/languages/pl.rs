@@ -2788,6 +2788,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         }
         TextKey::Troubleshooting => "Rozwiązywanie problemów",
         TextKey::TunerCount => "Liczba tunerów",
+        TextKey::HdhrDisabledByJwt => "Punkty końcowe HDHomeRun są wyłączone, ponieważ ochrona JWT dla IPTV jest włączona. Te ustawienia nie mają wpływu.",
         TextKey::TvShows => "Seriale",
         TextKey::Ui => "Interfejs",
         TextKey::Unavailable => "Niedostępne",

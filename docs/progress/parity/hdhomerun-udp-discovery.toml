@@ -4,5 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/udp.rs`'
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: UDP discovery responder on port 65001 with TLV + CRC32 encoding, covered by protocol round-trip tests.
+Ported: UDP discovery responder on port 65001 with TLV + CRC32 encoding, covered by protocol round-trip tests. With IPTV JWT protection enabled, the
+host omits the discovery task so it does not advertise disabled HTTP endpoints.
+UCU-08 row 127 proves the no-spawn boundary and preserves existing protocol and
+shutdown tests; its milestone owns the final verification evidence.
 '''

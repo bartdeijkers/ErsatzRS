@@ -254,6 +254,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("settings"), StaticSegment("hdhr"))
                 view=HdhrSettingsPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("settings"), StaticSegment("scanner"))
@@ -263,7 +264,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 path=(StaticSegment("settings"), StaticSegment("playout"))
                 view=PlayoutSettingsPage
             />
-            <Route path=(StaticSegment("settings"), StaticSegment("ui")) view=UiSettingsPage/>
+            <Route path=(StaticSegment("settings"), StaticSegment("ui")) view=UiSettingsPage ssr=SsrMode::InOrder/>
             <Route
                 path=(StaticSegment("settings"), StaticSegment("xmltv"))
                 view=XmltvSettingsPage

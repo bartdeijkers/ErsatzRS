@@ -1410,6 +1410,7 @@ pub enum TextKey {
     TrashSubtitle,
     Troubleshooting,
     TunerCount,
+    HdhrDisabledByJwt,
     TvShows,
     Ui,
     Unavailable,
@@ -3414,6 +3415,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TrashSubtitle,
     TextKey::Troubleshooting,
     TextKey::TunerCount,
+    TextKey::HdhrDisabledByJwt,
     TextKey::TvShows,
     TextKey::Ui,
     TextKey::Unavailable,
@@ -4361,6 +4363,10 @@ pub fn ffmpeg_profile_error_text(language: UiLanguage, error: &str) -> String {
 }
 
 pub fn settings_error_text(language: UiLanguage, error: &str) -> String {
+    if unwrap_server_function_error(error) == text(UiLanguage::English, TextKey::HdhrDisabledByJwt)
+    {
+        return text(language, TextKey::HdhrDisabledByJwt).to_owned();
+    }
     languages_for(language).settings_error_message(error)
 }
 

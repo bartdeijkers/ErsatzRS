@@ -209,6 +209,12 @@ IPTV JWT and private callback capability checks remain independent.
 
 ## IPTV JWT protection
 
+HDHomeRun discovery and lineup HTTP endpoints, together with UDP discovery,
+are disabled when IPTV JWT protection is enabled. HDHomeRun clients cannot use
+the required IPTV tokens. The HDHomeRun settings page explains this and disables
+saving; existing UUID and tuner-count values are retained for use after JWT
+protection is disabled and the server is restarted.
+
 | Variable | Purpose |
 |---|---|
 | `JWT__IssuerSigningKey` | Enables HS256 JWT validation for IPTV routes |
