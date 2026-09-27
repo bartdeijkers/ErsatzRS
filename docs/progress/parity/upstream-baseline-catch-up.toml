@@ -4,13 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103']
 summary    = """
-176 commits, 114 reconciled, 62 pending. AMM-N-03 Complete.
+176 commits, 115 reconciled, 61 pending. AMM-N-03 Complete.
 UCU-03/04/05 Complete; UCU-05 CI 36190815587 at 81bcd649.
 Rows 99/102 Port: runtime v2.0.1, probe/cache and Docker Vulkan; GPU limits recorded.
 Rows 100-101/103 N/A; row 104 Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
 Row 108 Port: v2.0.2 published; public hashes verified and managed default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
-green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered. Row 115 next.
+green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A. UCU-07 gates next.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.

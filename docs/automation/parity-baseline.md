@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `ef5094aa164666460fdc30d9ed0926ea04718386` |
-| **Commit subject** | `fix: GHSA-h3r4-r2f2-qf59` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ef5094aa164666460fdc30d9ed0926ea04718386 |
+| **Pinned commit** | `49b68314299ea9961c1914ca41b3016a62f2ed73` |
+| **Commit subject** | `prep for release v26.8.1 [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/49b68314299ea9961c1914ca41b3016a62f2ed73 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

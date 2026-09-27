@@ -10785,6 +10785,16 @@ Strict all-target infra/web Clippy passes. Row 114 is Adapt under accepted
 ADRs 0095/0102 with checkpoint `fix(security): harden internal media authentication`.
 Pin and ledger advance together to ef5094aa. Row 115 and the milestone gates
 remain open; no intermediate push or CI is launched.
+Row 114 landed as fa493751; pin, ledger and clean upstream HEAD agreed before
+row 115. The refreshed upstream target remains 6f0449c2.
+Row 115 49b68314 changes only upstream CHANGELOG: the 26.8.1 heading,
+Plex/Emby-specific upgrade recommendation and comparison links. Exact diff
+review found no source, configuration, dependency or package changes. Verdict
+N/A, checkpoint `docs(parity): reconcile upstream v26.8.1 release notes`.
+All 115 rows through this window are reconciled, with 61 pending in UCU-08/09.
+The pin advances to 49b68314 with the row. UCU-07 remains In progress for
+workspace Clippy, test-closeout, matched Leptos build, parity-check, smoke,
+applicable TSDuck evidence, push and terminal exact-SHA green CI.
 """
 
 [[milestone]]

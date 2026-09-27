@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **62 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **61 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **114**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **115**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -39,7 +39,8 @@
   row 111 is Port (Plex reauthentication and retained missing sources); row 112
   is Adapt under accepted ADR 0103 (machine API key and browser route separation).
   Row 113 is Covered (Next mirror build notifications); row 114 is Adapt
-  (internal media authentication under ADRs 0095/0102); row 115 is next. Existing debt
+  (internal media authentication under ADRs 0095/0102); row 115 is N/A release
+  bookkeeping. UCU-07 window gates and exact-SHA CI are next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -50,6 +51,17 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 115 source map: upstream release bookkeeping
+
+- Upstream: `49b68314299ea9961c1914ca41b3016a62f2ed73` changes only
+  `CHANGELOG.md`: it creates the 26.8.1 heading, narrows the upstream security
+  upgrade recommendation to Plex/Emby users and updates comparison links.
+- N/A: no executable source, configuration, dependency or package changes.
+  ErsatzRS retains its own Unreleased security notes and release lifecycle;
+  this upstream release does not establish an ErsatzRS release or CI result.
+- All UCU-07 rows are reconciled. Milestone closeout gates, push and terminal
+  exact-SHA green CI remain required before UCU-08 starts.
 
 ## UCU-07 row 114 source map: internal media request authentication
 
@@ -2496,7 +2508,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 112 | `c27a8d50` | feat: require api key (#2991) | Adapt (ADR 0103) | upstream-baseline-catch-up | `feat(api): require the ErsatzRS machine API key` | ucu-07; accepted X-Ers-Api-Key, atomic persistent credentials, fail-closed startup and routing, authenticated OpenAPI, separate browser actions and trusted-network/authenticated-proxy management. Key/router/listener tests, strict lint and matched Chromium/Firefox (480 passed, 38 existing skips) pass. Storage-failure browser fixture is isolated; window gates remain open. |
 | 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | Covered | upstream-baseline-catch-up | `test(next): verify source builds synchronize every mirror` | ucu-07; existing persisted-build notifications include all dependent Next mirrors independently of source engine. Expanded production scheduler regression covers two Next mirrors, a native mirror, an unrelated Next channel and preserved timeline; seven downstream offset/publication/session checks pass. No production behavior changes. |
 | 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | Adapt (ADRs 0095/0102) | upstream-baseline-catch-up | `fix(security): harden internal media authentication` | ucu-07; constant-time callback credentials and query-free sample filenames; accepted private listener and process/session capabilities cover internal URL authentication. Provider-origin confinement, binding/restart/session rejection and sample paths pass 24 focused tests; strict infra/web lint passes. |
-| 115 | `49b68314` | prep for release v26.8.1 [no ci] | | | | ucu-07; provisional: Upstream tooling candidate. |
+| 115 | `49b68314` | prep for release v26.8.1 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream v26.8.1 release notes` | ucu-07; only upstream CHANGELOG release heading, Plex/Emby upgrade wording and compare links change. Exact diff reviewed; no executable or package changes. Window acceptance and exact-SHA CI remain open. |
 | 116 | `39e39ef6` | changelog update [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 117 | `b7aaea3d` | fix: block scheduler deleting playout items (#2992) | | | | ucu-08; provisional: Port candidate. |
 | 118 | `fcd593e0` | chore: trigger new build for updated next engine | | | | ucu-08; provisional: Upstream tooling candidate. |
