@@ -10854,6 +10854,32 @@ paths are preserved, with no new dependency or Next-only resolver. The owning
 runtime report and health consumers now receive the selected absolute tools.
 Workspace gates must be refreshed after this code correction; UCU-07 is not
 complete and no push/CI has occurred.
+Post-correction workspace Clippy passes at 855804e6. The canonical
+./run.sh test-closeout exits zero: all 3,341 selected tests pass, with 121
+existing skips (Nextest 5be403f2-a122-4656-bb8d-a4f4e2f2f463), and every
+workspace doctest command succeeds. Native playback smoke, parity validation
+and the final matched Leptos build remain before publication and exact-SHA CI.
+The post-correction native smoke also exits zero with checksum-verified
+ErsatzRS-ffmpeg v2.0.2: all three public internal callbacks return 404,
+legacy and Hybrid MPEG-TS return 200 with media, and segmenter/session HLS
+return playlists with initial segments. Next Convert evidence above remains
+valid for this same runtime correction. Parity validation and the matched
+Leptos build remain outstanding before publication.
+The full default cargo xtask parity-check now passes: progress validation,
+formatting, architecture lint, hydration lint, all 730 selected web tests
+(20 existing skips; Nextest 92a9e6ac-700b-4459-a114-bdaa6c5b3175), and strict
+all-target web Clippy. The final matched Leptos build is the remaining local
+window gate before publication and exact-SHA CI.
+Final cargo leptos build and scripts/release/verify-web-bundle.sh now exit
+zero: the matched server serves both referenced JS and WASM assets with HTTP
+200 from the assembled site. All required local window gates are satisfied.
+The retained full Chromium/Firefox report has 480 passes, 38 existing skips,
+zero unexpected failures and zero flaky results; TSDuck has 87 checks with
+zero failures. Their covered UI and transport behavior is unchanged by the
+runtime path correction. Pin, last reconciled row 115 and clean upstream HEAD
+agree at 49b68314299ea9961c1914ca41b3016a62f2ed73. UCU-07 remains In progress
+pending its authorized main push and terminal green exact-SHA CI; UCU-08 has
+not started.
 """
 
 [[milestone]]

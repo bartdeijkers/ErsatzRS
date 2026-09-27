@@ -124,8 +124,11 @@ ADRs 0095/0102: constant-time callback checks and safe sample filenames pass
 UCU-07 rows are reconciled; milestone gates remain before push and green CI.
 The Next runtime-path closeout defect is corrected: shared runtime candidates
 retain absolute selected tools. All 23 focused tests, strict crate lint and the
-original bare-ffprobe decoded smoke pass. Repeat affected workspace gates,
-then finish parity validation and the matched build before push and green CI.
+original bare-ffprobe decoded smoke pass. Refreshed workspace Clippy, full
+test closeout (3,341 passed), native playback smoke and the default parity
+gate (730 web tests passed) now pass. The final matched Leptos build and
+bundle verification also pass. Publish the coherent UCU-07 window and require
+terminal green exact-SHA CI before completing UCU-07 or starting UCU-08.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 
