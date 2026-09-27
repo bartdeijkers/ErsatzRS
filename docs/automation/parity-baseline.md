@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `cefd715c28e31d003fe5ccd3a113f93672486b41` |
-| **Commit subject** | `fix: mirror channels falling out of sync when using the next streaming engine` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cefd715c28e31d003fe5ccd3a113f93672486b41 |
+| **Pinned commit** | `ef5094aa164666460fdc30d9ed0926ea04718386` |
+| **Commit subject** | `fix: GHSA-h3r4-r2f2-qf59` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ef5094aa164666460fdc30d9ed0926ea04718386 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

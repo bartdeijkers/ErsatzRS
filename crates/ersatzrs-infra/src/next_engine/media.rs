@@ -11,6 +11,7 @@ use std::{
     sync::OnceLock,
     time::Duration,
 };
+use subtle::ConstantTimeEq as _;
 use tokio::time::{timeout_at, Instant};
 use uuid::Uuid;
 
@@ -71,7 +72,12 @@ impl MediaRelay {
 
     #[must_use]
     pub fn authorized(&self, value: &str) -> bool {
-        Uuid::parse_str(value).is_ok_and(|candidate| candidate == self.capability)
+        Uuid::parse_str(value).is_ok_and(|candidate| {
+            candidate
+                .as_bytes()
+                .ct_eq(self.capability.as_bytes())
+                .into()
+        })
     }
 
     pub(super) fn source(&self, media: &ScheduledMedia) -> Result<Source> {
@@ -174,7 +180,10 @@ impl MediaRelay {
     #[must_use]
     pub fn authorized_credits(&self, binding: (i64, i64, i64, u64, u64), ticket: &str) -> bool {
         let (channel, item, media, in_point_ms, out_point_ms) = binding;
-        ticket == self.credits_ticket(channel, item, media, in_point_ms, out_point_ms)
+        self.credits_ticket(channel, item, media, in_point_ms, out_point_ms)
+            .as_bytes()
+            .ct_eq(ticket.as_bytes())
+            .into()
     }
 
     fn credits_ticket(

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **63 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **62 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **113**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **114**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -38,7 +38,8 @@
   audio/subtitle evidence. UCU-07 row 110 is Adapt under accepted ADR 0102;
   row 111 is Port (Plex reauthentication and retained missing sources); row 112
   is Adapt under accepted ADR 0103 (machine API key and browser route separation).
-  Row 113 is Covered (Next mirror build notifications); row 114 is next. Existing debt
+  Row 113 is Covered (Next mirror build notifications); row 114 is Adapt
+  (internal media authentication under ADRs 0095/0102); row 115 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -49,6 +50,60 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 114 source map: internal media request authentication
+
+- Upstream: `ef5094aa164666460fdc30d9ed0926ea04718386`
+  (`GHSA-h3r4-r2f2-qf59`) adds process-local HMAC signatures and expiration
+  checks before remote-stream, Plex, Jellyfin, Emby, subtitle and fallback
+  callback handling. Plex paths are appended to the configured address rather
+  than allowed to replace its authority. Invalid or out-of-range expiration
+  input is rejected without throwing.
+- Producers: subtitle extraction and lookup, troubleshooting, statistics,
+  FFmpeg subtitle arguments, dynamic items, Next projection and external JSON
+  playouts generate signed requests. Scheduler startup republishes Next
+  playouts after database readiness; troubleshooting sample filenames strip
+  URL queries from extensions. Plex connection view-model and artwork changes
+  accommodate the address representation.
+- Rust callback boundary: `web/host/router.rs` and `host/listeners.rs` expose
+  callbacks only on the private listener with actual loopback-peer admission
+  (accepted ADR 0102). `transport/iptv/next_media.rs` authenticates Next media,
+  dynamic items, prepared transfers, fallback and credits before their work.
+  `infra/next_engine/media.rs` creates process-local capabilities and credits
+  tickets; URLs carry persisted binding IDs rather than provider credentials.
+- Provider confinement: `next_engine/source.rs::resolve_http` rejects Plex
+  file keys that change the configured origin or introduce user information.
+  `media.rs::open_http` permanently stops forwarding credential headers after
+  a cross-origin redirect. `provider_subtitles.rs` encodes provider identities
+  as path segments, refuses redirects, and prepares local subtitle artifacts.
+- Restart path: `next_engine/host.rs::start` refreshes publication before
+  `NextProcess::start_with_session`. The existing media-publication regression
+  rejects a prior relay's capability; the Plex source regression rejects an
+  absolute file key on another origin without exposing the URL or token.
+  Native `subtitles.rs::resolve_input_path` reads stored file paths with path
+  replacements and invokes extraction directly, without upstream-style public
+  provider callback URLs.
+- Corrections identified: use the existing `subtle` constant-time comparison
+  for capabilities and credits tickets; strip HTTP(S) query/fragment suffixes
+  before deriving troubleshooting sample extensions. Regression coverage checks
+  altered tickets, every credits binding field, process restart, and URL queries
+  containing dots or slashes. All seven focused media tests pass (Nextest
+  `762b9ffb-52fb-4613-bb61-1c6c0ff4f9d8`), including real localhost redirect,
+  range, credential-rotation and Plex failover checks. The first sandboxed run
+  denied mock-server socket binds; the unchanged set passed with loopback
+  access. Sample-filename and binding/session verification also pass; the
+  milestone owns all 24 focused test results. Strict all-target infra/web lint passes.
+- Scope review: native extraction and sample capture use resolved stored paths,
+  while Next troubleshooting uses the same session-owned preparation machinery.
+  There is no upstream-shaped arbitrary provider-path callback or external-JSON
+  callback URL generator in the Rust transport. The upstream Plex view-model
+  and artwork edits only accommodate its address-type change; Rust already
+  stores the connection address as a string. The existing accepted ADR 0095
+  capability/session lifetime and ADR 0102 listener boundary remain the
+  adaptation; no new public callback or signature-query API is introduced.
+- Adapt under accepted ADRs 0095/0102: the scoped fixes, 24 focused tests and
+  strict lint pass. The pin advances with this row; milestone gates and push/CI
+  remain open after the release bookkeeping row.
 
 ## UCU-07 row 113 source map: Next mirror synchronization
 
@@ -2440,7 +2495,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 111 | `a5937386` | fix: plex sign in (#2990) | Port | upstream-baseline-catch-up | `fix(plex): preserve sources during reauthentication` | ucu-07; bounded fresh-device authentication, stale/sign-out race protection, retained missing-source inventory, scan/health guards, localized refresh/removal UI and live SQL search cleanup. Focused backend/scanner tests, strict lint, hydration lint and six Chromium/Firefox cases pass; substantive review fixes returned-source and running-scan removal races. Window gates remain open. |
 | 112 | `c27a8d50` | feat: require api key (#2991) | Adapt (ADR 0103) | upstream-baseline-catch-up | `feat(api): require the ErsatzRS machine API key` | ucu-07; accepted X-Ers-Api-Key, atomic persistent credentials, fail-closed startup and routing, authenticated OpenAPI, separate browser actions and trusted-network/authenticated-proxy management. Key/router/listener tests, strict lint and matched Chromium/Firefox (480 passed, 38 existing skips) pass. Storage-failure browser fixture is isolated; window gates remain open. |
 | 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | Covered | upstream-baseline-catch-up | `test(next): verify source builds synchronize every mirror` | ucu-07; existing persisted-build notifications include all dependent Next mirrors independently of source engine. Expanded production scheduler regression covers two Next mirrors, a native mirror, an unrelated Next channel and preserved timeline; seven downstream offset/publication/session checks pass. No production behavior changes. |
-| 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | | | | ucu-07; provisional: Port candidate. |
+| 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | Adapt (ADRs 0095/0102) | upstream-baseline-catch-up | `fix(security): harden internal media authentication` | ucu-07; constant-time callback credentials and query-free sample filenames; accepted private listener and process/session capabilities cover internal URL authentication. Provider-origin confinement, binding/restart/session rejection and sample paths pass 24 focused tests; strict infra/web lint passes. |
 | 115 | `49b68314` | prep for release v26.8.1 [no ci] | | | | ucu-07; provisional: Upstream tooling candidate. |
 | 116 | `39e39ef6` | changelog update [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 117 | `b7aaea3d` | fix: block scheduler deleting playout items (#2992) | | | | ucu-08; provisional: Port candidate. |

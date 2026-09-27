@@ -1708,11 +1708,7 @@ async fn build_media_sample_archive(
         .get_optional_string(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
         .await?;
     let ffmpeg_path = ersatzrs_ffmpeg::resolve_ffmpeg_path(configured_ffmpeg_path.as_deref()).path;
-    let extension = FsPath::new(&media_path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .filter(|extension| !extension.trim().is_empty())
-        .unwrap_or("mkv");
+    let extension = media_sample_extension(&media_path);
     let sample_path = std::env::temp_dir().join(format!(
         "ersatzrs-media-sample-{}.{}",
         uuid::Uuid::new_v4(),
@@ -1747,6 +1743,21 @@ async fn build_media_sample_archive(
     let bytes = tokio::fs::read(&sample_path).await?;
     let _ = tokio::fs::remove_file(&sample_path).await;
     Ok(Some(build_store_zip(vec![(file_name, bytes)])?))
+}
+
+fn media_sample_extension(media_path: &str) -> String {
+    // Signed provider URLs can carry query values containing dots or slashes.
+    // Only the URL path determines the output container; local names stay intact.
+    let url = reqwest::Url::parse(media_path)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https"));
+    let path = url.as_ref().map_or(media_path, reqwest::Url::path);
+    FsPath::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.trim().is_empty())
+        .unwrap_or("mkv")
+        .to_owned()
 }
 
 fn troubleshooting_folder() -> PathBuf {
@@ -1844,6 +1855,22 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn media_sample_extension_excludes_url_credentials_and_fragments() {
+        for (input, expected) in [
+            ("https://example.test/video.mp4?sig=synthetic.secret", "mp4"),
+            ("http://example.test/video.ts?path=/another/file.mkv", "ts"),
+            ("https://example.test/video.mkv#fragment.mp4", "mkv"),
+            ("https://example.test/video?sig=synthetic.mp4", "mkv"),
+            ("https://example.test?sig=synthetic.mp4", "mkv"),
+            ("movie.ts", "ts"),
+            ("movie", "mkv"),
+            ("movie?part.one.ts", "ts"),
+        ] {
+            assert_eq!(super::media_sample_extension(input), expected);
+        }
+    }
+
     #[test]
     fn preview_command_reports_progress_without_changing_hls_output() {
         use super::*;

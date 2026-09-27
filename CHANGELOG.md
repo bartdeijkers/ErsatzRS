@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Security
 
+- Compare internal Next media capabilities and credits tickets in constant time,
+  preserving rejection of altered bindings and credentials from an earlier host
+  process.
+  Keep URL query credentials out of troubleshooting sample filenames.
+
 - Require `X-Ers-Api-Key` for machine API requests, with a persistent random
   credential in the application state directory's `api-secrets.json` file.
   **Breaking change:** browser action and server-function paths move to

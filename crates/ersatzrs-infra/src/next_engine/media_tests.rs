@@ -1,6 +1,40 @@
 use super::*;
 
 #[test]
+fn callback_credentials_reject_tampering_and_previous_host_instances() {
+    let relay = MediaRelay::new();
+    let restarted = MediaRelay::new();
+    let capability = relay.capability.to_string();
+    assert!(relay.authorized(&capability));
+    assert!(!restarted.authorized(&capability));
+    for invalid in ["", "invalid", "00000000-0000-0000-0000-000000000000"] {
+        assert!(!relay.authorized(invalid));
+    }
+
+    let binding = (1, 2, 3, 4, 5);
+    let ticket = relay.credits_ticket(1, 2, 3, 4, 5);
+    assert!(relay.authorized_credits(binding, &ticket));
+    assert!(!restarted.authorized_credits(binding, &ticket));
+    for changed in [
+        (9, 2, 3, 4, 5),
+        (1, 9, 3, 4, 5),
+        (1, 2, 9, 4, 5),
+        (1, 2, 3, 9, 5),
+        (1, 2, 3, 4, 9),
+    ] {
+        assert!(!relay.authorized_credits(changed, &ticket));
+    }
+    assert!(!relay.authorized_credits(binding, ""));
+    assert!(!relay.authorized_credits(binding, &ticket[..63]));
+    assert!(!relay.authorized_credits(binding, &format!("{ticket}0")));
+    for index in 0..ticket.len() {
+        let mut changed = ticket.as_bytes().to_vec();
+        changed[index] = if changed[index] == b'0' { b'1' } else { b'0' };
+        assert!(!relay.authorized_credits(binding, std::str::from_utf8(&changed).unwrap()));
+    }
+}
+
+#[test]
 fn prepared_source_binds_single_use_session_transport_without_seeking() {
     let relay = MediaRelay::new();
     relay.configure("0.0.0.0:8409".parse().unwrap()).unwrap();

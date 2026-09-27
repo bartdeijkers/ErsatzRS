@@ -10754,6 +10754,37 @@ Row 113 is Covered with checkpoint `test(next): verify source builds synchronize
 The pin advances to cefd715c; row 114 is next. Window gates and push/CI remain open.
 Strict Clippy for the changed maintenance integration-test target, formatting,
 progress validation and diff checks pass.
+Row 114 ef5094aa security audit maps upstream signed internal URLs to accepted
+ADR 0095 process capabilities and binding/session checks, plus ADR 0102 private
+listener isolation. Provider media redirects strip credentials across origins;
+Plex file keys cannot replace the configured origin. Next startup republishes
+before launching the engine, so process-local credentials are regenerated.
+Two corrections are in progress: constant-time internal credential comparison
+using the existing subtle dependency, and URL-path-only troubleshooting sample
+extensions. Seven focused media regressions pass (Nextest
+762b9ffb-52fb-4613-bb61-1c6c0ff4f9d8), including altered credits bindings,
+prior-host rejection, credential rotation, redirects, ranges and Plex failover.
+The initial sandboxed run denied three localhost mock-server binds; the same
+tests passed with loopback permission. The sample-filename regression passes
+(2b562a04-ac5c-484d-85b2-aab72e77b13f), covering signed queries, fragments,
+empty URL paths and unchanged local filenames. Ten production callback/router
+tests pass (7c9061e5-e027-4f29-b0e7-b32081d3e3a8), including forged-local
+headers, actual loopback peer admission, no unauthorized database work,
+expired fallback sessions and provider-header isolation. Six existing provider
+and lifetime regressions pass (6ddf5cfb-4491-4663-8c92-aa76a35627cb): foreign
+Plex origins, encoded subtitle identities, invalid/traversing identities,
+live credits sessions, changed credits bindings, changed fallback policy and
+changed track/cut selection. All 24 focused tests pass.
+Substantive review found no additional correction: comparison changes preserve
+the wire format and process lifetime; URL parsing changes only sample container
+selection, leaving local paths and media track mapping intact. No dependency,
+schema, FFmpeg capability or browser route changes are introduced. Existing
+ADR 0095 process/session authentication and ADR 0102 listener isolation own the
+adaptation instead of adding upstream signature-query endpoints.
+Strict all-target infra/web Clippy passes. Row 114 is Adapt under accepted
+ADRs 0095/0102 with checkpoint `fix(security): harden internal media authentication`.
+Pin and ledger advance together to ef5094aa. Row 115 and the milestone gates
+remain open; no intermediate push or CI is launched.
 """
 
 [[milestone]]

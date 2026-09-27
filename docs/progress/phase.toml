@@ -118,8 +118,10 @@ review. All six Chromium/Firefox scenarios pass. Row 112 is Adapt under accepted
 ADR 0103 with the approved X-Ers-Api-Key header, key/router/listener regressions
 and full matched Chromium/Firefox proof (480 passed, 38 existing skips).
 Row 113 is Covered: existing build notifications reach every dependent Next mirror;
-expanded scheduler and downstream regressions pass. Next is row 114; rows 114-115
-and milestone gates remain pending before push and CI.
+expanded scheduler and downstream regressions pass. Row 114 is Adapt under
+ADRs 0095/0102: constant-time callback checks and safe sample filenames pass
+24 focused tests and strict lint. Row 115 and milestone gates remain pending
+before push and CI.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 
