@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `39e39ef6ebb939f0b069a100589926d78f4535d7` |
-| **Commit subject** | `changelog update [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/39e39ef6ebb939f0b069a100589926d78f4535d7 |
+| **Pinned commit** | `b7aaea3d46bc1eaf2e239ca0f534190a90dac633` |
+| **Commit subject** | `fix: block scheduler deleting playout items (#2992)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b7aaea3d46bc1eaf2e239ca0f534190a90dac633 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

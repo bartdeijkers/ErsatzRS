@@ -8,6 +8,8 @@
 //! each with the corresponding engine using Reset mode, persist via
 //! `apply_build_result` into a fresh in-memory database (seeded from the real-
 //! world schema), then snapshot the produced `PlayoutItem` ordering with `insta`.
+#[path = "playout_build_round_trip/block_retention.rs"]
+mod block_retention;
 mod common;
 #[path = "playout_build_round_trip/gaps.rs"]
 mod gaps;

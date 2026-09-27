@@ -39,6 +39,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep block-scheduler cleanup at or before the build start when the next block
+  begins later, preserving current and future playout items between blocks.
+
 - Resolve configured FFmpeg and FFprobe commands to absolute executables before
   publishing runtime paths, preventing Next from rebasing bare commands against
   its configuration directory and falling back to black video and silence.

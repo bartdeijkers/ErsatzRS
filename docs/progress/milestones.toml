@@ -10929,6 +10929,37 @@ and substantive review are recorded in the plan. No runtime test is warranted
 for this documentation-only row. Pin and ledger advance together to 39e39ef6;
 align the clean upstream checkout after the authorized local row commit.
 Row 117 and the remaining window gates are pending; no UCU-08 push/CI yet.
+Row 117 audit confirms the same upstream defect in Rust: a future first
+effective block advances remove_before, and persistence deletes items finishing
+before that boundary. The working correction clamps the cutoff to request.start
+while preserving earlier block boundaries. A focused regression covers absent,
+earlier, exact and future blocks across Continue, Refresh and Reset. Core block
+tests are running after required target cleanup; persistence proof, strict lint
+and substantive review remain before the row verdict/pin can advance.
+All 18 focused core block tests pass (Nextest
+9bcac994-65bf-4933-9cdb-fe9f37efdf10), including the new cutoff matrix.
+A production-builder/SQLite regression now generates and persists a timeline,
+reloads repository state, rebuilds with only a future effective block, and
+checks exact retained rows across Continue/Refresh/Reset and delayed-channel
+offsets. It also checks persisted alternate-audio and subtitle settings.
+This focused integration test is compiling; its result is not yet known.
+The corrected fixture uses the existing Forced subtitle-selection mode. The
+production-builder/SQLite regression passes (Nextest
+7fd7b4b9-705d-4d6d-97a4-d1e615e5c3e8): exact generated rows survive repository
+reload and all three rebuild modes, delayed-channel retention remains intact,
+expired rows are removed, and stored audio/subtitle overrides are unchanged.
+Strict changed-crate/test Clippy is running; no row verdict or pin advance yet.
+Substantive review confirms the correction matches upstream's earlier-only
+boundary selection, retains the no-block fallback and leaves block selection,
+item/history generation, cancellation and delayed-offset persistence unchanged.
+No schema, platform assumption, dependency or FFmpeg argument changes are
+introduced. Existing scheduling-health behavior remains applicable. The new
+database test checks full persisted row equality instead of only the cutoff.
+Strict Clippy passes for the changed core/infra targets. Row 117 is Port:
+all focused tests, formatting and substantive review pass; pin and ledger
+advance to b7aaea3d in the coherent local correction commit. Align the clean
+upstream checkout after commit. Row 118 is next; UCU-08 remains In progress
+and no intermediate push or CI is requested.
 """
 
 [[milestone]]

@@ -363,7 +363,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
         blocks.sort_by_key(|block| block.start);
         result.remove_before = blocks
             .first()
-            .map(|block| block.start)
+            .map(|block| block.start.min(request.start))
             .or(Some(request.start));
 
         let collection_etags = collection_etags(&request.reference_data, &blocks);
@@ -1415,6 +1415,44 @@ mod tests {
 
         assert_ne!(base_etag, commentary_etag);
         assert_ne!(commentary_etag, alternate_etag);
+    }
+
+    #[test]
+    fn block_retention_cutoff_never_moves_after_build_start() {
+        let start = utc("2026-04-15T09:00:00Z");
+        for mode in [
+            PlayoutBuildMode::Continue,
+            PlayoutBuildMode::Refresh,
+            PlayoutBuildMode::Reset,
+        ] {
+            for offset in [None, Some(-10), Some(0), Some(60), Some(1380)] {
+                let mut reference_data = SchedulingReferenceData::default();
+                if let Some(minutes) = offset {
+                    reference_data.effective_blocks.push(effective_block(
+                        10,
+                        20,
+                        "movies",
+                        start + Duration::minutes(minutes),
+                    ));
+                    reference_data.media_by_key.insert(
+                        "movies".to_owned(),
+                        vec![SchedulingMediaItem::new(1, Duration::minutes(10))],
+                    );
+                }
+                let result = BlockSchedulingEngine
+                    .schedule(SchedulingRequest {
+                        playout: Playout::default(),
+                        start,
+                        finish: start + Duration::days(2),
+                        mode,
+                        reference_data,
+                    })
+                    .unwrap();
+                let expected = start + Duration::minutes(offset.unwrap_or(0).min(0));
+                assert_eq!(result.remove_before, Some(expected), "{mode:?}, {offset:?}");
+                assert!(!result.clear_items);
+            }
+        }
     }
 
     #[test]

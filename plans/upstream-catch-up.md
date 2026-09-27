@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **60 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **59 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **116**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **117**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -43,7 +43,7 @@
   bookkeeping. UCU-07 is Complete: local window gates and terminal green CI
   [36321494841](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36321494841)
   at `b4d659eb` satisfy acceptance. UCU-08 row 116 is N/A release-note wording;
-  row 117 is next. Existing debt
+  row 117 is Port (safe block cleanup cutoff); row 118 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -54,6 +54,23 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 117 source map: block retention cutoff
+
+- Upstream `b7aaea3d46bc1eaf2e239ca0f534190a90dac633` changes
+  `ErsatzTV.Core/Scheduling/BlockScheduling/BlockPlayoutBuilder.cs`: selecting
+  the earliest effective block may move the build boundary earlier, never later.
+  Its regression builds after today's block and requires RemoveBefore <= now.
+- Rust `crates/ersatzrs-core/src/scheduling/block.rs` currently assigns the
+  first effective block start directly to `SchedulingResult.remove_before`.
+  `crates/ersatzrs-infra/src/repositories/playout.rs::apply_build_result`
+  deletes items finishing before this boundary minus the delayed-channel offset.
+  A future block can therefore delete current or future persisted items.
+- Clamp the cutoff to the request start while preserving an earlier block's
+  boundary. Exercise future, active, exact-boundary and absent blocks, then
+  prove retained items through the production builder/persistence path.
+- No UI, schema, playback selection or intentional deviation changes. Preserve
+  persisted subtitle/audio overrides and delayed-channel retention.
 
 ## UCU-08 row 116 source map: upstream security-release wording
 
@@ -2553,7 +2570,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | Adapt (ADRs 0095/0102) | upstream-baseline-catch-up | `fix(security): harden internal media authentication` | ucu-07; constant-time callback credentials and query-free sample filenames; accepted private listener and process/session capabilities cover internal URL authentication. Provider-origin confinement, binding/restart/session rejection and sample paths pass 24 focused tests; strict infra/web lint passes. |
 | 115 | `49b68314` | prep for release v26.8.1 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream v26.8.1 release notes` | ucu-07; only upstream CHANGELOG release heading, Plex/Emby upgrade wording and compare links change. Exact diff reviewed; no executable or package changes. Window acceptance and exact-SHA CI remain open. |
 | 116 | `39e39ef6` | changelog update [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream security release wording` | ucu-08; only upstream release guidance emphasis, labels, ordering, cache/restart and affected-provider wording change. Full diff reviewed; no executable or package changes. Existing UCU-07 security evidence remains authoritative. |
-| 117 | `b7aaea3d` | fix: block scheduler deleting playout items (#2992) | | | | ucu-08; provisional: Port candidate. |
+| 117 | `b7aaea3d` | fix: block scheduler deleting playout items (#2992) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve items before future blocks` | ucu-08; clamp cleanup to build start while retaining earlier block boundaries. All 18 block tests and production-builder/SQLite retention regression pass across three modes and delayed offsets; audio/subtitle overrides preserved. Strict Clippy and substantive review pass. |
 | 118 | `fcd593e0` | chore: trigger new build for updated next engine | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 119 | `2cf8e56a` | update changelog [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | | | | ucu-08; provisional: Port candidate. |
