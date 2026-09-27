@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::repositories::ArtworkReference;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::FillerKind;
 
@@ -73,7 +74,7 @@ pub enum XmltvItemKind {
     RemoteStream,
 }
 
-/// Which artwork kind `icon_path` actually resolved to, so the web layer
+/// Which artwork kind `icon_artwork` actually resolved to, so the web layer
 /// can request the matching resize budget from `artwork_url` (poster-sized
 /// vs. thumbnail-sized) instead of guessing from `XmltvItemKind` alone —
 /// e.g. an episode that fell back to its show's poster should be resized
@@ -105,14 +106,14 @@ pub struct XmltvProgrammeContent {
     pub artist_genres: Vec<String>,
     /// Raw, possibly `/`-delimited multi-value `ContentRating` string.
     pub content_rating: Option<String>,
-    /// Raw artwork path, resolved to a servable URL at render time.
-    pub icon_path: Option<String>,
-    /// Ignored when `icon_path` is `None`.
+    /// Persisted artwork identity, resolved to a servable URL at render time.
+    pub icon_artwork: Option<ArtworkReference>,
+    /// Ignored when `icon_artwork` is `None`.
     pub icon_size_hint: IconSizeHint,
-    /// Episode-level still artwork. Episode `icon_path` is deliberately the
+    /// Episode-level still artwork. Episode `icon_artwork` is deliberately the
     /// parent show's prioritized artwork, matching ErsatzTV.
-    pub thumbnail_path: Option<String>,
-    /// Ignored when `thumbnail_path` is `None`.
+    pub thumbnail_artwork: Option<ArtworkReference>,
+    /// Ignored when `thumbnail_artwork` is `None`.
     pub thumbnail_size_hint: IconSizeHint,
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
@@ -297,9 +298,17 @@ mod tests {
             year: Some(2026),
             genres: vec!["Drama".to_owned()],
             content_rating: Some("us:TV-14".to_owned()),
-            icon_path: Some("path/to/art.jpg".to_owned()),
+            icon_artwork: Some(ArtworkReference {
+                id: 1,
+                kind: ersatzrs_domain::ArtworkKind::Thumbnail,
+                path: "path/to/art.jpg".to_owned(),
+            }),
             icon_size_hint: IconSizeHint::Thumbnail,
-            thumbnail_path: Some("path/to/still.jpg".to_owned()),
+            thumbnail_artwork: Some(ArtworkReference {
+                id: 2,
+                kind: ersatzrs_domain::ArtworkKind::Thumbnail,
+                path: "path/to/still.jpg".to_owned(),
+            }),
             thumbnail_size_hint: IconSizeHint::Thumbnail,
             season_number: Some(1),
             episode_number: Some(1),

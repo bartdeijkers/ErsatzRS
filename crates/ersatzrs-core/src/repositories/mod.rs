@@ -81,7 +81,7 @@ pub use admin_search::{
 pub use admin_settings::{
     AdminSettingsRepository, SettingsMutation, SettingsOptionKind, SettingsSelectOption,
 };
-pub use artwork::ArtworkRepository;
+pub use artwork::{ArtworkReference, ArtworkRepository};
 pub use block::{
     BlockAdminRow, BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow,
     BlockItemAdmin, BlockRepository,

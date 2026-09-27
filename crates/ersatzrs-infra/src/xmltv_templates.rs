@@ -16,16 +16,12 @@
 //! overrides the bundled `_movie.jinja` when present, with no extraction
 //! step required for a fresh install to render the bundled defaults.
 //!
-//! Five deliberate deviations from ErsatzTV's own templates:
+//! Intentional differences from ErsatzTV's own templates:
 //! - `<rating>` splitting (the `/`-delimited multi-value `ContentRating`
 //!   convention, `us:` prefix -> `MPAA`/`VCHIP` system) is resolved in Rust
 //!   ([`split_ratings`]) rather than via Scriban's `string.split`/
 //!   `string.replace` filter pipeline, since minijinja does not ship an
 //!   equivalent filter set; templates just loop a pre-built list.
-//! - The episode template drops ErsatzTV's malformed `<image type="poster">`
-//!   element: the upstream template has a stray trailing quote
-//!   (`{{ episode_artwork_url }}"`) that emits malformed XML. The `<icon>`
-//!   carries the same show artwork, and the valid episode still is retained.
 //! - Movie icons fall back to thumbnail artwork when no poster exists, giving
 //!   guide clients a usable image instead of an empty artwork slot.
 //! - The bundled Remote Stream template emits persisted genres that ErsatzTV
@@ -898,12 +894,18 @@ mod tests {
             custom_title: None,
             title: "Some Show",
             content: &episode_content,
-            icon_url: None,
-            thumbnail_url: None,
+            icon_url: Some("/show-poster?tag=a&size=3"),
+            thumbnail_url: Some("/episode-still.jpg"),
         };
 
         let xml = render_programme(&templates, &input).expect("render episode");
 
+        assert!(xml.contains(
+            "<image type=\"poster\" size=\"3\">&#x2f;show-poster?tag=a&amp;size=3</image>"
+        ));
+        assert!(xml.contains(
+            "<image type=\"still\" orient=\"L\" size=\"3\">&#x2f;episode-still.jpg</image>"
+        ));
         assert!(xml.contains("<title lang=\"en\">Some Show</title>"));
         assert!(xml.contains("<sub-title lang=\"en\">Pilot</sub-title>"));
         assert!(xml.contains("<category lang=\"en\">Series</category>"));

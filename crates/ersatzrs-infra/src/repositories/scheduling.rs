@@ -4639,6 +4639,11 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
             return Ok(enrichment);
         }
 
+        let mut poster_ids = std::collections::HashMap::<EntityId, EntityId>::new();
+        let mut thumbnail_ids = std::collections::HashMap::<EntityId, EntityId>::new();
+        let mut season_poster_ids = std::collections::HashMap::<EntityId, EntityId>::new();
+        let mut show_poster_ids = std::collections::HashMap::<EntityId, EntityId>::new();
+
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let state_sql =
             format!(r#"SELECT "Id", "State" FROM "MediaItem" WHERE "Id" IN ({placeholders})"#);
@@ -4653,16 +4658,16 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
         match kind {
             AdminSearchKind::Movie => {
                 let sql = format!(
-                    r#"SELECT mm."MovieId" AS "ItemId", a."Path" AS "Path"
+                    r#"SELECT mm."MovieId" AS "ItemId", a."Id" AS "ArtworkId"
                        FROM "MovieMetadata" mm
                        JOIN "Artwork" a
                          ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
                        WHERE mm."MovieId" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
-                    enrichment.poster.insert(
+                    poster_ids.insert(
                         row.try_get("ItemId").repository()?,
-                        row.try_get("Path").repository()?,
+                        row.try_get("ArtworkId").repository()?,
                     );
                 }
             }
@@ -4670,7 +4675,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 let sql = format!(
                     r#"SELECT sh."Id" AS "ItemId",
                               (
-                                  SELECT a."Path"
+                                  SELECT a."Id"
                                   FROM "Artwork" a
                                   JOIN "ShowMetadata" sm
                                     ON sm."Id" = a."ShowMetadataId"
@@ -4679,14 +4684,14 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(a."Path"), '') IS NOT NULL
                                   ORDER BY a."Id"
                                   LIMIT 1
-                              ) AS "Path"
+                              ) AS "ArtworkId"
                        FROM "Show" sh
                        WHERE sh."Id" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        poster_ids.insert(id, artwork_id);
                     }
                 }
             }
@@ -4694,7 +4699,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 let sql = format!(
                     r#"SELECT sea."Id" AS "SeasonId",
                               (
-                                  SELECT sea_art."Path"
+                                  SELECT sea_art."Id"
                                   FROM "Artwork" sea_art
                                   JOIN "SeasonMetadata" sem
                                     ON sem."Id" = sea_art."SeasonMetadataId"
@@ -4703,9 +4708,9 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(sea_art."Path"), '') IS NOT NULL
                                   ORDER BY sea_art."Id"
                                   LIMIT 1
-                              ) AS "OwnPath",
+                              ) AS "OwnArtworkId",
                               (
-                                  SELECT show_art."Path"
+                                  SELECT show_art."Id"
                                   FROM "Artwork" show_art
                                   JOIN "ShowMetadata" shm
                                     ON shm."Id" = show_art."ShowMetadataId"
@@ -4714,17 +4719,17 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(show_art."Path"), '') IS NOT NULL
                                   ORDER BY show_art."Id"
                                   LIMIT 1
-                              ) AS "ShowPath"
+                              ) AS "ShowArtworkId"
                        FROM "Season" sea
                        WHERE sea."Id" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("SeasonId").repository()?;
-                    if let Some(path) = row.try_get("OwnPath").repository()? {
-                        enrichment.poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("OwnArtworkId").repository()? {
+                        poster_ids.insert(id, artwork_id);
                     }
-                    if let Some(path) = row.try_get("ShowPath").repository()? {
-                        enrichment.season_poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ShowArtworkId").repository()? {
+                        season_poster_ids.insert(id, artwork_id);
                     }
                 }
             }
@@ -4733,7 +4738,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                     r#"SELECT ep."Id" AS "EpisodeId",
                               ep."SeasonId" AS "SeasonId",
                               (
-                                  SELECT ep_art."Path"
+                                  SELECT ep_art."Id"
                                   FROM "Artwork" ep_art
                                   JOIN "EpisodeMetadata" em
                                     ON em."Id" = ep_art."EpisodeMetadataId"
@@ -4742,9 +4747,9 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(ep_art."Path"), '') IS NOT NULL
                                   ORDER BY ep_art."Id"
                                   LIMIT 1
-                              ) AS "OwnPath",
+                              ) AS "OwnArtworkId",
                               (
-                                  SELECT sea_art."Path"
+                                  SELECT sea_art."Id"
                                   FROM "Artwork" sea_art
                                   JOIN "SeasonMetadata" sem
                                     ON sem."Id" = sea_art."SeasonMetadataId"
@@ -4753,9 +4758,9 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(sea_art."Path"), '') IS NOT NULL
                                   ORDER BY sea_art."Id"
                                   LIMIT 1
-                              ) AS "SeasonPath",
+                              ) AS "SeasonArtworkId",
                               (
-                                  SELECT show_art."Path"
+                                  SELECT show_art."Id"
                                   FROM "Artwork" show_art
                                   JOIN "ShowMetadata" shm
                                     ON shm."Id" = show_art."ShowMetadataId"
@@ -4766,7 +4771,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                                     AND NULLIF(TRIM(show_art."Path"), '') IS NOT NULL
                                   ORDER BY show_art."Id"
                                   LIMIT 1
-                              ) AS "ShowPath"
+                              ) AS "ShowArtworkId"
                        FROM "Episode" ep
                        WHERE ep."Id" IN ({placeholders})"#
                 );
@@ -4775,14 +4780,14 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                     enrichment
                         .episode_season_id
                         .insert(id, row.try_get("SeasonId").repository()?);
-                    if let Some(path) = row.try_get("OwnPath").repository()? {
-                        enrichment.poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("OwnArtworkId").repository()? {
+                        poster_ids.insert(id, artwork_id);
                     }
-                    if let Some(path) = row.try_get("SeasonPath").repository()? {
-                        enrichment.season_poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("SeasonArtworkId").repository()? {
+                        season_poster_ids.insert(id, artwork_id);
                     }
-                    if let Some(path) = row.try_get("ShowPath").repository()? {
-                        enrichment.show_poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ShowArtworkId").repository()? {
+                        show_poster_ids.insert(id, artwork_id);
                     }
                 }
             }
@@ -4790,7 +4795,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 let sql = format!(
                     r#"SELECT am."ArtistId" AS "ItemId",
                               am."Disambiguation" AS "Disambiguation",
-                              a."Path" AS "Path"
+                              a."Id" AS "ArtworkId"
                        FROM "ArtistMetadata" am
                        LEFT JOIN "Artwork" a
                          ON a."ArtistMetadataId" = am."Id" AND a."ArtworkKind" = 1
@@ -4798,8 +4803,8 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
                     if let Some(value) = row.try_get("Disambiguation").repository()? {
                         enrichment.artist_disambiguation.insert(id, value);
@@ -4810,7 +4815,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 let sql = format!(
                     r#"SELECT mv."Id" AS "ItemId",
                               mv."ArtistId" AS "ArtistId",
-                              a."Path" AS "Path",
+                              a."Id" AS "ArtworkId",
                               am."Title" AS "ArtistTitle"
                        FROM "MusicVideo" mv
                        LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
@@ -4824,8 +4829,8 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                     if let Some(value) = row.try_get("ArtistId").repository()? {
                         enrichment.music_video_artist_id.insert(id, value);
                     }
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
                     if let Some(value) = row.try_get("ArtistTitle").repository()? {
                         enrichment.music_video_artist.insert(id, value);
@@ -4835,8 +4840,8 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
             AdminSearchKind::OtherVideo => {
                 let sql = format!(
                     r#"SELECT ovm."OtherVideoId" AS "ItemId",
-                              thumb."Path" AS "ThumbPath",
-                              poster."Path" AS "PosterPath"
+                              thumb."Id" AS "ThumbArtworkId",
+                              poster."Id" AS "PosterArtworkId"
                        FROM "OtherVideoMetadata" ovm
                        LEFT JOIN "Artwork" thumb
                          ON thumb."OtherVideoMetadataId" = ovm."Id"
@@ -4848,18 +4853,18 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("ThumbPath").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ThumbArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
-                    if let Some(path) = row.try_get("PosterPath").repository()? {
-                        enrichment.poster.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("PosterArtworkId").repository()? {
+                        poster_ids.insert(id, artwork_id);
                     }
                 }
             }
             AdminSearchKind::Song => {
                 let sql = format!(
                     r#"SELECT som."SongId" AS "ItemId",
-                              a."Path" AS "Path",
+                              a."Id" AS "ArtworkId",
                               som."Artists" AS "Artists",
                               som."Album" AS "Album"
                        FROM "SongMetadata" som
@@ -4869,8 +4874,8 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
                     enrichment.song_meta.insert(
                         id,
@@ -4883,7 +4888,7 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
             }
             AdminSearchKind::Image => {
                 let sql = format!(
-                    r#"SELECT im."ImageId" AS "ItemId", a."Path" AS "Path"
+                    r#"SELECT im."ImageId" AS "ItemId", a."Id" AS "ArtworkId"
                        FROM "ImageMetadata" im
                        LEFT JOIN "Artwork" a
                          ON a."ImageMetadataId" = im."Id" AND a."ArtworkKind" = 1
@@ -4891,14 +4896,14 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
                 }
             }
             AdminSearchKind::RemoteStream => {
                 let sql = format!(
-                    r#"SELECT rsm."RemoteStreamId" AS "ItemId", a."Path" AS "Path"
+                    r#"SELECT rsm."RemoteStreamId" AS "ItemId", a."Id" AS "ArtworkId"
                        FROM "RemoteStreamMetadata" rsm
                        LEFT JOIN "Artwork" a
                          ON a."RemoteStreamMetadataId" = rsm."Id"
@@ -4907,13 +4912,37 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
                     let id = row.try_get("ItemId").repository()?;
-                    if let Some(path) = row.try_get("Path").repository()? {
-                        enrichment.thumbnail.insert(id, path);
+                    if let Some(artwork_id) = row.try_get("ArtworkId").repository()? {
+                        thumbnail_ids.insert(id, artwork_id);
                     }
                 }
             }
         }
 
+        let artwork_ids = poster_ids
+            .values()
+            .chain(thumbnail_ids.values())
+            .chain(season_poster_ids.values())
+            .chain(show_poster_ids.values())
+            .copied()
+            .collect::<Vec<_>>();
+        let artwork = crate::metadata_query::load_artwork_references(&self.0, &artwork_ids).await?;
+        enrichment.poster = poster_ids
+            .into_iter()
+            .filter_map(|(item, id)| artwork.get(&id).cloned().map(|art| (item, art)))
+            .collect();
+        enrichment.thumbnail = thumbnail_ids
+            .into_iter()
+            .filter_map(|(item, id)| artwork.get(&id).cloned().map(|art| (item, art)))
+            .collect();
+        enrichment.season_poster = season_poster_ids
+            .into_iter()
+            .filter_map(|(item, id)| artwork.get(&id).cloned().map(|art| (item, art)))
+            .collect();
+        enrichment.show_poster = show_poster_ids
+            .into_iter()
+            .filter_map(|(item, id)| artwork.get(&id).cloned().map(|art| (item, art)))
+            .collect();
         Ok(enrichment)
     }
 }

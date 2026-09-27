@@ -11062,6 +11062,28 @@ history persistence paths and audio/subtitle restart proof pass. Source map
 records substantive review, covered existing guards and compatibility limits.
 Pin/ledger advance to b0f313ee in the authorized local row commit, followed by
 clean reference-checkout alignment. Next is row 124; no intermediate push/CI.
+Row 124 is Port. Typed artwork identities survive search/cards, details/actors,
+collections and XMLTV projection. Provider routes resolve persisted IDs and
+derive paths/resize from stored rows; caller query overrides, unknown/mismatched
+IDs and arbitrary cache filenames are rejected. Plex source ownership and
+case-insensitive imported prefixes are preserved. Bounded provider redirects
+load images while permanently dropping credentials after an origin change.
+The episode guide restores upstream's corrected poster element (ADR 0058);
+shared show artwork, genres and guide identifiers now survive multiple episodes.
+Focused SQL/detail/search checks, ten final projection tests and all 20 artwork
+tests pass (f65eaf7b-6fb6-4fb1-b4da-8c9ae18227b8). Six media-browser cases and
+both search browser cases pass in Chromium/Firefox. The initial search decode
+assertion checked an offscreen lazy image; scrolling into view fixes the fixture
+without changing its assertion or timeout. Canonical browser outputs are
+test-results/ucu08-row124 and test-results/ucu08-row124-search-final.
+Final cargo xtask parity-check web passes: 738 tests, 20 existing skips
+(08d4dc97-c456-4980-a746-487269efca95), architecture/hydration lint, formatting,
+progress validation and strict web Clippy. Infrastructure Clippy also passes.
+All 19 upstream files are source-mapped and substantively reviewed. The existing
+v2.0.2 FFmpeg package checksum was reverified; no build/release was started.
+Pin/ledger advance to b3a35116 in the authorized local row commit, followed by
+clean reference-checkout alignment. Next is row 125. UCU-08 remains In progress:
+remaining rows, window-wide gates and milestone push/terminal green CI are due.
 """
 
 [[milestone]]

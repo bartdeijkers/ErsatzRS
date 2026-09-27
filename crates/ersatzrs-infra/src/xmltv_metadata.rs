@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use ersatzrs_core::repositories::ArtworkReference;
 use ersatzrs_core::xmltv::{IconSizeHint, XmltvCredit, XmltvItemKind, XmltvProgrammeContent};
 use sqlx::{Pool, Row};
 
@@ -106,11 +107,10 @@ async fn load_episodes(
 
     let show_ids = metadata_ids(&show_refs);
     let episode_ids = metadata_ids(&episode_refs);
-    let mut show_genres =
-        load_string_map(pool, "Genre", "ShowMetadataId", "Name", &show_ids).await?;
-    let mut show_guids =
+    let show_genres = load_string_map(pool, "Genre", "ShowMetadataId", "Name", &show_ids).await?;
+    let show_guids =
         load_string_map(pool, "MetadataGuid", "ShowMetadataId", "Guid", &show_ids).await?;
-    let mut show_artwork = load_artwork_map(pool, "ShowMetadataId", &show_ids).await?;
+    let show_artwork = load_artwork_map(pool, "ShowMetadataId", &show_ids).await?;
     let mut episode_guids = load_string_map(
         pool,
         "MetadataGuid",
@@ -123,16 +123,17 @@ async fn load_episodes(
 
     for (item_id, metadata_id) in show_refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
-            content.genres = show_genres.remove(&metadata_id).unwrap_or_default();
-            content.guids = show_guids.remove(&metadata_id).unwrap_or_default();
-            set_icon(content, show_artwork.remove(&metadata_id));
+            // Several episodes may share this show within one guide batch.
+            content.genres = show_genres.get(&metadata_id).cloned().unwrap_or_default();
+            content.guids = show_guids.get(&metadata_id).cloned().unwrap_or_default();
+            set_icon(content, show_artwork.get(&metadata_id).cloned());
         }
     }
     for (item_id, metadata_id) in episode_refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
             content.episode_guids = episode_guids.remove(&metadata_id).unwrap_or_default();
             if let Some((path, hint)) = episode_artwork.remove(&metadata_id) {
-                content.thumbnail_path = Some(path);
+                content.thumbnail_artwork = Some(path);
                 content.thumbnail_size_hint = hint;
             }
         }
@@ -450,9 +451,12 @@ async fn hydrate_studios(
     Ok(())
 }
 
-fn set_icon(content: &mut XmltvProgrammeContent, artwork: Option<(String, IconSizeHint)>) {
+fn set_icon(
+    content: &mut XmltvProgrammeContent,
+    artwork: Option<(ArtworkReference, IconSizeHint)>,
+) {
     if let Some((path, hint)) = artwork {
-        content.icon_path = Some(path);
+        content.icon_artwork = Some(path);
         content.icon_size_hint = hint;
     }
 }
@@ -486,9 +490,9 @@ async fn load_artwork_map(
     pool: &Pool<Db>,
     owner_column: &str,
     ids: &[i64],
-) -> Result<HashMap<i64, (String, IconSizeHint)>, sqlx::Error> {
+) -> Result<HashMap<i64, (ArtworkReference, IconSizeHint)>, sqlx::Error> {
     let prefix = format!(
-        r#"SELECT "{owner_column}" AS "MetadataId", "Path", "ArtworkKind"
+        r#"SELECT "{owner_column}" AS "MetadataId", "Id", "Path", "ArtworkKind"
             FROM "Artwork" WHERE "ArtworkKind" IN ({}, {}) AND "{owner_column}" IN"#,
         artwork_kind::POSTER,
         artwork_kind::THUMBNAIL
@@ -515,7 +519,21 @@ async fn load_artwork_map(
         match artwork.get(&metadata_id) {
             Some((_, IconSizeHint::Poster)) => {}
             _ => {
-                artwork.insert(metadata_id, (path, hint));
+                artwork.insert(
+                    metadata_id,
+                    (
+                        ArtworkReference {
+                            id: row.try_get("Id")?,
+                            kind: if kind == artwork_kind::POSTER {
+                                ersatzrs_domain::ArtworkKind::Poster
+                            } else {
+                                ersatzrs_domain::ArtworkKind::Thumbnail
+                            },
+                            path,
+                        },
+                        hint,
+                    ),
+                );
             }
         }
     }
@@ -605,12 +623,14 @@ mod tests {
             r#"INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name") VALUES (10, 2, 10, 'TV')"#,
             r#"INSERT INTO "LocalLibrary" ("Id") VALUES (10)"#,
             r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (10, 10, '/media')"#,
-            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES (20, 10), (21, 10), (22, 10)"#,
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES (20, 10), (21, 10), (22, 10), (23, 10)"#,
             r#"INSERT INTO "Show" ("Id") VALUES (20)"#,
             r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (21, 20, 2)"#,
-            r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (22, 21)"#,
+            r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (22, 21), (23, 21)"#,
             r#"INSERT INTO "ShowMetadata" ("Id", "ShowId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "Year", "ContentRating") VALUES (30, 20, '2026-01-01', '2026-01-01', 0, 'The Show', 2026, 'us:TV-14')"#,
-            r#"INSERT INTO "EpisodeMetadata" ("Id", "EpisodeId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "Plot", "EpisodeNumber") VALUES (31, 22, '2026-01-01', '2026-01-01', 0, 'The Episode', 'Episode plot', 3)"#,
+            r#"INSERT INTO "EpisodeMetadata" ("Id", "EpisodeId", "DateAdded", "DateUpdated", "MetadataKind", "Title", "Plot", "EpisodeNumber") VALUES (31, 22, '2026-01-01', '2026-01-01', 0, 'The Episode', 'Episode plot', 3), (32, 23, '2026-01-01', '2026-01-01', 0, 'Second Episode', 'Another plot', 4)"#,
+            r#"INSERT INTO "Genre" ("ShowMetadataId", "Name") VALUES (30, 'Drama')"#,
+            r#"INSERT INTO "MetadataGuid" ("ShowMetadataId", "Guid") VALUES (30, 'tvdb://fixture-show')"#,
             r#"INSERT INTO "Artwork" ("ArtworkKind", "ShowMetadataId", "Path", "DateAdded", "DateUpdated") VALUES (0, 30, '/show/poster.jpg', '2026-01-01', '2026-01-01')"#,
             r#"INSERT INTO "Artwork" ("ArtworkKind", "EpisodeMetadataId", "Path", "DateAdded", "DateUpdated") VALUES (1, 31, '/episode/still.jpg', '2026-01-01', '2026-01-01')"#,
         ] {
@@ -620,16 +640,46 @@ mod tests {
                 .expect("seed episode metadata");
         }
 
-        let cache = load_content_cache(&pool, &[22])
+        let cache = load_content_cache(&pool, &[22, 23])
             .await
             .expect("load metadata");
         let (title, content) = cache.get(&22).expect("episode content");
 
         assert_eq!(title.as_deref(), Some("The Show"));
-        assert_eq!(content.icon_path.as_deref(), Some("/show/poster.jpg"));
-        assert_eq!(content.icon_size_hint, IconSizeHint::Poster);
+        let poster_id: i64 =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Artwork" WHERE "ShowMetadataId" = 30"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let still_id: i64 =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Artwork" WHERE "EpisodeMetadataId" = 31"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let poster = content.icon_artwork.as_ref().unwrap();
+        let still = content.thumbnail_artwork.as_ref().unwrap();
+        assert_eq!(poster.id, poster_id);
+        assert_eq!(poster.kind, ersatzrs_domain::ArtworkKind::Poster);
+        assert_eq!(still.id, still_id);
+        assert_eq!(still.kind, ersatzrs_domain::ArtworkKind::Thumbnail);
         assert_eq!(
-            content.thumbnail_path.as_deref(),
+            content.icon_artwork.as_ref().map(|art| art.path.as_str()),
+            Some("/show/poster.jpg")
+        );
+        assert_eq!(content.icon_size_hint, IconSizeHint::Poster);
+        let second = &cache.get(&23).unwrap().1;
+        assert_eq!(
+            second.icon_artwork, content.icon_artwork,
+            "every episode retains its shared show artwork"
+        );
+        assert!(second.thumbnail_artwork.is_none());
+        assert_eq!(second.genres, vec!["Drama"]);
+        assert_eq!(second.guids, vec!["tvdb://fixture-show"]);
+        assert_eq!(
+            content
+                .thumbnail_artwork
+                .as_ref()
+                .map(|art| art.path.as_str()),
             Some("/episode/still.jpg")
         );
         assert_eq!(content.thumbnail_size_hint, IconSizeHint::Thumbnail);
@@ -662,7 +712,10 @@ mod tests {
             .expect("load metadata");
         let (_, content) = cache.get(&20).expect("movie content");
 
-        assert_eq!(content.icon_path.as_deref(), Some("/movie/still.jpg"));
+        assert_eq!(
+            content.icon_artwork.as_ref().map(|art| art.path.as_str()),
+            Some("/movie/still.jpg")
+        );
         assert_eq!(content.icon_size_hint, IconSizeHint::Thumbnail);
     }
 

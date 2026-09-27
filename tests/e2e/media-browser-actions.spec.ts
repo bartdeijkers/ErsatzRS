@@ -106,11 +106,11 @@ function seedMediaBrowserActions(testInfo: TestInfo): Seed {
   const now = '2026-07-01T00:00:00Z';
   const itemIds = [seed.artistId, seed.musicVideoId, seed.secondMusicVideoId, seed.songId, seed.imageId].join(', ');
   const artwork = {
-    artistThumb: `e2e-artist-thumb-${seed.artistId}.png`,
-    artistFanart: `e2e-artist-fanart-${seed.artistId}.png`,
-    musicVideoThumb: `e2e-music-video-thumb-${seed.musicVideoId}.png`,
-    songThumb: `e2e-song-thumb-${seed.songId}.png`,
-    imageThumb: `e2e-image-thumb-${seed.imageId}.png`,
+    artistThumb: `${seed.artistId.toString(16)}aa`,
+    artistFanart: `${seed.artistId.toString(16)}ab`,
+    musicVideoThumb: `${seed.musicVideoId.toString(16)}ac`,
+    songThumb: `${seed.songId.toString(16)}ad`,
+    imageThumb: `${seed.imageId.toString(16)}ae`,
   };
 
   Object.values(artwork).forEach(writeArtworkFixture);

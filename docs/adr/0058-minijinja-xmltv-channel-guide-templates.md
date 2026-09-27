@@ -51,18 +51,13 @@ renders the bundled defaults with no extraction step, and an admin drops
 `movie.jinja` (no underscore) into `<data>/templates/channel-guide/` to
 override it.
 
-Four deliberate deviations from ErsatzTV's own templates:
+Intentional differences from ErsatzTV's own templates:
 
 - `<rating>` splitting (the `/`-delimited multi-value `ContentRating`
   convention, `us:` prefix mapping to `MPAA`/`VCHIP`) is resolved in Rust
   before the template ever runs, since minijinja does not ship Scriban's
   `string.split`/`string.replace` filter pipeline; templates just loop a
   pre-built `{system, value}` list.
-- The episode template drops ErsatzTV's malformed `<image type="poster">`
-  element: the upstream template has a stray trailing quote
-  (`{{ episode_artwork_url }}"`) that emits malformed XML. The `<icon>`
-  element carries the same show artwork, while the valid episode-level
-  `<image type="still">` element is preserved.
 - Movie guide icons use thumbnail artwork when no poster exists. ErsatzTV's
   movie handler selects posters only; ErsatzRS deliberately degrades to the
   available image and retains its thumbnail sizing hint so EPG clients receive
@@ -72,6 +67,11 @@ Four deliberate deviations from ErsatzTV's own templates:
   but omits them from its bundled default; emitting them improves guide
   filtering and discovery without requiring every administrator to override
   the template.
+
+The episode poster-image omission was retired on 2026-09-27 during UCU-08
+row 124. Upstream `b3a35116` removes the trailing quote from that image URL;
+the bundled ErsatzRS episode template now emits the valid poster image alongside
+the show icon and episode still. Custom template precedence is unchanged.
 
 ## Consequences
 

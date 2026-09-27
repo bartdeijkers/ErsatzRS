@@ -8,7 +8,7 @@ use ersatzrs_domain::{
 
 use crate::metadata_facets::MediaFacetSet;
 
-use super::Result;
+use super::{ArtworkReference, Result};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AdminMediaCard {
@@ -16,7 +16,7 @@ pub struct AdminMediaCard {
     pub title: String,
     pub sort_title: String,
     pub subtitle: Option<String>,
-    pub artwork_path: Option<String>,
+    pub artwork_path: Option<ArtworkReference>,
     pub season_number: Option<i64>,
     pub content_kind: ContentKind,
     pub sub_kind: Option<String>,
@@ -28,7 +28,7 @@ pub struct AdminActorCard {
     pub id: EntityId,
     pub name: String,
     pub role: Option<String>,
-    pub artwork_path: Option<String>,
+    pub artwork_path: Option<ArtworkReference>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -85,8 +85,8 @@ pub struct AdminMovieDetail {
     pub tagline: Option<String>,
     pub content_ratings: Vec<String>,
     pub release_date: Option<String>,
-    pub poster_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub poster_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub file_path: Option<String>,
     pub local_path: Option<String>,
     pub media_item_state: i32,
@@ -109,7 +109,7 @@ pub struct AdminMovieDetail {
 pub struct AdminSeasonCard {
     pub id: EntityId,
     pub season_number: i64,
-    pub poster_path: Option<String>,
+    pub poster_path: Option<ArtworkReference>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -121,8 +121,8 @@ pub struct AdminShowDetail {
     pub year: Option<i64>,
     pub plot: Option<String>,
     pub content_ratings: Vec<String>,
-    pub poster_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub poster_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub media_item_state: i32,
     pub genres: Vec<String>,
     pub tags: Vec<String>,
@@ -142,7 +142,7 @@ pub struct AdminArtistMusicVideo {
     pub sort_title: String,
     pub plot: Option<String>,
     pub album: Option<String>,
-    pub thumbnail_path: Option<String>,
+    pub thumbnail_path: Option<ArtworkReference>,
     pub media_item_state: i32,
     pub file_path: Option<String>,
     pub local_path: Option<String>,
@@ -154,8 +154,8 @@ pub struct AdminArtistDetail {
     pub title: String,
     pub disambiguation: Option<String>,
     pub biography: Option<String>,
-    pub thumbnail_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub thumbnail_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub genres: Vec<String>,
     pub styles: Vec<String>,
     pub moods: Vec<String>,
@@ -174,9 +174,9 @@ pub struct AdminOtherVideoDetail {
     pub tagline: Option<String>,
     pub content_ratings: Vec<String>,
     pub release_date: Option<String>,
-    pub thumbnail_path: Option<String>,
-    pub poster_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub thumbnail_path: Option<ArtworkReference>,
+    pub poster_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub file_path: Option<String>,
     pub local_path: Option<String>,
     pub media_item_state: i32,
@@ -205,8 +205,8 @@ pub struct AdminFacetedMediaDetail {
     pub year: Option<i64>,
     pub plot: Option<String>,
     pub release_date: Option<String>,
-    pub artwork_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub artwork_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub file_path: Option<String>,
     pub local_path: Option<String>,
     pub media_item_state: i32,
@@ -299,9 +299,9 @@ pub struct AdminRemoteStreamDetail {
     pub collection_name: Option<String>,
     pub original_broadcasters: Vec<String>,
     pub broadcasters: Vec<String>,
-    pub thumbnail_path: Option<String>,
-    pub poster_path: Option<String>,
-    pub fanart_path: Option<String>,
+    pub thumbnail_path: Option<ArtworkReference>,
+    pub poster_path: Option<ArtworkReference>,
+    pub fanart_path: Option<ArtworkReference>,
     pub media_item_state: i32,
     pub content_kind: AddonMediaListContentKind,
     pub liveness: RemoteStreamLiveness,

@@ -51,7 +51,7 @@ pub(in crate::admin::server_fns::media_browser) async fn list_movies_impl(
 pub(in crate::admin::server_fns::media_browser) async fn get_movie_details_impl(
     id: i64,
 ) -> Result<Option<MovieDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -327,7 +327,7 @@ pub async fn get_movie_details_with_pool(
 pub(in crate::admin::server_fns::media_browser) async fn get_show_details_impl(
     id: i64,
 ) -> Result<Option<ShowDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -592,7 +592,7 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_legacy
 pub(in crate::admin::server_fns::media_browser) async fn get_season_details_impl(
     id: i64,
 ) -> Result<Option<SeasonDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();

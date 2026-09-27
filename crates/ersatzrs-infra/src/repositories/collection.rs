@@ -1528,25 +1528,25 @@ impl CollectionRepository for SqliteCollectionRepository {
                       "am"."Disambiguation", "mvm"."Album" AS "MusicVideoAlbum",
                       "sgm"."Album" AS "SongAlbum",
                       COALESCE(
-                        (SELECT "Path" FROM "Artwork" WHERE "MovieMetadataId" = "mm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "MovieMetadataId" = "mm"."Id"
                          AND "ArtworkKind" = 0 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "ShowMetadataId" = "sm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "ShowMetadataId" = "sm"."Id"
                          AND "ArtworkKind" = 0 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "SeasonMetadataId" = "sem"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "SeasonMetadataId" = "sem"."Id"
                          AND "ArtworkKind" = 0 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "EpisodeMetadataId" = "em"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "EpisodeMetadataId" = "em"."Id"
                          AND "ArtworkKind" = 0 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "ArtistMetadataId" = "am"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "ArtistMetadataId" = "am"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "MusicVideoMetadataId" = "mvm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "MusicVideoMetadataId" = "mvm"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "OtherVideoMetadataId" = "ovm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "OtherVideoMetadataId" = "ovm"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "SongMetadataId" = "sgm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "SongMetadataId" = "sgm"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "ImageMetadataId" = "im"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "ImageMetadataId" = "im"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1),
-                        (SELECT "Path" FROM "Artwork" WHERE "RemoteStreamMetadataId" = "rsm"."Id"
+                        (SELECT CASE WHEN "Path" IS NOT NULL THEN "Id" END FROM "Artwork" WHERE "RemoteStreamMetadataId" = "rsm"."Id"
                          AND "ArtworkKind" = 1 LIMIT 1)
                       ) AS "Artwork"
                FROM "CollectionItem" AS "ci"
@@ -1587,9 +1587,16 @@ impl CollectionRepository for SqliteCollectionRepository {
         .fetch_all(&self.0)
         .await
         .repository()?;
+        let artwork =
+            crate::metadata_query::load_projected_artwork(&self.0, &rows, &["Artwork"]).await?;
         let items = rows
             .iter()
-            .map(map_collection_detail_item)
+            .map(|row| {
+                map_collection_detail_item(
+                    row,
+                    crate::metadata_query::projected_artwork(row, "Artwork", &artwork)?,
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
         Ok(Some(CollectionDetailAdmin {
             id,
@@ -1701,7 +1708,10 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 }
 
-fn map_collection_detail_item(row: &DbRow) -> Result<CollectionItemCardAdmin> {
+fn map_collection_detail_item(
+    row: &DbRow,
+    artwork_path: Option<ersatzrs_core::repositories::ArtworkReference>,
+) -> Result<CollectionItemCardAdmin> {
     let kind: String = row.try_get("Kind").repository()?;
     let mut title: String = row.try_get("Title").repository()?;
     let subtitle = match kind.as_str() {
@@ -1756,7 +1766,7 @@ fn map_collection_detail_item(row: &DbRow) -> Result<CollectionItemCardAdmin> {
         title,
         sort_title: row.try_get("SortTitle").repository()?,
         subtitle,
-        artwork_path: row.try_get("Artwork").repository()?,
+        artwork_path,
         custom_index: row.try_get("CustomIndex").repository()?,
         playback: PlaybackOverrides {
             preferred_audio_language_code: row

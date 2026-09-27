@@ -18,7 +18,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
-use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+use crate::api::artwork::{artwork_reference_url, ArtworkUrlKind};
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::hls::{request_host, request_scheme};
@@ -199,23 +199,23 @@ pub fn build_xmltv(
         let programme_stop = format_xmltv_time(programme.stop, time_zone);
         let icon_url = programme
             .content
-            .icon_path
-            .as_deref()
-            .filter(|path| !path.trim().is_empty())
-            .and_then(|path| artwork_url(path, artwork_kind_for(programme.content.icon_size_hint)))
-            .map(|resolved| absolute_url(scheme, host, &resolved));
+            .icon_artwork
+            .as_ref()
+            .and_then(|path| {
+                artwork_reference_url(path, artwork_kind_for(programme.content.icon_size_hint))
+            })
+            .map(|resolved| guide_artwork_url(scheme, host, &resolved, access_token));
         let thumbnail_url = programme
             .content
-            .thumbnail_path
-            .as_deref()
-            .filter(|path| !path.trim().is_empty())
+            .thumbnail_artwork
+            .as_ref()
             .and_then(|path| {
-                artwork_url(
+                artwork_reference_url(
                     path,
                     artwork_kind_for(programme.content.thumbnail_size_hint),
                 )
             })
-            .map(|resolved| absolute_url(scheme, host, &resolved));
+            .map(|resolved| guide_artwork_url(scheme, host, &resolved, access_token));
         let input = RenderProgrammeInput {
             programme_start: &programme_start,
             programme_stop: &programme_stop,
@@ -359,7 +359,7 @@ fn split_categories(raw: Option<&str>) -> Vec<String> {
     .unwrap_or_default()
 }
 
-/// The SQL layer already resolved which artwork kind `icon_path` actually
+/// The SQL layer already resolved which artwork kind `icon_artwork` actually
 /// is (poster-then-thumbnail priority, see `IconSizeHint`); this just picks
 /// the matching resize budget `artwork_url` applies.
 fn artwork_kind_for(hint: IconSizeHint) -> ArtworkUrlKind {
@@ -380,6 +380,16 @@ fn absolute_url(scheme: &str, host: &str, relative_or_absolute: &str) -> String 
     }
 }
 
+fn guide_artwork_url(scheme: &str, host: &str, resolved: &str, token: &AccessToken) -> String {
+    if let Some(artwork) = resolved.strip_prefix("/artwork/") {
+        // Use the transport listener's routes, and never attach IPTV credentials
+        // to an external image URL or forward them to a provider.
+        format!("{scheme}://{host}/iptv/artwork/{artwork}{}", token.query())
+    } else {
+        absolute_url(scheme, host, resolved)
+    }
+}
+
 fn format_xmltv_time(value: DateTime<Utc>, time_zone: XmltvTimeZone) -> String {
     match time_zone {
         XmltvTimeZone::Utc => value.format("%Y%m%d%H%M%S +0000").to_string(),
@@ -397,6 +407,29 @@ mod tests {
     use ersatzrs_core::xmltv::{XmltvItemKind, XmltvProgrammeContent};
     use ersatzrs_domain::Channel;
     use uuid::Uuid;
+
+    #[test]
+    fn guide_artwork_uses_transport_routes_without_leaking_tokens_to_external_images() {
+        let token = AccessToken::new(Some("fixture-token"));
+        assert_eq!(
+            guide_artwork_url(
+                "https",
+                "example.test",
+                "/artwork/posters/jellyfin/42",
+                &token
+            ),
+            "https://example.test/iptv/artwork/posters/jellyfin/42?access_token=fixture-token"
+        );
+        assert_eq!(
+            guide_artwork_url(
+                "https",
+                "example.test",
+                "https://images.example.test/poster.jpg",
+                &token
+            ),
+            "https://images.example.test/poster.jpg"
+        );
+    }
 
     fn fixture_channel(number: &str, name: &str) -> Channel {
         let mut channel = Channel::new(Uuid::nil());
@@ -549,7 +582,11 @@ mod tests {
             year: Some(2008),
             genres: vec!["Animation".into()],
             content_rating: Some("us:G".into()),
-            icon_path: Some("/media/movies/Big Buck Bunny/poster.jpg".into()),
+            icon_artwork: Some(ersatzrs_core::repositories::ArtworkReference {
+                id: 1,
+                kind: ersatzrs_domain::ArtworkKind::Poster,
+                path: "/media/movies/Big Buck Bunny/poster.jpg".into(),
+            }),
             ..Default::default()
         };
         let episode_content = XmltvProgrammeContent {
@@ -597,7 +634,7 @@ mod tests {
         assert!(output.contains("<category lang=\"en\">Animation</category>"));
         assert!(output.contains("<rating system=\"MPAA\"><value>G</value></rating>"));
         assert!(output.contains(&format!(
-            "http:&#x2f;&#x2f;example.test&#x2f;artwork&#x2f;posters&#x2f;{}",
+            "http:&#x2f;&#x2f;example.test&#x2f;iptv&#x2f;artwork&#x2f;posters&#x2f;{}",
             urlencoding::encode("/media/movies/Big Buck Bunny/poster.jpg")
         )));
         assert!(output.contains("<sub-title lang=\"en\">Pilot</sub-title>"));

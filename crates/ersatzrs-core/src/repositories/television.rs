@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ersatzrs_domain::EntityId;
 
-use super::Result;
+use super::{ArtworkReference, Result};
 
 /// Season-detail projection used by the admin TV season page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -11,8 +11,8 @@ pub struct SeasonDetail {
     pub show_title: String,
     pub show_year: Option<i64>,
     pub season_number: i32,
-    pub season_poster_path: Option<String>,
-    pub show_fanart_path: Option<String>,
+    pub season_poster_path: Option<ArtworkReference>,
+    pub show_fanart_path: Option<ArtworkReference>,
 }
 
 /// Episode card projection used by the admin TV season page.
@@ -24,7 +24,7 @@ pub struct EpisodeCard {
     pub sort_title: String,
     pub plot: Option<String>,
     pub release_date: Option<String>,
-    pub thumbnail_path: Option<String>,
+    pub thumbnail_path: Option<ArtworkReference>,
     pub state: i32,
     pub file_path: Option<String>,
     pub local_path: Option<String>,

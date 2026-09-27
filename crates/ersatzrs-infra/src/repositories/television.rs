@@ -1,3 +1,4 @@
+use crate::metadata_query::{load_projected_artwork, projected_artwork};
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
@@ -21,7 +22,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                       COALESCE(shm."Title", '') AS "ShowTitle",
                       shm."Year" AS "ShowYear",
                       (
-                          SELECT sa."Path"
+                          SELECT sa."Id"
                           FROM "Artwork" sa
                           WHERE sa."SeasonMetadataId" = sm."Id"
                             AND sa."ArtworkKind" = 0
@@ -30,7 +31,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                           LIMIT 1
                       ) AS "SeasonPoster",
                       (
-                          SELECT fa."Path"
+                          SELECT fa."Id"
                           FROM "Artwork" fa
                           WHERE fa."ShowMetadataId" = shm."Id"
                             AND fa."ArtworkKind" = 3
@@ -54,14 +55,20 @@ impl TelevisionRepository for SqliteTelevisionRepository {
             return Ok(None);
         };
 
+        let artwork = load_projected_artwork(
+            &self.0,
+            std::slice::from_ref(&row),
+            &["SeasonPoster", "ShowFanArt"],
+        )
+        .await?;
         Ok(Some(SeasonDetail {
             id: row.try_get("Id").repository()?,
             show_id: row.try_get("ShowId").repository()?,
             show_title: row.try_get("ShowTitle").repository()?,
             show_year: row.try_get("ShowYear").repository()?,
             season_number: row.try_get("SeasonNumber").repository()?,
-            season_poster_path: row.try_get("SeasonPoster").repository()?,
-            show_fanart_path: row.try_get("ShowFanArt").repository()?,
+            season_poster_path: projected_artwork(&row, "SeasonPoster", &artwork)?,
+            show_fanart_path: projected_artwork(&row, "ShowFanArt", &artwork)?,
         }))
     }
 
@@ -93,7 +100,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                       em."Plot" AS "Plot",
                       em."ReleaseDate" AS "ReleaseDate",
                       (
-                          SELECT a."Path"
+                          SELECT a."Id"
                           FROM "Artwork" a
                           WHERE a."EpisodeMetadataId" = em."Id"
                             AND a."ArtworkKind" = 1
@@ -132,6 +139,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         .await
         .repository()?;
 
+        let artwork = load_projected_artwork(&self.0, &rows, &["Thumbnail"]).await?;
         let mut episodes = Vec::with_capacity(rows.len());
         let mut replacements_by_library_path = HashMap::new();
         for row in rows {
@@ -165,7 +173,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                 sort_title: row.try_get("SortTitle").repository()?,
                 plot: row.try_get("Plot").repository()?,
                 release_date: row.try_get("ReleaseDate").repository()?,
-                thumbnail_path: row.try_get("Thumbnail").repository()?,
+                thumbnail_path: projected_artwork(&row, "Thumbnail", &artwork)?,
                 state: row.try_get("State").repository()?,
                 local_path,
                 file_path,

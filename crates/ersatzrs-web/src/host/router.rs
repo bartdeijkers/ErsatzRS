@@ -522,6 +522,7 @@ pub fn build_app(app_state: AppState) -> Router {
                 "/artwork/watermarks/{filename}",
                 get(api::watermarks::serve_watermark_image),
             )
+            .route("/artwork/{id}", get(api::artwork::redirect_artwork))
             .route("/artwork/posters/{*path}", get(api::artwork::serve_poster))
             .route("/artwork/fanart/{*path}", get(api::artwork::serve_fanart))
             .route(
@@ -583,6 +584,14 @@ pub(crate) fn build_streaming_app(app_state: AppState) -> Router {
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
     Router::new()
+        .route(
+            "/iptv/artwork/posters/{*path}",
+            get(api::artwork::serve_poster),
+        )
+        .route(
+            "/iptv/artwork/thumbnails/{*path}",
+            get(api::artwork::serve_thumbnail),
+        )
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{Collection, EntityId, PinnedStreamSelection, Playlist, SmartCollection};
 
-use super::Result;
+use super::{ArtworkReference, Result};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CollectionAdminRow {
@@ -186,7 +186,7 @@ pub struct CollectionItemCardAdmin {
     pub title: String,
     pub sort_title: String,
     pub subtitle: Option<String>,
-    pub artwork_path: Option<String>,
+    pub artwork_path: Option<ArtworkReference>,
     pub custom_index: i64,
     pub playback: PlaybackOverrides,
 }

@@ -58,6 +58,116 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-08 row 124 source map: artwork identity and episode images
+
+- Upstream `b3a351167a1f051ea9093b65530dfda7435d4a31` centralizes artwork
+  mapping and replaces provider paths/query strings in public artwork URLs with
+  persisted artwork IDs. The controller resolves the stored row, verifies the
+  provider prefix and derives provider paths and resize settings from that row.
+  Local redirects require hex cache names; numeric artwork IDs and hex route
+  constraints eliminate ambiguous catch-all matches. Provider helpers, media
+  cards, movie/TV details and channel-guide projections use those references.
+- Routing/controller sources: ArtworkController, IptvController logo routes,
+  Startup's artwork branch, HexConstraint and StringExtensions; account, sort
+  and internal route constraints are included in the final source audit.
+  Presentation sources are ArtworkMapper and the media-card/movie/television
+  mappers. Existing image geometry and localized controls remain unchanged;
+  browser acceptance must prove the rendered image URLs load successfully.
+- XMLTV source: `_episode.sbntxt` removes the quote appended to the poster image
+  URL. Rust's ADR 0058 omitted that element as a workaround; retire that omission
+  and restore the valid poster image alongside the show icon and episode still.
+- Rust targets: artwork repository/application projection, admin media/search
+  artwork references, web artwork/router handlers and guide projections,
+  bundled `_episode.jinja` and XMLTV regression coverage. Current projections
+  lose artwork IDs and expose paths; provider handlers accept request-selected
+  paths and query parameters with stored provider credentials. Those are actual
+  gaps against the new ID-only route contract, not a covered cleanup.
+- Acceptance: persisted-ID resolution for every provider and affected admin/EPG
+  projection; reject unknown/mismatched IDs, arbitrary provider paths/query
+  overrides and invalid cache names; preserve local registered artwork, routing
+  policies, provider source ownership, fixed resize behavior and credential
+  isolation. Verify valid episode poster/still output and custom-template
+  precedence, focused SQL/router tests, affected browser proof and strict lint.
+  No live provider credentials or library data are needed. Row 124 is Port;
+  pin and ledger advance together, then align the clean reference checkout.
+- Ancillary audit: AccountController only changes C# collection syntax; the
+  internal remote-stream and collection-sort endpoints gain numeric constraints.
+  Native collection ordering uses `update_collection_custom_order_impl` with an
+  `i64` collection ID. The native internal media callback is
+  `/ffmpeg/next-media/{item}/{version}/{file}` with a `Path<(i64, i64, i64)>`
+  extractor and capability validation, served only by the loopback router
+  (ADR 0102); there is no arbitrary-string remote-stream callback to constrain.
+  Native uploaded channel logos and watermarks use UUID plus
+  image-extension filenames (or `.bin` for unknown upload MIME types), so retain
+  that stored format alongside upstream hex names when constraining those routes.
+  Arbitrary filenames and decoded path separators must be rejected before
+  filesystem access.
+- ID propagation targets confirmed by source: `AdminMediaCard`, detail/actor
+  projections and `AdminSearchEnrichment`; SQL lives in `admin_media.rs`,
+  `television.rs`, `metadata_query.rs` and search enrichment in `scheduling.rs`.
+  Guide artwork is separately batched in `xmltv_metadata.rs`; preserve its
+  fallback order and batch loading when retaining IDs. Search/cards and XMLTV
+  now retain typed references, and provider routes resolve IDs before creating
+  outbound requests. Detail/actor and collection projections also retain IDs,
+  resolving selected rows in bounded batches. Legacy path mapping is test-only;
+  current production projection uses typed artwork references.
+- Hydration source map for the admin conversion: existing `/search` and
+  `/media/*` SSR wrappers and islands stay in place. Server-side
+  `search::build_card`, `media_browser::browser_card_artwork_url` and detail
+  projections consume typed repository artwork references and emit image URLs;
+  island props, forms, localization and DOM structure are unchanged. Existing
+  `search-see-all.spec.ts` and `media-browser-actions.spec.ts` cover navigation,
+  hydration and responsive behavior; update provider URL expectations to IDs
+  and add real provider-route evidence rather than relying solely on mocked
+  browser images. No shared visual primitives are changed.
+- Focused evidence so far: artwork repository identity/error test passed
+  (Nextest `44f6c75f-b029-43a6-a684-22858ececf3f`); four XMLTV metadata tests
+  passed with persisted poster/still IDs
+  (`da7fc1e7-c0c6-4cd0-901c-87e9c3e041c6`); SQL search fallback test passed
+  with exact winning IDs despite duplicate paths
+  (`07d9cd10-a336-4208-b5bc-2a65c8333a30`). Combined web selection passed
+  46 tests (`4bbc9402-c755-4cf6-b998-10b63fc4870c`); its one stale guide-URL
+  assertion was updated to the IPTV artwork route, then that rendering test
+  passed (`b8cedb5f-48d4-4e08-910a-8e6cd6e74b61`). These are partial proofs,
+  not row or milestone acceptance. Detail conversion subsequently passed the
+  remote-stream SQL test (`837de8ee-340b-4ed1-94d9-69e6a3a97c9f`) and 24
+  detail/search web tests (`3f9bd83d-c9c0-4397-8a9b-1a15b0661218`). The initial
+  three-provider HTTP fixture passed (`02bd784e-4570-497f-aeca-cbe8cd1e763d`);
+  its added decoy Plex source and local-cache redirect cases subsequently
+  passed (`5dc939c2-be61-44bf-9744-75995bd1f3c9`). Strict Clippy passed for
+  infrastructure and web all-targets. A two-episode regression then reproduced
+  the existing XMLTV shared-show map-consumption defect (second episode lost
+  its poster); the loader now clones shared show artwork, genres and guide
+  identifiers. Ten final projection tests passed
+  (`1c0ec21a-feed-47fd-8383-694ae8e58a6d`), and strict infrastructure lint was
+  rerun successfully for the correction. The initial matched SSR/WASM browser
+  run passed all six media-browser cases. Search failed in both projects because
+  the new decoded-image assertion inspected an offscreen lazy image; Chromium's
+  trace confirms no thumbnail request was made. The test now scrolls each image
+  into view before the unchanged decode assertion. The focused rerun passed in
+  both projects (two tests, 15.5 seconds) under
+  `test-results/ucu08-row124-search-final/`; the six earlier media-browser passes
+  remain applicable.
+  Final source review also caught disabled provider redirects in the pending
+  proxy change. Bounded redirects now preserve same-origin headers and permanently
+  drop provider credentials after crossing origins, with a synthetic two-origin
+  regression covering the return hop, loop limit and invalid scheme.
+  All 20 artwork tests now pass (Nextest
+  `f65eaf7b-6fb6-4fb1-b4da-8c9ae18227b8`), including those redirects, all three
+  provider ID routes and case-insensitive native/imported Plex prefixes.
+  Final strict web all-targets Clippy, formatting and progress validation pass.
+  The existing v2.0.2 Linux package passed
+  its published checksum again before use. Substantive source review confirms
+  all 19 upstream files are accounted for: ID projections and provider helpers,
+  image constraints and routing, guide templates and the ancillary numeric-route
+  changes. No FFmpeg argv, schema, platform assumption, health requirement or
+  audio/subtitle selection changes are introduced. The required web parity gate
+  passed architecture/hydration checks and all 738 web tests (20 existing skips;
+  Nextest `08d4dc97-c456-4980-a746-487269efca95`). Its final strict Clippy step
+  also passed. Row 124 is Port; commit the implementation, evidence, ledger and
+  pin together, then align the clean reference checkout. Row 125 and the
+  milestone window gates/push/CI remain; no intermediate push is requested.
+
 ## UCU-08 row 123 source map: shuffle cycles and scheduling safety
 
 - Upstream `b0f313eec89774fecc7e88cb1fc0cdea29c507a4` adds nullable parent
@@ -2777,7 +2887,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 121 | `06ee45ff` | fix: text subtitle playback (#2994) | Covered | upstream-baseline-catch-up | `test(subtitles): preserve source queries during seek rebasing` | ucu-08; existing ADR 0061 seek cache avoids upstream callback query concatenation. Strengthened HTTP query-preservation and separate FFmpeg seek assertions pass with all 50 selected subtitle tests and strict infra lint. No runtime behavior change. |
 | 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | Port | block-scheduling; scripted-scheduling; upstream-baseline-catch-up | `fix(scheduling): restore playlist state through real sources` | ucu-08; parent replay and all-child history preserve counted/play-all continuation. Block deco retains structured children; Lua resolves real SQL sources through the awaited worker. 220 scheduling tests, seven builder tests, SQLite restart/source regressions and strict affected lint pass. Remote Stream checks, audio/subtitle settings and Reset-only block filler admission are preserved. |
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | Port | classic-scheduling; yaml-scheduling; scripted-scheduling; block-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist shuffled playlist cycles` | ucu-08; nullable history seeds and compatible checkpoint state preserve parent/child cycles, repeated slots and source settings. Shuffled Lua marathons use persisted playout seeds. 228 scheduling tests, 55 repository tests, legacy migration and strict lint pass; real SQL restart matches 100 uninterrupted items. Marathon validation/deduplication and empty/equal/missing-item/filler boundaries are covered. |
-| 124 | `b3a35116` | fix: artwork cleanup (#2997) | | | | ucu-08; provisional: Port candidate. |
+| 124 | `b3a35116` | fix: artwork cleanup (#2997) | Port | media-browsers | `fix(artwork): resolve provider images by persisted identity` | ucu-08; typed IDs retained through cards/details/collections/XMLTV; stored-row provider paths and resize, source ownership, bounded redirects and credential isolation, cache guards and valid episode poster output. Focused SQL/HTTP regressions, eight Chromium/Firefox cases, web parity 738 passed/20 existing skips and strict lint pass. |
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | | | | ucu-08; provisional: Port candidate. |
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | | | | ucu-08; provisional: Port candidate. |
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | | | | ucu-08; provisional: Port candidate. |

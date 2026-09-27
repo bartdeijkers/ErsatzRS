@@ -12,16 +12,18 @@ type Seed = {
   seasonId: number;
   episodeId: number;
   musicVideoId: number;
+  showArtworkId: number;
+  artistArtworkId: number;
 };
 
-function sqlite(sql: string): void {
+function sqlite(sql: string): string {
   if (!dbPath) {
     throw new Error('E2E_DB_PATH or ERSATZRS_DB_PATH is required for search seeding');
   }
-  execFileSync('sqlite3', [dbPath], {
+  return execFileSync('sqlite3', [dbPath], {
     input: `.timeout 10000\n${sql}`,
     encoding: 'utf8',
-  });
+  }).trim();
 }
 
 function projectBase(testInfo: TestInfo): number {
@@ -148,6 +150,8 @@ PRAGMA foreign_keys=ON;
     seasonId: base + 100,
     episodeId: base + 300,
     musicVideoId: base + 500,
+    showArtworkId: Number(sqlite(`SELECT "Id" FROM "Artwork" WHERE "ShowMetadataId" = ${showMetadataId} AND "ArtworkKind" = 0 ORDER BY "Id" LIMIT 1;`)),
+    artistArtworkId: Number(sqlite(`SELECT "Id" FROM "Artwork" WHERE "ArtistMetadataId" = ${artistMetadataId} AND "ArtworkKind" = 1 ORDER BY "Id" LIMIT 1;`)),
   };
 }
 
@@ -195,7 +199,7 @@ async function gotoHydrated(page: Page, route: string): Promise<void> {
 test.describe('P7C-03 search and See All parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed search rows');
 
-  test('preserves artwork kinds, queries, valid navigation, hydration, and mobile containment', async ({
+  test('preserves artwork identities, kinds, valid navigation, hydration, and mobile containment', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
@@ -209,19 +213,24 @@ test.describe('P7C-03 search and See All parity', () => {
     const seed = seedSearchResults(testInfo);
     const encodedQuery = encodeURIComponent(seed.query);
 
-    await page.route(/\/artwork\/(?:posters|thumbnails)\/(?:jellyfin|emby)\//, (route) =>
+    await page.route(/\/artwork\/(?:posters|thumbnails)\/(?:jellyfin|emby)\/\d+$/, (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: TINY_PNG }),
     );
 
     await gotoHydrated(page, `/search?query=${encodedQuery}`);
     const poster = page.locator(
-      `img[src*="/artwork/posters/jellyfin/Items/${seed.query}-show/Images/Primary"]`,
+      `img[src="/artwork/posters/jellyfin/${seed.showArtworkId}"]`,
     );
     const thumbnail = page.locator(
-      `img[src*="/artwork/thumbnails/emby/Items/${seed.query}-artist/Images/Primary"]`,
+      `img[src="/artwork/thumbnails/emby/${seed.artistArtworkId}"]`,
     );
-    await expect(poster.first()).toHaveAttribute('src', /tag=poster&fillHeight=440/);
-    await expect(thumbnail.first()).toHaveAttribute('src', /tag=thumbnail&maxHeight=220/);
+    await expect(poster.first()).toHaveAttribute('src', `/artwork/posters/jellyfin/${seed.showArtworkId}`);
+    await expect(thumbnail.first()).toHaveAttribute('src', `/artwork/thumbnails/emby/${seed.artistArtworkId}`);
+    await poster.first().scrollIntoViewIfNeeded();
+    await expect(poster.first()).toHaveJSProperty('naturalWidth', 1);
+    await thumbnail.first().scrollIntoViewIfNeeded();
+    await expect(thumbnail.first()).toHaveJSProperty('naturalWidth', 1);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await expect(page.getByRole('button', { name: 'Add All to Collection' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add All to Playlist' })).toBeVisible();
     await page.screenshot({

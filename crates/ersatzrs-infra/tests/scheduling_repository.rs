@@ -1020,12 +1020,21 @@ async fn admin_show_detail_uses_one_lowest_non_empty_artwork_winner_per_season()
         .unwrap()
         .expect("show detail");
 
-    assert_eq!(detail.poster_path.as_deref(), Some("show-lowest.jpg"));
-    assert_eq!(detail.fanart_path.as_deref(), Some("fanart-lowest.jpg"));
+    assert_eq!(
+        detail.poster_path.as_ref().map(|art| art.path.as_str()),
+        Some("show-lowest.jpg")
+    );
+    assert_eq!(
+        detail.fanart_path.as_ref().map(|art| art.path.as_str()),
+        Some("fanart-lowest.jpg")
+    );
     assert_eq!(detail.seasons.len(), 1);
     assert_eq!(detail.seasons[0].id, 11);
     assert_eq!(
-        detail.seasons[0].poster_path.as_deref(),
+        detail.seasons[0]
+            .poster_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("season-lowest.jpg")
     );
 }
@@ -1043,8 +1052,9 @@ async fn admin_search_uses_stable_lowest_non_empty_tv_artwork_winners() {
         .await
         .unwrap();
     assert_eq!(show.poster.len(), 1);
+    assert_eq!(show.poster[&10].id, 9012);
     assert_eq!(
-        show.poster.get(&10).map(String::as_str),
+        show.poster.get(&10).map(|art| art.path.as_str()),
         Some("show-lowest.jpg")
     );
 
@@ -1055,12 +1065,14 @@ async fn admin_search_uses_stable_lowest_non_empty_tv_artwork_winners() {
         .unwrap();
     assert_eq!(season.poster.len(), 1);
     assert_eq!(season.season_poster.len(), 1);
+    assert_eq!(season.poster[&11].id, 9002);
+    assert_eq!(season.season_poster[&11].id, 9012);
     assert_eq!(
-        season.poster.get(&11).map(String::as_str),
+        season.poster.get(&11).map(|art| art.path.as_str()),
         Some("season-lowest.jpg")
     );
     assert_eq!(
-        season.season_poster.get(&11).map(String::as_str),
+        season.season_poster.get(&11).map(|art| art.path.as_str()),
         Some("show-lowest.jpg")
     );
 
@@ -1073,18 +1085,25 @@ async fn admin_search_uses_stable_lowest_non_empty_tv_artwork_winners() {
     assert_eq!(episode.season_poster.len(), 2);
     assert_eq!(episode.show_poster.len(), 2);
     assert_eq!(episode.episode_season_id.len(), 2);
+    assert_eq!(episode.poster[&12].id, 9032);
     assert_eq!(
-        episode.poster.get(&12).map(String::as_str),
+        episode.poster.get(&12).map(|art| art.path.as_str()),
         Some("episode-lowest.jpg")
     );
     assert!(!episode.poster.contains_key(&13));
     for episode_id in [12, 13] {
         assert_eq!(
-            episode.season_poster.get(&episode_id).map(String::as_str),
+            episode
+                .season_poster
+                .get(&episode_id)
+                .map(|art| art.path.as_str()),
             Some("season-lowest.jpg")
         );
         assert_eq!(
-            episode.show_poster.get(&episode_id).map(String::as_str),
+            episode
+                .show_poster
+                .get(&episode_id)
+                .map(|art| art.path.as_str()),
             Some("show-lowest.jpg")
         );
     }

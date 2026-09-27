@@ -117,7 +117,7 @@ pub(in crate::admin::server_fns::media_browser) async fn list_artists_legacy_sql
 pub(in crate::admin::server_fns::media_browser) async fn get_artist_details_impl(
     id: i64,
 ) -> Result<Option<ArtistDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();

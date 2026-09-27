@@ -17,10 +17,19 @@ async fn television_repository_reads_season_episodes_and_episode_media_info() {
     assert_eq!(season.show_year, Some(2026));
     assert_eq!(season.season_number, 1);
     assert_eq!(
-        season.season_poster_path.as_deref(),
+        season
+            .season_poster_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("season-poster.jpg")
     );
-    assert_eq!(season.show_fanart_path.as_deref(), Some("show-fanart.jpg"));
+    assert_eq!(
+        season
+            .show_fanart_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
+        Some("show-fanart.jpg")
+    );
 
     assert_eq!(repos.television.get_episode_count(20).await.unwrap(), 2);
 
@@ -35,7 +44,10 @@ async fn television_repository_reads_season_episodes_and_episode_media_info() {
     assert_eq!(episodes[0].title, "Pilot");
     assert_eq!(episodes[0].sort_title, "pilot");
     assert_eq!(
-        episodes[0].thumbnail_path.as_deref(),
+        episodes[0]
+            .thumbnail_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("pilot-thumb.jpg")
     );
     assert_eq!(episodes[0].state, 1);
@@ -111,11 +123,17 @@ async fn television_repository_uses_lowest_artwork_id_without_multiplying_episod
 
     let season = repos.television.get_season(20).await.unwrap().unwrap();
     assert_eq!(
-        season.season_poster_path.as_deref(),
+        season
+            .season_poster_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("lowest-season-poster.jpg")
     );
     assert_eq!(
-        season.show_fanart_path.as_deref(),
+        season
+            .show_fanart_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("lowest-show-fanart.jpg")
     );
 
@@ -134,7 +152,10 @@ async fn television_repository_uses_lowest_artwork_id_without_multiplying_episod
         vec![30, 31]
     );
     assert_eq!(
-        episodes[0].thumbnail_path.as_deref(),
+        episodes[0]
+            .thumbnail_path
+            .as_ref()
+            .map(|art| art.path.as_str()),
         Some("lowest-pilot-thumb.jpg")
     );
     assert!(episodes[1].thumbnail_path.is_none());

@@ -456,6 +456,9 @@ fn channel_number_updates_from_fields(
 }
 
 pub async fn serve_channel_logo(Path(filename): Path<String>) -> Response {
+    if !super::artwork::is_cached_image_filename(&filename) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let path = channel_logo_dir().join(&filename);
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("bin");
     let content_type = match ext {
@@ -480,6 +483,71 @@ fn channel_logo_dir() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channel_logo_filename_preserves_uploaded_uuids_and_hex_cache_names() {
+        for name in ["ab", "ABCDEF0123456789", "abcdef.jpg"] {
+            assert!(
+                super::super::artwork::is_cached_image_filename(name),
+                "{name}"
+            );
+        }
+        for extension in ["png", "jpg", "jpeg", "gif", "webp", "svg", "bin"] {
+            let name = format!("00000000-0000-4000-8000-000000000001.{extension}");
+            assert!(
+                super::super::artwork::is_cached_image_filename(&name),
+                "{name}"
+            );
+        }
+        for name in [
+            "",
+            "a",
+            "a.jpg",
+            "../file.jpg",
+            "/file.jpg",
+            "ab/cd",
+            "ab\\cd",
+            "file.png",
+            "€",
+            "ab.jpg.jpg",
+            "ab%2fcd",
+            "ab.png",
+            "00000000-0000-4000-8000-000000000001.exe",
+        ] {
+            assert!(
+                !super::super::artwork::is_cached_image_filename(name),
+                "{name}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn channel_logo_rejects_paths_before_reading_files() {
+        let fixture = std::env::temp_dir().join(format!("logo-boundary-{}.jpg", Uuid::new_v4()));
+        fs::write(&fixture, b"fixture outside artwork cache")
+            .await
+            .unwrap();
+        let absolute = fixture.to_str().unwrap().to_owned();
+        let logo = serve_channel_logo(Path(absolute.clone())).await;
+        let watermark = super::super::watermarks::serve_watermark_image(Path(absolute)).await;
+        fs::remove_file(fixture).await.unwrap();
+        assert_eq!(logo.status(), StatusCode::NOT_FOUND);
+        assert_eq!(watermark.status(), StatusCode::NOT_FOUND);
+        for name in ["../file.jpg", "/file.jpg", "ab/cd", "ab\\cd", "€"] {
+            assert_eq!(
+                serve_channel_logo(Path(name.to_owned())).await.status(),
+                StatusCode::NOT_FOUND,
+                "{name}"
+            );
+            assert_eq!(
+                super::super::watermarks::serve_watermark_image(Path(name.to_owned()))
+                    .await
+                    .status(),
+                StatusCode::NOT_FOUND,
+                "watermark: {name}"
+            );
+        }
+    }
 
     #[test]
     fn channel_save_form_defaults_missing_checkboxes_to_false() {

@@ -660,8 +660,8 @@ fn build_card(
 
     let raw_path = resolve_artwork_path(kind, hit.media_item_id, enrichment);
     let artwork_url = raw_path.and_then(|path| {
-        use crate::api::artwork::{artwork_kind_for_admin_search, artwork_url};
-        artwork_url(
+        use crate::api::artwork::{artwork_kind_for_admin_search, artwork_reference_url};
+        artwork_reference_url(
             &path,
             artwork_kind_for_admin_search(admin_search_kind(kind)),
         )
@@ -750,7 +750,7 @@ fn resolve_artwork_path(
     kind: SearchCardKind,
     media_item_id: i64,
     enrichment: &SectionEnrichment,
-) -> Option<String> {
+) -> Option<ersatzrs_core::repositories::ArtworkReference> {
     let map = match search_artwork_kind(kind) {
         SearchArtworkKind::Poster => &enrichment.poster,
         SearchArtworkKind::Thumbnail => &enrichment.thumbnail,
@@ -772,274 +772,16 @@ fn resolve_artwork_path(
 }
 
 #[cfg(all(test, feature = "ssr"))]
-async fn fetch_with_ids(
-    pool: &ersatzrs_infra::db::DbPool,
-    sql: &str,
-    ids: &[i64],
-) -> Result<Vec<ersatzrs_infra::db::DbRow>, ServerFnError> {
-    let mut q = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql));
-    for id in ids {
-        q = q.bind(*id);
-    }
-    Ok(q.fetch_all(pool).await?)
-}
-
-#[cfg(all(test, feature = "ssr"))]
-#[allow(clippy::too_many_lines)]
 async fn load_enrichment(
     pool: &ersatzrs_infra::db::DbPool,
     kind: SearchCardKind,
     ids: &[i64],
 ) -> Result<SectionEnrichment, ServerFnError> {
-    use sqlx::Row;
-
-    let mut enrichment = SectionEnrichment::default();
-    if ids.is_empty() {
-        return Ok(enrichment);
-    }
-
-    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-
-    // Common: MediaItem.State for every kind.
-    {
-        let sql =
-            format!(r#"SELECT "Id", "State" FROM "MediaItem" WHERE "Id" IN ({placeholders})"#);
-        let rows = fetch_with_ids(pool, &sql, ids).await?;
-        for row in rows {
-            let id: i64 = row.try_get("Id")?;
-            let state_value: i32 = row.try_get("State").unwrap_or(0);
-            let state = match state_value {
-                1 => ersatzrs_domain::MediaItemState::FileNotFound,
-                2 => ersatzrs_domain::MediaItemState::Unavailable,
-                3 => ersatzrs_domain::MediaItemState::RemoteOnly,
-                _ => ersatzrs_domain::MediaItemState::Normal,
-            };
-            enrichment.state.insert(id, state);
-        }
-    }
-
-    match kind {
-        SearchCardKind::Movie => {
-            let sql = format!(
-                r#"SELECT mm."MovieId" AS "ItemId", a."Path" AS "Path"
-                   FROM "MovieMetadata" mm
-                   JOIN "Artwork" a ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
-                   WHERE mm."MovieId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                enrichment
-                    .poster
-                    .insert(row.try_get("ItemId")?, row.try_get("Path")?);
-            }
-        }
-        SearchCardKind::Show => {
-            let sql = format!(
-                r#"SELECT sm."ShowId" AS "ItemId", a."Path" AS "Path"
-                   FROM "ShowMetadata" sm
-                   JOIN "Artwork" a ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
-                   WHERE sm."ShowId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                enrichment
-                    .poster
-                    .insert(row.try_get("ItemId")?, row.try_get("Path")?);
-            }
-        }
-        SearchCardKind::Season => {
-            // Own poster (SeasonMetadata) + show poster fallback (keyed by season id).
-            let sql = format!(
-                r#"SELECT sea."Id" AS "SeasonId",
-                          sea_art."Path" AS "OwnPath",
-                          show_art."Path" AS "ShowPath"
-                   FROM "Season" sea
-                   LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
-                   LEFT JOIN "Artwork" sea_art
-                       ON sea_art."SeasonMetadataId" = sem."Id" AND sea_art."ArtworkKind" = 0
-                   LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
-                   LEFT JOIN "Artwork" show_art
-                       ON show_art."ShowMetadataId" = shm."Id" AND show_art."ArtworkKind" = 0
-                   WHERE sea."Id" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("SeasonId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("OwnPath") {
-                    enrichment.poster.insert(id, path);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("ShowPath") {
-                    enrichment.season_poster.insert(id, path);
-                }
-            }
-        }
-        SearchCardKind::Episode => {
-            // Own poster + season + show fallback chain, keyed by episode id.
-            let sql = format!(
-                r#"SELECT ep."Id" AS "EpisodeId",
-                          ep."SeasonId" AS "SeasonId",
-                          ep_art."Path" AS "OwnPath",
-                          sea_art."Path" AS "SeasonPath",
-                          show_art."Path" AS "ShowPath"
-                   FROM "Episode" ep
-                   LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
-                   LEFT JOIN "Artwork" ep_art
-                       ON ep_art."EpisodeMetadataId" = em."Id" AND ep_art."ArtworkKind" = 0
-                   LEFT JOIN "Season" sea ON sea."Id" = ep."SeasonId"
-                   LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
-                   LEFT JOIN "Artwork" sea_art
-                       ON sea_art."SeasonMetadataId" = sem."Id" AND sea_art."ArtworkKind" = 0
-                   LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
-                   LEFT JOIN "Artwork" show_art
-                       ON show_art."ShowMetadataId" = shm."Id" AND show_art."ArtworkKind" = 0
-                   WHERE ep."Id" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("EpisodeId")?;
-                if let Ok(season_id) = row.try_get::<i64, _>("SeasonId") {
-                    enrichment.episode_season_id.insert(id, season_id);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("OwnPath") {
-                    enrichment.poster.insert(id, path);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("SeasonPath") {
-                    enrichment.season_poster.insert(id, path);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("ShowPath") {
-                    enrichment.show_poster.insert(id, path);
-                }
-            }
-        }
-        SearchCardKind::Artist => {
-            let sql = format!(
-                r#"SELECT am."ArtistId" AS "ItemId",
-                          am."Disambiguation" AS "Disambiguation",
-                          a."Path" AS "Path"
-                   FROM "ArtistMetadata" am
-                   LEFT JOIN "Artwork" a ON a."ArtistMetadataId" = am."Id" AND a."ArtworkKind" = 1
-                   WHERE am."ArtistId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-                if let Ok(Some(disambiguation)) = row.try_get::<Option<String>, _>("Disambiguation")
-                {
-                    enrichment.artist_disambiguation.insert(id, disambiguation);
-                }
-            }
-        }
-        SearchCardKind::MusicVideo => {
-            let sql = format!(
-                r#"SELECT mv."Id" AS "ItemId",
-                          mv."ArtistId" AS "ArtistId",
-                          a."Path" AS "Path",
-                          am."Title" AS "ArtistTitle"
-                   FROM "MusicVideo" mv
-                   LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
-                   LEFT JOIN "Artwork" a
-                       ON a."MusicVideoMetadataId" = mvm."Id" AND a."ArtworkKind" = 1
-                   LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = mv."ArtistId"
-                   WHERE mv."Id" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(artist_id)) = row.try_get::<Option<i64>, _>("ArtistId") {
-                    enrichment.music_video_artist_id.insert(id, artist_id);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-                if let Ok(Some(artist)) = row.try_get::<Option<String>, _>("ArtistTitle") {
-                    enrichment.music_video_artist.insert(id, artist);
-                }
-            }
-        }
-        SearchCardKind::OtherVideo => {
-            // Thumbnail-first, then poster fallback (matches `Mapper`).
-            let sql = format!(
-                r#"SELECT ovm."OtherVideoId" AS "ItemId",
-                          thumb."Path" AS "ThumbPath",
-                          poster."Path" AS "PosterPath"
-                   FROM "OtherVideoMetadata" ovm
-                   LEFT JOIN "Artwork" thumb
-                       ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
-                   LEFT JOIN "Artwork" poster
-                       ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
-                   WHERE ovm."OtherVideoId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("ThumbPath") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("PosterPath") {
-                    enrichment.poster.insert(id, path);
-                }
-            }
-        }
-        SearchCardKind::Song => {
-            let sql = format!(
-                r#"SELECT som."SongId" AS "ItemId",
-                          a."Path" AS "Path",
-                          som."Artists" AS "Artists",
-                          som."Album" AS "Album"
-                   FROM "SongMetadata" som
-                   LEFT JOIN "Artwork" a
-                       ON a."SongMetadataId" = som."Id" AND a."ArtworkKind" = 1
-                   WHERE som."SongId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-                let artists: Option<String> = row.try_get("Artists").ok().flatten();
-                let album: Option<String> = row.try_get("Album").ok().flatten();
-                enrichment.song_meta.insert(id, (artists, album));
-            }
-        }
-        SearchCardKind::Image => {
-            let sql = format!(
-                r#"SELECT im."ImageId" AS "ItemId", a."Path" AS "Path"
-                   FROM "ImageMetadata" im
-                   LEFT JOIN "Artwork" a
-                       ON a."ImageMetadataId" = im."Id" AND a."ArtworkKind" = 1
-                   WHERE im."ImageId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-            }
-        }
-        SearchCardKind::RemoteStream => {
-            let sql = format!(
-                r#"SELECT rsm."RemoteStreamId" AS "ItemId", a."Path" AS "Path"
-                   FROM "RemoteStreamMetadata" rsm
-                   LEFT JOIN "Artwork" a
-                       ON a."RemoteStreamMetadataId" = rsm."Id" AND a."ArtworkKind" = 1
-                   WHERE rsm."RemoteStreamId" IN ({placeholders})"#
-            );
-            let rows = fetch_with_ids(pool, &sql, ids).await?;
-            for row in rows {
-                let id: i64 = row.try_get("ItemId")?;
-                if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
-                    enrichment.thumbnail.insert(id, path);
-                }
-            }
-        }
-    }
-
-    Ok(enrichment)
+    use ersatzrs_core::repositories::AdminSearchRepository as _;
+    ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(pool.clone())
+        .enrich_admin_search(admin_search_kind(kind), ids)
+        .await
+        .map_err(ServerFnError::new)
 }
 
 // ---------------------------------------------------------------------------
@@ -1232,13 +974,25 @@ mod tests {
             let mut enrichment = SectionEnrichment::default();
             let expected_family = match search_artwork_kind(kind) {
                 SearchArtworkKind::Poster => {
-                    enrichment.poster.insert(id, format!("poster-{id}.jpg"));
+                    enrichment.poster.insert(
+                        id,
+                        ersatzrs_core::repositories::ArtworkReference {
+                            id,
+                            kind: ersatzrs_domain::ArtworkKind::Poster,
+                            path: format!("jellyfin://Items/{id}/Images/Primary?tag=stored"),
+                        },
+                    );
                     "posters"
                 }
                 SearchArtworkKind::Thumbnail => {
-                    enrichment
-                        .thumbnail
-                        .insert(id, format!("thumbnail-{id}.jpg"));
+                    enrichment.thumbnail.insert(
+                        id,
+                        ersatzrs_core::repositories::ArtworkReference {
+                            id,
+                            kind: ersatzrs_domain::ArtworkKind::Thumbnail,
+                            path: format!("jellyfin://Items/{id}/Images/Primary?tag=stored"),
+                        },
+                    );
                     "thumbnails"
                 }
             };
@@ -1252,14 +1006,7 @@ mod tests {
 
             assert_eq!(
                 build_card(kind, &hit, &enrichment).artwork_url,
-                Some(format!(
-                    "/artwork/{expected_family}/{}-{id}.jpg",
-                    if expected_family == "posters" {
-                        "poster"
-                    } else {
-                        "thumbnail"
-                    }
-                ))
+                Some(format!("/artwork/{expected_family}/jellyfin/{id}"))
             );
         }
     }

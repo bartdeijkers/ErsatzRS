@@ -130,3 +130,10 @@ description = 'Per-kind See All pages explicitly defer full detail-page behavior
 discovered  = '2026-07-21'
 evidence    = 'Resolved 2026-07-25 from the pinned ErsatzTV search/list/card/pager/letter-bar sources: See All opens dedicated filtered routes, query state survives pagination and letter navigation, seasons link to detail, episodes link to their owning season anchor, music-video cards intentionally have no detail href, and the pages expose no library-filter combobox. `tests/e2e/search-see-all.spec.ts` proves those dispositions, hydration, desktop/mobile containment, and clean Chromium/Firefox runtime behavior.'
 resolved    = true
+
+[[debt]]
+id          = 'artwork-id-bound-projections'
+description = 'UCU-08 row 124 replaces provider paths and request query strings with persisted artwork IDs. Search/cards, details/actors, collections and XMLTV now retain typed artwork references. Complete browser and route acceptance of the stored-row resize policy, local cache redirects and image filename constraints.'
+discovered  = '2026-09-27'
+evidence    = 'ArtworkRepository::find_by_id, typed projections and persisted provider-request construction are implemented. Focused SQL, 24 detail/search web tests, ten final projection tests and all 20 artwork tests pass. Provider HTTP fixtures prove source ownership, caller-query isolation, cache-only redirects and cross-origin credential removal. Six media-browser cases and the corrected search case in both Chromium/Firefox pass; strict affected Clippy passes. Legacy path mapping is test-only. Final web parity passes: 738 tests, 20 existing skips, architecture/hydration lint and strict Clippy. UCU-08 milestone evidence and plans/upstream-catch-up.md record row 124 acceptance.'
+resolved    = true

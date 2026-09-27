@@ -5,7 +5,7 @@ use ersatzrs_domain::{EntityId, MediaItemState};
 
 use crate::search::SearchDocument;
 
-use super::Result;
+use super::{ArtworkReference, Result};
 
 /// Media category used by the global admin-search projection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -25,10 +25,10 @@ pub enum AdminSearchKind {
 /// Storage-hydrated metadata used to build admin search cards.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AdminSearchEnrichment {
-    pub poster: HashMap<EntityId, String>,
-    pub thumbnail: HashMap<EntityId, String>,
-    pub season_poster: HashMap<EntityId, String>,
-    pub show_poster: HashMap<EntityId, String>,
+    pub poster: HashMap<EntityId, ArtworkReference>,
+    pub thumbnail: HashMap<EntityId, ArtworkReference>,
+    pub season_poster: HashMap<EntityId, ArtworkReference>,
+    pub show_poster: HashMap<EntityId, ArtworkReference>,
     pub episode_season_id: HashMap<EntityId, EntityId>,
     pub music_video_artist: HashMap<EntityId, String>,
     pub music_video_artist_id: HashMap<EntityId, EntityId>,

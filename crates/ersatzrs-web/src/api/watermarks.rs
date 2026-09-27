@@ -276,6 +276,9 @@ fn watermark_editor_error_path(id: i64, error: &str) -> String {
 }
 
 pub async fn serve_watermark_image(Path(filename): Path<String>) -> Response {
+    if !super::artwork::is_cached_image_filename(&filename) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let path = watermark_dir().join(&filename);
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("bin");

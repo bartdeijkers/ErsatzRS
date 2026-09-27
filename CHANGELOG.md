@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Security
 
+- Reject invalid artwork-cache, watermark and channel-logo filenames before reading files,
+  while preserving registered local artwork and existing uploaded logos.
+  Provider artwork URLs now resolve persisted artwork IDs; callers cannot select
+  provider paths or override stored resize settings. Follow bounded image
+  redirects without forwarding provider credentials across origins.
+
 - Compare internal Next media capabilities and credits tickets in constant time,
   preserving rejection of altered bindings and credentials from an earlier host
   process.
@@ -38,6 +44,11 @@ release section when tagging a release.
   Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
+
+- Include the show poster image alongside the icon and episode still in the
+  bundled XMLTV episode template, following the upstream artwork correction.
+  Preserve shared show artwork, genres and guide identifiers for every episode
+  in a guide batch.
 
 - Preserve shuffled playlist and marathon cycle seeds across rebuilds, including
   independently wrapping children and repeated collection slots. Deduplicate

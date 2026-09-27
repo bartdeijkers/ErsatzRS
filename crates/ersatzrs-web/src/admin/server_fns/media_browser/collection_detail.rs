@@ -75,7 +75,7 @@ pub(in crate::admin::server_fns::media_browser) async fn get_collection_detail_i
 pub(in crate::admin::server_fns::media_browser) fn collection_detail_from_admin(
     detail: ersatzrs_core::repositories::CollectionDetailAdmin,
 ) -> CollectionDetail {
-    use crate::api::artwork::{artwork_kind_for_media_kind, artwork_url};
+    use crate::api::artwork::{artwork_kind_for_media_kind, artwork_reference_url as artwork_url};
 
     CollectionDetail {
         id: detail.id,

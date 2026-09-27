@@ -195,7 +195,9 @@ fn browser_card_artwork_url(
     id: i64,
     enrichment: &ersatzrs_core::repositories::AdminSearchEnrichment,
 ) -> Option<String> {
-    use crate::api::artwork::{artwork_kind_for_admin_search, artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{
+        artwork_kind_for_admin_search, artwork_reference_url, ArtworkUrlKind,
+    };
 
     let artwork_kind = artwork_kind_for_admin_search(kind);
     let raw_artwork = match artwork_kind {
@@ -210,7 +212,7 @@ fn browser_card_artwork_url(
             .or_else(|| enrichment.show_poster.get(&id)),
         ArtworkUrlKind::FanArt => None,
     };
-    raw_artwork.and_then(|path| artwork_url(path, artwork_kind))
+    raw_artwork.and_then(|path| artwork_reference_url(path, artwork_kind))
 }
 
 #[cfg(feature = "ssr")]
@@ -247,12 +249,24 @@ mod browser_card_projection_tests {
     fn browser_projection_retains_poster_and_thumbnail_families() {
         let mut enrichment = AdminSearchEnrichment::default();
         for id in 1..=4 {
-            enrichment.poster.insert(id, format!("poster-{id}.jpg"));
+            enrichment.poster.insert(
+                id,
+                ersatzrs_core::repositories::ArtworkReference {
+                    id,
+                    kind: ersatzrs_domain::ArtworkKind::Poster,
+                    path: format!("jellyfin://Items/{id}/Images/Primary?tag=stored"),
+                },
+            );
         }
         for id in 5..=10 {
-            enrichment
-                .thumbnail
-                .insert(id, format!("thumbnail-{id}.jpg"));
+            enrichment.thumbnail.insert(
+                id,
+                ersatzrs_core::repositories::ArtworkReference {
+                    id,
+                    kind: ersatzrs_domain::ArtworkKind::Thumbnail,
+                    path: format!("jellyfin://Items/{id}/Images/Primary?tag=stored"),
+                },
+            );
         }
 
         for (kind, id) in [
@@ -263,7 +277,7 @@ mod browser_card_projection_tests {
         ] {
             assert_eq!(
                 browser_card_artwork_url(kind, id, &enrichment),
-                Some(format!("/artwork/posters/poster-{id}.jpg"))
+                Some(format!("/artwork/posters/jellyfin/{id}"))
             );
         }
         for (kind, id) in [
@@ -276,7 +290,7 @@ mod browser_card_projection_tests {
         ] {
             assert_eq!(
                 browser_card_artwork_url(kind, id, &enrichment),
-                Some(format!("/artwork/thumbnails/thumbnail-{id}.jpg"))
+                Some(format!("/artwork/thumbnails/jellyfin/{id}"))
             );
         }
     }
@@ -1151,7 +1165,7 @@ fn playlist_row_from_admin(row: ersatzrs_core::repositories::PlaylistAdminRow) -
 
 #[cfg(feature = "ssr")]
 fn media_card_from_admin(row: ersatzrs_core::repositories::AdminMediaCard) -> MediaCardRow {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
 
     MediaCardRow {
         id: row.id,
@@ -1730,7 +1744,7 @@ async fn get_faceted_media_details_impl(
     id: i64,
     kind: ersatzrs_core::repositories::AdminFacetedMediaKind,
 ) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();

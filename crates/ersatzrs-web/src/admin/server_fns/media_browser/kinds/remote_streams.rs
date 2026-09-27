@@ -96,7 +96,7 @@ pub(in crate::admin::server_fns::media_browser) async fn list_remote_streams_imp
 pub(in crate::admin::server_fns::media_browser) async fn get_remote_stream_details_impl(
     id: i64,
 ) -> Result<Option<RemoteStreamDetailRow>, ServerFnError> {
-    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::api::artwork::{artwork_reference_url as artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();

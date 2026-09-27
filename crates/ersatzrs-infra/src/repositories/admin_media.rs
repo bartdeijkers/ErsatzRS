@@ -24,7 +24,10 @@ use ersatzrs_domain::{
 use semver::Version;
 use sqlx::{Pool, Row};
 
-use crate::metadata_query::{load_artwork_path, load_strings, split_content_ratings};
+use crate::metadata_query::{
+    load_artwork_path, load_projected_artwork, load_strings, projected_artwork,
+    split_content_ratings,
+};
 use crate::remote_stream::{
     decode_persisted_liveness, resolve_remote_stream, RemoteStreamDefinition,
 };
@@ -293,7 +296,7 @@ async fn load_artist_music_videos(
     let rows = sqlx::query(
         r#"SELECT video."Id", COALESCE(metadata."Title", '') AS "Title",
                   COALESCE(metadata."SortTitle", metadata."Title", '') AS "SortTitle",
-                  metadata."Plot", metadata."Album", artwork."Path" AS "Thumbnail",
+                  metadata."Plot", metadata."Album", artwork."Id" AS "Thumbnail",
                   COALESCE(media."State", 0) AS "State", media."LibraryPathId",
                   file."Path"
            FROM "MusicVideo" video
@@ -323,6 +326,7 @@ async fn load_artist_music_videos(
     .await
     .repository()?;
 
+    let artwork = load_projected_artwork(pool, &rows, &["Thumbnail"]).await?;
     let mut videos = Vec::with_capacity(rows.len());
     for row in rows {
         let file_path: Option<String> = row.try_get("Path").repository()?;
@@ -341,7 +345,7 @@ async fn load_artist_music_videos(
             sort_title: row.try_get("SortTitle").repository()?,
             plot: row.try_get("Plot").repository()?,
             album: row.try_get("Album").repository()?,
-            thumbnail_path: row.try_get("Thumbnail").repository()?,
+            thumbnail_path: projected_artwork(&row, "Thumbnail", &artwork)?,
             media_item_state: row.try_get("State").repository()?,
             file_path,
             local_path,
@@ -357,7 +361,7 @@ async fn load_actors(
 ) -> Result<Vec<AdminActorCard>> {
     let sql = format!(
         r#"SELECT actor."Id", COALESCE(actor."Name", '') AS "Name",
-                  actor."Role", artwork."Path" AS "Artwork"
+                  actor."Role", artwork."Id" AS "Artwork"
            FROM "Actor" actor
            LEFT JOIN "Artwork" artwork ON artwork."Id" = actor."ArtworkId"
            WHERE actor."{metadata_column}" = ?
@@ -368,13 +372,14 @@ async fn load_actors(
         .fetch_all(pool)
         .await
         .repository()?;
+    let artwork = load_projected_artwork(pool, &rows, &["Artwork"]).await?;
     rows.iter()
         .map(|row| {
             Ok(AdminActorCard {
                 id: row.try_get("Id").repository()?,
                 name: row.try_get("Name").repository()?,
                 role: row.try_get("Role").repository()?,
-                artwork_path: row.try_get("Artwork").repository()?,
+                artwork_path: projected_artwork(row, "Artwork", &artwork)?,
             })
         })
         .collect()
@@ -895,7 +900,7 @@ async fn load_extras(
     let sql = if movie {
         r#"SELECT item."Id", COALESCE(metadata."Title", '') AS "Title",
                   COALESCE(metadata."SortTitle", metadata."Title", '') AS "SortTitle",
-                  metadata."Year", artwork."Path" AS "Artwork",
+                  metadata."Year", artwork."Id" AS "Artwork",
                   COALESCE(media."ContentKind", 0) AS "ContentKind",
                   media."SubKind", parent."Title" AS "ParentTitle"
            FROM "Movie" item
@@ -909,7 +914,7 @@ async fn load_extras(
     } else {
         r#"SELECT item."Id", COALESCE(metadata."Title", '') AS "Title",
                   COALESCE(metadata."SortTitle", metadata."Title", '') AS "SortTitle",
-                  metadata."Year", COALESCE(thumb."Path", poster."Path") AS "Artwork",
+                  metadata."Year", CASE WHEN thumb."Path" IS NOT NULL THEN thumb."Id" ELSE poster."Id" END AS "Artwork",
                   COALESCE(media."ContentKind", 0) AS "ContentKind",
                   media."SubKind", NULL AS "ParentTitle"
            FROM "OtherVideo" item
@@ -928,6 +933,7 @@ async fn load_extras(
         .fetch_all(pool)
         .await
         .repository()?;
+    let artwork = load_projected_artwork(pool, &rows, &["Artwork"]).await?;
     rows.iter()
         .map(|row| {
             Ok(AdminMediaCard {
@@ -938,7 +944,7 @@ async fn load_extras(
                     .try_get::<Option<i64>, _>("Year")
                     .repository()?
                     .map(|year| year.to_string()),
-                artwork_path: row.try_get("Artwork").repository()?,
+                artwork_path: projected_artwork(row, "Artwork", &artwork)?,
                 season_number: None,
                 content_kind: decode_content_kind(row.try_get("ContentKind").repository()?)?,
                 sub_kind: row.try_get("SubKind").repository()?,
@@ -1151,7 +1157,7 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
         let season_rows = sqlx::query(
             r#"SELECT season."Id", season."SeasonNumber",
                       (
-                          SELECT artwork."Path"
+                          SELECT artwork."Id"
                           FROM "Artwork" artwork
                           JOIN "SeasonMetadata" artwork_metadata
                             ON artwork_metadata."Id" = artwork."SeasonMetadataId"
@@ -1169,13 +1175,14 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
         .fetch_all(&self.0)
         .await
         .repository()?;
+        let artwork = load_projected_artwork(&self.0, &season_rows, &["Poster"]).await?;
         let seasons = season_rows
             .iter()
             .map(|season| {
                 Ok(ersatzrs_core::repositories::AdminSeasonCard {
                     id: season.try_get("Id").repository()?,
                     season_number: season.try_get("SeasonNumber").repository()?,
-                    poster_path: season.try_get("Poster").repository()?,
+                    poster_path: projected_artwork(season, "Poster", &artwork)?,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -1214,7 +1221,7 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             r#"SELECT artist."Id", metadata."Id" AS "MetadataId",
                       COALESCE(metadata."Title", '') AS "Title",
                       metadata."Disambiguation", metadata."Biography",
-                      thumbnail."Path" AS "Thumbnail", fanart."Path" AS "FanArt"
+                      thumbnail."Id" AS "Thumbnail", fanart."Id" AS "FanArt"
                FROM "Artist" artist
                JOIN "ArtistMetadata" metadata ON metadata."ArtistId" = artist."Id"
                LEFT JOIN "Artwork" thumbnail
@@ -1233,6 +1240,12 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             return Ok(None);
         };
         let metadata_id = row.try_get("MetadataId").repository()?;
+        let artwork = load_projected_artwork(
+            &self.0,
+            std::slice::from_ref(&row),
+            &["Thumbnail", "FanArt"],
+        )
+        .await?;
         Ok(Some(AdminArtistDetail {
             id: row.try_get("Id").repository()?,
             title: row.try_get("Title").repository()?,
@@ -1244,8 +1257,8 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
                 .try_get::<Option<String>, _>("Biography")
                 .repository()?
                 .filter(|value| !value.trim().is_empty()),
-            thumbnail_path: row.try_get("Thumbnail").repository()?,
-            fanart_path: row.try_get("FanArt").repository()?,
+            thumbnail_path: projected_artwork(&row, "Thumbnail", &artwork)?,
+            fanart_path: projected_artwork(&row, "FanArt", &artwork)?,
             genres: load_strings(&self.0, r#""Genre""#, "ArtistMetadataId", metadata_id).await?,
             styles: load_strings(&self.0, r#""Style""#, "ArtistMetadataId", metadata_id).await?,
             moods: load_strings(&self.0, r#""Mood""#, "ArtistMetadataId", metadata_id).await?,
@@ -2289,9 +2302,18 @@ mod tests {
         assert_eq!(detail.collection_name.as_deref(), Some("Motorsport"));
         assert_eq!(detail.original_broadcasters, ["Original Sports"]);
         assert_eq!(detail.broadcasters, ["Current Sports"]);
-        assert_eq!(detail.thumbnail_path.as_deref(), Some("race-thumb.jpg"));
-        assert_eq!(detail.poster_path.as_deref(), Some("race-poster.jpg"));
-        assert_eq!(detail.fanart_path.as_deref(), Some("race-fanart.jpg"));
+        assert_eq!(
+            detail.thumbnail_path.as_ref().map(|art| art.path.as_str()),
+            Some("race-thumb.jpg")
+        );
+        assert_eq!(
+            detail.poster_path.as_ref().map(|art| art.path.as_str()),
+            Some("race-poster.jpg")
+        );
+        assert_eq!(
+            detail.fanart_path.as_ref().map(|art| art.path.as_str()),
+            Some("race-fanart.jpg")
+        );
         assert_eq!(detail.facets.genres, ["Sports"]);
         assert_eq!(detail.facets.tags, ["Night"]);
         assert_eq!(detail.facets.studios, ["Track TV"]);
