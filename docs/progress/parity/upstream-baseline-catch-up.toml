@@ -62,6 +62,14 @@ refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
 
 [[debt]]
+id          = 'ucu-next-runtime-path-resolution'
+description = 'UCU-07 closeout: a bare ffprobe override passes host startup but Next rebases it against its config location and emits black/silence after probe failure. Resolve executable paths before publishing Next configuration.'
+discovered  = '2026-09-27'
+resolved    = true
+adr         = '0095'
+evidence    = 'The owning ucu-07 milestone records the failure, controlled absolute-path pass and corrected original bare-path pass. Shared runtime candidates now retain absolute executable paths selected by the existing platform locator. All 23 locator/runtime tests and strict FFmpeg-crate Clippy pass. The unchanged Next Convert smoke decodes Dutch 881 Hz audio, serves Dutch WebVTT, preserves preview/disconnect/restart behavior and cleans idle sessions. Workspace closeout remains pending after this correction.'
+
+[[debt]]
 id          = 'ucu-machine-api-authentication'
 description = 'UCU-07 row 112: persist and enforce the machine API key without disclosing it to browser actions; separate browser routes, preserve troubleshooting and listener policies, and explicitly account for the existing management OIDC gap before row acceptance.'
 discovered  = '2026-09-27'

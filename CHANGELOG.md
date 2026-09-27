@@ -39,6 +39,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Resolve configured FFmpeg and FFprobe commands to absolute executables before
+  publishing runtime paths, preventing Next from rebasing bare commands against
+  its configuration directory and falling back to black video and silence.
+
 - Make Plex server discovery transactional and retain the first missing-server
   timestamp until the server returns, preserving synchronized content and path
   overrides when a server disappears from plex.tv (ErsatzTV #2990).

@@ -10,7 +10,10 @@ use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::locator::{first_non_empty_env, resolve_ffmpeg_on_path, resolve_ffprobe_on_path};
+use crate::locator::{
+    first_non_empty_env, path_env_var, resolve_existing_executable, resolve_ffmpeg_on_path,
+    resolve_ffprobe_on_path,
+};
 use crate::version::{
     check_ffmpeg_runtime_with_config, FfmpegCheckError, FfmpegRuntimeCheckConfig,
     FfmpegRuntimeReport, DEFAULT_FFMPEG_PATH, DEFAULT_FFPROBE_PATH, FFMPEG_PATH_ENV_VARS,
@@ -601,12 +604,33 @@ fn explicit_candidate(
     ffmpeg_config: Option<&str>,
     ffprobe_config: Option<&str>,
 ) -> Option<RuntimeCandidate> {
-    explicit_candidate_from_parts(
+    let candidate = explicit_candidate_from_parts(
         first_non_empty_env(FFMPEG_PATH_ENV_VARS),
         first_non_empty_env(FFPROBE_PATH_ENV_VARS),
         ffmpeg_config.map(str::to_owned),
         ffprobe_config.map(str::to_owned),
-    )
+    )?;
+    Some(resolve_candidate_executables(
+        candidate,
+        path_env_var().as_deref(),
+    ))
+}
+
+fn resolve_candidate_executables(
+    mut candidate: RuntimeCandidate,
+    path_var: Option<&str>,
+) -> RuntimeCandidate {
+    // Next rebases relative configuration paths instead of searching PATH.
+    // Validate and publish the same selected executables to every consumer.
+    for path in [&mut candidate.ffmpeg_path, &mut candidate.ffprobe_path] {
+        if let Some(resolved) = resolve_existing_executable(Path::new(path), path_var)
+            .and_then(|resolved| resolved.to_str().map(str::to_owned))
+        {
+            *path = resolved;
+        }
+    }
+    // Unresolved values reach the existing runtime checks and failure report.
+    candidate
 }
 
 fn explicit_candidate_from_parts(
@@ -1269,6 +1293,75 @@ mod tests {
         assert_eq!(candidate.source, FfmpegRuntimeSource::Override);
         assert_eq!(candidate.ffmpeg_path, "/custom/ffmpeg");
         assert_eq!(candidate.ffprobe_path, "/custom/ffprobe");
+    }
+
+    fn executable_fixture(directory: &Path, name: &str) -> PathBuf {
+        let path = directory.join(executable_name(name));
+        fs::write(&path, b"fixture").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn explicit_runtime_freezes_path_companion_without_replacing_selected_tool() {
+        let selected = tempfile::tempdir().unwrap();
+        let search = tempfile::tempdir().unwrap();
+        let ffmpeg = executable_fixture(selected.path(), "ffmpeg");
+        let ffprobe = executable_fixture(search.path(), "ffprobe");
+        executable_fixture(search.path(), "ffmpeg");
+        let candidate = explicit_candidate_from_parts(
+            Some(ffmpeg.to_str().unwrap().to_owned()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(candidate.ffprobe_path, "ffprobe");
+        let resolved = resolve_candidate_executables(candidate, search.path().to_str());
+        assert_eq!(resolved.ffmpeg_path, ffmpeg.to_str().unwrap());
+        assert_eq!(resolved.ffprobe_path, ffprobe.to_str().unwrap());
+        assert!(Path::new(&resolved.ffprobe_path).is_absolute());
+        assert_eq!(resolved.source, FfmpegRuntimeSource::Override);
+    }
+
+    #[test]
+    fn explicit_relative_runtime_is_anchored_to_host_directory() {
+        let directory = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let executable = executable_fixture(directory.path(), "custom-probe");
+        let relative = Path::new(".")
+            .join(directory.path().file_name().unwrap())
+            .join(executable.file_name().unwrap());
+        let candidate = explicit_candidate_from_parts(
+            None,
+            Some(relative.to_str().unwrap().to_owned()),
+            None,
+            None,
+        )
+        .unwrap();
+        let resolved = resolve_candidate_executables(candidate, None);
+        assert_eq!(resolved.ffprobe_path, executable.to_str().unwrap());
+        assert_eq!(resolved.ffmpeg_path, "ffmpeg");
+    }
+
+    #[test]
+    fn unresolved_runtime_remains_available_to_existing_failure_checks() {
+        let directory = tempfile::tempdir().unwrap();
+        let missing = directory.path().join(executable_name("missing-probe"));
+        let candidate = explicit_candidate_from_parts(
+            Some("missing-command".to_owned()),
+            Some(missing.to_str().unwrap().to_owned()),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_candidate_executables(candidate.clone(), None),
+            candidate
+        );
     }
 
     #[test]

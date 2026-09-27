@@ -63,6 +63,33 @@
 - All UCU-07 rows are reconciled. Milestone closeout gates, push and terminal
   exact-SHA green CI remain required before UCU-08 starts.
 
+## UCU-07 closeout correction: Next executable path resolution
+
+- Runtime evidence: bare `ffprobe` passes host startup but Next emits
+  black/silence after probe failure. Supplying the same executable by absolute
+  path restores decoded Dutch audio and Convert subtitles with unchanged smoke
+  assertions. The milestone owns both runs and the open acceptance condition.
+- Upstream Next: `ersatztv-channel/src/config.rs` applies
+  `resolve_relative_paths` to `PATH_FIELDS`, including both tool paths, before
+  deserializing configuration. `ffpipeline/src/probe.rs` spawns that result.
+- Rust: `next_engine/config.rs::runtime_path` currently serializes paths without
+  executable resolution; `host.rs::configuration` supplies the startup tool
+  report. The shared runtime manager's explicit candidate retains bare names
+  even after validating them. Resolve those candidates through the existing
+  locator before validation, preserving the selected absolute paths for all
+  consumers and leaving missing tools to the existing failure report. Reuse
+  `ersatzrs-ffmpeg::locator` platform-aware discovery rather than
+  introducing another process runner or relying on a verification-only override.
+- Correction must preserve absolute and explicit relative executable choices,
+  resolve PATH commands to absolute executables, and retain malformed/missing
+  tool refusal. Add focused coverage and repeat the original bare-path runtime
+  case before resolving the owning parity debt. ADR 0095 remains Partial.
+- Corrected in the shared runtime candidate path: 23 locator/runtime tests and
+  strict crate lint pass. The original bare-FFprobe smoke now passes decoded
+  Dutch audio, Convert subtitles and session lifecycle checks without an
+  absolute-path verification override. The owning debt is resolved; refresh
+  affected window gates before final UCU-07 acceptance.
+
 ## UCU-07 row 114 source map: internal media request authentication
 
 - Upstream: `ef5094aa164666460fdc30d9ed0926ea04718386`

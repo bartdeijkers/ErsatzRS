@@ -10795,6 +10795,65 @@ All 115 rows through this window are reconciled, with 61 pending in UCU-08/09.
 The pin advances to 49b68314 with the row. UCU-07 remains In progress for
 workspace Clippy, test-closeout, matched Leptos build, parity-check, smoke,
 applicable TSDuck evidence, push and terminal exact-SHA green CI.
+Window verification at b51e6204: workspace all-target Clippy passes in 3m15s.
+The published ErsatzRS-ffmpeg v2.0.2 linux-x64 archive checksum is reverified.
+Workspace test-closeout is running with that pinned runtime and localhost
+fixture access. Runtime smoke will precede the final matched Leptos build
+because smoke rebuilds the server binary. Existing row-110 TSDuck evidence
+remains applicable to the unchanged transport pipeline. No window test,
+build, parity, smoke or CI completion is claimed yet.
+Workspace test-closeout now passes: Nextest c9d2bd39-13e6-427c-8efb-01e41f100e90
+runs 3,338 tests successfully with 121 existing skips, followed by successful
+workspace doctest execution. The wrapper exits zero. Native streaming smoke
+is next, using a disposable database and the verified pinned v2.0.2 runtime.
+Closeout reinspection of the saved row-112 browser JSON confirms 480 expected,
+38 skipped, zero unexpected/flaky results and no top-level errors. The retained
+row-110 TSDuck log confirms GATE PASS with 87 checks and zero failures. Later
+rows change no browser UI or transport pipeline, so those results are reused;
+fresh native and Next smoke still verify the final host/callback integration.
+Native smoke now exits zero: all three public callback probes return 404;
+legacy and Hybrid MPEG-TS each return 200 with 8,192 media bytes; segmenter
+and session HLS playlists return 200 with initial segments. It uses the
+verified v2.0.2 package and a disposable database. Next Convert smoke is
+running next. Parity checks will also precede the final matched Leptos build
+so no subsequent Cargo test/build step can replace that server artifact.
+Next Convert smoke initially fails decoded audio: the retained capture contains
+silence instead of the selected 880 Hz tone. Host diagnostics show FFprobe
+failure followed by Next's black/silence fallback. The input retains English
+and Dutch audio streams, and the startup report carries bare `ffprobe` while
+FFmpeg uses the pinned absolute path. A controlled run changing only the
+FFPROBE_PATH override to the verified executable passes decoded Dutch 880 Hz,
+unburned blue video, Dutch WebVTT, H.264/AAC streams, preview, wrapper restart,
+disconnect survival and idle cleanup. No assertion or deadline was changed.
+Source audit of Next's config loader confirms it rebases relative PATH_FIELDS
+against the configuration location. The ErsatzRS adapter currently serializes
+the supplied runtime strings unchanged. This is a demonstrated path-resolution
+gap, not window acceptance: resolve runtime executable paths before publishing
+Next configuration, add a regression and repeat the formerly failing smoke.
+The successful absolute-path run is retained as causal evidence only. UCU-07
+remains open for this correction and its affected verification before push/CI.
+The shared runtime manager now resolves existing explicit tool candidates to
+absolute executable paths before validation, reusing locator PATH order and
+platform executable checks. This preserves selected absolute/relative tools
+and leaves missing candidates to the existing failure report. Next receives
+the same validated paths as native consumers, without another resolver in the
+pure profile mapper. All 23 locator/runtime tests pass (Nextest
+f315c85b-5106-4cbc-8ddc-2a96094fb716), including bare companion selection,
+preserved explicit tool identity, relative paths and unresolved candidates.
+Strict all-target FFmpeg-crate Clippy passes. The original Next Convert smoke,
+without an absolute FFprobe override, is rebuilding the corrected host; the
+debt remains open until that runtime check passes.
+The corrected original smoke now exits zero without an explicit FFPROBE_PATH.
+Startup reports the selected pinned absolute FFprobe executable. Next Convert
+decodes Dutch 881 Hz audio, unburned blue video and Dutch WebVTT; H.264/AAC
+stream checks, preview, HLS survival after wrapper disconnect, wrapper restart
+and normal/preview/wrapper idle cleanup pass with unchanged assertions and
+deadlines. The runtime-path debt is resolved. Substantive review confirms
+environment/DB precedence, platform executable checks and selected explicit
+paths are preserved, with no new dependency or Next-only resolver. The owning
+runtime report and health consumers now receive the selected absolute tools.
+Workspace gates must be refreshed after this code correction; UCU-07 is not
+complete and no push/CI has occurred.
 """
 
 [[milestone]]

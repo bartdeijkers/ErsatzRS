@@ -122,6 +122,10 @@ expanded scheduler and downstream regressions pass. Row 114 is Adapt under
 ADRs 0095/0102: constant-time callback checks and safe sample filenames pass
 24 focused tests and strict lint. Row 115 is N/A release bookkeeping. All
 UCU-07 rows are reconciled; milestone gates remain before push and green CI.
+The Next runtime-path closeout defect is corrected: shared runtime candidates
+retain absolute selected tools. All 23 focused tests, strict crate lint and the
+original bare-ffprobe decoded smoke pass. Repeat affected workspace gates,
+then finish parity validation and the matched build before push and green CI.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 

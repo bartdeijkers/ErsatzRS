@@ -174,6 +174,29 @@ fn resolve_tool_on_path(base: &str) -> Option<LocatedTool> {
     (located.source == PathSource::OnPath).then_some(located)
 }
 
+/// Freeze a command's selected executable before handing it to another process.
+/// Explicit paths retain their meaning; bare commands use the existing PATH
+/// search and platform executable checks, without falling back to another tool.
+pub(crate) fn resolve_existing_executable(path: &Path, path_var: Option<&str>) -> Option<PathBuf> {
+    let candidate = if path.components().count() == 1
+        && matches!(
+            path.components().next(),
+            Some(std::path::Component::Normal(_))
+        ) {
+        let located = locate_tool_in(path.to_str()?, None, None, None, path_var);
+        if located.source != PathSource::OnPath {
+            return None;
+        }
+        PathBuf::from(located.path)
+    } else {
+        if !is_executable_file(path) {
+            return None;
+        }
+        path.to_owned()
+    };
+    std::path::absolute(candidate).ok()
+}
+
 /// Pure resolution used by [`resolve_tool`] and by tests. `exe_dir` and
 /// `path_var` are injected so the directory-search and `PATH`-search branches
 /// can be exercised against real temp files without faking `current_exe`.
@@ -288,7 +311,7 @@ fn current_exe_dir() -> Option<PathBuf> {
 }
 
 #[allow(clippy::disallowed_methods)]
-fn path_env_var() -> Option<String> {
+pub(crate) fn path_env_var() -> Option<String> {
     std::env::var("PATH").ok().filter(|value| !value.is_empty())
 }
 
