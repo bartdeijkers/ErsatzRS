@@ -15,11 +15,21 @@ release section when tagging a release.
 
 ### Security
 
+- Isolate internal FFmpeg and Next callbacks on a loopback listener and build
+  their URLs from the bound address, preventing client-supplied Host or proxy
+  headers from selecting callback origins. Preserve Next capability checks.
+  Add an optional streaming-only listener that does not expose management
+  pages, APIs, server functions or assets (ErsatzTV #2989; ADR 0102).
+
 - Update the bundled SQLite used by the server and tooling to 3.51.3, above
   the 3.50.2 fix for CVE-2025-6965, without requiring a system SQLite install.
   Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
+
+- Keep direct MPEG-TS responses separate from HLS worker lookup, preventing
+  legacy-to-Hybrid switching from reusing a closing direct stream. Channel Stop
+  still reaches every viewer, and one response's cleanup preserves other streams.
 
 - Keep playback troubleshooting controls within narrow screens when option
   labels would otherwise expand the form's grid columns.

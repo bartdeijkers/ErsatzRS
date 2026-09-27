@@ -2,16 +2,16 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..6f0449c2 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102']
 summary    = """
-Ledger: 176 commits, 109 reconciled, 67 pending. AMM-N-03 Complete.
+Ledger: 176 commits, 110 reconciled, 66 pending. AMM-N-03 Complete.
 UCU-03/04 Complete. UCU-05 Complete: rows 68-90,
 local gates and exact-SHA green CI 36190815587 at 81bcd649.
 Rows 99/102 Port: runtime v2.0.1, probe/cache and Docker Vulkan; GPU limits recorded.
 Rows 100-101/103 N/A; row 104 Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
 Row 108 Port: v2.0.2 published; public hashes verified and managed default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
-terminal green exact-SHA CI 36274614736 at 0e482f66. UCU-07 starts at row 110.
+green CI 36274614736 at 0e482f66. Row 110 Adapt (ADR 0102); row 111 next.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.
@@ -61,6 +61,14 @@ independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Unsupported graphics kinds/settings remain refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id          = 'ucu-listener-boundaries'
+description = 'UCU-07 row 110: isolate management from a separately published streaming listener and restrict internal native/Next callbacks to actual loopback connections without trusting request headers.'
+discovered  = '2026-09-27'
+resolved    = true
+adr         = '0102'
+evidence    = 'Row 110 is Adapt under ADR 0102, explicitly accepted on 2026-09-27. UCU-07 owns listener denial/lifecycle tests, direct/HLS registry regression proof, decoded native/Next smoke using the checksum-verified public FFmpeg v2.0.2 package, actual troubleshooting samples, TSDuck 87/87, matched browser 7 passed/3 existing skips, and web parity 724/724 with strict lint. Substantive review passes; milestone window and cross-platform CI acceptance remain separate.'
 
 [[debt]]
 id          = 'ucu-intel-container-driver-stack'

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7b7a19a234ad04ce592a9a43013a62ee96a5adda` |
-| **Commit subject** | `prep for release v26.8.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7b7a19a234ad04ce592a9a43013a62ee96a5adda |
+| **Pinned commit** | `14372575160a58672a44c9ff52034904b5ace156` |
+| **Commit subject** | `fix: close hole that allowed management ui over streaming port (#2989)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/14372575160a58672a44c9ff52034904b5ace156 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

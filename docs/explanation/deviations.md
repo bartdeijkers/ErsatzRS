@@ -3,6 +3,16 @@
 ErsatzRS preserves ErsatzTV behavior by default. Deliberate deviations must be
 listed here and backed by ADRs.
 
+## HTTP callback listener partition
+
+ADR [0102](../adr/0102-isolate-http-listener-route-surfaces.md) records the
+accepted UCU-07 row-110 decision to keep private callback routes on a dynamically bound
+loopback listener in the existing host process. This preserves upstream's
+loopback-only callback invariant when public listeners bind specific network
+interfaces, while retaining existing private path names and Next capability
+checks. The owning milestone records implementation and verification;
+milestone window gates and cross-platform CI remain separate obligations.
+
 ## Streaming SponsorBlock cuts
 
 The accepted M-01A direction uses server-side interval streaming instead of

@@ -92,10 +92,18 @@ pub trait HlsSessionHandle: Send + Sync {
 /// `ersatzrs-infra` owns the concrete in-memory implementation.
 #[async_trait]
 pub trait HlsSessionRegistry: Send + Sync {
+    /// Find only a playlist-producing worker, never a direct response process.
     async fn try_get(&self, channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>>;
     async fn try_insert(&self, handle: Arc<dyn HlsSessionHandle>) -> bool;
     async fn insert(&self, handle: Arc<dyn HlsSessionHandle>);
     async fn remove(&self, channel_number: &str);
+
+    /// Track a direct HTTP response for activity reporting and channel Stop.
+    /// Direct responses must not occupy or replace the HLS worker slot.
+    async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>);
+
+    /// Remove only this direct response, preserving other viewers and workers.
+    async fn unregister_direct(&self, handle: &Arc<dyn HlsSessionHandle>);
 
     /// Channel numbers that currently have a live session.
     ///

@@ -555,8 +555,19 @@ fn web_routes(development_routes_enabled: bool) -> Vec<leptos_axum::AxumRouteLis
     routes
 }
 
+/// Public transport routes only; management and private callbacks are absent.
+pub(crate) fn build_streaming_app(app_state: AppState) -> Router {
+    build_iptv_router(&app_state)
+        .route("/discover.json", get(hdhr::get_discover_json))
+        .route("/device.xml", get(hdhr::get_device_xml))
+        .route("/lineup_status.json", get(hdhr::get_lineup_status_json))
+        .route("/lineup.json", get(hdhr::get_lineup_json))
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http())
+}
+
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
-    let iptv_routes = Router::new()
+    Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))
@@ -600,9 +611,12 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             iptv::access_token::require_iptv_access,
-        ));
+        ))
+}
 
-    let internal_ffmpeg_routes = Router::new()
+/// Callback routes served only by the host's private loopback listener.
+pub(crate) fn build_internal_app(app_state: AppState) -> Router {
+    Router::new()
         .route(
             "/ffmpeg/next-fallback/{channel}/{start}/{finish}",
             get(iptv::next_media::get_fallback),
@@ -630,10 +644,14 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         .route(
             "/ffmpeg/stream/{channel_number}",
             get(iptv::get_internal_stream),
-        );
-
-    iptv_routes.merge(internal_ffmpeg_routes)
+        )
+        .route_layer(middleware::from_fn(super::listeners::require_loopback))
+        .with_state(app_state)
 }
+
+#[cfg(test)]
+#[path = "router_boundary_tests.rs"]
+mod boundary_tests;
 
 #[cfg(test)]
 mod tests {

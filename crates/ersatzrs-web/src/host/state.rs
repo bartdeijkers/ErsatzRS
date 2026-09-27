@@ -63,6 +63,10 @@ impl SystemStartup {
 
 #[derive(Clone)]
 pub struct AppState {
+    /// Local public-stream origin for wrappers, independent of request headers.
+    pub(crate) streaming_http_addr: Arc<OnceLock<std::net::SocketAddr>>,
+    /// Actual private listener; never derived from request or proxy headers.
+    pub(crate) internal_http_addr: Arc<OnceLock<std::net::SocketAddr>>,
     /// Optional Next version discovered once during host startup.
     pub next_version: Arc<OnceLock<String>>,
     /// Storage-neutral application services built from native infrastructure
@@ -211,6 +215,8 @@ impl AppState {
             ),
         ));
         Self {
+            streaming_http_addr: Arc::new(OnceLock::new()),
+            internal_http_addr: Arc::new(OnceLock::new()),
             next_version,
             artwork_cleanup: Arc::new(TokioArtworkCleanupQueue::channel().0),
             application,

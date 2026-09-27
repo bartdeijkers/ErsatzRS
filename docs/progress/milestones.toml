@@ -10465,7 +10465,7 @@ required. UCU-07 is now eligible, beginning with pending row 110.
 id         = 'ucu-07'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 49b68314'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-06']
@@ -10483,7 +10483,103 @@ for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-27: UCU-06 is Complete with terminal green CI 36274614736 at
+0e482f66; documentation closeout 99cd14e2 is published and local/tracking/live
+remote main agree. Its code evidence remains valid without a redundant CI run.
+Upstream fetch is unchanged at 6f0449c2; all 176 ledger SHA/subject pairs
+match the fetched history. Pin, last processed row 109 and upstream checkout
+agree at 7b7a19a2 before work begins.
+The full row-110 diff (14372575) removes Host-based management access on a
+separate streaming port, gates internal requests by actual loopback peer
+before forwarded headers, and updates every internal callback consumer.
+The plan now maps these paths to the Rust host and playback consumers.
+Rust currently has one shared listener, no separate streaming-only option,
+and unrestricted legacy concat/stream callbacks. Next callbacks already use
+capabilities and binding checks under ADR 0095. Preserve those checks and
+native direct producers while implementing listener/internal-route isolation.
+Row 110 implementation checkpoint: the public-callback regression first failed
+because a forged-local request reached the database. The working tree now
+partitions public/internal routers, checks the actual loopback peer, binds all
+listeners before background work, and derives native/Next callback origins
+from bound sockets. Hybrid wrappers also use the bound streaming origin while
+preserving their access tokens. Focused host/wrapper tests pass 77/77 (Nextest
+378e15e1-4be9-45b2-9b17-1712bce53214), including real IPv4/IPv6 listener
+isolation/shutdown, failed-bind cleanup, invalid address configuration and
+capability retention under forged forwarded headers. Streaming GET/POST tests
+reject management pages/APIs/assets and retain public IPTV authentication.
+The reviewed FFmpeg snapshot changes only the input origin from localhost to
+the bound IPv4 address; token, stream mapping and copy options are preserved.
+Strict web Clippy passed before the final troubleshooting-consumer correction.
+The real Next routed producer test passed in 20.132 seconds (Nextest
+2cd579e1-0c0b-4130-8cc7-7b9910e670c5), proving callback authentication,
+claim/cleanup, decoded seek and selected Dutch audio. That combined run exposed
+an incorrect shared-port test expectation, since the admin API legitimately
+returns 405 rather than the isolated streaming router's 404. After correcting
+that expectation, default/shared and separate IPv4/IPv6 serving, shutdown and
+bound MPEG troubleshooting URL tests pass 5/5 (Nextest
+8b5375c5-3d5a-4aba-8e06-f633778fb9b3). Review found and corrected the MPEG
+troubleshooting consumer still targeting the old public callback port.
+Next host smoke passes with official Next df41692 and ErsatzRS-ffmpeg 9.0
+20260926: public callbacks return 404, HLS and preview produce media, Hybrid
+decodes selected Dutch audio at 879 Hz and burned subtitles (35 white pixels),
+HLS survives wrapper disconnect, and idle cleanup plus wrapper restart pass.
+Separate-port native smoke starts legacy MPEG-TS but the immediate Hybrid
+request returns 503 with MissingSession during startup. Native HLS passes on
+a fresh fixture without the preceding legacy request. Source review points
+to direct-stream handles sharing the HLS registry: startup can reuse a direct
+handle while its asynchronous disconnect cleanup removes it. The focused real
+FFmpeg disposal test reproduced the occupied HLS slot (Nextest
+f49ee4f2-e0fd-4986-85a7-17de88bfe34c). The correction tracks direct responses
+separately in the existing registry, removes them by handle identity, and
+preserves channel activity, Stop and playout notifications. Registry tests pass
+9/9 (Nextest 3f031f7f-3a63-484b-8105-13e53ac26aed). The subsequent stream run
+passed the disposal regression but found a watermark fixture capturing only
+the first pipe read; that fixture now captures one complete bounded frame and
+keeps its pixel assertion. The run was interrupted with no terminal result;
+its temporary logs/runtime disappeared. Restored public FFmpeg v2.0.2 matches
+the approved archive digest ef797ab1ad7c54340b2b92c208d1ecd7223c0941a68d831e1154aea16ba33e59;
+restored Next remains df41692. The disposal and complete-frame watermark
+regressions now pass serially, 2/2 (Nextest
+a9227914-ace5-448f-9a7a-ac5d31cde6f4). The corrected separate-port native smoke
+passes with the verified public v2.0.2 package: immediate legacy-to-Hybrid
+requests both return HTTP 200 with 8192 media bytes, HLS produces initial
+segments, and all three tested public internal callbacks return HTTP 404.
+Strict all-target Clippy passes for core, infra, web and xtask after the registry
+and troubleshooting changes. The separate-port Next Convert smoke also passes
+with the same verified FFmpeg package and official Next df41692: Dutch WebVTT,
+H.264/AAC MPEG-TS with decoded Dutch 880 Hz audio and no burned caption,
+preview output, HLS survival after wrapper disconnect, idle cleanup and wrapper
+restart are verified. These are local Linux proofs, not window CI acceptance.
+The MPEG troubleshooting native GET form captures and completes TSDuck analysis
+in both modes on a copied synthetic database: 2,417,116 bytes through the private
+legacy listener and 3,152,196 bytes through the distinct public streaming
+listener. A first evidence-reader lookup used the wrong archive directory;
+another attempt overlapped the Next fixture's temporary stream directory and
+returned no public sample bytes. Serial execution with a private temporary
+directory for all stream artifacts passes both modes without product changes.
+The required TSDuck playback gate passes 87 checks with zero failures across
+legacy MPEG-TS, Hybrid MPEG-TS, HLS segmenter and HLS direct, using the same
+verified v2.0.2 runtime. All four captures have zero continuity-counter errors
+and PTS/DTS/PCR leaps; the host log has no known playback failure signature.
+The standard focused stream suite passes 63/63 (Nextest
+cc7dfc7a-b7db-4111-85e8-79ad427cc996); the two relevant opt-in real-FFmpeg
+regressions retain their separate 2/2 proof above. Formatting and the new
+Clippy-allow policy check pass. Substantive source review covers route
+registration and forged-header denial, loopback/capability checks, bound
+callback consumers, all-listener shutdown and bind cleanup, and direct/HLS
+registration ownership and cancellation; no additional correction was found.
+The matched Leptos build and focused support-page browser run pass with distinct
+admin/streaming listeners: 7 passed, 3 existing Firefox skips. Chromium and
+Firefox cover JavaScript-on and no-JS diagnostics; Chromium also covers
+hydrated support controls, navigation and narrow release-note layout. Evidence:
+test-results/ucu07-support/playwright-results.json.
+The maintainer explicitly accepted ADR 0102 on 2026-09-27. The web parity gate
+passes: progress, format, architecture/hydration lint, 724/724 tests (Nextest
+acceb7ea-f22e-4a21-818a-b5734ee193e2) and strict web Clippy. Row 110 is Adapt
+under ADR 0102, landed with the ledger and pin in the coherent checkpoint
+`fix(web): isolate streaming and internal callback listeners`.
+The refreshed upstream target is unchanged; all 176 SHA/subject pairs match.
+Rows 111-115 and window gates remain open; no intermediate push or CI run.
 """
 
 [[milestone]]

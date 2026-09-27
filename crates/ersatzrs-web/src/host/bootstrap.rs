@@ -147,6 +147,8 @@ pub async fn run() {
 
     init_logging(&startup.pool).await;
     let listen_addr = configured_listen_addr();
+    let streaming_addr =
+        super::config::streaming_listen_addr().expect("valid streaming listener configuration");
 
     prepare_streaming_resources().await;
 
@@ -219,14 +221,22 @@ pub async fn run() {
             .unwrap_or_else(|error| abort_after_startup_recovery_error(&error));
     tracing::info!(recovered_refreshes, "startup scan recovery complete");
 
-    let listener = tokio::net::TcpListener::bind(listen_addr)
+    let listeners = super::listeners::BoundListeners::bind(listen_addr, streaming_addr)
         .await
-        .unwrap_or_else(|e| panic!("failed to bind to {listen_addr}: {e}"));
-    let listen_addr = listener.local_addr().expect("bound web listener address");
+        .unwrap_or_else(|e| panic!("failed to bind HTTP listeners: {e}"));
+    let listen_addr = listeners.admin_addr;
+    app_state
+        .streaming_http_addr
+        .set(super::listeners::local_http_addr(listeners.streaming_addr))
+        .expect("configure streaming HTTP listener");
+    app_state
+        .internal_http_addr
+        .set(listeners.internal_addr)
+        .expect("configure internal HTTP listener");
     app_state
         .next_engine
         .media
-        .configure(listen_addr)
+        .configure(listeners.internal_addr)
         .expect("configure internal Next media listener");
 
     // Coordinated shutdown: the signal handler cancels this token, the axum
@@ -239,7 +249,7 @@ pub async fn run() {
         super::tasks::HdhrTaskInputs {
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
-            listen_port: listen_addr.port(),
+            listen_port: listeners.streaming_addr.port(),
         },
         super::tasks::MaintenanceTaskInputs {
             pool: app_state.pool.clone(),
@@ -252,18 +262,15 @@ pub async fn run() {
         shutdown.clone(),
     );
 
-    // Keep a pool handle for the post-serve cleanup; `build_app` consumes state.
+    // Keep a pool handle for the post-serve cleanup; listener serving consumes state.
     let pool = app_state.pool.clone();
-    let app = super::router::build_app(app_state);
 
-    tracing::info!(%listen_addr, "ersatzrs-web listening");
+    tracing::info!(%listen_addr, streaming_addr = %listeners.streaming_addr,
+        "ersatzrs-web listening");
 
     tokio::spawn(shutdown_signal(shutdown.clone()));
 
-    if let Err(error) = axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown.clone().cancelled_owned())
-        .await
-    {
+    if let Err(error) = listeners.serve(app_state, shutdown.clone()).await {
         tracing::error!(%error, "server error");
     }
 

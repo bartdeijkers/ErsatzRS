@@ -122,7 +122,7 @@ struct MpegTsScriptRenderData {
 pub async fn serve_transport_stream(
     state: &AppState,
     channel_number: &str,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
     let channel = match state
@@ -152,9 +152,9 @@ pub async fn serve_transport_stream(
             );
             axum::response::Redirect::temporary(&target).into_response()
         }
-        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, headers).await,
+        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel).await,
         TransportStreamMode::HybridWrapper => {
-            serve_segmenter_wrapper_stream(state, &channel, headers, query).await
+            serve_segmenter_wrapper_stream(state, &channel, query).await
         }
     }
 }
@@ -198,9 +198,12 @@ pub async fn serve_channel_stream(
 pub async fn serve_concat_playlist(
     state: &AppState,
     channel_number: &str,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
+    let Some(internal_addr) = state.internal_http_addr.get() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
     let channel = match state
         .repositories
         .channel
@@ -220,12 +223,7 @@ pub async fn serve_concat_playlist(
         .map(str::trim)
         .filter(|mode| !mode.is_empty())
         .unwrap_or("ts-legacy");
-    let playlist = ConcatPlaylist::new(
-        hls::request_scheme(headers),
-        hls::request_host(headers),
-        channel.number,
-        mode,
-    );
+    let playlist = ConcatPlaylist::new("http", internal_addr.to_string(), channel.number, mode);
 
     let mut response = playlist.render().into_response();
     response.headers_mut().insert(
@@ -1570,9 +1568,11 @@ fn resolve_transport_stream_mode(
 async fn serve_segmenter_wrapper_stream(
     state: &AppState,
     channel: &Channel,
-    headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
+    let Some(streaming_addr) = state.streaming_http_addr.get() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     let path_replacements = match tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
@@ -1630,8 +1630,7 @@ async fn serve_segmenter_wrapper_stream(
     let aac_latm_audio = playback_profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm;
     let access_token = AccessToken::new(query.access_token.clone());
     let hls_url = build_segmenter_wrapper_hls_url(
-        &hls::request_scheme(headers),
-        &hls::request_host(headers),
+        *streaming_addr,
         &channel.number,
         channel.streaming_engine,
         &access_token,
@@ -1763,16 +1762,11 @@ fn segmenter_wrapper_wait_failure_response(
     }
 }
 
-async fn serve_legacy_concat_stream(
-    state: &AppState,
-    channel: &Channel,
-    headers: &HeaderMap,
-) -> Response {
-    let concat_url = build_legacy_concat_url(
-        &hls::request_scheme(headers),
-        &hls::request_host(headers),
-        &channel.number,
-    );
+async fn serve_legacy_concat_stream(state: &AppState, channel: &Channel) -> Response {
+    let Some(internal_addr) = state.internal_http_addr.get() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let concat_url = build_legacy_concat_url(*internal_addr, &channel.number);
     let metadata = channel_stream_metadata(channel);
     let (playback_profile, target_frame_rate, runtime_capabilities) =
         match load_capacity_slate_context(state, channel, "legacy stream").await {
@@ -1840,13 +1834,12 @@ async fn serve_legacy_concat_stream(
     }
 }
 
-fn build_legacy_concat_url(scheme: &str, host: &str, channel_number: &str) -> String {
-    format!("{scheme}://{host}/ffmpeg/concat/{channel_number}?mode=ts-legacy")
+fn build_legacy_concat_url(address: std::net::SocketAddr, channel_number: &str) -> String {
+    format!("http://{address}/ffmpeg/concat/{channel_number}?mode=ts-legacy")
 }
 
 fn build_segmenter_wrapper_hls_url(
-    scheme: &str,
-    host: &str,
+    address: std::net::SocketAddr,
     channel_number: &str,
     engine: ersatzrs_domain::StreamingEngine,
     access_token: &AccessToken,
@@ -1855,12 +1848,12 @@ fn build_segmenter_wrapper_hls_url(
     // Converted text stays on HLS; this already-started session carries video/audio.
     if engine == ersatzrs_domain::StreamingEngine::Next {
         return format!(
-            "{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8{}",
+            "http://{address}/iptv/session/{channel_number}/hls.m3u8{}",
             access_token.query()
         );
     }
     format!(
-        "{scheme}://{host}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
+        "http://{address}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
         access_token.query_amp()
     )
 }
@@ -3499,11 +3492,12 @@ async fn spawn_stream_body_with_prepared_input(
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
+    let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
         let _capacity_reservation = capacity_reservation;
-        let registered = session_registry.try_insert(handle).await;
+        session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
         let outcome = supervise_stream_command_with_retry(
             child,
@@ -3526,9 +3520,7 @@ async fn spawn_stream_body_with_prepared_input(
             completed.notify_one();
             drop(writer);
         }
-        if registered {
-            session_registry.remove(&channel_number).await;
-        }
+        session_registry.unregister_direct(&handle).await;
         shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
         for path in cleanup_paths {
             cleanup_stream_artifact(&path).await;
@@ -3553,10 +3545,11 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
+    let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
-        let registered = session_registry.try_insert(handle).await;
+        session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
         loop {
             let limit = match load_active_transcode_limit(&pool).await {
@@ -3644,9 +3637,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 }
             }
         }
-        if registered {
-            session_registry.remove(&channel_number).await;
-        }
+        session_registry.unregister_direct(&handle).await;
         shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
         for path in cleanup_paths {
             cleanup_stream_artifact(&path).await;
@@ -5349,13 +5340,12 @@ mod tests {
         let token = AccessToken::new(Some("abc123".to_owned()));
         assert_eq!(
             build_segmenter_wrapper_hls_url(
-                "http",
-                "localhost:8409",
+                "127.0.0.1:8409".parse().unwrap(),
                 "7",
                 ersatzrs_domain::StreamingEngine::Legacy,
                 &token
             ),
-            "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=abc123"
+            "http://127.0.0.1:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=abc123"
         );
     }
 
@@ -5363,25 +5353,23 @@ mod tests {
     fn next_segmenter_wrapper_uses_authenticated_media_playlist_without_webvtt() {
         let token = AccessToken::new(Some("synthetic-token".to_owned()));
         let url = build_segmenter_wrapper_hls_url(
-            "http",
-            "localhost:8409",
+            "127.0.0.1:8409".parse().unwrap(),
             "7",
             ersatzrs_domain::StreamingEngine::Next,
             &token,
         );
         assert_eq!(
             url,
-            "http://localhost:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token"
+            "http://127.0.0.1:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token"
         );
         assert_eq!(
             build_segmenter_wrapper_hls_url(
-                "http",
-                "localhost:8409",
+                "127.0.0.1:8409".parse().unwrap(),
                 "7",
                 ersatzrs_domain::StreamingEngine::Next,
                 &AccessToken::default(),
             ),
-            "http://localhost:8409/iptv/session/7/hls.m3u8"
+            "http://127.0.0.1:8409/iptv/session/7/hls.m3u8"
         );
         // Preserve every in-band stream; only the HLS-only WebVTT rendition is absent.
         let command =
@@ -5666,8 +5654,8 @@ mod tests {
     #[test]
     fn legacy_concat_url_matches_internal_endpoint_shape() {
         assert_eq!(
-            build_legacy_concat_url("http", "localhost:8409", "7"),
-            "http://localhost:8409/ffmpeg/concat/7?mode=ts-legacy"
+            build_legacy_concat_url("127.0.0.1:8409".parse().unwrap(), "7"),
+            "http://127.0.0.1:8409/ffmpeg/concat/7?mode=ts-legacy"
         );
     }
 
@@ -5998,6 +5986,10 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
 
+        assert!(
+            registry.try_get("97").await.is_none(),
+            "a direct stream must not occupy the HLS worker slot"
+        );
         drop(body);
 
         // The supervisor kills ffmpeg on disposal and removes the session.
@@ -6165,7 +6157,7 @@ mod tests {
         let logo = temp.path().join("logo.ppm");
         std::fs::write(&logo, red_ppm(64, 32)).expect("write watermark fixture");
 
-        let command = build_stream_command(
+        let mut command = build_stream_command(
             fixture.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
             Duration::ZERO,
@@ -6193,6 +6185,14 @@ mod tests {
             Vec::new(),
         )
         .expect("the fixture source is playable");
+        // A pipe read can contain only transport headers. Encode one complete
+        // video frame and drain that bounded output before checking its pixels.
+        let output_index = command.arguments.len() - 1;
+        assert_eq!(command.arguments[output_index], "pipe:1");
+        command.arguments.splice(
+            output_index..output_index,
+            ["-frames:v".to_owned(), "1".to_owned()],
+        );
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)
@@ -6203,16 +6203,24 @@ mod tests {
             process.env(variable.name, variable.value);
         }
         let mut child = process.spawn().expect("spawn ffmpeg");
-        let mut stdout = child.stdout.take().expect("stdout pipe");
-
-        let mut buffer = vec![0u8; 2 * 1024 * 1024];
-        let read = timeout(Duration::from_secs(20), stdout.read(&mut buffer))
-            .await
-            .expect("timed out waiting for ffmpeg output")
-            .expect("read ffmpeg stdout");
-        assert!(read > 0, "expected some bytes from ffmpeg");
-        child.kill().await.ok();
-        let _ = child.wait().await;
+        let stdout = child.stdout.take().expect("stdout pipe");
+        let mut buffer = Vec::new();
+        let (read, status) = timeout(Duration::from_secs(20), async {
+            let read = stdout
+                .take(2 * 1024 * 1024 + 1)
+                .read_to_end(&mut buffer)
+                .await?;
+            let status = child.wait().await?;
+            Ok::<_, std::io::Error>((read, status))
+        })
+        .await
+        .expect("timed out waiting for a complete watermarked frame")
+        .expect("capture ffmpeg output");
+        assert!(
+            read > 0 && read <= 2 * 1024 * 1024,
+            "invalid capture size: {read}"
+        );
+        assert!(status.success(), "watermark encoder failed: {status}");
 
         let stream = temp.path().join("watermarked.ts");
         std::fs::write(&stream, &buffer[..read]).expect("write mpegts sample");

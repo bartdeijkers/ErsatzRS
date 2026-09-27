@@ -1,7 +1,9 @@
 # HTTP endpoint reference
 
 The default base URL is `http://<ersatzrs-host>:8409`. The configured listen
-address can change the port.
+address can change the port. `LEPTOS_SITE_ADDR` serves management and public
+streaming routes. An optional distinct `ERSATZRS_STREAMING_ADDR` serves only
+IPTV/XMLTV/channel-logo and HDHomeRun HTTP routes; management paths return 404.
 
 ## User-facing endpoints
 
@@ -17,6 +19,12 @@ address can change the port.
 Use the public host name or LAN address in requests that generate playlists.
 ErsatzRS derives absolute guide, logo, and stream URLs from the incoming
 request.
+
+Internal `/ffmpeg/*` callbacks are served only on a dynamically allocated
+loopback listener and are not public client endpoints. They reject missing or
+non-loopback socket peers regardless of Host and forwarded headers. Next media,
+subtitle and producer callbacks additionally retain capability or ticket
+validation. Public listener requests cannot reach these internal handlers.
 
 ## HDHomeRun-compatible endpoints
 

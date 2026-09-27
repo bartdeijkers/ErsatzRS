@@ -7,6 +7,32 @@ use crate::host::assets::{site_pkg_dir, DEFAULT_OUTPUT_NAME};
 
 const WEB_CRATE_CARGO_TOML: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
 const DEVELOPMENT_ROUTES_ENV: &str = "ERSATZRS_ENABLE_DEVELOPMENT_ROUTES";
+const STREAMING_ADDR_ENV: &str = "ERSATZRS_STREAMING_ADDR";
+
+/// Optional public streaming-only listener; absence retains shared service.
+#[allow(clippy::disallowed_methods)] // Listener binding is intentionally startup environment-only.
+pub(crate) fn streaming_listen_addr() -> Result<Option<std::net::SocketAddr>, String> {
+    match std::env::var(STREAMING_ADDR_ENV) {
+        Ok(value) => parse_streaming_listen_addr(Some(&value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            Err(format!("{STREAMING_ADDR_ENV} must be a socket address"))
+        }
+    }
+}
+
+fn parse_streaming_listen_addr(
+    value: Option<&str>,
+) -> Result<Option<std::net::SocketAddr>, String> {
+    value
+        .map(|value| {
+            value
+                .trim()
+                .parse()
+                .map_err(|_| format!("{STREAMING_ADDR_ENV} must be an IP address and port"))
+        })
+        .transpose()
+}
 
 pub fn leptos_configuration() -> ConfFile {
     let manifest = Path::new(WEB_CRATE_CARGO_TOML);
@@ -59,6 +85,27 @@ fn normalize_release_options(options: &mut LeptosOptions) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_address_requires_an_explicit_socket_address() {
+        assert_eq!(parse_streaming_listen_addr(None).unwrap(), None);
+        for value in ["127.0.0.1:8410", "[::1]:8410", " 0.0.0.0:0 "] {
+            assert_eq!(
+                parse_streaming_listen_addr(Some(value)).unwrap(),
+                Some(value.trim().parse().unwrap())
+            );
+        }
+        for value in [
+            "",
+            " ",
+            "localhost:8410",
+            "127.0.0.1",
+            "127.0.0.1:65536",
+            "https://127.0.0.1:8410",
+        ] {
+            assert!(parse_streaming_listen_addr(Some(value)).is_err(), "{value}");
+        }
+    }
 
     #[test]
     fn normalize_release_options_fills_empty_output_name() {

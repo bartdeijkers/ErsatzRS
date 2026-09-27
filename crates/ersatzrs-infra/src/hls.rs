@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -9,9 +9,12 @@ use tokio::sync::RwLock;
 ///
 /// Matches `ErsatzTV`'s `FFmpegSegmenterService` shape: handles are indexed
 /// by channel number and looked up via [`HlsSessionRegistry::try_get`].
+/// Direct HTTP responses have independent registrations for channel activity
+/// and cancellation; they cannot occupy a playlist worker's slot.
 #[derive(Default)]
 pub struct InMemoryHlsSessionRegistry {
     inner: RwLock<HashMap<String, Arc<dyn HlsSessionHandle>>>,
+    direct: RwLock<HashMap<String, Vec<Arc<dyn HlsSessionHandle>>>>,
     playout_updates_to: Option<Arc<dyn HlsSessionRegistry>>,
 }
 
@@ -21,11 +24,26 @@ impl InMemoryHlsSessionRegistry {
         Self::default()
     }
 
+    async fn channel_handles(&self, channel_number: &str) -> Vec<Arc<dyn HlsSessionHandle>> {
+        let mut handles = self
+            .direct
+            .read()
+            .await
+            .get(channel_number)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(worker) = self.try_get(channel_number).await {
+            handles.push(worker);
+        }
+        handles
+    }
+
     /// Forward rebuild notifications to an independently owned preview registry.
     /// Session lookup, admission and cancellation remain isolated.
     #[must_use]
     pub fn with_playout_updates_to(previews: Arc<dyn HlsSessionRegistry>) -> Self {
         Self {
+            direct: RwLock::new(HashMap::new()),
             playout_updates_to: Some(previews),
             ..Self::default()
         }
@@ -36,7 +54,7 @@ impl InMemoryHlsSessionRegistry {
 impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
     async fn playout_updated(&self, channel_number: &str) -> bool {
         let mut notified = false;
-        if let Some(handle) = self.try_get(channel_number).await {
+        for handle in self.channel_handles(channel_number).await {
             handle.playout_updated();
             notified = true;
         }
@@ -72,9 +90,46 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         guard.remove(channel_number);
     }
 
+    async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>) {
+        self.direct
+            .write()
+            .await
+            .entry(handle.channel_number().to_owned())
+            .or_default()
+            .push(handle);
+    }
+
+    async fn unregister_direct(&self, handle: &Arc<dyn HlsSessionHandle>) {
+        let mut direct = self.direct.write().await;
+        if let Some(handles) = direct.get_mut(handle.channel_number()) {
+            handles.retain(|registered| !Arc::ptr_eq(registered, handle));
+            if handles.is_empty() {
+                direct.remove(handle.channel_number());
+            }
+        }
+    }
+
     async fn active_channels(&self) -> Vec<String> {
-        let guard = self.inner.read().await;
-        guard.keys().cloned().collect()
+        let mut channels: BTreeSet<_> = self.inner.read().await.keys().cloned().collect();
+        channels.extend(self.direct.read().await.keys().cloned());
+        channels.into_iter().collect()
+    }
+
+    async fn is_active(&self, channel_number: &str) -> bool {
+        if self.inner.read().await.contains_key(channel_number) {
+            return true;
+        }
+        self.direct.read().await.contains_key(channel_number)
+    }
+
+    async fn stop_channel(&self, channel_number: &str) -> bool {
+        let handles = self.channel_handles(channel_number).await;
+        let found = !handles.is_empty();
+        // Release registry locks before calling into a worker's cancellation path.
+        for handle in handles {
+            handle.cancel().await;
+        }
+        found
     }
 }
 
@@ -142,6 +197,50 @@ mod tests {
         assert!(normal.stop_channel("42").await);
         assert_eq!(preview.cancelled.load(Ordering::SeqCst), 0);
         assert!(!normal.playout_updated("absent").await);
+    }
+
+    #[tokio::test]
+    async fn direct_viewers_and_hls_workers_have_independent_admission_and_cleanup() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let first: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        let second: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        registry.register_direct(first.clone()).await;
+        registry.register_direct(second.clone()).await;
+        assert!(registry.is_active("7").await);
+        assert!(registry.try_get("7").await.is_none());
+        let worker: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        assert!(registry.try_insert(worker.clone()).await);
+        assert_eq!(registry.active_channels().await, vec!["7"]);
+        registry.unregister_direct(&first).await;
+        registry.unregister_direct(&first).await;
+        assert!(Arc::ptr_eq(&registry.try_get("7").await.unwrap(), &worker));
+        registry.remove("7").await;
+        assert!(registry.try_get("7").await.is_none());
+        assert!(registry.is_active("7").await);
+        registry.unregister_direct(&second).await;
+        assert!(!registry.is_active("7").await);
+        assert!(registry.active_channels().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn channel_stop_and_rebuild_reach_all_direct_viewers_and_the_worker() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let first = FakeHandle::new("7");
+        let second = FakeHandle::new("7");
+        let worker = FakeHandle::new("7");
+        let other = FakeHandle::new("8");
+        registry.register_direct(first.clone()).await;
+        registry.register_direct(second.clone()).await;
+        registry.register_direct(other.clone()).await;
+        assert!(registry.try_insert(worker.clone()).await);
+        assert!(registry.playout_updated("7").await);
+        assert!(registry.stop_channel("7").await);
+        for handle in [&first, &second, &worker] {
+            assert_eq!(handle.playout_updated.load(Ordering::SeqCst), 1);
+            assert_eq!(handle.cancelled.load(Ordering::SeqCst), 1);
+        }
+        assert_eq!(other.playout_updated.load(Ordering::SeqCst), 0);
+        assert_eq!(other.cancelled.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

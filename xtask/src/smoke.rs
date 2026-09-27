@@ -108,27 +108,34 @@ fn run_inner(opts: Opts) -> Result<()> {
     }
 
     let deadline = Deadline::from_now(opts.timeout);
-    if opts.next {
-        let response = http_get_until_body("/ffmpeg/next-media/1/1/1", 0, deadline.remaining()?)?;
-        if response.status != 401 {
+    for path in [
+        "/ffmpeg/concat/1",
+        "/ffmpeg/stream/1",
+        "/ffmpeg/next-media/1/1/1",
+    ] {
+        let response = http_get_until_body(path, 0, deadline.remaining()?)?;
+        if response.status != 404 {
             bail!(
-                "Next media route must reject missing capability, got {}",
+                "internal callback {path} must be absent from the public listener, got {}",
                 response.status
             );
         }
-        println!("smoke evidence: Next media request without capability -> HTTP 401");
+        println!("smoke evidence: public internal callback {path} -> HTTP 404");
     }
     for channel in &opts.channels {
         if !opts.next && opts.check_ts && !opts.check_hls_lifecycle {
-            let path = format!("/iptv/channel/{channel}.ts?mode=ts");
-            let response = http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
-                .with_context(|| format!("probing MPEG-TS endpoint {path}"))?;
-            response.ensure_success_with_body(&path)?;
-            println!(
-                "smoke evidence: {path} -> HTTP {} with {} body bytes",
-                response.status,
-                response.body.len()
-            );
+            for mode in ["ts-legacy", "ts"] {
+                let path = format!("/iptv/channel/{channel}.ts?mode={mode}");
+                let response =
+                    http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
+                        .with_context(|| format!("probing MPEG-TS endpoint {path}"))?;
+                response.ensure_success_with_body(&path)?;
+                println!(
+                    "smoke evidence: {path} -> HTTP {} with {} body bytes",
+                    response.status,
+                    response.body.len()
+                );
+            }
         }
 
         if opts.check_hls {

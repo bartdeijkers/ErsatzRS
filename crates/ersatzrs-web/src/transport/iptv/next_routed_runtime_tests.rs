@@ -480,17 +480,20 @@ async fn start_server(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     state.next_engine.media.configure(address).unwrap();
-    let app = crate::host::router::build_app(state.clone()).layer(
+    let app = crate::host::router::build_internal_app(state.clone()).layer(
         axum::middleware::from_fn_with_state(observation.clone(), observe),
     );
     let (stop, stopped) = oneshot::channel();
     let server = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                let _ = stopped.await;
-            })
-            .await
-            .unwrap();
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(async {
+            let _ = stopped.await;
+        })
+        .await
+        .unwrap();
     });
     (address, stop, server)
 }

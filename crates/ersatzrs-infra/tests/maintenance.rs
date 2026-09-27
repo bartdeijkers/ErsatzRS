@@ -41,6 +41,10 @@ impl HlsSessionRegistry for FakeHlsRegistry {
 
     async fn remove(&self, _channel_number: &str) {}
 
+    async fn register_direct(&self, _handle: Arc<dyn HlsSessionHandle>) {}
+
+    async fn unregister_direct(&self, _handle: &Arc<dyn HlsSessionHandle>) {}
+
     async fn active_channels(&self) -> Vec<String> {
         Vec::new()
     }

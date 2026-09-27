@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-26): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **67 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **66 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **109**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **110**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -35,7 +35,8 @@
   gates pass, and correction `0e482f66` has terminal green exact-SHA CI
   [36274614736](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36274614736).
   Its milestone owns the runtime publication, browser correction and decoded
-  audio/subtitle evidence. UCU-07 begins with pending row 110; accepted debt
+  audio/subtitle evidence. UCU-07 row 110 is Adapt under accepted ADR 0102;
+  row 111 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -46,6 +47,60 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 110 source map: listener and internal-route isolation
+
+- Upstream commit: `14372575160a58672a44c9ff52034904b5ace156`.
+- UI/components/validators: no form or visual change. `Program.cs` and
+  `Core/SystemEnvironment.cs` retain independently configurable UI/streaming
+  ports; equal ports share the default listener.
+- Request boundary: `Startup.cs` removes the client-controlled `Host`
+  localhost exception, rejects management requests on a separate streaming
+  port, and checks actual loopback peers for internal requests before
+  forwarded headers. `InternalController.cs` moves callbacks under `/internal`.
+- Consumers: `ConcatPlaylist`, `FFmpegLibraryProcessService`, subtitle
+  extraction/path queries, troubleshooting, `LocalStatisticsProvider`,
+  `DynamicPlayoutItemService`, `PlayoutItemConverter`, and external JSON
+  playout items update their internal callback URLs together. Provider media,
+  external subtitles, fallback and generated credits remain playable.
+- ErsatzRS targets: `host/bootstrap.rs`, `host/config.rs`, `host/router.rs`,
+  `transport/iptv/{mod,stream,next_media}.rs`, FFmpeg concat generation and
+  the existing Next media relay. Configuration and endpoint references own
+  operator-facing listener documentation.
+- Confirmed gaps: the current host registers management and streaming routes
+  on one listener without a separate streaming-only configuration. Legacy
+  `/ffmpeg/concat/*` and `/ffmpeg/stream/*` handlers have no peer or capability
+  restriction. Next callbacks already validate scoped capabilities/tickets;
+  those protections must remain in addition to network isolation.
+- Required proof: crafted `Host`, `Forwarded` and `X-Forwarded-*` values cannot
+  expose management on the streaming listener or internal callbacks to remote
+  peers; UI access and public IPTV remain correct. Default/shared and separate
+  listeners, IPv4/IPv6, configured interfaces, shutdown and startup failures
+  need coverage. Generated internal URLs must use a trusted bound address,
+  with decoded legacy/Next playback and selected audio/subtitles preserved.
+- Exclusions: rows 111-115 remain pending. No new admin authentication or
+  API-key policy is inferred from this row. No visual-layout change is planned.
+- Existing decisions: ADRs 0057/0095 retain native direct producers and
+  authenticated Next callbacks. Accepted ADR 0102 separates public/internal
+  route surfaces within the same process, with a dynamically bound loopback
+  callback listener and optional `ERSATZRS_STREAMING_ADDR`. The maintainer
+  accepted the decision on 2026-09-27; UCU-07 owns implementation evidence.
+- Troubleshooting consumer: `/system/troubleshooting/mpeg` uses the
+  `MpegTroubleshootingPage` SSR wrapper and a native GET form. Its context
+  loader calls `run_mpeg_troubleshooting`; private legacy samples must use
+  the bound internal address and public samples the bound streaming address.
+  There is no page island or changed form contract, shared primitive, or
+  visual geometry. Verify URL selection with distinct IPv4/IPv6 sockets and
+  preserve actual sample capture in the runtime/browser acceptance.
+- Runtime follow-up: native legacy-to-Hybrid switching reproduced a direct
+  response handle occupying the HLS worker slot until asynchronous cleanup.
+  Upstream `IptvController` owns direct response processes separately from
+  `FFmpegSegmenterService` workers. Keep that distinction in the existing Rust
+  registry: HLS lookup/admission sees only segmenters; separately tracked
+  direct handles remain visible to channel activity and Stop. Remove direct
+  registrations by handle identity so one viewer cannot remove another.
+  Regression proof must retain the immediate transition and check concurrent
+  direct/HLS tracking, independent cleanup, and channel-wide cancellation.
 
 ## UCU-06 CI follow-up: troubleshooting containment
 
@@ -2235,7 +2290,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 107 | `b36e94cc` | fix: on-demand channel progress using next engine (#2985) | Port | upstream-baseline-catch-up | `fix(next): persist on-demand viewer checkpoints` | ucu-06; startup time-shift precedes publication after capacity admission; five-minute/final saves use viewer touch with configured timeout, monotonic and first-item clamps. Preview/continuous isolation, locked rebuilds and bounded cleanup preserved. Production-generated SQLite restart, 221 regressions, decoded official Next resume with audio/subtitles, and strict Clippy pass. |
 | 108 | `c0e4c4ac` | chore: update windows ffmpeg (#2988) | Port | upstream-baseline-catch-up | `fix(ffmpeg): adopt sparse-stream pacing runtime` | ucu-06; published first-party v2.0.2 applies the upstream sparse-pacing fix on FFmpeg 9. Source fallback/exclusion tests and decoded Windows/Linux bitmap/alternate-audio regressions pass; both v2.0.1 controls fail unchanged pacing bounds. Public downloads match tested archives. Managed default adopted; all local window gates pass. |
 | 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-06; only upstream CHANGELOG release heading and compare links change. No source, runtime or package behavior changes; reviewed exact diff. Existing window gates remain valid; no release acceptance is inferred from these notes. |
-| 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | | | | ucu-07; provisional: Port candidate. |
+| 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | Adapt (ADR 0102) | upstream-baseline-catch-up | `fix(web): isolate streaming and internal callback listeners` | ucu-07; actual-peer loopback and separate streaming route boundaries, trusted callback origins, direct/HLS lifecycle isolation. Listener/regression tests, decoded native/Next smoke, troubleshooting samples, TSDuck 87/87, browser 7 passed/3 existing skips and web parity 724/724 pass. ADR explicitly accepted; substantive review passes. Window gates remain open. |
 | 111 | `a5937386` | fix: plex sign in (#2990) | | | | ucu-07; provisional: Port candidate. |
 | 112 | `c27a8d50` | feat: require api key (#2991) | | | | ucu-07; provisional: Port candidate. |
 | 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | | | | ucu-07; provisional: Next behavior triage. |

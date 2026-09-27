@@ -523,6 +523,7 @@ pub async fn load_mpeg_troubleshooting_context_with_state(
     } else {
         Some(
             run_mpeg_troubleshooting(
+                state,
                 &selected_channel_number,
                 &selected_mode,
                 duration_seconds,
@@ -582,6 +583,7 @@ async fn load_mpeg_troubleshooting_channels(
 
 #[cfg(feature = "ssr")]
 async fn run_mpeg_troubleshooting(
+    state: &crate::host::state::AppState,
     channel_number: &str,
     mode: &str,
     duration_seconds: u64,
@@ -592,7 +594,7 @@ async fn run_mpeg_troubleshooting(
     let run_dir = ersatzrs_infra::tsduck::report_archive_dir(run_id);
     tokio::fs::create_dir_all(&run_dir).await?;
     let sample_path = run_dir.join("sample.ts");
-    let sample_url = local_mpeg_sample_url(channel_number, mode);
+    let sample_url = local_mpeg_sample_url(state, channel_number, mode)?;
     let redacted_sample_url = ersatzrs_infra::tsduck::redact_sensitive_text(&sample_url);
 
     let sample_bytes = match capture_mpeg_sample(
@@ -936,28 +938,22 @@ fn is_supported_mpeg_mode(mode: &str) -> bool {
 }
 
 #[cfg(feature = "ssr")]
-fn local_mpeg_sample_url(channel_number: &str, mode: &str) -> String {
-    let address = crate::host::config::leptos_configuration()
-        .leptos_options
-        .site_addr;
-    let host = if address.ip().is_unspecified() {
-        "127.0.0.1".to_owned()
-    } else if address.ip().is_ipv6() {
-        format!("[{}]", address.ip())
+fn local_mpeg_sample_url(
+    state: &crate::host::state::AppState,
+    channel_number: &str,
+    mode: &str,
+) -> Result<String, ServerFnError> {
+    let address = if mode == "public-ts" {
+        state.streaming_http_addr.get()
     } else {
-        address.ip().to_string()
-    };
-    let channel_number = urlencoding::encode(channel_number);
-    match mode {
-        "public-ts" => format!(
-            "http://{host}:{}/iptv/channel/{channel_number}.ts",
-            address.port()
-        ),
-        _ => format!(
-            "http://{host}:{}/ffmpeg/stream/{channel_number}",
-            address.port()
-        ),
+        state.internal_http_addr.get()
     }
+    .ok_or_else(|| ServerFnError::new("HTTP listener is not configured"))?;
+    let channel_number = urlencoding::encode(channel_number);
+    Ok(match mode {
+        "public-ts" => format!("http://{address}/iptv/channel/{channel_number}.ts"),
+        _ => format!("http://{address}/ffmpeg/stream/{channel_number}"),
+    })
 }
 
 #[cfg(feature = "ssr")]
@@ -2337,15 +2333,28 @@ mod tests {
         assert_eq!(report.errors, vec!["tsp not found"]);
     }
 
-    #[test]
-    fn local_mpeg_sample_url_uses_mpeg_ts_routes() {
-        let internal = local_mpeg_sample_url("7", "internal-legacy");
-        let public = local_mpeg_sample_url("7", "public-ts");
-
-        assert!(internal.contains("/ffmpeg/stream/7"));
-        assert!(public.contains("/iptv/channel/7.ts"));
-        assert!(!internal.contains("access_token="));
-        assert!(!public.contains("access_token="));
+    #[tokio::test]
+    async fn local_mpeg_sample_url_uses_the_bound_listener_for_each_mode() {
+        use crate::host::state::{AppState, IptvAccessTokenVerifier};
+        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        assert!(local_mpeg_sample_url(&state, "7", "internal-legacy").is_err());
+        assert!(local_mpeg_sample_url(&state, "7", "public-ts").is_err());
+        state
+            .internal_http_addr
+            .set("[::1]:19001".parse().unwrap())
+            .unwrap();
+        state
+            .streaming_http_addr
+            .set("127.0.0.1:19002".parse().unwrap())
+            .unwrap();
+        assert_eq!(
+            local_mpeg_sample_url(&state, "7", "internal-legacy").unwrap(),
+            "http://[::1]:19001/ffmpeg/stream/7"
+        );
+        assert_eq!(
+            local_mpeg_sample_url(&state, "7", "public-ts").unwrap(),
+            "http://127.0.0.1:19002/iptv/channel/7.ts"
+        );
     }
 
     #[cfg(feature = "ssr")]

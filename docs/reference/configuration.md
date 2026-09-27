@@ -55,9 +55,28 @@ Leptos provides the native server listen setting:
 | Variable | Default | Purpose |
 |---|---|---|
 | `LEPTOS_SITE_ADDR` | `0.0.0.0:8409` | Admin, API, IPTV, XMLTV, and HDHomeRun HTTP listener |
+| `ERSATZRS_STREAMING_ADDR` | Unset | Optional separate IPTV, XMLTV, channel-logo and HDHomeRun HTTP listener |
+
+Both values use an IP address and port, such as `0.0.0.0:8410` or
+`[::]:8410`. An unset streaming address retains the shared public listener.
+An explicitly identical nonzero address shares that listener too. A distinct
+streaming address exposes no management pages, admin APIs, Leptos server
+functions, static admin assets or readiness endpoint. Host and forwarded
+headers cannot change the listener's route surface. An invalid streaming
+address or occupied socket fails startup instead of falling back to shared
+management access. HDHomeRun UDP discovery advertises the streaming port.
+
+Internal FFmpeg/Next callbacks use a dynamically allocated loopback socket in
+the same process, even when public listeners bind specific network interfaces.
+They are not registered on either public listener. Their port needs no firewall,
+Docker publication or reverse-proxy rule. Next callbacks retain their existing
+capability and media/session checks. The `/healthz` readiness endpoint remains
+on `LEPTOS_SITE_ADDR`.
 
 For Docker, keep the container address on `0.0.0.0` and change the host-side
-port publication when needed, for example `--publish 8410:8409`.
+port publication when needed, for example `--publish 8410:8409`. To expose only
+streaming, configure a distinct `ERSATZRS_STREAMING_ADDR` and publish that port;
+keep management publication restricted to the intended trusted clients.
 
 ## Development-only routes
 
