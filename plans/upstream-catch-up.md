@@ -58,6 +58,40 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-08 row 125 source map: artwork authorization surfaces
+
+- Upstream `19b783d7e996c406d1e1bc1366b5f340685391f4` changes only
+  ArtworkController. It separates IPTV handlers from UI handlers and applies
+  ConditionalUiAuthorizeFilter to UI redirects, cache images and provider
+  proxies. The filter requires the management cookie only when upstream OIDC
+  is enabled; it never requires the machine API key for browser image requests.
+- Native policy is already explicitly adapted by accepted ADR 0103: management
+  stays on a trusted network or behind an authenticated reverse proxy with
+  direct access prevented. No built-in OIDC/session claim is made. `/artwork/*`
+  belongs to the management listener; `/iptv/artwork/*` is shared with the
+  streaming listener and uses the existing optional IPTV JWT policy. Machine
+  keys cannot substitute for either management deployment protection or IPTV
+  JWTs. Adding a second internal login implementation is outside this row.
+- Acceptance: production-router tests must prove management artwork is absent
+  from the streaming listener even with forged forwarding headers and a machine
+  key; GET/HEAD IPTV image requests must require valid JWTs when enabled on both
+  listeners and remain open when disabled. UI artwork must remain independent
+  of the machine key. Reuse row 124's actual provider/cache image and browser
+  loading evidence; no image-serving or browser implementation changes occur.
+- The initial four boundary tests passed (Nextest
+  `5b1d33bc-35a7-48e3-99d8-98cd6a39a712`). Review strengthened the new fixture
+  to configure the supplied machine key as valid, proving a real machine key
+  cannot bypass IPTV JWT admission. The strengthened four-test selection passes
+  (Nextest `6b726a14-06c4-4340-a815-8cb2027b80b3`), and final strict web
+  all-targets Clippy passes.
+  Configuration docs now explicitly include `/artwork/*` in the management
+  proxy boundary. The complete single-file upstream diff and conditional filter
+  are reviewed; no runtime, schema, health, platform or browser change is needed.
+  Verdict Adapt (ADR 0103): preserve the accepted native management deployment
+  boundary and existing separate IPTV routes. Advance pin/ledger in the local
+  row commit, then align the clean reference checkout. Row 126 and window
+  acceptance remain; no intermediate push/CI.
+
 ## UCU-08 row 124 source map: artwork identity and episode images
 
 - Upstream `b3a351167a1f051ea9093b65530dfda7435d4a31` centralizes artwork
@@ -2888,7 +2922,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | Port | block-scheduling; scripted-scheduling; upstream-baseline-catch-up | `fix(scheduling): restore playlist state through real sources` | ucu-08; parent replay and all-child history preserve counted/play-all continuation. Block deco retains structured children; Lua resolves real SQL sources through the awaited worker. 220 scheduling tests, seven builder tests, SQLite restart/source regressions and strict affected lint pass. Remote Stream checks, audio/subtitle settings and Reset-only block filler admission are preserved. |
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | Port | classic-scheduling; yaml-scheduling; scripted-scheduling; block-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist shuffled playlist cycles` | ucu-08; nullable history seeds and compatible checkpoint state preserve parent/child cycles, repeated slots and source settings. Shuffled Lua marathons use persisted playout seeds. 228 scheduling tests, 55 repository tests, legacy migration and strict lint pass; real SQL restart matches 100 uninterrupted items. Marathon validation/deduplication and empty/equal/missing-item/filler boundaries are covered. |
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | Port | media-browsers | `fix(artwork): resolve provider images by persisted identity` | ucu-08; typed IDs retained through cards/details/collections/XMLTV; stored-row provider paths and resize, source ownership, bounded redirects and credential isolation, cache guards and valid episode poster output. Focused SQL/HTTP regressions, eight Chromium/Firefox cases, web parity 738 passed/20 existing skips and strict lint pass. |
-| 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | | | | ucu-08; provisional: Port candidate. |
+| 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | Adapt (ADR 0103) | upstream-baseline-catch-up | `test(artwork): verify management and IPTV authorization boundaries` | ucu-08; accepted trusted-network/authenticated-proxy management policy covers UI images; public artwork retains independent optional IPTV JWTs. Four production-router tests prove GET/HEAD admission and streaming exclusions even with a valid machine key; strict lint and source review pass. Row 124 image/browser evidence remains valid. |
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | | | | ucu-08; provisional: Port candidate. |
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | | | | ucu-08; provisional: Port candidate. |
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | | | | ucu-08; provisional: Upstream tooling candidate. |

@@ -11084,6 +11084,23 @@ v2.0.2 FFmpeg package checksum was reverified; no build/release was started.
 Pin/ledger advance to b3a35116 in the authorized local row commit, followed by
 clean reference-checkout alignment. Next is row 125. UCU-08 remains In progress:
 remaining rows, window-wide gates and milestone push/terminal green CI are due.
+Row 125 is Adapt (ADR 0103). Upstream separates UI artwork handlers with its
+conditional OIDC cookie filter from IPTV handlers. The accepted native
+trusted-network/authenticated-proxy management boundary already includes UI
+artwork; no built-in OIDC claim or machine-key requirement is added for images.
+Configuration guidance explicitly includes /artwork/* and prevents direct
+management access when using proxy login. Existing /iptv/artwork/* routes retain
+their independent optional IPTV JWT policy on shared and separate listeners.
+Four production-router tests pass (6b726a14-06c4-4340-a815-8cb2027b80b3):
+management artwork is absent on streaming for GET/HEAD/POST despite forged
+forwarding headers and a valid machine key; IPTV GET/HEAD rejects missing/invalid
+JWTs even with a configured valid machine key/cookie, accepts valid JWTs and
+remains open when JWT protection is disabled. Authorization precedes DB access.
+Final strict web all-targets Clippy and substantive single-file/filter review
+pass. Row 124 provider/cache/browser serving evidence is reused because no
+production or UI code changes. Pin/ledger advance to 19b783d7 in the local row
+commit; align the clean reference checkout afterwards. Next is row 126; window
+gates and authorized milestone push/terminal green CI remain due.
 """
 
 [[milestone]]

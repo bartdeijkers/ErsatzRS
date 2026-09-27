@@ -20,6 +20,8 @@ release section when tagging a release.
   Provider artwork URLs now resolve persisted artwork IDs; callers cannot select
   provider paths or override stored resize settings. Follow bounded image
   redirects without forwarding provider credentials across origins.
+  Keep browser artwork within the management authentication boundary and IPTV
+  artwork under the separate IPTV token policy (ADR 0103).
 
 - Compare internal Next media capabilities and credits tickets in constant time,
   preserving rejection of altered bindings and credentials from an earlier host

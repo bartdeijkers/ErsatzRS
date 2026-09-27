@@ -103,11 +103,19 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
         "/public/channel-preview.js",
         "/pkg/ersatzrs_web.wasm",
         "/healthz",
+        "/artwork/1",
+        "/artwork/posters/abcdef",
+        "/artwork/thumbnails/abcdef",
+        "/artwork/fanart/abcdef",
+        "/artwork/watermarks/abcdef",
+        "/artwork/posters/plex/1",
+        "/artwork/posters/jellyfin/1",
+        "/artwork/thumbnails/emby/1",
         "/dev",
         "/%73ettings/ffmpeg",
         "//settings/ffmpeg",
     ] {
-        for method in ["GET", "POST"] {
+        for method in ["GET", "HEAD", "POST"] {
             let response = app
                 .clone()
                 .oneshot(
@@ -137,4 +145,95 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(state.pool.size(), 0);
+}
+
+#[tokio::test]
+async fn artwork_routes_keep_management_and_iptv_admission_separate() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("api-secrets.json"),
+        br#"{"ApiKey":"synthetic-fixture-key"}"#,
+    )
+    .unwrap();
+    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
+    let management = super::build_app(state.clone());
+    let streaming = super::build_streaming_app(state.clone());
+    let token = jsonwebtoken::encode(
+        &jsonwebtoken::Header::default(),
+        &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+        &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
+    )
+    .unwrap();
+    // Invalid IDs/cache names make admission observable without touching a
+    // database or an operator's image files. Row 124 covers successful serving.
+    for suffix in [
+        "posters/invalid-cache",
+        "thumbnails/invalid-cache",
+        "posters/plex/not-an-id",
+        "posters/jellyfin/not-an-id",
+        "thumbnails/emby/not-an-id",
+    ] {
+        for method in ["GET", "HEAD"] {
+            let response = management
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/artwork/{suffix}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            // ADR 0103: management authentication belongs to the deployment's
+            // trusted-network/authenticated-proxy boundary, not the machine key.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            for app in [&management, &streaming] {
+                for credential in [None, Some("invalid"), Some(token.as_str())] {
+                    let uri = match credential {
+                        Some(value) => format!("/iptv/artwork/{suffix}?access_token={value}"),
+                        None => format!("/iptv/artwork/{suffix}"),
+                    };
+                    let response = app
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .method(method)
+                                .uri(uri)
+                                .header("X-Ers-Api-Key", "synthetic-fixture-key")
+                                .header("cookie", "management=synthetic-session")
+                                .body(Body::empty())
+                                .unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        response.status(),
+                        if credential == Some(token.as_str()) {
+                            StatusCode::NOT_FOUND
+                        } else {
+                            StatusCode::UNAUTHORIZED
+                        },
+                        "{method} {suffix}"
+                    );
+                }
+            }
+        }
+    }
+    let open = super::build_streaming_app(AppState::for_tests(IptvAccessTokenVerifier::disabled()));
+    let response = open
+        .oneshot(
+            Request::get("/iptv/artwork/posters/invalid-cache")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        state.pool.size(),
+        0,
+        "authorization must precede repository access"
+    );
 }

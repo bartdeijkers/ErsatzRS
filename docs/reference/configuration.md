@@ -198,6 +198,12 @@ The management listener still requires a trusted network or a separately
 authenticated reverse proxy; this key does not add management login or OIDC.
 When using a reverse proxy for login, prevent direct access to the management
 listener so clients cannot bypass the proxy's authentication.
+Protect the complete management surface, including `/artwork/*` image requests,
+with that same proxy login policy. Browser images do not carry the machine API
+key. `/iptv/artwork/*` instead follows the optional IPTV JWT policy on both the
+management and streaming listeners; a machine key or management cookie cannot
+substitute for an IPTV token. Do not exempt `/artwork/*` from management login
+when exposing the management listener through a proxy.
 A separate streaming listener exposes neither machine nor browser action APIs.
 IPTV JWT and private callback capability checks remain independent.
 

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b3a351167a1f051ea9093b65530dfda7435d4a31` |
-| **Commit subject** | `fix: artwork cleanup (#2997)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b3a351167a1f051ea9093b65530dfda7435d4a31 |
+| **Pinned commit** | `19b783d7e996c406d1e1bc1366b5f340685391f4` |
+| **Commit subject** | `fix: authorize artwork when requested from ui (#2998)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/19b783d7e996c406d1e1bc1366b5f340685391f4 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
