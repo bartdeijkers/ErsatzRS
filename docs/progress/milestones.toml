@@ -10998,6 +10998,19 @@ changes; existing scheduling health remains applicable. SHA-256 reuses the
 existing workspace dependency version. Row 120 is Port; pin and ledger advance
 together to 722f1b93 in the coherent local commit. Align clean upstream HEAD
 after committing. Row 121 and UCU-08 window gates remain; no push/CI yet.
+Row 121 (06ee45ff) fixes the separator before seekToMs on upstream's signed
+subtitle callback URL. ErsatzRS already preserves HTTP subtitle source queries
+and passes seek separately through cue-aware cache delivery (accepted ADR 0061)
+or a separate FFmpeg -ss argument. It does not construct the faulty callback.
+Strengthened tests require existing exp/sig query values at the HTTP fixture,
+verify the rebased straddling cue, and assert extensionless ASS source/seek argv
+remain separate. All 50 selected subtitle tests pass (Nextest
+7093b16e-9a91-40f8-8c9b-cad05a2ce5b0), including existing Next subtitle tests;
+strict infra library/test Clippy passes. Source and test review confirms no
+production change, authentication-policy change or new playback claim. Existing
+runtime evidence remains applicable. Verdict Covered; pin/ledger move together
+to 06ee45ff with the local row commit, then align upstream. Row 122 is next;
+UCU-08 milestone gates, push and exact-SHA CI remain outstanding.
 """
 
 [[milestone]]

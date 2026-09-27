@@ -1905,6 +1905,8 @@ mod tests {
             Path::new("out.ass"),
         );
         assert!(args.windows(2).any(|pair| pair == ["-f", "ass"]));
+        assert!(args.windows(2).any(|pair| pair == ["-i", plex_stream]));
+        assert!(args.windows(2).any(|pair| pair == ["-ss", "00:00:44"]));
     }
 
     #[test]
@@ -1936,15 +1938,21 @@ mod tests {
         let server = MockServer::start_async().await;
         let mock = server
             .mock_async(|when, then| {
-                when.method(GET).path("/subtitle.srt");
+                when.method(GET)
+                    .path("/subtitle.srt")
+                    .query_param("exp", "123456")
+                    .query_param("sig", "synthetic-fixture");
                 then.status(200)
                     .body("1\n00:00:42,000 --> 00:00:46,000\nRemote cue\n");
             })
             .await;
 
-        let content = read_subtitle_text_source(&format!("{}/subtitle.srt", server.base_url()))
-            .await
-            .expect("remote subtitle should be fetched");
+        let content = read_subtitle_text_source(&format!(
+            "{}/subtitle.srt?exp=123456&sig=synthetic-fixture",
+            server.base_url()
+        ))
+        .await
+        .expect("remote subtitle should be fetched with its original query");
         mock.assert_async().await;
         let rebased = rebase_subtitle_cues(&content, "srt", 44).expect("rebase should succeed");
         assert_eq!(rebased.remaining_cues, 1);

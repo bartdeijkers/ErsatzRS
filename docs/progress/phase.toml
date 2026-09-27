@@ -135,7 +135,8 @@ with row 116 N/A release wording after the unchanged upstream refresh and
 build start; core and persisted retention regressions plus strict lint pass.
 Rows 118/119 are N/A: empty build trigger and external Next QSV release note.
 Row 120 is Port: YAML shuffle state survives continuation/restart; 64 focused
-YAML tests, SQLite oracle comparison and strict lint pass. Row 121 is next;
+YAML tests, SQLite oracle comparison and strict lint pass. Row 121 is Covered:
+subtitle query/seek separation has 50 passing tests and strict lint. Row 122 is next;
 milestone gates and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.

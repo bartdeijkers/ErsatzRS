@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `722f1b932099d046ac695a8a03be9af03d8a4637` |
-| **Commit subject** | `fix: preserve YAML shuffle order across builds (#2993)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/722f1b932099d046ac695a8a03be9af03d8a4637 |
+| **Pinned commit** | `06ee45ff06203988acb68339850c73f30167104d` |
+| **Commit subject** | `fix: text subtitle playback (#2994)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/06ee45ff06203988acb68339850c73f30167104d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **56 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **55 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **120**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **121**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -45,7 +45,8 @@
   at `b4d659eb` satisfy acceptance. UCU-08 row 116 is N/A release-note wording;
   row 117 is Port (safe block cleanup cutoff); row 118 is N/A (empty build trigger).
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
-  shuffle order). Row 121 is next. Existing debt
+  shuffle order). Row 121 is Covered (subtitle query/seek separation).
+  Row 122 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -56,6 +57,29 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 121 source map: text subtitle query preservation
+
+- Upstream `06ee45ff06203988acb68339850c73f30167104d` changes one
+  character in `FFmpegLibraryProcessService`: append `&seekToMs` rather than
+  `?seekToMs` after the subtitle callback's existing `exp` and `sig` query.
+  Its only other change is a CHANGELOG line.
+- ErsatzRS does not construct that subtitle callback. `playback.rs` preserves
+  HTTP(S) subtitle paths, provider preparation produces a local artifact, and
+  `subtitles.rs` rebases text into the seek cache under accepted ADR 0061.
+  `transport/iptv/stream.rs` passes the seek separately to
+  `rebase_burned_text_subtitle_input`; FFmpeg fallback uses a separate `-ss`
+  argument. There is no `seekToMs` query concatenation to repair.
+- Strengthened existing regressions require the original `exp`/`sig` query
+  at the HTTP fixture, then verify the straddling cue rebases correctly; the
+  extensionless ASS fallback must preserve its query-bearing source argument
+  and keep seek in a separate argv entry. All 50 selected subtitle tests pass
+  (Nextest `7093b16e-9a91-40f8-8c9b-cad05a2ce5b0`), including existing Next
+  subtitle coverage; strict infra library/test Clippy passes.
+- Covered under the existing seek-cache design (ADR 0061). No production
+  behavior, generated FFmpeg arguments, URL/authentication policy, track
+  selection, schema or health requirements change. The row adds focused proof
+  rather than importing an unused callback; full UCU-08 gates remain due.
 
 ## UCU-08 row 120 source map: persisted YAML sequence order
 
@@ -2626,7 +2650,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 118 | `fcd593e0` | chore: trigger new build for updated next engine | N/A | upstream-baseline-catch-up | `docs(parity): reconcile empty upstream build trigger` | ucu-08; tree equals parent b7aaea3d exactly. No source, runtime pin, package or configuration delta; does not authorize a new runtime build or release. |
 | 119 | `2cf8e56a` | update changelog [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream Next QSV release note` | ucu-08; two CHANGELOG lines describe external Next QSV detection. No source, runtime pin or package changes; existing hardware acceptance limits remain, with no new QSV claim. |
 | 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve YAML sequence order across builds` | ucu-08; stable declaration fingerprints and complete-order restoration preserve shuffled default/named lists; nested slots remain intact. All 64 YAML tests and production-builder SQLite restart/oracle comparison pass, including audio/subtitle settings; strict affected lint and substantive review pass. |
-| 121 | `06ee45ff` | fix: text subtitle playback (#2994) | | | | ucu-08; provisional: Port candidate. |
+| 121 | `06ee45ff` | fix: text subtitle playback (#2994) | Covered | upstream-baseline-catch-up | `test(subtitles): preserve source queries during seek rebasing` | ucu-08; existing ADR 0061 seek cache avoids upstream callback query concatenation. Strengthened HTTP query-preservation and separate FFmpeg seek assertions pass with all 50 selected subtitle tests and strict infra lint. No runtime behavior change. |
 | 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | | | | ucu-08; provisional: Port candidate. |
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | | | | ucu-08; provisional: Port candidate. |
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | | | | ucu-08; provisional: Port candidate. |
