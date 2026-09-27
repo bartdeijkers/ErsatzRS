@@ -18,7 +18,7 @@ use crate::{
 };
 use chrono::Utc;
 use ersatzrs_core::{
-    hls::{HlsAdmissionStatus, HlsSessionRegistry},
+    hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry},
     locking::EntityLocker,
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError},
@@ -303,7 +303,9 @@ impl NextHost {
                 }
             }
             drop(reservation);
-            registry.remove(&request.number).await;
+            registry
+                .remove_if_current(&(session as Arc<dyn HlsSessionHandle>))
+                .await;
         }))
     }
 

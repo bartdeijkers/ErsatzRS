@@ -41,6 +41,8 @@ impl HlsSessionRegistry for FakeHlsRegistry {
 
     async fn remove(&self, _channel_number: &str) {}
 
+    async fn remove_if_current(&self, _handle: &Arc<dyn HlsSessionHandle>) {}
+
     async fn register_direct(&self, _handle: Arc<dyn HlsSessionHandle>) {}
 
     async fn unregister_direct(&self, _handle: &Arc<dyn HlsSessionHandle>) {}

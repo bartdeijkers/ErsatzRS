@@ -98,6 +98,10 @@ pub trait HlsSessionRegistry: Send + Sync {
     async fn insert(&self, handle: Arc<dyn HlsSessionHandle>);
     async fn remove(&self, channel_number: &str);
 
+    /// Remove a worker only if this exact handle still owns its channel slot.
+    /// Late cleanup must never unregister a replacement worker.
+    async fn remove_if_current(&self, handle: &Arc<dyn HlsSessionHandle>);
+
     /// Track a direct HTTP response for activity reporting and channel Stop.
     /// Direct responses must not occupy or replace the HLS worker slot.
     async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>);

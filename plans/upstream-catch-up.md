@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
-  — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **47 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-27): `f8410286d265701304193365d757b061ca0e0168`
+  — build: fix docker workflow quoting.
+- Ledger: **178 commits**, **48 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -17,13 +17,15 @@
   A subsequent refresh appends MPEG-TS script line endings as pending row 175;
   all 174 existing SHA/subject pairs remain an exact prefix.
   The latest refresh appends Windows libvpl packaging as pending row 176.
+  The row-130 refresh appends ARMv7/FFmpeg packaging and Docker quoting as
+  rows 177-178; all 176 existing SHA/subject pairs remain an exact prefix.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **129**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **130**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -47,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -58,6 +60,73 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 130 source map: channel startup (Port)
+
+- Upstream `1681d1ad3882ceb37bb215fc3e2e1cd85fa6e68b` changes both
+  StartFFmpegSession handlers, FFmpegSegmenterService, its interface, new
+  SessionStartWait/StartLockReleaser, two test suites, IptvController,
+  request-cancellation middleware and release notes.
+- Required behavior: one worker per channel, no null reservation after failed
+  validation, safe folder preparation, identity-checked cleanup, bounded playlist
+  readiness that ends with the worker, and cancellable request waits.
+- Native targets: core HLS registry/handle contracts, infra registry and
+  hls_worker, Next host/session, web transport/iptv/hls and request lifecycle.
+  Rust admission already atomically registers a real handle before spawning or
+  preparing folders; concurrent losers touch the winning handle. Further audit
+  must verify readiness and client cancellation across both engines.
+- Confirmed gap: native and Next cleanup remove by channel number. An old
+  worker can remove a replacement registration. Add atomic identity-checked
+  removal and regressions for stale, repeated and current-owner cleanup.
+- Identity-checked cleanup now covers all native exit branches and the Next
+  host cleanup path. All ten registry cases pass
+  (`1102cea4-0021-4e86-8ab1-f005e257ef30`), including replacement protection,
+  repeated cleanup and independent direct viewers.
+- Stalled playlist I/O reproduced an unbounded readiness wait
+  (`bc301f54-7f53-4deb-aa0b-92577f8c82b1`): a 20 ms startup deadline still hung
+  past the regression's one-second outer guard. Registry/playlist reads and
+  polling now share one deadline. The same correction covers the capacity-slate
+  wait. All 21 HLS route tests pass (`e685b45b-f37a-4abd-bfc9-7d55dce7ea5e`),
+  including both stalled-read paths, capacity, ready/failed/missing handles,
+  token preservation and Next routing. Nine native/Next lifecycle tests pass
+  (`d82fa5fe-34af-438a-9998-19d4933919ae`) for terminal deadlines, cancellation,
+  early exit, idle cleanup, stale playlist suppression and folder preparation.
+  Strict core/infra/web library/test lint passed before the capacity extension;
+  final web library/test lint also passes after it. The later HTTP regression
+  and runtime results below complete the request-disconnect and playback checks.
+- A real loopback HTTP disconnect before response headers drops the blocked
+  readiness future without cancelling or unregistering the shared worker
+  (`c3786ef8-bd77-4d81-a832-192b4239c0c6`). This is the Rust counterpart to
+  request-token propagation and upstream cancellation-exception handling: the
+  request future is dropped, with no detached polling task or error response.
+- The real Next HLS fixture passes (`d0e92f99-cc5f-497e-ad7d-43b07c7ac116`):
+  capacity precedes process/output creation, duplicate starts reuse the worker,
+  stop removes files/registry/capacity, previews remain isolated, and decoded
+  selected audio and external subtitles survive. It uses the existing official
+  Next df41692 executable and checksum-verified ErsatzRS-ffmpeg v2.0.2 package.
+- Substantive source review: TryAddWorker/null-placeholder changes map to
+  atomic real-handle admission before spawning in both native and Next paths;
+  failed preflight therefore cannot strand a null reservation. Rust owned
+  handles/lock guards replace StartLockReleaser disposal. Identity removal is
+  atomic under the registry write lock. SessionStartWait maps to bounded inline
+  readiness polling and terminal Next/native startup state; dropping a wait
+  leaves the shared session running. Folder preparation occurs only for the
+  winning registered worker. Interface changes and both upstream test suites
+  are covered by the registry, lifecycle, route and HTTP/runtime evidence above.
+  Changelog formatting has no additional executable behavior. No new deviation.
+- Native real-host lifecycle smoke passes on disposable data: HLS master,
+  variant and nonempty segment; idle cleanup; MPEG-TS wrapper restart and idle
+  cleanup; no known runtime failure signatures. Canonical local artifact:
+  `ersatzrs-smoke-1037398-1790543273/ersatzrs-web-smoke.log (system temporary directory)`.
+  Bootstrap confirms both FFmpeg and ffprobe 9.0.0 came from the pinned v2.0.2
+  package with no runtime download. Final core/infra/web library/test Clippy
+  passes including the HTTP regression; window-wide acceptance stays separate.
+- Upstream refreshed to `f8410286`; the 176 previous ledger SHA/subject pairs
+  remain an exact prefix. Rows 177-178 are appended without processing them.
+- Exclusions: no new streaming engine, FFmpeg build, authentication change or
+  browser UI. Verdict: Port, with no new deviation. The row source review,
+  focused checks and native/Next runtime proof pass. Advance the pin with this
+  row, then align the clean reference checkout; row 131 is next.
 
 ## UCU-08 row 129 source map: scanner tag ownership (Adapt; accepted ADR 0104)
 
@@ -3337,7 +3406,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | Port | hdhomerun-http-endpoints; hdhomerun-udp-discovery | `fix(hdhr): disable discovery with IPTV JWT protection` | ucu-08; omit HTTP routes on both listeners and UDP startup under JWT, localize disabled settings and reject crafted saves. Eight Chromium/Firefox hydrated/no-JS cases, desktop/mobile inspection and final web parity (742 passed, 20 existing skips) with strict lint pass. In-order SSR fixes the demonstrated native-form fallback defect. |
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream test fixture deadline` | ucu-08; only upstream NUnit multiday fixture cancellation increases from 10 to 30 seconds. No runtime or assertion changes. Native synchronous scheduling tests do not inherit this deadline; Nextest reporting and zero retries remain unchanged. Full diff/base fixture/runner review and structured validation pass. |
 | 129 | `9067cde8` | fix: tag maintenance (#3001) | Adapt | upstream-baseline-catch-up | `fix(scanner): preserve provider-owned tags and refresh state` | ucu-08; accepted ADR 0104 source ownership; atomic producer reconciliation, durable refresh and restart continuity, migration/search/browser evidence in row source map. |
-| 130 | `1681d1ad` | fix: channel startup (#3002) | | | | ucu-08; provisional: Port candidate. |
+| 130 | `1681d1ad` | fix: channel startup (#3002) | Port | upstream-baseline-catch-up | `fix(streaming): bound startup waits and preserve worker ownership` | ucu-08; identity-checked cleanup, bounded playlist I/O, real HTTP disconnect and native/Next lifecycle proof; see source map and milestone. |
 | 131 | `6ebcaf80` | fix: multiday seek | | | | ucu-08; provisional: Port candidate. |
 | 132 | `d5f11315` | fix: more channel startup fixes (#3003) | | | | ucu-08; provisional: Port candidate. |
 | 133 | `4a2aa157` | fix: local folder etags (#3004) | | | | ucu-08; provisional: Port candidate. |
@@ -3384,3 +3453,5 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 174 | `d7b265e0` | fix: next engine subtitles (#3040) | | | | ucu-09; provisional: Port; ErsatzRS repeats the defect: `crates/ersatzrs-infra/src/playback.rs:1819` gates both embedded-subtitle filters on `engine == SubtitleSelectionEngine::Native`, so Next channels ignore `ffmpeg.use_embedded_subtitles` and still admit embedded text subtitles that were never extracted (or carry an empty path); those win over a usable sidecar and are then dropped, leaving no subtitles. Upstream now applies both filters to every engine and exempts only `HttpLiveStreamingDirect` from the extraction requirement. Claude 2026-09-27 triage. |
 | 175 | `04f49b0a` | fix: mpegts script line endings (#3041) | | | | ucu-09; provisional: Port (small); `.gitattributes` normalizes everything with `* text=auto eol=lf`, so the tracked Windows scripts check out with LF: `assets/Scripts/MpegTs/run.bat`, `run.cmd`, `run.ps1` and `scripts/release/*.ps1`. Upstream's counterpart is `*.bat text eol=crlf`; the `*.sh text eol=lf` half is already covered by our global rule. Claude 2026-09-27 triage. |
 | 176 | `6f0449c2` | build: package libvpl (from next) on windows (#3042) | | | | ucu-09; provisional: Port; `scripts/release/stage-next.py` stages only `BINARIES = ("ersatztv-channel",)`, so the win-x64 release ships `ersatztv-channel.exe` without the `libvpl.dll` and `libvpl-LICENSE.txt` that upstream now moves out of the same Next zip, leaving Windows Next playback with no oneVPL/QSV runtime beside the binary. Linux and macOS artifacts are unaffected. Claude 2026-09-27 triage. |
+| 177 | `b1ed47db` | feat!: drop arm32v7 support; bump ffmpeg (#3043) | | | | ucu-09; pending ordered source audit; existing platform and published-runtime contracts remain in force. |
+| 178 | `f8410286` | build: fix docker workflow quoting | | | | ucu-09; pending ordered source audit; existing platform and published-runtime contracts remain in force. |

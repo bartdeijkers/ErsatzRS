@@ -4,7 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_spe
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084']
 summary    = '''
-Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
+Row 130 startup ownership/deadlines verified.
+HLS exposes mode-aware channel URLs,
 multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
 playlists with per-channel media-sequence / `#EXT-X-DISCONTINUITY` tracking and
 `ffmpeg.hls_direct.output_format` targets (copy audio/video, realtime pacing).
@@ -163,3 +164,10 @@ description = 'Burned text-subtitle (SRT/ASS/WebVTT) cues were silently dropped 
 discovered  = '2026-08-03'
 evidence    = 'A wholly synthetic external SubRip fixture reproduces the missing-cue behavior at a 44-second HttpLiveStreamingSegmenter work-ahead boundary. Confirmed the same mechanism exists in $ERSATZTV_SRC (PipelineBuilderBase.Seek + StreamSeekFilterOption + EncoderCopySubtitle) — not an ErsatzRS regression. Fixed in crates/ersatzrs-infra/src/subtitles.rs with an in-process cue rewrite that shifts every cue and clamps (instead of drops) a straddling cue to start at zero; it fetches HTTP(S) inputs, decodes UTF-8/BOM-marked UTF-16, accepts comma- or dot-separated SubRip timestamps and padded ASS event headers, and retains the prior FFmpeg seek as a fallback for unsupported syntax or encodings. The subtitle-seek cache directory was versioned (seek -> seek-v2) so stale pre-fix cached output cannot keep being served. Focused tests cover source normalization, compatibility fallback argv, dot-separated SRT, padded ASS event headers, separator-less SRT fallback, and the straddling-cue clamp per format.'
 resolved    = true
+
+[[debt]]
+id          = 'ucu-channel-startup-ownership-and-deadline'
+description = 'UCU-08 row 130: worker cleanup must preserve replacement registrations and playlist readiness must remain bounded during slow I/O. Startup cancellation and native/Next runtime acceptance pass.'
+discovered  = '2026-09-27'
+resolved    = true
+evidence    = 'Upstream 1681d1ad and native source map are recorded in plans/upstream-catch-up.md. Atomic identity-checked removal now covers native and Next cleanup; all ten registry tests pass (1102cea4-0021-4e86-8ab1-f005e257ef30). The stalled-playlist regression reproduced the missing bound (bc301f54); all 21 HLS route tests now pass (e685b45b), including bounded startup and capacity playlist reads. Nine native/Next lifecycle tests pass (d82fa5fe); strict affected library/test lint passes. Real HTTP disconnect passes (c3786ef8), as does installed Next startup/cleanup and decoded media (d0e92f99). Native lifecycle smoke, final strict core/infra/web lint and substantive row review pass; ucu-08 owns canonical evidence. Row 130 is Port.'

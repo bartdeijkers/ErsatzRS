@@ -51,6 +51,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep replacement HLS workers registered when an older native or Next worker
+  finishes cleanup; direct viewers retain their independent registrations.
+  Enforce the HLS readiness deadline during playlist reads as well as polling.
+
 - Preserve collection, label, network and country tags when an ordinary library
   metadata refresh replaces its own untyped tags.
   Reconcile Plex movie, show, season, episode and other-video labels by provider ID and name,

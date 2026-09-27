@@ -269,11 +269,19 @@ pub(crate) async fn wait_for_initial_segments(
     segment_count: usize,
     startup_timeout: Duration,
 ) -> InitialSegmentWaitResult {
-    let started_at = tokio::time::Instant::now();
+    let deadline = tokio::time::Instant::now() + startup_timeout;
     let mut saw_at_capacity = false;
-    while started_at.elapsed() < startup_timeout {
-        let mut poll_at = tokio::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL;
-        if let Some(handle) = registry.try_get(channel_number).await {
+    while tokio::time::Instant::now() < deadline {
+        let mut poll_at =
+            (tokio::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL).min(deadline);
+        let Ok(handle) = tokio::time::timeout_at(deadline, registry.try_get(channel_number)).await
+        else {
+            break;
+        };
+        if let Some(handle) = handle {
+            if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
+                saw_at_capacity = true;
+            }
             match handle.startup_readiness() {
                 HlsStartupReadiness::Ready => return InitialSegmentWaitResult::Ready,
                 HlsStartupReadiness::Failed => {
@@ -294,15 +302,17 @@ pub(crate) async fn wait_for_initial_segments(
                     }
                 }
                 HlsStartupReadiness::Legacy => {
-                    if let Some(playlist) = handle.trim_playlist().await {
+                    let Ok(playlist) =
+                        tokio::time::timeout_at(deadline, handle.trim_playlist()).await
+                    else {
+                        break;
+                    };
+                    if let Some(playlist) = playlist {
                         if count_playlist_segments(&playlist) >= segment_count {
                             return InitialSegmentWaitResult::Ready;
                         }
                     }
                 }
-            }
-            if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
-                saw_at_capacity = true;
             }
         } else {
             return InitialSegmentWaitResult::MissingSession;
@@ -1157,16 +1167,22 @@ async fn wait_for_capacity_playlist(
     handle: Arc<dyn HlsSessionHandle>,
     startup_timeout: Duration,
 ) -> Option<String> {
-    let started_at = tokio::time::Instant::now();
-    while started_at.elapsed() < startup_timeout {
+    let deadline = tokio::time::Instant::now() + startup_timeout;
+    while tokio::time::Instant::now() < deadline {
         handle.touch();
-        if let Some(playlist) = handle.trim_playlist().await {
+        if let Some(playlist) = tokio::time::timeout_at(deadline, handle.trim_playlist())
+            .await
+            .ok()?
+        {
             return Some(playlist);
         }
         if handle.admission_status() != HlsAdmissionStatus::AtCapacity {
             return None;
         }
-        tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
+        tokio::time::sleep_until(
+            (tokio::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL).min(deadline),
+        )
+        .await;
     }
     None
 }
@@ -1239,7 +1255,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use ersatzrs_core::hls::HlsSessionHandle;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     struct FakeHandle {
@@ -1249,6 +1265,7 @@ mod tests {
         playlist: Mutex<Option<String>>,
         readiness: Mutex<HlsStartupReadiness>,
         cancelled: AtomicUsize,
+        stall_playlist: AtomicBool,
     }
 
     impl FakeHandle {
@@ -1264,6 +1281,7 @@ mod tests {
                 playlist: Mutex::new(None),
                 readiness: Mutex::new(HlsStartupReadiness::Legacy),
                 cancelled: AtomicUsize::new(0),
+                stall_playlist: AtomicBool::new(false),
             })
         }
 
@@ -1293,6 +1311,9 @@ mod tests {
         }
 
         async fn trim_playlist(&self) -> Option<String> {
+            if self.stall_playlist.load(Ordering::SeqCst) {
+                std::future::pending::<()>().await;
+            }
             self.playlist
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1460,6 +1481,121 @@ mod tests {
         touch_session_segment(&registry, "12").await;
 
         assert_eq!(handle.touched.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn startup_http_disconnect_drops_wait_without_cancelling_shared_worker() {
+        use tokio::io::AsyncWriteExt;
+
+        struct Dropped(Arc<tokio::sync::Notify>);
+        impl Drop for Dropped {
+            fn drop(&mut self) {
+                self.0.notify_one();
+            }
+        }
+
+        let registry = Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let handle = FakeHandle::new("12");
+        handle.stall_playlist.store(true, Ordering::SeqCst);
+        registry.insert(handle.clone()).await;
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let dropped = Arc::new(tokio::sync::Notify::new());
+        let route = {
+            let registry = registry.clone();
+            let entered = entered.clone();
+            let dropped = dropped.clone();
+            axum::routing::get(move || {
+                let registry = registry.clone();
+                let entered = entered.clone();
+                let dropped = dropped.clone();
+                async move {
+                    let _guard = Dropped(dropped);
+                    entered.notify_one();
+                    wait_for_initial_segments(&*registry, "12", 1, Duration::from_secs(30)).await;
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+            })
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, axum::Router::new().route("/startup", route))
+                .await
+                .unwrap();
+        });
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client
+            .write_all(b"GET /startup HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), entered.notified())
+            .await
+            .unwrap();
+        drop(client);
+        let result = tokio::time::timeout(Duration::from_secs(2), dropped.notified()).await;
+        server.abort();
+        let _ = server.await;
+        result.expect("disconnect must drop the pending startup wait before its deadline");
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+        let expected: Arc<dyn HlsSessionHandle> = handle;
+        assert!(Arc::ptr_eq(
+            &registry.try_get("12").await.unwrap(),
+            &expected
+        ));
+    }
+
+    #[tokio::test]
+    async fn initial_segment_wait_handles_ready_failed_and_missing_workers() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1)).await,
+            InitialSegmentWaitResult::MissingSession
+        );
+        let handle = FakeHandle::new("12");
+        handle.set_playlist("#EXTM3U\n#EXTINF:4,\na.ts\n");
+        registry.insert(handle.clone()).await;
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1)).await,
+            InitialSegmentWaitResult::Ready
+        );
+        *handle.readiness.lock().unwrap() = HlsStartupReadiness::Failed;
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1)).await,
+            InitialSegmentWaitResult::Timeout
+        );
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn initial_segment_wait_bounds_stalled_playlist_reads() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        for admission in [HlsAdmissionStatus::Waiting, HlsAdmissionStatus::AtCapacity] {
+            let handle = FakeHandle::with_admission_status("12", admission);
+            handle.stall_playlist.store(true, Ordering::SeqCst);
+            registry.insert(handle.clone()).await;
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                wait_for_initial_segments(&registry, "12", 1, Duration::from_millis(20)),
+            )
+            .await
+            .expect("startup deadline must bound playlist I/O");
+            assert!(tokio::time::timeout(
+                Duration::from_secs(1),
+                wait_for_capacity_playlist(handle.clone(), Duration::from_millis(20)),
+            )
+            .await
+            .expect("capacity deadline must bound playlist I/O")
+            .is_none());
+            assert_eq!(
+                result,
+                if admission == HlsAdmissionStatus::AtCapacity {
+                    InitialSegmentWaitResult::AtCapacity
+                } else {
+                    InitialSegmentWaitResult::Timeout
+                }
+            );
+            assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+        }
     }
 
     #[tokio::test]

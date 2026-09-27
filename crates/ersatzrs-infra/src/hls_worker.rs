@@ -652,7 +652,9 @@ impl HlsSessionWorker {
             .await
         {
             tracing::warn!(%error, working_dir = %self.working_dir.display(), "failed to prepare hls working directory");
-            registry.remove(&self.registry_key).await;
+            registry
+                .remove_if_current(&(self.clone() as Arc<dyn HlsSessionHandle>))
+                .await;
             return;
         }
         self.working_dir_ready.store(true, Ordering::Release);
@@ -691,7 +693,9 @@ impl HlsSessionWorker {
                     "failed to load channel slug configuration; stopping hls worker"
                 );
                 let _ = cleanup_working_dir(&self.working_dir).await;
-                registry.remove(&self.registry_key).await;
+                registry
+                    .remove_if_current(&(self.clone() as Arc<dyn HlsSessionHandle>))
+                    .await;
                 return;
             }
         };
@@ -726,7 +730,9 @@ impl HlsSessionWorker {
                         "failed to load HLS work-ahead limit; stopping hls worker"
                     );
                     let _ = cleanup_working_dir(&self.working_dir).await;
-                    registry.remove(&self.registry_key).await;
+                    registry
+                        .remove_if_current(&(self.clone() as Arc<dyn HlsSessionHandle>))
+                        .await;
                     return;
                 }
             };
@@ -2287,7 +2293,9 @@ impl HlsSessionWorker {
 
         self.set_admission_status(HlsAdmissionStatus::Waiting);
         let _ = cleanup_working_dir(&self.working_dir).await;
-        registry.remove(&self.registry_key).await;
+        registry
+            .remove_if_current(&(self.clone() as Arc<dyn HlsSessionHandle>))
+            .await;
     }
 
     async fn run_all_streams_in_use_slate(

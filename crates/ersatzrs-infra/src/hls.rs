@@ -90,6 +90,16 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         guard.remove(channel_number);
     }
 
+    async fn remove_if_current(&self, handle: &Arc<dyn HlsSessionHandle>) {
+        let mut guard = self.inner.write().await;
+        if guard
+            .get(handle.channel_number())
+            .is_some_and(|registered| Arc::ptr_eq(registered, handle))
+        {
+            guard.remove(handle.channel_number());
+        }
+    }
+
     async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>) {
         self.direct
             .write()
@@ -177,6 +187,30 @@ mod tests {
         fn playout_updated(&self) {
             self.playout_updated.fetch_add(1, Ordering::SeqCst);
         }
+    }
+
+    #[tokio::test]
+    async fn stale_worker_cleanup_preserves_replacement_and_direct_viewers() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let first: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        let replacement: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        let viewer: Arc<dyn HlsSessionHandle> = FakeHandle::new("7");
+        assert!(registry.try_insert(first.clone()).await);
+        registry.register_direct(viewer.clone()).await;
+        registry.remove_if_current(&first).await;
+        assert!(registry.try_get("7").await.is_none());
+        assert!(registry.try_insert(replacement.clone()).await);
+        registry.remove_if_current(&first).await;
+        assert!(Arc::ptr_eq(
+            &registry.try_get("7").await.unwrap(),
+            &replacement
+        ));
+        registry.remove_if_current(&replacement).await;
+        registry.remove_if_current(&replacement).await;
+        assert!(registry.try_get("7").await.is_none());
+        assert!(registry.is_active("7").await);
+        registry.unregister_direct(&viewer).await;
+        assert!(!registry.is_active("7").await);
     }
 
     #[tokio::test]

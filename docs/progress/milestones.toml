@@ -11258,6 +11258,25 @@ cases pass (657deb15-c037-46b0-9470-2c7f4010d8a9); strict infra library/test Cli
 passes. Chromium/Firefox hydrated/no-JS tag search passes all four cases in
 test-results/ucu08-row129-tags-final. The row source map owns the full evidence.
 Row 130 is next; milestone-wide gates, push and exact-SHA CI remain open.
+Row 130 source review maps 1681d1ad startup locking, real-worker admission,
+identity cleanup, readiness deadlines and request cancellation to native/Next.
+Atomic identity-checked cleanup passes ten registry tests (1102cea4). A stalled
+playlist read reproduced an unbounded wait (bc301f54); both startup and capacity
+reads now share their polling deadline. All 21 HLS route tests pass (e685b45b)
+and nine lifecycle tests pass (d82fa5fe). A real HTTP disconnect before headers
+drops the pending wait while preserving its shared worker (c3786ef8).
+The installed official Next df41692 fixture passes (d0e92f99): capacity before
+spawn, duplicate-start reuse, stop cleanup, preview isolation and decoded
+selected audio/external subtitles. ErsatzRS-ffmpeg v2.0.2 archive SHA-256 remains
+ef797ab1ad7c54340b2b92c208d1ecd7223c0941a68d831e1154aea16ba33e59.
+Native lifecycle smoke passes: master/variant/segment, idle cleanup, MPEG-TS
+wrapper restart and cleanup; no failure signatures. Artifact: ersatzrs-smoke-1037398-1790543273/ersatzrs-web-smoke.log (system temporary directory). Bootstrap confirms pinned
+v2.0.2 FFmpeg/ffprobe 9.0.0 overrides with no download. Final core/infra/web
+library/test Clippy passes including the HTTP test. Substantive source review
+passes; row 130 is Port and pin advances to 1681d1ad. Row 131 and window-wide
+gates remain; no intermediate-row push or CI.
+Upstream f8410286 appends pending UCU-09 rows 177-178; all prior 176 ordered
+SHA/subject pairs remain an exact prefix. No later row is processed here.
 """
 
 [[milestone]]
@@ -11269,7 +11288,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 6f0449c2 (latest fetched tip) in order,
+Process every ledger row in this release window through f8410286 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
