@@ -94,102 +94,48 @@ pub(super) async fn upsert_jellyfin_episode(
 }
 
 pub(super) async fn upsert_jellyfin_collection(
-    pool: &DbPool,
+    tx: &mut Transaction<'_, crate::db::Db>,
     media_source_id: i64,
     item: &JellyfinCollectionItem,
 ) -> Result<i64> {
-    let mut tx = crate::db::begin_write(pool).await.repository()?;
-    sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
-        .bind(media_source_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-    sqlx::query(r#"INSERT OR IGNORE INTO "JellyfinMediaSource" ("Id") VALUES (?)"#)
-        .bind(media_source_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-
-    let id = if let Some(row) =
-        sqlx::query(r#"SELECT "Id" FROM "JellyfinCollection" WHERE "ItemId" = ?"#)
-            .bind(&item.item_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .repository()?
-    {
-        let id = row.get("Id");
-        sqlx::query(r#"UPDATE "JellyfinCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
-            .bind(&item.etag)
-            .bind(&item.name)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(&item.name)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        id
-    } else {
-        let result = sqlx::query(
-            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
-        )
-        .bind(&item.name)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        let id = crate::db::last_insert_id(result);
-        sqlx::query(
-            r#"INSERT INTO "JellyfinCollection" ("Id", "ItemId", "Etag", "Name")
-               VALUES (?, ?, ?, ?)"#,
-        )
-        .bind(id)
-        .bind(&item.item_id)
-        .bind(&item.etag)
-        .bind(&item.name)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        id
-    };
-
-    tx.commit().await.repository()?;
-    Ok(id)
+    crate::provider_collections::upsert_tx(
+        tx,
+        crate::collection_tags::Provider::Jellyfin,
+        media_source_id,
+        &item.item_id,
+        item.etag.as_deref(),
+        &item.name,
+    )
+    .await
 }
 
 pub(super) async fn replace_collection_items(
-    pool: &DbPool,
+    tx: &mut Transaction<'_, crate::db::Db>,
     collection_id: i64,
+    media_source_id: i64,
     items: &[JellyfinCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = crate::db::begin_write(pool).await.repository()?;
-    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
-        .bind(collection_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-    for (index, item) in items.iter().enumerate() {
-        if let Some(media_item_id) = find_jellyfin_media_item(&mut tx, item).await? {
-            sqlx::query(
-                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
-                   VALUES (?, ?, ?)"#,
-            )
-            .bind(collection_id)
-            .bind(media_item_id)
-            .bind(i32::try_from(index).unwrap_or_default())
-            .execute(&mut *tx)
-            .await
-            .repository()?;
+    let previous = crate::collection_tags::members(tx, collection_id).await?;
+    let mut incoming = Vec::new();
+    for item in items {
+        if let Some(id) = find_jellyfin_media_item(tx, media_source_id, item).await? {
+            incoming.push(id);
         }
     }
-    tx.commit().await.repository()?;
+    crate::provider_collections::replace_members(tx, collection_id, &incoming).await?;
+    crate::collection_tags::reconcile(
+        tx,
+        crate::collection_tags::Provider::Jellyfin,
+        collection_id,
+        &previous,
+    )
+    .await?;
     Ok(())
 }
 
 pub(super) async fn find_jellyfin_media_item(
     tx: &mut Transaction<'_, crate::db::Db>,
+    media_source_id: i64,
     item: &JellyfinCollectionMediaItem,
 ) -> Result<Option<i64>> {
     let table = match item.kind {
@@ -198,9 +144,16 @@ pub(super) async fn find_jellyfin_media_item(
         JellyfinCollectionMediaKind::Season => "JellyfinSeason",
         JellyfinCollectionMediaKind::Episode => "JellyfinEpisode",
     };
-    let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "ItemId" = ?"#);
+    let sql = format!(
+        r#"SELECT p."Id" FROM "{table}" p
+        JOIN "MediaItem" m ON m."Id" = p."Id"
+        JOIN "LibraryPath" path ON path."Id" = m."LibraryPathId"
+        JOIN "Library" l ON l."Id" = path."LibraryId"
+        WHERE p."ItemId" = ? AND l."MediaSourceId" = ?"#
+    );
     Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.item_id)
+        .bind(media_source_id)
         .fetch_optional(&mut **tx)
         .await
         .repository()?

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **55 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **47 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **121**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **129**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -47,7 +47,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -58,6 +58,301 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 129 source map: scanner tag ownership (Adapt; accepted ADR 0104)
+
+- Upstream `9067cde8` changes 31 files. Two large generated EF designer snapshots
+  are model bookkeeping; substantive changes include typed Tag owners, ordered
+  legacy backfill, all tag insert paths, three collection repositories, scoped
+  Plex network removal/insertion, Plex label projection/ownership, local NFO
+  country comparison, UI/search filtering and eight ownership tests. The full
+  non-generated diff still needs final per-file review before implementation.
+- User outcome: library, collection and network refreshes preserve one another's
+  tags; renamed/deleted labels and collections disappear only from their owned
+  rows. Networks and NFO countries remain distinct from ordinary searchable
+  tags, while typed labels/collections continue matching tag-based schedules.
+- Confirmed native gaps: `infra::metadata::replace_strings` deletes every Tag
+  for the metadata owner; `plex::replace_plex_metadata_facets` uses it. Plex
+  projection keeps collection names as untyped tags, maps Label to music labels,
+  and `PlexTagResponse` discards IDs. Collection persistence in Plex and Jellyfin
+  currently replaces CollectionItem membership without typed Tag projection.
+  `admin_media` exposes only untyped show tags; scheduling's generic tag reader
+  does not distinguish owner types. Network reads use type 319, but the provider
+  network producer/refresh needs a full audit. NFO parsing and native search lack
+  country handling in the inspected modules. Emby and all other media writes
+  still require mapping before choosing the shared implementation boundary.
+- Invariants: one metadata-owner/type/external-ID/name identity per tag;
+  repeated scans are idempotent; removing one producer's rows preserves other
+  owners even with equal names or colliding provider IDs. Scope provider media
+  lookups to the owning source/library. Keep real collection membership,
+  scheduling checkpoints, local playable media and audio/subtitle state intact.
+- Required acceptance: synthetic provider projection and real SQLite mixed-owner
+  refresh/rename/removal regressions across Plex/Jellyfin/Emby and metadata kinds;
+  repeated writes and restart; legacy backfill preserving existing network/NFO
+  tags; same-name distinct-owner cases; source/library collision isolation;
+  NFO country and tag/network/country search/UI projection; membership-driven
+  refresh continuity; relevant health/schema readiness and strict affected lint.
+  Browser proof is needed for changed visible search/detail behavior. Do not
+  use live provider data or credentials, create runtime artifacts, weaken tests,
+  or advance the row verdict/pin before acceptance.
+- First regression reproduced destructive ordinary replacement: all five typed
+  or externally identified rows disappeared (Nextest
+  `2830c2bb-0af8-4282-92ed-db35b82d3036`). The shared writer now deletes only
+  rows with both ExternalTypeId and ExternalCollectionId NULL. This preserves
+  other producers while replacing/deduplicating ordinary tags, including empty
+  refreshes. All 19 selected metadata tests pass (Nextest
+  `6e6f9980-6dca-48d2-8510-4c415ce38c17`). Strict infra library/test Clippy passes.
+- Initial mapping found PlexShowItem/PlexSeasonItem discarded labels, and show
+  upsert did not persist ShowMetadata facets. No native network-scan producer was
+  found. Plex/Jellyfin/Emby collection sync replaces membership but has no
+  collection-tag removal/reconciliation path. These are required producer gaps,
+  not grounds for dropping ownership acceptance. Tag columns already exist;
+  the upstream migration is an ordered data backfill, not a schema addition.
+- Plex movie/episode/other-video projection now retains label IDs (numeric and
+  string JSON IDs canonicalize to the same string). Library-owned tags use the
+  new `plex/tag_ownership.rs` reconciliation, including legacy untyped labels.
+  Existing same-ID/name labels retain row IDs; duplicate incoming identities
+  collapse, renamed/deleted labels are removed, other owner types are untouched.
+  Existing MusicLabel projection is retained. Collection names are no longer
+  misrepresented as library-owned tags; proper collection projection remains
+  part of this open row and must land before row acceptance.
+- All 15 Plex service tests pass (Nextest
+  `e22b5f63-3e2d-4fc9-aa56-4d6059d79123`). The new HTTP/SQLite regression checks
+  two identical scans per phase, equal numeric/string label IDs, rename and
+  removal, preservation of five other owners sharing a name/external ID, stable
+  label row IDs, database close/reopen and unchanged media-stream count. Initial
+  lint found one unused mutable fixture binding; corrected strict infra library
+  and Plex service lint passes. Formatting and diff checks also pass.
+- Show and season projection now retains label IDs and provider timestamps.
+  The shared container writer creates missing metadata and updates title/time
+  without clearing unrelated fields or facets, then reconciles only labels.
+  The new mixed-owner provider test proves one metadata row per container,
+  stable label IDs across repeated scans, stale legacy label removal, and
+  retained network/collection tags. All 16 Plex service tests pass (Nextest
+  `4b246622-6c02-4224-97c6-9eeb5919ffbf`). Fixture corrections use the existing
+  SQL safety wrapper and matching synthetic HTTP token; strict infra library and
+  Plex service lint passes.
+- Network source map: upstream PlexNetworkScanner pages `/library/tags?type=319`,
+  parses each Directory tag Filter, and pages `/library/sections/{key}/all`
+  with that network filter. Per-library show membership determines owned type
+  319 insertions/removals; changed shows and episodes are reindexed. Native
+  implementation must preserve request/source confinement and durable refresh.
+- Collection membership replacement now snapshots prior members and reconciles
+  typed tags before committing for Plex/Jellyfin/Emby. The new collection_tags
+  module uses provider type plus external collection ID on affected metadata;
+  unchanged rows retain IDs, membership removal deletes only owned tags, and
+  existing names update in place. Ordinary labels/networks remain independent.
+  This covers membership refresh only: deleted collection discovery and source
+  collision handling still require implementation before row acceptance.
+- All 35 provider service tests pass (Nextest
+  `38030e5f-ed31-4351-a87b-be25c4a329c3`). Expanded collection fixtures for all
+  three providers assert typed external IDs, stable repeated-sync IDs, removal
+  on empty membership and preservation of an equal-name/equal-ID network tag.
+  SQLite EXPLAIN on the initial schema confirms metadata-owner and Tag FK index
+  searches for all five metadata kinds; membership probes use the CollectionItem
+  primary index, with only the supplied JSON member list scanned. Strict lint
+  passes after documenting the shared fixture helper's panic behavior and
+  extracting the enlarged Plex assertion sequence into a focused helper.
+- Provider member collision regressions first reproduced wrong-source membership
+  in all three providers. Collection member lookup now joins through Library and
+  requires the requested MediaSourceId. All 35 provider tests pass (Nextest
+  `0ef871b0-c382-4e77-acc8-a8552bd58023`). Collection container identity still
+  needs source isolation; this result covers member lookup only. Strict infra
+  library/test lint passes after extracting a shared assertion helper; the final
+  35-test rerun passes (`aa0a32a2-c618-4216-bc5b-129bc22f501b`). Tests require
+  loopback socket permission for synthetic HTTP servers.
+- ADR 0104 proposes source-owned collection identities, conservative legacy
+  adoption and discovery-root-scoped removal without deleting scheduling
+  references. Decision is Proposed; schema implementation awaits acceptance.
+- NFO audit: upstream MovieNfoReader retains repeated country elements and
+  LocalMetadataProvider projects them as nfo/country. Native movie parsing now
+  retains them; a scoped writer preserves unchanged IDs and other producers.
+  The new real SQLite regression failed with no country rows before the fix;
+  all ten selected movie tests now pass, including replacement, sidecar removal,
+  equal-name ordinary tags and transaction rollback. Country/search acceptance
+  is still in progress.
+- Search/detail source map: `/search` uses SearchPage and SearchIsland,
+  with SSR query form and the search_results server function; scheduling's
+  SearchDocument projection owns the database field reads. ShowPage at
+  `/media/tv/shows/:id` loads get_show_details into ShowDetailIsland;
+  SqliteAdminMediaRepository owns the production tag/network projection.
+  Existing fact-row labels remain localized. No island shape, shared primitive
+  or interaction changes are required. Browser proof must show typed collection
+  and label tags, separate networks and country search with hydrated and no-JS
+  routes; the legacy test-only SQL projection must agree with production.
+- Search parser and evaluator now expose country. SQLite hydration reads only
+  nfo/country for that field and excludes nfo/country/319 from ordinary tags,
+  including inherited show tags. Production and legacy test-only detail readers
+  retain typed labels/collections. All 35 scheduling repository tests pass
+  (`bde8da88-00dd-4d6a-a06f-cecb00368855`), including movie/show details and
+  country/tag/network separation; 18 core search tests pass. Strict core, infra
+  and scanner library/test lint passes. Web compilation/browser proof remains.
+- Plex network discovery now pages `/library/tags?type=319` and filtered show
+  memberships, with per-request deadlines and complete, consistent page totals
+  required before writes. Reconciliation scopes metadata to the current library
+  and owns only each returned network's name/type-319 pair, matching upstream;
+  other network names and producers remain independent. Unknown show keys do
+  not create metadata. Unchanged tag IDs survive. Tag writes and LastNetworksScan
+  commit together. TV-library dispatch runs network refresh after show metadata.
+- All 25 Plex service/source-reconciliation tests pass
+  (`2ac1d91c-bbc8-412a-b4e5-0b2a2484fc9f`). Network regressions cover colliding
+  keys on another server, other network/label/collection preservation, repeated
+  sync, unknown shows, 101-member pagination, HTTP failure, truncated membership,
+  timestamp-write rollback and normal library dispatch. Scheduling search sees
+  network membership additions/removals directly from SQLite without a separate
+  index rebuild. Live Plex-server acceptance is not claimed by these fixtures.
+- Web consumer checks pass all 40 media-browser tests
+  (`7fbc56e0-93a8-4520-a5fe-9efebc117210`). The first four browser cases passed
+  hydrated Chromium/Firefox but reproduced a persistent Loading state without
+  JavaScript on `/search`. Route-local InOrder SSR now supplies resolved search
+  results in the response, following the existing settings/remote-detail pattern.
+  All four cases now pass in `test-results/ucu08-row129-tags-final`, with the
+  same assertions and timeouts. The runner used a matched Leptos bundle and the
+  checksum-reverified v2.0.2 FFmpeg package on an isolated database.
+- ADR 0104 remains Proposed. Its local identity implementation adds nullable
+  source ownership to all three provider collection tables and unique claimed
+  identities. Legacy ownership is backfilled only from complete, single-source
+  membership of the matching provider, with duplicate candidate identities left
+  unclaimed. Collection IDs, membership rows and audio/subtitle overrides survive.
+  Three SQLite migration tests pass (`37dc812d-779d-40d6-b06e-5f12b295c522`),
+  covering fresh schema, upgrade ambiguity, uniqueness, provider foreign keys,
+  transaction rollback, restart and source deletion without collection deletion.
+- Shared source-scoped upserts preserve unclaimed collections and distinguish
+  colliding display names while retaining provider names for tags. Two focused
+  unit tests pass (`297bb23f-0e2e-4b49-80f7-61984a0c6b03`), including rename
+  isolation, stable IDs and failed-write rollback.
+- Public sync regressions for Plex/Jellyfin/Emby use two source identities with
+  equal external IDs and names. Retained foreign-source membership exposed tag
+  deletion in all three (`75fcb242-50b7-4b77-9704-1e46f0e6c1f0`): metadata owner
+  plus provider/key did not prevent a previous foreign member from losing tags.
+  Tag reconciliation now also joins the collection's owning media source.
+  All eight focused collection cases pass
+  (`1ae13418-4a25-4608-af2b-36b93e00457d`) with exact tag-ID preservation.
+- Legacy tag backfill now follows collection-first classification within the
+  metadata owner's source. It covers all ten metadata kinds, preserves existing
+  types and ordinary tags, and limits Plex-label fallback to a uniquely
+  identified Plex source without an ambiguous unclaimed collection match.
+  This deliberate source-isolation adaptation is described in Proposed ADR 0104.
+  Orphan/multiple-owner tags, empty external IDs and ambiguous source subtypes
+  remain unchanged. The migration does not modify IDs, names or owner links.
+- Six focused migration tests pass (`40c2ea4a-a22c-43c5-b165-0c133e03ce61`),
+  including the combined upgrade from before both new migrations: source-owned
+  collection backfill precedes tag classification, with duplicated legacy
+  collections still unclaimed/untyped. The tag matrix covers all metadata kinds
+  and providers, colliding keys, local rows, preserved country/network/custom
+  types, failed-update rollback and persisted restart behavior. The missing
+  migration first failed both tag regressions (`0ea1ccf1-8e70-4f13-8b82-a257261c074d`).
+- Complete-root discovery now gathers provider pages before a shared write
+  transaction and records per-provider/source/root claims. Raw page counts must
+  match a stable total; malformed collection/member identities, truncated pages
+  and bounded HTTP failures preserve published state. A complete empty root
+  removes membership/tags only when no other recorded root retains the collection.
+  Base collection IDs and dependent references survive; rediscovery reuses them.
+- Repeated discovery exposed destructive member replacement in all three providers
+  (`c9e56e99-5a97-428b-90cb-d98cb9daaf11`): row IDs and explicit audio/subtitle
+  choices were lost despite unchanged membership. Shared reconciliation now
+  reuses retained member rows and updates only provider order.
+- All 17 focused collection cases pass (`ec50cfad-b961-4d39-95c4-5c4a0025ca1e`).
+  Nine new lifecycle cases cover three providers, persisted database restart,
+  HTTP/SQL failure rollback, malformed/truncated responses, 101 raw-member pages
+  with unsupported-kind projection, changing totals, multiple roots, removal
+  and rediscovery. They retain rerun-collection references, unrelated tags,
+  audio/subtitle streams and unchanged membership playback choices. The prior
+  Unicode/mixed-member fixture was renamed accurately; its snapshot data is
+  unchanged (it never exercised pagination despite the old name/comment).
+- Cancellation now passes for all three providers
+  (`dc12c153-8612-4c2d-954c-404e7f68c7c1`): each fixture cancels while a
+  member response is pending and verifies unchanged publication before and
+  after reopening the database.
+- A Classic media-dependency snapshot now shares default/alternate schedule
+  graph discovery with the existing scan-impact resolver. It retains resolved
+  media dependencies across publication, including nested collections,
+  playlists, reruns, fillers and global fallback. The focused regression
+  (`16b3f537-e614-430c-9f93-55de3af1d358`) proves membership removal and a
+  metadata rename cannot erase captured old matches; unrelated library
+  playouts remain excluded unless the global fallback actually depends on the
+  changed media.
+- Provider publication now compares semantic membership/tag projections inside
+  its write transaction and records changed playable media plus old dependency
+  matches atomically. Startup and periodic refresh recovery resolve new matches
+  and transfer both sets to existing durable playout intents. The 19 focused
+  collection cases pass (`5ba6bc0f-948b-44ae-9cb1-5177e69901fd`), including
+  unchanged-scan suppression and the handoff's file-backed restart, publication
+  rollback, transfer rollback and idempotent completion. The numeric/textual
+  schedule-kind follow-up passes (`2181e0a4-47fa-40d6-9e70-09feb45be665`).
+- The 64 selected refresh regressions pass
+  (`70d577f4-49cd-43e9-86da-7345f9423ffc`), including mixed native/remote
+  reasons, concurrent existing intent writers, replay generation guards and
+  aggregate health for stalled provider publication. The preceding sandbox run
+  failed only four HTTP fixtures because loopback binds were denied; the
+  permission-correct run passes all selected tests without assertion changes.
+- Strict domain/infra/web library, test and binary Clippy passes after extracting
+  fixture setup and coalescing assertions into named helpers; no lint allowances
+  or acceptance assertions were weakened.
+- Integrated provider-to-builder continuity passes for Plex, Jellyfin and Emby
+  across Shuffle, Random and RandomRotation (`9c1e7ef8-4501-4712-944a-8c18db828f11`):
+  production builds generate two-day checkpoints; publication adds/removes/reorders
+  members; a restart before resolution produces the same items, anchors and
+  checkpoints as uninterrupted Refresh beyond the day seam. A second provider
+  server reuses collection and media keys; its separately scheduled state is
+  unchanged. Repeating an unchanged provider scan produces no work.
+- Show/season descendant invalidation and inherited `show_tag` search changes
+  pass through real sync for all three providers
+  (`fefbf783-0d49-4d90-8262-5752d113c12c`). Adding only a show member refreshes
+  the direct collection and newly matching episode search; replacing it with a
+  season member retains the old search dependency for invalidation. The fixture
+  initially misplaced EpisodeNumber and used `tag` instead of the documented
+  inherited `show_tag` field; both fixture mistakes were corrected without
+  changing the expected affected playouts.
+- The publication-boundary failure regression passes for all three providers
+  (`16f6472e-2e0f-43b0-9895-8c13b3fac1c9`): a trigger rejects the durable
+  handoff insert after membership/tag/discovery writes, and the complete prior
+  state is preserved. Strict continuity-test Clippy passes.
+- Final source-content review covered all 29 non-generated changed files:
+  Tag constants/search semantics and Television Mapper map to SQL-backed search
+  and admin readers; the three CollectionRepository changes map to shared
+  source-scoped collection tag reconciliation; Emby/Jellyfin Movie/Television
+  writers map to the shared untyped-only facet replacement; Image/Movie/
+  MusicVideo/OtherVideo/RemoteStream/Song/Television AddTag changes map to typed
+  producer inserts and ordinary replacement preserving typed rows. Native
+  scoped selection and deletion occur within one write transaction, covering
+  MetadataRepository's ownership guard without a separate stale entity delete.
+  PlexServerApiClient, three library scanners and PlexTagOwnership map to
+  ID/name label projection/reconciliation; PlexTelevisionRepository network
+  changes map to library-scoped network writes. ElasticSearchIndex maps to
+  immediate SQL search projection (including distinct show_tag and country).
+  LocalMetadataProvider maps to separate NFO country reconciliation. Both
+  database backfills map to the conservative SQLite ownership migration;
+  ErsatzRS remains SQLite-only. The upstream ownership tests map to the mixed
+  owner, retained-ID, rename/removal and search regressions recorded above.
+  Changelog behavior is represented in Unreleased. Two generated EF designers
+  are bookkeeping and introduce no independent runtime behavior.
+- This review found network invalidation missing from the new durable path.
+  Plex network publication now records changed shows/episodes in the same
+  transaction, with a distinct provider-network-changed reason; recovery
+  preserves old and new show_network query matches. Its regression proves
+  unrelated-library exclusion, unchanged suppression and rollback if handoff
+  insertion fails. The handoff schema now stores its bounded reason explicitly.
+- The review also reproduced stranded collection tags outside current/previous
+  membership (`3554622a-62ca-4e3c-aa1e-885f51079dbd`). Reconciliation now includes
+  all matching owned tags within the source, preserving equal-name other-owner
+  rows. All 39 combined collection/network/continuity checks pass after these
+  corrections (`d047f85d-b7b0-4f5b-b9f5-3078da042a0a`).
+- Strict domain/infra/web library, test and binary Clippy passes after both
+  audit corrections.
+- Explicit admin deletion reproduced orphaned provider tags
+  (`bff19c03-5908-4120-95c7-ca123e149031`). It now removes confidently owned
+  projections, deletes the collection and records affected refresh work in one
+  transaction; ambiguous unclaimed legacy tags are not assigned an owner.
+  Source ownership is rechecked inside the write transaction before cleanup.
+  All 46 selected migration, collection, network and continuity cases pass
+  (`657deb15-c037-46b0-9470-2c7f4010d8a9`), including deletion rollback/restart,
+  retained media/tracks and the ordinary manual-collection delete regression.
+- Row source review and final strict infra library/test lint are complete.
+  Maintainer accepted ADR 0104 on 2026-09-27. Verdict: Adapt, preserving
+  upstream tag behavior with accepted source-owned collection identities.
+  The pin advances with row 129; align the clean reference checkout after
+  landing. Row 130 is next. UCU-08 milestone-wide acceptance remains open.
 
 ## UCU-08 row 128 source map: upstream test deadline
 
@@ -3041,7 +3336,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | Port | yaml-scheduling | `fix(scheduling): fill the complete YAML fallback interval` | ucu-08; correct a short YAML fallback leaving an uncovered interval. Existing native helpers already preserve fallback history identity and advance unlocked guide groups. Two-engine duration/history/group/track-preference matrix, all 96 YAML/scripted tests and strict core lint pass. |
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | Port | hdhomerun-http-endpoints; hdhomerun-udp-discovery | `fix(hdhr): disable discovery with IPTV JWT protection` | ucu-08; omit HTTP routes on both listeners and UDP startup under JWT, localize disabled settings and reject crafted saves. Eight Chromium/Firefox hydrated/no-JS cases, desktop/mobile inspection and final web parity (742 passed, 20 existing skips) with strict lint pass. In-order SSR fixes the demonstrated native-form fallback defect. |
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream test fixture deadline` | ucu-08; only upstream NUnit multiday fixture cancellation increases from 10 to 30 seconds. No runtime or assertion changes. Native synchronous scheduling tests do not inherit this deadline; Nextest reporting and zero retries remain unchanged. Full diff/base fixture/runner review and structured validation pass. |
-| 129 | `9067cde8` | fix: tag maintenance (#3001) | | | | ucu-08; provisional: Port candidate. |
+| 129 | `9067cde8` | fix: tag maintenance (#3001) | Adapt | upstream-baseline-catch-up | `fix(scanner): preserve provider-owned tags and refresh state` | ucu-08; accepted ADR 0104 source ownership; atomic producer reconciliation, durable refresh and restart continuity, migration/search/browser evidence in row source map. |
 | 130 | `1681d1ad` | fix: channel startup (#3002) | | | | ucu-08; provisional: Port candidate. |
 | 131 | `6ebcaf80` | fix: multiday seek | | | | ucu-08; provisional: Port candidate. |
 | 132 | `d5f11315` | fix: more channel startup fixes (#3003) | | | | ucu-08; provisional: Port candidate. |

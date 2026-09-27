@@ -39,11 +39,7 @@ const SQLITE_REFRESH_INTENT_UPSERT_SQL: &str = r#"INSERT INTO "ScanPlayoutRefres
        END,
        "Generation" = "ScanPlayoutRefreshIntent"."Generation" + 1,
        "State" = excluded."State",
-       "Reason" = CASE
-           WHEN "ScanPlayoutRefreshIntent"."Reason" = excluded."Reason"
-               THEN "ScanPlayoutRefreshIntent"."Reason"
-           ELSE ?
-       END,
+       "Reason" = excluded."Reason",
        "Diagnostic" = NULL,
        "UpdatedAt" = excluded."UpdatedAt""#;
 
@@ -296,14 +292,23 @@ async fn persist_refresh_intents_with_owner(
 ) -> Result<(), sqlx::Error> {
     let now = Utc::now().to_rfc3339();
     for &playout_id in playout_ids {
+        let previous: Option<String> = sqlx::query_scalar(
+            r#"SELECT "Reason" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let merged = previous
+            .as_deref()
+            .and_then(ScanPlayoutRefreshReason::from_token)
+            .map_or(reason, |previous| previous.merge(reason));
         sqlx::query(SQLITE_REFRESH_INTENT_UPSERT_SQL)
             .bind(playout_id)
             .bind(library_id)
             .bind(INTENT_STATE_PENDING)
-            .bind(reason.as_str())
+            .bind(merged.as_str())
             .bind(&now)
             .bind(&now)
-            .bind(ScanPlayoutRefreshReason::RemoteStreamMembershipMixed.as_str())
             .execute(&mut **tx)
             .await?;
     }

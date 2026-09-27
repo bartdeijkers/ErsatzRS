@@ -234,7 +234,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=ScheduleItemsPage
             />
             <Route path=(StaticSegment("schedules"), ParamSegment("id")) view=ScheduleEditorPage/>
-            <Route path=StaticSegment("search") view=SearchPage/>
+            <Route path=StaticSegment("search") view=SearchPage ssr=SsrMode::InOrder/>
             <Route
                 path=(StaticSegment("settings"), StaticSegment("addons"))
                 view=AddonsSettingsPage

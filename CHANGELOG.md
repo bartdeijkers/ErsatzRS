@@ -51,6 +51,33 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve collection, label, network and country tags when an ordinary library
+  metadata refresh replaces its own untyped tags.
+  Reconcile Plex movie, show, season, episode and other-video labels by provider ID and name,
+  preserving other scanners' tags when labels are renamed or removed.
+  Plex, Jellyfin and Emby collection membership updates now maintain separately
+  owned collection tags in the same transaction.
+  Scope provider collection identities to their server, preserving unambiguous
+  legacy IDs and leaving ambiguous collections untouched. Same-name collections
+  receive distinct display names without changing their provider tags.
+  Backfill legacy tag ownership within its media source, preserving existing
+  types and ambiguous rows instead of assigning another server's collection.
+  Reconcile removed provider collections only after complete root discovery,
+  retaining collection references and other roots' memberships. Failed scans
+  preserve published state; repeated scans preserve membership IDs and selected
+  audio/subtitle overrides. Persist affected Classic playout refresh work with
+  collection publication so restart recovery retains both old and new dependency
+  matches; unchanged scans create no refresh work.
+  Movie NFO countries persist separately and match `country:` searches; ordinary
+  tag searches and media detail tags exclude countries and networks while
+  retaining provider labels and collection tags.
+  Plex TV-library scans now refresh network memberships within the owning
+  library; failed or incomplete responses preserve existing network tags.
+  Network changes also persist affected episode-playout refreshes, and collection
+  scans clean stranded owned tags even outside prior membership. Explicit admin
+  deletion also removes owned tags and persists affected refresh work atomically.
+  Search results render completely when JavaScript is disabled.
+
 - Render HDHomeRun and UI settings forms completely on the server so they
   remain usable with JavaScript disabled.
 

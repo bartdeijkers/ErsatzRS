@@ -73,6 +73,29 @@ pub struct SqliteSchedulingContentRepository(
     tokio::sync::OnceCell<bool>,
 );
 
+struct ClassicScheduleGraph {
+    classic_playouts: BTreeSet<EntityId>,
+    playouts_by_schedule: BTreeMap<EntityId, BTreeSet<EntityId>>,
+}
+
+/// Resolved Classic media dependencies retained across a content publication.
+#[derive(Debug)]
+pub struct ClassicMediaDependencies {
+    media_by_playout: BTreeMap<EntityId, BTreeSet<EntityId>>,
+}
+
+impl ClassicMediaDependencies {
+    /// Return each affected playout once, ordered by its stable identity.
+    #[must_use]
+    pub fn affected_playouts(&self, changed_media: &BTreeSet<EntityId>) -> Vec<EntityId> {
+        self.media_by_playout
+            .iter()
+            .filter(|(_, media)| !media.is_disjoint(changed_media))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+}
+
 impl SqliteSchedulingContentRepository {
     /// Resolve Classic playouts whose current persisted schedule graph can
     /// consume changed media or a structurally changed managed playlist.
@@ -95,58 +118,12 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         }
 
-        let rows = sqlx::query(
-            r#"SELECT "Id", "ScheduleKind", "ProgramScheduleId"
-               FROM "Playout" ORDER BY "Id""#,
-        )
-        .fetch_all(&self.0)
-        .await
-        .repository()?;
+        let ClassicScheduleGraph {
+            classic_playouts,
+            playouts_by_schedule,
+        } = self.classic_schedule_graph().await?;
         let schedule_repo =
             super::program_schedule::SqliteProgramScheduleRepository(self.0.clone());
-        let mut classic_playouts = BTreeSet::new();
-        let mut playouts_by_schedule: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
-        for row in rows {
-            let playout_id: EntityId = row.try_get("Id").repository()?;
-            let schedule_kind: PlayoutScheduleKind =
-                decode_enum_column("scan impact playout schedule kind", &row, "ScheduleKind")?;
-            if schedule_kind != PlayoutScheduleKind::Classic {
-                continue;
-            }
-            classic_playouts.insert(playout_id);
-            if let Some(schedule_id) = row.try_get("ProgramScheduleId").repository()? {
-                playouts_by_schedule
-                    .entry(schedule_id)
-                    .or_default()
-                    .insert(playout_id);
-            }
-        }
-        let alternate_rows = sqlx::query(
-            r#"SELECT "a"."PlayoutId", "a"."ProgramScheduleId", "p"."ScheduleKind"
-               FROM "ProgramScheduleAlternate" AS "a"
-               JOIN "Playout" AS "p" ON "p"."Id" = "a"."PlayoutId"
-               ORDER BY "a"."ProgramScheduleId", "a"."PlayoutId""#,
-        )
-        .fetch_all(&self.0)
-        .await
-        .repository()?;
-        for row in alternate_rows {
-            let schedule_kind: PlayoutScheduleKind = decode_enum_column(
-                "scan impact alternate playout schedule kind",
-                &row,
-                "ScheduleKind",
-            )?;
-            if schedule_kind != PlayoutScheduleKind::Classic {
-                continue;
-            }
-            let playout_id: EntityId = row.try_get("PlayoutId").repository()?;
-            let schedule_id: EntityId = row.try_get("ProgramScheduleId").repository()?;
-            classic_playouts.insert(playout_id);
-            playouts_by_schedule
-                .entry(schedule_id)
-                .or_default()
-                .insert(playout_id);
-        }
 
         let global_fallback_affected =
             if changed_media_item_ids.is_empty() && managed_playlist_id.is_none() {
@@ -213,6 +190,134 @@ impl SqliteSchedulingContentRepository {
             }
         }
         Ok(affected.into_iter().collect())
+    }
+
+    async fn classic_schedule_graph(&self) -> Result<ClassicScheduleGraph> {
+        let rows = sqlx::query(
+            r#"SELECT "Id", "ScheduleKind", "ProgramScheduleId"
+               FROM "Playout" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        let mut classic_playouts = BTreeSet::new();
+        let mut playouts_by_schedule: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
+        for row in rows {
+            let playout_id: EntityId = row.try_get("Id").repository()?;
+            let schedule_kind: PlayoutScheduleKind =
+                decode_enum_column("scan impact playout schedule kind", &row, "ScheduleKind")?;
+            if schedule_kind != PlayoutScheduleKind::Classic {
+                continue;
+            }
+            classic_playouts.insert(playout_id);
+            if let Some(schedule_id) = row.try_get("ProgramScheduleId").repository()? {
+                playouts_by_schedule
+                    .entry(schedule_id)
+                    .or_default()
+                    .insert(playout_id);
+            }
+        }
+        let alternate_rows = sqlx::query(
+            r#"SELECT "a"."PlayoutId", "a"."ProgramScheduleId", "p"."ScheduleKind"
+               FROM "ProgramScheduleAlternate" AS "a"
+               JOIN "Playout" AS "p" ON "p"."Id" = "a"."PlayoutId"
+               ORDER BY "a"."ProgramScheduleId", "a"."PlayoutId""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        for row in alternate_rows {
+            let schedule_kind: PlayoutScheduleKind = decode_enum_column(
+                "scan impact alternate playout schedule kind",
+                &row,
+                "ScheduleKind",
+            )?;
+            if schedule_kind != PlayoutScheduleKind::Classic {
+                continue;
+            }
+            let playout_id: EntityId = row.try_get("PlayoutId").repository()?;
+            let schedule_id: EntityId = row.try_get("ProgramScheduleId").repository()?;
+            classic_playouts.insert(playout_id);
+            playouts_by_schedule
+                .entry(schedule_id)
+                .or_default()
+                .insert(playout_id);
+        }
+
+        Ok(ClassicScheduleGraph {
+            classic_playouts,
+            playouts_by_schedule,
+        })
+    }
+
+    /// Capture current playable media dependencies before collection publication.
+    ///
+    /// Retaining this value across publication preserves dependencies on search
+    /// results that disappear after a tag rename or membership removal. Default
+    /// and alternate schedules, nested content sources and fillers use the same
+    /// production content resolution as the builder. Runtime anchors are not
+    /// read or changed. This is a dependency value, not a database transaction
+    /// snapshot; callers must serialize their publication against other writers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a schedule or its content cannot be resolved.
+    pub async fn classic_media_dependencies(&self) -> Result<ClassicMediaDependencies> {
+        let graph = self.classic_schedule_graph().await?;
+        let schedule_repo =
+            super::program_schedule::SqliteProgramScheduleRepository(self.0.clone());
+        let mut fillers = BTreeMap::new();
+        let global_media = if let Some(id) = self
+            .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+            .await?
+        {
+            let media = self.filler_media_dependencies(id).await?;
+            fillers.insert(id, media.clone());
+            media
+        } else {
+            BTreeSet::new()
+        };
+        let mut media_by_playout: BTreeMap<_, _> = graph
+            .classic_playouts
+            .into_iter()
+            .map(|id| (id, global_media.clone()))
+            .collect();
+        for (schedule_id, playout_ids) in graph.playouts_by_schedule {
+            let mut media = BTreeSet::new();
+            for item in schedule_repo.list_items(schedule_id).await? {
+                media.extend(
+                    self.items_for_program_schedule_item(&item)
+                        .await?
+                        .into_iter()
+                        .map(|item| item.id),
+                );
+                for filler_id in program_schedule_item_filler_ids(&item) {
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        fillers.entry(filler_id)
+                    {
+                        entry.insert(self.filler_media_dependencies(filler_id).await?);
+                    }
+                    media.extend(&fillers[&filler_id]);
+                }
+            }
+            for playout_id in playout_ids {
+                media_by_playout
+                    .entry(playout_id)
+                    .or_default()
+                    .extend(&media);
+            }
+        }
+        Ok(ClassicMediaDependencies { media_by_playout })
+    }
+
+    async fn filler_media_dependencies(&self, filler_id: EntityId) -> Result<BTreeSet<EntityId>> {
+        Ok(self
+            .scheduling_filler_preset(filler_id)
+            .await?
+            .into_iter()
+            .flat_map(|preset| preset.media_items)
+            .map(|media| media.id)
+            .collect())
     }
 
     /// Construct the repository over a database pool.
@@ -285,6 +390,7 @@ const SEARCH_NEED_PARENT_TITLE: u64 = 1 << 35;
 const SEARCH_NEED_AUDIO_TITLES: u64 = 1 << 36;
 const SEARCH_NEED_SUBTITLE_TITLES: u64 = 1 << 37;
 const SEARCH_NEED_MUSIC_LABELS: u64 = 1 << 38;
+const SEARCH_NEED_COUNTRIES: u64 = 1 << 39;
 
 const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_LANGUAGE_TAGS
@@ -365,6 +471,7 @@ impl SearchHydrationNeeds {
             SearchField::Studio => self.insert(SEARCH_NEED_STUDIOS),
             SearchField::MusicLabel => self.insert(SEARCH_NEED_MUSIC_LABELS),
             SearchField::Network => self.insert(SEARCH_NEED_NETWORKS),
+            SearchField::Country => self.insert(SEARCH_NEED_COUNTRIES),
             SearchField::Actor => self.insert(SEARCH_NEED_ACTORS),
             SearchField::Director => self.insert(SEARCH_NEED_DIRECTORS),
             SearchField::Writer => self.insert(SEARCH_NEED_WRITERS),
@@ -2163,6 +2270,16 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            countries: if hydration.contains(SEARCH_NEED_COUNTRIES) {
+                self.metadata_tag_values_by_external_type(
+                    &metadata_kind,
+                    metadata_id,
+                    "nfo/country",
+                )
+                .await?
+            } else {
+                Vec::new()
+            },
             networks: if hydration.contains(SEARCH_NEED_NETWORKS) {
                 self.metadata_tag_values_by_external_type(&metadata_kind, metadata_id, "319")
                     .await?
@@ -2401,8 +2518,14 @@ impl SqliteSchedulingContentRepository {
             "RemoteStream" => "RemoteStreamMetadataId",
             _ => return Ok(Vec::new()),
         };
-        let sql =
-            format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#);
+        let tag_filter = if table == "Tag" {
+            r#" AND ("ExternalTypeId" IS NULL OR "ExternalTypeId" NOT IN ('319', 'nfo/country'))"#
+        } else {
+            ""
+        };
+        let sql = format!(
+            r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ?{tag_filter} ORDER BY "Name""#
+        );
         sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)

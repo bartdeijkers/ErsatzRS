@@ -84,6 +84,9 @@ impl ScanRuntime for NativeScanRuntime {
     }
 
     async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        ersatzrs_infra::provider_collection_refresh::resolve_pending(&self.pool)
+            .await
+            .map_err(scan_error)?;
         let refreshes = ersatzrs_infra::scan_refresh::recoverable_refreshes(&self.pool)
             .await
             .map_err(scan_error)?;
@@ -99,6 +102,9 @@ impl ScanRuntime for NativeScanRuntime {
     }
 
     async fn pending_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        ersatzrs_infra::provider_collection_refresh::resolve_pending(&self.pool)
+            .await
+            .map_err(scan_error)?;
         let refreshes = ersatzrs_infra::scan_refresh::pending_refreshes(&self.pool)
             .await
             .map_err(scan_error)?;

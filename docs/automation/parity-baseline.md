@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `165c39ec04e814c8fc5bf6c84c867d49b25eeb15` |
-| **Commit subject** | `fix: give slow test more time (#3000)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/165c39ec04e814c8fc5bf6c84c867d49b25eeb15 |
+| **Pinned commit** | `9067cde884c8ff2ff2cbb59d7c46579af7d641f9` |
+| **Commit subject** | `fix: tag maintenance (#3001)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9067cde884c8ff2ff2cbb59d7c46579af7d641f9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

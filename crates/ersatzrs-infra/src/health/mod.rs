@@ -1008,6 +1008,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scan_refresh_state_health_detects_stalled_provider_publication() {
+        let pool = test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "ProviderCollectionRefreshResolution"
+            ("ChangedMediaIds", "PreviousPlayoutIds", "CreatedAt") VALUES ('[8675309]', '[]', ?)"#,
+        )
+        .bind(Utc::now().to_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
+        let check = ScanRefreshStateHealthCheck::new(pool.clone());
+        assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
+        sqlx::query(r#"UPDATE "ProviderCollectionRefreshResolution" SET "CreatedAt" = ?"#)
+            .bind((Utc::now() - chrono::Duration::minutes(16)).to_rfc3339())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let result = check.check().await.unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(result.brief_message, "1 scan refresh state error(s)");
+        assert!(!result.message.contains("8675309"));
+    }
+
+    #[tokio::test]
     async fn scan_refresh_state_health_ignores_recent_active_work() {
         let pool = test_pool().await;
         seed_empty_schedule(&pool).await;

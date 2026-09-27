@@ -41,6 +41,7 @@ pub enum SearchField {
     Studio,
     MusicLabel,
     Network,
+    Country,
     Actor,
     Director,
     Writer,
@@ -129,6 +130,7 @@ pub struct SearchDocument {
     pub studios: Vec<String>,
     pub music_labels: Vec<String>,
     pub networks: Vec<String>,
+    pub countries: Vec<String>,
     pub actors: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
@@ -354,6 +356,7 @@ impl SearchField {
             Self::Studio => "studio",
             Self::MusicLabel => "music_label",
             Self::Network => "network",
+            Self::Country => "country",
             Self::Actor => "actor",
             Self::Director => "director",
             Self::Writer => "writer",
@@ -440,6 +443,7 @@ impl SearchField {
             Self::Studio => document.studios.clone(),
             Self::MusicLabel => document.music_labels.clone(),
             Self::Network => document.networks.clone(),
+            Self::Country => document.countries.clone(),
             Self::Actor => document.actors.clone(),
             Self::Director => document.directors.clone(),
             Self::Writer => document.writers.clone(),
@@ -567,6 +571,7 @@ impl SearchField {
             "studio" => Self::Studio,
             "music_label" => Self::MusicLabel,
             "network" => Self::Network,
+            "country" => Self::Country,
             "actor" => Self::Actor,
             "director" => Self::Director,
             "writer" => Self::Writer,
@@ -1841,6 +1846,17 @@ mod tests {
         assert!(SearchExpression::parse("content_rating:TV-MA").matches(&doc));
         assert!(!SearchExpression::parse("content_rating:tv-ma").matches(&doc));
         assert!(!SearchExpression::parse("NOT artist:\"Alice in Chains\"").matches(&doc));
+    }
+
+    #[test]
+    fn country_is_a_separate_search_field() {
+        let mut doc = document();
+        doc.countries = vec!["New Zealand".to_owned(), "Japan".to_owned()];
+        assert_eq!(SearchField::Country.query_token(), "country");
+        assert!(SearchExpression::parse("country:\"New Zealand\" AND country:japan").matches(&doc));
+        assert!(!SearchExpression::parse("country:France").matches(&doc));
+        assert!(!SearchExpression::parse("tag:Japan").matches(&doc));
+        assert!(SearchExpression::parse("NOT country:France").matches(&doc));
     }
 
     #[test]

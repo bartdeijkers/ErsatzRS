@@ -18,7 +18,7 @@ notes  = '`Scan Library` server fn smoke clean; lock-state polling present. 2026
 name   = 'SearchPage'
 status = '✅'
 routes = ['/search']
-notes  = '2026-07-25: `tests/e2e/search-see-all.spec.ts` passed in Chromium and Firefox with exhaustive poster/thumbnail URL-family assertions, query-preserving See All links, and clean hydration. 2026-08-30: ADR 0083 replaced the `Save As` dialog with a results-first quick-filter disclosure and exact-query navigation to the dedicated composer. `tests/e2e/collections.spec.ts` passed Chromium and Firefox with exact handoff, keyboard activation, nested focus, and 320px containment.'
+notes  = '2026-07-25: `tests/e2e/search-see-all.spec.ts` passed in Chromium and Firefox with exhaustive poster/thumbnail URL-family assertions, query-preserving See All links, and clean hydration. 2026-08-30: ADR 0083 replaced the `Save As` dialog with a results-first quick-filter disclosure and exact-query navigation to the dedicated composer. `tests/e2e/collections.spec.ts` passed Chromium and Firefox with exact handoff, keyboard activation, nested focus, and 320px containment. 2026-09-27 UCU-08 row129: tag-ownership.spec.ts passes all four Chromium/Firefox hydrated/no-JS cases. Route-local InOrder SSR fixes the reproduced no-JS Loading state; country search and typed label/collection detail links are verified.'
 
 [[page]]
 name   = 'PlexSourcesPage'

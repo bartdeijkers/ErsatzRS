@@ -24,6 +24,9 @@ const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
 const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
 
 mod authentication;
+mod networks;
+mod tag_ownership;
+pub use networks::sync_plex_networks;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexConnectionConfig {
@@ -84,7 +87,7 @@ pub struct PlexMediaItem {
     pub studios: Vec<String>,
     pub music_labels: Vec<String>,
     pub genres: Vec<String>,
-    pub tags: Vec<String>,
+    pub labels: Vec<PlexLabel>,
     pub guids: Vec<String>,
     pub actors: Vec<PlexPerson>,
     pub directors: Vec<PlexPerson>,
@@ -101,10 +104,19 @@ pub struct PlexPerson {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlexLabel {
+    pub name: String,
+    pub external_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexShowItem {
     pub key: String,
     pub etag: Option<String>,
     pub title: String,
+    pub date_added: DateTime<Utc>,
+    pub date_updated: DateTime<Utc>,
+    pub labels: Vec<PlexLabel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +125,9 @@ pub struct PlexSeasonItem {
     pub etag: Option<String>,
     pub title: String,
     pub season_number: i32,
+    pub date_added: DateTime<Utc>,
+    pub date_updated: DateTime<Utc>,
+    pub labels: Vec<PlexLabel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,6 +155,8 @@ pub struct PlexCollectionMediaItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlexPage<T> {
     pub total_record_count: i32,
+    /// Number of raw response entries before supported-kind projection.
+    pub received_count: usize,
     pub items: Vec<T>,
 }
 
@@ -200,6 +217,7 @@ impl PlexService {
             .await?;
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -242,6 +260,7 @@ impl PlexService {
             .await?;
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -297,6 +316,7 @@ impl PlexService {
             .await?;
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -323,6 +343,7 @@ impl PlexService {
             .await?;
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -367,6 +388,7 @@ impl PlexService {
 
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -395,8 +417,21 @@ impl PlexService {
         let response: PlexCollectionItemsResponse =
             self.get_page(config, url, start_index, limit).await?;
 
+        if response.media_container.metadata.iter().any(|item| {
+            item.key
+                .as_deref()
+                .or(item.rating_key.as_deref())
+                .is_none_or(|id| id.trim().is_empty())
+                || item
+                    .item_type
+                    .as_deref()
+                    .is_none_or(|kind| kind.trim().is_empty())
+        }) {
+            return Err(crate::provider_collections::invalid_discovery());
+        }
         Ok(PlexPage {
             total_record_count: response.media_container.total_size,
+            received_count: response.media_container.metadata.len(),
             items: response
                 .media_container
                 .metadata
@@ -1419,73 +1454,96 @@ pub async fn sync_plex_collection_library_with_progress(
     library_key: &str,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
-    let library_section_id = library_key.parse::<i32>().unwrap_or_default();
-    let mut synced = 0;
-    let mut seen: usize = 0;
-    let mut start_index = 0;
-    let mut page = service
-        .fetch_collection_page(config, start_index, PLEX_PAGE_SIZE)
-        .await?;
-    let total_size = page.total_record_count;
-
+    use crate::provider_collections::{invalid_discovery, request, CompletePages};
+    let library_section_id = library_key
+        .parse::<i32>()
+        .map_err(|_| invalid_discovery())?;
+    let mut pages = CompletePages::new(PLEX_PAGE_SIZE);
+    let mut gathered = Vec::new();
+    let mut keys = std::collections::HashSet::new();
     if let Some(sink) = progress {
         sink.report(0.0);
     }
-
-    while start_index < total_size {
-        for collection in &page.items {
-            seen += 1;
+    loop {
+        let page =
+            request(service.fetch_collection_page(config, pages.start(), PLEX_PAGE_SIZE)).await?;
+        let more = pages.advance(page.total_record_count, page.received_count)?;
+        if page.received_count != page.items.len() {
+            return Err(invalid_discovery());
+        }
+        for collection in page.items {
             if collection.library_section_id != library_section_id {
                 continue;
             }
-
-            let collection_id = upsert_plex_collection(pool, media_source_id, collection).await?;
-            let mut item_start_index = 0;
-            let items = service
-                .fetch_collection_items_page(
+            if !keys.insert(collection.key.clone()) {
+                return Err(invalid_discovery());
+            }
+            let mut member_pages = CompletePages::new(PLEX_PAGE_SIZE);
+            let mut all_items = Vec::new();
+            loop {
+                let items = request(service.fetch_collection_items_page(
                     config,
                     &collection.key,
-                    item_start_index,
+                    member_pages.start(),
                     PLEX_PAGE_SIZE,
-                )
+                ))
                 .await?;
-            let item_total_size = items.total_record_count;
-            let mut all_items = items.items;
-
-            while item_start_index + PLEX_PAGE_SIZE < item_total_size {
-                item_start_index += PLEX_PAGE_SIZE;
-                let next_page = service
-                    .fetch_collection_items_page(
-                        config,
-                        &collection.key,
-                        item_start_index,
-                        PLEX_PAGE_SIZE,
-                    )
-                    .await?;
-                all_items.extend(next_page.items);
+                let more_members =
+                    member_pages.advance(items.total_record_count, items.received_count)?;
+                all_items.extend(items.items);
+                if !more_members {
+                    break;
+                }
             }
-            replace_plex_collection_items(pool, collection_id, &all_items).await?;
-            synced += 1;
+            gathered.push((collection, all_items));
         }
         if let Some(sink) = progress {
-            if total_size > 0 {
-                sink.report(seen as f32 / total_size as f32);
+            if more && page.total_record_count > 0 {
+                sink.report(pages.start() as f32 / page.total_record_count as f32);
             }
         }
-
-        start_index += PLEX_PAGE_SIZE;
-        if start_index >= total_size {
+        if !more {
             break;
         }
-        page = service
-            .fetch_collection_page(config, start_index, PLEX_PAGE_SIZE)
-            .await?;
     }
-
+    let dependencies = crate::repositories::SqliteSchedulingContentRepository::new(pool.clone())
+        .classic_media_dependencies()
+        .await?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    let before = crate::provider_collection_refresh::PublicationState::capture(
+        &mut tx,
+        crate::collection_tags::Provider::Plex,
+        media_source_id,
+    )
+    .await?;
+    let mut discovered = Vec::new();
+    for (collection, items) in &gathered {
+        let id = upsert_plex_collection(&mut tx, media_source_id, collection).await?;
+        replace_plex_collection_items(&mut tx, id, media_source_id, items).await?;
+        discovered.push(id);
+    }
+    crate::provider_collections::reconcile_root(
+        &mut tx,
+        crate::collection_tags::Provider::Plex,
+        media_source_id,
+        library_key,
+        &discovered,
+    )
+    .await?;
+    let after = crate::provider_collection_refresh::PublicationState::capture(
+        &mut tx,
+        crate::collection_tags::Provider::Plex,
+        media_source_id,
+    )
+    .await?;
+    before
+        .persist_changes(&mut tx, after, &dependencies)
+        .await?;
+    tx.commit().await.repository()?;
     if let Some(sink) = progress {
         sink.report(1.0);
     }
-    Ok(synced)
+    Ok(discovered.len())
 }
 
 async fn upsert_plex_movie(
@@ -1567,6 +1625,15 @@ async fn upsert_plex_show(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_show_item(&mut tx, library_path_id, item).await?;
+    tag_ownership::replace_container_labels(
+        &mut tx,
+        tag_ownership::ContainerKind::Show,
+        id,
+        &item.title,
+        (item.date_added, item.date_updated),
+        &item.labels,
+    )
+    .await?;
     tx.commit().await.repository()?;
     Ok(id)
 }
@@ -1584,6 +1651,15 @@ async fn upsert_plex_season(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_season_item(&mut tx, library_path_id, show_id, item).await?;
+    tag_ownership::replace_container_labels(
+        &mut tx,
+        tag_ownership::ContainerKind::Season,
+        id,
+        &item.title,
+        (item.date_added, item.date_updated),
+        &item.labels,
+    )
+    .await?;
     tx.commit().await.repository()?;
     Ok(id)
 }
@@ -1645,6 +1721,13 @@ fn project_show(item: PlexMetadataItemResponse) -> Option<PlexShowItem> {
         key: item.key.or(item.rating_key)?,
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
+        date_added: unix_time(item.added_at),
+        date_updated: unix_time(item.updated_at),
+        labels: item
+            .music_label
+            .into_iter()
+            .filter_map(project_label)
+            .collect(),
     })
 }
 
@@ -1661,6 +1744,13 @@ fn project_season(item: PlexMetadataItemResponse) -> Option<PlexSeasonItem> {
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
         season_number: item.index.unwrap_or_default(),
+        date_added: unix_time(item.added_at),
+        date_updated: unix_time(item.updated_at),
+        labels: item
+            .music_label
+            .into_iter()
+            .filter_map(project_label)
+            .collect(),
     })
 }
 
@@ -1669,7 +1759,7 @@ fn project_collection(item: PlexCollectionMetadataItemResponse) -> Option<PlexCo
         key: item.rating_key?,
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
-        library_section_id: item.library_section_id.unwrap_or_default(),
+        library_section_id: item.library_section_id?,
     })
 }
 
@@ -1741,9 +1831,13 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         summary: item.summary,
         tagline: item.tagline,
         studios: item.studio.into_iter().collect(),
-        music_labels: plex_tag_values(item.music_label),
+        music_labels: plex_tag_values(item.music_label.clone()),
         genres: plex_tag_values(item.genre),
-        tags: plex_tag_values(item.collection),
+        labels: item
+            .music_label
+            .into_iter()
+            .filter_map(project_label)
+            .collect(),
         guids: item.guid.into_iter().filter_map(|guid| guid.id).collect(),
         actors: item.role.into_iter().filter_map(project_person).collect(),
         directors: item
@@ -1774,6 +1868,20 @@ fn plex_tag_values(values: Vec<PlexTagResponse>) -> Vec<String> {
     ersatzrs_core::metadata_facets::normalize_facet_values(
         values.into_iter().filter_map(|value| value.tag),
     )
+}
+
+fn project_label(value: PlexTagResponse) -> Option<PlexLabel> {
+    let name = value.tag?.trim().to_owned();
+    if name.is_empty() {
+        return None;
+    }
+    Some(PlexLabel {
+        name,
+        external_id: value.id.map(|id| match id {
+            PlexTagId::Text(value) => value,
+            PlexTagId::Number(value) => value.to_string(),
+        }),
+    })
 }
 
 fn project_person(value: PlexPersonResponse) -> Option<PlexPerson> {
@@ -2409,12 +2517,12 @@ async fn replace_plex_metadata_facets(
 ) -> Result<()> {
     for (table, values) in [
         ("Genre", &item.genres),
-        ("Tag", &item.tags),
         ("Studio", &item.studios),
         ("MusicLabel", &item.music_labels),
     ] {
         crate::metadata::replace_strings(tx, table, owner_column, metadata_id, values).await?;
     }
+    tag_ownership::replace_labels(tx, owner_column, metadata_id, &item.labels).await?;
     let people = |values: &[PlexPerson]| {
         values
             .iter()
@@ -2556,101 +2664,48 @@ async fn upsert_plex_episode_metadata(
 }
 
 async fn upsert_plex_collection(
-    pool: &DbPool,
+    tx: &mut Transaction<'_, crate::db::Db>,
     media_source_id: i64,
     item: &PlexCollectionItem,
 ) -> Result<i64> {
-    let mut tx = crate::db::begin_write(pool).await.repository()?;
-    sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
-        .bind(media_source_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-    sqlx::query(r#"INSERT OR IGNORE INTO "PlexMediaSource" ("Id") VALUES (?)"#)
-        .bind(media_source_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-
-    let id = if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexCollection" WHERE "Key" = ?"#)
-        .bind(&item.key)
-        .fetch_optional(&mut *tx)
-        .await
-        .repository()?
-    {
-        let id = row.get("Id");
-        sqlx::query(r#"UPDATE "PlexCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
-            .bind(&item.etag)
-            .bind(&item.title)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(&item.title)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        id
-    } else {
-        let result = sqlx::query(
-            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
-        )
-        .bind(&item.title)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        let id = crate::db::last_insert_id(result);
-        sqlx::query(
-            r#"INSERT INTO "PlexCollection" ("Id", "Key", "Etag", "Name")
-               VALUES (?, ?, ?, ?)"#,
-        )
-        .bind(id)
-        .bind(&item.key)
-        .bind(&item.etag)
-        .bind(&item.title)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        id
-    };
-
-    tx.commit().await.repository()?;
-    Ok(id)
+    crate::provider_collections::upsert_tx(
+        tx,
+        crate::collection_tags::Provider::Plex,
+        media_source_id,
+        &item.key,
+        item.etag.as_deref(),
+        &item.title,
+    )
+    .await
 }
 
 async fn replace_plex_collection_items(
-    pool: &DbPool,
+    tx: &mut Transaction<'_, crate::db::Db>,
     collection_id: i64,
+    media_source_id: i64,
     items: &[PlexCollectionMediaItem],
 ) -> Result<()> {
-    let mut tx = crate::db::begin_write(pool).await.repository()?;
-    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
-        .bind(collection_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-    for (index, item) in items.iter().enumerate() {
-        if let Some(media_item_id) = find_plex_media_item(&mut tx, item).await? {
-            sqlx::query(
-                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
-                   VALUES (?, ?, ?)"#,
-            )
-            .bind(collection_id)
-            .bind(media_item_id)
-            .bind(i32::try_from(index).unwrap_or_default())
-            .execute(&mut *tx)
-            .await
-            .repository()?;
+    let previous = crate::collection_tags::members(tx, collection_id).await?;
+    let mut incoming = Vec::new();
+    for item in items {
+        if let Some(id) = find_plex_media_item(tx, media_source_id, item).await? {
+            incoming.push(id);
         }
     }
-    tx.commit().await.repository()?;
+    crate::provider_collections::replace_members(tx, collection_id, &incoming).await?;
+    crate::collection_tags::reconcile(
+        tx,
+        crate::collection_tags::Provider::Plex,
+        collection_id,
+        &previous,
+    )
+    .await?;
     Ok(())
 }
 
 async fn find_plex_media_item(
     tx: &mut Transaction<'_, crate::db::Db>,
+    media_source_id: i64,
     item: &PlexCollectionMediaItem,
 ) -> Result<Option<i64>> {
     let table = match item.kind {
@@ -2659,9 +2714,16 @@ async fn find_plex_media_item(
         PlexCollectionMediaKind::Season => "PlexSeason",
         PlexCollectionMediaKind::Episode => "PlexEpisode",
     };
-    let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "Key" = ?"#);
+    let sql = format!(
+        r#"SELECT p."Id" FROM "{table}" p
+        JOIN "MediaItem" m ON m."Id" = p."Id"
+        JOIN "LibraryPath" path ON path."Id" = m."LibraryPathId"
+        JOIN "Library" l ON l."Id" = path."LibraryId"
+        WHERE p."Key" = ? AND l."MediaSourceId" = ?"#
+    );
     Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.key)
+        .bind(media_source_id)
         .fetch_optional(&mut **tx)
         .await
         .repository()?
@@ -3080,7 +3142,7 @@ pub async fn sync_library_by_id_with_progress(
     let service = PlexService::new();
     match kind {
         2 => {
-            sync_plex_show_library_with_progress(
+            let synced = sync_plex_show_library_with_progress(
                 pool,
                 &service,
                 &config,
@@ -3090,7 +3152,9 @@ pub async fn sync_library_by_id_with_progress(
                 deep_scan,
                 progress,
             )
-            .await
+            .await?;
+            sync_plex_networks(pool, &service, &config, library_id).await?;
+            Ok(synced)
         }
         1 => {
             sync_plex_movie_library_with_progress(
@@ -3516,7 +3580,7 @@ struct PlexCollectionResponse {
 
 #[derive(Debug, Deserialize)]
 struct PlexCollectionContainerResponse {
-    #[serde(rename = "totalSize", default)]
+    #[serde(rename = "totalSize")]
     total_size: i32,
     #[serde(rename = "Metadata", default)]
     metadata: Vec<PlexCollectionMetadataItemResponse>,
@@ -3539,7 +3603,7 @@ struct PlexCollectionItemsResponse {
 
 #[derive(Debug, Deserialize)]
 struct PlexCollectionItemsContainerResponse {
-    #[serde(rename = "totalSize", default)]
+    #[serde(rename = "totalSize")]
     total_size: i32,
     #[serde(rename = "Metadata", default)]
     metadata: Vec<PlexCollectionMediaItemResponse>,
@@ -3578,8 +3642,6 @@ struct PlexMetadataItemResponse {
     genre: Vec<PlexTagResponse>,
     #[serde(default, rename = "Label")]
     music_label: Vec<PlexTagResponse>,
-    #[serde(default, rename = "Collection")]
-    collection: Vec<PlexTagResponse>,
     #[serde(default, rename = "Guid")]
     guid: Vec<PlexGuidResponse>,
     #[serde(default, rename = "Role")]
@@ -3590,10 +3652,18 @@ struct PlexMetadataItemResponse {
     writer: Vec<PlexPersonResponse>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PlexTagResponse {
     tag: Option<String>,
+    id: Option<PlexTagId>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum PlexTagId {
+    Text(String),
+    Number(i64),
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,4 +1,6 @@
 mod common;
+#[path = "plex_service/networks.rs"]
+mod networks;
 
 use ersatzrs_domain::LibraryMediaKind;
 use ersatzrs_infra::plex::{
@@ -8,6 +10,180 @@ use ersatzrs_infra::plex::{
 use httpmock::prelude::*;
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
+
+#[tokio::test]
+async fn plex_label_refresh_preserves_other_owners_and_survives_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        directory.path().join("tags.db").display()
+    );
+    let mut pool = SqlitePool::connect(&url).await.unwrap();
+    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    let server = MockServer::start_async().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "synthetic-plex-label-test".to_owned(),
+    };
+    let mut protected = Vec::<(i64, String, Option<String>, Option<String>)>::new();
+    for (phase, name) in [Some("old"), Some("renamed"), None].into_iter().enumerate() {
+        let mut item = media_json(
+            "/library/metadata/1",
+            "/library/parts/1",
+            "/fixture/movie.mkv",
+            1,
+        );
+        item["Label"] = name.map_or_else(
+            || json!([]),
+            |name| {
+                json!([
+                    { "id": 5, "tag": name }, { "id": "5", "tag": name }
+                ])
+            },
+        );
+        let response = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/library/sections/1/all");
+                then.status(200).json_body(json!({
+                    "MediaContainer": { "totalSize": 1, "Metadata": [item] }
+                }));
+            })
+            .await;
+        let mut previous = None;
+        for _ in 0..2 {
+            sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", true)
+                .await
+                .unwrap();
+            let labels: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+                r#"SELECT "Id", "Name", "ExternalCollectionId" FROM "Tag"
+                   WHERE "ExternalTypeId" = 'plex/label' ORDER BY "Id""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(labels.len(), usize::from(name.is_some()));
+            if let Some(name) = name {
+                assert_eq!(labels[0].1, name);
+                assert_eq!(labels[0].2.as_deref(), Some("5"));
+            }
+            if let Some(previous) = previous {
+                assert_eq!(
+                    labels, previous,
+                    "identical scan retains label row identity"
+                );
+            }
+            previous = Some(labels);
+            let others: Vec<(i64, String, Option<String>, Option<String>)> = sqlx::query_as(
+                r#"SELECT "Id", "Name", "ExternalCollectionId", "ExternalTypeId" FROM "Tag"
+                   WHERE "ExternalTypeId" != 'plex/label' ORDER BY "Id""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(others, protected);
+            assert_eq!(count(&pool, "MediaStream").await, 2);
+        }
+        response.delete_async().await;
+        if phase == 0 {
+            for owner in [
+                "319",
+                "nfo/country",
+                "plex/collection",
+                "jellyfin/collection",
+                "emby/collection",
+            ] {
+                sqlx::query(
+                    r#"INSERT INTO "Tag" ("Name", "ExternalCollectionId", "ExternalTypeId", "MovieMetadataId")
+                       SELECT 'renamed', '5', ?, "Id" FROM "MovieMetadata""#,
+                ).bind(owner).execute(&pool).await.unwrap();
+            }
+            protected = sqlx::query_as(
+                r#"SELECT "Id", "Name", "ExternalCollectionId", "ExternalTypeId" FROM "Tag"
+                   WHERE "ExternalTypeId" != 'plex/label' ORDER BY "Id""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+            pool = SqlitePool::connect(&url).await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn plex_container_labels_reconcile_without_removing_networks_or_collections() {
+    let server = MockServer::start_async().await;
+    mock_plex_show_pages(&server).await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+    sync_plex_show_library(&pool, &service, &config, 1, 1, "2", true)
+        .await
+        .unwrap();
+    let original: Vec<(i64, String, String)> = sqlx::query_as(
+        r#"SELECT "Id", "Name", "ExternalCollectionId" FROM "Tag"
+           WHERE "ShowMetadataId" IS NOT NULL OR "SeasonMetadataId" IS NOT NULL ORDER BY "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(original.len(), 2);
+    assert_eq!(
+        (&original[0].1, &original[0].2),
+        (&"Show label".to_owned(), &"7".to_owned())
+    );
+    assert_eq!(
+        (&original[1].1, &original[1].2),
+        (&"Season label".to_owned(), &"8".to_owned())
+    );
+    for kind in ["Show", "Season"] {
+        for owner in ["319", "plex/collection"] {
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+                r#"INSERT INTO "Tag" ("Name", "ExternalTypeId", "{kind}MetadataId")
+                   SELECT 'Protected', ?, "Id" FROM "{kind}Metadata""#,
+            )))
+            .bind(owner)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"INSERT INTO "Tag" ("Name", "{kind}MetadataId") SELECT 'Legacy stale', "Id" FROM "{kind}Metadata""#,
+        ))).execute(&pool).await.unwrap();
+    }
+    for _ in 0..2 {
+        sync_plex_show_library(&pool, &service, &config, 1, 1, "2", true)
+            .await
+            .unwrap();
+        let labels: Vec<(i64, String, String)> = sqlx::query_as(
+            r#"SELECT "Id", "Name", "ExternalCollectionId" FROM "Tag"
+               WHERE ("ShowMetadataId" IS NOT NULL OR "SeasonMetadataId" IS NOT NULL)
+                 AND "ExternalTypeId" = 'plex/label' ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(labels, original);
+        let protected: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Tag" WHERE "Name" = 'Protected'"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(protected, 4);
+        let stale: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Tag" WHERE "Name" = 'Legacy stale'"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(stale, 0);
+        assert_eq!(count(&pool, "ShowMetadata").await, 1);
+        assert_eq!(count(&pool, "SeasonMetadata").await, 1);
+    }
+}
 
 #[tokio::test]
 async fn plex_library_discovery_exposes_other_video_sections() {
@@ -855,49 +1031,7 @@ async fn plex_single_show_sync_targets_one_show_and_honors_episode_etags() {
 async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
     let server = MockServer::start_async().await;
     mock_plex_collection_movie_pages(&server).await;
-    let collections = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/library/all")
-                .header("Accept", "application/json")
-                .header("X-Plex-Token", "plex-token")
-                .query_param("type", "18")
-                .query_param("X-Plex-Container-Start", "0")
-                .query_param("X-Plex-Container-Size", "100");
-            then.status(200).json_body(json!({
-                "MediaContainer": {
-                    "totalSize": 1,
-                    "Metadata": [
-                        {
-                            "ratingKey": "900",
-                            "title": "Favorites",
-                            "updatedAt": 5,
-                            "librarySectionId": 4
-                        }
-                    ]
-                }
-            }));
-        })
-        .await;
-    let members = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/library/collections/900/children")
-                .header("Accept", "application/json")
-                .header("X-Plex-Token", "plex-token")
-                .query_param("X-Plex-Container-Start", "0")
-                .query_param("X-Plex-Container-Size", "100");
-            then.status(200).json_body(json!({
-                "MediaContainer": {
-                    "totalSize": 2,
-                    "Metadata": [
-                        { "key": "/library/metadata/400", "type": "movie" },
-                        { "key": "/library/metadata/401", "type": "movie" }
-                    ]
-                }
-            }));
-        })
-        .await;
+    let (collections, members) = mock_plex_collection_pages(&server).await;
 
     let pool = common::test_db().await;
     let service = PlexService::new();
@@ -906,6 +1040,9 @@ async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
         token: "plex-token".to_owned(),
     };
 
+    sync_plex_movie_library(&pool, &service, &config, 2, 99, "4", false)
+        .await
+        .unwrap();
     sync_plex_movie_library(&pool, &service, &config, 1, 4, "4", false)
         .await
         .unwrap();
@@ -915,12 +1052,60 @@ async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
         .unwrap();
 
     assert_eq!(synced, 1);
+    common::assert_collection_member_source(&pool, 1).await;
     assert_eq!(count(&pool, "Collection").await, 1);
     assert_eq!(count(&pool, "PlexCollection").await, 1);
     assert_eq!(count(&pool, "CollectionItem").await, 2);
     insta::assert_json_snapshot!(plex_collection_rows(&pool).await);
     collections.assert_async().await;
     members.assert_async().await;
+    assert_plex_collection_tag_updates(&pool, &service, &config, &server, &members).await;
+}
+
+async fn assert_plex_collection_tag_updates(
+    pool: &SqlitePool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    server: &MockServer,
+    members: &httpmock::Mock<'_>,
+) {
+    let owned = common::collection_tag_rows(pool, "plex/collection").await;
+    assert_eq!(owned.len(), 2);
+    assert!(owned
+        .iter()
+        .all(|(_, name, key)| name == "Favorites" && key == "900"));
+    sqlx::query(
+        r#"INSERT INTO "Tag" ("Name", "ExternalCollectionId", "ExternalTypeId", "MovieMetadataId")
+        SELECT 'Favorites', ?, '319', "Id" FROM "MovieMetadata" WHERE "MovieId" IN (SELECT "MediaItemId" FROM "CollectionItem") ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind("900")
+    .execute(pool)
+    .await
+    .unwrap();
+    let protected = common::collection_tag_rows(pool, "319").await;
+    sync_plex_collection_library(pool, service, config, 1, "4")
+        .await
+        .unwrap();
+    assert_eq!(
+        common::collection_tag_rows(pool, "plex/collection").await,
+        owned
+    );
+    members.delete_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET).path("/library/collections/900/children");
+            then.status(200)
+                .json_body(json!({"MediaContainer": {"totalSize": 0, "Metadata": []}}));
+        })
+        .await;
+    sync_plex_collection_library(pool, service, config, 1, "4")
+        .await
+        .unwrap();
+    assert!(common::collection_tag_rows(pool, "plex/collection")
+        .await
+        .is_empty());
+    assert_eq!(common::collection_tag_rows(pool, "319").await, protected);
+    assert_eq!(count(pool, "CollectionItem").await, 0);
 }
 
 async fn mock_plex_movie_page(server: &MockServer) {
@@ -952,13 +1137,15 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/sections/2/all")
+                .query_param_missing("network")
                 .header("Accept", "application/json")
                 .header("X-Plex-Token", "plex-token");
             then.status(200).json_body(json!({
                 "MediaContainer": {
                     "totalSize": 1,
                     "Metadata": [
-                        { "key": "/library/metadata/200", "title": "Example Show", "updatedAt": 1 }
+                        { "key": "/library/metadata/200", "title": "Example Show", "updatedAt": 1,
+                          "Label": [{ "id": 7, "tag": "Show label" }] }
                     ]
                 }
             }));
@@ -978,7 +1165,8 @@ async fn mock_plex_show_pages(server: &MockServer) {
                             "key": "/library/metadata/201",
                             "title": "Season 1",
                             "index": 1,
-                            "updatedAt": 2
+                            "updatedAt": 2,
+                            "Label": [{ "id": "8", "tag": "Season label" }]
                         }
                     ]
                 }
@@ -1008,15 +1196,10 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .await;
 }
 
-/// Exercises real-world Plex collection response shapes that the mock test
-/// above does not: paginated `/library/all?type=18` results, unicode in
-/// collection titles, mixed `type` values for collection members, and a
-/// member with a redirect-style `ratingKey`-only key. Asserts that the sync
-/// projects collections deterministically and that pagination is honored
-/// (Plex caps each page at 100, so a totalSize of 150 must trigger a second
-/// fetch).
+/// Covers Unicode collection names and mixed movie/show member types. Unknown
+/// local member IDs are skipped without preventing known members from syncing.
 #[tokio::test]
-async fn plex_sync_paginates_collection_list_and_handles_mixed_member_types() {
+async fn plex_sync_handles_unicode_collection_names_and_mixed_member_types() {
     let server = MockServer::start_async().await;
     mock_plex_collection_movie_pages(&server).await;
 
@@ -1567,4 +1750,93 @@ async fn plex_collection_rows(pool: &SqlitePool) -> serde_json::Value {
             })
             .collect(),
     )
+}
+
+#[tokio::test]
+async fn plex_collection_identity_isolates_servers_with_the_same_key_and_name() {
+    let server = MockServer::start_async().await;
+    mock_plex_collection_movie_pages(&server).await;
+    let (collections, members) = mock_plex_collection_pages(&server).await;
+
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 2, 99, "4", false)
+        .await
+        .unwrap();
+    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4", false)
+        .await
+        .unwrap();
+
+    for source in [1, 2, 1, 2] {
+        sync_plex_collection_library(&pool, &service, &config, source, "4")
+            .await
+            .unwrap();
+    }
+    common::assert_source_owned_collections(&pool, "PlexCollection", "plex/collection", 2).await;
+    let tags = common::collection_tag_rows(&pool, "plex/collection").await;
+    common::add_foreign_collection_member(&pool, "PlexCollection").await;
+    sync_plex_collection_library(&pool, &service, &config, 1, "4")
+        .await
+        .unwrap();
+    assert_eq!(
+        common::collection_tag_rows(&pool, "plex/collection").await,
+        tags
+    );
+    collections.assert_calls_async(5).await;
+    members.assert_calls_async(5).await;
+}
+
+async fn mock_plex_collection_pages(
+    server: &MockServer,
+) -> (httpmock::Mock<'_>, httpmock::Mock<'_>) {
+    let collections = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("type", "18")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        {
+                            "ratingKey": "900",
+                            "title": "Favorites",
+                            "updatedAt": 5,
+                            "librarySectionId": 4
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/collections/900/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        { "key": "/library/metadata/400", "type": "movie" },
+                        { "key": "/library/metadata/401", "type": "movie" }
+                    ]
+                }
+            }));
+        })
+        .await;
+
+    (collections, members)
 }

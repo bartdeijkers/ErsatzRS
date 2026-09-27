@@ -460,9 +460,8 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_legacy
     .await?;
     let languages = load_show_languages(&state.pool, id).await?;
 
-    // Tags split into plain tags vs Plex "network" tags, mirroring
-    // `Television/Mapper.cs` (`ExternalTypeId` is null/blank for tags,
-    // `Tag.PlexNetworkTypeId` for networks).
+    // Match Television/Mapper.cs and Tag.IsSearchTag: typed labels and
+    // collections remain tags; networks and NFO countries have separate fields.
     let tag_rows = sqlx::query(
         r#"SELECT COALESCE("Name", '') AS "Name",
                   COALESCE("ExternalTypeId", '') AS "ExternalTypeId"
@@ -479,10 +478,10 @@ pub(in crate::admin::server_fns::media_browser) async fn get_show_details_legacy
             continue;
         }
         let external: String = r.try_get("ExternalTypeId").unwrap_or_default();
-        if external.trim().is_empty() {
-            tags.push(name);
-        } else if external == PLEX_NETWORK_TYPE_ID {
+        if external == PLEX_NETWORK_TYPE_ID {
             networks.push(name);
+        } else if external != "nfo/country" {
+            tags.push(name);
         }
     }
 
@@ -1363,7 +1362,13 @@ pub(in crate::admin::server_fns::media_browser) async fn load_strings(
     // `table` and `column` are private constants supplied by the call sites
     // in this module; not user input. Identifiers are inlined because the
     // sqlx query cache uses the rendered SQL as the key.
-    let sql = format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ? ORDER BY "Name""#);
+    let tag_filter = if table == r#""Tag""# {
+        r#" AND ("ExternalTypeId" IS NULL OR "ExternalTypeId" NOT IN ('319', 'nfo/country'))"#
+    } else {
+        ""
+    };
+    let sql =
+        format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ?{tag_filter} ORDER BY "Name""#);
     let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(metadata_id)
         .fetch_all(pool)

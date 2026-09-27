@@ -51,7 +51,7 @@ pub use metadata::SqliteMetadataRepository;
 pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
 pub use saved_search::SqliteSavedSearchRepository;
-pub use scheduling::SqliteSchedulingContentRepository;
+pub use scheduling::{ClassicMediaDependencies, SqliteSchedulingContentRepository};
 use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;

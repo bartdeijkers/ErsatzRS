@@ -313,38 +313,7 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
 async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
     let server = MockServer::start_async().await;
     mock_movie(&server).await;
-    let collections = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "collections-root")
-                .query_param("includeItemTypes", "BoxSet");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    { "Name": "Favorites", "Id": "collection-1", "Etag": "collection-etag" }
-                ]
-            }));
-        })
-        .await;
-    let members = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "collection-1")
-                .query_param("includeItemTypes", "Movie,Series,Season,Episode");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    {
-                        "Id": "movie-1",
-                        "Type": "Movie",
-                        "LocationType": "FileSystem"
-                    }
-                ]
-            }));
-        })
-        .await;
+    let (collections, members) = mock_jellyfin_collection_pages(&server).await;
 
     let pool = common::test_db().await;
     let service = JellyfinService::new();
@@ -352,6 +321,9 @@ async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
         address: server.base_url(),
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
+    sync_jellyfin_movie_library(&pool, &service, &config, 2, 99, "library-1", false)
+        .await
+        .unwrap();
     sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
@@ -361,12 +333,52 @@ async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
         .unwrap();
 
     assert_eq!(synced, 1);
+    common::assert_collection_member_source(&pool, 1).await;
     assert_eq!(count(&pool, "Collection").await, 1);
     assert_eq!(count(&pool, "JellyfinCollection").await, 1);
     assert_eq!(count(&pool, "CollectionItem").await, 1);
     insta::assert_json_snapshot!(jellyfin_collection_rows(&pool).await);
     collections.assert_async().await;
     members.assert_async().await;
+    let owned = common::collection_tag_rows(&pool, "jellyfin/collection").await;
+    assert_eq!(owned.len(), 1);
+    assert!(owned
+        .iter()
+        .all(|(_, name, key)| name == "Favorites" && key == "collection-1"));
+    sqlx::query(
+        r#"INSERT INTO "Tag" ("Name", "ExternalCollectionId", "ExternalTypeId", "MovieMetadataId")
+        SELECT 'Favorites', ?, '319', "Id" FROM "MovieMetadata" WHERE "MovieId" IN (SELECT "MediaItemId" FROM "CollectionItem") ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind("collection-1")
+    .execute(&pool)
+    .await
+    .unwrap();
+    let protected = common::collection_tag_rows(&pool, "319").await;
+    sync_jellyfin_collection_library(&pool, &service, &config, 1, "collections-root")
+        .await
+        .unwrap();
+    assert_eq!(
+        common::collection_tag_rows(&pool, "jellyfin/collection").await,
+        owned
+    );
+    members.delete_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "collection-1");
+            then.status(200)
+                .json_body(json!({"TotalRecordCount": 0, "Items": []}));
+        })
+        .await;
+    sync_jellyfin_collection_library(&pool, &service, &config, 1, "collections-root")
+        .await
+        .unwrap();
+    assert!(common::collection_tag_rows(&pool, "jellyfin/collection")
+        .await
+        .is_empty());
+    assert_eq!(common::collection_tag_rows(&pool, "319").await, protected);
+    assert_eq!(count(&pool, "CollectionItem").await, 0);
 }
 
 #[tokio::test]
@@ -1474,4 +1486,82 @@ async fn assert_provider_retrieval_fails_closed(pool: &SqlitePool, server: &Mock
         rejected.delete_async().await;
     }
     assert_eq!(unexpected.calls_async().await, 0);
+}
+
+#[tokio::test]
+async fn jellyfin_collection_identity_isolates_servers_with_the_same_key_and_name() {
+    let server = MockServer::start_async().await;
+    mock_movie(&server).await;
+    let (collections, members) = mock_jellyfin_collection_pages(&server).await;
+
+    let pool = common::test_db().await;
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: server.base_url(),
+        authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
+    };
+    sync_jellyfin_movie_library(&pool, &service, &config, 2, 99, "library-1", false)
+        .await
+        .unwrap();
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+
+    for source in [1, 2, 1, 2] {
+        sync_jellyfin_collection_library(&pool, &service, &config, source, "collections-root")
+            .await
+            .unwrap();
+    }
+    common::assert_source_owned_collections(&pool, "JellyfinCollection", "jellyfin/collection", 1)
+        .await;
+    let tags = common::collection_tag_rows(&pool, "jellyfin/collection").await;
+    common::add_foreign_collection_member(&pool, "JellyfinCollection").await;
+    sync_jellyfin_collection_library(&pool, &service, &config, 1, "collections-root")
+        .await
+        .unwrap();
+    assert_eq!(
+        common::collection_tag_rows(&pool, "jellyfin/collection").await,
+        tags
+    );
+    collections.assert_calls_async(5).await;
+    members.assert_calls_async(5).await;
+}
+
+async fn mock_jellyfin_collection_pages(
+    server: &MockServer,
+) -> (httpmock::Mock<'_>, httpmock::Mock<'_>) {
+    let collections = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "collections-root")
+                .query_param("includeItemTypes", "BoxSet");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    { "Name": "Favorites", "Id": "collection-1", "Etag": "collection-etag" }
+                ]
+            }));
+        })
+        .await;
+    let members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "collection-1")
+                .query_param("includeItemTypes", "Movie,Series,Season,Episode");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Id": "movie-1",
+                        "Type": "Movie",
+                        "LocationType": "FileSystem"
+                    }
+                ]
+            }));
+        })
+        .await;
+
+    (collections, members)
 }

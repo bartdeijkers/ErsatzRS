@@ -135,6 +135,8 @@ pub struct MovieNfo {
     pub genres: Vec<String>,
     /// Tag rows.
     pub tags: Vec<String>,
+    /// Production countries from repeated `<country>` elements.
+    pub countries: Vec<String>,
     /// Studio rows.
     pub studios: Vec<String>,
     /// Publisher/music-label rows (ErsatzRS extension).
@@ -877,6 +879,8 @@ struct RawMovieNfo {
     genres: Vec<String>,
     #[serde(rename = "tag")]
     tags: Vec<String>,
+    #[serde(rename = "country")]
+    countries: Vec<String>,
     #[serde(rename = "studio")]
     studios: Vec<String>,
     #[serde(rename = "label")]
@@ -906,6 +910,7 @@ impl From<RawMovieNfo> for MovieNfo {
             premiered: parse_datetime(value.premiered),
             genres: value.genres,
             tags: value.tags,
+            countries: value.countries,
             studios: value.studios,
             music_labels: value.music_labels,
             languages: value.languages,

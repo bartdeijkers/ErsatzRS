@@ -343,3 +343,101 @@ pub async fn seed_collection_target(pool: &SqlitePool) {
 pub fn collection_type() -> CollectionType {
     CollectionType::Collection
 }
+
+/// Inspect typed tag identity through the persisted provider projection.
+///
+/// # Panics
+///
+/// Panics when the fixture database cannot read the expected typed tag rows.
+pub async fn collection_tag_rows(pool: &SqlitePool, owner: &str) -> Vec<(i64, String, String)> {
+    sqlx::query_as(
+        r#"SELECT "Id", "Name", "ExternalCollectionId" FROM "Tag"
+        WHERE "ExternalTypeId" = ? ORDER BY "Id""#,
+    )
+    .bind(owner)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+/// Assert that collection membership stays within one provider source.
+///
+/// # Panics
+/// Panics when the query fails or membership belongs to another source.
+pub async fn assert_collection_member_source(pool: &SqlitePool, expected: i64) {
+    let sources: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT DISTINCT l."MediaSourceId"
+        FROM "CollectionItem" ci JOIN "MediaItem" m ON m."Id" = ci."MediaItemId"
+        JOIN "LibraryPath" p ON p."Id" = m."LibraryPathId"
+        JOIN "Library" l ON l."Id" = p."LibraryId""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        sources,
+        vec![expected],
+        "collection members belong to the requested server"
+    );
+}
+
+/// Verify that equal provider IDs/names produce independent collections and tags.
+///
+/// # Panics
+/// Panics for an unsupported fixture table, failed query or ownership mismatch.
+pub async fn assert_source_owned_collections(
+    pool: &SqlitePool,
+    table: &str,
+    tag_type: &str,
+    members_per_source: usize,
+) {
+    assert!(matches!(
+        table,
+        "PlexCollection" | "JellyfinCollection" | "EmbyCollection"
+    ));
+    let rows: Vec<(i64, i64, i64, String, String)> =
+        sqlx::query_as(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT p."Id", p."MediaSourceId", l."MediaSourceId", p."Name", c."Name"
+            FROM "{table}" p JOIN "Collection" c ON c."Id" = p."Id"
+            JOIN "CollectionItem" ci ON ci."CollectionId" = p."Id"
+            JOIN "MediaItem" m ON m."Id" = ci."MediaItemId"
+            JOIN "LibraryPath" lp ON lp."Id" = m."LibraryPathId"
+            JOIN "Library" l ON l."Id" = lp."LibraryId" ORDER BY p."Id""#
+        )))
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), members_per_source * 2);
+    let ids: std::collections::BTreeSet<_> = rows.iter().map(|row| row.0).collect();
+    assert_eq!(ids.len(), 2);
+    let display_names: std::collections::BTreeSet<_> = rows.iter().map(|row| &row.4).collect();
+    assert_eq!(display_names.len(), 2);
+    for (_, owner, member_source, provider_name, _) in rows {
+        assert_eq!(owner, member_source);
+        assert_eq!(provider_name, "Favorites");
+    }
+    let tags = collection_tag_rows(pool, tag_type).await;
+    assert_eq!(tags.len(), members_per_source * 2);
+    assert!(tags.iter().all(|(_, name, _)| name == "Favorites"));
+}
+
+/// Model retained membership that predates source isolation without touching tags.
+///
+/// # Panics
+/// Panics for an unsupported fixture table or a failed fixture insert.
+pub async fn add_foreign_collection_member(pool: &SqlitePool, table: &str) {
+    assert!(matches!(
+        table,
+        "PlexCollection" | "JellyfinCollection" | "EmbyCollection"
+    ));
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+        r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId")
+        SELECT owner."Id", ci."MediaItemId" FROM "{table}" owner
+        JOIN "{table}" other ON other."MediaSourceId" = 2
+        JOIN "CollectionItem" ci ON ci."CollectionId" = other."Id"
+        WHERE owner."MediaSourceId" = 1 ORDER BY ci."Id" LIMIT 1"#
+    )))
+    .execute(pool)
+    .await
+    .unwrap();
+}

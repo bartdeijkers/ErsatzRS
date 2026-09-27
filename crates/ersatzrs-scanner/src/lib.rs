@@ -4178,6 +4178,14 @@ async fn enrich_movie_metadata(
     let languages = union_facet_values(&explicit_languages, &audio_stream_languages(probed));
     replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &genres).await?;
     replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &tags).await?;
+    ersatzrs_infra::metadata::replace_movie_countries(
+        tx,
+        metadata_id,
+        movie_nfo
+            .as_ref()
+            .map_or(&[], |nfo| nfo.countries.as_slice()),
+    )
+    .await?;
     replace_strings(tx, "Studio", "MovieMetadataId", metadata_id, &studios).await?;
     replace_strings(
         tx,
@@ -7725,6 +7733,69 @@ defaults:
         use sqlx::{Executor, Row, SqlitePool};
         use std::path::Path;
         use tempfile::TempDir;
+
+        #[tokio::test]
+        async fn country_refresh_preserves_equal_name_tags_and_other_producers() {
+            let temp = TempDir::new().expect("temp dir");
+            let movie_path = temp.path().join("Film.mkv");
+            let sidecar = movie_path.with_extension("nfo");
+            let pool = test_db().await;
+            let library = seed_movie_library(&pool, temp.path()).await;
+            let movie = seed_movie(&pool, library.id).await;
+            std::fs::write(&sidecar, "<movie><tag>France</tag><country> France </country><country>France</country><country>Japan</country></movie>")
+                .expect("sidecar");
+            let metadata = enrich_once(&pool, movie, &library, &movie_path).await;
+            let first = country_rows(&pool, metadata).await;
+            assert_eq!(
+                first
+                    .iter()
+                    .map(|(_, name)| name.as_str())
+                    .collect::<Vec<_>>(),
+                ["France", "Japan"]
+            );
+            sqlx::query(r#"INSERT INTO "Tag" ("Name", "MovieMetadataId", "ExternalTypeId", "ExternalCollectionId") VALUES ('France', ?, 'plex/collection', '1')"#)
+                .bind(metadata).execute(&pool).await.expect("protected collection");
+            let protected: i64 = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "Tag" WHERE "ExternalTypeId" = 'plex/collection'"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("protected id");
+            enrich_once(&pool, movie, &library, &movie_path).await;
+            assert_eq!(country_rows(&pool, metadata).await, first);
+            std::fs::write(
+                &sidecar,
+                "<movie><tag>France</tag><country>Japan</country></movie>",
+            )
+            .expect("replace sidecar");
+            enrich_once(&pool, movie, &library, &movie_path).await;
+            assert_eq!(country_rows(&pool, metadata).await, vec![first[1].clone()]);
+            let plain: Vec<String> = sqlx::query_scalar(r#"SELECT "Name" FROM "Tag" WHERE "MovieMetadataId" = ? AND "ExternalTypeId" IS NULL"#)
+                .bind(metadata).fetch_all(&pool).await.expect("ordinary tags");
+            assert_eq!(plain, ["France"]);
+            std::fs::remove_file(&sidecar).expect("remove sidecar");
+            // A failed scan transaction must not publish the country removal.
+            let mut tx = pool.begin().await.expect("begin rollback");
+            enrich_movie_metadata(&mut tx, movie, &library, &movie_path, &probed_version())
+                .await
+                .expect("refresh");
+            tx.rollback().await.expect("rollback");
+            assert_eq!(country_rows(&pool, metadata).await, vec![first[1].clone()]);
+            enrich_once(&pool, movie, &library, &movie_path).await;
+            assert!(country_rows(&pool, metadata).await.is_empty());
+            let retained: i64 = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "Tag" WHERE "ExternalTypeId" = 'plex/collection'"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("retained collection");
+            assert_eq!(retained, protected);
+        }
+
+        async fn country_rows(pool: &SqlitePool, metadata: i64) -> Vec<(i64, String)> {
+            sqlx::query_as(r#"SELECT "Id", "Name" FROM "Tag" WHERE "MovieMetadataId" = ? AND "ExternalTypeId" = 'nfo/country' ORDER BY "Name""#)
+                .bind(metadata).fetch_all(pool).await.expect("countries")
+        }
 
         fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
             ersatzrs_infra::ffprobe::FfprobeMediaVersion {

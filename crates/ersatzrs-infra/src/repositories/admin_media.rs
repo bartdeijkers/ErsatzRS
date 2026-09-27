@@ -1148,10 +1148,10 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             if name.trim().is_empty() {
                 continue;
             }
-            if external.trim().is_empty() {
-                tags.push(name);
-            } else if external == "319" {
+            if external == "319" {
                 networks.push(name);
+            } else if external != "nfo/country" {
+                tags.push(name);
             }
         }
         let season_rows = sqlx::query(

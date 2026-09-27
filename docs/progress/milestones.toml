@@ -11145,6 +11145,119 @@ termination) and zero retries are unchanged. Full diff/base fixture/native
 runner review and structured validation pass; no runtime rerun is warranted.
 Pin/ledger advance to 165c39ec in the local documentation commit, followed by
 clean reference alignment. Row 129 and window gates/push/CI remain due.
+Row 129 audit is in progress. Native shared Tag replacement deletes all rows for
+one metadata owner, Plex labels lose external identity, collection membership
+sync lacks typed Tag projection, and show/search filtering does not implement
+the new ownership contract. Scanner and Search index parity have explicit debts.
+The source map records upstream groups, confirmed native gaps, preservation
+invariants and required real SQLite/provider/search evidence. Finish per-file
+source and producer/consumer mapping before implementation; no row verdict or
+pin advance. Production data and existing provider credentials are untouched.
+First row129 regression reproduces deletion of five other-producer tags during
+ordinary replacement (2830c2bb-0af8-4282-92ed-db35b82d3036). The shared writer
+now restricts plain tag deletion to rows with NULL type and external collection
+ID. All 19 selected metadata tests pass (6e6f9980-6dca-48d2-8510-4c415ce38c17),
+including preserved row identities, same-name tags, legacy external IDs and an
+empty ordinary refresh. Strict infra library/test Clippy passes. This is partial:
+typed provider/collection/network writes, backfill, NFO country/search projection
+and full row acceptance remain. Pin stays at row128; no commit/push for row129.
+Plex movie/episode/other-video label projection and reconciliation now retain
+external IDs and type ownership. Unchanged labels retain row identities;
+rename/removal and duplicate input handling preserve other producers. All 15
+Plex service tests pass (e22b5f63-3e2d-4fc9-aa56-4d6059d79123), including HTTP
+numeric/string ID projection, same-name/external-ID collisions across five
+other owners, repeated scans and a real SQLite restart. Existing MusicLabel
+projection is preserved. Corrected strict infra library/Plex service lint and
+formatting pass after removing an unused mutable binding. Show/season labels, collection/network producers,
+legacy migration, country/search/UI and complete row acceptance remain.
+Plex show/season labels now reach owned Tag rows through metadata creation and
+scoped reconciliation. Existing metadata fields remain intact; repeated scans
+retain label row IDs and one metadata row per container. The added provider
+regression removes legacy stale labels while preserving network/collection
+rows. All 16 Plex service tests pass (4b246622-6c02-4224-97c6-9eeb5919ffbf).
+Fixture build/token mismatches were corrected without weakening assertions.
+Strict infra library/Plex service lint passes. Network endpoint/membership behavior is mapped;
+collection/network producers, backfill and country/search acceptance remain.
+Collection membership writes now maintain typed owned tags transactionally for
+Plex/Jellyfin/Emby. Prior/current metadata owners bound reconciliation; unchanged
+tag IDs survive and empty membership removes only this collection's tags.
+All 35 provider tests pass (38030e5f-ed31-4351-a87b-be25c4a329c3). All three
+collection fixtures assert external identity, repeated-sync stability and empty
+membership cleanup while preserving a network tag with equal name/external ID.
+SQLite query-plan inspection on the initial schema confirms metadata/Tag FK
+indexes and CollectionItem primary indexes for all five supported metadata kinds.
+Strict infra library/test lint passes after fixture documentation and test-helper extraction. Deleted
+collection reconciliation, source collisions, network scanning, backfill and
+country/search/UI acceptance remain; row129 is not ready to commit.
+Provider collection member lookups now require the requested MediaSourceId.
+Regressions reproduced wrong-source membership in all three providers before
+the fix; all 35 provider tests pass (0ef871b0-c382-4e77-acc8-a8552bd58023).
+Strict infra library/test lint passes after extracting the common source
+assertion. Collection container identity remains globally keyed and still needs
+source isolation before row acceptance.
+Movie NFO countries now persist with nfo/country ownership and stable unchanged
+IDs. The regression failed before the fix (9409eb43-09c0-4f96-8ace-3818bf01c14c);
+ten selected movie tests pass (ee362c7f-2dd5-4f9c-b617-112bb634645b), including
+equal-name tags, sidecar removal and transaction rollback. Country search and
+ownership-aware tag projection pass all 35 scheduling repository tests
+(bde8da88-00dd-4d6a-a06f-cecb00368855) and 18 core search tests. Movie/show detail
+tags retain typed labels/collections while excluding network/country rows.
+Browser proof and integrated producer acceptance remain open. ADR 0104 is a
+Proposed source-owned collection identity/removal design, awaiting maintainer
+acceptance; no schema implementation or row verdict is claimed.
+Plex network scanning is wired into TV-library dispatch. Complete paginated
+discovery precedes library-scoped network name/type reconciliation, retaining
+other owners and unchanged IDs; LastNetworksScan shares the write transaction.
+All 25 Plex service/source tests pass (2ac1d91c-bbc8-412a-b4e5-0b2a2484fc9f):
+cross-server key collisions, unknown shows, repeat stability, 101-member paging,
+HTTP/incomplete-page preservation, SQL rollback and normal library dispatch.
+Scheduling queries immediately reflect network membership changes. Live server,
+integrated continuity and browser acceptance remain unclaimed.
+Network isolation also passes with a same-source second library and a NULL
+legacy provider key (five focused tests, 22d7342e-5bc5-4ad9-9693-5cba7f958d42).
+The scanner CLI now invokes the same network refresh after TV metadata; strict
+infra/scanner lint passes. All 40 web media-browser tests pass
+(7fbc56e0-93a8-4520-a5fe-9efebc117210). Browser verification reproduced a no-JS
+/search Loading state in Chromium and Firefox; route-local InOrder SSR fixes
+it. All four hydrated/no-JS tag-ownership cases pass with unchanged assertions
+in test-results/ucu08-row129-tags-final. The runner built matched SSR/WASM assets
+and used the checksum-reverified FFmpeg v2.0.2 package on an isolated database.
+Collection identity/deletion, legacy backfill and final integrated acceptance
+remain; ADR 0104 is still Proposed and the pin remains row128.
+Combined strict infra/scanner/web library, test and binary lint passes after
+the network, CLI and route-local SSR changes. No UCU-08 closeout or CI claim is
+made; collection identity/deletion and legacy backfill remain open.
+Row 129 local identity work: ADR 0104 remains Proposed. Three migration tests
+pass for conservative source backfill, duplicate/ambiguous legacy preservation,
+rollback, restart and retained collection IDs. Two source-owned upsert tests
+pass, and eight provider collection cases pass after reproducing and fixing
+foreign-source tag deletion from retained membership. Exact Nextest evidence
+and remaining complete-root discovery/removal, legacy tag backfill and
+integrated scheduling acceptance are in the row source map. No row verdict,
+pin advance, UCU-08 push or CI claim follows from this partial evidence.
+Row 129 legacy tag backfill now has six passing SQLite migration tests,
+including the combined pre-ownership upgrade, ten metadata kinds, source/provider
+ID collisions, existing type preservation, ambiguous-owner retention, rollback
+and restart (40c2ea4a-a22c-43c5-b165-0c133e03ce61). ADR 0104 documents the
+source-isolation adaptation and remains Proposed. Complete-root discovery/removal,
+affected-playout refresh and integrated continuity evidence remain before verdict.
+Row 129 complete-root reconciliation now passes 17 focused collection cases
+(ec50cfad-b961-4d39-95c4-5c4a0025ca1e). Identities, membership, tags and discovery
+claims publish atomically after complete raw pagination. Tests cover multiple
+roots, removal/rediscovery, persisted restart, malformed/failed/truncated input,
+SQL rollback and stream/reference preservation. A repeated-scan regression
+reproduced lost member IDs/audio/subtitle overrides in all three providers;
+retained rows now survive. Durable dependency-scoped playout refresh, cancellation
+and integrated scheduling continuity remain; ADR 0104 stays Proposed and pin128
+is unchanged. The existing scan_refresh durable intent path is the next target.
+Row 129 final acceptance supersedes those interim findings: maintainer accepted
+ADR 0104 on 2026-09-27; verdict Adapt and pin 9067cde8. Durable publication and
+recovery, old/new dependency resolution, cancellation and three-provider restart
+continuity are complete. All 46 selected migration/collection/network/continuity
+cases pass (657deb15-c037-46b0-9470-2c7f4010d8a9); strict infra library/test Clippy
+passes. Chromium/Firefox hydrated/no-JS tag search passes all four cases in
+test-results/ucu08-row129-tags-final. The row source map owns the full evidence.
+Row 130 is next; milestone-wide gates, push and exact-SHA CI remain open.
 """
 
 [[milestone]]

@@ -492,6 +492,59 @@ async fn scheduling_repository_resolves_playlist_children_by_group_before_name()
 }
 
 #[tokio::test]
+async fn scheduling_search_separates_owned_tags_networks_and_countries() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Tag" ("Name", "MovieMetadataId", "ExternalTypeId") VALUES
+            ('Japan', 200, 'nfo/country'), ('MovieNetwork', 200, '319'),
+            ('Label', 200, 'plex/label'), ('Collection', 200, 'plex/collection');
+           INSERT INTO "Tag" ("Name", "ShowMetadataId", "ExternalTypeId") VALUES
+            ('ShowCollection', 100, 'jellyfin/collection'), ('France', 100, 'nfo/country');"#,
+    )
+    .await
+    .unwrap();
+    for (query, expected) in [
+        ("country:Japan", vec![20]),
+        ("country:Japan AND tag:Label AND tag:Collection", vec![20]),
+        ("tag:Japan", vec![]),
+        ("tag:MovieNetwork", vec![]),
+        ("network:MovieNetwork", vec![20]),
+        ("show_tag:ShowCollection", vec![13, 12]),
+        ("show_tag:Network", vec![]),
+        ("show_tag:France", vec![]),
+    ] {
+        let items = repos
+            .scheduling
+            .media_items_for_source(&SchedulingContentSource::Search(query.to_owned()))
+            .await
+            .unwrap();
+        assert_eq!(
+            items.iter().map(|item| item.id).collect::<Vec<_>>(),
+            expected,
+            "{query}"
+        );
+    }
+    let show = repos
+        .admin_media
+        .get_show_detail_admin(10)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(show.tags, ["ShowCollection"]);
+    assert_eq!(show.networks, ["Network"]);
+    let movie = repos
+        .admin_media
+        .get_movie_detail_admin(20)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(movie.tags, ["Collection", "Festival", "Label"]);
+}
+
+#[tokio::test]
 async fn scheduling_repository_searches_metadata_fields_and_expands_containers() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -1829,6 +1882,242 @@ async fn classic_scan_impact_resolver_uses_current_dependency_graph_not_runtime_
         .await
         .unwrap()
         .is_empty());
+
+    let before = repos.scheduling.classic_media_dependencies().await.unwrap();
+    assert_eq!(
+        before.affected_playouts(&BTreeSet::from([20])),
+        [1101, 1103, 1104, 1109]
+    );
+    assert_eq!(
+        before.affected_playouts(&BTreeSet::from([21])),
+        [1102, 1103, 1104, 1105, 1107, 1109]
+    );
+    assert_eq!(
+        before.affected_playouts(&BTreeSet::from([50])),
+        [1106, 1108, 1110]
+    );
+    assert!(before.affected_playouts(&BTreeSet::from([999])).is_empty());
+
+    // Removing a provider member must not erase its old dependency evidence.
+    pool.execute(r#"DELETE FROM "CollectionItem" WHERE "MediaItemId" = 20"#)
+        .await
+        .unwrap();
+    let after = repos.scheduling.classic_media_dependencies().await.unwrap();
+    assert!(after.affected_playouts(&BTreeSet::from([20])).is_empty());
+    assert_eq!(
+        before.affected_playouts(&BTreeSet::from([20])),
+        [1101, 1103, 1104, 1109]
+    );
+
+    // A metadata rename can remove a smart collection match; preserve the old
+    // direct, nested, alternate-schedule, rerun and filler dependencies.
+    pool.execute(r#"UPDATE "MovieMetadata" SET "Title" = 'Missing' WHERE "MovieId" = 21"#)
+        .await
+        .unwrap();
+    let renamed = repos.scheduling.classic_media_dependencies().await.unwrap();
+    assert!(renamed.affected_playouts(&BTreeSet::from([21])).is_empty());
+    assert_eq!(
+        before.affected_playouts(&BTreeSet::from([21])),
+        [1102, 1103, 1104, 1105, 1107, 1109]
+    );
+
+    sqlx::query(r#"INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, '60')"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Reintroduce the match through a global fallback shared by all Classic
+    // playouts, including schedules whose primary source is another library.
+    pool.execute(r#"UPDATE "MovieMetadata" SET "Title" = 'Bonus' WHERE "MovieId" = 21"#)
+        .await
+        .unwrap();
+    let global = repos.scheduling.classic_media_dependencies().await.unwrap();
+    assert_eq!(
+        global.affected_playouts(&BTreeSet::from([21])),
+        (1101..=1110).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn provider_collection_refresh_handoff_survives_restart_and_atomic_transfer_failure() {
+    use ersatzrs_infra::{db::begin_write, provider_collection_refresh, scan_refresh};
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        dir.path().join("refresh.db").display()
+    );
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&url)
+        .await
+        .unwrap();
+    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    let repos = seed_provider_refresh_fixture(&pool).await;
+    let changed = BTreeSet::from([20, 21]);
+    let before = repos.scheduling.classic_media_dependencies().await.unwrap();
+    assert_eq!(before.affected_playouts(&changed), [1101, 1102]);
+    let mut tx = begin_write(&pool).await.unwrap();
+    provider_collection_refresh::persist_resolution(&mut tx, &changed, &[1101, 1102])
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    assert_eq!(
+        provider_collection_refresh::resolve_pending(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+
+    let mut tx = begin_write(&pool).await.unwrap();
+    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "MediaItemId" = 20"#)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MovieMetadata" SET "Title" = 'Renamed' WHERE "MovieId" = 21"#)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    provider_collection_refresh::persist_resolution(
+        &mut tx,
+        &changed,
+        &before.affected_playouts(&changed),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert!(scan_refresh::pending_refreshes(&pool)
+        .await
+        .unwrap()
+        .is_empty());
+    pool.close().await;
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&url)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"CREATE TRIGGER fail_refresh_transfer BEFORE INSERT ON "ScanPlayoutRefreshIntent"
+        WHEN NEW."PlayoutId" = 1102 BEGIN SELECT RAISE(ABORT, 'synthetic transfer failure'); END"#,
+    )
+    .await
+    .unwrap();
+    assert!(provider_collection_refresh::resolve_pending(&pool)
+        .await
+        .is_err());
+    assert!(scan_refresh::pending_refreshes(&pool)
+        .await
+        .unwrap()
+        .is_empty());
+    pool.execute("DROP TRIGGER fail_refresh_transfer")
+        .await
+        .unwrap();
+    assert_eq!(
+        provider_collection_refresh::resolve_pending(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let pending = scan_refresh::pending_refreshes(&pool).await.unwrap();
+    assert_eq!(
+        pending
+            .iter()
+            .map(|work| work.playout_id)
+            .collect::<Vec<_>>(),
+        [1101, 1102, 1103]
+    );
+    assert!(pending
+        .iter()
+        .all(|work| work.reason
+            == ersatzrs_domain::ScanPlayoutRefreshReason::ProviderCollectionChanged));
+    assert_eq!(
+        provider_collection_refresh::resolve_pending(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        scan_refresh::pending_refreshes(&pool).await.unwrap(),
+        pending
+    );
+    assert_provider_refresh_coalesces(&pool).await;
+}
+
+async fn assert_provider_refresh_coalesces(pool: &SqlitePool) {
+    use ersatzrs_infra::{db::begin_write, scan_refresh};
+    let mut tx = begin_write(pool).await.unwrap();
+    scan_refresh::persist_unowned_refresh_intents(
+        &mut tx,
+        ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+        &[1101],
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let coalesced = scan_refresh::pending_refreshes(pool).await.unwrap();
+    assert_eq!(coalesced.len(), 3);
+    assert_eq!(
+        coalesced[0].reason,
+        ersatzrs_domain::ScanPlayoutRefreshReason::ContentMembershipMixed
+    );
+}
+
+async fn seed_provider_refresh_fixture(pool: &SqlitePool) -> Repositories {
+    pool.execute(
+        r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height")
+        VALUES (1, '1920x1080', 1920, 1080)"#,
+    )
+    .await
+    .unwrap();
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(pool).await;
+    pool.execute(
+        r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query")
+        VALUES (7, 'new match', 'title = Renamed')"#,
+    )
+    .await
+    .unwrap();
+    for (id, item) in [
+        (
+            1101,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                ..Default::default()
+            },
+        ),
+        (
+            1102,
+            ProgramScheduleItem {
+                collection_type: CollectionType::SmartCollection,
+                smart_collection_id: Some(2),
+                ..Default::default()
+            },
+        ),
+        (
+            1103,
+            ProgramScheduleItem {
+                collection_type: CollectionType::SmartCollection,
+                smart_collection_id: Some(7),
+                ..Default::default()
+            },
+        ),
+        (
+            1104,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Episode,
+                media_item_id: Some(13),
+                ..Default::default()
+            },
+        ),
+    ] {
+        seed_classic_impact_playout(&repos, pool, id, id + 100, item).await;
+    }
+    // Native admin creation stores numeric enum values; legacy fixtures may
+    // retain the textual representation. Both must receive refresh work.
+    pool.execute(r#"UPDATE "Playout" SET "ScheduleKind" = 1 WHERE "Id" = 1102"#)
+        .await
+        .unwrap();
+    repos
 }
 
 async fn seed_classic_impact_playout(

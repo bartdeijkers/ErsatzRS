@@ -2,17 +2,17 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..6f0449c2 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
 summary    = """
-176 rows: 128 reconciled, 48 pending.
-UCU-03/04/05 Complete; CI 36190815587 at 81bcd649.
+176 rows: 129 reconciled, 47 pending.
+UCU-03/04/05: CI 36190815587 at 81bcd649.
 99/102 Port: runtime, probe/cache, Docker Vulkan.
 100-101/103 N/A; 104 Covered; 105-107 Port: watermarks, images, on-demand.
-Row 108 Port: v2.0.2 published, hashes verified, managed default adopted.
+Row 108 Port: v2.0.2 published, hashes verified, default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
 green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
 UCU-07 Complete: CI 36321494841, b4d659eb.
-116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). Next 129.
+116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). Next: 130.
 
 UCU-02 Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.

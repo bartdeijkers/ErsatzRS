@@ -208,7 +208,14 @@ pub async fn replace_strings(
     metadata_id: i64,
     values: &[String],
 ) -> Result<()> {
-    let delete_sql = format!(r#"DELETE FROM "{table}" WHERE "{fk_column}" = ?"#);
+    // Ordinary library/NFO tags share this table with collection, network and
+    // country scanners. A plain-string refresh owns only untyped local rows.
+    let ownership = if table == "Tag" {
+        r#" AND "ExternalTypeId" IS NULL AND "ExternalCollectionId" IS NULL"#
+    } else {
+        ""
+    };
+    let delete_sql = format!(r#"DELETE FROM "{table}" WHERE "{fk_column}" = ?{ownership}"#);
     sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
@@ -228,6 +235,52 @@ pub async fn replace_strings(
             .execute(&mut **tx)
             .await
             .repository()?;
+    }
+    Ok(())
+}
+
+/// Reconcile movie NFO countries while preserving tags owned by other producers.
+/// Existing country rows retain their IDs when their names are unchanged.
+///
+/// # Errors
+/// Returns an error when a tag query or write fails in the caller's transaction.
+pub async fn replace_movie_countries(
+    tx: &mut Transaction<'_, Db>,
+    metadata_id: i64,
+    countries: &[String],
+) -> Result<()> {
+    let mut wanted: std::collections::BTreeSet<String> =
+        ersatzrs_core::metadata_facets::normalize_facet_values(countries)
+            .into_iter()
+            .collect();
+    let existing = sqlx::query(
+        r#"SELECT "Id", "Name" FROM "Tag" WHERE "MovieMetadataId" = ?
+           AND "ExternalTypeId" = 'nfo/country' ORDER BY "Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(&mut **tx)
+    .await
+    .repository()?;
+    for row in existing {
+        let name: Option<String> = row.try_get("Name").repository()?;
+        if !name.as_ref().is_some_and(|name| wanted.remove(name)) {
+            sqlx::query(r#"DELETE FROM "Tag" WHERE "Id" = ?"#)
+                .bind(row.try_get::<i64, _>("Id").repository()?)
+                .execute(&mut **tx)
+                .await
+                .repository()?;
+        }
+    }
+    for name in wanted {
+        sqlx::query(
+            r#"INSERT INTO "Tag" ("Name", "MovieMetadataId", "ExternalTypeId")
+               VALUES (?, ?, 'nfo/country')"#,
+        )
+        .bind(name)
+        .bind(metadata_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
     }
     Ok(())
 }
@@ -905,6 +958,66 @@ fn encode_datetime(value: DateTime<Utc>) -> String {
 mod tests {
     use super::*;
     use chrono::TimeZone as _;
+
+    #[tokio::test]
+    async fn ordinary_tag_refresh_preserves_other_producers() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"CREATE TABLE "Tag" (
+                "Id" INTEGER PRIMARY KEY, "Name" TEXT NOT NULL,
+                "MovieMetadataId" INTEGER, "ExternalCollectionId" TEXT,
+                "ExternalTypeId" TEXT
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for (id, name, external_id, owner) in [
+            (1, "old", None, None),
+            (2, "shared", None, Some("319")),
+            (3, "shared", Some("7"), Some("plex/collection")),
+            (4, "shared", Some("7"), Some("plex/label")),
+            (5, "NL", None, Some("nfo/country")),
+            (6, "legacy collection", Some("8"), None),
+        ] {
+            sqlx::query(r#"INSERT INTO "Tag" VALUES (?, ?, 42, ?, ?)"#)
+                .bind(id)
+                .bind(name)
+                .bind(external_id)
+                .bind(owner)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        for values in [vec!["shared".to_owned(), "shared".to_owned()], vec![]] {
+            let mut tx = crate::db::begin_write(&pool).await.unwrap();
+            replace_strings(&mut tx, "Tag", "MovieMetadataId", 42, &values)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            let retained: Vec<i64> = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "Tag"
+                   WHERE "ExternalTypeId" IS NOT NULL OR "ExternalCollectionId" IS NOT NULL
+                   ORDER BY "Id""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(retained, vec![2, 3, 4, 5, 6]);
+            let ordinary: Vec<String> = sqlx::query_scalar(
+                r#"SELECT "Name" FROM "Tag"
+                   WHERE "ExternalTypeId" IS NULL AND "ExternalCollectionId" IS NULL"#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(ordinary, values.into_iter().take(1).collect::<Vec<_>>());
+        }
+    }
 
     fn artwork_ref(kind: i32, path: &str, day: u32) -> ArtworkRef {
         ArtworkRef {

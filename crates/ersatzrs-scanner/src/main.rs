@@ -296,7 +296,7 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             .await?
         }
         2 => {
-            sync_plex_show_library(
+            let count = sync_plex_show_library(
                 pool,
                 &service,
                 &config,
@@ -305,7 +305,10 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
                 &library_key,
                 args.deep_scan,
             )
-            .await?
+            .await?;
+            ersatzrs_infra::plex::sync_plex_networks(pool, &service, &config, args.library_id)
+                .await?;
+            count
         }
         4 => {
             sync_plex_other_video_library(

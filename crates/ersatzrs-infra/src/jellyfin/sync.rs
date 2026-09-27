@@ -639,54 +639,93 @@ pub async fn sync_jellyfin_collection_library_with_progress<S>(
 where
     S: JellyfinServiceTrait,
 {
-    let mut synced = 0;
-    let mut pages = PageProgress::new(JELLYFIN_PAGE_SIZE);
-
+    use crate::provider_collections::{invalid_discovery, request, CompletePages};
+    let mut pages = CompletePages::new(JELLYFIN_PAGE_SIZE);
+    let mut gathered = Vec::new();
+    let mut keys = std::collections::HashSet::new();
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
     loop {
-        let page = service
-            .fetch_collection_page(config, parent_id, pages.start_index(), JELLYFIN_PAGE_SIZE)
-            .await?;
-        let total_record_count = page.total_record_count;
-        let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
-        pages.report_initial(progress);
-        for collection in &page.items {
-            let collection_id =
-                upsert_jellyfin_collection(pool, media_source_id, collection).await?;
-            let mut item_pages = PageProgress::new(JELLYFIN_PAGE_SIZE);
+        let page = request(service.fetch_collection_page(
+            config,
+            parent_id,
+            pages.start(),
+            JELLYFIN_PAGE_SIZE,
+        ))
+        .await?;
+        let more = pages.advance(page.total_record_count, page.received_count)?;
+        if page.received_count != page.items.len() {
+            return Err(invalid_discovery());
+        }
+        for collection in page.items {
+            if !keys.insert(collection.item_id.clone()) {
+                return Err(invalid_discovery());
+            }
+            let mut member_pages = CompletePages::new(JELLYFIN_PAGE_SIZE);
             let mut all_items = Vec::new();
-
             loop {
-                let items = service
-                    .fetch_collection_items_page(
-                        config,
-                        &collection.item_id,
-                        item_pages.start_index(),
-                        JELLYFIN_PAGE_SIZE,
-                    )
-                    .await?;
-                let item_total_count = items.total_record_count;
-                let item_page_len = i32::try_from(items.items.len()).unwrap_or(i32::MAX);
+                let items = request(service.fetch_collection_items_page(
+                    config,
+                    &collection.item_id,
+                    member_pages.start(),
+                    JELLYFIN_PAGE_SIZE,
+                ))
+                .await?;
+                let more_members =
+                    member_pages.advance(items.total_record_count, items.received_count)?;
                 all_items.extend(items.items);
-
-                if !item_pages.advance(item_page_len, item_total_count) {
+                if !more_members {
                     break;
                 }
             }
-
-            replace_collection_items(pool, collection_id, &all_items).await?;
-            synced += 1;
-            PageProgress::report(progress, synced, total_record_count);
+            gathered.push((collection, all_items));
         }
-
-        if !pages.advance(page_len, total_record_count) {
+        if more {
+            PageProgress::report(progress, gathered.len(), page.total_record_count);
+        }
+        if !more {
             break;
         }
     }
-
+    let dependencies = crate::repositories::SqliteSchedulingContentRepository::new(pool.clone())
+        .classic_media_dependencies()
+        .await?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    let before = crate::provider_collection_refresh::PublicationState::capture(
+        &mut tx,
+        crate::collection_tags::Provider::Jellyfin,
+        media_source_id,
+    )
+    .await?;
+    let mut discovered = Vec::new();
+    for (collection, items) in &gathered {
+        let id = upsert_jellyfin_collection(&mut tx, media_source_id, collection).await?;
+        replace_collection_items(&mut tx, id, media_source_id, items).await?;
+        discovered.push(id);
+    }
+    crate::provider_collections::reconcile_root(
+        &mut tx,
+        crate::collection_tags::Provider::Jellyfin,
+        media_source_id,
+        parent_id,
+        &discovered,
+    )
+    .await?;
+    let after = crate::provider_collection_refresh::PublicationState::capture(
+        &mut tx,
+        crate::collection_tags::Provider::Jellyfin,
+        media_source_id,
+    )
+    .await?;
+    before
+        .persist_changes(&mut tx, after, &dependencies)
+        .await?;
+    tx.commit().await.repository()?;
     if let Some(sink) = progress {
         sink.report(1.0);
     }
-    Ok(synced)
+    Ok(discovered.len())
 }
 
 /// Loads configuration from the database and synchronizes one Jellyfin library.

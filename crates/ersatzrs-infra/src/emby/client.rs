@@ -235,6 +235,7 @@ impl EmbyServiceTrait for EmbyService {
             .await?;
         Ok(EmbyCollectionPage {
             total_record_count: response.total_record_count,
+            received_count: response.items.len(),
             items: response
                 .items
                 .into_iter()
@@ -260,8 +261,22 @@ impl EmbyServiceTrait for EmbyService {
                 limit,
             )
             .await?;
+        if response.items.iter().any(|item| {
+            item.id.as_deref().is_none_or(|id| id.trim().is_empty())
+                || item
+                    .item_type
+                    .as_deref()
+                    .is_none_or(|kind| kind.trim().is_empty())
+                || (matches!(
+                    item.item_type.as_deref(),
+                    Some("Movie" | "Series" | "Season" | "Episode")
+                ) && item.location_type.is_none())
+        }) {
+            return Err(crate::provider_collections::invalid_discovery());
+        }
         Ok(EmbyCollectionMediaPage {
             total_record_count: response.total_record_count,
+            received_count: response.items.len(),
             items: response
                 .items
                 .into_iter()

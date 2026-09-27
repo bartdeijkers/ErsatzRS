@@ -1,5 +1,8 @@
 mod common;
 
+#[path = "scan_refresh_continuity/provider_collections.rs"]
+mod provider_collections;
+
 #[path = "scan_refresh_continuity/collection_identity.rs"]
 mod collection_identity;
 #[path = "scan_refresh_continuity/fixed_start_clock.rs"]

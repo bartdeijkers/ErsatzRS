@@ -148,12 +148,16 @@ pub struct EmbySeasonPage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbyCollectionPage {
     pub total_record_count: i32,
+    /// Number of raw response entries before supported-kind projection.
+    pub received_count: usize,
     pub items: Vec<EmbyCollectionItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbyCollectionMediaPage {
     pub total_record_count: i32,
+    /// Number of raw response entries before supported-kind projection.
+    pub received_count: usize,
     pub items: Vec<EmbyCollectionMediaItem>,
 }
 

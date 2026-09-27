@@ -100,7 +100,13 @@ pub(crate) async fn load_strings(
     column: &str,
     metadata_id: EntityId,
 ) -> Result<Vec<String>> {
-    let sql = format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ? ORDER BY "Name""#);
+    let tag_filter = if table == r#""Tag""# {
+        r#" AND ("ExternalTypeId" IS NULL OR "ExternalTypeId" NOT IN ('319', 'nfo/country'))"#
+    } else {
+        ""
+    };
+    let sql =
+        format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ?{tag_filter} ORDER BY "Name""#);
     sqlx::query_scalar(crate::db::assert_sql_safe(&sql))
         .bind(metadata_id)
         .fetch_all(pool)

@@ -148,12 +148,16 @@ pub struct JellyfinSeasonPage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JellyfinCollectionPage {
     pub total_record_count: i32,
+    /// Number of raw response entries before supported-kind projection.
+    pub received_count: usize,
     pub items: Vec<JellyfinCollectionItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JellyfinCollectionMediaPage {
     pub total_record_count: i32,
+    /// Number of raw response entries before supported-kind projection.
+    pub received_count: usize,
     pub items: Vec<JellyfinCollectionMediaItem>,
 }
 

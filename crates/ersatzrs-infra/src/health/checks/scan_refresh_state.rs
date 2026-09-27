@@ -75,6 +75,22 @@ impl HealthCheck for ScanRefreshStateHealthCheck {
             }
         }
 
+        let publications: Vec<String> =
+            sqlx::query_scalar(r#"SELECT "CreatedAt" FROM "ProviderCollectionRefreshResolution""#)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(sqlx_error)?;
+        for created_at in publications {
+            let created_at = crate::repositories::common::decode_datetime(
+                "provider collection refresh publication",
+                &created_at,
+            )
+            .map_err(|error| HealthCheckError::Database(error.to_string()))?;
+            if created_at <= stale_before {
+                issues.stale_resolutions += 1;
+            }
+        }
+
         let intents = sqlx::query(
             r#"SELECT "State", "UpdatedAt"
                FROM "ScanPlayoutRefreshIntent""#,

@@ -1,7 +1,7 @@
 feature    = 'Search index'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-web/src/admin/pages/search.rs`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0009', '0062', '0083']
 
 summary    = '''
@@ -34,3 +34,10 @@ patterns were found in that review. Limits: screenshots were English/dark-theme
 with synthetic artwork; light contrast was source-reviewed only, and no
 all-culture image/real-library cropping acceptance was claimed.
 '''
+
+[[debt]]
+id          = 'ucu-owned-tag-search-fields'
+description = 'UCU-08 row 129: typed labels/collections remain ordinary search tags while networks and NFO countries use separate fields. Core, SQLite search, detail projection and four browser cases pass locally; legacy backfill now passes migration coverage; producer integration and row review pass locally; ADR 0104 is accepted and row 129 is Adapt.'
+discovered  = '2026-09-27'
+resolved    = true
+evidence    = 'Movie NFO country persistence passes ten selected scanner movie tests, including rollback and equal-name producer isolation. All 35 scheduling repository tests pass (bde8da88-00dd-4d6a-a06f-cecb00368855), including country/tag/network separation and movie/show detail tags; 18 core search tests pass. All four Chromium/Firefox hydrated/no-JS cases pass in test-results/ucu08-row129-tags-final after route-local InOrder SSR fixed the reproduced no-JS Loading state. Legacy backfill passes six migration tests including source collisions, all metadata kinds and combined upgrade/restart; producer integration is verified and row 129 is reconciled under ucu-08; plans/upstream-catch-up.md owns the source map.'

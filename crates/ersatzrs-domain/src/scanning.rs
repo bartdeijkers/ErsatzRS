@@ -32,6 +32,12 @@ pub enum ScanPlayoutRefreshReason {
     RemoteStreamMembershipReordered,
     /// More than one bounded membership-change category applies.
     RemoteStreamMembershipMixed,
+    /// A native provider collection changed membership, order or searchable tags.
+    ProviderCollectionChanged,
+    /// Plex network membership changed searchable show or episode metadata.
+    ProviderNetworkChanged,
+    /// Coalesced native provider and remote-stream dependency changes.
+    ContentMembershipMixed,
 }
 
 impl ScanPlayoutRefreshReason {
@@ -45,6 +51,9 @@ impl ScanPlayoutRefreshReason {
             Self::RemoteStreamMembershipReidentified => "remote-stream-membership-reidentified",
             Self::RemoteStreamMembershipReordered => "remote-stream-membership-reordered",
             Self::RemoteStreamMembershipMixed => "remote-stream-membership-mixed",
+            Self::ProviderCollectionChanged => "provider-collection-changed",
+            Self::ProviderNetworkChanged => "provider-network-changed",
+            Self::ContentMembershipMixed => "content-membership-mixed",
         }
     }
 
@@ -60,6 +69,9 @@ impl ScanPlayoutRefreshReason {
             }
             "remote-stream-membership-reordered" => Some(Self::RemoteStreamMembershipReordered),
             "remote-stream-membership-mixed" => Some(Self::RemoteStreamMembershipMixed),
+            "provider-collection-changed" => Some(Self::ProviderCollectionChanged),
+            "provider-network-changed" => Some(Self::ProviderNetworkChanged),
+            "content-membership-mixed" => Some(Self::ContentMembershipMixed),
             _ => None,
         }
     }
@@ -70,6 +82,18 @@ impl ScanPlayoutRefreshReason {
     pub const fn merge(self, other: Self) -> Self {
         if self as u8 == other as u8 {
             self
+        } else if matches!(
+            self,
+            Self::ProviderCollectionChanged
+                | Self::ProviderNetworkChanged
+                | Self::ContentMembershipMixed
+        ) || matches!(
+            other,
+            Self::ProviderCollectionChanged
+                | Self::ProviderNetworkChanged
+                | Self::ContentMembershipMixed
+        ) {
+            Self::ContentMembershipMixed
         } else {
             Self::RemoteStreamMembershipMixed
         }

@@ -308,12 +308,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn delete_admin(&self, id: EntityId) -> Result<()> {
-        sqlx::query(r#"DELETE FROM "Collection" WHERE "Id" = ?"#)
-            .bind(id)
-            .execute(&self.0)
-            .await
-            .repository()?;
-        Ok(())
+        crate::provider_collections::delete_admin(&self.0, id).await
     }
 
     async fn add_default_item(
