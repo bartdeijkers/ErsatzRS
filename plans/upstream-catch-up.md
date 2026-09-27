@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **57 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **56 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **119**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **120**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -44,7 +44,8 @@
   [36321494841](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36321494841)
   at `b4d659eb` satisfy acceptance. UCU-08 row 116 is N/A release-note wording;
   row 117 is Port (safe block cleanup cutoff); row 118 is N/A (empty build trigger).
-  Row 119 is N/A (upstream Next release note); row 120 is next. Existing debt
+  Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
+  shuffle order). Row 121 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -55,6 +56,38 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 120 source map: persisted YAML sequence order
+
+- Upstream `722f1b93` changes SequentialPlayoutBuilder sequence flattening,
+  YamlPlayoutInstruction sequence identity, YamlPlayoutShuffleSequenceHandler
+  placement, and YamlPlayoutContext serialization/restoration. Independent
+  clones, declaration indices and sequence/list fingerprints preserve shuffled
+  order across builds and reset only invalidated list positions.
+- Upstream regressions cover nested/non-contiguous positions, bounded shuffle
+  retries, continuation, all named lists, changed content/layout, partial or
+  malformed orders, missing fingerprints, legacy anchors, unnamed and duplicate
+  schedules. Complete-order validation precedes mutation of a restored list.
+- Rust targets: `crates/ersatzrs-core/src/scheduling/yaml/{mod,sequences}.rs`
+  and focused tests; persisted anchors pass through the existing playout
+  repository transaction. Current Rust cloning and bounded shuffle already
+  exist, but contiguous splice can overwrite nested instructions, and anchors
+  retain list indices without retaining the shuffled instruction order.
+- Preserve current anchor fields, media enumerator/history state, selected
+  audio/subtitle overrides and schedule switching. Add backward-compatible
+  order/fingerprint state and reject partial restoration without partially
+  mutating a list. No schema or UI changes are required.
+- Acceptance: focused sequence placement and restore-validation regressions,
+  uninterrupted-versus-split/reloaded builder proof, strict affected lint and
+  persistence evidence. All pass: 64 YAML tests (Nextest
+  `bc67e989-b5c0-49ac-aba4-3488e859ec44`), production-builder SQLite close/reopen
+  and uninterrupted-permutation oracle comparison (Nextest
+  `79a39c33-bfbf-4459-97a7-eafb676e6295`), plus strict core/infra lint.
+- Review confirms whole-list validation before mutation, ignored ephemeral
+  invocation IDs, independent named/default state, legacy-anchor compatibility,
+  and preserved media history/settings. SHA-256 uses the existing workspace
+  dependency version; no schema, platform, UI or FFmpeg argument change.
+  Row 120 is Port; milestone closeout and publication remain pending.
 
 ## UCU-08 row 119 source map: external Next QSV release note
 
@@ -2592,7 +2625,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 117 | `b7aaea3d` | fix: block scheduler deleting playout items (#2992) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve items before future blocks` | ucu-08; clamp cleanup to build start while retaining earlier block boundaries. All 18 block tests and production-builder/SQLite retention regression pass across three modes and delayed offsets; audio/subtitle overrides preserved. Strict Clippy and substantive review pass. |
 | 118 | `fcd593e0` | chore: trigger new build for updated next engine | N/A | upstream-baseline-catch-up | `docs(parity): reconcile empty upstream build trigger` | ucu-08; tree equals parent b7aaea3d exactly. No source, runtime pin, package or configuration delta; does not authorize a new runtime build or release. |
 | 119 | `2cf8e56a` | update changelog [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream Next QSV release note` | ucu-08; two CHANGELOG lines describe external Next QSV detection. No source, runtime pin or package changes; existing hardware acceptance limits remain, with no new QSV claim. |
-| 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | | | | ucu-08; provisional: Port candidate. |
+| 120 | `722f1b93` | fix: preserve YAML shuffle order across builds (#2993) | Port | upstream-baseline-catch-up | `fix(scheduling): preserve YAML sequence order across builds` | ucu-08; stable declaration fingerprints and complete-order restoration preserve shuffled default/named lists; nested slots remain intact. All 64 YAML tests and production-builder SQLite restart/oracle comparison pass, including audio/subtitle settings; strict affected lint and substantive review pass. |
 | 121 | `06ee45ff` | fix: text subtitle playback (#2994) | | | | ucu-08; provisional: Port candidate. |
 | 122 | `34b0d954` | fix: playlist state in sequential and scripted schedules (#2995) | | | | ucu-08; provisional: Port candidate. |
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | | | | ucu-08; provisional: Port candidate. |

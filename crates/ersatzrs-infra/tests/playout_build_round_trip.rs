@@ -13,6 +13,8 @@ mod block_retention;
 mod common;
 #[path = "playout_build_round_trip/gaps.rs"]
 mod gaps;
+#[path = "playout_build_round_trip/yaml_sequence.rs"]
+mod yaml_sequence;
 
 use std::collections::BTreeSet;
 

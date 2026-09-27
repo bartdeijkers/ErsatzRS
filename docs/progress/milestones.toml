@@ -10973,6 +10973,31 @@ host source, runtime pin, dependency or package changes are present. This
 release note does not establish ErsatzRS hardware acceptance; existing
 limitations remain. Source review and structured validation pass; pin/ledger
 advance together to 2cf8e56a with the local row commit. Row 120 is next.
+Row 120 audit maps upstream sequence cloning, shuffled-order persistence,
+list/sequence fingerprints and atomic restore validation to Rust's YAML engine.
+Rust already clones flattened instructions and bounds tail avoidance, but
+contiguous shuffle splice overwrites nested instructions, and serialized
+anchors lack shuffled-order state. A new non-contiguous placement regression
+fails on the original implementation; replacing only original member slots
+passes (Nextest 5d29a907-7a81-4994-9907-92528ace452a). This is a partial working
+correction: order capture/restoration, invalid/legacy anchor handling, split
+build/persistence proof and strict lint remain. Row 120 is pending and the pin
+stays at row 119; no UCU-08 push/CI.
+Row 120 acceptance now passes: all 64 focused YAML tests (Nextest
+bc67e989-b5c0-49ac-aba4-3488e859ec44) cover order restoration, malformed and
+partial orders, changed layouts/declarations, legacy anchors, named-list
+isolation and duplicate/unnamed list handling. The production builder generates
+a shuffled permutation, persists it transactionally, closes/reopens SQLite and
+continues against an uninterrupted oracle using that same initial permutation.
+Full playout-item equality and persisted audio/subtitle settings pass (Nextest
+79a39c33-bfbf-4459-97a7-eafb676e6295). Strict affected core/infra Clippy passes.
+Review confirms complete-list validation before mutation, stable fingerprints
+without invocation IDs, independent cloned instructions, bounded shuffling and
+unchanged media-history semantics. No schema, platform, UI or FFmpeg argument
+changes; existing scheduling health remains applicable. SHA-256 reuses the
+existing workspace dependency version. Row 120 is Port; pin and ledger advance
+together to 722f1b93 in the coherent local commit. Align clean upstream HEAD
+after committing. Row 121 and UCU-08 window gates remain; no push/CI yet.
 """
 
 [[milestone]]

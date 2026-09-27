@@ -1,4 +1,40 @@
 use super::*;
+
+#[test]
+fn sequence_shuffle_preserves_nested_instruction_slots() {
+    let member = |content: &str| YamlInstruction {
+        content: Some(content.to_owned()),
+        sequence_key: Some("outer".to_owned()),
+        sequence_guid: Some("outer:1".to_owned()),
+        ..YamlInstruction::default()
+    };
+    let nested = YamlInstruction {
+        content: Some("nested".to_owned()),
+        sequence_key: Some("inner".to_owned()),
+        sequence_guid: Some("inner:2".to_owned()),
+        ..YamlInstruction::default()
+    };
+    let mut definition = YamlPlayoutDefinition {
+        playout: vec![member("first"), nested.clone(), member("second")],
+        ..YamlPlayoutDefinition::default()
+    };
+    let mut context = YamlContext::new(
+        Playout::default(),
+        SchedulingReferenceData::default(),
+        Utc::now(),
+        BTreeMap::new(),
+    );
+    context.pending_shuffles.push("outer".to_owned());
+    apply_pending_shuffles(&mut context, &mut definition);
+    assert_eq!(definition.playout.len(), 3);
+    assert_eq!(definition.playout[1], nested);
+    let mut contents = [
+        definition.playout[0].content.as_deref().unwrap(),
+        definition.playout[2].content.as_deref().unwrap(),
+    ];
+    contents.sort_unstable();
+    assert_eq!(contents, ["first", "second"]);
+}
 use crate::scheduling::{
     SchedulingCollectionKey, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };

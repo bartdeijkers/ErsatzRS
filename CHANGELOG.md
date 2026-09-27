@@ -39,6 +39,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve shuffled YAML sequence order across continuation builds and restarts,
+  keep nested instructions in their original slots, and reset only affected
+  list positions when saved orders or schedule definitions are invalidated.
+
 - Keep block-scheduler cleanup at or before the build start when the next block
   begins later, preserving current and future playout items between blocks.
 

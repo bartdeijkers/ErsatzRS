@@ -265,6 +265,12 @@ pub struct YamlInstruction {
     pub sequence_key: Option<String>,
     #[serde(default)]
     pub sequence_guid: Option<String>,
+    #[serde(skip)]
+    pub sequence_index: usize,
+    #[serde(skip)]
+    pub sequence_shuffled: bool,
+    #[serde(skip)]
+    pub sequence_fingerprint: String,
 }
 
 fn default_stop_before_end() -> bool {
@@ -300,6 +306,7 @@ mod expressions;
 mod instructions;
 mod playlist_history;
 mod schedules;
+mod sequence_state;
 mod sequences;
 
 #[cfg(test)]
@@ -311,6 +318,7 @@ use instructions::dispatch_instruction;
 #[cfg(test)]
 use instructions::YamlInstructionKind;
 use schedules::select_schedule;
+use sequence_state::SequenceState;
 use sequences::{detect_cycle, flatten_sequences};
 
 #[derive(Debug, Clone, Default)]
@@ -479,6 +487,7 @@ impl YamlPlayoutEngine {
                 context.restore(anchor)?;
             }
         }
+        context.restore_sequence_orders(&mut definition)?;
         context.apply_history(&definition, &result.history_to_remove, request.mode)?;
 
         if request.mode == PlayoutBuildMode::Reset {
@@ -497,6 +506,7 @@ impl YamlPlayoutEngine {
             .max()
             .unwrap_or(context.current_time);
 
+        context.sequence_state.capture_orders(&definition)?;
         result.anchor = Some(PlayoutAnchor {
             next_start: max_time,
             next_instruction_index: i32::try_from(context.instruction_index).unwrap_or_default(),
@@ -596,13 +606,9 @@ fn apply_pending_shuffles(context: &mut YamlContext, definition: &mut YamlPlayou
                 ));
             }
         }
-        for (guid, mut members) in groups {
-            let Some(first) = playout.iter().position(|item| {
-                item.sequence_guid == guid && item.sequence_key.as_deref() == Some(key.as_str())
-            }) else {
-                continue;
-            };
-            let last_original_index = members.last().map_or(first, |(index, _)| *index);
+        for (_, mut members) in groups {
+            let positions = members.iter().map(|(index, _)| *index).collect::<Vec<_>>();
+            let last_original_index = positions.last().copied().unwrap_or_default();
             shuffle_with_seed(
                 &mut members,
                 super::next_playout_seed().cast_unsigned().into(),
@@ -610,8 +616,10 @@ fn apply_pending_shuffles(context: &mut YamlContext, definition: &mut YamlPlayou
             if members.len() > 1 && members[0].0 == last_original_index {
                 members.rotate_left(1);
             }
-            let finish = first.saturating_add(members.len()).min(playout.len());
-            playout.splice(first..finish, members.into_iter().map(|(_, item)| item));
+            for (position, (_, mut instruction)) in positions.into_iter().zip(members) {
+                instruction.sequence_shuffled = true;
+                playout[position] = instruction;
+            }
         }
     }
 }
@@ -645,6 +653,18 @@ impl PlayoutSchedulingEngine for YamlPlayoutEngine {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SerializedYamlContext {
+    #[serde(
+        default,
+        alias = "SequenceOrders",
+        skip_serializing_if = "Option::is_none"
+    )]
+    sequence_orders: Option<serde_json::Value>,
+    #[serde(
+        default,
+        alias = "ListFingerprints",
+        skip_serializing_if = "Option::is_none"
+    )]
+    list_fingerprints: Option<BTreeMap<String, String>>,
     instruction_index: usize,
     guide_group: i32,
     guide_group_locked: bool,
@@ -674,6 +694,7 @@ struct SerializedYamlContext {
 
 #[derive(Debug, Clone)]
 struct YamlContext {
+    sequence_state: SequenceState,
     playout: Playout,
     reference_data: SchedulingReferenceData,
     current_time: DateTime<Utc>,
@@ -743,6 +764,7 @@ impl YamlContext {
         content_sources: BTreeMap<String, ResolvedYamlContent>,
     ) -> Self {
         Self {
+            sequence_state: SequenceState::default(),
             playout,
             reference_data,
             current_time,
@@ -790,6 +812,8 @@ impl YamlContext {
             }),
         );
         let state = SerializedYamlContext {
+            sequence_orders: self.sequence_state.orders.clone(),
+            list_fingerprints: self.sequence_state.fingerprints.clone(),
             instruction_index: self.instruction_index,
             guide_group: self.guide_group,
             guide_group_locked: self.guide_group_locked,
@@ -811,6 +835,8 @@ impl YamlContext {
                 let state: SerializedYamlContext = serde_json::from_str(context)
                     .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?;
                 self.instruction_index = state.instruction_index;
+                self.sequence_state.orders = state.sequence_orders;
+                self.sequence_state.fingerprints = state.list_fingerprints;
                 self.guide_group = state.guide_group;
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();

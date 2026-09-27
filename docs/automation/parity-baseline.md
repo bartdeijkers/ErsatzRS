@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `2cf8e56ae3cc8d84598d7b36e26234d23c12747b` |
-| **Commit subject** | `update changelog [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2cf8e56ae3cc8d84598d7b36e26234d23c12747b |
+| **Pinned commit** | `722f1b932099d046ac695a8a03be9af03d8a4637` |
+| **Commit subject** | `fix: preserve YAML shuffle order across builds (#2993)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/722f1b932099d046ac695a8a03be9af03d8a4637 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

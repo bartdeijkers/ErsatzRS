@@ -77,11 +77,15 @@ fn flatten_list(
                 {
                     sequence_id += 1;
                     let sequence_guid = format!("{sequence_key}:{sequence_id}");
-                    for _ in 0..repeat {
-                        for item in &sequence.items {
+                    let fingerprint = super::sequence_state::fingerprint(&sequence.items)?;
+                    for repetition in 0..repeat {
+                        for (index, item) in sequence.items.iter().enumerate() {
                             let mut item = item.clone();
                             item.sequence_key = Some(sequence_key.clone());
                             item.sequence_guid = Some(sequence_guid.clone());
+                            item.sequence_index = repetition * sequence.items.len() + index;
+                            item.sequence_shuffled = false;
+                            item.sequence_fingerprint.clone_from(&fingerprint);
                             if instruction
                                 .custom_title
                                 .as_ref()
