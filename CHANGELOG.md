@@ -47,6 +47,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fill the complete remaining YAML schedule interval with fallback content,
+  keeping its playback duration, history and guide grouping aligned with the
+  scripted scheduler.
+
 - Include the show poster image alongside the icon and episode still in the
   bundled XMLTV episode template, following the upstream artwork correction.
   Preserve shared show artwork, genres and guide identifiers for every episode

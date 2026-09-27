@@ -145,8 +145,11 @@ repository tests, legacy migration and strict lint. Row 124 is Port: persisted
 artwork identity, provider request isolation, cache guards and episode poster
 output pass focused SQL/HTTP tests, eight Chromium/Firefox cases and web parity
 (738 tests, 20 existing skips). Row 125 is Adapt (ADR 0103): artwork admission
-boundaries pass four production-router tests and strict lint. Next is row 126;
-milestone gates and push/CI remain.
+boundaries pass four production-router tests and strict lint. Row 126 is Port:
+YAML fallback now occupies the complete remaining interval; duration/history/
+guide-group and track-preference regressions pass in both engines, with 96
+scheduler tests and strict core lint green. Next is row 127; milestone gates
+and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 

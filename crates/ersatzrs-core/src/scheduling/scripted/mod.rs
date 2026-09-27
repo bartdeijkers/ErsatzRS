@@ -1443,6 +1443,55 @@ add_count("main", 1)
     // ── add_duration with fallback ────────────────────────────────────────────
 
     #[test]
+    fn scripted_fallback_duration_history_and_guide_group_use_fallback_identity() {
+        for gap_seconds in [90, 600] {
+            for fallback_seconds in [30, 2700, 3600] {
+                for locked in [false, true] {
+                    let mut rd = SchedulingReferenceData::default();
+                    rd.media_by_key.insert(
+                        "main".into(),
+                        vec![SchedulingMediaItem::new(1, Duration::minutes(30))],
+                    );
+                    let mut fallback =
+                        SchedulingMediaItem::new(99, Duration::seconds(fallback_seconds));
+                    fallback.preferred_audio_language_code = Some("ja".into());
+                    fallback.preferred_subtitle_language_code = Some("nl".into());
+                    rd.media_by_key.insert("fallback".into(), vec![fallback]);
+                    let group = if locked { "lock_guide_group()\n" } else { "" };
+                    let script = format!("{group}add_duration('main', '{gap_seconds}', {{stop_before_end=true, fallback='fallback'}})\nadd_count('main', 1)");
+                    let result = run(&script, rd);
+                    assert_eq!(result.added_items.len(), 2);
+                    let item = &result.added_items[0];
+                    let next = &result.added_items[1];
+                    let gap = Duration::seconds(gap_seconds);
+                    assert_eq!(item.media_item_id, 99);
+                    assert_eq!(item.filler_kind, FillerKind::Fallback);
+                    assert_eq!(item.start, base_start());
+                    assert_eq!(item.finish, base_start() + gap);
+                    assert_eq!(item.out_point - item.in_point, gap);
+                    assert_eq!(next.start, item.finish);
+                    assert_eq!(
+                        next.media_item_id, 1,
+                        "rejected main content is not consumed"
+                    );
+                    assert_eq!(item.guide_group == next.guide_group, locked);
+                    assert_eq!(item.preferred_audio_language_code.as_deref(), Some("ja"));
+                    assert_eq!(item.preferred_subtitle_language_code.as_deref(), Some("nl"));
+                    assert_eq!(result.added_history.len(), 2);
+                    for (history, scheduled) in result.added_history.iter().zip(&result.added_items)
+                    {
+                        let details: serde_json::Value =
+                            serde_json::from_str(&history.details).unwrap();
+                        assert_eq!(details["MediaItemId"], scheduled.media_item_id);
+                        assert_eq!(history.when, scheduled.start);
+                        assert_eq!(history.finish, Some(scheduled.finish));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn scripted_add_duration_fallback_snapshot() {
         let mut rd = SchedulingReferenceData::default();
         rd.media_by_key.insert(

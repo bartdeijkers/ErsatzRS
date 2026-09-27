@@ -11101,6 +11101,22 @@ pass. Row 124 provider/cache/browser serving evidence is reused because no
 production or UI code changes. Pin/ledger advance to 19b783d7 in the local row
 commit; align the clean reference checkout afterwards. Next is row 126; window
 gates and authorized milestone push/terminal green CI remain due.
+Row 126 is Port. The upstream YAML/scripted fallback branches now use the gap
+duration for the out point, advance guide groups and record fallback identity.
+Native shared constructors already generate fallback-owned history and respect
+locked/unlocked guide grouping. YAML alone clamped a short fallback to its media
+duration before jumping to the target, leaving an uncovered interval. A new
+regression reproduces the 30-second item in a 90-second window; scripted passes.
+YAML now passes the complete remaining duration, matching upstream and scripted.
+Both engines' regression matrices cover 90/600-second gaps, shorter/longer
+fallback media, exact in/out and start/finish intervals, following-item continuity,
+unconsumed rejected main content, history identity/times, locked/unlocked guide
+groups and fallback audio/subtitle preferences. All 96 YAML/scripted tests pass
+(2339dee6-2003-4045-bc59-42efc6787041), with strict core all-targets Clippy,
+formatting and substantive source review. Existing SQL history persistence and
+restart evidence from rows 122/123 remains valid; no storage/restore code changes.
+Pin/ledger advance to fd2171ad in the local correction commit, followed by clean
+reference-checkout alignment. Row 127 and full window gates/push/CI remain due.
 """
 
 [[milestone]]

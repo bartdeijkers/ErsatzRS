@@ -20,3 +20,10 @@ description = 'UCU-08 row 123 covers parent and independently shuffled child cyc
 discovered  = '2026-09-27'
 evidence    = 'UCU-08 row 123: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c), 55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy migration (66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected lint pass. Real SQL later-cycle restart matches 100 uninterrupted items, including independently wrapping children. Source map records substantive review and remaining milestone gates.'
 resolved    = true
+
+[[debt]]
+id          = 'fallback-window-duration'
+description = 'A fallback shorter than the remaining YAML duration window was clamped to its media length while the cursor jumped to the target, leaving an uncovered interval.'
+discovered  = '2026-09-27'
+evidence    = 'Resolved in UCU-08 row 126: use the complete remaining interval, matching upstream and native scripted scheduling. Red/green regression proves the short-fallback defect; both-engine matrices preserve fallback-owned history, locked/unlocked guide groups, main-content position and audio/subtitle preferences. All 96 YAML/scripted tests and strict core lint pass; milestone evidence owns test IDs and window gates.'
+resolved    = true

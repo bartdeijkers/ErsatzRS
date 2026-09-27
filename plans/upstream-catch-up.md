@@ -58,6 +58,39 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+## UCU-08 row 126 source map: fallback duration, history and guide groups
+
+- Upstream `fd2171ade1d76e84f1496cea85e40871b4855c51` changes the scripted
+  SchedulingEngine and YamlPlayoutDurationHandler fallback branches: set the out
+  point from the gap duration, advance the guide group and generate history from
+  the fallback media item instead of the rejected main item. Added upstream
+  tests exercise 10-minute and 90-second gaps with longer fallback media.
+- Native scripted fallback already delegates to add_item_with_opts with the
+  remaining duration and selected fallback identity. Both engines' shared item
+  constructors generate matching start/finish and in/out points, history from
+  the selected item and guide-group advancement that respects locking.
+  YAML schedule_fallback_item instead clamps duration to the fallback length,
+  then jumps the cursor to the target, leaving an uncovered interval when the
+  fallback is shorter. Align that argument with upstream and native scripted
+  behavior; no persisted-state format or restore policy changes are needed.
+- A two-engine matrix covers 90/600-second gaps, 30/2700/3600-second fallback
+  lengths, locked/unlocked guide groups, exact interval continuity, fallback
+  history identity/times, retained rejected main content and audio/subtitle
+  preferences. Before correction, scripted passes and YAML fails with a
+  30-second item in a 90-second gap. The YAML duration argument now uses the
+  complete remaining interval. All 96 YAML/scripted tests pass (Nextest
+  `2339dee6-2003-4045-bc59-42efc6787041`); strict core all-targets Clippy passes.
+- Substantive review confirms the one-argument correction matches the upstream
+  target-time interval and native scripted path. Both engines construct fallback
+  history and advance guide groups through their existing helpers; those parts
+  of the upstream change are covered, including group locking. Acceptance passes
+  with the two-engine suites and strict affected lint.
+  Existing row 122/123 SQL history restart evidence remains applicable because
+  history construction/storage does not change. No FFmpeg argv, platform,
+  schema or browser change is introduced. Verdict Port: commit code, tests,
+  evidence, ledger and pin together, then align the clean reference checkout.
+  Row 127 and window acceptance remain, with no intermediate push/CI.
+
 ## UCU-08 row 125 source map: artwork authorization surfaces
 
 - Upstream `19b783d7e996c406d1e1bc1366b5f340685391f4` changes only
@@ -2923,7 +2956,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 123 | `b0f313ee` | fix: multiple playlist and marathon fixes (#2996) | Port | classic-scheduling; yaml-scheduling; scripted-scheduling; block-scheduling; upstream-baseline-catch-up | `fix(scheduling): persist shuffled playlist cycles` | ucu-08; nullable history seeds and compatible checkpoint state preserve parent/child cycles, repeated slots and source settings. Shuffled Lua marathons use persisted playout seeds. 228 scheduling tests, 55 repository tests, legacy migration and strict lint pass; real SQL restart matches 100 uninterrupted items. Marathon validation/deduplication and empty/equal/missing-item/filler boundaries are covered. |
 | 124 | `b3a35116` | fix: artwork cleanup (#2997) | Port | media-browsers | `fix(artwork): resolve provider images by persisted identity` | ucu-08; typed IDs retained through cards/details/collections/XMLTV; stored-row provider paths and resize, source ownership, bounded redirects and credential isolation, cache guards and valid episode poster output. Focused SQL/HTTP regressions, eight Chromium/Firefox cases, web parity 738 passed/20 existing skips and strict lint pass. |
 | 125 | `19b783d7` | fix: authorize artwork when requested from ui (#2998) | Adapt (ADR 0103) | upstream-baseline-catch-up | `test(artwork): verify management and IPTV authorization boundaries` | ucu-08; accepted trusted-network/authenticated-proxy management policy covers UI images; public artwork retains independent optional IPTV JWTs. Four production-router tests prove GET/HEAD admission and streaming exclusions even with a valid machine key; strict lint and source review pass. Row 124 image/browser evidence remains valid. |
-| 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | | | | ucu-08; provisional: Port candidate. |
+| 126 | `fd2171ad` | fix: fallback duration, history and guide group for sequential and scripted schedules | Port | yaml-scheduling | `fix(scheduling): fill the complete YAML fallback interval` | ucu-08; correct a short YAML fallback leaving an uncovered interval. Existing native helpers already preserve fallback history identity and advance unlocked guide groups. Two-engine duration/history/group/track-preference matrix, all 96 YAML/scripted tests and strict core lint pass. |
 | 127 | `463a4c80` | fix: disable hdhr controller when jwt is used (#2999) | | | | ucu-08; provisional: Port candidate. |
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 129 | `9067cde8` | fix: tag maintenance (#3001) | | | | ucu-08; provisional: Port candidate. |

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `19b783d7e996c406d1e1bc1366b5f340685391f4` |
-| **Commit subject** | `fix: authorize artwork when requested from ui (#2998)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/19b783d7e996c406d1e1bc1366b5f340685391f4 |
+| **Pinned commit** | `fd2171ade1d76e84f1496cea85e40871b4855c51` |
+| **Commit subject** | `fix: fallback duration, history and guide group for sequential and scripted schedules` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/fd2171ade1d76e84f1496cea85e40871b4855c51 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

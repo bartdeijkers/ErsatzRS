@@ -176,7 +176,9 @@ fn schedule_fallback_item(
         &fallback_instruction,
         fallback,
         &fallback_item,
-        fallback_item.duration.min(remaining),
+        // Fallback occupies the whole remaining window, matching upstream's
+        // target-time finish/out point and the native scripted engine.
+        remaining,
         fallback_history_context,
     );
     context.advance_content(fallback);

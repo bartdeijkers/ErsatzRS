@@ -536,6 +536,63 @@ playout:
 }
 
 #[test]
+fn yaml_fallback_duration_history_and_guide_group_use_fallback_identity() {
+    for gap_seconds in [90, 600] {
+        for fallback_seconds in [30, 2700, 3600] {
+            for locked in [false, true] {
+                let group = if locked { "  - epg_group: true\n" } else { "" };
+                let yaml = format!(
+                    "playout:\n{group}  - duration: '{gap_seconds}'\n    content: main\n    stop_before_end: true\n    fallback: fallback\n  - count: '1'\n    content: main\n"
+                );
+                let (definition, mut req) = request(&yaml);
+                req.reference_data.media_by_key.insert(
+                    "main".into(),
+                    vec![SchedulingMediaItem::new(1, Duration::minutes(30))],
+                );
+                let mut fallback =
+                    SchedulingMediaItem::new(99, Duration::seconds(fallback_seconds));
+                fallback.preferred_audio_language_code = Some("ja".into());
+                fallback.preferred_subtitle_language_code = Some("nl".into());
+                req.reference_data
+                    .media_by_key
+                    .insert("fallback".into(), vec![fallback]);
+                let start = req.start;
+                let gap = Duration::seconds(gap_seconds);
+                req.finish = start + gap + Duration::minutes(30);
+                let result = YamlPlayoutEngine
+                    .schedule_definition(definition, req)
+                    .unwrap();
+                assert_eq!(result.added_items.len(), 2);
+                let item = &result.added_items[0];
+                let next = &result.added_items[1];
+                assert_eq!(item.media_item_id, 99);
+                assert_eq!(item.filler_kind, FillerKind::Fallback);
+                assert_eq!(item.start, start);
+                assert_eq!(item.finish, start + gap);
+                assert_eq!(item.out_point - item.in_point, gap);
+                assert_eq!(next.start, item.finish);
+                assert_eq!(
+                    next.media_item_id, 1,
+                    "rejected main content is not consumed"
+                );
+                assert_eq!(item.guide_group == next.guide_group, locked);
+                assert_eq!(item.preferred_audio_language_code.as_deref(), Some("ja"));
+                assert_eq!(item.preferred_subtitle_language_code.as_deref(), Some("nl"));
+                assert!(result.added_gaps.is_empty());
+                assert_eq!(result.added_history.len(), 2);
+                for (history, scheduled) in result.added_history.iter().zip(&result.added_items) {
+                    let details: serde_json::Value =
+                        serde_json::from_str(&history.details).unwrap();
+                    assert_eq!(details["MediaItemId"], scheduled.media_item_id);
+                    assert_eq!(history.when, scheduled.start);
+                    assert_eq!(history.finish, Some(scheduled.finish));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn yaml_duration_instruction_snapshot() {
     assert_yaml_json_snapshot!(snapshot(
         r#"
