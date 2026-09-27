@@ -38,6 +38,7 @@ pub mod addon_tool_maintenance;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;
+pub mod api_security;
 pub mod artwork_cleanup;
 pub mod audio_script;
 pub mod cache_cleanup;

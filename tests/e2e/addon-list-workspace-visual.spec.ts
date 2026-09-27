@@ -9,7 +9,7 @@ test('locked workspace reflows in both themes from mobile to 4K', async ({page},
   const routes=[['items',base],['settings',`${base}/settings`],['playback',`${base}/playback`],['activity',`${base}/activity`],['item',`${base}/items/${seed.firstItemId}`],['artwork',`${base}/artwork`]];
   for(const theme of ['dark','light']) {
     await page.emulateMedia({colorScheme:theme==='dark'?'light':'dark'});
-    await page.request.post('/api/settings/ui/save',{form:{is_dark_mode:String(theme==='dark'),language:'en-us'},maxRedirects:0});
+    await page.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:String(theme==='dark'),language:'en-us'},maxRedirects:0});
     for(const [task,route] of routes) {
       await page.goto(route);
       await page.waitForFunction(()=>(window as any).__ersatzrs_hydrated===true);
@@ -61,7 +61,7 @@ test('long Dutch and German selected filters stay readable at 320 pixels', async
   await page.setViewportSize({ width: 320, height: 800 });
   for (const language of ['nl', 'de-de']) {
     for (const dark of [false, true]) {
-      await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: String(dark), language }, maxRedirects: 0 });
+      await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: String(dark), language }, maxRedirects: 0 });
       await page.goto(`/media/addon-lists/${seed.listId}`);
       await page.waitForFunction(() => (window as any).__ersatzrs_hydrated === true);
       const longestValue = await page.locator('[name="category"] option').evaluateAll(options =>

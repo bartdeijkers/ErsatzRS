@@ -103,7 +103,7 @@ pub struct AddonSettingEditor {
     pub reference: Option<String>,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_addon_overview() -> Result<AddonOverview, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -132,7 +132,7 @@ pub async fn load_addon_overview() -> Result<AddonOverview, ServerFnError> {
 }
 
 /// Persist the global fair-use window used by all deferred item-detail work.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_addon_detail_wait_settings(
     settings: AddonDetailWaitSettingsForm,
 ) -> Result<(), ServerFnError> {
@@ -148,7 +148,7 @@ pub async fn save_addon_detail_wait_settings(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_addon_detail(addon_id: String) -> Result<Option<AddonDetail>, ServerFnError> {
     let overview = load_addon_overview().await?;
     let installed = overview
@@ -171,7 +171,7 @@ pub async fn load_addon_detail(addon_id: String) -> Result<Option<AddonDetail>, 
     }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_unverified_addon_sources(enabled: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -183,7 +183,7 @@ pub async fn set_unverified_addon_sources(enabled: bool) -> Result<(), ServerFnE
 }
 
 /// Persist or clear the add-on used for unclaimed remote source URLs.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_default_remote_stream_addon(addon_id: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -195,7 +195,7 @@ pub async fn set_default_remote_stream_addon(addon_id: String) -> Result<(), Ser
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn scan_addon_repositories() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -206,7 +206,7 @@ pub async fn scan_addon_repositories() -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn remove_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -217,7 +217,7 @@ pub async fn remove_addon_repository(repository_id: String) -> Result<(), Server
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn install_addon_package(
     repository_id: String,
     addon_id: String,
@@ -232,7 +232,7 @@ pub async fn install_addon_package(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_addon_configuration(setting: AddonSettingEditor) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -249,7 +249,7 @@ pub async fn save_addon_configuration(setting: AddonSettingEditor) -> Result<(),
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn check_addon_package(addon_id: String) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -260,7 +260,7 @@ pub async fn check_addon_package(addon_id: String) -> Result<String, ServerFnErr
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn enable_addon_package(addon_id: String) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -271,7 +271,7 @@ pub async fn enable_addon_package(addon_id: String) -> Result<String, ServerFnEr
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn disable_addon_package(addon_id: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -282,7 +282,7 @@ pub async fn disable_addon_package(addon_id: String) -> Result<(), ServerFnError
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn uninstall_addon_package(addon_id: String, force: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 

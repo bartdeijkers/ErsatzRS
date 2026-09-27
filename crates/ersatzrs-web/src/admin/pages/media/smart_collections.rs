@@ -761,7 +761,7 @@ fn SmartCollectionComposer(
     view! {
         <form
             method="post"
-            action="/api/smart-collections/save"
+            action="/admin-api/smart-collections/save"
             class=format!("{} {}", style::page, style::composer_page)
             data-smart-collection-editor-hydrated=move || if hydrated.get() { "true" } else { "false" }
             data-composer-all=move || model.get().all.len().to_string()
@@ -1025,7 +1025,7 @@ fn SavedSearchControls(
                 <button
                     type="submit"
                     formmethod="post"
-                    formaction="/api/saved-searches/load"
+                    formaction="/admin-api/saved-searches/load"
                     formnovalidate
                     class=style::secondary_button
                     disabled=move || pending.get()
@@ -1065,7 +1065,7 @@ fn SavedSearchControls(
             <button
                 type="submit"
                 formmethod="post"
-                formaction="/api/saved-searches/save"
+                formaction="/admin-api/saved-searches/save"
                 formnovalidate
                 class=style::secondary_button
                 disabled=move || pending.get()

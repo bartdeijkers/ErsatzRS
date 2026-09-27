@@ -9,7 +9,7 @@ test('admin controls initialize even when the browser grants no idle callbacks',
     window.requestIdleCallback = () => 1;
     window.cancelIdleCallback = () => {};
   });
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
   });
   await page.goto('/settings/addons');

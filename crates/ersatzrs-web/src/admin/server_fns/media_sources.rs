@@ -79,7 +79,7 @@ pub struct PathReplacementRow {
 
 // ─── Local Libraries ──────────────────────────────────────────────────────────
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_local_libraries() -> Result<Vec<LocalLibraryRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -99,7 +99,7 @@ pub async fn list_local_libraries() -> Result<Vec<LocalLibraryRow>, ServerFnErro
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_managed_addon_media_sources(
 ) -> Result<Vec<ManagedAddonMediaSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
@@ -118,7 +118,7 @@ pub async fn list_managed_addon_media_sources(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_local_library_form(id: i64) -> Result<LocalLibraryForm, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -146,7 +146,7 @@ pub async fn get_local_library_form(id: i64) -> Result<LocalLibraryForm, ServerF
 ///
 /// On create: inserts MediaSource → LocalMediaSource → Library → LocalLibrary → LibraryPath rows.
 /// On update: renames the library and replaces all path rows (delete-all + reinsert).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -285,7 +285,7 @@ fn normalize_local_library_path(raw: &str) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_local_library(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -295,7 +295,7 @@ pub async fn delete_local_library(id: i64) -> Result<(), ServerFnError> {
 
 // ─── Jellyfin ─────────────────────────────────────────────────────────────────
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_jellyfin_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -314,7 +314,7 @@ pub async fn list_jellyfin_sources() -> Result<Vec<RemoteSourceRow>, ServerFnErr
 }
 
 /// Loads the current Jellyfin address + API key for the connection editor.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -345,7 +345,7 @@ pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> 
 /// name, then triggers a background library list refresh + sync. If the
 /// validation call fails the entire save is rejected so the user sees the
 /// error in the form instead of silently storing a bad key.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -361,7 +361,7 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         .await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_jellyfin_source(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -369,7 +369,7 @@ pub async fn delete_jellyfin_source(id: i64) -> Result<(), ServerFnError> {
     Ok(state.application.delete_remote_source(id).await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_jellyfin_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -382,7 +382,7 @@ pub async fn list_jellyfin_libraries(source_id: i64) -> Result<Vec<LibraryPrefRo
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_jellyfin_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -394,7 +394,7 @@ pub async fn save_jellyfin_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_jellyfin_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -406,7 +406,7 @@ pub async fn list_jellyfin_paths(source_id: i64) -> Result<Vec<PathReplacementRo
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_jellyfin_paths(
     source_id: i64,
     paths: Vec<PathReplacementRow>,
@@ -425,7 +425,7 @@ pub async fn save_jellyfin_paths(
 
 // ─── Emby ─────────────────────────────────────────────────────────────────────
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_emby_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -443,7 +443,7 @@ pub async fn list_emby_sources() -> Result<Vec<RemoteSourceRow>, ServerFnError> 
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_emby_connection() -> Result<ConnectionForm, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -467,7 +467,7 @@ pub async fn get_emby_connection() -> Result<ConnectionForm, ServerFnError> {
     })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_emby_connection(form: ConnectionForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -485,7 +485,7 @@ pub async fn save_emby_connection(form: ConnectionForm) -> Result<i64, ServerFnE
         .await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_emby_source(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -493,7 +493,7 @@ pub async fn delete_emby_source(id: i64) -> Result<(), ServerFnError> {
     Ok(state.application.delete_remote_source(id).await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_emby_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -505,7 +505,7 @@ pub async fn list_emby_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, 
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_emby_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -517,7 +517,7 @@ pub async fn save_emby_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), S
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_emby_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -529,7 +529,7 @@ pub async fn list_emby_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, 
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_emby_paths(
     source_id: i64,
     paths: Vec<PathReplacementRow>,
@@ -556,7 +556,7 @@ pub struct PlexSourceRow {
     pub missing_since: Option<String>,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_plex_sources() -> Result<Vec<PlexSourceRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -575,7 +575,7 @@ pub async fn list_plex_sources() -> Result<Vec<PlexSourceRow>, ServerFnError> {
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn has_plex_token() -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -583,7 +583,7 @@ pub async fn has_plex_token() -> Result<bool, ServerFnError> {
     Ok(state.application.has_plex_token().await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_missing_plex_source(source_id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -593,14 +593,14 @@ pub async fn delete_missing_plex_source(source_id: i64) -> Result<(), ServerFnEr
         .await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn refresh_plex_libraries(source_id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
     Ok(state.application.refresh_plex_libraries(source_id).await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn sign_out_plex() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -612,7 +612,7 @@ pub async fn sign_out_plex() -> Result<(), ServerFnError> {
 ///
 /// Stores a bounded, client-identity-bound pending flow without replacing
 /// existing credentials until authorization succeeds.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn start_plex_pin_flow(
     force_new_credentials: bool,
 ) -> Result<(String, String), ServerFnError> {
@@ -629,14 +629,14 @@ pub async fn start_plex_pin_flow(
 ///
 /// On success, calls `PlexService::get_servers` (mirrors
 /// `SynchronizePlexMediaSources`) to discover and upsert PlexMediaSource rows.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn check_plex_pin(pin_id: String) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
     Ok(state.application.check_plex_pin(&pin_id).await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_plex_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -648,7 +648,7 @@ pub async fn list_plex_libraries(source_id: i64) -> Result<Vec<LibraryPrefRow>, 
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_plex_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -660,7 +660,7 @@ pub async fn save_plex_library_prefs(prefs: Vec<LibraryPrefRow>) -> Result<(), S
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_plex_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -672,7 +672,7 @@ pub async fn list_plex_paths(source_id: i64) -> Result<Vec<PathReplacementRow>, 
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_plex_paths(
     source_id: i64,
     paths: Vec<PathReplacementRow>,

@@ -247,7 +247,7 @@ fn preparation_failures(w: &Workspace) -> AnyView {
 
 pub(super) fn activity(w: &Workspace) -> AnyView {
     view!{<section class="settings-layout">{recovery(w)}{preparation_failures(w)}
-        <div class="action-row">{button("test-source",TextKey::TestSource,false)}{button("reconcile",TextKey::ReconcileEntireSource,false)}<a class="button secondary" href=format!("/api/addon-lists/{}/publication-diagnostics",w.form.id) download>{tr(TextKey::DownloadRedactedDiagnostics)}</a></div>
+        <div class="action-row">{button("test-source",TextKey::TestSource,false)}{button("reconcile",TextKey::ReconcileEntireSource,false)}<a class="button secondary" href=format!("/admin-api/addon-lists/{}/publication-diagnostics",w.form.id) download>{tr(TextKey::DownloadRedactedDiagnostics)}</a></div>
         {source_status(w)}{changes(w)}
         <PublicationActivity list_id=w.form.id history=RwSignal::new(w.history.clone()) hold=RwSignal::new(w.form.auto_publication_hold.clone())/>
         <h2>{tr(TextKey::RevisionHistory)}</h2><p>{tr(TextKey::RevisionHistoryHelp)}</p><p hidden=!w.revisions.is_empty()>{tr(TextKey::NoRevisionHistory)}</p>
@@ -341,6 +341,6 @@ pub(super) fn import_progress(w: &Workspace) -> AnyView {
 fn artwork_preview_url(url: &str) -> String {
     ersatzrs_infra::addon_artwork::upload_id(url).map_or_else(
         || url.to_owned(),
-        |id| format!("/api/addon-media-lists/artwork/{id}"),
+        |id| format!("/admin-api/addon-media-lists/artwork/{id}"),
     )
 }

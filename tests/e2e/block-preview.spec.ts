@@ -115,7 +115,7 @@ INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -238,7 +238,7 @@ async function exerciseDraftPreview(
 
   const unsavedName = `${seed.blockName} unsaved`;
   await blockNameInput(page).fill(unsavedName);
-  await page.route('**/api/*', async (route) => {
+  await page.route('**/admin-api/*', async (route) => {
     if (route.request().method() === 'POST') {
       await new Promise((resolve) => setTimeout(resolve, 400));
     }

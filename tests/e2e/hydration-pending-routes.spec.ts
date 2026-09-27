@@ -133,7 +133,7 @@ function watchRuntimeErrors(page: Page): string[] {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -928,8 +928,8 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 
     const fillerName = `E2E Filler Fallback ${testInfo.project.name}`;
     await gotoHydrated(page, '/media/filler/presets/add');
-    await expect(page.locator('form[action="/api/filler-presets/save"]')).toBeVisible();
-    await page.request.post('/api/filler-presets/save', {
+    await expect(page.locator('form[action="/admin-api/filler-presets/save"]')).toBeVisible();
+    await page.request.post('/admin-api/filler-presets/save', {
       form: {
         id: '0',
         name: fillerName,
@@ -957,7 +957,7 @@ SELECT COUNT(*) FROM "FillerPreset" WHERE "Name" = '${sqlEscape(fillerName)}';
     const fillerId = sqlite(`
 SELECT "Id" FROM "FillerPreset" WHERE "Name" = '${sqlEscape(fillerName)}' LIMIT 1;
 `);
-    await page.request.post('/api/filler-presets/delete', {
+    await page.request.post('/admin-api/filler-presets/delete', {
       form: { id: fillerId },
       maxRedirects: 0,
     });
@@ -967,8 +967,8 @@ SELECT COUNT(*) FROM "FillerPreset" WHERE "Name" = '${sqlEscape(fillerName)}';
 
     const rerunName = `E2E Rerun Fallback ${testInfo.project.name}`;
     await gotoHydrated(page, '/media/rerun-collections/add');
-    await expect(page.locator('form[action="/api/rerun-collections/save"]')).toBeVisible();
-    await page.request.post('/api/rerun-collections/save', {
+    await expect(page.locator('form[action="/admin-api/rerun-collections/save"]')).toBeVisible();
+    await page.request.post('/admin-api/rerun-collections/save', {
       form: {
         id: '0',
         name: rerunName,
@@ -988,7 +988,7 @@ SELECT COUNT(*) FROM "RerunCollection" WHERE "Name" = '${sqlEscape(rerunName)}';
     const rerunId = sqlite(`
 SELECT "Id" FROM "RerunCollection" WHERE "Name" = '${sqlEscape(rerunName)}' LIMIT 1;
 `);
-    await page.request.post('/api/rerun-collections/delete', {
+    await page.request.post('/admin-api/rerun-collections/delete', {
       form: { id: rerunId },
       maxRedirects: 0,
     });

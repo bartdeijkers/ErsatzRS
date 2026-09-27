@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Counts playouts whose last build attempt failed (Success = 0).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_playout_warnings() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -12,7 +12,7 @@ pub async fn count_playout_warnings() -> Result<u32, ServerFnError> {
 
 /// Returns (error_count, warning_count) by combining the persisted parity
 /// health summary with the startup/runtime counts wired into the web host.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_health_issues() -> Result<(u32, u32), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -64,7 +64,7 @@ pub struct AdminFfmpegRuntimeNotification {
 }
 
 /// Loads the persisted parity health snapshot for the admin /system/health page.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_core::health::HealthCheckStatus as S;
@@ -114,7 +114,7 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
 }
 
 /// Returns a startup notification when this process downloaded a managed FFmpeg runtime.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_ffmpeg_runtime_notification(
 ) -> Result<Option<AdminFfmpegRuntimeNotification>, ServerFnError> {
     use crate::host::state::AppState;
@@ -175,7 +175,7 @@ fn e2e_ffmpeg_runtime_notification_override() -> Option<AdminFfmpegRuntimeNotifi
 /// media item ids so the Lucene index can reindex/remove them. ErsatzRS media
 /// views query SQL directly, so the equivalent invalidation boundary is the
 /// scan timestamp plus missing-state count.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn media_state_revision() -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
 

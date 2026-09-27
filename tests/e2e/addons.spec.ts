@@ -203,7 +203,7 @@ test.beforeEach(async ({ request }) => {
   resetFixtures();
   seedInstalledAddon();
   seedLocalRepository();
-  await request.post('/api/settings/ui/save', {
+  await request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
   });

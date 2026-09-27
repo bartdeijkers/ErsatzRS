@@ -1621,7 +1621,7 @@ pub use kinds::movies::media_item_info_json_from_admin;
 #[cfg(all(test, feature = "ssr"))]
 pub use kinds::movies::{get_media_item_info_json_with_pool, get_movie_details_with_pool};
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_movies(
     search: String,
     page: u32,
@@ -1631,30 +1631,30 @@ pub async fn list_movies(
     kinds::movies::list_movies_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_lines)]
 pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, ServerFnError> {
     kinds::movies::get_movie_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_lines)]
 pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFnError> {
     kinds::movies::get_show_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, ServerFnError> {
     kinds::movies::get_season_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_lines)]
 pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> {
     kinds::movies::get_media_item_info_json_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_shows(
     search: String,
     page: u32,
@@ -1664,7 +1664,7 @@ pub async fn list_shows(
     kinds::shows::list_shows_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_images(
     search: String,
     page: u32,
@@ -1674,7 +1674,7 @@ pub async fn list_images(
     kinds::images::list_images_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_image_details(id: i64) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
     get_faceted_media_details_impl(
         id,
@@ -1683,7 +1683,7 @@ pub async fn get_image_details(id: i64) -> Result<Option<FacetedMediaDetailRow>,
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_artists(
     search: String,
     page: u32,
@@ -1693,12 +1693,12 @@ pub async fn list_artists(
     kinds::artists::list_artists_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, ServerFnError> {
     kinds::artists::get_artist_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_other_videos(
     search: String,
     page: u32,
@@ -1708,7 +1708,7 @@ pub async fn list_other_videos(
     kinds::other_videos::list_other_videos_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_music_video_details(
     id: i64,
 ) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
@@ -1719,7 +1719,7 @@ pub async fn get_music_video_details(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_song_details(id: i64) -> Result<Option<FacetedMediaDetailRow>, ServerFnError> {
     get_faceted_media_details_impl(id, ersatzrs_core::repositories::AdminFacetedMediaKind::Song)
         .await
@@ -1758,7 +1758,7 @@ async fn get_faceted_media_details_impl(
         }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_lines)]
 pub async fn get_other_video_details(
     id: i64,
@@ -1766,7 +1766,7 @@ pub async fn get_other_video_details(
     kinds::other_videos::get_other_video_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_seasons(
     search: String,
     page: u32,
@@ -1776,7 +1776,7 @@ pub async fn list_seasons(
     kinds::seasons::list_seasons_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_episodes(
     search: String,
     page: u32,
@@ -1786,7 +1786,7 @@ pub async fn list_episodes(
     kinds::episodes::list_episodes_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_music_videos(
     search: String,
     page: u32,
@@ -1796,7 +1796,7 @@ pub async fn list_music_videos(
     kinds::music_videos::list_music_videos_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn remote_stream_page_map(
     search: String,
     page_size: u32,
@@ -1804,7 +1804,7 @@ pub async fn remote_stream_page_map(
     kinds::remote_streams::remote_stream_page_map_impl(search, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_remote_streams(
     search: String,
     page: u32,
@@ -1813,14 +1813,14 @@ pub async fn list_remote_streams(
     kinds::remote_streams::list_remote_streams_impl(search, page, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_remote_stream_details(
     id: i64,
 ) -> Result<Option<RemoteStreamDetailRow>, ServerFnError> {
     kinds::remote_streams::get_remote_stream_details_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_remote_stream_tags() -> Result<Vec<String>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1828,7 +1828,7 @@ pub async fn list_remote_stream_tags() -> Result<Vec<String>, ServerFnError> {
     Ok(state.application.list_remote_stream_tags().await?)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_songs(
     search: String,
     page: u32,
@@ -1838,22 +1838,22 @@ pub async fn list_songs(
     kinds::songs::list_songs_impl(search, page, page_size, show_variants).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_trash_items() -> Result<TrashPageData, ServerFnError> {
     trash::list_trash_items_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_media_items(ids: Vec<i64>) -> Result<u64, ServerFnError> {
     trash::delete_media_items_impl(ids).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn empty_trash() -> Result<u64, ServerFnError> {
     trash::empty_trash_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_collections(
     search: String,
     page: u32,
@@ -1862,22 +1862,22 @@ pub async fn list_collections(
     collections::manual::list_collections_impl(search, page, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_collection(id: i64) -> Result<Option<CollectionForm>, ServerFnError> {
     collections::manual::get_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_collection(form: CollectionForm) -> Result<i64, ServerFnError> {
     collections::manual::save_collection_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_collection(id: i64) -> Result<(), ServerFnError> {
     collections::manual::delete_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_smart_collections(
     search: String,
     page: u32,
@@ -1886,27 +1886,27 @@ pub async fn list_smart_collections(
     collections::smart::list_smart_collections_impl(search, page, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_smart_collection(id: i64) -> Result<Option<CollectionForm>, ServerFnError> {
     collections::smart::get_smart_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_smart_collection(form: CollectionForm) -> Result<i64, ServerFnError> {
     collections::smart::save_smart_collection_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_smart_collection(id: i64) -> Result<(), ServerFnError> {
     collections::smart::delete_smart_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_multi_collections_page_size() -> Result<u32, ServerFnError> {
     collections::multi::get_multi_collections_page_size_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_multi_collections(
     search: String,
     page: u32,
@@ -1915,33 +1915,33 @@ pub async fn list_multi_collections(
     collections::multi::list_multi_collections_impl(search, page, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_multi_collection(id: i64) -> Result<Option<MultiCollectionForm>, ServerFnError> {
     collections::multi::get_multi_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_multi_collection_editor_options(
 ) -> Result<MultiCollectionEditorOptions, ServerFnError> {
     collections::multi::get_multi_collection_editor_options_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_multi_collection(form: MultiCollectionForm) -> Result<i64, ServerFnError> {
     collections::multi::save_multi_collection_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_multi_collection(id: i64) -> Result<(), ServerFnError> {
     collections::multi::delete_multi_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_rerun_collections_page_size() -> Result<u32, ServerFnError> {
     collections::rerun::get_rerun_collections_page_size_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_rerun_collections(
     search: String,
     page: u32,
@@ -1950,37 +1950,37 @@ pub async fn list_rerun_collections(
     collections::rerun::list_rerun_collections_impl(search, page, page_size).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_rerun_collection_form(
     id: i64,
 ) -> Result<Option<RerunCollectionForm>, ServerFnError> {
     collections::rerun::get_rerun_collection_form_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_rerun_collection_editor_options(
 ) -> Result<RerunCollectionEditorOptions, ServerFnError> {
     collections::rerun::get_rerun_collection_editor_options_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_rerun_collection(form: RerunCollectionForm) -> Result<i64, ServerFnError> {
     collections::rerun::save_rerun_collection_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_rerun_collection(id: i64) -> Result<(), ServerFnError> {
     collections::rerun::delete_rerun_collection_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn suggest_media_items(
     prefix: String,
 ) -> Result<Vec<MediaItemSuggestion>, ServerFnError> {
     autocomplete::suggest_media_items_impl(prefix).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_item_to_collection(
     collection_id: i64,
     media_item_id: i64,
@@ -1988,7 +1988,7 @@ pub async fn add_item_to_collection(
     autocomplete::add_item_to_collection_impl(collection_id, media_item_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn remove_item_from_collection(
     collection_id: i64,
     media_item_id: i64,
@@ -1996,17 +1996,17 @@ pub async fn remove_item_from_collection(
     autocomplete::remove_item_from_collection_impl(collection_id, media_item_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_program_schedules() -> Result<Vec<ScheduleOption>, ServerFnError> {
     autocomplete::list_program_schedules_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), ServerFnError> {
     autocomplete::add_show_to_schedule_impl(schedule_id, show_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_item_to_schedule(
     schedule_id: i64,
     collection_type: i64,
@@ -2015,7 +2015,7 @@ pub async fn add_media_item_to_schedule(
     autocomplete::add_media_item_to_schedule_impl(schedule_id, collection_type, media_item_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_item_to_schedule_with_stream_selection(
     schedule_id: i64,
     collection_type: i64,
@@ -2031,32 +2031,32 @@ pub async fn add_media_item_to_schedule_with_stream_selection(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnError> {
     autocomplete::list_all_collections_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_smart_collections_for_select() -> Result<Vec<CollectionOption>, ServerFnError> {
     autocomplete::list_smart_collections_for_select_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_collection(name: String) -> Result<CollectionOption, ServerFnError> {
     autocomplete::create_collection_impl(name).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playlist_page() -> Result<PlaylistPageData, ServerFnError> {
     playlists::get_playlist_page_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_playlist_group(name: String) -> Result<PlaylistGroupRow, ServerFnError> {
     playlists::create_playlist_group_impl(name).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_playlist(
     playlist_group_id: i64,
     name: String,
@@ -2064,63 +2064,63 @@ pub async fn create_playlist(
     playlists::create_playlist_impl(playlist_group_id, name).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_playlist_group(playlist_group_id: i64) -> Result<(), ServerFnError> {
     playlists::delete_playlist_group_impl(playlist_group_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_playlist(playlist_id: i64) -> Result<(), ServerFnError> {
     playlists::delete_playlist_impl(playlist_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playlist_editor(
     playlist_id: i64,
 ) -> Result<Option<PlaylistEditorForm>, ServerFnError> {
     playlists::get_playlist_editor_impl(playlist_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playlist_editor_options() -> Result<PlaylistEditorOptions, ServerFnError> {
     playlists::get_playlist_editor_options_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playlist(form: PlaylistEditorForm) -> Result<(), ServerFnError> {
     playlists::save_playlist_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn preview_playlist_playout(
     form: PlaylistEditorForm,
 ) -> Result<Vec<PlaylistPreviewRow>, ServerFnError> {
     playlists::preview_playlist_playout_impl(form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_all_playlist_groups() -> Result<Vec<PlaylistGroupOption>, ServerFnError> {
     playlists::list_all_playlist_groups_impl().await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_playlists_by_group(
     playlist_group_id: i64,
 ) -> Result<Vec<PlaylistOption>, ServerFnError> {
     playlists::list_playlists_by_group_impl(playlist_group_id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, ServerFnError> {
     collection_detail::get_collection_detail_impl(id).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_collection_use_custom_order(id: i64, on: bool) -> Result<(), ServerFnError> {
     collection_detail::set_collection_use_custom_order_impl(id, on).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn remove_items_from_collection(
     collection_id: i64,
     collection_item_ids: Vec<i64>,
@@ -2128,7 +2128,7 @@ pub async fn remove_items_from_collection(
     collection_detail::remove_items_from_collection_impl(collection_id, collection_item_ids).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn update_collection_custom_order(
     collection_id: i64,
     ordered_collection_item_ids: Vec<i64>,
@@ -2140,7 +2140,7 @@ pub async fn update_collection_custom_order(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_collection_members(
     collection_id: i64,
 ) -> Result<Vec<CollectionMember>, ServerFnError> {
@@ -2232,7 +2232,7 @@ impl MediaBrowserKind {
 /// up to and including that letter that has not yet been assigned maps to
 /// this page (1-based). Unmatched trailing buckets get the final page number
 /// so the rightmost letters still scroll to the last page.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn media_page_map(
     kind: MediaBrowserKind,
     search: String,
@@ -2317,7 +2317,7 @@ pub async fn media_page_map(
 /// media item and an identical playback-override tuple is skipped, so default
 /// adds stay idempotent like ErsatzTV. Returns the number of rows actually
 /// inserted.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_collection(
     collection_id: i64,
     media_item_ids: Vec<i64>,
@@ -2331,7 +2331,7 @@ pub async fn add_media_items_to_collection(
 /// several times as long as each row carries a different override tuple (for
 /// example one row per commentary track); a row identical to an existing one
 /// (media item plus override tuple) is skipped.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_collection_with_playback(
     collection_id: i64,
     media_item_ids: Vec<i64>,
@@ -2357,7 +2357,7 @@ pub async fn add_media_items_to_collection_with_playback(
 /// `Index = max(Index) + 1`, `PlaybackOrder = Shuffle (1)`,
 /// `IncludeInProgramGuide = 1`, `PlayAll = 0`. Mirrors the per-kind branches
 /// of `AddItemsToPlaylistHandler`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_playlist(
     kind: MediaBrowserKind,
     playlist_id: i64,
@@ -2368,7 +2368,7 @@ pub async fn add_media_items_to_playlist(
 
 /// Add media items to a playlist and optionally persist item-level playback
 /// overrides. ADR 0048 extends `PlaylistItem` with these nullable fields.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_playlist_with_playback(
     kind: MediaBrowserKind,
     playlist_id: i64,
@@ -2379,7 +2379,7 @@ pub async fn add_media_items_to_playlist_with_playback(
         .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_playlist_with_stream_selection(
     kind: MediaBrowserKind,
     playlist_id: i64,
@@ -2640,7 +2640,7 @@ pub fn plan_mixed_playlist_inserts(
 ///
 /// Sibling to the single-kind [`add_media_items_to_playlist`], which the
 /// browser pages still use for their per-kind grids.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_media_items_to_playlist_mixed(
     playlist_id: i64,
     ids: crate::admin::server_fns::search::SearchAllIds,
@@ -2677,7 +2677,7 @@ mod server_fn_path_stability {
     fn pinned_route(function_name: &str) -> String {
         let module_path = "ersatzrs_web::admin::server_fns::media_browser";
         let hash = xxh64(format!("ersatzrs:{module_path}").as_bytes(), 0);
-        format!("/api/{function_name}{hash}")
+        format!("/admin-api/{function_name}{hash}")
     }
 
     #[test]

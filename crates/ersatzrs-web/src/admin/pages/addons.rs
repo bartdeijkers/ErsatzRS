@@ -211,7 +211,7 @@ fn AddonsSettingsIsland(
             pickers.addon_pending.set(true);
             pickers.addon_feedback.set(String::new());
             leptos::task::spawn_local(async move {
-                match upload_selected_file(input, "/api/addons/package").await {
+                match upload_selected_file(input, "/admin-api/addons/package").await {
                     Ok(_) => {
                         toast.push(tr(TextKey::Install).to_owned(), ToastSeverity::Success);
                         overview.refetch();
@@ -232,7 +232,7 @@ fn AddonsSettingsIsland(
             pickers.repository_feedback.set(String::new());
             pickers.repository_browse.set(String::new());
             leptos::task::spawn_local(async move {
-                match upload_selected_file(input, "/api/addons/repository-bundle").await {
+                match upload_selected_file(input, "/admin-api/addons/repository-bundle").await {
                     Ok(receipt) => {
                         if let (Some(id), Some(name), Some(count)) = (
                             receipt["repository"]["id"].as_str(),
@@ -767,7 +767,7 @@ fn repository_row(
             </td>
             <td>
                 {removable.then(|| view! {
-                    <form method="post" action="/api/addons/repository-bundle/remove">
+                    <form method="post" action="/admin-api/addons/repository-bundle/remove">
                         <input type="hidden" name="repository_id" value=repository_id.clone()/>
                         <button
                             type="submit"

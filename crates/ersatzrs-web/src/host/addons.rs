@@ -239,7 +239,7 @@ impl AddonRuntime for NativeAddonRuntime {
             .map(|value| {
                 let icon_url = value.has_local_icon.then(|| {
                     format!(
-                        "/api/addons/source-icon/{}/{}",
+                        "/admin-api/addons/source-icon/{}/{}",
                         value.repository_id, value.addon.id
                     )
                 });
@@ -293,7 +293,7 @@ impl AddonRuntime for NativeAddonRuntime {
                 icon_url: manifest
                     .icon
                     .as_ref()
-                    .map(|_| format!("/api/addons/installed-icon/{}", value.addon_id)),
+                    .map(|_| format!("/admin-api/addons/installed-icon/{}", value.addon_id)),
                 addon_id: value.addon_id,
                 repository_id: value.source_id.or(value.repository_id),
                 version: value.version.to_string(),

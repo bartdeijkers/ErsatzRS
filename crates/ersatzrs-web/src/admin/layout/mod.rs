@@ -262,7 +262,7 @@ fn ThemeStateScript() -> impl IntoView {
 (() => {
   async function initTheme() {
     try {
-      const response = await fetch("/api/settings/ui/theme", { cache: "no-store" });
+      const response = await fetch("/admin-api/settings/ui/theme", { cache: "no-store" });
       if (!response.ok) return;
       const payload = await response.json();
       const theme = payload && payload.theme === "light" ? "light" : "dark";

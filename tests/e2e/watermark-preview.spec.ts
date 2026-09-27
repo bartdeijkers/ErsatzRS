@@ -26,7 +26,7 @@ function sqlite(sql: string): string {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
   });
@@ -36,7 +36,7 @@ async function uploadWatermark(
   request: APIRequestContext,
   buffer = WATERMARK_PNG,
 ): Promise<string> {
-  const response = await request.post('/api/watermarks/image', {
+  const response = await request.post('/admin-api/watermarks/image', {
     multipart: {
       file: {
         name: 'p7c-watermark.png',
@@ -99,7 +99,7 @@ async function waitForHydration(page: Page): Promise<void> {
 }
 
 async function expectContained(page: Page): Promise<void> {
-  const containment = await page.locator('form[action="/api/watermarks/save"]').evaluate(
+  const containment = await page.locator('form[action="/admin-api/watermarks/save"]').evaluate(
     (form) => {
       const preview = form.querySelector<HTMLElement>('[data-state]');
       const rect = preview?.getBoundingClientRect();

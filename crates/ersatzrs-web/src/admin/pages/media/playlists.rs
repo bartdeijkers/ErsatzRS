@@ -155,7 +155,7 @@ fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
             <section class=style::playlist_section>
                 <h1 class=style::page_title>{tr(TextKey::PlaylistGroups)}</h1>
                 <div class=style::divider/>
-                <form method="post" action="/api/playlists/groups/create" class=style::playlist_form>
+                <form method="post" action="/admin-api/playlists/groups/create" class=style::playlist_form>
                     <div class=style::playlist_form_row>
                         <label for="playlist-group-name">{tr(TextKey::PlaylistGroupName)}</label>
                         <input
@@ -195,7 +195,7 @@ fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
                             }
                         }
                         view! {
-                            <form method="post" action="/api/playlists/create" class=style::playlist_form>
+                            <form method="post" action="/admin-api/playlists/create" class=style::playlist_form>
                                 <div class=style::playlist_form_row>
                                     <label for="playlist-group-select">{tr(TextKey::PlaylistGroup)}</label>
                                     <select
@@ -252,7 +252,7 @@ fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
                                                         <span class=style::tree_folder style=icon_style(IconName::Folder, "1.25rem") aria-hidden="true"></span>
                                                         <span>{group_name}</span>
                                                     </div>
-                                                    <form method="post" action="/api/playlists/groups/delete">
+                                                    <form method="post" action="/admin-api/playlists/groups/delete">
                                                         <input type="hidden" name="id" value=group_id.to_string()/>
                                                         <button
                                                             type="submit"
@@ -329,7 +329,7 @@ fn playlist_row(
             >
                 <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
             </a>
-            <form method="post" action="/api/playlists/delete">
+            <form method="post" action="/admin-api/playlists/delete">
                 <input type="hidden" name="id" value=id.to_string()/>
                 <button
                     type="submit"
@@ -441,7 +441,7 @@ fn PlaylistEditorIsland(
     };
 
     view! {
-        <form method="post" action="/api/playlists/save" class=style::page>
+        <form method="post" action="/admin-api/playlists/save" class=style::page>
             <input type="hidden" name="id" value=id.to_string()/>
             {move || playlist_item_hidden_fields(normalized_items(items.get()))}
             <div class=style::editor_action_bar>

@@ -210,7 +210,7 @@ fn TemplatesIsland(
                 <section class=style::section>
                     <h1 class=style::page_title>{tr(TextKey::TemplateGroups)}</h1>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/templates/groups/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/templates/groups/create" class=style::form_grid>
                         <label class=style::label for="template-group-name">{tr(TextKey::TemplateGroupName)}</label>
                         <input
                             id="template-group-name"
@@ -240,7 +240,7 @@ fn TemplatesIsland(
                 <section class=style::section>
                     <h2 class=style::section_title>{tr(TextKey::Templates)}</h2>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/templates/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/templates/create" class=style::form_grid>
                         <label class=style::label for="template-group">{tr(TextKey::TemplateGroup)}</label>
                         <select
                             id="template-group"
@@ -331,7 +331,7 @@ fn TemplatesIsland(
             >
                 <h2 class=style::modal_title>{tr(TextKey::CopyTemplate)}</h2>
                 <p class=style::label>{tr(TextKey::SelectGroupForNewTemplate)}</p>
-                <form method="post" action="/api/templates/copy" class=style::form_grid>
+                <form method="post" action="/admin-api/templates/copy" class=style::form_grid>
                     <input
                         type="hidden"
                         name="id"
@@ -485,7 +485,7 @@ fn TemplateTable(
                                 <td class=style::group_header>{group_name.clone()}</td>
                                 <td class=style::group_header>
                                     <div class=style::header_actions>
-                                        <form method="post" action="/api/templates/groups/delete">
+                                        <form method="post" action="/admin-api/templates/groups/delete">
                                             <input type="hidden" name="id" value=group_id.to_string()/>
                                             <button
                                                 type="submit"
@@ -553,7 +553,7 @@ fn TemplateTable(
                                                         >
                                                             <span class=style::copy_icon aria-hidden="true"></span>
                                                         </button>
-                                                        <form method="post" action="/api/templates/delete">
+                                                        <form method="post" action="/admin-api/templates/delete">
                                                             <input type="hidden" name="id" value=id.to_string()/>
                                                             <button
                                                                 type="submit"
@@ -742,7 +742,7 @@ fn TemplateEditorForm(
                 </div>
             </div>
             <div class=style::content>
-                <form id="template-editor-form" method="post" action="/api/templates/items/save">
+                <form id="template-editor-form" method="post" action="/admin-api/templates/items/save">
                     <input type="hidden" name="template_id" value=template_id.to_string()/>
                     <input type="hidden" name="group_id" value=group_id.to_string()/>
                     <h1 class=style::section_title>{tr(TextKey::General)}</h1>

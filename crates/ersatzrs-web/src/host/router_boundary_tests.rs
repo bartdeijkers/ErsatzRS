@@ -82,14 +82,24 @@ async fn internal_routes_require_actual_loopback_peer_and_keep_capability_checks
 
 #[tokio::test]
 async fn streaming_listener_omits_management_and_keeps_public_iptv_authentication() {
-    let state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("api-secrets.json"),
+        br#"{"ApiKey":"synthetic-fixture-key"}"#,
+    )
+    .unwrap();
+    let mut state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
+    state.api_key = Some(ersatzrs_infra::api_security::load_or_create(root.path()).unwrap());
     let app = super::build_streaming_app(state.clone());
     for path in [
         "/",
         "/settings/ffmpeg",
         "/api/maintenance/clean_artwork",
+        "/api/openapi.json",
         "/api/addons/package",
         "/api/serverfn",
+        "/admin-api/addons/package",
+        "/admin-api/serverfn",
         "/public/channel-preview.js",
         "/pkg/ersatzrs_web.wasm",
         "/healthz",
@@ -107,6 +117,7 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
                         .header("host", "localhost")
                         .header("forwarded", "for=127.0.0.1;host=localhost")
                         .header("x-forwarded-host", "localhost")
+                        .header("x-ers-api-key", "synthetic-fixture-key")
                         .body(Body::empty())
                         .unwrap(),
                 )

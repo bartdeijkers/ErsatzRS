@@ -171,7 +171,7 @@ fn filler_form_from_admin(form: ersatzrs_app::commands::FillerPresetAdminForm) -
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_filler_presets_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -183,7 +183,7 @@ pub async fn get_filler_presets_page_size() -> Result<u32, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_filler_presets(
     page: u32,
     page_size: u32,
@@ -210,7 +210,7 @@ pub async fn list_filler_presets(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_filler_preset_form(id: i64) -> Result<Option<FillerPresetForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -223,7 +223,7 @@ pub async fn get_filler_preset_form(id: i64) -> Result<Option<FillerPresetForm>,
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_filler_preset_editor_options() -> Result<FillerPresetEditorOptions, ServerFnError>
 {
     use crate::host::state::AppState;
@@ -278,7 +278,7 @@ pub async fn get_filler_preset_editor_options() -> Result<FillerPresetEditorOpti
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_filler_preset(form: FillerPresetForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -292,7 +292,7 @@ pub async fn save_filler_preset(form: FillerPresetForm) -> Result<i64, ServerFnE
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_filler_preset(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 

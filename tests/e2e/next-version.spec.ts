@@ -18,7 +18,7 @@ test('Next version is cached SSR content in the responsive navigation drawer', a
     page.on('console', message => {
       if (message.type() === 'error') errors.push(message.text());
     });
-    const saved = await page.request.post('/api/settings/ui/save', {
+    const saved = await page.request.post('/admin-api/settings/ui/save', {
       form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
     });
     expect(saved.status()).toBe(303);

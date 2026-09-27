@@ -449,7 +449,7 @@ fn validate_profile_options(
 // ---------------------------------------------------------------------------
 
 /// Returns paginated `FFmpegProfile` rows (Name, Resolution, VideoFormat, AudioFormat).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_ffmpeg_profile_rows(
     page: u32,
     page_size: u32,
@@ -476,7 +476,7 @@ pub async fn list_ffmpeg_profile_rows(
 }
 
 /// Returns the total `FFmpegProfile` count.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_ffmpeg_profiles() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -489,7 +489,7 @@ pub async fn count_ffmpeg_profiles() -> Result<u64, ServerFnError> {
 }
 
 /// Returns `(id, name)` pairs for resolutions.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -509,7 +509,7 @@ pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerF
 /// boundary so it follows the active UI language.
 ///
 /// V4L2M2M is excluded (commented out in the upstream handler too).
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn list_supported_hw_accelerations(
 ) -> Result<Vec<HardwareAccelerationOption>, ServerFnError> {
@@ -577,7 +577,7 @@ fn hw_acceleration_select_items(
 }
 
 /// Loads a profile into [`FfmpegProfileForm`]. Returns `None` if not found.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -612,7 +612,7 @@ fn qsv_extra_hardware_frames_for_persist(
 /// - When `TranscodeAudio = false`, `AudioFormat` is forced to Copy (99).
 /// - `PadMode` is Software (1) for None, VAAPI-controlled otherwise.
 /// - `BitDepth` is forced to EightBit (0) for `Mpeg2Video`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -867,7 +867,7 @@ async fn save_ffmpeg_profile_legacy_sql(form: FfmpegProfileForm) -> Result<i64, 
 }
 
 /// Deletes an `FFmpegProfile` by id.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_ffmpeg_profile(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::commands::DeleteFfmpegProfile;
@@ -884,7 +884,7 @@ pub async fn delete_ffmpeg_profile(id: i64) -> Result<(), ServerFnError> {
 ///
 /// Validates that `new_name` is non-empty and ≤ 50 characters. Returns an error
 /// if the source profile is not found (zero rows inserted).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::commands::CopyFfmpegProfile;

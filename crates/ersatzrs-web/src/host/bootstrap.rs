@@ -984,6 +984,20 @@ async fn build_app_state(
     scan_work_tx: tokio::sync::mpsc::UnboundedSender<ersatzrs_app::commands::ScanWorkRequest>,
     playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> ersatzrs_app::Result<AppState> {
+    let api_key = tokio::task::spawn_blocking(|| {
+        ersatzrs_infra::api_security::load_or_create(
+            &ersatzrs_infra::file_system_layout::app_state_folder(),
+        )
+    })
+    .await
+    .map_err(|_| ersatzrs_app::ApplicationError::Unavailable {
+        operation: "initialize machine API authentication",
+        message: "credential initialization task failed".to_owned(),
+    })?
+    .map_err(|error| ersatzrs_app::ApplicationError::Unavailable {
+        operation: "initialize machine API authentication",
+        message: error.to_string(),
+    })?;
     if let Err(error) = ersatzrs_infra::addon_media_storage::reconcile_enabled_sources(&pool).await
     {
         tracing::warn!(%error, "failed to reconcile enabled add-on media sources");
@@ -1019,7 +1033,7 @@ async fn build_app_state(
     .and_then(|value| value.trim().parse::<i32>().ok())
     .unwrap_or(DEFAULT_TUNER_COUNT);
 
-    Ok(AppState::new_with_scan_queue(
+    let mut state = AppState::new_with_scan_queue(
         pool,
         database_backend,
         SystemStartup {
@@ -1033,7 +1047,9 @@ async fn build_app_state(
         playout_build_tx,
         scan_work_tx,
         playout_locker,
-    ))
+    );
+    state.api_key = Some(api_key);
+    Ok(state)
 }
 
 fn load_iptv_jwt_signing_key() -> Option<String> {

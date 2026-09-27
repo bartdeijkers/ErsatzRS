@@ -73,7 +73,7 @@ async fn actual_ipv4_and_ipv6_listeners_isolate_routes_and_shut_down_together() 
                     (streaming, "/lineup_status.json", 200),
                     (
                         streaming,
-                        "/api/settings/ui/save",
+                        "/admin-api/settings/ui/save",
                         if separate { 404 } else { 405 },
                     ),
                     (streaming, "/ffmpeg/next-media/1/2/3", 404),

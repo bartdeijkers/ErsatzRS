@@ -1,4 +1,5 @@
 pub mod addons;
+pub(crate) mod api_security;
 pub mod artwork_cleanup;
 pub mod assets;
 pub mod bootstrap;

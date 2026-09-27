@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
+import { test as isolatedTest } from './isolated-web-host';
 
 /**
  * Whole-app island hydration smoke.
@@ -147,7 +148,7 @@ const HYDRATION_ERROR_SIGNATURES = [
 // Force a deterministic (English) UI once, against the shared throwaway DB, so
 // headings/labels are stable if individual specs ever assert on them.
 test.beforeAll(async ({ request }) => {
-  await request.post('/api/settings/ui/save', {
+  await request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
   });
@@ -205,16 +206,10 @@ for (const { route, islands } of ISLAND_ROUTES) {
   });
 }
 
-test('settings storage failure renders a stable error state without a submittable form', async ({
-  page,
+isolatedTest('settings storage failure renders a stable error state without a submittable form', async ({
+  page, isolatedWebHost,
 }) => {
-  const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
-  test.skip(
-    !databasePath,
-    'E2E_DB_PATH or ERSATZRS_DB_PATH is required for storage failure injection.',
-  );
-
-  const database = new DatabaseSync(databasePath!);
+  const database = new DatabaseSync(isolatedWebHost.databasePath);
   database.exec('PRAGMA busy_timeout=5000');
   database.exec('ALTER TABLE "ConfigElement" RENAME TO "ConfigElementFailureInjection"');
 
@@ -232,7 +227,7 @@ test('settings storage failure renders a stable error state without a submittabl
       }
     });
 
-    const response = await page.goto('/settings/ffmpeg', { waitUntil: 'domcontentloaded' });
+    const response = await page.goto(`${isolatedWebHost.baseURL}/settings/ffmpeg`, { waitUntil: 'domcontentloaded' });
     expect(response?.status()).toBe(200);
     await expect(page.locator('[data-admin-resource][data-state="error"]')).toHaveCount(1);
     await expect(

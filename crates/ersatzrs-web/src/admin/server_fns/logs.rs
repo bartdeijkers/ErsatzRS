@@ -25,7 +25,7 @@ pub struct AdminLogSnapshot {
     pub entries: Vec<AdminLogEntry>,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_logs_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -41,7 +41,7 @@ pub async fn get_logs_page_size() -> Result<u32, ServerFnError> {
         .unwrap_or(10))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async, clippy::too_many_lines)]
 pub async fn load_recent_log_entries(
     filter: String,

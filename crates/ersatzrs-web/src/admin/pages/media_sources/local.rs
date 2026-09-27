@@ -240,7 +240,7 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <form method="post" action="/api/media-sources/local/save">
+            <form method="post" action="/admin-api/media-sources/local/save">
                 <input type="hidden" name="id" value=lib_id.to_string()/>
 
                 <div class=style::toolbar>

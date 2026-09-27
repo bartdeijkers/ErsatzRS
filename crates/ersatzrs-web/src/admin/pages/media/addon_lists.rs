@@ -390,7 +390,7 @@ async fn upload_metadata_artwork(
     form_data
         .append_with_blob_and_filename("file", blob, &file.name())
         .map_err(|error| format!("{error:?}"))?;
-    let response = Request::post("/api/addon-media-lists/artwork")
+    let response = Request::post("/admin-api/addon-media-lists/artwork")
         .body(form_data)
         .map_err(|error| error.to_string())?
         .send()
@@ -1509,7 +1509,7 @@ fn AddonListDiskWarningSettings(list_id: Option<i64>) -> impl IntoView {
             <section id="addon-list-disk-warning-settings" class=style::disk_warning_settings data-testid="addon-list-disk-warning-settings">
                 <div class=style::content>
                     <h2>{tr(TextKey::AddonListDiskWarnings)}</h2>
-                    <form method="post" action="/api/addon-lists/disk-warning" class=style::disk_warning_form>
+                    <form method="post" action="/admin-api/addon-lists/disk-warning" class=style::disk_warning_form>
                         <input type="hidden" name="list_id" value=list_id.map(|id| id.to_string()).unwrap_or_default()/>
                         <label class=style::source_field>
                             <span class=style::field_title>{label}</span>
@@ -1902,7 +1902,7 @@ fn AddonMediaListsIsland(
                                                                     >
                                                                         <span style=icon_style(IconName::Search, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
-                                                                    <form method="post" action="/api/addon-lists/match">
+                                                                    <form method="post" action="/admin-api/addon-lists/match">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
                                                                         <button
                                                                             type="submit"
@@ -1917,7 +1917,7 @@ fn AddonMediaListsIsland(
                                                                             <span style=icon_style(IconName::Refresh, "1.25rem") aria-hidden="true"></span>
                                                                         </button>
                                                                     </form>
-                                                                    <form method="post" action="/api/addon-lists/delete">
+                                                                    <form method="post" action="/admin-api/addon-lists/delete">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
                                                                         <button
                                                                             type="submit"
@@ -2085,7 +2085,7 @@ fn AddAddonMediaListDialog(
                 <h2 class=style::dialog_title>{tr(TextKey::AddAddonMediaList)}</h2>
                 <form
                     method="post"
-                    action="/api/addon-lists/add"
+                    action="/admin-api/addon-lists/add"
                     on:submit=move |event| {
                         event.prevent_default();
                         let addon_id = addon_id.get_untracked();
@@ -2582,7 +2582,7 @@ fn AddAddonMediaListPageIsland(
                 <form
                     class=style::source_card
                     method="post"
-                    action="/api/addon-lists/add"
+                    action="/admin-api/addon-lists/add"
                     on:submit=move |event| {
                     event.prevent_default();
                     if source_url.with(|value| !value.trim().is_empty()) {
@@ -3226,7 +3226,7 @@ fn AddonMediaListItemIsland(
                 id="addon-list-item-review-form"
                 class=style::editor
                 method="post"
-                action="/api/addon-lists/items/review"
+                action="/admin-api/addon-lists/items/review"
             >
                 <h1 class=style::page_title>{detail.item.display_title}</h1>
                 <p class=style::draft_note role="status" style:display=if initial_status == "saved" { "flex" } else { "none" }>{tr(TextKey::Saved)}</p>
@@ -3903,7 +3903,7 @@ fn PublicationActivity(
                         <style>"[data-publication-diagnostics-copy] { display: none !important; }"</style>
                         <a
                             class=style::btn_cancel
-                            href=format!("/api/addon-lists/{list_id}/publication-diagnostics")
+                            href=format!("/admin-api/addon-lists/{list_id}/publication-diagnostics")
                         >
                             <span style=icon_style(IconName::Download, "1rem") aria-hidden="true"></span>
                             <span>{tr(TextKey::DownloadRedactedDiagnostics)}</span>
@@ -4088,7 +4088,7 @@ fn publication_recovery_view(
                 <div><dt>{tr(TextKey::FailureReason)}</dt><dd>{diagnostic}</dd></div>
             </dl>
             <div class=style::recovery_actions>
-                <form method="post" action="/api/addon-lists/recover" style:display=if can_retry { "block" } else { "none" }>
+                <form method="post" action="/admin-api/addon-lists/recover" style:display=if can_retry { "block" } else { "none" }>
                     <input type="hidden" name="list_id" value=list_id/>
                     <input type="hidden" name="job_id" value=job_id/>
                     <input type="hidden" name="generation" value=generation/>
@@ -4110,7 +4110,7 @@ fn publication_recovery_view(
                         }
                     >{tr(TextKey::RetryRecovery)}</button>
                 </form>
-                <form method="post" action="/api/addon-lists/recover" style:display=if can_restore { "block" } else { "none" }>
+                <form method="post" action="/admin-api/addon-lists/recover" style:display=if can_restore { "block" } else { "none" }>
                     <input type="hidden" name="list_id" value=list_id/>
                     <input type="hidden" name="job_id" value=job_id/>
                     <input type="hidden" name="generation" value=generation/>
@@ -5774,7 +5774,7 @@ fn AddonMediaListEditorIsland(
                 <button
                     form="addon_media_lists-list-editor-form"
                     type="submit"
-                    formaction="/api/addon-lists/publish"
+                    formaction="/admin-api/addon-lists/publish"
                     formmethod="post"
                     class=style::btn_add
                     disabled=move || row_mutation_pending.get() || publish_action.pending().get()
@@ -5847,7 +5847,7 @@ fn AddonMediaListEditorIsland(
                         <button
                             form="addon_media_lists-list-editor-form"
                             type="submit"
-                            formaction="/api/addon-lists/publish"
+                            formaction="/admin-api/addon-lists/publish"
                             formmethod="post"
                             class=style::btn_add
                             disabled=move || !matches!(primary_action.get(), PublicationPrimaryAction::Prepare | PublicationPrimaryAction::Publish)
@@ -6057,7 +6057,7 @@ fn AddonMediaListEditorIsland(
                         <h2 id="addon-list-source-test-heading">{tr(TextKey::TestSource)}</h2>
                         <p>{tr(TextKey::TestSourceHelp)}</p>
                     </div>
-                    <form method="post" action="/api/addon-lists/test-source">
+                    <form method="post" action="/admin-api/addon-lists/test-source">
                         <input type="hidden" name="id" value=id />
                         <input
                             type="hidden"
@@ -6150,7 +6150,7 @@ fn AddonMediaListEditorIsland(
                     style:display=move || if reconcile_status_visible.get() { "flex" } else { "none" }
                 >{tr(TextKey::ReconcileQueued)}</p>
                 <noscript>
-                    <form method="post" action="/api/addon-lists/reconcile">
+                    <form method="post" action="/admin-api/addon-lists/reconcile">
                         <input type="hidden" name="id" value=id />
                         <button type="submit" class=style::btn_add>
                             <span style=icon_style(IconName::Refresh, "1rem") aria-hidden="true"></span>
@@ -6209,7 +6209,7 @@ fn AddonMediaListEditorIsland(
                                     >{tr(TextKey::ConfirmRemoval)}</Button>
                                 </div>
                                 <noscript>
-                                    <form method="post" action="/api/addon-lists/confirm-removal">
+                                    <form method="post" action="/admin-api/addon-lists/confirm-removal">
                                         <input type="hidden" name="list_id" value=id />
                                         <input type="hidden" name="item_id" value=item_id />
                                         <input
@@ -6307,7 +6307,7 @@ fn AddonMediaListEditorIsland(
                                     <div><dt>{tr(TextKey::Files)}</dt><dd>{revision.file_count}</dd></div>
                                     <div><dt>{tr(TextKey::Artifacts)}</dt><dd>{revision.artifact_count}</dd></div>
                                 </dl>
-                                <form method="post" action="/api/addon-lists/restore-revision">
+                                <form method="post" action="/admin-api/addon-lists/restore-revision">
                                     <input type="hidden" name="id" value=id />
                                     <input type="hidden" name="source_published_revision" value=revision_number />
                                     <input type="hidden" name="expected_draft_revision" value=move || publication_readiness.with(|value| value.saved_revision) />
@@ -6344,7 +6344,7 @@ fn AddonMediaListEditorIsland(
             <form
                 id="addon_media_lists-list-editor-form"
                 method="post"
-                action="/api/addon-lists/save"
+                action="/admin-api/addon-lists/save"
                 class=style::editor
                 style:display=move || if form_found { "" } else { "none" }
             >
@@ -6826,7 +6826,7 @@ fn AddonMediaListEditorIsland(
                         </button>
                     </div>
                     <section class=style::bulk_edit_toolbar aria-label=tr(TextKey::BulkEdit)>
-                        <form method="post" action="/api/addon-lists/options/edit" hidden=!options_available>
+                        <form method="post" action="/admin-api/addon-lists/options/edit" hidden=!options_available>
                             <input type="hidden" name="list_id" value=id.to_string()/>
                             <label>
                                 <span>{tr(TextKey::AddonOptions)}</span>
@@ -7096,7 +7096,7 @@ fn AddonMediaListEditorIsland(
                         <form
                             class=style::reset_fallback_form
                             method="post"
-                            action="/api/addon-lists/reset"
+                            action="/admin-api/addon-lists/reset"
                         >
                             <input type="hidden" name="id" value=id />
                             <label for="addon-list-reset-confirmation-nojs">

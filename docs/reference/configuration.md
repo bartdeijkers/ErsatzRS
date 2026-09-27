@@ -168,6 +168,39 @@ HTTP. Persisted directives are applied after the base `RUST_LOG` filter and can
 be reloaded without replacing application files. Exact keys, accepted levels,
 and file locations are in the [logging reference](logging.md).
 
+## Machine API authentication
+
+Machine requests under `/api` require exactly one `X-Ers-Api-Key` header.
+Startup creates `api-secrets.json` in the durable application state directory
+(`ERSATZRS_APP_STATE_DIR`, or the default state directory). Its `ApiKey` property
+holds the credential. A valid existing value survives restart. Startup stops
+with a redacted error if credential storage or initialization is unavailable.
+
+Configure the header through your client's protected credential configuration.
+Do not put the key in URLs, command-line arguments, screenshots or support logs.
+Query parameters, management cookies and forwarded headers do not substitute
+for the header. Missing or invalid credentials return HTTP 401.
+
+`GET /api/openapi.json` describes the implemented machine endpoints and their
+authentication scheme; fetching it also requires the header. For example,
+`POST /api/maintenance/clean_artwork` queues cleanup after authenticating.
+This description does not advertise upstream endpoints that ErsatzRS does not
+implement.
+
+To rotate the key, stop the server, remove `api-secrets.json` locally, then
+restart and update authorized clients using the new file. Back up and protect
+the credential with the rest of the state directory. Unix-created files use
+owner-only permissions; Windows uses the directory's inherited access controls.
+
+Browser actions and Leptos server functions use `/admin-api`; browsers never
+receive the machine key. `/api/troubleshoot` remains a management-only exception.
+The management listener still requires a trusted network or a separately
+authenticated reverse proxy; this key does not add management login or OIDC.
+When using a reverse proxy for login, prevent direct access to the management
+listener so clients cannot bypass the proxy's authentication.
+A separate streaming listener exposes neither machine nor browser action APIs.
+IPTV JWT and private callback capability checks remain independent.
+
 ## IPTV JWT protection
 
 | Variable | Purpose |

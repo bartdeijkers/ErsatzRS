@@ -50,7 +50,7 @@ impl Default for GraphicsElementForm {
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_graphics_element_rows() -> Result<Vec<GraphicsElementListRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -66,7 +66,7 @@ pub async fn list_graphics_element_rows() -> Result<Vec<GraphicsElementListRow>,
     Ok(rows.into_iter().map(list_row_from_element).collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_graphics_element_form(
     id: i64,
 ) -> Result<Option<GraphicsElementForm>, ServerFnError> {
@@ -83,7 +83,7 @@ pub async fn get_graphics_element_form(
 /// The server redirects after every submission. Leptos turns the same response
 /// into a client navigation for hydrated calls and a regular HTTP redirect for
 /// progressive enhancement.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_arguments)]
 pub async fn save_graphics_element(
     id: i64,

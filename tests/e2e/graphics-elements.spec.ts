@@ -24,7 +24,7 @@ function projectBase(testInfo: TestInfo): number {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
   });

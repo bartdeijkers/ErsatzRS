@@ -158,7 +158,7 @@ INSERT INTO "MediaChapter" (
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -200,7 +200,7 @@ test.describe('Windows release interaction regressions', () => {
 
     for (const [name, deep] of [['Quick Scan', 'false'], ['Deep Scan', 'true']]) {
       const requestPromise = page.waitForRequest(request =>
-        request.method() === 'POST' && request.url().includes('/api/scan_show'),
+        request.method() === 'POST' && request.url().includes('/admin-api/scan_show'),
       );
       await page.getByRole('button', { name, exact: true }).click();
       const request = await requestPromise;

@@ -42,7 +42,7 @@ for (const javaScriptEnabled of [false, true]) {
       const seed = seedMetadataEditor(info);
       sqlite(`UPDATE "AddonMediaListItem" SET "Included"=0,"Availability"=1 WHERE "Id"=${seed.secondItemId};`);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
-      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       if (javaScriptEnabled) hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}`);
@@ -84,7 +84,7 @@ for (const javaScriptEnabled of [false, true]) {
       sqlite(`UPDATE "AddonMediaListItem" SET "ProviderMetadataJson"=json_set("ProviderMetadataJson",'$.release_date','2019-08-20') WHERE "Id"=${seed.firstItemId};`);
       sqlite(`UPDATE "AddonMediaListItem" SET "ProviderMetadataJson"=json_set("ProviderMetadataJson",'$.release_date','2020-08-21') WHERE "Id"=${seed.secondItemId};`);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
-      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       if (javaScriptEnabled) hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}`);
@@ -110,7 +110,7 @@ for (const javaScriptEnabled of [false, true]) {
     test('saves playback after metadata progress and retains a competing edit', async ({ browser, baseURL }, info) => {
       const seed = seedMetadataEditor(info);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
-      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       const other = await context.newPage();
       if (javaScriptEnabled) { hydratedPages.add(page); hydratedPages.add(other); }
@@ -139,7 +139,7 @@ for (const javaScriptEnabled of [false, true]) {
       const seed = seedMetadataEditor(info);
       sqlite(`UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0 WHERE "Id"=${seed.secondItemId};`);
       const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 320, height: 800 } });
-      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       if (javaScriptEnabled) hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}`);
@@ -162,7 +162,7 @@ for (const javaScriptEnabled of [false, true]) {
     test('retains task input and commits only the selected task', async ({ browser, baseURL }, info) => {
       const seed = seedMetadataEditor(info);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
-      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       if(javaScriptEnabled) hydratedPages.add(page);
       const errors: string[] = [];
@@ -342,7 +342,7 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       const poster=await page.locator('[name="metadata_poster"]').inputValue();
       const fanart=await page.locator('[name="metadata_fanart"]').inputValue();
       expect(poster).toMatch(/^ersatzrs-upload:\/\/\d+$/);expect(fanart).not.toBe(poster);
-      const preview=await page.request.get(`/api/addon-media-lists/artwork/${poster.split('//')[1]}`);
+      const preview=await page.request.get(`/admin-api/addon-media-lists/artwork/${poster.split('//')[1]}`);
       expect(preview.ok()).toBe(true);expect(await preview.body()).toEqual(png);
       await submit(page,'save');await expect(page.locator('#workspace-errors')).toHaveCount(0);
       const saved=JSON.parse(sqlite(`SELECT "MetadataOverrideJson" FROM "AddonMediaList" WHERE "Id"=${seed.listId}`));
@@ -412,7 +412,7 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
 
     test('marks edited rows and opens items in a new tab without losing the draft',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});
-      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'nl'},maxRedirects:0});
+      await context.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'nl'},maxRedirects:0});
       try{
       const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
       const base=`/media/addon-lists/${seed.listId}`;
@@ -436,14 +436,14 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await expect(link).toHaveAttribute('target','_blank');
       }finally{
         // The UI language is global; later tests expect English.
-        await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+        await context.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
         await context.close();
       }
     });
 
     test('reviews bulk numbering beside its panels and applies or cancels it',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});
-      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      await context.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
       try{
       const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}`);await settled(page);
@@ -501,7 +501,7 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
         sqlite(`INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","Included","ProviderMetadataJson") VALUES (${id},${seed.listId},'pager-${i}','Pager item ${i}',4,${i},'Pager item ${i}',1,'{"title":"Pager item ${i}"}');`);
       }
       const context=await browser.newContext({baseURL,javaScriptEnabled});
-      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      await context.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
       try{
       const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}`);await settled(page);
@@ -531,7 +531,7 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
     test('offers Save item at the top of the item page and hides numbers when unnumbered',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);
       const context=await browser.newContext({baseURL,javaScriptEnabled,viewport:{width:1440,height:700}});
-      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      await context.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
       try{
       const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);await settled(page);

@@ -33,7 +33,7 @@ pub fn ReleaseNotesCard() -> impl IntoView {
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)] // Leptos server functions require an async transport signature.
 async fn load_release_notes() -> Result<String, ServerFnError> {
     use std::sync::OnceLock;

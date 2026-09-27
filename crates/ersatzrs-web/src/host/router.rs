@@ -23,6 +23,7 @@ use leptos_axum::{generate_route_list, LeptosRoutes};
 
 #[allow(clippy::too_many_lines)]
 pub fn build_app(app_state: AppState) -> Router {
+    let api_key = app_state.api_key.clone();
     let conf = super::config::leptos_configuration();
     let leptos_options = conf.leptos_options;
     let routes = web_routes(super::config::development_routes_enabled());
@@ -78,6 +79,7 @@ pub fn build_app(app_state: AppState) -> Router {
     let api_router: Router =
         Router::new()
             .route("/healthz", get(super::bootstrap::healthz))
+            .route("/api/openapi.json", get(super::api_security::openapi))
             .route(
                 "/changelog.md",
                 get(crate::admin::release_notes::full_changelog),
@@ -87,239 +89,248 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::maintenance::clean_artwork),
             )
             .route(
-                "/api/addons/package",
+                "/admin-api/addons/package",
                 post(api::addons::upload_addon_package).layer(DefaultBodyLimit::max(
                     api::addons::MAX_ADDON_UPLOAD_BYTES + 1024 * 1024,
                 )),
             )
             .route(
-                "/api/addon-media-lists/artwork",
+                "/admin-api/addon-media-lists/artwork",
                 post(api::addon_media_lists::upload_artwork).layer(DefaultBodyLimit::max(
                     api::addon_media_lists::MAX_ARTWORK_REQUEST_BYTES,
                 )),
             )
             .route(
-                "/api/addon-media-lists/artwork/{upload_id}",
+                "/admin-api/addon-media-lists/artwork/{upload_id}",
                 get(api::addon_media_lists::uploaded_artwork),
             )
             .route(
-                "/api/addons/repository-bundle",
+                "/admin-api/addons/repository-bundle",
                 post(api::addons::upload_repository_bundle)
                     .layer(DefaultBodyLimit::max(512 * 1024 * 1024 + 1024 * 1024)),
             )
             .route(
-                "/api/addons/repository-bundle/remove",
+                "/admin-api/addons/repository-bundle/remove",
                 post(api::addons::remove_repository_bundle),
             )
             .route(
-                "/api/addons/installed-icon/{addon_id}",
+                "/admin-api/addons/installed-icon/{addon_id}",
                 get(api::addons::installed_icon),
             )
             .route(
-                "/api/addons/source-icon/{source_id}/{addon_id}",
+                "/admin-api/addons/source-icon/{source_id}/{addon_id}",
                 get(api::addons::source_icon),
             )
             .route(
-                "/api/blocks/items/save",
+                "/admin-api/blocks/items/save",
                 post(api::blocks::save_block_items_form),
             )
             .route(
-                "/api/collections/save",
+                "/admin-api/collections/save",
                 post(api::collections::save_collection_form),
             )
             .route(
-                "/api/search/quick-filters",
+                "/admin-api/search/quick-filters",
                 get(api::search::apply_quick_filters),
             )
             .route(
-                "/api/saved-searches/load",
+                "/admin-api/saved-searches/load",
                 post(api::search::load_saved_search_form),
             )
             .route(
-                "/api/saved-searches/save",
+                "/admin-api/saved-searches/save",
                 post(api::search::save_saved_search_form),
             )
             .route(
-                "/api/smart-collections/save",
+                "/admin-api/smart-collections/save",
                 post(api::collections::save_smart_collection_form),
             )
             .route(
-                "/api/multi-collections/save",
+                "/admin-api/multi-collections/save",
                 post(api::collections::save_multi_collection_form),
             )
             .route(
-                "/api/multi-collections/delete",
+                "/admin-api/multi-collections/delete",
                 post(api::collections::delete_multi_collection_form),
             )
-            .route("/api/channels/save", post(api::channels::save_channel_form))
             .route(
-                "/api/channels/numbers/save",
+                "/admin-api/channels/save",
+                post(api::channels::save_channel_form),
+            )
+            .route(
+                "/admin-api/channels/numbers/save",
                 post(api::channels::save_channel_numbers_form),
             )
             .route(
-                "/api/channels/save-multipart",
+                "/admin-api/channels/save-multipart",
                 post(api::channels::save_channel_multipart_form)
                     .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
             )
             .route(
-                "/api/channels/logo",
+                "/admin-api/channels/logo",
                 post(api::channels::upload_channel_logo)
                     .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
             )
             .route(
-                "/api/ffmpeg/save",
+                "/admin-api/ffmpeg/save",
                 post(api::ffmpeg_profiles::save_ffmpeg_profile_form),
             )
             .route(
-                "/api/settings/ffmpeg/save",
+                "/admin-api/settings/ffmpeg/save",
                 post(api::settings::save_ffmpeg_settings_form),
             )
             .route(
-                "/api/settings/ffmpeg/resolutions/add",
+                "/admin-api/settings/ffmpeg/resolutions/add",
                 post(api::settings::add_custom_resolution_form),
             )
             .route(
-                "/api/settings/ffmpeg/resolutions/delete",
+                "/admin-api/settings/ffmpeg/resolutions/delete",
                 post(api::settings::delete_custom_resolution_form),
             )
             .route(
-                "/api/settings/logging/save",
+                "/admin-api/settings/logging/save",
                 post(api::settings::save_logging_settings_form),
             )
             .route(
-                "/api/settings/hdhr/save",
+                "/admin-api/settings/hdhr/save",
                 post(api::settings::save_hdhr_settings_form),
             )
             .route(
-                "/api/settings/scanner/save",
+                "/admin-api/settings/scanner/save",
                 post(api::settings::save_scanner_settings_form),
             )
             .route(
-                "/api/settings/playout/save",
+                "/admin-api/settings/playout/save",
                 post(api::settings::save_playout_settings_form),
             )
             .route(
-                "/api/settings/ui/save",
+                "/admin-api/settings/ui/save",
                 post(api::settings::save_ui_settings_form),
             )
             .route(
-                "/api/settings/ui/windows-startup",
+                "/admin-api/settings/ui/windows-startup",
                 post(api::settings::save_windows_startup_form),
             )
-            .route("/api/settings/ui/theme", get(api::settings::ui_theme))
+            .route("/admin-api/settings/ui/theme", get(api::settings::ui_theme))
             .route(
-                "/api/settings/xmltv/save",
+                "/admin-api/settings/xmltv/save",
                 post(api::settings::save_xmltv_settings_form),
             )
             .route(
-                "/api/filler-presets/save",
+                "/admin-api/filler-presets/save",
                 post(api::filler::save_filler_preset_form),
             )
             .route(
-                "/api/filler-presets/delete",
+                "/admin-api/filler-presets/delete",
                 post(api::filler::delete_filler_preset_form),
             )
             .route(
-                "/api/playlists/groups/create",
+                "/admin-api/playlists/groups/create",
                 post(api::playlists::create_playlist_group_form),
             )
             .route(
-                "/api/playlists/create",
+                "/admin-api/playlists/create",
                 post(api::playlists::create_playlist_form),
             )
             .route(
-                "/api/playlists/groups/delete",
+                "/admin-api/playlists/groups/delete",
                 post(api::playlists::delete_playlist_group_form),
             )
             .route(
-                "/api/playlists/delete",
+                "/admin-api/playlists/delete",
                 post(api::playlists::delete_playlist_form),
             )
             .route(
-                "/api/playlists/save",
+                "/admin-api/playlists/save",
                 post(api::playlists::save_playlist_form),
             )
             .route(
-                "/api/playouts/create",
+                "/admin-api/playouts/create",
                 post(api::playouts::create_playout_form),
             )
             .route(
-                "/api/rerun-collections/save",
+                "/admin-api/rerun-collections/save",
                 post(api::rerun_collections::save_rerun_collection_form),
             )
             .route(
-                "/api/rerun-collections/delete",
+                "/admin-api/rerun-collections/delete",
                 post(api::rerun_collections::delete_rerun_collection_form),
             )
             .route(
-                "/api/schedules/save",
+                "/admin-api/schedules/save",
                 post(api::schedules::save_schedule_form),
             )
             .route(
-                "/api/schedules/delete",
+                "/admin-api/schedules/delete",
                 post(api::schedules::delete_schedule_form),
             )
             .route(
-                "/api/schedules/copy",
+                "/admin-api/schedules/copy",
                 post(api::schedules::copy_schedule_form),
             )
             .route(
-                "/api/schedules/items/save",
+                "/admin-api/schedules/items/save",
                 post(api::schedules::save_schedule_items_form),
             )
             .route(
-                "/api/templates/groups/create",
+                "/admin-api/templates/groups/create",
                 post(api::templates::create_template_group_form),
             )
             .route(
-                "/api/templates/create",
+                "/admin-api/templates/create",
                 post(api::templates::create_template_form),
             )
             .route(
-                "/api/templates/groups/delete",
+                "/admin-api/templates/groups/delete",
                 post(api::templates::delete_template_group_form),
             )
             .route(
-                "/api/templates/delete",
+                "/admin-api/templates/delete",
                 post(api::templates::delete_template_form),
             )
             .route(
-                "/api/templates/copy",
+                "/admin-api/templates/copy",
                 post(api::templates::copy_template_form),
             )
             .route(
-                "/api/templates/items/save",
+                "/admin-api/templates/items/save",
                 post(api::templates::save_template_items_form),
             )
             .route(
-                "/api/decos/groups/create",
+                "/admin-api/decos/groups/create",
                 post(api::decos::create_deco_group_form),
             )
-            .route("/api/decos/create", post(api::decos::create_deco_form))
-            .route("/api/decos/save", post(api::decos::save_deco_form))
             .route(
-                "/api/decos/groups/delete",
+                "/admin-api/decos/create",
+                post(api::decos::create_deco_form),
+            )
+            .route("/admin-api/decos/save", post(api::decos::save_deco_form))
+            .route(
+                "/admin-api/decos/groups/delete",
                 post(api::decos::delete_deco_group_form),
             )
-            .route("/api/decos/delete", post(api::decos::delete_deco_form))
             .route(
-                "/api/deco-templates/groups/create",
+                "/admin-api/decos/delete",
+                post(api::decos::delete_deco_form),
+            )
+            .route(
+                "/admin-api/deco-templates/groups/create",
                 post(api::decos::create_deco_template_group_form),
             )
             .route(
-                "/api/deco-templates/create",
+                "/admin-api/deco-templates/create",
                 post(api::decos::create_deco_template_form),
             )
             .route(
-                "/api/deco-templates/groups/delete",
+                "/admin-api/deco-templates/groups/delete",
                 post(api::decos::delete_deco_template_group_form),
             )
             .route(
-                "/api/deco-templates/delete",
+                "/admin-api/deco-templates/delete",
                 post(api::decos::delete_deco_template_form),
             )
             .route(
-                "/api/deco-templates/items/save",
+                "/admin-api/deco-templates/items/save",
                 post(api::decos::save_deco_template_items_form),
             )
             .route(
@@ -365,120 +376,120 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
-                "/api/addon-lists/add",
+                "/admin-api/addon-lists/add",
                 post(api::addon_media_lists::add_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/disk-warning",
+                "/admin-api/addon-lists/disk-warning",
                 post(api::addon_media_lists::save_addon_media_list_disk_warning_form)
                     .layer(DefaultBodyLimit::max(4096)),
             )
             .route(
-                "/api/addon-lists/options/test-access",
+                "/admin-api/addon-lists/options/test-access",
                 post(api::addon_list_options::test_access).layer(DefaultBodyLimit::max(4096)),
             )
             .route(
-                "/api/addon-lists/options/cancel-access",
+                "/admin-api/addon-lists/options/cancel-access",
                 post(api::addon_list_options::cancel_access).layer(DefaultBodyLimit::max(4096)),
             )
             .route(
-                "/api/addon-lists/options/edit",
+                "/admin-api/addon-lists/options/edit",
                 post(api::addon_list_options::edit).layer(DefaultBodyLimit::max(
                     crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
                 )),
             )
             .route(
-                "/api/addon-lists/options/change",
+                "/admin-api/addon-lists/options/change",
                 post(api::addon_list_options::change).layer(DefaultBodyLimit::max(
                     crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
                 )),
             )
             .route(
-                "/api/addon-lists/options/apply",
+                "/admin-api/addon-lists/options/apply",
                 post(api::addon_list_options::apply).layer(DefaultBodyLimit::max(
                     crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
                 )),
             )
             .route(
-                "/api/addon-lists/options/undo",
+                "/admin-api/addon-lists/options/undo",
                 post(api::addon_list_options::undo).layer(DefaultBodyLimit::max(
                     crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
                 )),
             )
             .route(
-                "/api/addon-lists/match",
+                "/admin-api/addon-lists/match",
                 post(api::addon_media_lists::match_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/save",
+                "/admin-api/addon-lists/save",
                 post(api::addon_media_lists::save_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/publish",
+                "/admin-api/addon-lists/publish",
                 post(api::addon_media_lists::publish_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/recover",
+                "/admin-api/addon-lists/recover",
                 post(api::addon_media_lists::recover_addon_media_list_publication_form),
             )
             .route(
-                "/api/addon-lists/reset",
+                "/admin-api/addon-lists/reset",
                 post(api::addon_media_lists::reset_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/reconcile",
+                "/admin-api/addon-lists/reconcile",
                 post(api::addon_media_lists::reconcile_addon_media_list_form),
             )
             .route(
-                "/api/addon-lists/confirm-removal",
+                "/admin-api/addon-lists/confirm-removal",
                 post(api::addon_media_lists::confirm_addon_media_list_removal_form),
             )
             .route(
-                "/api/addon-lists/test-source",
+                "/admin-api/addon-lists/test-source",
                 post(api::addon_media_lists::test_addon_media_list_source_form),
             )
             .route(
-                "/api/addon-lists/restore-revision",
+                "/admin-api/addon-lists/restore-revision",
                 post(api::addon_media_lists::restore_addon_media_list_revision_form),
             )
             .route(
-                "/api/addon-lists/{id}/publication-diagnostics",
+                "/admin-api/addon-lists/{id}/publication-diagnostics",
                 get(api::addon_media_lists::download_addon_media_list_publication_diagnostics),
             )
             .route(
-                "/api/addon-lists/items/review",
+                "/admin-api/addon-lists/items/review",
                 post(api::addon_media_lists::save_addon_media_list_item_review_form),
             )
             .route(
-                "/api/addon-lists/delete",
+                "/admin-api/addon-lists/delete",
                 post(api::addon_media_lists::delete_addon_media_list_form),
             )
             .route(
-                "/api/media-sources/local/save",
+                "/admin-api/media-sources/local/save",
                 post(api::media_sources::save_local_library_form),
             )
             .route(
-                "/api/media/actions/collections",
+                "/admin-api/media/actions/collections",
                 get(api::media_actions::list_collections),
             )
             .route(
-                "/api/media/actions/collections/add",
+                "/admin-api/media/actions/collections/add",
                 post(api::media_actions::add_to_collection),
             )
             .route(
-                "/api/media/actions/playlist-groups",
+                "/admin-api/media/actions/playlist-groups",
                 get(api::media_actions::list_playlist_groups),
             )
             .route(
-                "/api/media/actions/playlists",
+                "/admin-api/media/actions/playlists",
                 get(api::media_actions::list_playlists),
             )
             .route(
-                "/api/media/actions/playlists/add",
+                "/admin-api/media/actions/playlists/add",
                 post(api::media_actions::add_to_playlist),
             )
             .route(
-                "/api/media/actions/media-info/{id}",
+                "/admin-api/media/actions/media-info/{id}",
                 get(api::media_actions::media_info),
             )
             .route(
@@ -498,12 +509,12 @@ pub fn build_app(app_state: AppState) -> Router {
                 get(api::troubleshooting::playback_sample),
             )
             .route(
-                "/api/watermarks/save",
+                "/admin-api/watermarks/save",
                 post(api::watermarks::save_watermark_form)
                     .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
             )
             .route(
-                "/api/watermarks/image",
+                "/admin-api/watermarks/image",
                 post(api::watermarks::upload_watermark_image)
                     .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
             )
@@ -544,7 +555,11 @@ pub fn build_app(app_state: AppState) -> Router {
         );
     }
 
-    root
+    // Run before tracing and routing, including unknown API paths and methods.
+    root.layer(middleware::from_fn_with_state(
+        api_key,
+        super::api_security::authenticate,
+    ))
 }
 
 fn web_routes(development_routes_enabled: bool) -> Vec<leptos_axum::AxumRouteListing> {

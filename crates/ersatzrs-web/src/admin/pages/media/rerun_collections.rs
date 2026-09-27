@@ -189,7 +189,7 @@ fn RerunCollectionsList(
                                                         >
                                                             <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
                                                         </a>
-                                                        <form method="post" action="/api/rerun-collections/delete">
+                                                        <form method="post" action="/admin-api/rerun-collections/delete">
                                                             <input type="hidden" name="id" value=id.to_string()/>
                                                             <button
                                                                 type="submit"
@@ -404,7 +404,7 @@ fn RerunCollectionEditorForm(
 
     view! {
         <div class=style::page>
-            <form method="post" action="/api/rerun-collections/save">
+            <form method="post" action="/admin-api/rerun-collections/save">
                 <div class=style::editor_action_bar>
                     <button
                         type="submit"

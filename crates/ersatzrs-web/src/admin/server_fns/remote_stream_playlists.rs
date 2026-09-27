@@ -55,7 +55,7 @@ pub struct PlaylistTroubleshootingResult {
     pub diagnostic_tail: String,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_remote_stream_playlists(
     library_id: i64,
 ) -> Result<Vec<RemoteStreamPlaylistRow>, ServerFnError> {
@@ -73,7 +73,7 @@ pub async fn list_remote_stream_playlists(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_remote_stream_playlist_addons() -> Result<Vec<String>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -85,7 +85,7 @@ pub async fn list_remote_stream_playlist_addons() -> Result<Vec<String>, ServerF
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_remote_stream_playlist(
     editor: RemoteStreamPlaylistEditor,
 ) -> Result<String, ServerFnError> {
@@ -114,7 +114,7 @@ pub async fn save_remote_stream_playlist(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_remote_stream_playlist(
     library_id: i64,
     root_index: usize,
@@ -130,7 +130,7 @@ pub async fn delete_remote_stream_playlist(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn exclude_remote_stream_playlist_entry(
     library_id: i64,
     root_index: usize,
@@ -147,7 +147,7 @@ pub async fn exclude_remote_stream_playlist_entry(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn troubleshoot_remote_stream_playlist(
     library_id: i64,
     root_index: usize,

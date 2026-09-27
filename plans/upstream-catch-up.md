@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-27): `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff`
   — build: package libvpl (from next) on windows (#3042).
-- Ledger: **176 commits**, **65 pending**. The original plan covered 152 through
+- Ledger: **176 commits**, **64 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -23,7 +23,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **111**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **112**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -37,7 +37,8 @@
   Its milestone owns the runtime publication, browser correction and decoded
   audio/subtitle evidence. UCU-07 row 110 is Adapt under accepted ADR 0102;
   row 111 is Port (Plex reauthentication and retained missing sources); row 112
-  is next. Existing debt
+  is Adapt under accepted ADR 0103 (machine API key and browser route separation).
+  Row 113 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -48,6 +49,70 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-07 row 112 source map: mandatory machine API keys
+
+- Upstream: `c27a8d5031c30bb3557a959db55a959ab2aa2aae` (#2991).
+  Security handlers/options, startup routing, run-once key creation,
+  `ApiSecrets`, scanner proxy, scripted-process environment, Python entrypoint,
+  troubleshooting authorization and all three OpenAPI diffs are audited.
+- Upstream outcome: machine `/api` requests require `X-Etv-Api-Key`, persisted in
+  `api-secrets.json` as `ApiKey`; missing or failed key setup never allows
+  anonymous machine calls. Existing valid keys survive restart. Upstream uses
+  32 random bytes, unpadded base64url and fixed-time comparison.
+- Upstream browser exception: exactly the `/api/troubleshoot` path segment uses
+  management authorization. Its cookie is required only when OIDC is configured.
+  Ordinary API paths cannot use management cookies as machine credentials.
+- Confirmed Rust inventory: `host/router.rs` mixes native browser forms,
+  uploads, browser JSON handlers and generated Leptos functions under `/api`.
+  `/api/maintenance/clean_artwork` is an existing machine endpoint. No API-key
+  guard, API secret store, OpenAPI document or OIDC/session implementation was
+  found. `AppState` currently holds only the separate IPTV JWT verifier.
+- Accepted adaptation: [ADR 0103](../docs/adr/0103-separate-machine-api-from-browser-actions.md)
+  moves browser actions/functions to `/admin-api`, preserves the troubleshooting
+  exception and ADR 0102 listener isolation, and uses `X-Ers-Api-Key` instead of
+  upstream's header. The maintainer accepted trusted-network or authenticated-
+  proxy management without built-in OIDC on 2026-09-27, explicitly choosing the
+  ErsatzRS header name. Implementation and verification are recorded in UCU-07.
+- Rust consumers: scanner CLI coordinates through SQLite managed operations,
+  not `ScannerProxy` HTTP. Scripted scheduling executes Lua in-process through
+  `core/scheduling/scripted`, not an external Python HTTP client. These existing
+  transports need no key injection; do not add an unused HTTP dependency.
+- OpenAPI diff also refreshes artwork-cleanup and FFmpeg profile schemas
+  (normalization, pad mode and target loudness). Any new Rust description must
+  describe implemented endpoints truthfully, not advertise absent upstream APIs.
+  Removed Bugsnag configuration and IDE namespace settings have no Rust runtime
+  counterpart. The Plex changelog note changes operator guidance, not code.
+- Target modules: infra durable state/key persistence; web startup/AppState,
+  router middleware and machine API description; admin server-function prefixes,
+  form actions, static JavaScript and corresponding route/browser contracts.
+- Evidence required: key creation/reuse/failure and concurrency; malformed,
+  duplicate, missing and incorrect header rejection before side effects;
+  no cookie/query/forwarded-header bypass; exact exception paths; denial on the
+  streaming listener even with a key; matched hydrated and no-JS actions;
+  unchanged IPTV/private callback authorization. Use synthetic fixtures only.
+- Row 112 is Adapt under accepted ADR 0103 with local verification recorded in
+  UCU-07. Rows 113-115 and window gates remain separate work; no intermediate
+  push or CI.
+
+### Row 112 hydration source map
+
+- Scope: all existing management pages that submit native forms, upload files,
+  fetch browser JSON or call generated server functions. Existing page wrappers
+  and islands retain their ownership and DOM shape; this slice changes request
+  paths, not page geometry, dialogs or control labels.
+- Boundary: 355 server-function declarations across 22 current source files
+  require an explicit management prefix. Handwritten route registrations,
+  form actions, static JavaScript and browser interception patterns must agree.
+  Machine artwork cleanup and browser troubleshooting retain their `/api` paths.
+- No-JS fallback: migrate actual form actions alongside hydrated callers;
+  never replace a native form with a JavaScript-only key-injection step.
+- Browser proof: matched SSR/WASM bundle, generated server-function calls,
+  native saves, multipart uploads and image retrieval, JSON actions and
+  troubleshooting. Existing full browser coverage is required after this broad
+  request-path migration. Retain listener-denial and IPTV/callback proof.
+- Shared components/styles: no structural or visual change is intended.
+  Audit route inventories and hydration contracts for embedded path assumptions.
 
 ## UCU-07 row 111 source map: Plex reauthentication and missing servers
 
@@ -2000,7 +2065,7 @@ No reference screenshot is available; browser comparison uses this Razor
 contract, desktop/mobile overflow checks and actual captions interaction.
 
 Hydration source map: `/channels/new` and `/channels/:id/edit` use the existing
-SSR editor and ordinary POST form, channel server DTO and `/api/channels`
+SSR editor and ordinary POST form, channel server DTO and `/admin-api/channels`
 save boundary. Keep the subtitle-mode row mounted and reuse the streaming-engine
 dependency script for visibility. Localize every supported language. The preview
 player remains inside its existing island with the shared channel-preview JS
@@ -2351,7 +2416,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 109 | `7b7a19a2` | prep for release v26.8.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-06; only upstream CHANGELOG release heading and compare links change. No source, runtime or package behavior changes; reviewed exact diff. Existing window gates remain valid; no release acceptance is inferred from these notes. |
 | 110 | `14372575` | fix: close hole that allowed management ui over streaming port (#2989) | Adapt (ADR 0102) | upstream-baseline-catch-up | `fix(web): isolate streaming and internal callback listeners` | ucu-07; actual-peer loopback and separate streaming route boundaries, trusted callback origins, direct/HLS lifecycle isolation. Listener/regression tests, decoded native/Next smoke, troubleshooting samples, TSDuck 87/87, browser 7 passed/3 existing skips and web parity 724/724 pass. ADR explicitly accepted; substantive review passes. Window gates remain open. |
 | 111 | `a5937386` | fix: plex sign in (#2990) | Port | upstream-baseline-catch-up | `fix(plex): preserve sources during reauthentication` | ucu-07; bounded fresh-device authentication, stale/sign-out race protection, retained missing-source inventory, scan/health guards, localized refresh/removal UI and live SQL search cleanup. Focused backend/scanner tests, strict lint, hydration lint and six Chromium/Firefox cases pass; substantive review fixes returned-source and running-scan removal races. Window gates remain open. |
-| 112 | `c27a8d50` | feat: require api key (#2991) | | | | ucu-07; provisional: Port candidate. |
+| 112 | `c27a8d50` | feat: require api key (#2991) | Adapt (ADR 0103) | upstream-baseline-catch-up | `feat(api): require the ErsatzRS machine API key` | ucu-07; accepted X-Ers-Api-Key, atomic persistent credentials, fail-closed startup and routing, authenticated OpenAPI, separate browser actions and trusted-network/authenticated-proxy management. Key/router/listener tests, strict lint and matched Chromium/Firefox (480 passed, 38 existing skips) pass. Storage-failure browser fixture is isolated; window gates remain open. |
 | 113 | `cefd715c` | fix: mirror channels falling out of sync when using the next streaming engine | | | | ucu-07; provisional: Next behavior triage. |
 | 114 | `ef5094aa` | fix: GHSA-h3r4-r2f2-qf59 | | | | ucu-07; provisional: Port candidate. |
 | 115 | `49b68314` | prep for release v26.8.1 [no ci] | | | | ucu-07; provisional: Upstream tooling candidate. |

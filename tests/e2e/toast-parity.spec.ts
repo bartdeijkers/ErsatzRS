@@ -49,7 +49,7 @@ VALUES (${playoutId}, ${channelId}, 2, 1);
 }
 
 async function setUiTheme(page: Page, isDarkMode: boolean): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: isDarkMode ? 'true' : 'false',
       language: 'en-us',

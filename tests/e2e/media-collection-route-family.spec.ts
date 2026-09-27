@@ -50,7 +50,7 @@ function sqlite(sql: string): string {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -267,7 +267,7 @@ test.describe('media collection route-family parity', () => {
       noJsPage.getByRole('heading', { name: 'Multi Collection', exact: true }),
     ).toBeVisible();
     const fallbackForm = noJsPage.locator(
-      'noscript form[action="/api/multi-collections/save"]',
+      'noscript form[action="/admin-api/multi-collections/save"]',
     );
     await fallbackForm.locator('input[name="name"]').fill(fallbackName);
     await fallbackForm.getByRole('button', { name: /add multi collection/i }).click();

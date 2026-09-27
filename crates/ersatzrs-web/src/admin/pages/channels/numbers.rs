@@ -41,7 +41,7 @@ fn ChannelNumbersForm(rows: Vec<ChannelNumberEditorRow>, form_error: String) -> 
         <form
             class=style::page
             method="post"
-            action="/api/channels/numbers/save"
+            action="/admin-api/channels/numbers/save"
             data-channel-number-form="true"
         >
             <div class=style::action_bar>

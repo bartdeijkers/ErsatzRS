@@ -386,7 +386,7 @@ fn select_options_from_core(
 }
 
 /// Returns paginated channel rows (excludes disabled when `show_disabled = false`).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_channel_rows(
     show_disabled: bool,
     page: u32,
@@ -433,7 +433,7 @@ pub async fn list_channel_rows(
 }
 
 /// Returns the total channel count (optionally including disabled).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_channels(show_disabled: bool) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -446,7 +446,7 @@ pub async fn count_channels(show_disabled: bool) -> Result<u64, ServerFnError> {
 }
 
 /// Loads all channels for the channel-number editor.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_channel_number_rows() -> Result<Vec<ChannelNumberEditorRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -467,13 +467,13 @@ pub async fn list_channel_number_rows() -> Result<Vec<ChannelNumberEditorRow>, S
 }
 
 /// Loads a channel into `ChannelForm` for editing.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_channel_form(id: i64) -> Result<ChannelForm, ServerFnError> {
     Ok(get_channel_editor_data(id).await?.form)
 }
 
 /// Loads the complete channel editor state for create/edit.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_channel_editor_data(id: i64) -> Result<ChannelEditorData, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::queries::GetChannelEditor;
@@ -489,7 +489,7 @@ pub async fn get_channel_editor_data(id: i64) -> Result<ChannelEditorData, Serve
 }
 
 /// Loads channel identity plus two hours of guide history and 24 hours ahead.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_channel_watch_data(id: i64) -> Result<ChannelWatchData, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::queries::GetChannelWatch;
@@ -513,7 +513,7 @@ pub async fn get_channel_watch_data(id: i64) -> Result<ChannelWatchData, ServerF
 }
 
 /// Loads the enabled, EPG-visible channel lanes for the global preview route.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::queries::GetEpgPreview;
@@ -565,7 +565,7 @@ pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {
 }
 
 /// Returns an on-demand segmenter URL for a streamable channel.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_channel_preview_url(id: i64) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
     use crate::transport::iptv::access_token::AccessToken;
@@ -589,7 +589,7 @@ pub async fn get_channel_preview_url(id: i64) -> Result<String, ServerFnError> {
 }
 
 /// Creates or updates a channel. Returns the channel id.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -655,7 +655,7 @@ pub async fn save_channel_numbers_with_state(
 ///
 /// Ports the `IFFmpegSegmenterService.Workers`/`IsActive` lookup that
 /// `ErsatzTV`'s `Channels.razor` uses to decide which rows show a stop button.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_active_channel_numbers() -> Result<Vec<String>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -669,7 +669,7 @@ pub async fn list_active_channel_numbers() -> Result<Vec<String>, ServerFnError>
 
 /// Stops the active transcode session for `number`, returning whether one was
 /// running. Ports `Channels.StopChannel` → `IFFmpegSegmenterService.StopChannel`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn stop_channel_session(number: String) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -682,7 +682,7 @@ pub async fn stop_channel_session(number: String) -> Result<bool, ServerFnError>
 }
 
 /// Deletes a channel by id.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_channel(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -695,7 +695,7 @@ pub async fn delete_channel(id: i64) -> Result<(), ServerFnError> {
 }
 
 /// Returns `(id, name)` pairs for FFmpeg profiles — used to populate selects.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_ffmpeg_profiles_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -711,7 +711,7 @@ pub async fn list_ffmpeg_profiles_for_select() -> Result<Vec<(i64, String)>, Ser
 }
 
 /// Returns `(id, name)` pairs for filler presets — used to populate selects.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_filler_presets_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
 

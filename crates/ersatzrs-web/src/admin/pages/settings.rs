@@ -179,7 +179,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let ffmpeg_autodetect_help = auto_detect_help(&data.ffmpeg_resolved);
     let ffprobe_autodetect_help = auto_detect_help(&data.ffprobe_resolved);
     view! {
-        <SettingsForm title=tr(TextKey::Ffmpeg) action="/api/settings/ffmpeg/save">
+        <SettingsForm title=tr(TextKey::Ffmpeg) action="/admin-api/settings/ffmpeg/save">
             <SettingsSection title=tr(TextKey::FfmpegRuntime)>
                 <Field label=tr(TextKey::FfmpegPath)>
                     <input class=style::input name="ffmpeg_path" value=form.ffmpeg_path placeholder=data.ffmpeg_resolved/>
@@ -255,7 +255,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
         <section class=style::content>
             <h2 class=style::section_title>{tr(TextKey::CustomResolutions)}</h2>
             <div class=style::divider></div>
-            <form method="post" action="/api/settings/ffmpeg/resolutions/add" class=style::inline_form>
+            <form method="post" action="/admin-api/settings/ffmpeg/resolutions/add" class=style::inline_form>
                 <input class=format!("{} {}", style::input, style::inline_input) name="width" type="number" min="1" required placeholder=tr(TextKey::Width) aria-label=tr(TextKey::CustomResolutionWidth)/>
                 <input class=format!("{} {}", style::input, style::inline_input) name="height" type="number" min="1" required placeholder=tr(TextKey::Height) aria-label=tr(TextKey::CustomResolutionHeight)/>
                 <button class=style::button type="submit">
@@ -271,7 +271,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                                 <tr>
                                     <td>{option.label}</td>
                                     <td>
-                                        <form method="post" action="/api/settings/ffmpeg/resolutions/delete">
+                                        <form method="post" action="/admin-api/settings/ffmpeg/resolutions/delete">
                                             <input type="hidden" name="id" value=option.value/>
                                             <button class=style::icon_button type="submit" aria-label=tr(TextKey::DeleteCustomResolution)>
                                                 <span style=icon_style(IconName::Delete, "1.1rem") aria-hidden="true"></span>
@@ -292,7 +292,7 @@ fn embedded_subtitle_dependency_script() -> &'static str {
     r#"
 (() => {
   const sync = () => {
-    const form = document.querySelector('form[action="/api/settings/ffmpeg/save"]');
+    const form = document.querySelector('form[action="/admin-api/settings/ffmpeg/save"]');
     if (!form) return;
 
     const useEmbedded = form.elements.namedItem("use_embedded_subtitles");
@@ -366,7 +366,7 @@ fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
     let scheduling_levels = levels.clone();
     let searching_levels = levels.clone();
     view! {
-        <SettingsForm title=tr(TextKey::Logging) action="/api/settings/logging/save">
+        <SettingsForm title=tr(TextKey::Logging) action="/admin-api/settings/logging/save">
             <SettingsSection title=tr(TextKey::General)>
                 <SelectField label=tr(TextKey::DefaultMinimumLogLevel) name="default_minimum_log_level" selected=form.default_minimum_log_level options=default_levels include_none=false/>
                 <SelectField label=tr(TextKey::HttpMinimumLogLevel) name="http_minimum_log_level" selected=form.http_minimum_log_level options=http_levels include_none=false/>
@@ -383,7 +383,7 @@ fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
 
 fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title=tr(TextKey::HdHomeRun) action="/api/settings/hdhr/save">
+        <SettingsForm title=tr(TextKey::HdHomeRun) action="/admin-api/settings/hdhr/save">
             <SettingsSection title=tr(TextKey::General)>
                 <Field label=tr(TextKey::Uuid)>
                     <input class=style::input name="uuid" disabled value=form.uuid/>
@@ -398,7 +398,7 @@ fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
 
 fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title=tr(TextKey::Scanner) action="/api/settings/scanner/save">
+        <SettingsForm title=tr(TextKey::Scanner) action="/admin-api/settings/scanner/save">
             <SettingsSection title=tr(TextKey::General)>
                 <Field label=tr(TextKey::LibraryRefreshInterval)>
                     <div class=style::input_with_adornment>
@@ -413,7 +413,7 @@ fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
 
 fn render_playout(form: PlayoutSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title=tr(TextKey::Playout) action="/api/settings/playout/save">
+        <SettingsForm title=tr(TextKey::Playout) action="/admin-api/settings/playout/save">
             <SettingsSection title=tr(TextKey::General)>
                 <Field label=tr(TextKey::DaysToBuild)>
                     <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
@@ -431,7 +431,7 @@ fn render_ui(data: UiSettingsPageData) -> impl IntoView {
     let form = data.form;
     let windows_startup = windows_startup_controls(data.windows_startup);
     view! {
-        <SettingsForm title=tr(TextKey::Ui) action="/api/settings/ui/save">
+        <SettingsForm title=tr(TextKey::Ui) action="/admin-api/settings/ui/save">
             <SettingsSection title=tr(TextKey::General)>
                 <SelectField
                     label=tr(TextKey::Theme)
@@ -496,7 +496,7 @@ fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView>
 
 fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title=tr(TextKey::Xmltv) action="/api/settings/xmltv/save">
+        <SettingsForm title=tr(TextKey::Xmltv) action="/admin-api/settings/xmltv/save">
             <SettingsSection title=tr(TextKey::General)>
                 <Field label=tr(TextKey::DaysToBuild)>
                     <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
@@ -705,7 +705,7 @@ mod tests {
             .to_html();
 
         assert!(!html.contains("data-windows-startup-state"));
-        assert!(!html.contains("/api/settings/ui/windows-startup"));
+        assert!(!html.contains("/admin-api/settings/ui/windows-startup"));
     }
 
     #[test]

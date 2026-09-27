@@ -114,8 +114,10 @@ transactional missing-server reconciliation have passing Plex tests. Bounded
 authentication, periodic discovery, missing-source scan admission/return and
 health have focused proof; strict backend/web lint passes.
 Row 111 is Port after final action-lock/contrast browser proof and substantive
-review. All six Chromium/Firefox scenarios pass; next is row 112. Rows 112-115 and milestone gates
-remain pending before push and CI.
+review. All six Chromium/Firefox scenarios pass. Row 112 is Adapt under accepted
+ADR 0103 with the approved X-Ers-Api-Key header, key/router/listener regressions
+and full matched Chromium/Firefox proof (480 passed, 38 existing skips).
+Next is row 113; rows 113-115 and milestone gates remain pending before push and CI.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-07 through UCU-09 remain open.
 

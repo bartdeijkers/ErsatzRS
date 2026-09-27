@@ -95,9 +95,23 @@ client supports it.
 For detailed results, use **Support** -> **Health Checks** in the admin UI or the
 `ersatzrs-healthcheck` binary included in release bundles.
 
+## Machine API and browser actions
+
+Machine requests under `/api` require exactly one `X-Ers-Api-Key` header.
+Missing or invalid credentials return `401 Unauthorized`. The authenticated
+`GET /api/openapi.json` document describes the implemented machine endpoints.
+See [machine API authentication](configuration.md#machine-api-authentication)
+for credential storage, rotation and the management deployment boundary.
+
+Browser actions and Leptos server functions use `/admin-api`; the browser never
+receives the machine key. `/api/troubleshoot` remains a management exception.
+Neither surface is exposed on a distinct streaming-only listener. The machine
+key does not provide management login.
+
 ## Internal endpoints
 
-Paths under `/api/`, `/ffmpeg/`, `/iptv/session/`, and `/iptv/hls-direct/` are
-used by the admin UI or generated stream pipelines. They are not stable
+Paths under `/admin-api/`, `/api/troubleshoot/`, `/ffmpeg/`, `/iptv/session/`,
+and `/iptv/hls-direct/` are used by the admin UI or generated stream pipelines.
+They are not stable
 operator APIs. Use the documented user-facing endpoints instead of constructing
 internal URLs.

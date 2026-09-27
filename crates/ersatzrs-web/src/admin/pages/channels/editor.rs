@@ -186,7 +186,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                 <h1 class=style::page_title inner_html=page_title></h1>
             </div>
 
-            <form method="post" action="/api/channels/save-multipart" enctype="multipart/form-data">
+            <form method="post" action="/admin-api/channels/save-multipart" enctype="multipart/form-data">
                 <input type="hidden" name="id" value=channel_id.to_string()/>
                 <input type="hidden" name="logo_path" value=logo_path.get_untracked()/>
                 <input type="hidden" name="logo_content_type" value=logo_content_type.get_untracked()/>
@@ -764,7 +764,7 @@ fn select_string_field(
 fn streaming_engine_dependency_script() -> &'static str {
     r#"
 (() => {
-  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  const form = document.querySelector('form[action="/admin-api/channels/save-multipart"]');
   if (!form) return;
   const engine = form.querySelector('select[name="streaming_engine"]');
   const mode = form.querySelector('select[name="streaming_mode"]');
@@ -789,7 +789,7 @@ fn streaming_engine_dependency_script() -> &'static str {
 fn playout_source_dependency_script() -> &'static str {
     r#"
 (() => {
-  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  const form = document.querySelector('form[action="/admin-api/channels/save-multipart"]');
   if (!form) return;
   const source = form.querySelector('select[name="playout_source"]');
   const mirrorSource = form.querySelector('select[name="mirror_source_channel_id"]');
@@ -809,7 +809,7 @@ fn playout_source_dependency_script() -> &'static str {
 fn music_video_credits_template_dependency_script() -> &'static str {
     r#"
 (() => {
-  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  const form = document.querySelector('form[action="/admin-api/channels/save-multipart"]');
   if (!form) return;
   const mode = form.querySelector('[name="music_video_credits_mode"]');
   const template = form.querySelector('[name="music_video_credits_template"]');

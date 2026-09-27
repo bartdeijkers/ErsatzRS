@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Security
 
+- Require `X-Ers-Api-Key` for machine API requests, with a persistent random
+  credential in the application state directory's `api-secrets.json` file.
+  **Breaking change:** browser action and server-function paths move to
+  `/admin-api`; machine clients must send the key. Browser troubleshooting and
+  IPTV retain their separate policies. No machine key is sent to the browser
+  (ErsatzTV #2991; ADR 0103).
+
 - Isolate internal FFmpeg and Next callbacks on a loopback listener and build
   their URLs from the bound address, preventing client-supplied Host or proxy
   headers from selecting callback origins. Preserve Next capability checks.

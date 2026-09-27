@@ -11,7 +11,7 @@ test('automatically projects thirteen episodes and applies native saved edits', 
   installPreparedFixture(dbPath!, false, false, variant);
   const errors: string[] = [];
   page.on('pageerror', error => { if (error.name !== 'AbortError') errors.push(error.message); });
-  await page.request.post('/api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' }, maxRedirects: 0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' }, maxRedirects: 0 });
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(preparedSourceUrl(variant));
   await page.getByLabel('Add-on', { exact: true }).selectOption(variant.addonId);

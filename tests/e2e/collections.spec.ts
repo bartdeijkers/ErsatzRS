@@ -96,7 +96,7 @@ test.describe('collections parity', () => {
   test('smart collection list and editor keep the MudBlazor geometry contract', async ({ page }, testInfo) => {
     const name = uniqueName('Smart Visual Collection');
 
-    await page.request.post('/api/smart-collections/save', {
+    await page.request.post('/admin-api/smart-collections/save', {
       form: {
         id: '0',
         name,
@@ -297,7 +297,7 @@ test.describe('collections parity', () => {
     const name = uniqueName('Duplicate smart');
     const returnTo = '/search?query=genre%3Adrama%20AND%20year%3A2020';
 
-    await page.request.post('/api/smart-collections/save', {
+    await page.request.post('/admin-api/smart-collections/save', {
       form: { id: '0', name, query: 'genre:drama', return_to: returnTo },
       maxRedirects: 0,
     });

@@ -342,7 +342,7 @@ fn WatermarkEditorForm(initial_data: WatermarkEditorData) -> impl IntoView {
     view! {
         <form
             method="post"
-            action="/api/watermarks/save"
+            action="/admin-api/watermarks/save"
             enctype="multipart/form-data"
             class=style::page
             on:submit=move |ev| {
@@ -1008,7 +1008,7 @@ fn preview_rendered_dimension(result: PreviewLoadState, width: bool) -> String {
         .unwrap_or_default()
 }
 
-/// Uploads a file from an HTML input element to `/api/watermarks/image`.
+/// Uploads a file from an HTML input element to `/admin-api/watermarks/image`.
 /// Returns `(path, content_type)` on success.
 #[cfg(target_arch = "wasm32")]
 async fn upload_file(input: web_sys::HtmlInputElement) -> Result<(String, String), String> {
@@ -1029,7 +1029,7 @@ async fn upload_file(input: web_sys::HtmlInputElement) -> Result<(String, String
         .append_with_blob_and_filename("file", blob, &file.name())
         .map_err(|error| format!("{error:?}"))?;
 
-    let resp = Request::post("/api/watermarks/image")
+    let resp = Request::post("/admin-api/watermarks/image")
         .body(form_data)
         .map_err(|error| error.to_string())?
         .send()

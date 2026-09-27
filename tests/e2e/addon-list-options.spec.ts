@@ -37,7 +37,7 @@ INSERT INTO "AddonProviderHostCooldown" ("ProviderHost","NextEligibleAt","Sample
       const settle=async()=>{await page.waitForLoadState('load');if(javaScriptEnabled)await page.waitForFunction(()=>(window as any).__ersatzrs_hydrated===true);};
       const submit=async(intent:string)=>{await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),page.locator(`button[name="intent"][value="${intent}"]:not([formaction])`).first().click()]);await settle();await expect(page.locator('#workspace-errors')).toHaveCount(0);};
       try {
-        await page.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+        await page.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
         await page.goto(`/media/addon-lists/${seed.listId}/playback`);await settle();
         await expect(page.locator('button[value="access-test"]')).toBeDisabled();
         await option(page,'browser').locator('select').selectOption('"firefox"');await submit('save');
@@ -76,10 +76,10 @@ INSERT INTO "AddonProviderHostCooldown" ("ProviderHost","NextEligibleAt","Sample
       const save=()=>submit('save');
       const listUrl=`/media/addon-lists/${seed.listId}`;const playback=`${listUrl}/playback`;const firstUrl=`${listUrl}/items/${seed.firstItemId}`;
       try {
-        await page.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+        await page.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
         await visit(playback);
         for (const theme of ['dark', 'light']) {
-          await page.request.post('/api/settings/ui/save',{form:{is_dark_mode:String(theme==='dark'),language:'en-us'},maxRedirects:0});
+          await page.request.post('/admin-api/settings/ui/save',{form:{is_dark_mode:String(theme==='dark'),language:'en-us'},maxRedirects:0});
           await visit(playback);
           for (const width of [390,3840]) {
             await page.setViewportSize({width,height:1080});

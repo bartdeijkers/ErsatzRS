@@ -117,7 +117,7 @@ async function bulkCommand(page: Page, name: string): Promise<void> {
 
 test.beforeEach(async ({ page }) => {
   test.skip(!dbPath, 'Requires the wrapper-owned isolated E2E database');
-  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
 });
 
 test('a new list first publishes with the default TV Shows presentation', async ({ page }, info) => {
@@ -395,7 +395,7 @@ for (const javaScriptEnabled of [false, true]) {
     await publishAndWait(page, listId, 1);
     const publishedBefore = sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`);
     const context = await browser.newContext({ baseURL, javaScriptEnabled });
-    await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+    await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
     const editor = await context.newPage();
     await editor.goto(`/media/addon-lists/${listId}/playback`);
     if (javaScriptEnabled) await hydrated(editor);

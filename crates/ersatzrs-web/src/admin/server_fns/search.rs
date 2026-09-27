@@ -179,7 +179,7 @@ pub struct SavedSearchForm {
     pub query: String,
 }
 
-#[server(name = ListSavedSearchesFn)]
+#[server(name = ListSavedSearchesFn, prefix = "/admin-api")]
 pub async fn list_saved_searches() -> Result<Vec<SavedSearchForm>, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -207,7 +207,7 @@ pub async fn list_saved_searches() -> Result<Vec<SavedSearchForm>, ServerFnError
     }
 }
 
-#[server(name = GetSavedSearchFn)]
+#[server(name = GetSavedSearchFn, prefix = "/admin-api")]
 pub async fn get_saved_search(id: i64) -> Result<Option<SavedSearchForm>, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -234,7 +234,7 @@ pub async fn get_saved_search(id: i64) -> Result<Option<SavedSearchForm>, Server
     }
 }
 
-#[server(name = SaveSavedSearchFn)]
+#[server(name = SaveSavedSearchFn, prefix = "/admin-api")]
 pub async fn save_saved_search(form: SavedSearchForm) -> Result<i64, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -269,7 +269,7 @@ pub async fn save_saved_search_with_state(
         .map_err(ServerFnError::new)
 }
 
-#[server(name = DeleteSavedSearchFn)]
+#[server(name = DeleteSavedSearchFn, prefix = "/admin-api")]
 pub async fn delete_saved_search(id: i64) -> Result<(), ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -289,8 +289,8 @@ pub async fn delete_saved_search(id: i64) -> Result<(), ServerFnError> {
     }
 }
 
-#[server(name = ProjectSearchQueryFn)]
-#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+#[server(name = ProjectSearchQueryFn, prefix = "/admin-api")]
+#[allow(clippy::unused_async)] // `#[server(prefix = "/admin-api")]` requires an async transport signature.
 pub async fn project_search_query(query: String) -> Result<QueryComposerModel, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -307,8 +307,8 @@ pub async fn project_search_query(query: String) -> Result<QueryComposerModel, S
     }
 }
 
-#[server(name = ComposeSearchQueryFn)]
-#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+#[server(name = ComposeSearchQueryFn, prefix = "/admin-api")]
+#[allow(clippy::unused_async)] // `#[server(prefix = "/admin-api")]` requires an async transport signature.
 pub async fn compose_search_query(model: QueryComposerModel) -> Result<String, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -324,8 +324,8 @@ pub async fn compose_search_query(model: QueryComposerModel) -> Result<String, S
     }
 }
 
-#[server(name = ProjectQuickFiltersFn)]
-#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+#[server(name = ProjectQuickFiltersFn, prefix = "/admin-api")]
+#[allow(clippy::unused_async)] // `#[server(prefix = "/admin-api")]` requires an async transport signature.
 pub async fn project_quick_filters(query: String) -> Result<QuickFilterProjection, ServerFnError> {
     #[cfg(feature = "ssr")]
     {
@@ -471,7 +471,7 @@ pub fn search_artwork_kind(kind: SearchCardKind) -> SearchArtworkKind {
 /// Each section runs
 /// `SchedulingRepository::search_documents_page("type:<kind> AND (<q>)", 0,
 /// 50)`. Empty queries return ten empty sections without touching the DB.
-#[server(name = SearchResultsFn)]
+#[server(name = SearchResultsFn, prefix = "/admin-api")]
 pub async fn search_results(query: String) -> Result<SearchResults, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -520,7 +520,7 @@ pub async fn search_results(query: String) -> Result<SearchResults, ServerFnErro
     Ok(results)
 }
 
-#[server(name = SearchAllIdsFn)]
+#[server(name = SearchAllIdsFn, prefix = "/admin-api")]
 pub async fn search_all_ids(query: String) -> Result<SearchAllIds, ServerFnError> {
     use crate::host::state::AppState;
 

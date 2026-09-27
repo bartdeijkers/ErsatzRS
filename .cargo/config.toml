@@ -4,7 +4,7 @@
 SQLX_OFFLINE = "true"
 # Pin the Leptos/server_fn URL hash key so server-function paths are identical
 # regardless of where the crate is built. Without this, server_fn derives each
-# `/api/<fn><hash>` path from `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`, so
+# `/admin-api/<fn><hash>` path from `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`, so
 # the absolute checkout path leaks into the URL. The release pipeline builds the
 # hydration WASM on a Linux runner and the per-RID server binary on its own
 # runner (see .github/workflows/release.yml): different checkout paths produced

@@ -75,7 +75,7 @@ function watchRuntimeErrors(page: Page): string[] {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -1479,7 +1479,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
     await expect(page.locator(`button[value="restore-preview:${firstRevision}"]`)).toBeEnabled();
     await page.locator('[name="compare_left"]').selectOption(String(firstRevision+1));await page.locator('[name="compare_right"]').selectOption(String(firstRevision));
     await workspaceSubmit(page,'compare');await expect(page.getByTestId('revision-diff')).toBeVisible();
-    const staleRestore = await page.request.post('/api/addon-lists/restore-revision', {
+    const staleRestore = await page.request.post('/admin-api/addon-lists/restore-revision', {
       form: {
         id: String(seed.listId),
         source_published_revision: '1',

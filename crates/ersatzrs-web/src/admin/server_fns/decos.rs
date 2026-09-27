@@ -352,7 +352,7 @@ pub(crate) fn deco_template_form_into_command(
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_deco_groups() -> Result<Vec<DecoGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -398,7 +398,7 @@ pub async fn list_deco_groups_with_pool(pool: &DbPool) -> Result<Vec<DecoGroupRo
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_decos(search: String) -> Result<Vec<DecoRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -463,7 +463,7 @@ pub async fn list_decos_with_pool(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_deco_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -484,7 +484,7 @@ pub async fn create_deco_group_with_pool(pool: &DbPool, name: &str) -> Result<i6
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_deco(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -519,7 +519,7 @@ pub async fn create_deco_with_pool(
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_deco_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -544,7 +544,7 @@ pub async fn delete_deco_group_with_pool(pool: &DbPool, id: i64) -> Result<(), S
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_deco(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -567,7 +567,7 @@ pub async fn delete_deco_with_pool(pool: &DbPool, id: i64) -> Result<(), ServerF
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_deco(id: i64) -> Result<Option<DecoForm>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -672,7 +672,7 @@ pub async fn get_deco_with_pool(pool: &DbPool, id: i64) -> Result<Option<DecoFor
     }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_deco_editor_options() -> Result<DecoEditorOptions, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -749,7 +749,7 @@ pub async fn load_deco_editor_options_with_pool(
     })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_deco(form: DecoForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -864,7 +864,7 @@ pub async fn save_deco_with_pool(pool: &DbPool, mut form: DecoForm) -> Result<()
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_deco_template_groups() -> Result<Vec<DecoTemplateGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -912,7 +912,7 @@ pub async fn list_deco_template_groups_with_pool(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_deco_templates(search: String) -> Result<Vec<DecoTemplateRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -970,7 +970,7 @@ pub async fn list_deco_templates_with_pool(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_deco_template_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -994,7 +994,7 @@ pub async fn create_deco_template_group_with_pool(
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_deco_template(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -1024,7 +1024,7 @@ pub async fn create_deco_template_with_pool(
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_deco_template_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -1052,7 +1052,7 @@ pub async fn delete_deco_template_group_with_pool(
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_deco_template(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -1077,7 +1077,7 @@ pub async fn delete_deco_template_with_pool(pool: &DbPool, id: i64) -> Result<()
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_deco_template(id: i64) -> Result<Option<DecoTemplateForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1118,7 +1118,7 @@ pub async fn get_deco_template_with_pool(
     }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_deco_template_items(
     template_id: i64,
 ) -> Result<Vec<DecoTemplateItemForm>, ServerFnError> {
@@ -1177,7 +1177,7 @@ pub async fn get_deco_template_items_with_pool(
     Ok(items)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_deco_template_with_items(
     form: DecoTemplateWithItemsForm,
 ) -> Result<(), ServerFnError> {

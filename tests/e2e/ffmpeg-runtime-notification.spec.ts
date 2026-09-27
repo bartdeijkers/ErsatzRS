@@ -29,7 +29,7 @@ test.describe('FFmpeg runtime startup notification', () => {
       'ERSATZRS_E2E_FFMPEG_RUNTIME_NOTIFICATION must be set before the E2E server starts',
     );
 
-    await page.request.post('/api/settings/ui/save', {
+    await page.request.post('/admin-api/settings/ui/save', {
       form: { is_dark_mode: 'true', language: 'en-us' },
       maxRedirects: 0,
     });

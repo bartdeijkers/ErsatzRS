@@ -345,7 +345,7 @@ fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView
     view! {
         <form
             method="post"
-            action="/api/collections/save"
+            action="/admin-api/collections/save"
             class=style::page
             data-collection-editor-hydrated=move || if hydrated.get() { "true" } else { "false" }
             on:submit=move |event| {

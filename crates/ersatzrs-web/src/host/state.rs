@@ -63,6 +63,8 @@ impl SystemStartup {
 
 #[derive(Clone)]
 pub struct AppState {
+    /// Machine API credential; absence always denies machine requests.
+    pub(crate) api_key: Option<ersatzrs_infra::api_security::ApiKey>,
     /// Local public-stream origin for wrappers, independent of request headers.
     pub(crate) streaming_http_addr: Arc<OnceLock<std::net::SocketAddr>>,
     /// Actual private listener; never derived from request or proxy headers.
@@ -215,6 +217,7 @@ impl AppState {
             ),
         ));
         Self {
+            api_key: None,
             streaming_http_addr: Arc::new(OnceLock::new()),
             internal_http_addr: Arc::new(OnceLock::new()),
             next_version,

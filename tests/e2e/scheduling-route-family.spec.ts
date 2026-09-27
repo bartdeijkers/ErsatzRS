@@ -9,7 +9,7 @@ function screenshotPath(testInfo: TestInfo, name: string): string {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: {
       is_dark_mode: 'true',
       language: 'en-us',
@@ -320,7 +320,7 @@ test.describe('scheduling route-family parity', () => {
     const blockId = await createBlock(page, blockGroupName, blockName);
     expect(Number(blockId)).toBeGreaterThan(0);
     const blockGroupId = await page.locator('select').first().inputValue();
-    const inheritedBlockResponse = await page.request.post('/api/blocks/items/save', {
+    const inheritedBlockResponse = await page.request.post('/admin-api/blocks/items/save', {
       form: {
         block_id: blockId,
         group_id: blockGroupId,

@@ -453,7 +453,7 @@ const languages: LanguageExpectation[] = [
 
 async function switchLanguage(page: Page, code: string): Promise<void> {
   await page.goto('/settings/ui');
-  const form = page.locator('form[action="/api/settings/ui/save"]');
+  const form = page.locator('form[action="/admin-api/settings/ui/save"]');
   await expect(form).toBeVisible();
   await form.locator('select[name="language"]').selectOption(code);
   await form.locator('select[name="is_dark_mode"]').selectOption('true');
@@ -571,7 +571,7 @@ test.describe('settings i18n parity', () => {
     );
     await switchLanguage(page, 'en-us');
     await page.goto('/settings/ffmpeg');
-    const form = page.locator('form[action="/api/settings/ffmpeg/save"]');
+    const form = page.locator('form[action="/admin-api/settings/ffmpeg/save"]');
     await expect(form).toBeVisible();
 
     const audio = form.locator('select[name="preferred_audio_language_code"]');

@@ -208,7 +208,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
                 <section class=style::section>
                     <h1 class=style::page_title>{tr(TextKey::DecoGroups)}</h1>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/decos/groups/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/decos/groups/create" class=style::form_grid>
                         <label class=style::label for="deco-group-name">{tr(TextKey::DecoGroupName)}</label>
                         <input
                             id="deco-group-name"
@@ -237,7 +237,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
                 <section class=style::section>
                     <h2 class=style::section_title>{tr(TextKey::Decos)}</h2>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/decos/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/decos/create" class=style::form_grid>
                         <label class=style::label for="deco-group">{tr(TextKey::DecoGroup)}</label>
                         <select
                             id="deco-group"
@@ -383,7 +383,7 @@ fn DecoTable(
                                     <span>{group_name.clone()}</span>
                                 </div>
                                 <div class=style::header_actions>
-                                    <form method="post" action="/api/decos/groups/delete">
+                                    <form method="post" action="/admin-api/decos/groups/delete">
                                         <input type="hidden" name="id" value=group_id.to_string()/>
                                         <button
                                             type="submit"
@@ -423,7 +423,7 @@ fn DecoTable(
                                                         <a class=style::icon_button title=tr(TextKey::EditDeco) href=href>
                                                             <span class=style::edit_icon aria-hidden="true"></span>
                                                         </a>
-                                                        <form method="post" action="/api/decos/delete">
+                                                        <form method="post" action="/admin-api/decos/delete">
                                                             <input type="hidden" name="id" value=id.to_string()/>
                                                             <button
                                                                 type="submit"
@@ -637,7 +637,7 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     </div>
                 </div>
 
-                <form id="deco-editor-form" method="post" action="/api/decos/save">
+                <form id="deco-editor-form" method="post" action="/admin-api/decos/save">
                     {move || hidden_deco_inputs(form.get())}
 
                     <section class=style::section>
@@ -961,7 +961,7 @@ fn DecoTemplatesIsland(
                 <section class=style::section>
                     <h1 class=style::page_title>{tr(TextKey::DecoTemplateGroups)}</h1>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/deco-templates/groups/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/deco-templates/groups/create" class=style::form_grid>
                         <label class=style::label for="deco-template-group-name">{tr(TextKey::DecoTemplateGroupName)}</label>
                         <input
                             id="deco-template-group-name"
@@ -990,7 +990,7 @@ fn DecoTemplatesIsland(
                 <section class=style::section>
                     <h2 class=style::section_title>{tr(TextKey::DecoTemplates)}</h2>
                     <div class=style::divider></div>
-                    <form method="post" action="/api/deco-templates/create" class=style::form_grid>
+                    <form method="post" action="/admin-api/deco-templates/create" class=style::form_grid>
                         <label class=style::label for="deco-template-group">{tr(TextKey::DecoTemplateGroup)}</label>
                         <select
                             id="deco-template-group"
@@ -1136,7 +1136,7 @@ fn DecoTemplateTable(
                                     <span>{group_name.clone()}</span>
                                 </div>
                                 <div class=style::header_actions>
-                                    <form method="post" action="/api/deco-templates/groups/delete">
+                                    <form method="post" action="/admin-api/deco-templates/groups/delete">
                                         <input type="hidden" name="id" value=group_id.to_string()/>
                                         <button
                                             type="submit"
@@ -1176,7 +1176,7 @@ fn DecoTemplateTable(
                                                         <a class=style::icon_button title=tr(TextKey::EditDecoTemplate) href=href>
                                                             <span class=style::edit_icon aria-hidden="true"></span>
                                                         </a>
-                                                        <form method="post" action="/api/deco-templates/delete">
+                                                        <form method="post" action="/admin-api/deco-templates/delete">
                                                             <input type="hidden" name="id" value=id.to_string()/>
                                                             <button
                                                                 type="submit"
@@ -1497,7 +1497,7 @@ fn DecoTemplateEditorForm(
                 <form
                     id="deco-template-editor-form"
                     method="post"
-                    action="/api/deco-templates/items/save"
+                    action="/admin-api/deco-templates/items/save"
                 >
                     <input type="hidden" name="template_id" value=template_id.to_string()/>
                     <input type="hidden" name="group_id" value=group_id.to_string()/>

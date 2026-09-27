@@ -10660,6 +10660,77 @@ was weakened. Upstream fetch remains unchanged; all 176 SHA/subject pairs match.
 Row 111 is Port, closed with `fix(plex): preserve sources during reauthentication`.
 The pin advances to a593738637bbc1b186f40395697882969bb4664e with this row; next
 is row 112. No intermediate push or CI was launched. UCU-07 remains In progress.
+Row 112 source/route audit maps the mandatory machine key, browser troubleshooting
+exception, scanner/script transports and OpenAPI changes. Proposed ADR 0103
+separates browser actions into /admin-api, preserves the existing trusted-network
+or authenticated-proxy management boundary without built-in OIDC, and aborts
+startup when key initialization fails. Maintainer acceptance remains pending.
+Key persistence passes five focused regressions (3135ae44-4cbd-4431-9d2b-e39db4886481).
+Production routing, maintenance side-effect denial, valid-key admission, OpenAPI
+security and registered browser-function prefixes pass five integrated tests
+(1fc20f6c-8639-4782-bec5-8eed3bfdb0da). Full web tests pass 729/729 with 20
+existing skips (0cab41b4-dfd7-4a6d-91fa-ba27186595ee). Strict all-target infra/web
+Clippy passes after style corrections without suppressions. Progress and
+architecture checks pass; hydration lint has no new findings (32 baseline
+suppressions). Review confirms browser/admin changes only substitute request
+prefixes. The valid-key streaming-denial extension and matched browser checks
+remain in progress. Published FFmpeg v2.0.2 archive checksum and both extracted
+executables were reverified against the archive; no Docker build is involved.
+Row 112 remains pending and the pin stays at a5937386.
+Final key and listener checks pass 11/11 (920b2588-002c-497e-8614-95a29f7543fc),
+including denial of machine and browser APIs on the streaming listener even
+with a valid machine key. The full Chromium/Firefox wrapper is now building
+fresh matched SSR/WASM assets against a disposable state root and database.
+Substantive row-112 review covers initialization before listeners/background
+work, bounded and atomic credential storage with serialized initialization,
+redacted failures, exact header comparison and duplicate rejection, middleware
+before tracing/routing, retired anonymous API aliases, generated-function
+registration, and separation from IPTV/private callbacks. Troubleshooting
+archives read their dedicated transcode directory, not the credential state
+root. No further correction was identified. The OIDC/proxy adaptation remains
+an explicit pending maintainer decision, not an implicit parity claim.
+The matched fixture starts successfully with the pinned v2.0.2 runtime. Actual
+HTTP requests return 200 for readiness, 401 for unauthenticated OpenAPI,
+maintenance and retired browser API paths, 405 for GET on the new POST-only
+management action, and 404 for public internal callbacks. No credential was
+read or printed for this check. The full browser run contains 518 serial tests.
+That initial run stopped after 261 passes and two Firefox preparation failures.
+The earlier Chromium storage-failure test renamed the shared ConfigElement
+table, causing the preparation worker to exit when recovery-state reads failed;
+restoring the table did not restart that worker. Later jobs remained queued.
+The destructive test now owns a separate server, database and application state
+while reusing matched assets. Its original UI assertions and deadlines remain
+unchanged. Focused Chromium/Firefox verification passes 2/2 in 23.3 seconds
+(wrapper exit zero, filter `settings storage failure`). A fresh full
+serial run is in progress; the interrupted run is not acceptance evidence.
+The corrected full matched-browser run exits zero: 480 passed, 38 existing
+conditional skips, zero failures, zero flaky tests, in 38.9 minutes. Chromium
+passes 252 with seven skips; Firefox passes 228 with 31 skips. The report is
+test-results/ucu07-api-security-isolated-full/playwright-results.json.
+Both browsers execute and pass the isolated storage-failure test, preparation
+defaults and retry workflows, and retained-numbering conflict rejection.
+After Chromium's injected fault, the shared host still records an Idle,
+available preparation worker and no missing-table or worker-stop errors.
+The previously failing Firefox preparation cases then pass in sequence.
+Skips remain the existing opt-in runtime/provider/Windows requirements and
+single-project shared-state cases; no deadline, retry or assertion was weakened.
+The endpoint reference and channel source map now reflect /admin-api.
+ADR 0103 remains Proposed: the management authentication adaptation still needs
+the maintainer decision. Row 112 and the pin remain unchanged; no intermediate
+push or CI has been launched.
+The maintainer accepted ADR 0103 on 2026-09-27 and required X-Ers-Api-Key
+instead of the upstream header. Implementation, OpenAPI, listener tests and
+operator references now use that name. Five focused API tests pass
+(0865814a-6f96-46bf-bc36-3ba0235b1394), including rejection of a correct key
+sent under the old header before maintenance admission. The valid-key streaming
+denial test also passes (6ab3a55c-b228-459a-bb8d-de4dd88094fc). The completed
+matched-browser evidence remains applicable: browser actions never receive
+or send the machine key, and their route behavior did not change in this rename.
+Row 112 is Adapt under accepted ADR 0103, with coherent checkpoint
+`feat(api): require the ErsatzRS machine API key`; the pin advances to c27a8d50.
+Next is row 113. Rows 113-115 and the window gates remain open before push/CI.
+Final strict all-target web Clippy, formatting, progress validation, staged diff
+checks and the new-Clippy-allow policy pass after the approved header rename.
 """
 
 [[milestone]]

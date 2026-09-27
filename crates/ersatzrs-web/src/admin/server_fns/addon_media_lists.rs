@@ -1237,7 +1237,7 @@ pub struct AddonMediaListReplacementRow {
     pub path: String,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_addon_media_list_providers(
 ) -> Result<Vec<AddonMediaListProviderRow>, ServerFnError> {
     use crate::host::state::AppState;
@@ -1288,7 +1288,7 @@ pub async fn list_addon_media_list_providers(
 ///
 /// The dialog calls this while the operator edits the URL so the resolved
 /// choice is visible before saving, and remains overridable.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn resolve_addon_media_list_provider(
     source_url: String,
 ) -> Result<Option<AddonMediaListProviderRow>, ServerFnError> {
@@ -1319,7 +1319,7 @@ pub async fn resolve_addon_media_list_provider(
         .find(|provider| provider.addon_id == addon_id))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_addon_media_lists(
     page: u32,
     page_size: u32,
@@ -1381,7 +1381,7 @@ pub async fn list_addon_media_lists_with_state(
     ))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_lists_page_size() -> Result<u32, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1393,7 +1393,7 @@ pub async fn get_addon_media_lists_page_size() -> Result<u32, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_form(
     id: i64,
 ) -> Result<Option<AddonMediaListForm>, ServerFnError> {
@@ -1436,7 +1436,7 @@ pub async fn get_addon_media_list_form(
         })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_publication_readiness(
     id: i64,
 ) -> Result<AddonMediaListPublicationReadiness, ServerFnError> {
@@ -1460,7 +1460,7 @@ pub async fn get_addon_media_list_publication_readiness_with_state(
         .map(Into::into)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_publication_history(
     id: i64,
 ) -> Result<AddonMediaListPublicationHistoryRow, ServerFnError> {
@@ -1484,7 +1484,7 @@ pub async fn get_addon_media_list_publication_history_with_state(
         .map(Into::into)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_source_probe(
     id: i64,
 ) -> Result<Option<AddonMediaListSourceProbeRow>, ServerFnError> {
@@ -1499,7 +1499,7 @@ pub async fn get_addon_media_list_source_probe(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn test_addon_media_list_source(
     id: i64,
     saved_revision: i32,
@@ -1517,7 +1517,7 @@ pub async fn test_addon_media_list_source(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_saved_draft_diff(
     id: i64,
 ) -> Result<AddonMediaListDraftDiffRow, ServerFnError> {
@@ -1532,7 +1532,7 @@ pub async fn get_addon_media_list_saved_draft_diff(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_reset_impact(
     id: i64,
 ) -> Result<AddonMediaListResetImpactRow, ServerFnError> {
@@ -1547,7 +1547,7 @@ pub async fn get_addon_media_list_reset_impact(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_revision_history(
     id: i64,
 ) -> Result<Vec<AddonMediaListRevisionSummaryRow>, ServerFnError> {
@@ -1562,7 +1562,7 @@ pub async fn get_addon_media_list_revision_history(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn compare_addon_media_list_revisions(
     id: i64,
     left_revision: i32,
@@ -1579,7 +1579,7 @@ pub async fn compare_addon_media_list_revisions(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn restore_addon_media_list_revision(
     id: i64,
     source_published_revision: i32,
@@ -1609,7 +1609,7 @@ pub async fn restore_addon_media_list_revision(
 }
 
 /// Retry or restore one exact failed/expired publication generation.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn recover_addon_media_list_publication(
     list_id: i64,
     job_id: i64,
@@ -1646,7 +1646,7 @@ pub async fn recover_addon_media_list_publication_with_state(
         .map(Into::into)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_addon_media_list_items(
     id: i64,
 ) -> Result<Vec<AddonMediaListItemRow>, ServerFnError> {
@@ -1710,7 +1710,7 @@ pub async fn list_addon_media_list_items(
 ///
 /// A `page_size` of zero means "every entry in this group", which the editor
 /// offers explicitly.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_addon_media_list_items_page(
     id: i64,
     availability: AddonMediaListItemAvailability,
@@ -1734,7 +1734,7 @@ pub async fn list_addon_media_list_items_page(
 }
 
 /// Count the entries of one list per availability group.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_item_counts(
     id: i64,
 ) -> Result<AddonMediaListItemCountsRow, ServerFnError> {
@@ -1754,7 +1754,7 @@ pub async fn get_addon_media_list_item_counts(
 }
 
 /// Set the descriptive classification of one entry.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_addon_media_list_item_content_kind(
     item_id: i64,
     content_kind: AddonMediaListContentKind,
@@ -1774,7 +1774,7 @@ pub async fn set_addon_media_list_item_content_kind(
 }
 
 /// Set or restore the playback behavior of one Remote Stream entry.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_addon_media_list_item_liveness(
     list_id: i64,
     item_id: i64,
@@ -1794,7 +1794,7 @@ pub async fn set_addon_media_list_item_liveness(
 }
 
 /// Apply or restore playback behavior for selected or all Remote Stream entries.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn apply_addon_media_list_liveness(
     id: i64,
     liveness: Option<RemoteStreamLiveness>,
@@ -1814,7 +1814,7 @@ pub async fn apply_addon_media_list_liveness(
 }
 
 /// Include or exclude one entry from the next publication.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_addon_media_list_item_included(
     list_id: i64,
     item_id: i64,
@@ -1834,7 +1834,7 @@ pub async fn set_addon_media_list_item_included(
 }
 
 /// Set the collection-aware role of one source for the next publication.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_addon_media_list_item_role(
     list_id: i64,
     item_id: i64,
@@ -1854,7 +1854,7 @@ pub async fn set_addon_media_list_item_role(
 }
 
 /// Apply one classification to every entry of a list as a bulk default.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn apply_addon_media_list_content_kind(
     id: i64,
     content_kind: AddonMediaListContentKind,
@@ -1871,7 +1871,7 @@ pub async fn apply_addon_media_list_content_kind(
 }
 
 /// Atomically apply quick-review values or a prior undo snapshot.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn apply_addon_media_list_item_review_edits(
     id: i64,
     edits: Vec<AddonMediaListItemReviewEdit>,
@@ -1891,7 +1891,7 @@ pub async fn apply_addon_media_list_item_review_edits(
 }
 
 /// Assign one season and consecutive episode numbers in original provider order.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn assign_addon_media_list_episode_numbers(
     id: i64,
     season: i32,
@@ -1916,7 +1916,7 @@ pub async fn assign_addon_media_list_episode_numbers(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_addon_media_list_replacements(
     query: String,
 ) -> Result<Vec<AddonMediaListReplacementRow>, ServerFnError> {
@@ -1940,7 +1940,7 @@ pub async fn search_addon_media_list_replacements(
         })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_addon_media_list_item_replacement(
     item_id: i64,
     media_item_id: Option<i64>,
@@ -1962,7 +1962,7 @@ pub async fn set_addon_media_list_item_replacement(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_item(
     list_id: i64,
     item_id: i64,
@@ -1977,7 +1977,7 @@ pub async fn get_addon_media_list_item(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_addon_media_list_show_nfo(
     id: i64,
 ) -> Result<AddonMediaListNfoForm, ServerFnError> {
@@ -1991,7 +1991,7 @@ pub async fn get_addon_media_list_show_nfo(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn request_addon_media_list_presentation(
     id: i64,
     presentation_kind: AddonMediaListPresentationKind,
@@ -2012,7 +2012,7 @@ pub async fn request_addon_media_list_presentation(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_addon_media_list_show_nfo(
     id: i64,
     metadata: AddonMediaListNfoMetadata,
@@ -2032,7 +2032,7 @@ pub async fn save_addon_media_list_show_nfo(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_addon_media_list_item_nfo(
     list_id: i64,
     id: i64,
@@ -2053,7 +2053,7 @@ pub async fn save_addon_media_list_item_nfo(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn reset_addon_media_list_nfo(
     list_id: i64,
     item_id: Option<i64>,
@@ -2067,7 +2067,7 @@ pub async fn reset_addon_media_list_nfo(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn update_addon_media_list_item_chapters(
     id: i64,
     chapter_input: String,
@@ -2088,7 +2088,7 @@ pub async fn update_addon_media_list_item_chapters(
 /// The application command validates again at the write boundary. This
 /// read-only preflight prevents a valid NFO update from committing before an
 /// invalid chapter edit is rejected by the second command.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)] // Leptos server-function transport requires an async signature.
 pub async fn validate_addon_media_list_item_chapters(
     chapter_input: String,
@@ -2098,7 +2098,7 @@ pub async fn validate_addon_media_list_item_chapters(
         .map_err(|error| ServerFnError::new(error.to_string()))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_arguments)] // Mirrors the native add form's persisted settings.
 pub async fn add_addon_media_list(
     addon_id: String,
@@ -2154,7 +2154,7 @@ pub async fn add_addon_media_list(
     Ok(id)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn match_addon_media_list(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2165,7 +2165,7 @@ pub async fn match_addon_media_list(id: i64) -> Result<(), ServerFnError> {
 }
 
 /// Publish the reviewed metadata snapshot, then scan its managed library.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn publish_addon_media_list(
     id: i64,
     saved_revision: i32,
@@ -2180,7 +2180,7 @@ pub async fn publish_addon_media_list(
 
 /// Remove all derived state for one list and queue a full import while
 /// retaining the list's operator-owned identity and settings.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn reset_addon_media_list(
     id: i64,
     confirmed_name: String,
@@ -2218,7 +2218,7 @@ pub async fn reset_addon_media_list_with_state(
 
 /// Enumerate the complete source into a review draft without changing the
 /// current publication or operator-owned item state.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn reconcile_addon_media_list(
     id: i64,
 ) -> Result<AddonMediaListReconcileResult, ServerFnError> {
@@ -2252,7 +2252,7 @@ pub async fn reconcile_addon_media_list_with_state(
         })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn confirm_addon_media_list_removal(
     list_id: i64,
     item_id: i64,
@@ -2310,7 +2310,7 @@ pub async fn publish_addon_media_list_with_state(
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn update_addon_media_list(form: AddonMediaListForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2321,7 +2321,7 @@ pub async fn update_addon_media_list(form: AddonMediaListForm) -> Result<(), Ser
 }
 
 /// Queue one top-level item for detail enrichment with manual priority.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn request_addon_media_list_item_details(
     list_id: i64,
     item_id: i64,
@@ -2338,7 +2338,7 @@ pub async fn request_addon_media_list_item_details(
 }
 
 /// Pause, resume, retry, or cancel the current overview generation.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn control_addon_media_list_import(
     id: i64,
     action: AddonMediaListImportAction,
@@ -2356,7 +2356,7 @@ pub async fn control_addon_media_list_import(
 }
 
 /// Move one saved list to a different add-on and re-import it through it.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn change_addon_media_list_addon(id: i64, addon_id: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2375,7 +2375,7 @@ pub async fn change_addon_media_list_addon(id: i64, addon_id: String) -> Result<
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_addon_media_list(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 

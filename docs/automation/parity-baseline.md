@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `a593738637bbc1b186f40395697882969bb4664e` |
-| **Commit subject** | `fix: plex sign in (#2990)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a593738637bbc1b186f40395697882969bb4664e |
+| **Pinned commit** | `c27a8d5031c30bb3557a959db55a959ab2aa2aae` |
+| **Commit subject** | `feat: require api key (#2991)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c27a8d5031c30bb3557a959db55a959ab2aa2aae |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

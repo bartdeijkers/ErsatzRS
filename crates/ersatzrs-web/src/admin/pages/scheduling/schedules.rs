@@ -245,7 +245,7 @@ fn SchedulesIsland(
                                                                     <a class=style::icon_button href=format!("/schedules/{id}/items") title=tr(TextKey::EditScheduleItems) aria-label=tr(TextKey::EditScheduleItems)>
                                                                         <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
-                                                                    <form method="post" action="/api/schedules/copy">
+                                                                    <form method="post" action="/admin-api/schedules/copy">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
                                                                         <input type="hidden" name="name" value=format!("{} {}", hidden_name, tr(TextKey::CopyNameSuffix))/>
                                                                         <button
@@ -267,7 +267,7 @@ fn SchedulesIsland(
                                                                     <a class=style::icon_button href=format!("/system/troubleshooting?schedule={id}") title=tr(TextKey::Troubleshooting) aria-label=tr(TextKey::Troubleshooting)>
                                                                         <span style=icon_style(IconName::Info, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
-                                                                    <form method="post" action="/api/schedules/delete">
+                                                                    <form method="post" action="/admin-api/schedules/delete">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
                                                                         <button
                                                                             type="submit"
@@ -568,7 +568,7 @@ fn ScheduleEditorIsland(
                     id="schedule-editor-form"
                     class=style::editor_form
                     method="post"
-                    action="/api/schedules/save"
+                    action="/admin-api/schedules/save"
                     on:submit=move |event| {
                         event.prevent_default();
                         save_action.dispatch(form.get_untracked());
@@ -680,7 +680,7 @@ fn schedule_items_fallback_html(
     }
 
     format!(
-        r#"<div class="{page}"><div class="{action_bar}"><div class="{action_row}"><div class="{grow}">{name}</div><button type="submit" form="schedule-items-fallback-form" class="{btn_primary}" name="action" value="save">{save_schedule_items}</button><button type="submit" form="schedule-items-fallback-form" class="{btn_default}" name="action" value="add">{add_schedule_item}</button><a href="/schedules" class="{btn_default}">{back}</a></div></div><section class="{content}"><h1 class="{page_title}">{schedule_items}</h1><div class="{divider}"></div><p class="{error}" style="display:{error_display}">{action_failed}</p><form id="schedule-items-fallback-form" method="post" action="/api/schedules/items/save" class="{fallback_form}"><input type="hidden" name="schedule_id" value="{id}"><div class="{table_wrap}"><table><thead><tr><th>{start}</th><th>{collection_label}</th><th>{playback}</th><th>{playout}</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">{add_schedule_item}</h2><div class="{editor_form}">{add_fields}</div></form></section></div>"#,
+        r#"<div class="{page}"><div class="{action_bar}"><div class="{action_row}"><div class="{grow}">{name}</div><button type="submit" form="schedule-items-fallback-form" class="{btn_primary}" name="action" value="save">{save_schedule_items}</button><button type="submit" form="schedule-items-fallback-form" class="{btn_default}" name="action" value="add">{add_schedule_item}</button><a href="/schedules" class="{btn_default}">{back}</a></div></div><section class="{content}"><h1 class="{page_title}">{schedule_items}</h1><div class="{divider}"></div><p class="{error}" style="display:{error_display}">{action_failed}</p><form id="schedule-items-fallback-form" method="post" action="/admin-api/schedules/items/save" class="{fallback_form}"><input type="hidden" name="schedule_id" value="{id}"><div class="{table_wrap}"><table><thead><tr><th>{start}</th><th>{collection_label}</th><th>{playback}</th><th>{playout}</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">{add_schedule_item}</h2><div class="{editor_form}">{add_fields}</div></form></section></div>"#,
         page = style::page,
         action_bar = style::action_bar,
         action_row = style::action_row,

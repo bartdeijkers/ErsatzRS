@@ -165,7 +165,7 @@ fn MultiCollectionsIsland(
                                                         >
                                                             {tr(TextKey::Edit)}
                                                         </a>
-                                                        <form method="post" action="/api/multi-collections/delete">
+                                                        <form method="post" action="/admin-api/multi-collections/delete">
                                                             <input type="hidden" name="id" value=id.to_string()/>
                                                             <button
                                                                 type="submit"
@@ -334,7 +334,7 @@ fn multi_collection_editor_fallback_html(form: Result<&MultiCollectionForm, &Str
     };
     let icon_style = escape_html(&icon_style(icon, "1.125rem"));
     format!(
-        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{editor_action_bar}"><button type="submit" class="{btn_add}"><span style="{icon_style}" aria-hidden="true"></span>{button}</button></div><div class="{editor}"><h1 class="{page_title}">{heading}</h1><div class="{editor_full_row} {divider}"></div><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div></form>"#,
+        r#"<form method="post" action="/admin-api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{editor_action_bar}"><button type="submit" class="{btn_add}"><span style="{icon_style}" aria-hidden="true"></span>{button}</button></div><div class="{editor}"><h1 class="{page_title}">{heading}</h1><div class="{editor_full_row} {divider}"></div><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div></form>"#,
         page = style::page,
         editor_action_bar = style::editor_action_bar,
         page_title = style::page_title,
@@ -467,7 +467,7 @@ fn MultiCollectionEditorIsland(
     view! {
         <form
             method="post"
-            action="/api/multi-collections/save"
+            action="/admin-api/multi-collections/save"
             class=style::page
             on:submit=move |event| {
                 event.prevent_default();

@@ -180,7 +180,7 @@ fn FillerPresetsList(
                                                             >
                                                                 <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
                                                             </a>
-                                                            <form method="post" action="/api/filler-presets/delete">
+                                                            <form method="post" action="/admin-api/filler-presets/delete">
                                                                 <input type="hidden" name="id" value=id.to_string()/>
                                                                 <button
                                                                     type="submit"
@@ -512,7 +512,7 @@ fn FillerPresetEditorForm(
                         </p>
                         <form
                             method="post"
-                            action="/api/filler-presets/save"
+                            action="/admin-api/filler-presets/save"
                             on:submit=move |event| on_save.run(event)
                         >
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>

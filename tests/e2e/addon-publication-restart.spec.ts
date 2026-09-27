@@ -20,7 +20,7 @@ function firstFile(directory: string): string {
 }
 
 async function baseline(page: Page, sql: (query: string) => string): Promise<number> {
-  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(sourceUrl);
   await page.getByLabel('Add-on', { exact: true }).selectOption(addonId);

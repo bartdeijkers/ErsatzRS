@@ -72,7 +72,7 @@ pub struct ScanOperationRow {
 }
 
 /// Returns every configured library with its provider kind and media kind.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -86,7 +86,7 @@ pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_libraries_page() -> Result<LibrariesPageData, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -116,7 +116,7 @@ pub async fn load_libraries_page_with_pool(
 }
 
 /// Admit a background scan through the application-owned FIFO worker.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn scan_library(
     library_id: i64,
     kind: String,
@@ -139,7 +139,7 @@ pub async fn scan_library(
 /// Provider dispatch and Local full-library fallback are resolved from
 /// persisted state by the application command. Mirrors
 /// `$ERSATZTV_SRC/ErsatzTV.Application/Libraries/Commands/QueueShowScanByLibraryIdHandler.cs`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn scan_show(
     library_id: i64,
     show_id: i64,
@@ -180,7 +180,7 @@ fn map_scan_outcome(outcome: RequestScanOutcome) -> Result<bool, ServerFnError> 
 
 /// Returns the ids of libraries currently being scanned. Polled by the
 /// libraries page to drive the per-row "scanning" spinner.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
@@ -194,7 +194,7 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
 /// percentage ring. Libraries that are locked but have not yet emitted any
 /// progress are simply absent from the map; the UI falls back to an
 /// indeterminate spinner in that case.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
     use crate::host::state::AppState;
@@ -204,7 +204,7 @@ pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
 }
 
 /// Returns retained queued, running, completed, and failed scan operations.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn list_scan_operations() -> Result<Vec<ScanOperationRow>, ServerFnError> {
     use crate::host::state::AppState;
@@ -241,7 +241,7 @@ pub async fn list_scan_operations() -> Result<Vec<ScanOperationRow>, ServerFnErr
 /// Returns one External Collections row per remote MediaSource whose
 /// libraries are flagged for collection sync. Mirrors ETV's
 /// `GetExternalCollectionsHandler`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -258,7 +258,7 @@ pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, S
 /// Fires a background sync of external collections for a single remote
 /// MediaSource. Returns immediately; the sync runs in a spawned task and is
 /// gated by the shared application operation coordinator.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn scan_external_collections(
     media_source_id: i64,
@@ -276,7 +276,7 @@ pub async fn scan_external_collections(
 /// Returns the `(kind, media_source_id)` pairs whose collections sync is
 /// currently locked. Polled by the libraries page alongside
 /// `list_locked_libraries`.
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)]
 pub async fn list_locked_collections() -> Result<Vec<(String, i64)>, ServerFnError> {
     use crate::host::state::AppState;
@@ -288,7 +288,7 @@ pub async fn list_locked_collections() -> Result<Vec<(String, i64)>, ServerFnErr
 #[cfg(test)]
 mod server_fn_path_stability {
     //! Regression guard for the `SERVER_FN_OVERRIDE_KEY` pin in
-    //! `.cargo/config.toml`. `server_fn` derives each `/api/<fn><hash>` route from
+    //! `.cargo/config.toml`. `server_fn` derives each `/admin-api/<fn><hash>` route from
     //! `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`. Without the override key
     //! the absolute build directory leaks into the URL, so the hydration WASM and
     //! the server binary — built on different release runners — disagree on every
@@ -300,7 +300,7 @@ mod server_fn_path_stability {
 
     fn pinned_route(fn_name: &str, module_path: &str) -> String {
         let hash = xxh64(format!("ersatzrs:{module_path}").as_bytes(), 0);
-        format!("/api/{fn_name}{hash}")
+        format!("/admin-api/{fn_name}{hash}")
     }
 
     #[test]

@@ -524,7 +524,7 @@ pub struct ScheduleItemsPageData {
     pub options: ScheduleItemsEditorOptions,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_schedules_page_size() -> Result<(u32, u32), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -536,7 +536,7 @@ pub async fn get_schedules_page_size() -> Result<(u32, u32), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_schedules_detail_page_size(page_size: u32) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -548,7 +548,7 @@ pub async fn save_schedules_detail_page_size(page_size: u32) -> Result<(), Serve
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_schedules(
     query: String,
     page: u32,
@@ -577,7 +577,7 @@ pub async fn list_schedules(
     ))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -590,7 +590,7 @@ pub async fn get_schedule_form(id: i64) -> Result<Option<ScheduleForm>, ServerFn
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_schedule(form: ScheduleForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::commands::SaveSchedule;
@@ -605,7 +605,7 @@ pub async fn save_schedule(form: ScheduleForm) -> Result<i64, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_schedule(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::commands::DeleteSchedule;
@@ -618,7 +618,7 @@ pub async fn delete_schedule(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn copy_schedule(id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_app::commands::CopySchedule;
@@ -631,7 +631,7 @@ pub async fn copy_schedule(id: i64, name: String) -> Result<i64, ServerFnError> 
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_schedule_items_page(
     id: i64,
 ) -> Result<Option<ScheduleItemsPageData>, ServerFnError> {
@@ -668,7 +668,7 @@ pub async fn get_schedule_items_page(
     }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn replace_schedule_items(
     schedule_id: i64,
     items: Vec<ScheduleItemForm>,

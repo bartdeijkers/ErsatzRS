@@ -35,7 +35,7 @@ for (const javaScriptEnabled of [true, false]) {
       if (message.type() === 'error' && /hydration|failed_to_cast_marker_node|rust_panic/i.test(message.text())) errors.push(message.text());
     });
     try {
-      await page.request.post('/api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' }, maxRedirects: 0 });
+      await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' }, maxRedirects: 0 });
       const visit = async () => {
         await page.goto(`/settings/addons/${addonId}`);
         await expect(page.locator('[data-not-found]')).toHaveCount(0);

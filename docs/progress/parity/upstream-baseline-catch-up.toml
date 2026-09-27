@@ -2,16 +2,15 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..6f0449c2 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103']
 summary    = """
-176 commits, 111 reconciled, 65 pending. AMM-N-03 Complete.
-UCU-03/04 Complete. UCU-05 Complete: rows 68-90,
-local gates and exact-SHA green CI 36190815587 at 81bcd649.
+176 commits, 112 reconciled, 64 pending. AMM-N-03 Complete.
+UCU-03/04/05 Complete. UCU-05: rows 68-90; green CI 36190815587 at 81bcd649.
 Rows 99/102 Port: runtime v2.0.1, probe/cache and Docker Vulkan; GPU limits recorded.
 Rows 100-101/103 N/A; row 104 Covered FFmpeg 9. Rows 105-107 Port: watermarks, images, on-demand progress.
 Row 108 Port: v2.0.2 published; public hashes verified and managed default adopted.
 Row 109 N/A: release notes. UCU-06 Complete: local gates and
-green CI 36274614736 at 0e482f66. Row 110 Adapt (ADR 0102); row 111 Port; row 112 next.
+green CI 36274614736 at 0e482f66. Row 110 Adapt (ADR 0102); row 111 Port; row 112 Adapt (ADR 0103); row 113 next.
 
 UCU-02 is Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.
@@ -61,6 +60,14 @@ independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Unsupported graphics kinds/settings remain refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
 refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id          = 'ucu-machine-api-authentication'
+description = 'UCU-07 row 112: persist and enforce the machine API key without disclosing it to browser actions; separate browser routes, preserve troubleshooting and listener policies, and explicitly account for the existing management OIDC gap before row acceptance.'
+discovered  = '2026-09-27'
+resolved    = true
+adr         = '0103'
+evidence    = 'Source and route audit recorded in the catch-up plan. ADR 0103 is Accepted and Implemented. Persisted key primitives pass five focused tests (Nextest 3135ae44-4cbd-4431-9d2b-e39db4886481): entropy encoding/restart reuse, invalid-document repair, lock contention, fail-closed storage bounds, and Unix permissions/symlink rejection. Production startup/router integration, browser request-path migration and authenticated OpenAPI are implemented. Five integrated tests pass (1fc20f6c-8639-4782-bec5-8eed3bfdb0da), including no unauthorized maintenance side effects, valid-key admission, exact exception boundaries and the complete generated server-function registry outside the machine namespace. Full web tests pass 729/729 with 20 existing skips (0cab41b4-dfd7-4a6d-91fa-ba27186595ee). Strict all-target infra/web lint and final 11 key/listener tests pass (920b2588-002c-497e-8614-95a29f7543fc), including streaming denial with a valid key. Progress/architecture checks pass and hydration lint has no new findings (32 baseline suppressions). Browser migration review confirms path-prefix substitutions; destructive storage-failure coverage now owns an isolated host/database to preserve the shared preparation worker. Full matched Chromium/Firefox verification exits zero: 480 passed, 38 existing conditional skips, zero failures or flaky tests (test-results/ucu07-api-security-isolated-full/playwright-results.json). Both browsers pass preparation defaults, retries, numbering conflicts and isolated storage failure. The maintainer accepted the management authentication adaptation and required X-Ers-Api-Key on 2026-09-27. Five final API regressions pass (0865814a-6f96-46bf-bc36-3ba0235b1394), including rejection of the old upstream header before side effects; the valid-key streaming denial passes (6ab3a55c-b228-459a-bb8d-de4dd88094fc). Row 112 is Adapt under ADR 0103; milestone closeout and exact-SHA CI remain open.'
 
 [[debt]]
 id          = 'ucu-plex-reauthentication'

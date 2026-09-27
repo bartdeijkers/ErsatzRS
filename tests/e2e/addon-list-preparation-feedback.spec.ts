@@ -86,7 +86,7 @@ function preparationJobs(listId: number, state: number): string {
 
 test.beforeEach(async ({ page }) => {
   test.skip(!dbPath, 'Requires the wrapper-owned isolated E2E database');
-  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
 });
 
 test('untouched add-on defaults prepare and publish in both download modes', async ({ page }, info) => {
@@ -229,7 +229,7 @@ test('an add whose settings fail opens the created list with a persistent notice
   const errors = watchErrors(page);
   const variant = scenario(info, 'partial-add', false);
   // Fail only the settings step that follows successful creation.
-  const settingsCall = /\/api\/update_addon_media_list\d*(?:\?|$)/;
+  const settingsCall = /\/admin-api\/update_addon_media_list\d*(?:\?|$)/;
   await page.route(settingsCall, route => route.fulfill({ status: 500, contentType: 'text/plain', body: 'injected settings failure' }));
   const url = await fillAdd(page, variant, 'download_ahead');
   await page.getByRole('button', { name: 'Import overview' }).click();

@@ -82,7 +82,7 @@ pub(crate) fn template_form_into_command(
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_template_groups() -> Result<Vec<TemplateGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -131,7 +131,7 @@ pub async fn list_template_groups_with_pool(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_templates(search: String) -> Result<Vec<TemplateRow>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -197,7 +197,7 @@ pub async fn list_templates_with_pool(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_template_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -221,7 +221,7 @@ pub async fn create_template_group_with_pool(
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_template(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -251,7 +251,7 @@ pub async fn create_template_with_pool(
     Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn copy_template(
     template_id: i64,
     new_group_id: i64,
@@ -325,7 +325,7 @@ pub async fn copy_template_with_pool(
     Ok(new_template_id)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_template_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -350,7 +350,7 @@ pub async fn delete_template_group_with_pool(pool: &DbPool, id: i64) -> Result<(
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_template(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -373,7 +373,7 @@ pub async fn delete_template_with_pool(pool: &DbPool, id: i64) -> Result<(), Ser
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_template(id: i64) -> Result<Option<TemplateForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -393,7 +393,7 @@ pub async fn get_template(id: i64) -> Result<Option<TemplateForm>, ServerFnError
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_template_items(template_id: i64) -> Result<Vec<TemplateItemForm>, ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -455,7 +455,7 @@ pub async fn get_template_items_with_pool(
     Ok(items)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_template_block_groups() -> Result<Vec<TemplateBlockGroupOption>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -476,7 +476,7 @@ pub async fn list_template_block_groups() -> Result<Vec<TemplateBlockGroupOption
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_template_blocks_for_group(
     group_id: i64,
 ) -> Result<Vec<TemplateBlockOption>, ServerFnError> {
@@ -501,7 +501,7 @@ pub async fn list_template_blocks_for_group(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_template_with_items(form: TemplateWithItemsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();

@@ -1,7 +1,7 @@
 //! Add-playout page — ports `Pages/PlayoutEditor.razor`.
 //!
 //! Routes `/playouts/add` and `/playouts/add/{kind}` render the same form with
-//! kind-specific schedule inputs. The native form posts to `/api/playouts/create`
+//! kind-specific schedule inputs. The native form posts to `/admin-api/playouts/create`
 //! so the route works without hydration; the hydrated submit uses the same
 //! server-side create path and returns to `/playouts`.
 
@@ -106,7 +106,7 @@ fn PlayoutEditorIsland(
                     id="playout-editor-form"
                     class=style::editor_form
                     method="post"
-                    action="/api/playouts/create"
+                    action="/admin-api/playouts/create"
                     on:submit=move |event| {
                         event.prevent_default();
                         save_action.dispatch(form.get_untracked());

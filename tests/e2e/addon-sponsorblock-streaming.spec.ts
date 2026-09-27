@@ -157,7 +157,7 @@ test('manual real SponsorBlock publication streams across its frozen late cut', 
     listId = Number(publishedListId);
     expect(Number.isSafeInteger(listId) && listId > 0).toBe(true);
   } else {
-  await request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+  await request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
   await installCheckout(page);
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(sourceUrl);

@@ -19,7 +19,7 @@ test.describe('channel streaming engine', () => {
       const page = await context.newPage();
       const name = `E2E Engine ${Date.now()} ${javaScriptEnabled}`;
       try {
-        await page.request.post('/api/settings/ui/save', {
+        await page.request.post('/admin-api/settings/ui/save', {
           form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
         });
         await page.goto('/channels/add');

@@ -260,7 +260,7 @@ pub(crate) fn block_editor_options_from_admin(
 // Block groups
 // ---------------------------------------------------------------------------
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_block_groups() -> Result<Vec<BlockGroupRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -281,7 +281,7 @@ pub async fn list_block_groups() -> Result<Vec<BlockGroupRow>, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_block_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -293,7 +293,7 @@ pub async fn create_block_group(name: String) -> Result<i64, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_block_group(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -308,7 +308,7 @@ pub async fn delete_block_group(id: i64) -> Result<(), ServerFnError> {
 // Blocks list
 // ---------------------------------------------------------------------------
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_blocks(search: String) -> Result<Vec<BlockRow>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -333,7 +333,7 @@ pub async fn list_blocks(search: String) -> Result<Vec<BlockRow>, ServerFnError>
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_block(group_id: i64, name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -345,7 +345,7 @@ pub async fn create_block(group_id: i64, name: String) -> Result<i64, ServerFnEr
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::too_many_lines)]
 pub async fn copy_block(
     block_id: i64,
@@ -500,7 +500,7 @@ async fn copy_block_with_pool(
     Ok(new_block_id)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_block(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
@@ -701,7 +701,7 @@ async fn validate_block_form(
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_block(id: i64) -> Result<Option<BlockForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -755,7 +755,7 @@ pub async fn get_block_with_pool(
     }))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -917,7 +917,7 @@ fn block_item_form_from_row(row: &ersatzrs_infra::db::DbRow) -> BlockItemForm {
 }
 
 /// Replace the block metadata and all its items atomically.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1029,7 +1029,7 @@ pub async fn save_block_with_pool(
 // state, real Reset-mode building, and enrichment live in ersatzrs-app.
 // ---------------------------------------------------------------------------
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn preview_block_playout(
     form: BlockWithItemsForm,
 ) -> Result<Vec<PlayoutPreviewRow>, ServerFnError> {
@@ -1165,7 +1165,7 @@ fn preview_playback_order(value: i32) -> Result<ersatzrs_domain::PlaybackOrder, 
 // Autocomplete helpers
 // ---------------------------------------------------------------------------
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
@@ -1180,7 +1180,7 @@ pub async fn search_collections_for_block(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_smart_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
@@ -1195,7 +1195,7 @@ pub async fn search_smart_collections_for_block(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_multi_collections_for_block(
     prefix: String,
 ) -> Result<Vec<(i64, String)>, ServerFnError> {
@@ -1210,7 +1210,7 @@ pub async fn search_multi_collections_for_block(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_shows_for_block(prefix: String) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1223,7 +1223,7 @@ pub async fn search_shows_for_block(prefix: String) -> Result<Vec<(i64, String)>
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn search_seasons_for_block(prefix: String) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1299,7 +1299,7 @@ async fn copy_block_item_join_rows(
     Ok(())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_block_editor_options() -> Result<BlockEditorOptions, ServerFnError> {
     use crate::host::state::AppState;
 

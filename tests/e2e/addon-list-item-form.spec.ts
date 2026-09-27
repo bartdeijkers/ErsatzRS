@@ -29,7 +29,7 @@ for (const javaScriptEnabled of [false, true]) {
       const errors: string[] = [];
       page.on('pageerror', e => errors.push(e.message));
       const route = `/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`;
-      await page.request.post('/api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' } });
+      await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'true' } });
       await page.goto(route);
       if (javaScriptEnabled) await page.waitForFunction(() => (window as any).__ersatzrs_hydrated === true);
       await expect(page.locator('#item-review-heading')).toBeVisible();
@@ -105,7 +105,7 @@ for (const javaScriptEnabled of [false, true]) {
       await expect(page.locator('#item-replacement')).not.toHaveAttribute('open');
       expect(sqlite(`SELECT "MediaItemId" FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId"=${seed.firstItemId}`)).toBe(String(replacement));
       for (const theme of ['dark', 'light']) {
-        await page.request.post('/api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(theme === 'dark') } });
+        await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(theme === 'dark') } });
         await page.goto(route);await settled(page);
         for (const width of [320,390,720,1024,1440,1920,3840]) {
           await page.setViewportSize({ width, height: 1080 });
@@ -161,14 +161,14 @@ for (const javaScriptEnabled of [false, true]) {
       expect(await page.locator('.addon-workspace').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
       await page.evaluate(() => document.body.style.zoom='1');
       for (const language of ['de-de','fr-fr']) {
-        await page.request.post('/api/settings/ui/save', { form: {language,is_dark_mode:'true'} });
+        await page.request.post('/admin-api/settings/ui/save', { form: {language,is_dark_mode:'true'} });
         await page.goto(route);await settled(page);
         await page.setViewportSize({width:320,height:900});
         await expect(page.locator('#item-review-heading')).toBeVisible();
         expect(await page.locator('.addon-workspace').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
         await page.screenshot({path:info.outputPath(`item-${language}-320.png`),animations:'disabled'});
       }
-      await page.request.post('/api/settings/ui/save', {form:{language:'en-us',is_dark_mode:'true'}});
+      await page.request.post('/admin-api/settings/ui/save', {form:{language:'en-us',is_dark_mode:'true'}});
       expect(errors).toEqual([]);
       await context.close();
     });

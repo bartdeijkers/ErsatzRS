@@ -294,7 +294,7 @@ fn QuickFilterDrawer(projection: QuickFilterProjection) -> impl IntoView {
                         {format!("{active_count} {}", tr(TextKey::ActiveFilters))}
                     </span>
                 </summary>
-                <form method="get" action="/api/search/quick-filters" class=style::filter_form>
+                <form method="get" action="/admin-api/search/quick-filters" class=style::filter_form>
                     <input type="hidden" name="base_query" value=projection.base_query.clone()/>
                     <label class=style::filter_field>
                         <span>{tr(TextKey::Type)}</span>
@@ -876,7 +876,7 @@ fn search_card_action_script() -> String {
     message(labels.loadingPlaylists);
     try {
       const playlists = groupId > 0
-        ? await json(`/api/media/actions/playlists?group_id=${groupId}`)
+        ? await json(`/admin-api/media/actions/playlists?group_id=${groupId}`)
         : [];
       fillSelect("search-card-playlist-select", playlists);
       message(playlists.length ? "" : labels.noPlaylistsInGroup);
@@ -906,11 +906,11 @@ fn search_card_action_script() -> String {
           name.value = "";
           name.disabled = false;
         }
-        const collections = await json("/api/media/actions/collections");
+        const collections = await json("/admin-api/media/actions/collections");
         fillSelect("search-card-collection-select", collections, { id: -1, name: labels.newCollection });
         message("");
       } else if (mode === "playlist") {
-        const groups = await json("/api/media/actions/playlist-groups");
+        const groups = await json("/admin-api/media/actions/playlist-groups");
         fillSelect("search-card-playlist-group", groups);
         message("");
         byId("search-card-playlist-group")?.dispatchEvent(new Event("change"));
@@ -931,7 +931,7 @@ fn search_card_action_script() -> String {
       if (state.mode === "collection") {
         const selected = Number(byId("search-card-collection-select")?.value || -1);
         const name = byId("search-card-collection-name")?.value || "";
-        const result = await json("/api/media/actions/collections/add", {
+        const result = await json("/admin-api/media/actions/collections/add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -947,7 +947,7 @@ fn search_card_action_script() -> String {
           message(labels.pleaseChoosePlaylist);
           return;
         }
-        await json("/api/media/actions/playlists/add", {
+        await json("/admin-api/media/actions/playlists/add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ media_item_id: state.mediaItemId, playlist_id: playlistId })

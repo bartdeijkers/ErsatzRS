@@ -145,7 +145,7 @@ pub struct XmltvSettingsForm {
     pub block_behavior: String,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_ffmpeg_settings() -> Result<FfmpegSettingsPageData, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -153,7 +153,7 @@ pub async fn load_ffmpeg_settings() -> Result<FfmpegSettingsPageData, ServerFnEr
     load_ffmpeg_settings_with_state(&state).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_ffmpeg_settings(form: FfmpegSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -161,7 +161,7 @@ pub async fn save_ffmpeg_settings(form: FfmpegSettingsForm) -> Result<(), Server
     save_ffmpeg_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_logging_settings() -> Result<LoggingSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -174,7 +174,7 @@ pub async fn load_logging_settings() -> Result<LoggingSettingsForm, ServerFnErro
     Ok(logging_settings_form(settings))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_logging_settings(form: LoggingSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -182,7 +182,7 @@ pub async fn save_logging_settings(form: LoggingSettingsForm) -> Result<(), Serv
     save_logging_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_hdhr_settings() -> Result<HdhrSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -195,7 +195,7 @@ pub async fn load_hdhr_settings() -> Result<HdhrSettingsForm, ServerFnError> {
     Ok(hdhr_settings_form(settings))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_hdhr_settings(form: HdhrSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -203,7 +203,7 @@ pub async fn save_hdhr_settings(form: HdhrSettingsForm) -> Result<(), ServerFnEr
     save_hdhr_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_scanner_settings() -> Result<ScannerSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -218,7 +218,7 @@ pub async fn load_scanner_settings() -> Result<ScannerSettingsForm, ServerFnErro
     })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_scanner_settings(form: ScannerSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -226,7 +226,7 @@ pub async fn save_scanner_settings(form: ScannerSettingsForm) -> Result<(), Serv
     save_scanner_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_playout_settings() -> Result<PlayoutSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -239,7 +239,7 @@ pub async fn load_playout_settings() -> Result<PlayoutSettingsForm, ServerFnErro
     Ok(playout_settings_form(settings))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playout_settings(form: PlayoutSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -247,7 +247,7 @@ pub async fn save_playout_settings(form: PlayoutSettingsForm) -> Result<(), Serv
     save_playout_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_ui_settings() -> Result<UiSettingsPageData, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -266,7 +266,7 @@ pub async fn load_ui_settings() -> Result<UiSettingsPageData, ServerFnError> {
     })
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_ui_settings(form: UiSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -274,7 +274,7 @@ pub async fn save_ui_settings(form: UiSettingsForm) -> Result<(), ServerFnError>
     save_ui_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 #[allow(clippy::unused_async)] // Leptos server functions require an async signature.
 pub async fn save_windows_startup(enabled: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
@@ -283,7 +283,7 @@ pub async fn save_windows_startup(enabled: bool) -> Result<(), ServerFnError> {
     set_windows_startup_with_state(&state, enabled)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_xmltv_settings() -> Result<XmltvSettingsForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -296,7 +296,7 @@ pub async fn load_xmltv_settings() -> Result<XmltvSettingsForm, ServerFnError> {
     Ok(xmltv_settings_form(settings))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_xmltv_settings(form: XmltvSettingsForm) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -304,7 +304,7 @@ pub async fn save_xmltv_settings(form: XmltvSettingsForm) -> Result<(), ServerFn
     save_xmltv_settings_with_state(&state, form).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn add_custom_resolution(width: i32, height: i32) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -312,7 +312,7 @@ pub async fn add_custom_resolution(width: i32, height: i32) -> Result<(), Server
     create_custom_resolution_with_state(&state, width, height).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_custom_resolution(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 

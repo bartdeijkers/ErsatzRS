@@ -143,7 +143,7 @@ pub fn editor_view(editor: crate::admin::server_fns::addon_list_options::OptionE
                     view! { <li>{format!("{who}: {value} · {inherited}")}<span hidden=row.applicable>{format!(" · {}", tr(TextKey::AddonOptionsFiniteOnly))}</span></li> }
                 }).collect_view();
                 view! {
-                    <form method="post" action="/api/addon-lists/options/change" class=style::field data-option-key=field.definition.key>
+                    <form method="post" action="/admin-api/addon-lists/options/change" class=style::field data-option-key=field.definition.key>
                         <input type="hidden" name="command" value=command/>
                         <input type="hidden" name="bulk" value=bulk.to_string()/>
                         <input type="hidden" name="off_page_count" value=off_page_count.to_string()/>
@@ -261,14 +261,14 @@ fn access_view(
                 view! { <p>{tr(TextKey::AddonAccessExpires)}" "<time datetime=datetime>{time}</time></p> }
             })}
             <div class=style::actions>
-                <form method="post" action="/api/addon-lists/options/test-access">
+                <form method="post" action="/admin-api/addon-lists/options/test-access">
                     <input type="hidden" name="list_id" value=list_id.to_string()/>
                     <input type="hidden" name="item_id" value=item_id.to_string()/>
                     <input type="hidden" name="expected_revision" value=saved_revision.to_string()/>
                     <button type="submit" disabled={provisional || active} aria-describedby="addon-access-save-reason">{tr(TextKey::AddonAccessTest)}</button>
                 </form>
                 <a href=format!("/media/addon-lists/{list_id}/items/{item_id}#addon-item-access")>{tr(TextKey::AddonAccessRefresh)}</a>
-                <form method="post" action="/api/addon-lists/options/cancel-access" hidden=!active>
+                <form method="post" action="/admin-api/addon-lists/options/cancel-access" hidden=!active>
                     <input type="hidden" name="list_id" value=list_id.to_string()/>
                     <input type="hidden" name="item_id" value=item_id.to_string()/>
                     <input type="hidden" name="job_id" value=job_id.to_string()/>
@@ -301,7 +301,7 @@ pub fn preview_view(
                     view! { <tr><th scope="row">{row.item_id.map_or_else(|| tr(TextKey::AddonOptionsListDefault).to_owned(), |id| format!("{} ({id})", titles.get(&id).cloned().unwrap_or_else(|| tr(TextKey::Item).to_owned())))}</th><td>{before}</td><td>{after}</td><td>{tr(if !row.applicable { TextKey::AddonOptionsFiniteOnly } else if row.after.is_none() { TextKey::AddonOptionsInherited } else { TextKey::AddonOptionsOverride })}</td></tr> }
                 }).collect_view()}</tbody>
             </table></div>
-            <form method="post" action="/api/addon-lists/options/apply">
+            <form method="post" action="/admin-api/addon-lists/options/apply">
                 <input type="hidden" name="command" value=command/>
                 <button type="submit" disabled=disabled>{tr(TextKey::Apply)}</button>
             </form>
@@ -315,7 +315,7 @@ pub fn saved_view(undo: &ersatzrs_app::addon_media_list_options::AddonListOption
         <section class=style::options data-testid="addon-options-saved">
             <h1>{tr(TextKey::Saved)}</h1>
             <p role="status">{tr(TextKey::AddonOptionsDraftHelp)}</p>
-            <form method="post" action="/api/addon-lists/options/undo">
+            <form method="post" action="/admin-api/addon-lists/options/undo">
                 <input type="hidden" name="command" value=serde_json::to_string(undo).expect("undo serializes")/>
                 <button type="submit">{tr(TextKey::UndoLastChange)}</button>
             </form>
@@ -402,7 +402,7 @@ mod tests {
         assert!(html.contains("checked"));
         assert!(html.contains("Inherited"));
         assert!(html.contains("Remove &lt;segments&gt;"));
-        assert!(html.contains("/api/addon-lists/options/change"));
+        assert!(html.contains("/admin-api/addon-lists/options/change"));
         assert!(html.contains("provisional"));
         assert!(!html.contains("definition_json"));
         assert!(!html.contains("item_values"));
@@ -452,7 +452,7 @@ mod tests {
         let html = owner.with(|| saved_view(&undo).to_html());
         assert!(html.contains("expected_revision&quot;:20"));
         assert!(html.contains("previous_schema&quot;:null"));
-        assert!(html.contains("/api/addon-lists/options/undo"));
+        assert!(html.contains("/admin-api/addon-lists/options/undo"));
     }
 
     #[test]
@@ -503,14 +503,14 @@ mod tests {
         assert!(html.contains("expected_revision&quot;:19"));
         assert!(html.contains("Items&quot;:[12]"));
         assert!(html.contains(tr(TextKey::OtherPageItemsAffected)));
-        assert!(html.contains("/api/addon-lists/options/apply"));
+        assert!(html.contains("/admin-api/addon-lists/options/apply"));
     }
 
     #[test]
     fn access_native_provisional_form_requires_saved_options() {
         let owner = Owner::new();
         let html = owner.with(|| access_view(7, 12, 19, true, Ok(None)).to_html());
-        assert!(html.contains("/api/addon-lists/options/test-access"));
+        assert!(html.contains("/admin-api/addon-lists/options/test-access"));
         assert!(html.contains("name=\"expected_revision\" value=\"19\""));
         assert!(html.contains("Save an option first"));
         let submit = html
@@ -545,7 +545,7 @@ mod tests {
         assert!(html.contains("2026-09-06T12:00:00+00:00"));
         assert!(html.contains("name=\"job_id\" value=\"42\""));
         let cancel_form = html
-            .split("action=\"/api/addon-lists/options/cancel-access\"")
+            .split("action=\"/admin-api/addon-lists/options/cancel-access\"")
             .nth(1)
             .unwrap()
             .split('>')

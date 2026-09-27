@@ -24,7 +24,7 @@ test.describe('Plex reauthentication and retained missing servers', () => {
       INSERT INTO "PlexLibrary" ("Id","Key","ShouldSyncItems") VALUES (${sourceId},'synthetic',1);
       INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (${sourceId},${sourceId},'plex://synthetic');
       INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (${sourceId},${sourceId},0);`);
-    await page.request.post('/api/settings/ui/save', {
+    await page.request.post('/admin-api/settings/ui/save', {
       form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
     });
   });
@@ -34,7 +34,7 @@ test.describe('Plex reauthentication and retained missing servers', () => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     const requests: string[] = [];
-    await page.route('**/api/start_plex_pin_flow*', async route => {
+    await page.route('**/admin-api/start_plex_pin_flow*', async route => {
       requests.push(route.request().postData() ?? '');
       await route.fulfill({ status: 503, contentType: 'text/plain', body: 'synthetic provider failure' });
     });
@@ -54,13 +54,13 @@ test.describe('Plex reauthentication and retained missing servers', () => {
     page.on('pageerror', error => errors.push(error.message));
     let attempts = 0;
     let polls = 0;
-    await page.route('**/api/start_plex_pin_flow*', async route => {
+    await page.route('**/admin-api/start_plex_pin_flow*', async route => {
       attempts += 1;
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify([
         'synthetic-pin', 'https://app.plex.tv/auth#synthetic-test',
       ]) });
     });
-    await page.route('**/api/check_plex_pin*', async route => {
+    await page.route('**/admin-api/check_plex_pin*', async route => {
       polls += 1;
       if (attempts === 1 && polls > 1) {
         await route.fulfill({ status: 503, body: 'synthetic expired flow' });

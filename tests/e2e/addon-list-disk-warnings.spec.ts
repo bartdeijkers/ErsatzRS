@@ -150,7 +150,7 @@ test.describe('advisory add-on list disk warnings', () => {
         await expect(input).toHaveValue('0');
         await visit(first);
         await expect(input).toHaveValue('0');
-        const invalid = await page.request.post('/api/addon-lists/disk-warning', {
+        const invalid = await page.request.post('/admin-api/addon-lists/disk-warning', {
           form: { list_id: String(first), warning_gb: '-1' }, maxRedirects: 0,
         });
         expect(invalid.status()).toBe(303);
@@ -163,7 +163,7 @@ test.describe('advisory add-on list disk warnings', () => {
         expect(runtimeErrors).toEqual([]);
       } finally {
         if (combinedBefore !== undefined) {
-          await page.request.post('/api/addon-lists/disk-warning', {
+          await page.request.post('/admin-api/addon-lists/disk-warning', {
             form: { list_id: '', warning_gb: combinedBefore },
           });
         }

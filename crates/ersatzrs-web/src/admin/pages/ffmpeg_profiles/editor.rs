@@ -162,7 +162,7 @@ fn ffmpeg_profile_no_script_html(data: Result<Option<FfmpegProfileForm>, String>
     }
 
     format!(
-        r#"<form method="post" action="/api/ffmpeg/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/ffmpeg" class="{back_link}">&#8592; {profiles}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button class="{btn_primary}" type="submit">{save_label}</button><a href="/ffmpeg" class="{cancel_link}">{cancel}</a></div><div class="{section}"><h2 class="{section_title}">{video}</h2><div class="{form_row}"><div class="{fallback_field}"><label>{name_label}</label><input name="name" value="{name}"></div><div class="{fallback_field}"><label>{accel_label}</label><select name="hardware_acceleration">{hardware_options}</select></div><div class="{fallback_field}"><label>{format_label}</label><select name="video_format">{format_options}</select></div><div class="{fallback_field}"><label>{profile_label}</label><select name="video_profile">{profile_options}</select></div><div class="{fallback_field}"><label>{bit_depth_label}</label><select name="bit_depth">{bit_depth_options}</select></div></div></div></form>"#,
+        r#"<form method="post" action="/admin-api/ffmpeg/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/ffmpeg" class="{back_link}">&#8592; {profiles}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button class="{btn_primary}" type="submit">{save_label}</button><a href="/ffmpeg" class="{cancel_link}">{cancel}</a></div><div class="{section}"><h2 class="{section_title}">{video}</h2><div class="{form_row}"><div class="{fallback_field}"><label>{name_label}</label><input name="name" value="{name}"></div><div class="{fallback_field}"><label>{accel_label}</label><select name="hardware_acceleration">{hardware_options}</select></div><div class="{fallback_field}"><label>{format_label}</label><select name="video_format">{format_options}</select></div><div class="{fallback_field}"><label>{profile_label}</label><select name="video_profile">{profile_options}</select></div><div class="{fallback_field}"><label>{bit_depth_label}</label><select name="bit_depth">{bit_depth_options}</select></div></div></div></form>"#,
         page = style::page,
         id = form.id,
         breadcrumb = style::breadcrumb,
@@ -658,7 +658,7 @@ fn FfmpegProfileEditorForm(
     view! {
         <form
             method="post"
-            action="/api/ffmpeg/save"
+            action="/admin-api/ffmpeg/save"
             class=style::page
             data-ffmpeg-profile-editor-hydrated="true"
         >

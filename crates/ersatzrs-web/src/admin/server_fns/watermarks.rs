@@ -178,7 +178,7 @@ pub struct WatermarkAssetPreview {
     pub rendered_height: u32,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_watermark_rows(
     page: u32,
     page_size: u32,
@@ -205,7 +205,7 @@ pub async fn list_watermark_rows(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_watermarks() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -217,7 +217,7 @@ pub async fn count_watermarks() -> Result<u64, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_watermark_form(id: i64) -> Result<WatermarkForm, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -231,7 +231,7 @@ pub async fn get_watermark_form(id: i64) -> Result<WatermarkForm, ServerFnError>
         .ok_or_else(|| ServerFnError::new("Watermark not found"))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_watermark_editor_data(id: i64) -> Result<WatermarkEditorData, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -245,7 +245,7 @@ pub async fn get_watermark_editor_data(id: i64) -> Result<WatermarkEditorData, S
         .ok_or_else(|| ServerFnError::new("Watermark not found"))
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -430,7 +430,7 @@ pub async fn save_watermark_with_pool(
     }
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_watermark(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -442,7 +442,7 @@ pub async fn delete_watermark(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -460,7 +460,7 @@ pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnEr
 /// preview contains the selected image and can represent `ActualSize`
 /// truthfully. This server function remains available for matched older
 /// clients, but no longer claims a fixed-height box is the asset's real size.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn preview_watermark_placement(
     params: WatermarkPreviewParams,
 ) -> Result<String, ServerFnError> {
@@ -697,7 +697,7 @@ async fn probe_image_dimensions(path: &std::path::Path) -> Result<(u32, u32), Se
 /// dimension. `ActualSize` therefore uses the selected asset's native pixel
 /// dimensions at a truthful 1:6 scale; `Scaled` uses the configured percentage
 /// of the reference output width while preserving the asset aspect ratio.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn preview_watermark_asset_placement(
     params: WatermarkAssetPreviewParams,
 ) -> Result<WatermarkAssetPreview, ServerFnError> {

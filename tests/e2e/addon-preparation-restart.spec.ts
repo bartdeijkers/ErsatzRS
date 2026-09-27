@@ -101,7 +101,7 @@ test('actual host death drains preparation before one safe restart', async ({ br
     const calls = (): Array<{ command: string; provider?: number; descendant?: number }> =>
       existsSync(fixture.invocationLog) ? readFileSync(fixture.invocationLog, 'utf8').trim()
         .split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) : [];
-    await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+    await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
     await hydrated(page, '/media/addon-lists/add');
     await page.getByLabel('Add-on list URL').fill(sourceUrl);
     await page.getByLabel('Add-on', { exact: true }).selectOption(addonId);

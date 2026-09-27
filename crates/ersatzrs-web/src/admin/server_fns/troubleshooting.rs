@@ -206,7 +206,7 @@ pub enum MpegTroubleshootingStatus {
     Failed,
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_troubleshooting_report() -> Result<TroubleshootingReport, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -214,7 +214,7 @@ pub async fn load_troubleshooting_report() -> Result<TroubleshootingReport, Serv
     load_troubleshooting_report_with_state(&state).await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn validate_sequential_schedule_file(
     yaml_file: String,
     is_import: bool,
@@ -225,7 +225,7 @@ pub async fn validate_sequential_schedule_file(
     .await
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_block_playout_options() -> Result<Vec<BlockPlayoutOption>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -243,7 +243,7 @@ pub async fn list_block_playout_options() -> Result<Vec<BlockPlayoutOption>, Ser
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_blocks_for_playout(
     playout_id: i64,
 ) -> Result<Vec<TroubleshootingBlockRow>, ServerFnError> {
@@ -266,7 +266,7 @@ pub async fn list_blocks_for_playout(
         .collect())
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_block_playout_history(
     playout_id: i64,
     block_id: i64,
@@ -301,7 +301,7 @@ pub async fn list_block_playout_history(
         .collect()
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_playback_troubleshooting_context(
     media_item_id: i64,
     channel_id: i64,
@@ -334,7 +334,7 @@ pub async fn load_playback_troubleshooting_context(
     Ok(context)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn load_mpeg_troubleshooting_context(
     channel_number: String,
     mode: String,

@@ -100,7 +100,7 @@ async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<
   await expect(dialog).toBeVisible();
   const stopped = page.waitForResponse((response) =>
     response.request().method() === 'POST'
-    && new URL(response.url()).pathname.includes('/api/stop_channel_session'));
+    && new URL(response.url()).pathname.includes('/admin-api/stop_channel_session'));
   await dialog.getByRole('button', { name: 'Stop Transcode Session', exact: true }).click();
   const response = await stopped;
   expect(response.ok()).toBe(true);
@@ -332,7 +332,7 @@ function programmeStartMinutes(title: string): number {
 }
 
 async function forceEnglish(page: Page): Promise<void> {
-  await page.request.post('/api/settings/ui/save', {
+  await page.request.post('/admin-api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
   });
@@ -464,7 +464,7 @@ test.describe('channel preview modal and watch route', () => {
     });
     let previewUrlRequests = 0;
     let playlistRequests = 0;
-    await page.route('**/api/get_channel_preview_url*', async (route) => {
+    await page.route('**/admin-api/get_channel_preview_url*', async (route) => {
       previewUrlRequests += 1;
       await previewUrlBlocked;
       await route.continue();
@@ -484,7 +484,7 @@ test.describe('channel preview modal and watch route', () => {
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toBeHidden();
     const previewUrlResponse = page.waitForResponse((response) =>
-      response.url().includes('/api/get_channel_preview_url'),
+      response.url().includes('/admin-api/get_channel_preview_url'),
     );
     releasePreviewUrl();
     await previewUrlResponse;
@@ -503,7 +503,7 @@ test.describe('channel preview modal and watch route', () => {
       releaseFirstProjection = resolve;
     });
     let projectionRequests = 0;
-    await page.route('**/api/get_channel_watch_data*', async (route) => {
+    await page.route('**/admin-api/get_channel_watch_data*', async (route) => {
       projectionRequests += 1;
       if (projectionRequests === 1) {
         await firstProjectionBlocked;
@@ -531,7 +531,7 @@ test.describe('channel preview modal and watch route', () => {
     await expect(dialog).toContainText(`E2E Preview Programme ${testInfo.project.name} 1`);
 
     const firstProjectionResponse = page.waitForResponse((response) =>
-      response.url().includes('/api/get_channel_watch_data'),
+      response.url().includes('/admin-api/get_channel_watch_data'),
     );
     releaseFirstProjection();
     await firstProjectionResponse;

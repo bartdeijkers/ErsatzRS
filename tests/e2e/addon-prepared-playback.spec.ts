@@ -54,7 +54,7 @@ test('prepared publication pins its generated file and plays it instead of raw p
     if (message.type() === 'error' && /hydration|failed_to_cast_marker_node|rust_panic/i.test(message.text())) errors.push(message.text());
   });
   const fixture = installPreparedFixture(dbPath!);
-  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(sourceUrl);
   await page.getByLabel('Add-on', { exact: true }).selectOption(addonId);

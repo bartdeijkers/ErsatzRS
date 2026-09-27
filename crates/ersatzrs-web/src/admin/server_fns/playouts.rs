@@ -418,7 +418,7 @@ fn template_item_into_admin(
 /// Paged playouts list. Mirrors `GetPagedPlayoutsHandler`: inner-joins
 /// `Channel`, left-joins `ProgramSchedule` and `PlayoutBuildStatus`, filters on
 /// `Channel.Name LIKE %query%`, and orders by `Channel.SortNumber`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_playouts(
     query: String,
     page: u32,
@@ -451,7 +451,7 @@ pub async fn list_playouts(
 
 /// Total playout count. Mirrors `GetPagedPlayoutsHandler` which counts the
 /// whole `Playouts` set (the search query filters the page only).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_playouts() -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -463,7 +463,7 @@ pub async fn count_playouts() -> Result<u64, ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_playout_create_channels() -> Result<Vec<PlayoutCreateChannel>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -485,7 +485,7 @@ pub async fn list_playout_create_channels() -> Result<Vec<PlayoutCreateChannel>,
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_playout_create_schedules() -> Result<Vec<PlayoutCreateSchedule>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -508,7 +508,7 @@ pub async fn list_playout_create_schedules() -> Result<Vec<PlayoutCreateSchedule
 /// Paged, future playout items + gaps for the selected playout. Mirrors
 /// `GetFuturePlayoutItemsByIdHandler`: items and gaps with `Finish >= now`,
 /// optionally hiding filler, combined and ordered by `Start`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_playout_detail_items(
     playout_id: i64,
     show_filler: bool,
@@ -552,7 +552,7 @@ pub async fn list_playout_detail_items(
 
 /// Combined count of future items + gaps for the playout. Mirrors the
 /// `combined.CountAsync` in `GetFuturePlayoutItemsByIdHandler`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn count_playout_detail_items(
     playout_id: i64,
     show_filler: bool,
@@ -575,7 +575,7 @@ pub async fn count_playout_detail_items(
 /// row cascades to its items/gaps/history/anchors via FK. ErsatzRS serves the
 /// channel guide on-the-fly so there is no cache file to delete and no
 /// `RefreshChannelList` cache to rewrite.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -590,7 +590,7 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
 /// Enqueues a build for one playout. Mirrors `Playouts.razor.ResetPlayout`:
 /// Classic playouts refresh, every other kind resets.
 #[allow(clippy::unused_async)]
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn reset_playout(
     id: i64,
     schedule_kind: i32,
@@ -604,7 +604,7 @@ pub async fn reset_playout(
 /// Enqueues builds for every eligible playout. Mirrors `ResetAllPlayoutsHandler`:
 /// Classic → Refresh, Block/Sequential/Scripted → Reset, ExternalJson/None
 /// skipped. Repeated clicks coalesce with work already accepted by the worker.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn reset_all_playouts() -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -622,7 +622,7 @@ pub async fn reset_all_playouts() -> Result<PlayoutBuildEnqueueResult, ServerFnE
 
 /// Persists a playout's `DailyRebuildTime`. Mirrors `UpdatePlayoutHandler`:
 /// `None` clears it, otherwise it stores `HH:MM:SS`.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playout_daily_reset(id: i64, minutes: Option<i32>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -637,7 +637,7 @@ pub async fn save_playout_daily_reset(id: i64, minutes: Option<i32>) -> Result<(
 /// Updates an external-json playout's `ScheduleFile`. Mirrors
 /// `UpdateExternalJsonPlayoutHandler` (without the on-the-fly guide cache that
 /// ErsatzRS does not keep).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn update_external_json_playout(
     id: i64,
     schedule_file: String,
@@ -660,7 +660,7 @@ pub async fn update_external_json_playout(
 /// Creates a playout from the add page. Ports the `Create*PlayoutHandler`
 /// family: validate channel ownership, validate the selected schedule/file,
 /// insert the `Playout`, then queue an initial reset build.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn create_playout(form: PlayoutCreateForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -680,7 +680,7 @@ pub async fn create_playout(form: PlayoutCreateForm) -> Result<i64, ServerFnErro
 /// Snapshot of playout ids currently building. Mirrors the admin UI polling
 /// `IEntityLocker.IsPlayoutLocked`.
 #[allow(clippy::unused_async)]
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn list_locked_playouts() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -692,7 +692,7 @@ pub async fn list_locked_playouts() -> Result<Vec<i64>, ServerFnError> {
 /// polls this alongside persisted build status to acknowledge accepted work
 /// before the scheduler acquires the build lock.
 #[allow(clippy::unused_async)]
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -706,7 +706,7 @@ pub async fn playout_build_activity() -> Result<PlayoutBuildActivitySnapshot, Se
 
 /// Reads the persisted `Show Filler` detail preference
 /// (`pages.playouts.detail_show_filler`).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_show_filler_pref() -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -719,7 +719,7 @@ pub async fn get_show_filler_pref() -> Result<bool, ServerFnError> {
 }
 
 /// Persists the `Show Filler` detail preference.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn set_show_filler_pref(show_filler: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -735,7 +735,7 @@ pub async fn set_show_filler_pref(show_filler: bool) -> Result<(), ServerFnError
 /// `ProcessSchedulingContextHandler`: Classic (`ScheduleId`) and Block
 /// (`BlockId`) contexts get human-readable names; anything else is
 /// pretty-printed (or returned as-is when it is not valid JSON).
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn process_scheduling_context(serialized: String) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -752,7 +752,7 @@ pub async fn process_scheduling_context(serialized: String) -> Result<String, Se
 // ---------------------------------------------------------------------------
 
 /// Loads one of the top-level Classic, Block, or Scripted editor forms.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playout_kind_editor(
     id: i64,
     schedule_kind: i32,
@@ -770,7 +770,7 @@ pub async fn get_playout_kind_editor(
 
 /// Persists a Scripted playout schedule file/command line and refreshes the
 /// channel through the scheduler worker.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_scripted_playout(id: i64, schedule_file: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_core::scheduling::PlayoutBuildMode;
@@ -788,7 +788,7 @@ pub async fn save_scripted_playout(id: i64, schedule_file: String) -> Result<(),
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playout_default_deco(id: i64, deco_id: Option<i64>) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -802,7 +802,7 @@ pub async fn save_playout_default_deco(id: i64, deco_id: Option<i64>) -> Result<
 
 /// Loads the Classic nested alternate schedule editor. ErsatzTV appends the
 /// current default schedule as the final catch-all row; this does the same.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playout_alternate_schedules(
     id: i64,
 ) -> Result<Option<PlayoutAlternateSchedulesForm>, ServerFnError> {
@@ -817,7 +817,7 @@ pub async fn get_playout_alternate_schedules(
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playout_alternate_schedules(
     playout_id: i64,
     items: Vec<PlayoutAlternateScheduleItemForm>,
@@ -835,7 +835,7 @@ pub async fn save_playout_alternate_schedules(
 }
 
 /// Loads the Block nested template editor.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_playout_templates(id: i64) -> Result<Option<PlayoutTemplatesForm>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -848,7 +848,7 @@ pub async fn get_playout_templates(id: i64) -> Result<Option<PlayoutTemplatesFor
         .map_err(ServerFnError::new)
 }
 
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_playout_templates(
     playout_id: i64,
     items: Vec<PlayoutTemplateItemForm>,
@@ -867,7 +867,7 @@ pub async fn save_playout_templates(
 }
 
 /// Equivalent to ErsatzTV's `ErasePlayoutItems`: remove generated items only.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn erase_playout_items(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -884,7 +884,7 @@ pub async fn erase_playout_items(id: i64) -> Result<(), ServerFnError> {
 // ---------------------------------------------------------------------------
 
 /// Loads a Sequential (YAML) playout (`ScheduleKind = 3`) by id.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn get_sequential_playout(
     id: i64,
 ) -> Result<Option<SequentialPlayoutForm>, ServerFnError> {
@@ -907,7 +907,7 @@ pub async fn get_sequential_playout(
 
 /// Persists the YAML content for a Sequential playout and kicks off a
 /// background playout rebuild so scheduled items stay current.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn save_sequential_playout(id: i64, yaml_content: String) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_core::scheduling::PlayoutBuildMode;
@@ -988,7 +988,7 @@ async fn rebuild_yaml_playout(
 
 /// Resets a playout to a blank state in a single transaction — equivalent to
 /// ErsatzTV's `ErasePlayoutHistory` command.
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn erase_playout_items_and_history(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
@@ -1002,7 +1002,7 @@ pub async fn erase_playout_items_and_history(id: i64) -> Result<(), ServerFnErro
 
 /// Validates YAML playout content server-side using [`YamlPlayoutEngine`].
 #[allow(clippy::unused_async)]
-#[server]
+#[server(prefix = "/admin-api")]
 pub async fn validate_yaml_playout(content: String) -> Result<(), ServerFnError> {
     use ersatzrs_core::scheduling::YamlPlayoutEngine;
     match YamlPlayoutEngine::definition_from_str(&content) {

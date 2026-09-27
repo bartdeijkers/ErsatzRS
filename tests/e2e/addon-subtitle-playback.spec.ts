@@ -151,7 +151,7 @@ test('manual primary and fallback subtitles survive worker publication and sched
   // override the primary to unavailable Dutch, so visible English proves fallback.
   sqlite(`INSERT INTO "ConfigElement" ("Key","Value") VALUES('ffmpeg.preferred_subtitle_language_code','eng'),('ffmpeg.fallback_subtitle_language_code','eng')
     ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";`);
-  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode:'true',language:'en-us' }, maxRedirects:0 });
+  await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode:'true',language:'en-us' }, maxRedirects:0 });
   for (const delivery of ['stream','download_ahead'] as const) {
     const list = await publish(page, delivery);
     const item = assertCaptionOwnership(list, delivery === 'download_ahead');
