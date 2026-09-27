@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `fcd593e08d9ae1501f25af55337432745aea0338` |
-| **Commit subject** | `chore: trigger new build for updated next engine` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/fcd593e08d9ae1501f25af55337432745aea0338 |
+| **Pinned commit** | `2cf8e56ae3cc8d84598d7b36e26234d23c12747b` |
+| **Commit subject** | `update changelog [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2cf8e56ae3cc8d84598d7b36e26234d23c12747b |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

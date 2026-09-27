@@ -10967,6 +10967,12 @@ No new engine artifact is selected and no build/release is inferred. Source-map
 review and structured validation are sufficient for this row. Pin/ledger move
 together to fcd593e0; align the clean upstream checkout after the local commit.
 Row 119 is next; UCU-08 acceptance remains open.
+Row 119 (2cf8e56a) is N/A: its complete diff adds two CHANGELOG lines
+about QSV detection in the external Next engine on older Intel devices. No
+host source, runtime pin, dependency or package changes are present. This
+release note does not establish ErsatzRS hardware acceptance; existing
+limitations remain. Source review and structured validation pass; pin/ledger
+advance together to 2cf8e56a with the local row commit. Row 120 is next.
 """
 
 [[milestone]]
