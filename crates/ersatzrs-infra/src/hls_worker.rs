@@ -1395,12 +1395,18 @@ impl HlsSessionWorker {
             let source_stream = if interval_playback.is_some() {
                 source_stream
             } else {
-                enrich_source_video_stream_for_playback(
-                    source_stream,
-                    playback_profile.profile.hardware_acceleration,
-                    &active.media_path,
-                )
-                .await
+                tokio::select! {
+                    biased;
+                    () = self.cancel.notified() => break,
+                    enriched = enrich_source_video_stream_for_playback(
+                        &pool,
+                        active.media_version_id,
+                        playback_profile.profile.deinterlace_video == Some(true),
+                        source_stream,
+                        playback_profile.profile.hardware_acceleration,
+                        &active.media_path,
+                    ) => enriched,
+                }
             };
             let Ok(target_frame_rate) = self
                 .startup_read(self.load_target_frame_rate(&pool, "hls worker"))

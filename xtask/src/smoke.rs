@@ -78,7 +78,7 @@ fn run_inner(opts: Opts) -> Result<()> {
             if generated_next {
                 next_proof::generate(&path, media_seconds)?;
             } else {
-                generate_fixture_media(&path, media_seconds)?;
+                generate_fixture_media(&path, media_seconds, opts.interlace_probe)?;
             }
             path
         }
@@ -101,6 +101,11 @@ fn run_inner(opts: Opts) -> Result<()> {
         opts.next_convert,
     )?;
 
+    if opts.interlace_probe {
+        let conn = rusqlite::Connection::open(&db_path)?;
+        conn.execute(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('ffmpeg.probe_for_interlaced_frames', 'True') ON CONFLICT ("Key") DO UPDATE SET "Value" = excluded."Value""#, [])?;
+        conn.execute(r#"UPDATE "FFmpegProfile" SET "DeinterlaceVideo" = 1"#, [])?;
+    }
     if generated_next {
         next_proof::seed(&db_path, &media_path)?;
     } else if opts.next {
@@ -125,11 +130,17 @@ fn run_inner(opts: Opts) -> Result<()> {
     for channel in &opts.channels {
         if !opts.next && opts.check_ts && !opts.check_hls_lifecycle {
             for mode in ["ts-legacy", "ts"] {
+                if opts.interlace_probe {
+                    reset_interlace_ratio(&db_path)?;
+                }
                 let path = format!("/iptv/channel/{channel}.ts?mode={mode}");
                 let response =
                     http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
                         .with_context(|| format!("probing MPEG-TS endpoint {path}"))?;
                 response.ensure_success_with_body(&path)?;
+                if opts.interlace_probe {
+                    verify_interlace_ratio(&db_path)?;
+                }
                 println!(
                     "smoke evidence: {path} -> HTTP {} with {} body bytes",
                     response.status,
@@ -139,10 +150,16 @@ fn run_inner(opts: Opts) -> Result<()> {
         }
 
         if opts.check_hls {
+            if opts.interlace_probe {
+                reset_interlace_ratio(&db_path)?;
+            }
             let variant_path = format!("/iptv/channel/{channel}.m3u8?mode=segmenter");
             let variant = http_get_until_body(&variant_path, usize::MAX, deadline.remaining()?)
                 .with_context(|| format!("probing HLS variant endpoint {variant_path}"))?;
             variant.ensure_success_with_body(&variant_path)?;
+            if opts.interlace_probe {
+                verify_interlace_ratio(&db_path)?;
+            }
             if !String::from_utf8_lossy(&variant.body).contains("#EXTM3U") {
                 bail!("{variant_path}: response did not contain an HLS playlist");
             }
@@ -244,6 +261,7 @@ struct Opts {
     check_hls_lifecycle: bool,
     next: bool,
     next_convert: bool,
+    interlace_probe: bool,
 }
 
 impl Opts {
@@ -257,6 +275,7 @@ impl Opts {
         let mut check_hls_lifecycle = false;
         let mut next = false;
         let mut next_convert = false;
+        let mut interlace_probe = false;
 
         let mut i = 0;
         while i < args.len() {
@@ -291,6 +310,7 @@ impl Opts {
                     media_path = Some(PathBuf::from(value));
                 }
                 "--keep-temp" => keep_temp = true,
+                "--interlace-probe" => interlace_probe = true,
                 "--next" => next = true,
                 "--next-convert" => {
                     next = true;
@@ -311,6 +331,12 @@ impl Opts {
         if next {
             check_hls_lifecycle = true;
         }
+        if interlace_probe && (next || media_path.is_some()) {
+            bail!("--interlace-probe requires generated native media");
+        }
+        if interlace_probe && check_ts && check_hls {
+            bail!("--interlace-probe requires --skip-ts or --skip-hls so shared workers cannot reuse earlier probes");
+        }
         if next && !check_hls {
             bail!("--next requires HLS checks");
         }
@@ -328,6 +354,7 @@ impl Opts {
             check_hls_lifecycle,
             next,
             next_convert,
+            interlace_probe,
         })
     }
 
@@ -493,7 +520,30 @@ fn ensure_port_free() -> Result<()> {
     Ok(())
 }
 
-fn generate_fixture_media(path: &Path, media_seconds: i64) -> Result<()> {
+fn reset_interlace_ratio(db_path: &Path) -> Result<()> {
+    let conn = rusqlite::Connection::open(db_path)?;
+    conn.execute(
+        r#"UPDATE "MediaVersion" SET "InterlacedRatio" = NULL WHERE "Id" = 1"#,
+        [],
+    )?;
+    Ok(())
+}
+
+fn verify_interlace_ratio(db_path: &Path) -> Result<()> {
+    let conn = rusqlite::Connection::open(db_path)?;
+    let ratio: Option<f64> = conn.query_row(
+        r#"SELECT "InterlacedRatio" FROM "MediaVersion" WHERE "Id" = 1"#,
+        [],
+        |row| row.get(0),
+    )?;
+    if !ratio.is_some_and(|value| value > 0.05 && value <= 1.0) {
+        bail!("native playback did not detect the interlaced fixture: {ratio:?}");
+    }
+    println!("smoke evidence: native playback published interlace ratio {ratio:?}");
+    Ok(())
+}
+
+fn generate_fixture_media(path: &Path, media_seconds: i64, interlace_probe: bool) -> Result<()> {
     let configured = configured_ffmpeg_path().or_else(|| find_on_path("ffmpeg"));
     let ffmpeg = configured.as_deref().unwrap_or("ffmpeg");
     let seconds = media_seconds.to_string();
@@ -508,7 +558,11 @@ fn generate_fixture_media(path: &Path, media_seconds: i64) -> Result<()> {
             "-f",
             "lavfi",
             "-i",
-            "testsrc2=size=320x180:rate=30",
+            if interlace_probe {
+                "testsrc2=size=320x180:rate=60,tinterlace=mode=interleave_top,setfield=prog"
+            } else {
+                "testsrc2=size=320x180:rate=30"
+            },
             "-f",
             "lavfi",
             "-i",
@@ -1136,5 +1190,6 @@ fn print_help() {
     eprintln!("    --hls-lifecycle  Also prove StopOnDisconnect HLS and mode=ts sessions drain");
     eprintln!("    --skip-ts         Skip /iptv/channel/<n>.ts?mode=ts probe");
     eprintln!("    --skip-hls        Skip HLS segmenter playlist probes");
+    eprintln!("    --interlace-probe Verify native playback detects interlaced generated media");
     eprintln!("    --keep-temp       Keep temporary DB/media/log directory for debugging");
 }

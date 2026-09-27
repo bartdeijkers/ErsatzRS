@@ -278,6 +278,9 @@ async fn start_playback_preview(
     let source_audio_streams =
         load_source_audio_streams(&state.pool, media.media_version_id).await?;
     let source_stream = enrich_source_video_stream_for_playback(
+        &state.pool,
+        media.media_version_id,
+        playback_profile.profile.deinterlace_video == Some(true),
         source_stream,
         playback_profile.profile.hardware_acceleration,
         &media_path,
@@ -446,6 +449,9 @@ async fn start_channel_playback_preview(
     let source_audio_streams =
         load_source_audio_streams(&state.pool, active.media_version_id).await?;
     let source_stream = enrich_source_video_stream_for_playback(
+        &state.pool,
+        active.media_version_id,
+        playback_profile.profile.deinterlace_video == Some(true),
         source_stream,
         playback_profile.profile.hardware_acceleration,
         &media_path,

@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **130**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **131**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -60,6 +60,124 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 131 source map: multi-day seeking (Port)
+
+- Upstream `6ebcaf800d05082ac22bcff7394d6e1d592d5c59` changes eight files:
+  FFmpegFormatter, input/output seek and time-limit options, pipeline snapshots,
+  LocalStatisticsProvider idet sampling, MotionElement timing and changelog.
+- Native input/output seek and time limits use options::format_time_limit:
+  total hours (`as_secs() / 3600`), never a day-prefixed C# TimeSpan string.
+  Add focused boundary/command regressions and real FFmpeg duration parsing
+  evidence before calling that portion Covered. Keep current submillisecond
+  precision; this row does not require changing valid argument syntax.
+- Native motion graphics use an in-process overlay/filter graph under ADR 0005,
+  with numeric-second setpts/enable expressions and no external renderer pipe.
+  Verify multi-day motion timing alongside the command formatting audit.
+- Confirmed missing path: settings persists ffmpeg.probe_for_interlaced_frames,
+  but no native playback consumer reads it or invokes idet. Upstream native
+  playback, when profile deinterlacing is enabled and container metadata is not
+  already interlaced, uses a cached ratio or samples 200 frames at duration/3
+  for local files of at least three seconds; ratios above 0.05 are interlaced.
+  Remote/missing/AviSynth-unavailable inputs are skipped. Scanner reprobe clears
+  cached ratios. This pre-existing gap is relevant to the changed multi-day
+  sampling path and must be implemented and verified before this row lands.
+- Targets: ffmpeg options/command regression tests; infra playback and bounded
+  local process probing; native MPEG-TS/HLS and troubleshooting consumers.
+  Preserve selected version/stream identity, cancellation and cached-state
+  invalidation. Do not probe unrelated streams or remote provider URLs.
+- Focused duration and command-order tests pass
+  (`762ba3e0-ab3a-4a54-a6aa-b0bc641e259f`): 24/25/48/100 hours, fractional
+  precision and input/output argument placement. A synthetic 53-hour FFV1
+  Matroska clip (one uniquely shaded frame per hour) proves both input-side and
+  output-side 48-hour seeks with a 100-hour limit decode the exact frame 48.
+  Pinned v2.0.2 FFmpeg output SHA-256 for both and the select-filter oracle:
+  `7d2f96a1df0d5d799a21b83063dca880b68738a5c5bef4d01760939fecddbbc8`.
+  The source fixture is in system temporary directory ersatzrs-ucu08-row131.
+- Playback integration target: enrich_source_video_stream_for_playback is
+  shared by native MPEG-TS, HLS and both troubleshooting paths. It currently
+  only probes QSV H.264 profile count. The new idet path needs the selected
+  version, stream, resolved local file and profile deinterlace setting; reuse
+  this runtime boundary without adding subprocess work to metadata-only reads.
+  Upstream Next schedule projection uses container field order independently;
+  do not silently impose native-only probing on that projection.
+- Initial implementation now connects the setting to the shared native
+  enrichment boundary and all four consumers. Sampling maps only the selected
+  video stream, seeks at duration/3 using the total-hour formatter, and captures
+  bounded idet statistics through the existing managed process-group/job owner.
+  A ten-second deadline includes admission, reads, sampling and publication;
+  a process-local gate serializes optional probes and rechecks cached state.
+  Only the sole original file and primary video stream can use/publish the
+  version ratio. Alternate streams and replacements are sampled without
+  poisoning that shared cache. Conditional publication guards the scan timestamp,
+  duration, file ownership and primary stream; filesystem size/mtime are rechecked.
+  Existing FFmpeg Capabilities health reports missing idet only when enabled.
+  Initial infra/web type-check passes. Three cache/parser/health tests pass
+  (`ba141abc-5297-44bd-870a-a2b73468bfb3`); three multi-day argument/snapshot
+  tests pass (`de4a74ff-420a-4e24-b531-1b0ee239bdda`). Real verified-v2.0.2
+  idet sampling passes (`0b1cd87a-8f1d-4942-8756-fccafc2d94b9`): two selected
+  streams are classified separately and alternate sampling preserves the
+  primary cached ratio. The first synthetic control (testsrc2) was itself
+  classified interlaced by standalone idet; testsrc supplies a verified
+  progressive control without weakening the 0.05 threshold. Race/cancellation,
+  motion timing and integrated runtime acceptance remain; this is not a
+  completion claim. Strict FFmpeg/infra/web library/test Clippy passes. HLS now selects cancellation around enrichment so
+  Stop drops the owned probe future and follows normal worker cleanup instead
+  of waiting for the optional sampling budget.
+- Conditional cache publication now has a SQLite race regression covering
+  scanner timestamp/duration changes, replacement/additional files, primary
+  stream removal and another cache publisher. Three focused tests pass
+  (`c714a3cb-ae02-4be2-8377-d0df3d50caf0`). A Unix process fixture verifies
+  nonzero exit, unbounded stderr and stalled execution return bounded errors
+  (`d04e333a-6af4-4469-af57-24962ec86a57`). These checks do not yet prove
+  dropped-future process-tree cleanup or integrated HLS Stop behavior.
+- Dropping the actual probe future terminates its delayed descendant in the
+  Unix process fixture (`b988efe0-68f0-4c07-a195-b6e7b18add07`). Windows uses
+  the existing managed-job owner; this run does not claim Windows runtime proof.
+  Native motion rendering preserves total seconds for a 48-hour fractional
+  start, 25-hour source duration and 24-hour fractional hold; the inline
+  snapshot passes (`97a1c33e-2f8a-437d-8cdf-1d74c40f10ee`). This follows
+  ADR 0005's native filter path, with no external motion renderer added.
+  Integrated HLS Stop and playback acceptance remain open.
+- Added `cargo xtask smoke --interlace-probe --keep-temp`: generated interlaced
+  content marked progressive, enabled native detection, and cache reset/assertion
+  for each exercised MPEG-TS/HLS path. Strict xtask lint passes. The v2.0.2
+  package checksum was reverified before launch; the first runtime run is
+  still building the web host after target cleanup, so no runtime pass is claimed.
+- Integrated HLS Stop during sampling passes
+  (`766b8bb0-95e5-4ebc-a4ca-3af2ca275ba2`): real worker/SQLite/registry,
+  observed probe admission, Stop, prompt output-directory cleanup, absent
+  registry entry, no cached ratio publication, preserved source file and no
+  surviving delayed descendant. The initial fixture used RFC3339 timestamps
+  rather than the repository SQL formatter; correcting that fixture admits
+  the item without weakening assertions or deadlines.
+  The smoke build passed, but sandbox loopback access was denied before health
+  verification. The authorized rerun with local networking is pending.
+- First authorized HTTP probe run served both MPEG-TS modes and published
+  ratio 0.9950248756218906. Its later HLS cache assertion failed because hybrid
+  MPEG-TS had already started the shared HLS worker. The harness now requires
+  separate `--skip-hls` and `--skip-ts` invocations with disposable hosts;
+  cache assertions remain unchanged. This fixes test isolation, not playback.
+  Terminal smoke acceptance is still pending those separate runs.
+- Both isolated native HTTP smoke runs pass with the checksum-verified v2.0.2
+  package: MPEG-TS legacy/hybrid (`ersatzrs-smoke-1102236-1790546796`) and
+  HLS variant/session playlists (`ersatzrs-smoke-1106284-1790546856`). Each
+  sampled from an empty ratio cache and published 0.9950248756218906. Logs are
+  `ersatzrs-web-smoke.log` in those system-temporary directories; no known
+  runtime failure signatures. Strict infra/xtask library/test lint passes.
+  TSDuck transport acceptance is running; final row review/verdict remain.
+- Final acceptance supersedes interim pending notes above: TSDuck passes all
+  87 checks with no failures (`tsduck-gate.vRQ8xg` in the system temporary
+  directory). Source review confirms scanner ffprobe projection initializes
+  `InterlacedRatio` to None and the transactional update overwrites the old
+  ratio while advancing DateUpdated. Playback probes do not change audio or
+  subtitle selection; the existing source projection and caller order remain.
+  No new dependency, schema or graphics renderer is introduced. Existing
+  managed process ownership supplies Unix groups and Windows jobs. Verdict
+  Port: valid total-hour seek formatting is retained, native motion follows
+  ADR 0005, and the missing configured probe is implemented and verified.
+  Pin advances with this row commit; align the clean reference checkout after
+  commit. Row 132 and milestone-wide gates remain. No intermediate push/CI.
 
 ## UCU-08 row 130 source map: channel startup (Port)
 
@@ -3407,7 +3525,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 128 | `165c39ec` | fix: give slow test more time (#3000) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream test fixture deadline` | ucu-08; only upstream NUnit multiday fixture cancellation increases from 10 to 30 seconds. No runtime or assertion changes. Native synchronous scheduling tests do not inherit this deadline; Nextest reporting and zero retries remain unchanged. Full diff/base fixture/runner review and structured validation pass. |
 | 129 | `9067cde8` | fix: tag maintenance (#3001) | Adapt | upstream-baseline-catch-up | `fix(scanner): preserve provider-owned tags and refresh state` | ucu-08; accepted ADR 0104 source ownership; atomic producer reconciliation, durable refresh and restart continuity, migration/search/browser evidence in row source map. |
 | 130 | `1681d1ad` | fix: channel startup (#3002) | Port | upstream-baseline-catch-up | `fix(streaming): bound startup waits and preserve worker ownership` | ucu-08; identity-checked cleanup, bounded playlist I/O, real HTTP disconnect and native/Next lifecycle proof; see source map and milestone. |
-| 131 | `6ebcaf80` | fix: multiday seek | | | | ucu-08; provisional: Port candidate. |
+| 131 | `6ebcaf80` | fix: multiday seek | Port | ffmpeg-command-generation | `fix(playback): sample interlace state with bounded source-safe caching` | ucu-08; multi-day argv/motion, selected-stream idet, cache races, HLS Stop, native HTTP smoke and TSDuck 87/87; see source map. |
 | 132 | `d5f11315` | fix: more channel startup fixes (#3003) | | | | ucu-08; provisional: Port candidate. |
 | 133 | `4a2aa157` | fix: local folder etags (#3004) | | | | ucu-08; provisional: Port candidate. |
 | 134 | `188274e8` | fix: season scanning fixes (#3005) | | | | ucu-08; provisional: Port candidate. |

@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
 summary    = """
-178 rows: 130 reconciled, 48 pending.
+178 rows: 131 done, 47 pending.
 UCU-03/04/05: CI 36190815587 at 81bcd649.
 99/102 Port: runtime, probe/cache, Docker Vulkan.
 100-101/103 N/A; 104 Covered; 105-107 Port: watermarks, images, on-demand.
@@ -12,7 +12,7 @@ UCU-03/04/05: CI 36190815587 at 81bcd649.
 109 N/A: release notes. UCU-06 Complete: local gates and
 green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
 UCU-07 Complete: CI 36321494841, b4d659eb.
-116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130 Port. Next 131.
+116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130-131 Port. Next 132.
 
 UCU-02 Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.

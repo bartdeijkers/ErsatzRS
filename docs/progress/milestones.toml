@@ -11277,6 +11277,17 @@ passes; row 130 is Port and pin advances to 1681d1ad. Row 131 and window-wide
 gates remain; no intermediate-row push or CI.
 Upstream f8410286 appends pending UCU-09 rows 177-178; all prior 176 ordered
 SHA/subject pairs remain an exact prefix. No later row is processed here.
+Row 131 is Port at 6ebcaf80. Total-hour seek and native motion timing retain
+multi-day fractional positions. Configured selected-local-stream idet sampling
+uses bounded managed processes and guarded cache publication; health reports
+missing idet. Parser/cache/race/bounds and real selected-stream tests pass.
+Integrated HLS Stop passes (766b8bb0), with clean worker/cache/process ownership.
+Isolated MPEG-TS and HLS HTTP smoke pass with fresh detected ratios; source map
+owns artifact paths. TSDuck passes 87/87 (tsduck-gate.vRQ8xg). Strict affected
+lint and substantive source review pass. No runtime build/release or schema
+change. Pin/ledger advance together; align reference checkout after commit.
+Row 132 and milestone-wide closeout/push/exact-SHA CI remain.
+
 """
 
 [[milestone]]

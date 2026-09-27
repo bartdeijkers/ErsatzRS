@@ -1,15 +1,16 @@
 use super::super::{
-    async_trait, runtime_issue_name, FfmpegRuntimeReport, HealthCheck, HealthCheckResult,
-    HealthCheckStatus, Result,
+    async_trait, load_config, runtime_issue_name, Db, FfmpegRuntimeReport, HealthCheck,
+    HealthCheckResult, HealthCheckStatus, Pool, Result,
 };
 
 pub(crate) struct FFmpegCapabilitiesHealthCheck {
     runtime: FfmpegRuntimeReport,
+    pool: Pool<Db>,
 }
 
 impl FFmpegCapabilitiesHealthCheck {
-    pub(crate) fn new(runtime: FfmpegRuntimeReport) -> Self {
-        Self { runtime }
+    pub(crate) fn new(runtime: FfmpegRuntimeReport, pool: Pool<Db>) -> Self {
+        Self { runtime, pool }
     }
 }
 
@@ -20,13 +21,23 @@ impl HealthCheck for FFmpegCapabilitiesHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
-        let missing: Vec<String> = self
+        let mut missing: Vec<String> = self
             .runtime
             .issues
             .iter()
             .filter(|issue| issue.is_error())
             .map(runtime_issue_name)
             .collect();
+
+        let probe_enabled = load_config(
+            &self.pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
+        )
+        .await?
+        .is_some_and(|value| value.eq_ignore_ascii_case("true") || value == "1");
+        if probe_enabled && !self.runtime.capabilities.filters.contains("idet") {
+            missing.push("filter idet".to_owned());
+        }
 
         if missing.is_empty() {
             if self.runtime.capabilities.hardware_decode_denials.is_empty() {

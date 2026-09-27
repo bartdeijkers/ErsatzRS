@@ -713,8 +713,15 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     } else {
-        enrich_source_video_stream_for_playback(source_stream, effective_acceleration, &resolved)
-            .await
+        enrich_source_video_stream_for_playback(
+            &state.pool,
+            active.media_version_id,
+            playback_profile.profile.deinterlace_video == Some(true),
+            source_stream,
+            effective_acceleration,
+            &resolved,
+        )
+        .await
     };
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {

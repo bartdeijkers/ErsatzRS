@@ -359,6 +359,25 @@ mod tests {
     }
 
     #[test]
+    fn multi_day_seeks_and_duration_keep_input_output_order() {
+        let position = std::time::Duration::new(172_861, 123_456_700);
+        let arguments = CommandGenerator::generate_arguments(
+            &[InputFile::video("fixture.mkv")],
+            &[
+                PipelineStep::stream_seek(position),
+                PipelineStep::generic(
+                    "output_seek",
+                    ["-ss".to_owned(), format_time_limit(position)],
+                ),
+                crate::options::time_limit(std::time::Duration::from_hours(100)),
+                pipe_output(),
+            ],
+            false,
+        );
+        insta::assert_snapshot!(arguments.join(" "), @"-ss 48:01:01.1234567 -i fixture.mkv -ss 48:01:01.1234567 -t 100:00:00.0000000 pipe:1");
+    }
+
+    #[test]
     fn output_seek_is_rendered_after_non_seekable_input() {
         let arguments = CommandGenerator::generate_arguments(
             &[InputFile::video("pipe:0").with_input_options(["-f", "mpegts"])],

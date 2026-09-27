@@ -51,6 +51,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Honor “Probe For Interlaced Frames” during native playback and troubleshooting:
+  sample the selected local video stream, preserve multi-day seek positions, and
+  cache eligible version ratios without overwriting scan updates. Health reports
+  a missing `idet` filter when this option is enabled.
+
 - Keep replacement HLS workers registered when an older native or Next worker
   finishes cleanup; direct viewers retain their independent registrations.
   Enforce the HLS readiness deadline during playlist reads as well as polling.

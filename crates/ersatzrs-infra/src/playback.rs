@@ -712,11 +712,16 @@ fn non_empty_string(value: &str) -> Option<String> {
 /// Populate runtime-only playback flags that ErsatzTV probes immediately before
 /// command generation instead of storing in the media schema.
 pub async fn enrich_source_video_stream_for_playback(
+    pool: &DbPool,
+    media_version_id: i64,
+    deinterlace: bool,
     source_stream: Option<SourceVideoStream>,
     acceleration: HardwareAccelerationKind,
     media_path: &str,
 ) -> Option<SourceVideoStream> {
     let mut stream = source_stream?;
+    crate::interlace_probe::enrich(pool, media_version_id, media_path, deinterlace, &mut stream)
+        .await;
 
     if should_probe_h264_profile_count(&stream, acceleration) {
         match trace_headers_profile_count(&ffmpeg_path(), media_path).await {

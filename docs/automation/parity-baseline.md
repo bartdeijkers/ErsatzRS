@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `1681d1ad3882ceb37bb215fc3e2e1cd85fa6e68b` |
-| **Commit subject** | `fix: channel startup (#3002)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/1681d1ad3882ceb37bb215fc3e2e1cd85fa6e68b |
+| **Pinned commit** | `6ebcaf800d05082ac22bcff7394d6e1d592d5c59` |
+| **Commit subject** | `fix: multiday seek` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6ebcaf800d05082ac22bcff7394d6e1d592d5c59 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

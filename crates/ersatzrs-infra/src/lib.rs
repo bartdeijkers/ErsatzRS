@@ -92,3 +92,5 @@ pub(crate) mod xmltv_metadata;
 pub mod xmltv_templates;
 
 pub use repositories::map_repository_error;
+
+mod interlace_probe;

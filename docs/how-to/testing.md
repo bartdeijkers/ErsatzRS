@@ -52,6 +52,20 @@ Use the runtime smoke test for basic IPTV and HLS startup:
 cargo xtask smoke
 ```
 
+To check the optional native interlace probe with generated media:
+
+```bash
+cargo xtask smoke --interlace-probe --skip-hls --keep-temp
+cargo xtask smoke --interlace-probe --skip-ts --keep-temp
+```
+
+This enables probing in the disposable database, generates interlaced video
+marked progressive, and requires a detected ratio above 0.05. It clears the
+cached ratio before each MPEG-TS mode and HLS startup so each path must sample
+independently. Separate hosts prevent hybrid MPEG-TS from supplying an already
+running HLS worker. Use the normal FFmpeg/ffprobe path overrides to select the
+verified runtime. This option cannot be combined with `--media` or `--next`.
+
 Use the manual TSDuck gate when transport continuity, PCR/PTS behavior, PSI, or
 audio/video PIDs are part of the change:
 

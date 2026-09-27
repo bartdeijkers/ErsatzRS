@@ -341,6 +341,31 @@ pub fn time_limit(duration: Duration) -> PipelineStep {
     PipelineStep::generic("time_limit", ["-t".to_owned(), format_time_limit(duration)])
 }
 
+/// Sample one selected video stream for native interlace detection.
+#[must_use]
+pub fn interlace_probe_arguments(path: &str, index: usize, seek: Duration) -> Vec<String> {
+    vec![
+        "-hide_banner".into(),
+        "-nostdin".into(),
+        "-ss".into(),
+        format_time_limit(seek),
+        "-i".into(),
+        path.into(),
+        "-map".into(),
+        format!("0:{index}"),
+        "-vf".into(),
+        "idet".into(),
+        "-frames:v".into(),
+        "200".into(),
+        "-an".into(),
+        "-sn".into(),
+        "-dn".into(),
+        "-f".into(),
+        "null".into(),
+        "-".into(),
+    ]
+}
+
 #[must_use]
 pub fn format_time_limit(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
@@ -376,6 +401,24 @@ pub fn pipe_output() -> PipelineStep {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multi_day_interlace_probe_seeks_and_maps_only_selected_video() {
+        insta::assert_snapshot!(interlace_probe_arguments("fixture.mkv", 3, Duration::from_hours(48)).join(" "), @"-hide_banner -nostdin -ss 48:00:00.0000000 -i fixture.mkv -map 0:3 -vf idet -frames:v 200 -an -sn -dn -f null -");
+    }
+
+    #[test]
+    fn multi_day_time_limits_keep_total_hours_and_fractional_precision() {
+        for (duration, expected) in [
+            (Duration::ZERO, "00:00:00.0000000"),
+            (Duration::new(86_399, 999_999_900), "23:59:59.9999999"),
+            (Duration::from_hours(24), "24:00:00.0000000"),
+            (Duration::new(90_061, 123_456_700), "25:01:01.1234567"),
+            (Duration::from_hours(100), "100:00:00.0000000"),
+        ] {
+            assert_eq!(format_time_limit(duration), expected);
+        }
+    }
 
     #[test]
     fn mpegts_muxing_uses_profile_bitrates_with_overhead() {

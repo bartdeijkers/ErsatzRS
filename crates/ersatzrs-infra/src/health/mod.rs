@@ -236,7 +236,10 @@ fn registered_health_checks(
         Box::new(FFmpegRuntimeAcquisitionHealthCheck::new(
             ffmpeg_runtime.clone(),
         )),
-        Box::new(FFmpegCapabilitiesHealthCheck::new(ffmpeg_runtime.clone())),
+        Box::new(FFmpegCapabilitiesHealthCheck::new(
+            ffmpeg_runtime.clone(),
+            pool.clone(),
+        )),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
         Box::new(NextRuntimeHealthCheck::new(pool.clone())),
@@ -766,6 +769,37 @@ mod tests {
 
         assert_eq!(result.status, HealthCheckStatus::Pass);
         assert_eq!(result.brief_message, "Search projection ready");
+    }
+
+    #[tokio::test]
+    async fn interlace_probe_requires_idet_only_when_enabled() {
+        let pool = test_pool().await;
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.capabilities.filters.remove("idet");
+        let check = FFmpegCapabilitiesHealthCheck::new(report.clone(), pool.clone());
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::NotApplicable
+        );
+        upsert_config(
+            &pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
+            "True",
+        )
+        .await
+        .unwrap();
+        let result = check.check().await.unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result.message.contains("filter idet"));
+        report.capabilities.filters.insert("idet".to_owned());
+        assert_eq!(
+            FFmpegCapabilitiesHealthCheck::new(report, pool)
+                .check()
+                .await
+                .unwrap()
+                .status,
+            HealthCheckStatus::NotApplicable
+        );
     }
 
     #[tokio::test]

@@ -3746,6 +3746,40 @@ fn graphics_element_renderer_bounds_hold_motion_snapshot() {
 }
 
 #[test]
+fn graphics_element_multi_day_motion_timing_snapshot() {
+    // ADR 0005 uses native FFmpeg motion inputs. Numeric filter times must
+    // preserve total seconds across day boundaries, including fractional time.
+    let output_dir = tempfile::tempdir().unwrap();
+    let renderer = GraphicsTemplateRenderer::new(output_dir.path());
+    let element = GraphicsElement {
+        id: 21,
+        kind: ersatzrs_domain::GraphicsElementKind::Motion,
+        config: GraphicsElementConfig::Motion(MotionGraphicsConfig {
+            video_path: Some("/media/motion.webm".to_owned()),
+            start_seconds: Some(172_800.125),
+            hold_seconds: Some(86_400.25),
+            end_behavior: MotionEndBehavior::Hold,
+        }),
+        ..GraphicsElement::default()
+    };
+    let elements = renderer
+        .render_graphics_elements(
+            std::slice::from_ref(&element),
+            &BTreeMap::new(),
+            &GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1920, 1080))
+                .with_motion_source_duration(element.id, 90_000.5),
+        )
+        .unwrap();
+    let GraphicsPipelineOverlay::NativeImage { input, overlay, .. } =
+        elements.into_iter().next().unwrap().into_pipeline_overlay()
+    else {
+        panic!("motion must use the native input");
+    };
+    insta::assert_snapshot!(format!("filters={:?} enable={:?}", input.filter_steps, overlay.enable),
+        @r#"filters=["setpts=PTS+172800.125/TB"] enable=Some("between(t,172800.125,349200.875)")"#);
+}
+
+#[test]
 fn pipeline_with_hold_motion_graphics_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request
