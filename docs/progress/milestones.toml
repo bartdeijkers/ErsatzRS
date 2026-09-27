@@ -10897,7 +10897,7 @@ eligible, beginning with pending row 116. No new release is implied.
 id         = 'ucu-08'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 5bb3ddfc'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-07']
@@ -10915,7 +10915,20 @@ for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-27: UCU-07 is Complete with terminal green CI 36321494841 at
+b4d659eb; completion record d16d0348 is published. Upstream fetch remains
+6f0449c2, and all 176 ledger SHA/subject pairs match the fetched history.
+Before processing, pin/row 115/clean upstream HEAD agree at 49b68314.
+Row 116 (39e39ef6) changes only upstream CHANGELOG.md: security-release
+emphasis, Plex label capitalization and cache/restart guidance, Emby rotation
+ordering, Jellyfin scope clarification and relocation of an existing note.
+The full diff contains no executable, package or dependency changes. Verdict
+N/A: ErsatzRS retains its own release guidance and UCU-07 security evidence;
+upstream cache behavior is not imported as an ErsatzRS requirement. Source map
+and substantive review are recorded in the plan. No runtime test is warranted
+for this documentation-only row. Pin and ledger advance together to 39e39ef6;
+align the clean upstream checkout after the authorized local row commit.
+Row 117 and the remaining window gates are pending; no UCU-08 push/CI yet.
 """
 
 [[milestone]]

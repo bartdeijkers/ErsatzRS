@@ -129,8 +129,9 @@ test closeout (3,341 passed), native playback smoke and the default parity
 gate (730 web tests passed) now pass. The final matched Leptos build and
 bundle verification also pass. UCU-07 is Complete: b4d659eb is published with
 terminal green exact-SHA CI 36321494841. Chromium has 252 passes/7 skips and
-Firefox 228 passes/31 skips, with no unexpected or flaky results. Start UCU-08
-with pending row 116 after refreshing the upstream target and agreement checks.
+Firefox 228 passes/31 skips, with no unexpected or flaky results. UCU-08 starts
+with row 116 N/A release wording after the unchanged upstream refresh and
+176-entry ledger audit. Row 117 is next; milestone gates and push/CI remain.
 The refreshed
 tail adds pending UCU-09 rows 174-176 (through 6f0449c2). UCU-08 and UCU-09 remain open.
 
