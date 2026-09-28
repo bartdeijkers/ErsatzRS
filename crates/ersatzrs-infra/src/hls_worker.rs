@@ -461,6 +461,7 @@ pub struct HlsSessionWorker {
     startup_minimum_segments: std::sync::atomic::AtomicUsize,
     startup_changed: Notify,
     last_access_ms: Arc<AtomicI64>,
+    transcoded_until_ms: AtomicI64,
     last_delete_ms: Arc<AtomicI64>,
     working_dir_ready: AtomicBool,
     state: AtomicI32,
@@ -518,6 +519,7 @@ impl HlsSessionWorker {
             startup_minimum_segments: std::sync::atomic::AtomicUsize::new(3),
             startup_changed: Notify::new(),
             last_access_ms: Arc::new(AtomicI64::new(0)),
+            transcoded_until_ms: AtomicI64::new(i64::MIN),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             working_dir_ready: AtomicBool::new(false),
             state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
@@ -530,6 +532,11 @@ impl HlsSessionWorker {
             cancel: Arc::new(Notify::new()),
             reclaim_transcode: Arc::new(Notify::new()),
         })
+    }
+
+    fn report_transcoded_until(&self, until: DateTime<Utc>) {
+        self.transcoded_until_ms
+            .store(until.timestamp_millis(), Ordering::Relaxed);
     }
 
     fn session_state(&self) -> HlsSessionState {
@@ -663,6 +670,7 @@ impl HlsSessionWorker {
         let mut is_first = true;
         let mut last_playout_item_id = None::<i64>;
         let mut transcoded_until = Utc::now();
+        self.report_transcoded_until(transcoded_until);
         let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
         let mut learned_decode_retry_used = false;
@@ -1083,6 +1091,7 @@ impl HlsSessionWorker {
                     HlsProcessOutcome::Success => {
                         self.set_admission_status(HlsAdmissionStatus::Waiting);
                         transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.report_transcoded_until(transcoded_until);
                         self.set_session_state(next_hls_session_state(
                             self.session_state(),
                             true,
@@ -2053,6 +2062,7 @@ impl HlsSessionWorker {
                     self.set_admission_status(HlsAdmissionStatus::Waiting);
                     if let Some(duration) = duration {
                         transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.report_transcoded_until(transcoded_until);
                         self.set_session_state(next_hls_session_state(
                             self.session_state(),
                             item_complete(&active, transcoded_until),
@@ -2223,6 +2233,7 @@ impl HlsSessionWorker {
                                     next_mpegts_output_ts_offset,
                                 );
                             transcoded_until = next_cursor;
+                            self.report_transcoded_until(transcoded_until);
                             interval_startup = None;
                             startup_attempt_started_at = None;
                             self.set_session_state(next_state);
@@ -3363,6 +3374,19 @@ fn apply_hls_software_video_fallback(playback_profile: &mut PlaybackProfile) {
 
 #[async_trait]
 impl HlsSessionHandle for HlsSessionWorker {
+    fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
+        Some(ersatzrs_core::hls::HlsSessionModel {
+            channel_number: self.channel_number.clone(),
+            state: format!("{:?}", self.session_state()),
+            transcoded_until: DateTime::from_timestamp_millis(
+                self.transcoded_until_ms.load(Ordering::Relaxed),
+            ),
+            last_access: DateTime::from_timestamp_millis(
+                self.last_access_ms.load(Ordering::Relaxed),
+            )?,
+        })
+    }
+
     fn startup_readiness(&self) -> HlsStartupReadiness {
         self.startup
             .lock()
@@ -7129,6 +7153,32 @@ mod tests {
                 allow_watched_preemption,
             ),
         )
+    }
+
+    #[test]
+    fn session_model_reports_native_state_cursor_and_last_access_without_touching() {
+        let root = tempfile::tempdir().unwrap();
+        let worker = HlsSessionWorker::new(
+            "native-test".into(),
+            1,
+            root.path().into(),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        worker.last_access_ms.store(1_000, Ordering::Relaxed);
+        assert!(worker.session_model().unwrap().transcoded_until.is_none());
+        let until = DateTime::from_timestamp_millis(9_000).unwrap();
+        worker.report_transcoded_until(until);
+        worker.set_session_state(HlsSessionState::ZeroAndWorkAhead);
+        let report = worker.session_model().unwrap();
+        assert_eq!(report.channel_number, "native-test");
+        assert_eq!(report.state, "ZeroAndWorkAhead");
+        assert_eq!(report.transcoded_until, Some(until));
+        assert_eq!(report.last_access.timestamp_millis(), 1_000);
+        assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 1_000);
+        worker.touch();
+        assert!(worker.session_model().unwrap().last_access > report.last_access);
     }
 
     #[tokio::test]

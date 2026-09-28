@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7e141a13b5f3697c9ccf5b99c0a37f5d18a3435e` |
-| **Commit subject** | `fix: use static hash functions (#3008)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7e141a13b5f3697c9ccf5b99c0a37f5d18a3435e |
+| **Pinned commit** | `2989faeb089e504ecf75652735ae41abe8406fcf` |
+| **Commit subject** | `fix: sessions api with next engine (#3009)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2989faeb089e504ecf75652735ae41abe8406fcf |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

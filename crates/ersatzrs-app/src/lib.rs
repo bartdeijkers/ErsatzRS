@@ -349,6 +349,13 @@ impl ApplicationServices {
         queries::list_active_channel_numbers(self.ports.channel_runtime()).await
     }
 
+    /// Snapshot normal playlist-worker state for machine clients.
+    pub async fn list_streaming_sessions(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>> {
+        queries::list_streaming_sessions(self.ports.channel_runtime()).await
+    }
+
     /// Stop one active channel streaming session.
     pub async fn stop_channel_session(&self, number: &str) -> Result<bool> {
         queries::stop_channel_session(number, self.ports.channel_runtime()).await

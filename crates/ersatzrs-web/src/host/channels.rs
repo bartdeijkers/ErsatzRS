@@ -39,6 +39,12 @@ impl ChannelRuntime for NativeChannelRuntime {
         Ok(active)
     }
 
+    async fn session_models(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError> {
+        Ok(self.hls_sessions.session_models().await)
+    }
+
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError> {
         let (normal, preview) = tokio::join!(
             self.hls_sessions.stop_channel(number),

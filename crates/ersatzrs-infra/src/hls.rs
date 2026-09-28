@@ -165,6 +165,18 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         channels.into_iter().collect()
     }
 
+    async fn session_models(&self) -> Vec<ersatzrs_core::hls::HlsSessionModel> {
+        let mut reports: Vec<_> = self
+            .inner
+            .read()
+            .await
+            .values()
+            .filter_map(|session| session.handle.session_model())
+            .collect();
+        reports.sort_by(|left, right| left.channel_number.cmp(&right.channel_number));
+        reports
+    }
+
     async fn is_active(&self, channel_number: &str) -> bool {
         if self.inner.read().await.contains_key(channel_number) {
             return true;

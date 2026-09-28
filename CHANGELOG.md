@@ -51,6 +51,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Expose native and Next playlist-worker reports through authenticated
+  `GET /api/sessions`, including last access and a nullable transcode cursor.
+  Next reports `state: "next"`; reading session reports does not keep streams
+  alive. Document the response and API-key requirement in OpenAPI.
+
 - Hourly and manual artwork cleanup remove unreferenced cached images and restore
   missing cache entries from local image sources, updating all shared references.
   Preserve original artwork, referenced blur images and uploaded watermarks/logos;

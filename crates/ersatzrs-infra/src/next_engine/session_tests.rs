@@ -111,9 +111,13 @@ async fn idle_deadline_tracks_recent_demand() {
     tokio::time::advance(Duration::from_secs(8)).await;
     session.touch();
     let last_touch = session.checkpoint_time().unwrap();
+    let report = session.session_model().unwrap();
     tokio::time::advance(Duration::from_secs(3)).await;
     assert!(!task.is_finished());
-    tokio::time::advance(Duration::from_secs(8)).await;
+    assert_eq!(session.session_model().unwrap(), report);
+    tokio::time::advance(Duration::from_secs(6)).await;
+    assert_eq!(session.session_model().unwrap(), report);
+    tokio::time::advance(Duration::from_secs(2)).await;
     tokio::time::resume();
     assert_eq!(task.await.unwrap().unwrap(), SessionExit::Idle);
     assert_eq!(session.checkpoint_time(), Some(last_touch));
@@ -206,4 +210,30 @@ async fn unexpected_exit_is_terminal_and_keeps_the_exit_code() {
         "{result:?}"
     );
     assert_eq!(session.startup_readiness(), HlsStartupReadiness::Failed);
+}
+
+#[test]
+fn session_model_reports_next_null_cursor_and_touch_without_changing_demand() {
+    let root = tempfile::tempdir().unwrap();
+    let session = NextSession::new(
+        "next-test".into(),
+        root.path().into(),
+        Instant::now() + Duration::from_secs(30),
+    );
+    session.last_access_utc_ms.store(1_000, Ordering::Relaxed);
+    let before = *session.last_access.lock().unwrap();
+    let report = session.session_model().unwrap();
+    assert_eq!(report.channel_number, "next-test");
+    assert_eq!(report.state, "next");
+    assert_eq!(report.transcoded_until, None);
+    assert_eq!(report.last_access.timestamp_millis(), 1_000);
+    assert_eq!(*session.last_access.lock().unwrap(), before);
+    assert_eq!(*session.last_playback_touch.lock().unwrap(), None);
+    session.touch();
+    assert!(session.session_model().unwrap().last_access > report.last_access);
+    assert_eq!(
+        *session.last_playback_touch.lock().unwrap(),
+        None,
+        "startup touches do not become playback demand"
+    );
 }

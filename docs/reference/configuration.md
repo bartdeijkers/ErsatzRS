@@ -184,6 +184,11 @@ for the header. Missing or invalid credentials return HTTP 401.
 `GET /api/openapi.json` describes the implemented machine endpoints and their
 authentication scheme; fetching it also requires the header. For example,
 `POST /api/maintenance/clean_artwork` queues cleanup after authenticating.
+`GET /api/sessions` returns normal playlist workers from both streaming engines
+with `channelNumber`, `state`, `transcodedUntil` and `lastAccess`. Next reports
+`state: "next"` and `transcodedUntil: null`; a native cursor is also null before
+worker startup. Reports exclude preview workers and direct-response registrations.
+Reading a report does not touch a worker or extend its idle lifetime.
 This description does not advertise upstream endpoints that ErsatzRS does not
 implement.
 

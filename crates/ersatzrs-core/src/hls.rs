@@ -2,6 +2,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+/// Public worker report matching upstream `HlsSessionModel`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HlsSessionModel {
+    pub channel_number: String,
+    pub state: String,
+    /// Next owns its own timeline; its cursor is unavailable to the host.
+    pub transcoded_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_access: chrono::DateTime<chrono::Utc>,
+}
+
 /// Runtime-only retained-media startup gate, shared by master and variant routes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HlsStartupReadiness {
@@ -48,15 +59,21 @@ impl HlsAdmissionStatus {
 
 /// A live handle to a running HLS segmenter worker.
 ///
-/// Ports the parts of [`IHlsSessionWorker`] that the HTTP layer needs today.
-/// Wider behaviour — cancellation and state reporting — remains for later
-/// slices.
+/// Ports playlist delivery, cancellation and state reporting from
+/// [`IHlsSessionWorker`].
 ///
 /// [`IHlsSessionWorker`]: $ERSATZTV_SRC/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
 #[async_trait]
 pub trait HlsSessionHandle: Send + Sync {
     fn channel_number(&self) -> &str;
     fn touch(&self);
+
+    /// Snapshot a playlist-producing worker without touching or trimming it.
+    /// Direct response handles have no playlist-worker report.
+    fn session_model(&self) -> Option<HlsSessionModel> {
+        None
+    }
+
     fn admission_status(&self) -> HlsAdmissionStatus {
         HlsAdmissionStatus::Waiting
     }
@@ -130,6 +147,19 @@ pub trait HlsSessionRegistry: Send + Sync {
     /// Ports the keys of `IFFmpegSegmenterService.Workers`; used by the
     /// `/channels` admin page to decide which rows show a stop button.
     async fn active_channels(&self) -> Vec<String>;
+
+    /// Snapshot registered playlist workers. Direct responses are excluded.
+    async fn session_models(&self) -> Vec<HlsSessionModel> {
+        let mut reports = Vec::new();
+        for number in self.active_channels().await {
+            if let Some(worker) = self.try_get(&number).await {
+                if let Some(model) = worker.session_model() {
+                    reports.push(model);
+                }
+            }
+        }
+        reports
+    }
 
     /// Whether a session is active for `channel_number`.
     ///

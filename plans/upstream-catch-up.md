@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **42 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **41 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **138**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **139**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Continue at row 139. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Continue at row 140. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -61,6 +61,30 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+
+## Row 139 source map — Next sessions API (Adapt)
+
+- Upstream `2989faeb`: full six-file diff and SessionController/worker context
+  reviewed. GET `/api/sessions` projects registered workers as channelNumber,
+  state, transcodedUntil and lastAccess. Next reports state `next`, a null
+  transcodedUntil and its last touch; native workers report their live cursor.
+- Next legacy trim calls now return None with a warning rather than throwing.
+  Native NextSession already returns an optional owned playlist without throwing;
+  its existing HLS delivery bridge must remain functional (ADR 0095).
+- OpenAPI marks transcodedUntil nullable. The two scripted scheduling schemas
+  also correct the existing director grouping description; native scripted
+  marathon validation already lists all five grouping modes, including director.
+- Closed gap: typed worker/registry reports and the application query now serve
+  GET sessions through the authenticated machine router and OpenAPI.
+- Targets: core HLS report/registry port, native and Next worker snapshots,
+  application channel-runtime query, host runtime adapter, authenticated machine
+  route and its OpenAPI schema. Preserve preview isolation and direct-response
+  registration semantics; report the normal playlist-worker registry only.
+- Acceptance: mixed native/Next JSON reports stable fields with Next null cursor;
+  lastAccess changes on touch, listing is observational, removal is reflected,
+  empty registry returns an empty array, and the API-key/listener boundaries
+  remain. Native cursor reporting follows actual progress without changing
+  playback scheduling. No new UI or authentication design is proposed.
 
 ## Row 138 source map — static hash functions (Covered)
 
@@ -3845,7 +3869,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 136 | `3c41959f` | fix: health check improvements (#3006) | Port | ersatzrs-healthcheck | `fix(health): share bounded health runs and cache results` | ucu-09; one host-owned run survives reader cancellation; five-minute cache, fifteen-minute check deadline, atomic publication, explicit localized refresh and no-JS fallback. 113 infra/maintenance and four web tests pass; strict affected lint and four Chromium/Firefox cases pass. |
 | 137 | `96cef081` | fix: heal artwork cache (#3007) | Port | ersatzrs-infra | `fix(artwork): heal cached images and prune unused files` | ucu-09; shared manual/hourly cache service, retained originals/blur/watermark references, local image restoration and shared-path repointing. Native direct-source images recover with unchanged mtime. 25 focused tests, affected all-target Clippy and license check pass. |
 | 138 | `7e141a13` | fix: use static hash functions (#3008) | Covered | upstream-baseline-catch-up | `docs(parity): reconcile static hash functions` | ucu-09; complete seven-file audit: native digests and rolling fingerprints are call-local; existing formats and accepted callback protocol preserved. Three hash/ticket regressions pass; row137 and UCU-08 evidence reused. |
-| 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: report Next sessions through the native sessions API once Next playback lands. |
+| 139 | `2989faeb` | fix: sessions api with next engine (#3009) | Adapt | upstream-baseline-catch-up | `fix(streaming): report native and Next sessions` | ucu-09; ADRs 0095/0103. Typed observational reports, nullable Next cursor, authenticated GET/OpenAPI; preserve native playlist bridge. Mixed-router and process-backed lifecycle tests pass; milestone owns evidence. |
 | 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: workflow and changelog only; QSV padding lives in their custom FFmpeg build per ADR 0008/0063. Check native QSV padding as separate debt. |
 | 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog and Next build trigger. |
 | 142 | `00db622d` | chore: trigger new build for updated next engine | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: Next build trigger only. |

@@ -2422,6 +2422,16 @@ mod epg_preview_query_tests {
             }
         }
 
+        async fn session_models(
+            &self,
+        ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError> {
+            if self.fail {
+                Err(ChannelRuntimeError::unavailable("injected failure"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+
         async fn stop_channel_session(&self, _number: &str) -> Result<bool, ChannelRuntimeError> {
             unimplemented!()
         }
@@ -2566,6 +2576,19 @@ pub async fn list_active_channel_numbers(runtime: &dyn ChannelRuntime) -> Result
         .await
         .map_err(|error| ApplicationError::Unavailable {
             operation: "list active channel sessions",
+            message: error.to_string(),
+        })
+}
+
+/// Query normal playlist-worker reports without refreshing client activity.
+pub async fn list_streaming_sessions(
+    runtime: &dyn ChannelRuntime,
+) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>> {
+    runtime
+        .session_models()
+        .await
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "list streaming sessions",
             message: error.to_string(),
         })
 }

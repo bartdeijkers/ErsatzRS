@@ -18,9 +18,29 @@ pub(crate) async fn openapi() -> axum::Json<serde_json::Value> {
         "components": {"securitySchemes": {"ApiKey": {
             "type": "apiKey", "in": "header", "name": "X-Ers-Api-Key",
             "description": "API key from api-secrets.json in the application state directory"
+        }}, "schemas": {"HlsSessionModel": {
+            "type": "object",
+            "required": ["channelNumber", "state", "transcodedUntil", "lastAccess"],
+            "properties": {
+                "channelNumber": {"type": "string"},
+                "state": {"type": "string", "description": "Native worker state or next"},
+                "transcodedUntil": {"type": ["null", "string"], "format": "date-time",
+                    "description": "Host transcode cursor; null for Next or before native startup"},
+                "lastAccess": {"type": "string", "format": "date-time"}
+            }
         }}},
         "security": [{"ApiKey": []}],
         "paths": {
+            "/api/sessions": {"get": {
+                "operationId": "getSessions", "summary": "List live playlist-worker sessions",
+                "responses": {
+                    "200": {"description": "Current native and Next workers",
+                        "content": {"application/json": {"schema": {"type": "array",
+                            "items": {"$ref": "#/components/schemas/HlsSessionModel"}}}}},
+                    "401": {"description": "Missing or invalid API key"},
+                    "503": {"description": "Session reporting unavailable"}
+                }
+            }},
             "/api/maintenance/clean_artwork": {"post": {
                 "operationId": "cleanArtwork",
                 "summary": "Queue orphan artwork cleanup",

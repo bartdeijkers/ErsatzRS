@@ -80,6 +80,7 @@ pub fn build_app(app_state: AppState) -> Router {
         Router::new()
             .route("/healthz", get(super::bootstrap::healthz))
             .route("/api/openapi.json", get(super::api_security::openapi))
+            .route("/api/sessions", get(api::sessions::list_sessions))
             .route(
                 "/changelog.md",
                 get(crate::admin::release_notes::full_changelog),

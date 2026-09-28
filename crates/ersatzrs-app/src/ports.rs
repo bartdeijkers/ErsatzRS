@@ -47,6 +47,11 @@ pub trait ChannelRuntime: Send + Sync {
     /// Return channel numbers with an active streaming session.
     async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError>;
 
+    /// Snapshot normal playlist workers without extending their lifetime.
+    async fn session_models(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError>;
+
     /// Stop one channel streaming session, returning whether it existed.
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError>;
 

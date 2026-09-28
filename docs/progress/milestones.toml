@@ -11516,6 +11516,34 @@ and unchanged UCU-08 window acceptance. No Rust or runtime change is required.
 Row138 is Covered; the docs/ledger/pin checkpoint is ready. Continue at row139
 with 42 pending rows. UCU-09 window closeout and terminal exact-SHA CI remain;
 no intermediate push/CI and no release.
+Row139 refresh retains 8bda4411 and verifies all 180 ordered SHA/subject pairs;
+starting pin/row138/clean reference HEAD agree at 7e141a13. Full six-file
+2989faeb diff and SessionController/worker context reviewed. The report port
+adds typed playlist-worker snapshots, the application query and authenticated
+GET /api/sessions with nullable OpenAPI cursor. Native reports mirror all four
+existing cursor updates; Next reports next/null and current UTC last access.
+Reads neither touch nor trim workers. Normal registry enumeration excludes
+preview/direct responses; the accepted optional Next playlist bridge remains.
+Existing scripted marathon validation already includes director grouping.
+Two worker-report tests pass (7805a52a-9f1d-447f-99d4-7c12d1f829b6).
+Two full-router tests pass (b2b157ee-77d7-4f18-b90e-91b89d59cf59;
+771 unrelated tests filtered), covering mixed/empty/removal JSON, no-store,
+missing/wrong/legacy-header rejection, streaming/internal listener exclusion,
+and OpenAPI nullability. Eighteen lifecycle/registry tests pass
+(4d9f1f71-328a-4de4-b415-75116577adc2; 1727 unrelated tests filtered), including
+process-backed Next idle expiry despite repeated report reads, heartbeat,
+cancellation, bounded playlist delivery and direct/preview separation.
+The initial lint compile found three incorrect test router paths; corrected
+before the passing API run. Final strict all-target Clippy passes for
+core/infra/app/web, including consumer compilation. Substantive Codex review
+confirms all native cursor writes are projected, registry reads are observational,
+normal/direct/preview boundaries remain and no real credentials enter fixtures.
+Formatting, architecture lint and structured progress validation pass.
+Row139 is Adapt under accepted ADRs 0095/0103; the coherent code/ledger/pin
+checkpoint is ready. Continue at row140 with 41 pending rows.
+No FFmpeg arguments, scheduling decisions, admission, subtitle/audio behavior
+or browser UI changed; unchanged playback evidence is retained and UCU-09
+window smoke/closeout remain required. No intermediate push/CI or release.
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.

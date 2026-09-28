@@ -10,7 +10,7 @@ use std::{
     future::Future,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU8, Ordering},
         Mutex,
     },
     time::Duration,
@@ -22,6 +22,7 @@ pub struct NextSession {
     output: PathBuf,
     deadline: Instant,
     last_access: Mutex<Instant>,
+    last_access_utc_ms: AtomicI64,
     last_playback_touch: Mutex<Option<chrono::DateTime<chrono::Utc>>>,
     state: AtomicU8,
     admission: AtomicI32,
@@ -63,6 +64,7 @@ impl NextSession {
             output,
             deadline,
             last_access: Mutex::new(Instant::now()),
+            last_access_utc_ms: AtomicI64::new(chrono::Utc::now().timestamp_millis()),
             last_playback_touch: Mutex::new(None),
             state: AtomicU8::new(0),
             admission: AtomicI32::new(0),
@@ -184,7 +186,19 @@ impl HlsSessionHandle for NextSession {
     fn channel_number(&self) -> &str {
         &self.number
     }
+    fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
+        Some(ersatzrs_core::hls::HlsSessionModel {
+            channel_number: self.number.clone(),
+            state: "next".to_owned(),
+            transcoded_until: None,
+            last_access: chrono::DateTime::from_timestamp_millis(
+                self.last_access_utc_ms.load(Ordering::Relaxed),
+            )?,
+        })
+    }
     fn touch(&self) {
+        self.last_access_utc_ms
+            .store(chrono::Utc::now().timestamp_millis(), Ordering::Relaxed);
         *self
             .last_access
             .lock()
