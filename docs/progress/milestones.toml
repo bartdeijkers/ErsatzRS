@@ -11318,6 +11318,45 @@ Row135 at 5bb3ddfc is N/A: full single-file diff only inserts the upstream
 26.9.0 release date/heading and comparison links. No ErsatzRS release or
 behavior is implied. All rows116-135 are reconciled; window-wide gates,
 authorized push and terminal exact-SHA green CI remain before completion.
+Window closeout started at 9a043842. Workspace all-target Clippy passes
+(3m18s). The matched Leptos build and four browser cases from row134 remain
+valid after documentation-only row135. TSDuck 87/87 from row131 remains valid:
+no subsequent changes in the FFmpeg crate, native HLS worker, playback builder
+or interlace-probe module; runtime package/digest is unchanged. Full canonical
+./run.sh test-closeout is running; parity-check and final smoke remain before
+local acceptance. No push or new CI has occurred.
+First workspace closeout 7ed3350c compiled successfully and ran 3453 tests:
+3447 passed, six managed-runtime acquisition cases failed. The invocation
+supplied FFmpeg/ffprobe path overrides; focused reproduction 486cbe81 proves
+Override was selected where Managed was expected. This is a test invocation
+error, not product acceptance. Remove only process-local runtime path overrides
+for the canonical rerun and retain published v2.0.2 executables on PATH.
+Target reached 66.5 GiB during the full workspace build, requiring the repository's
+60 GiB cleanup before further large builds. Doctests have not run yet.
+Cleanup completed with no Cargo processes active. The corrected closeout is
+running with all seven path-override variables removed only from its process
+environment and the verified package on PATH. Full output is retained as
+ersatzrs-ucu08-closeout.log in the system temporary directory. The first shell
+attempt did not start because PATH contained spaces; quoting corrected it.
+Corrected canonical closeout 7837138b-b4aa-458d-8099-49268da47b5e passes:
+3453 tests passed, 123 skipped, 72.954 seconds; workspace doctest stage passes.
+No product or assertion change was needed. Default parity-check is now running;
+final pinned-runtime smoke, authorized push and exact-SHA CI remain.
+Default parity-check passes: progress, format, architecture and hydration lint;
+751 web tests pass (20 skipped), nextest 5e2f9fb4-e1f3-4f83-a2c9-a52f56ce868e;
+strict web all-target Clippy passes. Final native smoke with HLS lifecycle
+checks is running against the same checksum-verified v2.0.2 runtime.
+Final smoke passes with published v2.0.2: public callbacks reject with 404;
+HLS playlists and a 5207224-byte media segment succeed; idle HLS cleanup,
+MPEG-TS wrapper restart and wrapper idle cleanup succeed. Retained log:
+ersatzrs-smoke-152474-1790613376/ersatzrs-web-smoke.log under the system
+temporary directory. All required local window gates are satisfied. Pin,
+last processed row135 and clean reference HEAD agree at 5bb3ddfc.
+UCU-08 stays In progress until authorized publication and exact-SHA green CI.
+Independent pending-row plan edits are excluded from this acceptance commit.
+
+
+
 
 
 
