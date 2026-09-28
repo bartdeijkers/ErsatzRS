@@ -2333,7 +2333,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::FfmpegRuntimeVersion => "Version",
         TextKey::HealthNoPersistedRun => "No health checks are applicable right now.",
         TextKey::HealthPersistedRunHelp => {
-            "Current parity health check results. This page refreshes after media scans update item state."
+            "Results are cached for five minutes. Refresh to check again now. This page also refreshes when media scans update item state."
         }
         TextKey::HistoryDetails => "History Details",
         TextKey::HlsDirect => "HLS Direct",

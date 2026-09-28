@@ -203,6 +203,12 @@ pub fn spawn_background_tasks(
     if let Some(task) = hdhr.spawn(shutdown.clone()) {
         tasks.push(task);
     }
+    let health = maintenance.health.clone();
+    let health_shutdown = shutdown.clone();
+    tasks.push(tokio::spawn(async move {
+        health_shutdown.cancelled().await;
+        health.shutdown().await;
+    }));
     tasks.extend([
         tokio::spawn(super::artwork_cleanup::run_artwork_cleanup_worker(
             maintenance.pool.clone(),
@@ -235,6 +241,7 @@ pub fn spawn_background_tasks(
             maintenance.playout_build_rx,
             maintenance.application.clone(),
             maintenance.hls_sessions,
+            maintenance.health,
             shutdown.clone(),
         )),
         tokio::spawn(crate::host::scanning::run_scan_worker(
@@ -429,12 +436,14 @@ pub struct MaintenanceTaskInputs {
     pub scan_work_rx: mpsc::UnboundedReceiver<ersatzrs_app::commands::ScanWorkRequest>,
     pub application: Arc<ersatzrs_app::ApplicationServices>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
+    pub health: ersatzrs_infra::health::HealthCheckCoordinator,
 }
 
 async fn run_maintenance_scheduler(
     playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
     application: Arc<ersatzrs_app::ApplicationServices>,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
+    health: ersatzrs_infra::health::HealthCheckCoordinator,
     shutdown: CancellationToken,
 ) {
     let operations = application.operations();
@@ -444,6 +453,7 @@ async fn run_maintenance_scheduler(
         application: Some(application.clone()),
         build_activity: Some(operations.playout_activity()),
         hls_sessions: Some(hls_sessions),
+        health: Some(health),
         locker: Some(operations.entity_locker()),
         shutdown: Some(shutdown),
         ..SchedulerOptions::default()

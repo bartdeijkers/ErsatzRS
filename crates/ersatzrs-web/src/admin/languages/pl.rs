@@ -3093,7 +3093,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::FfmpegRuntimeVersion => "Wersja",
         TextKey::HealthNoPersistedRun => "Brak obecnie odpowiednich kontroli diagnostycznych.",
         TextKey::HealthPersistedRunHelp => {
-            "Bieżące wyniki kontroli diagnostycznych parytetu. Ta strona odświeża się po zmianie stanu elementów przez skanowanie mediów."
+            "Wyniki są przechowywane przez pięć minut. Wybierz Odśwież, aby sprawdzić ponownie teraz. Strona odświeża się również, gdy skanowanie mediów zmienia stan elementów."
         }
         TextKey::HistoryDetails => "Szczegóły historii",
         TextKey::HlsDirect => "HLS Direct",

@@ -86,6 +86,81 @@ impl ScheduledLibraryScanRequester for FakeLibraryScanRequester {
 }
 
 #[tokio::test]
+async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
+    use ersatzrs_core::health::HealthCheckStatus;
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::health::{HealthCheckCoordinator, SqlHealthCheckStore};
+    use ersatzrs_infra::maintenance::{run_maintenance_once_cancellable, MaintenanceExecution};
+    use tokio::sync::RwLock;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (7136);
+        INSERT INTO "Library" ("Id", "MediaSourceId", "MediaKind", "Name")
+        VALUES (7136, 7136, 1, 'Synthetic health cache');
+        INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (7136, 7136, '/synthetic');
+        INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (7136, 7136, 0);"#,
+    )
+    .await
+    .unwrap();
+    let health = HealthCheckCoordinator::new(
+        pool.clone(),
+        Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
+        DatabaseSchemaStatus::default(),
+    );
+    let before = health.run(false).await.unwrap();
+    pool.execute(r#"UPDATE "MediaItem" SET "State" = 1 WHERE "Id" = 7136"#)
+        .await
+        .unwrap();
+    let report = run_maintenance_once_cancellable(
+        pool.clone(),
+        &CacheCleanupConfig::default(),
+        None,
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: None,
+            health: Some(&health),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.health_summary, Some(before.summary));
+    let rows = SqlHealthCheckStore::new(pool.clone())
+        .load_results()
+        .await
+        .unwrap();
+    assert_eq!(
+        rows, before.results,
+        "maintenance must reuse the host's completed run"
+    );
+    let refreshed = health.run(true).await.unwrap();
+    let missing = refreshed
+        .results
+        .iter()
+        .find(|row| row.title == "File Not Found")
+        .unwrap();
+    assert_eq!(missing.status, HealthCheckStatus::Warning);
+    let report = run_maintenance_once_cancellable(
+        pool,
+        &CacheCleanupConfig::default(),
+        None,
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: None,
+            health: Some(&health),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.health_summary, Some(refreshed.summary));
+    health.shutdown().await;
+}
+
+#[tokio::test]
 async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
     let pool = common::test_db().await;
     sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)

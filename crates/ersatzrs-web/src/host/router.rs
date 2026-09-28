@@ -89,6 +89,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::maintenance::clean_artwork),
             )
             .route(
+                "/admin-api/system/health/refresh",
+                post(api::maintenance::refresh_health),
+            )
+            .route(
                 "/admin-api/addons/package",
                 post(api::addons::upload_addon_package).layer(DefaultBodyLimit::max(
                     api::addons::MAX_ADDON_UPLOAD_BYTES + 1024 * 1024,

@@ -18,7 +18,6 @@ crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/scheduling/templates.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/scheduling/playouts.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/scheduling/schedules.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/system/health.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/system/logs.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media_sources/jellyfin.rs:rule-2
 crates/ersatzrs-web/src/admin/pages/media_sources/emby.rs:rule-2

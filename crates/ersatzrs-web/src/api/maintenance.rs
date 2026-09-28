@@ -34,6 +34,18 @@ pub async fn clean_artwork(
     }
 }
 
+/// Native form fallback for the admin health refresh action.
+pub async fn refresh_health(State(state): State<AppState>) -> axum::response::Response {
+    use axum::response::{IntoResponse, Redirect};
+    match state.application.run_admin_health_checks(true).await {
+        Ok(_) => Redirect::to("/system/health").into_response(),
+        Err(error) => {
+            tracing::warn!(%error, "admin health refresh failed");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

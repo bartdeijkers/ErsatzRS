@@ -11387,7 +11387,7 @@ row136 after refreshing upstream. No new release is implied.
 id         = 'ucu-09'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through the latest fetched tip'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
@@ -11412,7 +11412,51 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+Started 2026-09-28 after UCU-08 completed with terminal green CI 36453480304
+at dfeaf6d0; completion record d9d43b66 is published. Refreshed upstream remains
+8bda4411. All 180 ledger SHA/subject pairs match ordered upstream history;
+135 rows are reconciled and 45 remain pending. Pin/row135/clean reference
+HEAD remain 5bb3ddfc. Row136 full eight-file diff audited: five-minute cached
+health results, shared independently owned run, fifteen-minute run timeout,
+explicit refresh and failure-safe publication; maintenance log noise reduced.
+Rust page loads currently run health afresh, and admin/maintenance paths can
+run independently. Source map and owning health debt record the required port.
+No row136 verdict/pin move or implementation acceptance yet.
+Row136 implementation now shares a service-owned coordinator across admin and
+maintenance, with five-minute caching, explicit refresh, a fifteen-minute check
+deadline, shutdown cancellation and atomic results/summary publication. The
+SSR page resolves health data for its island; localized refresh has a native POST fallback.
+Focused infra/maintenance acceptance passes 113 tests (5869c68f-faa7-416a-920a-4bae5cb181ba),
+including cancellation after the last reader leaves. Four web layout tests pass
+(7f9191ad-fa1a-4cd6-8e9b-7ea121f311b1). Strict all-target infra/app/scheduler/web
+Clippy passes after duration-style and constructor-size corrections; hydration
+lint has no new findings (31 existing suppressions). Matched SSR/WASM build and
+four Chromium/Firefox hydrated/no-JS cases are running. Browser acceptance,
+substantive final review and the coherent row/pin commit remain. No push/CI.
+The first matched browser run reproduced a hydration marker mismatch in both
+browsers: refresh responses contained the expected missing-item warning, but
+the table stayed at Pass. The island's internal streamed Suspense raced its
+hydration. Initial data now resolves in the SSR wrapper before the island is
+emitted. Independent cases replace serial grouping so a hydrated failure does
+not skip no-JS proof. A matched rebuild and the same assertions remain required.
+Row136 acceptance now passes after resolving the initial snapshot in a server
+Suspend before emitting HealthIsland: matched Leptos rebuild, all four browser
+cases (21.732s; zero skips/unexpected/flaky/errors) in
+ test-results/ucu09-row136-fixed/playwright-results.json. Both browsers prove
+cached no-JS navigation, explicit refresh persistence, hydrated media-revision
+refresh, navigation and Dutch labels without browser errors. Initial failed
+traces are retained in ersatzrs-ucu09-row136-initial-browser under the system
+temporary directory. Final strict all-target affected Clippy passes after the
+UI correction; the obsolete health hydration exemption is removed. Published
+FFmpeg v2.0.2 archive checksum reverified as
+ef797ab1ad7c54340b2b92c208d1ecd7223c0941a68d831e1154aea16ba33e59;
+server logs confirm those exact ffmpeg/ffprobe overrides. No FFmpeg artifacts
+were rebuilt. Substantive Codex review confirms single host ownership, coherent
+publication, caller-independent deadline/shutdown, preserved check ordering,
+media refresh, troubleshooting freshness and localized SSR fallback.
+Row136 is Port; its coherent code/ledger/pin checkpoint is ready. Continue at
+row137 with 44 pending rows. UCU-09 window gates, push and exact-SHA CI remain;
+no intermediate push/CI and no release.
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.

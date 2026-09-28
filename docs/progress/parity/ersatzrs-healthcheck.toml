@@ -1,9 +1,13 @@
 feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0064']
 summary    = '''
+UCU-09 row136: admin and maintenance share bounded, independently owned health
+runs with five-minute caching and explicit refresh. Results and summary publish
+atomically; localized hydrated and no-JS refresh pass in both browsers.
+
 Ported: ErsatzRS includes a dedicated `ersatzrs-healthcheck` binary that
 probes the server readiness endpoint with a direct HTTP GET and exits `0` only
 when `/healthz` returns `200`. It defaults to
@@ -136,4 +140,12 @@ Executed 2026-08-10 against an isolated MySQL 8.4.0 server. The focused
 passed all four states in 84.177 seconds. CI now provisions MySQL 8 and injects
 `ERSATZRS_MYSQL_TEST_URL` for this exact non-skipping contract.
 '''
+resolved    = true
+
+
+[[debt]]
+id          = 'ucu-shared-health-run-cache'
+description = 'UCU-09 row136: health page reads and maintenance must share one bounded run independent of caller cancellation, cache completed results for five minutes, support explicit refresh, and preserve coherent persisted results and summaries without publishing timed-out checks.'
+discovered  = '2026-09-28'
+evidence    = 'UCU-09 row136 ports upstream 3c41959f. Seven coordinator regressions cover shared/last-reader cancellation, cache/expiry/forced refresh, timeout, panic, publication recovery and shutdown. Maintenance shares the same cache; 113 infra/maintenance and four web tests pass. Strict affected lint, hydration lint and four Chromium/Firefox hydrated/no-JS cases pass after correcting the initial SSR boundary. Detailed evidence and the reproduced/corrected browser failure are in the UCU-09 milestone; source map is in plans/upstream-catch-up.md.'
 resolved    = true

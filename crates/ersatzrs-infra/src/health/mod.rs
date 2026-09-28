@@ -16,6 +16,9 @@ use sqlx::{Pool, Row};
 use crate::db::{DatabaseSchemaStatus, Db};
 use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
+mod coordinator;
+
+pub use coordinator::{HealthCheckCoordinator, HealthRunError};
 
 use checks::{
     AddonListDiskUsageHealthCheck, AddonMediaListHealthCheck, AddonPlatformHealthCheck,
@@ -170,8 +173,21 @@ impl SqlHealthCheckStore {
         let summary_json = serde_json::to_string(&summary)
             .map_err(|error| HealthCheckError::Serialization(error.to_string()))?;
 
-        upsert_config(&self.pool, CONFIG_KEY_HEALTH_RESULTS, &results_json).await?;
-        upsert_config(&self.pool, CONFIG_KEY_HEALTH_SUMMARY, &summary_json).await?;
+        let mut tx = crate::db::begin_write(&self.pool)
+            .await
+            .map_err(sqlx_error)?;
+        for (key, value) in [
+            (CONFIG_KEY_HEALTH_RESULTS, results_json),
+            (CONFIG_KEY_HEALTH_SUMMARY, summary_json),
+        ] {
+            sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+                .bind(key)
+                .bind(value)
+                .execute(&mut *tx)
+                .await
+                .map_err(sqlx_error)?;
+        }
+        tx.commit().await.map_err(sqlx_error)?;
 
         Ok(summary)
     }
@@ -489,6 +505,7 @@ async fn missing_metadata_result(
     ))
 }
 
+#[cfg(test)]
 async fn upsert_config(pool: &Pool<Db>, key: &str, value: &str) -> Result<()> {
     sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
         .bind(key)

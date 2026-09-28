@@ -6,26 +6,27 @@ use crate::admin::release_notes::ReleaseNotesCard;
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::layout::{
     load_health_snapshot, AdminFfmpegRuntimeStatus, AdminHealthRow, AdminHealthSnapshot,
+    RefreshHealthSnapshot,
 };
-use crate::admin::ui::primitives::resource_state::{
-    admin_loading_resource_view, admin_result_view,
-};
+use crate::admin::ui::primitives::resource_state::admin_result_view;
 use crate::admin::ui::primitives::system_navigation::SystemPageLayout;
-#[cfg(target_arch = "wasm32")]
+use crate::admin::ui::primitives::toast::use_toast;
 use crate::admin::ui::primitives::toast::ToastSeverity;
-use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
+
+use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
-    let snapshot = Resource::new_blocking(|| (), |()| load_health_snapshot());
-
+    // Resolve on the server before emitting the island. A streamed Suspense
+    // fallback inside the island can otherwise race its hydration markers.
+    let content = Suspend::new(async move {
+        admin_result_view(load_health_snapshot().await, |initial_snapshot| {
+            view! { <HealthIsland initial_snapshot/> }.into_any()
+        })
+    });
     view! {
         <SystemPageLayout>
-            <Suspense fallback=admin_loading_resource_view>
-                {move || snapshot.get().map(|result| admin_result_view(result, |initial_snapshot| {
-                    view! { <HealthIsland initial_snapshot=initial_snapshot/> }.into_any()
-                }))}
-            </Suspense>
+            {content}
             <div style="max-width:64rem;margin:0 auto;padding:0 0 2rem">
                 <ReleaseNotesCard/>
             </div>
@@ -35,36 +36,55 @@ pub fn HealthPage() -> impl IntoView {
 
 #[island]
 fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
-    let media_revision = RwSignal::new(String::new());
     let snapshot = RwSignal::new(initial_snapshot);
+    let refresh = ServerAction::<RefreshHealthSnapshot>::new();
     let load_toast = use_toast();
-    let refreshed_snapshot: LocalResource<AdminHealthSnapshot> = LocalResource::new(move || {
-        let _ = media_revision.get();
-        async move { load_or_notify(load_health_snapshot().await, load_toast) }
-    });
-
-    #[cfg(target_arch = "wasm32")]
-    let revision_load_failed = RwSignal::new(false);
     Effect::new(move |_| {
-        if let Some(next) = refreshed_snapshot.get() {
-            snapshot.set(next);
+        if let Some(result) = refresh.value().get() {
+            match result {
+                Ok(next) => snapshot.set(next),
+                Err(error) => load_toast.push(
+                    format!("{}: {error}", tr(TextKey::ErrorOccurred)),
+                    ToastSeverity::Error,
+                ),
+            }
         }
     });
 
-    Effect::new(move |_| {
-        #[cfg(target_arch = "wasm32")]
-        {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let cleanup_running = running.clone();
+        on_cleanup(move || cleanup_running.store(false, Ordering::Relaxed));
+        Effect::new(move |_| {
+            let running = running.clone();
             leptos::task::spawn_local(async move {
-                loop {
-                    match media_state_revision().await {
+                let mut previous_revision = None;
+                let mut revision_load_failed = false;
+                while running.load(Ordering::Relaxed) {
+                    let result = media_state_revision().await;
+                    if !running.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    match result {
                         Ok(next) => {
-                            if media_revision.get_untracked() != next {
-                                media_revision.set(next);
+                            // The first poll establishes a baseline; hydration
+                            // must not immediately bypass the SSR result cache.
+                            if previous_revision
+                                .as_ref()
+                                .is_some_and(|previous| previous != &next)
+                            {
+                                refresh.dispatch(RefreshHealthSnapshot {});
                             }
-                            revision_load_failed.set(false);
+                            previous_revision = Some(next);
+                            revision_load_failed = false;
                         }
-                        Err(error) if !revision_load_failed.get_untracked() => {
-                            revision_load_failed.set(true);
+                        Err(error) if !revision_load_failed => {
+                            revision_load_failed = true;
                             load_toast.push(
                                 format!("{}: {error}", tr(TextKey::ErrorOccurred)),
                                 ToastSeverity::Error,
@@ -75,14 +95,27 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
             });
-        }
-    });
+        });
+    }
 
     view! {
         <div style="max-width:64rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
-            <h1 style="font-size:1.5rem;font-weight:700;color:var(--color-gray-100);margin:0">
-                {tr(TextKey::HealthChecks)}
-            </h1>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+                <h1 style="font-size:1.5rem;font-weight:700;color:var(--color-gray-100);margin:0">
+                    {tr(TextKey::HealthChecks)}
+                </h1>
+                <form method="post" action="/admin-api/system/health/refresh"
+                    on:submit=move |event| {
+                        event.prevent_default();
+                        refresh.dispatch(RefreshHealthSnapshot {});
+                    }
+                >
+                    <button type="submit" class=btn_class(ButtonVariant::Secondary)
+                        disabled=move || refresh.pending().get()
+                        aria-busy=move || refresh.pending().get().to_string()
+                    >{tr(TextKey::Refresh)}</button>
+                </form>
+            </div>
             <p style="font-size:0.875rem;color:var(--color-muted);margin:0">
                 {tr(TextKey::HealthPersistedRunHelp)}
             </p>

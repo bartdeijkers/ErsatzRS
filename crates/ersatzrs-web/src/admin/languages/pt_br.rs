@@ -3110,7 +3110,7 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::FfmpegRuntimeVersion => "Versão",
         TextKey::HealthNoPersistedRun => "Nenhuma verificação de integridade se aplica agora.",
         TextKey::HealthPersistedRunHelp => {
-            "Resultados atuais das verificações de integridade de paridade. Esta página é atualizada depois que varreduras de mídia alteram o estado dos itens."
+            "Os resultados são armazenados por cinco minutos. Atualize para verificar novamente agora. Esta página também é atualizada quando as varreduras de mídia alteram o estado dos itens."
         }
         TextKey::HistoryDetails => "Detalhes do histórico",
         TextKey::HlsDirect => "HLS direto",

@@ -2398,7 +2398,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::FfmpegRuntimeVersion => "Versione",
         TextKey::HealthNoPersistedRun => "Al momento non sono applicabili controlli di stato.",
         TextKey::HealthPersistedRunHelp => {
-            "Risultati controllo stato parità corrente. Questa pagina si aggiorna dopo l'aggiornamento dello stato degli elementi tramite scansione dei media."
+            "I risultati vengono conservati per cinque minuti. Aggiorna per ripetere subito i controlli. La pagina si aggiorna anche quando le scansioni dei media cambiano lo stato degli elementi."
         }
         TextKey::HistoryDetails => "Dettagli cronologia",
         TextKey::HlsDirect => "HLS diretto",

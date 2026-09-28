@@ -51,6 +51,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Share health checks across page visits and scheduled maintenance, cache complete
+  results for five minutes, and add a localized Refresh action with a no-JavaScript
+  fallback. Leaving the page no longer cancels checks for other readers. Bound
+  check execution and persist results and warning/error counts together so a
+  failed run or write retains the previous complete snapshot.
+
 - Provider episode scans repair changed season membership even when metadata is
   unchanged, exclude Emby specials from unrelated seasons, and retain valid
   episodes after filtered pages. Season pages fall back to the show poster.

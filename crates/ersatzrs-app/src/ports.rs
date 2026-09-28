@@ -316,7 +316,12 @@ impl AdminHealthRuntimeError {
 #[async_trait]
 pub trait AdminHealthRuntime: Send + Sync {
     async fn issue_counts(&self) -> Result<(u32, u32), AdminHealthRuntimeError>;
-    async fn run_health_checks(&self) -> Result<AdminHealthRead, AdminHealthRuntimeError>;
+    /// Read completed cached checks, or request a fresh run when `refresh` is true.
+    /// Concurrent requests may join one run; dropping a reader does not cancel it.
+    async fn run_health_checks(
+        &self,
+        refresh: bool,
+    ) -> Result<AdminHealthRead, AdminHealthRuntimeError>;
     async fn ffmpeg_runtime(&self) -> AdminFfmpegRuntimeRead;
 }
 

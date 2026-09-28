@@ -2112,10 +2112,10 @@ impl ApplicationServices {
             })
     }
 
-    pub async fn run_admin_health_checks(&self) -> Result<AdminHealthRead> {
+    pub async fn run_admin_health_checks(&self, refresh: bool) -> Result<AdminHealthRead> {
         self.ports
             .admin_health_runtime()
-            .run_health_checks()
+            .run_health_checks(refresh)
             .await
             .map_err(|error| ApplicationError::Unavailable {
                 operation: "run admin health checks",

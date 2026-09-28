@@ -66,11 +66,22 @@ pub struct AdminFfmpegRuntimeNotification {
 /// Loads the persisted parity health snapshot for the admin /system/health page.
 #[server(prefix = "/admin-api")]
 pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError> {
+    health_snapshot(false).await
+}
+
+/// Refresh health checks, joining a run already in progress.
+#[server(prefix = "/admin-api")]
+pub async fn refresh_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError> {
+    health_snapshot(true).await
+}
+
+#[cfg(feature = "ssr")]
+async fn health_snapshot(refresh: bool) -> Result<AdminHealthSnapshot, ServerFnError> {
     use crate::host::state::AppState;
     use ersatzrs_core::health::HealthCheckStatus as S;
 
     let state = expect_context::<AppState>();
-    let run = state.application.run_admin_health_checks().await?;
+    let run = state.application.run_admin_health_checks(refresh).await?;
     let runtime = run.ffmpeg_runtime;
 
     let rows = run
@@ -185,7 +196,10 @@ pub async fn media_state_revision() -> Result<String, ServerFnError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_ffmpeg_runtime_notification, load_health_snapshot, media_state_revision};
+    use super::{
+        load_ffmpeg_runtime_notification, load_health_snapshot, media_state_revision,
+        refresh_health_snapshot,
+    };
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_ffmpeg::{FfmpegRuntimeReport, FfmpegRuntimeSource};
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
@@ -285,7 +299,17 @@ mod tests {
             .await
             .unwrap();
 
-        let after = load_health_snapshot().await.unwrap();
+        let cached = load_health_snapshot().await.unwrap();
+        assert_eq!(
+            cached
+                .rows
+                .iter()
+                .find(|row| row.title == "File Not Found")
+                .unwrap()
+                .status,
+            "Pass"
+        );
+        let after = refresh_health_snapshot().await.unwrap();
         let file_not_found_after = after
             .rows
             .iter()

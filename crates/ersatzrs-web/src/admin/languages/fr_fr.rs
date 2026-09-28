@@ -2402,7 +2402,7 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
             "Aucune vérification d'état n'est applicable pour le moment."
         }
         TextKey::HealthPersistedRunHelp => {
-            "Résultats actuels des vérifications d'état de parité. Cette page s'actualise après que les analyses de médias ont mis à jour l'état des éléments."
+            "Les résultats sont conservés pendant cinq minutes. Actualisez pour relancer les vérifications. Cette page s’actualise aussi lorsque les analyses de médias modifient l’état des éléments."
         }
         TextKey::HistoryDetails => "Détails de l'historique",
         TextKey::HlsDirect => "HLS Direct",

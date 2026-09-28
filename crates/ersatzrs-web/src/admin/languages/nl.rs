@@ -3094,7 +3094,7 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::FfmpegRuntimeVersion => "Versie",
         TextKey::HealthNoPersistedRun => "Er zijn nu geen toepasselijke gezondheidscontroles.",
         TextKey::HealthPersistedRunHelp => {
-            "Huidige pariteitsgezondheidscontroles. Deze pagina wordt vernieuwd nadat mediascans de itemstatus bijwerken."
+            "Resultaten worden vijf minuten bewaard. Kies Vernieuwen om direct opnieuw te controleren. Deze pagina wordt ook vernieuwd wanneer mediascans de itemstatus bijwerken."
         }
         TextKey::HistoryDetails => "Geschiedenisdetails",
         TextKey::HlsDirect => "HLS direct",

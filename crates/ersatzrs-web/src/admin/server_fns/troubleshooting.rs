@@ -369,7 +369,7 @@ pub async fn load_troubleshooting_report_with_state(
     )?;
     let health = state
         .application
-        .run_admin_health_checks()
+        .run_admin_health_checks(true)
         .await?
         .results
         .into_iter()

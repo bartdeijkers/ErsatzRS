@@ -2412,7 +2412,7 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::FfmpegRuntimeVersion => "Version",
         TextKey::HealthNoPersistedRun => "Derzeit sind keine Systemprüfungen anwendbar.",
         TextKey::HealthPersistedRunHelp => {
-            "Aktuelle Ergebnisse der Paritäts-Systemprüfungen. Diese Seite wird aktualisiert, nachdem Medienscans den Elementstatus aktualisiert haben."
+            "Ergebnisse werden fünf Minuten zwischengespeichert. Mit Aktualisieren können Sie sofort erneut prüfen. Diese Seite wird auch aktualisiert, wenn Medienscans den Elementstatus ändern."
         }
         TextKey::HistoryDetails => "Verlaufsdetails",
         TextKey::HlsDirect => "HLS direkt",

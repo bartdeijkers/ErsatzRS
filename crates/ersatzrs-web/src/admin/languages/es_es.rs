@@ -2405,7 +2405,7 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
             "No hay comprobaciones de estado aplicables en este momento."
         }
         TextKey::HealthPersistedRunHelp => {
-            "Resultados actuales de las comprobaciones de estado de paridad. Esta página se actualiza cuando los análisis multimedia cambian el estado de los elementos."
+            "Los resultados se guardan durante cinco minutos. Actualiza para comprobar de nuevo ahora. Esta página también se actualiza cuando los análisis multimedia cambian el estado de los elementos."
         }
         TextKey::HistoryDetails => "Detalles del historial",
         TextKey::HlsDirect => "HLS directo",

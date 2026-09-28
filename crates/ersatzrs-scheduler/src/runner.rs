@@ -9,7 +9,8 @@ use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
     repair_invalid_classic_playouts, run_maintenance_once_cancellable,
-    run_requested_playout_build_cancellable, MaintenancePassReport, PlayoutBuildCancellation,
+    run_requested_playout_build_cancellable, MaintenanceExecution, MaintenancePassReport,
+    PlayoutBuildCancellation,
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
@@ -29,6 +30,8 @@ pub struct SchedulerOptions {
     pub channel_guide_dir: Option<PathBuf>,
     /// Shared application command boundary for periodic library scans.
     pub application: Option<Arc<ersatzrs_app::ApplicationServices>>,
+    /// Host-owned health runs shared with admin readers and refreshes.
+    pub health: Option<ersatzrs_infra::health::HealthCheckCoordinator>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
     /// Shared activity registry used by the web host to distinguish accepted
@@ -66,6 +69,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         transcode_dir,
         channel_guide_dir,
         application,
+        health,
         mut build_requests,
         build_activity,
         hls_sessions,
@@ -100,7 +104,10 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
             &locker,
             startup.schema_status,
             hls_sessions.clone(),
-            Some(&cancelled),
+            MaintenanceExecution {
+                cancelled: Some(&cancelled),
+                health: health.as_ref(),
+            },
         )
         .await?;
         log_report(&report);
@@ -128,7 +135,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     &locker,
                     startup.schema_status.clone(),
                     hls_sessions.clone(),
-                    Some(&cancelled),
+                    MaintenanceExecution { cancelled: Some(&cancelled), health: health.as_ref() },
                 )
                 .await
                 {

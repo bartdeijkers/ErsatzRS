@@ -330,7 +330,7 @@ notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection a
 name   = 'HealthPage'
 status = '✅'
 routes = ['/system/health']
-notes  = '`tests/e2e/support-pages.spec.ts` proves live and persisted health rows against the scripted Support parity criteria.'
+notes  = '`tests/e2e/support-pages.spec.ts` covers Support health rows. `tests/e2e/health-refresh.spec.ts` proves cached navigation, explicit persisted refresh with and without JavaScript, automatic media-state refresh, navigation and Dutch labels in Chromium and Firefox. SSR resolves the initial snapshot before emitting the island; the old rule-2 exemption is removed (UCU-09 row136).'
 
 [[page]]
 name   = 'LogsPage'

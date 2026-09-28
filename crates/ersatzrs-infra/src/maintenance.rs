@@ -199,9 +199,16 @@ pub async fn run_maintenance_once(
         locker,
         schema_status,
         hls_sessions,
-        None,
+        MaintenanceExecution::default(),
     )
     .await
+}
+
+/// Shared services and cancellation for one maintenance pass.
+#[derive(Default)]
+pub struct MaintenanceExecution<'a> {
+    pub cancelled: Option<&'a PlayoutBuildCancellation>,
+    pub health: Option<&'a crate::health::HealthCheckCoordinator>,
 }
 
 /// Cancellation-aware variant of [`run_maintenance_once`].
@@ -215,8 +222,9 @@ pub async fn run_maintenance_once_cancellable(
     locker: &EntityLocker,
     schema_status: DatabaseSchemaStatus,
     hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
-    cancelled: Option<&PlayoutBuildCancellation>,
+    execution: MaintenanceExecution<'_>,
 ) -> Result<MaintenancePassReport> {
+    let MaintenanceExecution { cancelled, health } = execution;
     if cancelled.is_some_and(|check| check()) {
         return Err(SchedulingError::Cancelled.into());
     }
@@ -282,6 +290,14 @@ pub async fn run_maintenance_once_cancellable(
         report.search_index_dispatched = dispatch_search_index_rebuild(&pool, now).await?;
         report.loops_ran.set(MaintenanceLoopFlags::SEARCH_INDEX);
         record_loop_run(&pool, "search_index", now).await?;
+    }
+
+    if let Some(health) = health {
+        match health.run(false).await {
+            Ok(run) => report.health_summary = Some(run.summary),
+            Err(error) => warn!(%error, "automatic health run did not complete"),
+        }
+        return Ok(report);
     }
 
     let ffmpeg_check_config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(

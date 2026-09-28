@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **45 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **44 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **135**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **136**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 starts at row 136 after refreshing upstream. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Continue at row 137. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -60,6 +60,53 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+
+## Row 136 source map — shared health runs (Port)
+
+- Upstream `3c41959f`: complete eight-file diff reviewed and ported. UCU-09 owns test/browser evidence and the resolved health debt.
+- UI/visual contract: `ErsatzTV/Pages/Index.razor` keeps the two-column health
+  table and adds a small refresh action beside the heading. Reads use cached
+  results; explicit refresh bypasses completed cache and joins an in-flight run.
+  ErsatzRS keeps its accepted Support navigation (ADR 0089), localized heading,
+  existing table, and an accessible refresh action with SSR fallback.
+- Handler/service: `GetAllHealthCheckResults` carries Refresh;
+  `GetAllHealthCheckResultsHandler` filters NotApplicable and contains caller
+  cancellation/disposal. Singleton `HealthCheckService` owns one run independent
+  of page cancellation, caches successful results for five minutes, and limits
+  execution to fifteen minutes. Timed-out results are not cached/published;
+  notification failure cannot stop the host.
+- Repository/side effects: health checks read the library and may start FFmpeg;
+  the result set and summary must remain coherent. Scoped upstream checks are
+  created within the service-owned run. Orphan cleanup logging changes from
+  Information to Debug; Rust cleanup already returns a report without those
+  repeated information logs.
+- Rust targets: `ersatzrs-core/src/health.rs`, `ersatzrs-infra/src/health/mod.rs`,
+  `ersatzrs-infra/src/maintenance.rs`, web `host/health.rs`, `host/tasks.rs`,
+  `host/state.rs`, app health port/use cases, `admin/server_fns/layout.rs`,
+  `admin/pages/system/health.rs`, and every supported language as needed.
+- Audited pre-port gap: `load_health_snapshot` started a fresh run; SSR and
+  hydration each invoked it, and maintenance constructed a separate runner.
+  Five-minute caching, shared ownership, a deadline and manual refresh were absent.
+- Preserve existing media-revision refresh, check order/failure rows,
+  persisted summary badges, troubleshooting, audio/subtitle checks and native
+  platform support. No FFmpeg release/build or runtime-package change.
+- Hydration source map: `/system/health` keeps `HealthPage` as its SSR wrapper;
+  `Suspend` resolves `load_health_snapshot` before emitting `HealthIsland`
+  with its finished snapshot. No unresolved Suspense boundary wraps the island
+  or its table. `load_health_snapshot` reads the shared cache; `refresh_health_snapshot`
+  forces a run for the refresh button and subsequent media-revision changes.
+  The ordinary POST form `/admin-api/system/health/refresh` redirects back to
+  the health page without JavaScript. Existing table, toast and Support layout
+  primitives remain in use; the native submit button reuses the existing button
+  class helper without changing primitive behavior. Browser proof covers Chromium and Firefox with
+  hydrated and no-JS refresh and navigation away.
+- Required proof: deterministic concurrent/cache/expiry/forced refresh and
+  waiter-cancellation tests; timeout and publication-failure recovery;
+  persisted result/summary consistency; localized hydrated/no-JS refresh,
+  navigation-away behavior, and strict affected lint. UCU-09 owns acceptance;
+  health parity debt `ucu-shared-health-run-cache` is resolved; UCU-09 owns the evidence.
+
 
 ## UCU-08 row 135 source map: release preparation (N/A)
 
@@ -3725,7 +3772,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 133 | `4a2aa157` | fix: local folder etags (#3004) | Port | scanner | `fix(scanner): retain failed season scans for unchanged retries` | ucu-08; mixed failure/NFO regression, seven real scan tests, ten local-TV unit tests and strict lint pass; see source map. |
 | 134 | `188274e8` | fix: season scanning fixes (#3005) | Port | scanner; media-browsers | `fix(media): reconcile provider seasons and fallback artwork` | ucu-08; ten focused tests, library isolation, filtered-page continuation, matched build, Chromium/Firefox four cases and strict lint pass; see source map. |
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-08; complete diff only changes upstream changelog release heading/date/links; no ErsatzRS release or behavior change. Window gates remain. |
-| 136 | `3c41959f` | fix: health check improvements (#3006) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: health check isolation and reporting; the native health engine has the same shape. |
+| 136 | `3c41959f` | fix: health check improvements (#3006) | Port | ersatzrs-healthcheck | `fix(health): share bounded health runs and cache results` | ucu-09; one host-owned run survives reader cancellation; five-minute cache, fifteen-minute check deadline, atomic publication, explicit localized refresh and no-JS fallback. 113 infra/maintenance and four web tests pass; strict affected lint and four Chromium/Firefox cases pass. |
 | 137 | `96cef081` | fix: heal artwork cache (#3007) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: no native artwork orphan cleanup or cache healing exists. |
 | 138 | `7e141a13` | fix: use static hash functions (#3008) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: C# static-hash refactor; native hashing is already stateless. |
 | 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: report Next sessions through the native sessions API once Next playback lands. |
