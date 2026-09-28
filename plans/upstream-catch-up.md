@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **47 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **46 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **133**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **134**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -60,6 +60,67 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 134 source map: provider season scanning (Port)
+
+- Reviewed all 12 upstream `188274e8` files. Emby episode responses with a
+  non-null different SeasonId are excluded; Plex/Jellyfin/Emby update an
+  existing episode's season even when its etag is unchanged. Season artwork
+  falls back to the show poster; media content layers stay above fanart.
+- Backend targets: `emby/{models,client,sync}.rs`, `jellyfin/sync.rs`,
+  `plex.rs`, shared provider helpers, and `repositories/television.rs`.
+  Confirmed all three episode etag branches skip parent repair. Emby response
+  lacks SeasonId and filters only through project_episode. Its scan loop also
+  stops on an empty projected page: filtering specials must not discard later
+  valid pages. Scope parent repair by provider identity and library; preserve
+  metadata, files, stream selection and etag fast paths.
+- Confirmed season-detail projection selects only SeasonPoster; no show-poster
+  fallback. It already rejects blank artwork paths. Extend existing projected
+  artwork identity handling, preserving provider URL/auth resolution.
+- Visual map: upstream Movie/Artist/TelevisionSeasonList/TelevisionEpisodeList
+  add relative content layers above absolute fanart. Rust season shell already
+  has fanart z-index 0 and content z-index 2 enclosing header and episode stack.
+  Shared movie shell likewise has content z-index 2. Finish auditing show/movie/
+  artist descendants and prove missing-season-artwork behavior in the browser;
+  do not add redundant styling without a demonstrated gap.
+- Required evidence: provider HTTP/database regressions for unchanged-etag
+  parent repair and library scoping; Emby mismatched/null SeasonId and filtered
+  page continuation; season poster precedence/blank fallback plus browser
+  visibility; focused lint and substantive review. No schema, new provider
+  infrastructure or runtime release. Pin remains row133; implementation next.
+- Three provider HTTP regressions reproduce unchanged-etag parent failures
+  (`65a1691f`). Shared library-scoped parent repair now runs before successful
+  etag skips; all three pass (`9a43b23c`) without extra playback lookup or file
+  changes. A database regression proves invalid/cross-library parents are
+  ignored and repeated repair is a no-op.
+- Emby specials filtering and blank/missing season-poster fallback reproduce
+  (`6f756666`). Filtering retains provider totals and scans past fully filtered
+  pages. Artwork falls back through the existing projected-artwork path.
+  All ten focused tests pass (`2abae677`): the three provider scans, Emby
+  response filtering/pagination, parent isolation/idempotency, and all five
+  television repository tests. EXPLAIN uses primary-key and existing
+  ShowMetadata/SeasonMetadata/Artwork owner indexes, with no artwork table scan.
+- Hydration map: `/media/tv/seasons/:id`, `SeasonPage` and `SeasonDetailIsland` use the unchanged server-function/repository data boundary.
+  Only artwork projection changes; no island props, routes, localization or
+  shared styles change. Movie/show/artist content and episode stacks already
+  sit inside relative z-index 2 containers above fanart at z-index 0.
+  The focused cardinality spec now checks missing/blank poster fallback,
+  loaded fanart and title hit testing with and without a show poster.
+  Strict infra library/test Clippy passes after factoring a test fixture and
+  documenting test-helper panics; no suppressions were added. Substantive
+  backend review passes. Browser verification is running via matched Leptos
+  build and isolated port18474; no row verdict/pin move.
+
+- Final acceptance: matched Leptos SSR/WASM build passes. Chromium and Firefox
+  pass all four focused cardinality/artwork cases in 20 seconds, with no retries
+  or changed timeouts (`test-results/ucu08-row134/playwright-results.json`).
+  The server log confirms published v2.0.2 FFmpeg/ffprobe 9.0.0 overrides and no
+  download. Both absent and blank season posters fall back; without any poster,
+  title hit testing still passes above loaded fanart. Existing 27-episode
+  uniqueness and reload tests remain green. Backend/source review and strict
+  infra library/test lint pass. Verdict: Port. Refresh confirms upstream target
+  unchanged at 8bda4411. Commit pin/ledger together and then align reference.
+  Row135 and milestone-wide gates remain; no intermediate push/CI.
 
 ## UCU-08 row 133 source map: local folder etags (Port)
 
@@ -3650,7 +3711,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 131 | `6ebcaf80` | fix: multiday seek | Port | ffmpeg-command-generation | `fix(playback): sample interlace state with bounded source-safe caching` | ucu-08; multi-day argv/motion, selected-stream idet, cache races, HLS Stop, native HTTP smoke and TSDuck 87/87; see source map. |
 | 132 | `d5f11315` | fix: more channel startup fixes (#3003) | Port | hls-variant-playlists-segmenter | `fix(streaming): coordinate identity-safe session readiness and recovery` | ucu-08; 28 HLS tests, three real Next lifecycle tests, strict affected lint and native lifecycle smoke pass; see source map. |
 | 133 | `4a2aa157` | fix: local folder etags (#3004) | Port | scanner | `fix(scanner): retain failed season scans for unchanged retries` | ucu-08; mixed failure/NFO regression, seven real scan tests, ten local-TV unit tests and strict lint pass; see source map. |
-| 134 | `188274e8` | fix: season scanning fixes (#3005) | | | | ucu-08; provisional: Port candidate. |
+| 134 | `188274e8` | fix: season scanning fixes (#3005) | Port | scanner; media-browsers | `fix(media): reconcile provider seasons and fallback artwork` | ucu-08; ten focused tests, library isolation, filtered-page continuation, matched build, Chromium/Firefox four cases and strict lint pass; see source map. |
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 136 | `3c41959f` | fix: health check improvements (#3006) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: health check isolation and reporting; the native health engine has the same shape. |
 | 137 | `96cef081` | fix: heal artwork cache (#3007) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: no native artwork orphan cleanup or cache healing exists. |

@@ -405,6 +405,50 @@ async function assertSeasonPage(page: Page, seed: CardinalitySeed, season: Seaso
 test.describe('AMM-H-01 add-on television cardinality', () => {
   test.skip(!DATABASE_PATH, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed TV rows');
 
+  test('uses show artwork for seasons and keeps titles above fanart without posters', async ({ page }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedFixture(testInfo);
+    const showPoster = 'https://amm-h-01.example.test/show-poster.png';
+    const showFanart = 'https://amm-h-01.example.test/show-fanart.png';
+    const database = openDatabase();
+    try {
+      const insertShowArt = database.prepare(`INSERT INTO "Artwork"
+        ("Id", "ArtworkKind", "Path", "ShowMetadataId", "DateAdded", "DateUpdated")
+        VALUES (?, ?, ?, ?, ?, ?)`);
+      insertShowArt.run(seed.showId + 9000, 0, showPoster, seed.showMetadataId, NOW, NOW);
+      insertShowArt.run(seed.showId + 9001, 3, showFanart, seed.showMetadataId, NOW, NOW);
+      database.prepare(`INSERT INTO "Artwork"
+        ("Id", "ArtworkKind", "Path", "SeasonMetadataId", "DateAdded", "DateUpdated")
+        VALUES (?, 0, '  ', ?, ?, ?)`)
+        .run(seed.showId + 9002, seed.seasonMetadataIds[0], NOW, NOW);
+      await page.route('https://amm-h-01.example.test/**', (route) =>
+        route.fulfill({ status: 200, contentType: 'image/png', body: TINY_PNG }));
+      await forceEnglish(page);
+      for (const season of seed.seasons) {
+        await gotoHydrated(page, `/media/tv/seasons/${season.id}`);
+        const poster = page.getByRole('img', { name: `${seed.showTitle} Season ${season.number}`, exact: true });
+        await expect(poster).toHaveAttribute('src', showPoster);
+        await expect(poster).toBeVisible();
+        await expect(poster).toHaveJSProperty('naturalWidth', 1);
+        await expect(page.locator(`img[src="${showFanart}"]`)).toHaveJSProperty('naturalWidth', 1);
+        const title = page.getByRole('heading', { name: seed.showTitle, exact: true });
+        await title.click({ trial: true });
+        await page.locator('article[id^="episode-"]').first().getByRole('heading').first().click({ trial: true });
+      }
+      database.prepare('DELETE FROM "Artwork" WHERE "Id" = ?').run(seed.showId + 9000);
+      await gotoHydrated(page, `/media/tv/seasons/${seed.seasons[0].id}`);
+      await expect(page.getByRole('img', { name: `${seed.showTitle} Season 1`, exact: true })).toHaveCount(0);
+      await page.getByRole('heading', { name: seed.showTitle, exact: true }).click({ trial: true });
+      await page.locator('article[id^="episode-"]').first().getByRole('heading').first().click({ trial: true });
+      expect(runtimeErrors).toEqual([]);
+    } finally {
+      database.prepare('DELETE FROM "Artwork" WHERE "Id" IN (?, ?, ?)')
+        .run(seed.showId + 9000, seed.showId + 9001, seed.showId + 9002);
+      database.close();
+      removeFixture(seed);
+    }
+  });
+
   test('keeps 13 and 14 episode seasons unique with legacy duplicate thumbnails', async ({
     page,
   }, testInfo) => {

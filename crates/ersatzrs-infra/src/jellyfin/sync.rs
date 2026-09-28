@@ -378,6 +378,15 @@ where
                         )
                         .await?
                     {
+                        crate::media_server::reconcile_episode_season(
+                            pool,
+                            crate::media_server::EpisodeProvider::Jellyfin,
+                            library_id,
+                            &episode.item_id,
+                            season_id,
+                        )
+                        .await
+                        .repository()?;
                         synced += 1;
                         continue;
                     }

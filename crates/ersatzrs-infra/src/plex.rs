@@ -1379,6 +1379,15 @@ async fn sync_one_plex_show(
                         )
                         .await?
                     {
+                        crate::media_server::reconcile_episode_season(
+                            pool,
+                            crate::media_server::EpisodeProvider::Plex,
+                            library_id,
+                            &episode.key,
+                            season_id,
+                        )
+                        .await
+                        .repository()?;
                         synced += 1;
                         continue;
                     }

@@ -5,6 +5,45 @@ use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
 
 #[tokio::test]
+async fn season_poster_falls_back_to_show_for_missing_or_blank_artwork() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_tv_fixture(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Artwork" ("Id", "ArtworkKind", "Path", "ShowMetadataId", "DateAdded", "DateUpdated")
+           VALUES (104, 0, 'show-poster.jpg', 100, '2026-01-01', '2026-01-01')"#,
+    ).await.unwrap();
+    let own = repos.television.get_season(20).await.unwrap().unwrap();
+    assert_eq!(own.season_poster_path.unwrap().path, "season-poster.jpg");
+    for missing in [false, true] {
+        if missing {
+            pool.execute(r#"DELETE FROM "Artwork" WHERE "Id" = 101"#)
+                .await
+                .unwrap();
+        } else {
+            pool.execute(r#"UPDATE "Artwork" SET "Path" = '  ' WHERE "Id" = 101"#)
+                .await
+                .unwrap();
+        }
+        let fallback = repos.television.get_season(20).await.unwrap().unwrap();
+        assert_eq!(fallback.season_poster_path.unwrap().path, "show-poster.jpg");
+        assert_eq!(fallback.show_fanart_path.unwrap().path, "show-fanart.jpg");
+        assert_eq!(repos.television.get_episode_count(20).await.unwrap(), 2);
+    }
+    pool.execute(r#"DELETE FROM "Artwork" WHERE "Id" = 104"#)
+        .await
+        .unwrap();
+    assert!(repos
+        .television
+        .get_season(20)
+        .await
+        .unwrap()
+        .unwrap()
+        .season_poster_path
+        .is_none());
+}
+
+#[tokio::test]
 async fn television_repository_reads_season_episodes_and_episode_media_info() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

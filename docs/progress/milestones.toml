@@ -11305,6 +11305,16 @@ metadata and subtitle restoration. Ten local-TV unit tests pass (c4ec5adb).
 Strict scanner library/test lint and source review pass. Other media kinds
 have no folder-etag skip; SQLite search has no separate indexing failure.
 Row134 and window gates remain; no intermediate push/CI.
+Row134 is Port at 188274e8. All three providers repair season membership
+without metadata-etag changes; Emby excludes other seasons and preserves
+pagination past filtered specials. Season details fall back to show artwork.
+Ten focused tests pass (2abae677), with identity/library isolation, idempotency,
+unchanged playback lookups, artwork precedence and existing cardinality checks.
+Strict infra library/test Clippy and substantive review pass. Matched Leptos
+build and all four Chromium/Firefox cases pass in test-results/ucu08-row134;
+no timeout/retry weakening. Server logs confirm pinned v2.0.2 runtime overrides.
+Upstream refresh remains 8bda4411. Row135 and window gates remain; no push/CI.
+
 
 
 

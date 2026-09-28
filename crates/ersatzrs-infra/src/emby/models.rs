@@ -38,6 +38,7 @@ pub(super) struct EmbyLibraryItemResponse {
     pub(super) name: Option<String>,
     pub(super) id: Option<String>,
     pub(super) etag: Option<String>,
+    pub(super) season_id: Option<String>,
     pub(super) path: Option<String>,
     pub(super) official_rating: Option<String>,
     #[serde(default)]

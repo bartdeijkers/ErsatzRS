@@ -347,7 +347,6 @@ where
                     )
                     .await?;
                 let episode_total_count = episodes.total_record_count;
-                let episode_page_len = i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
                 for episode in &episodes.items {
                     present_episodes.insert(episode.item_id.clone());
                     if !deep_scan
@@ -360,6 +359,15 @@ where
                         )
                         .await?
                     {
+                        crate::media_server::reconcile_episode_season(
+                            pool,
+                            crate::media_server::EpisodeProvider::Emby,
+                            library_id,
+                            &episode.item_id,
+                            season_id,
+                        )
+                        .await
+                        .repository()?;
                         synced += 1;
                         continue;
                     }
@@ -379,7 +387,9 @@ where
                 }
 
                 episode_start_index += EMBY_PAGE_SIZE;
-                if episode_start_index >= episode_total_count || episode_page_len == 0 {
+                // A full provider page can contain only filtered specials.
+                // Advance by the provider count, not the projected item count.
+                if episode_start_index >= episode_total_count {
                     break;
                 }
             }

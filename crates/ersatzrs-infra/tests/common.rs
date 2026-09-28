@@ -441,3 +441,53 @@ pub async fn add_foreign_collection_member(pool: &SqlitePool, table: &str) {
     .await
     .unwrap();
 }
+
+/// Move the single fixture episode to a different valid season without changing its etag.
+///
+/// # Panics
+/// Panics when the fixture is missing or a database operation fails.
+pub async fn displace_episode_season(pool: &SqlitePool) -> (i64, i64) {
+    let original: (i64, i64) = sqlx::query_as(r#"SELECT "Id", "SeasonId" FROM "Episode""#)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let wrong_id: i64 = sqlx::query_scalar(
+        r#"INSERT INTO "MediaItem" ("LibraryPathId", "State")
+           SELECT "LibraryPathId", 0 FROM "MediaItem" WHERE "Id" = ? RETURNING "Id""#,
+    )
+    .bind(original.0)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber")
+           SELECT ?, "ShowId", 99 FROM "Season" WHERE "Id" = ?"#,
+    )
+    .bind(wrong_id)
+    .bind(original.1)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
+        .bind(wrong_id)
+        .bind(original.0)
+        .execute(pool)
+        .await
+        .unwrap();
+    original
+}
+
+/// Assert that the fixture episode retains its identity and expected parent.
+///
+/// # Panics
+/// Panics on a database error or an unexpected episode identity or parent.
+pub async fn assert_episode_parent(pool: &SqlitePool, expected: (i64, i64)) {
+    let actual: (i64, i64) = sqlx::query_as(r#"SELECT "Id", "SeasonId" FROM "Episode""#)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        actual, expected,
+        "an unchanged etag must not suppress parent repair"
+    );
+}

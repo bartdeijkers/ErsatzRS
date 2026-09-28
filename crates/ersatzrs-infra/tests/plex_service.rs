@@ -1009,11 +1009,14 @@ async fn plex_single_show_sync_targets_one_show_and_honors_episode_etags() {
         .await
         .unwrap();
 
+    let original_episode = common::displace_episode_season(&pool).await;
+
     let shallow_synced = sync_plex_show_by_id(&pool, 1, 10, false, None)
         .await
         .unwrap();
 
     assert_eq!(shallow_synced, 1);
+    common::assert_episode_parent(&pool, original_episode).await;
     assert_eq!(media_file_path(&pool).await, "/media/show/kept.mkv");
 
     let deep_synced = sync_plex_show_by_id(&pool, 1, 10, true, None)

@@ -11,6 +11,42 @@ use serde_json::json;
 use sqlx::{Row, SqlitePool};
 
 #[tokio::test]
+async fn emby_episode_page_rejects_other_seasons_but_accepts_missing_season_id() {
+    let server = MockServer::start_async().await;
+    let response = server.mock_async(|when, then| {
+        when.method(GET).path("/Shows/show/Episodes").query_param("seasonId", "season");
+        then.status(200).json_body(json!({
+            "TotalRecordCount": 3,
+            "Items": [
+                { "Id": "special", "Name": "Special", "Path": "/fixture/special.mkv", "SeasonId": "specials" },
+                { "Id": "episode", "Name": "Episode", "Path": "/fixture/episode.mkv", "SeasonId": "season" },
+                { "Id": "legacy", "Name": "Legacy", "Path": "/fixture/legacy.mkv" }
+            ]
+        }));
+    }).await;
+    let config = EmbyConnectionConfig {
+        address: server.base_url(),
+        api_key: "fixture".to_owned(),
+    };
+    let page = EmbyService::new()
+        .fetch_episode_page(&config, "show", "season", 0, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        page.total_record_count, 3,
+        "pagination retains the provider count"
+    );
+    assert_eq!(
+        page.items
+            .iter()
+            .map(|item| item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["episode", "legacy"]
+    );
+    response.assert_async().await;
+}
+
+#[tokio::test]
 async fn emby_sync_maps_mock_movie_response_to_media_rows() {
     let server = MockServer::start_async().await;
     let libraries = mock_emby_libraries(&server).await;
@@ -630,17 +666,20 @@ async fn emby_single_show_sync_targets_one_show_and_honors_episode_etags() {
             }));
         })
         .await;
+    let filtered_page = mock_filtered_specials_page(&server).await;
     let episodes = server
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/Shows/show-target/Episodes")
-                .query_param("seasonId", "season-target");
+                .query_param("seasonId", "season-target")
+                .query_param("startIndex", "100");
             then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
+                "TotalRecordCount": 101,
                 "Items": [
                     {
                         "Name": "Pilot",
                         "Id": "episode-target",
+                        "SeasonId": "season-target",
                         "Etag": "episode-target-etag",
                         "Path": "/srv/media/show/target.mkv",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -674,10 +713,13 @@ async fn emby_single_show_sync_targets_one_show_and_honors_episode_etags() {
         .await
         .unwrap();
 
+    let original_episode = common::displace_episode_season(&pool).await;
+
     let shallow_synced = sync_emby_show_by_id(&pool, 1, 10, false, None)
         .await
         .unwrap();
     assert_eq!(shallow_synced, 1);
+    common::assert_episode_parent(&pool, original_episode).await;
     assert_eq!(media_file_path(&pool).await, "/srv/media/show/kept.mkv");
     // Shallow re-run should NOT hit the per-episode playback endpoint.
     assert_eq!(playback.calls_async().await, 1);
@@ -692,8 +734,27 @@ async fn emby_single_show_sync_targets_one_show_and_honors_episode_etags() {
     assert_eq!(single_show.calls_async().await, 3);
     assert_eq!(seasons.calls_async().await, 3);
     assert_eq!(episodes.calls_async().await, 3);
+    assert_eq!(filtered_page.calls_async().await, 3);
     // Playback was hit on the first sync and the deep re-run, not the shallow.
     assert_eq!(playback.calls_async().await, 2);
+}
+
+async fn mock_filtered_specials_page(server: &MockServer) -> Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Shows/show-target/Episodes")
+                .query_param("seasonId", "season-target")
+                .query_param("startIndex", "0");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 101,
+                "Items": (0..100).map(|index| json!({
+                    "Id": format!("special-{index}"), "Name": "Special",
+                    "Path": format!("/fixture/special-{index}.mkv"), "SeasonId": "specials"
+                })).collect::<Vec<_>>()
+            }));
+        })
+        .await
 }
 
 async fn seed_emby_show_scan_config(pool: &SqlitePool, base_url: &str) {

@@ -40,6 +40,53 @@ pub(crate) fn provider_item_state_allows_etag_skip(state: i64) -> bool {
     matches!(state, STATE_NORMAL | STATE_REMOTE_ONLY)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EpisodeProvider {
+    Plex,
+    Jellyfin,
+    Emby,
+}
+
+/// Repair parent membership even when provider metadata has not changed.
+/// Both identities are scoped to the scanned library; other episode data stays intact.
+pub(crate) async fn reconcile_episode_season(
+    pool: &DbPool,
+    provider: EpisodeProvider,
+    library_id: i64,
+    provider_id: &str,
+    season_id: i64,
+) -> Result<u64, sqlx::Error> {
+    let (table, key) = match provider {
+        EpisodeProvider::Plex => ("PlexEpisode", "Key"),
+        EpisodeProvider::Jellyfin => ("JellyfinEpisode", "ItemId"),
+        EpisodeProvider::Emby => ("EmbyEpisode", "ItemId"),
+    };
+    let sql = format!(
+        r#"UPDATE "Episode" SET "SeasonId" = ?
+           WHERE "SeasonId" != ? AND "Id" IN (
+               SELECT provider."Id" FROM "{table}" provider
+               JOIN "MediaItem" mi ON mi."Id" = provider."Id"
+               JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+               WHERE provider."{key}" = ? AND lp."LibraryId" = ?
+           ) AND EXISTS (
+               SELECT 1 FROM "Season" s
+               JOIN "MediaItem" mi ON mi."Id" = s."Id"
+               JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+               WHERE s."Id" = ? AND s."Id" > 0 AND lp."LibraryId" = ?
+           )"#,
+    );
+    Ok(sqlx::query(assert_sql_safe(&sql))
+        .bind(season_id)
+        .bind(season_id)
+        .bind(provider_id)
+        .bind(library_id)
+        .bind(season_id)
+        .bind(library_id)
+        .execute(pool)
+        .await?
+        .rows_affected())
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ProviderVariantCandidate {
     pub item_id: i64,
@@ -533,6 +580,67 @@ mod tests {
         provider_item_state_allows_etag_skip, STATE_FILE_NOT_FOUND, STATE_NORMAL,
         STATE_REMOTE_ONLY, STATE_UNAVAILABLE,
     };
+
+    #[tokio::test]
+    async fn episode_parent_repair_is_library_scoped_and_idempotent() {
+        use super::{reconcile_episode_season, EpisodeProvider};
+        use sqlx::Executor as _;
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+        sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+        pool.execute(r#"
+            INSERT INTO "MediaSource" ("Id") VALUES (1);
+            INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId") VALUES (1, 2, 1), (2, 2, 1);
+            INSERT INTO "LibraryPath" ("Id", "LibraryId") VALUES (1, 1), (2, 2);
+            INSERT INTO "MediaItem" ("Id", "LibraryPathId") VALUES
+                (10, 1), (11, 1), (12, 1), (13, 1), (20, 2), (21, 2), (23, 2);
+            INSERT INTO "Show" ("Id") VALUES (10), (20);
+            INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (11, 10, 1), (12, 10, 2), (21, 20, 1);
+            INSERT INTO "Episode" ("Id", "SeasonId") VALUES (13, 11), (23, 21);
+            INSERT INTO "PlexEpisode" ("Id", "Key") VALUES (13, 'same-id'), (23, 'same-id');
+            INSERT INTO "JellyfinEpisode" ("Id", "ItemId") VALUES (13, 'same-id'), (23, 'same-id');
+            INSERT INTO "EmbyEpisode" ("Id", "ItemId") VALUES (13, 'same-id'), (23, 'same-id');
+        "#).await.unwrap();
+        for provider in [
+            EpisodeProvider::Plex,
+            EpisodeProvider::Jellyfin,
+            EpisodeProvider::Emby,
+        ] {
+            for invalid in [0, 21, 999] {
+                assert_eq!(
+                    reconcile_episode_season(&pool, provider, 1, "same-id", invalid)
+                        .await
+                        .unwrap(),
+                    0
+                );
+            }
+            assert_eq!(
+                reconcile_episode_season(&pool, provider, 1, "same-id", 12)
+                    .await
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                reconcile_episode_season(&pool, provider, 1, "same-id", 12)
+                    .await
+                    .unwrap(),
+                0
+            );
+            let parents: Vec<(i64, i64)> =
+                sqlx::query_as(r#"SELECT "Id", "SeasonId" FROM "Episode" ORDER BY "Id""#)
+                    .fetch_all(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(parents, vec![(13, 12), (23, 21)]);
+            pool.execute(r#"UPDATE "Episode" SET "SeasonId" = 11 WHERE "Id" = 13"#)
+                .await
+                .unwrap();
+        }
+    }
 
     #[test]
     fn etag_skip_accepts_normal_and_remote_only_provider_items() {

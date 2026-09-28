@@ -137,3 +137,10 @@ description = 'UCU-08 row 124 replaces provider paths and request query strings 
 discovered  = '2026-09-27'
 evidence    = 'ArtworkRepository::find_by_id, typed projections and persisted provider-request construction are implemented. Focused SQL, 24 detail/search web tests, ten final projection tests and all 20 artwork tests pass. Provider HTTP fixtures prove source ownership, caller-query isolation, cache-only redirects and cross-origin credential removal. Six media-browser cases and the corrected search case in both Chromium/Firefox pass; strict affected Clippy passes. Legacy path mapping is test-only. Final web parity passes: 738 tests, 20 existing skips, architecture/hydration lint and strict Clippy. UCU-08 milestone evidence and plans/upstream-catch-up.md record row 124 acceptance.'
 resolved    = true
+
+[[debt]]
+id = 'ucu-season-artwork-fallback'
+description = 'UCU-08 row134: season details need show-poster fallback when their artwork is missing or blank, with content visible above fanart.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'Missing fallback reproduced (6f756666). Existing projected-artwork handling now selects the show poster after season artwork; focused repository tests pass (2abae677), and EXPLAIN retains owner-index lookups. Matched SSR/WASM build and all four Chromium/Firefox cardinality/artwork cases pass in test-results/ucu08-row134. Both blank/missing season posters fall back and titles remain unobstructed even without any poster. Existing shared shells already stack content above fanart. Strict infra lint and substantive review pass; row134 is Port.'

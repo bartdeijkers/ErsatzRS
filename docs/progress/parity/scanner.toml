@@ -142,3 +142,10 @@ description = 'UCU-08 row133: local season etags currently publish after failed 
 discovered = '2026-09-28'
 resolved = true
 evidence = 'Unconditional etag publication reproduced (f8cf9940). Failed episode/extra writes and malformed NFO fallback now prevent completion caching while preserving successful siblings and playback. Seven real local-TV scan tests pass (0490d38f), including unchanged retries, preserved-mtime NFO repair, metadata and subtitle restoration; ten unit tests pass (c4ec5adb). Strict scanner lint and substantive review pass. Source map and ucu-08 own acceptance. Row133 is Port.'
+
+[[debt]]
+id = 'ucu-provider-season-reconciliation'
+description = 'UCU-08 row134: Plex/Jellyfin/Emby unchanged-etag episodes skip season-parent repair, and Emby specials can enter an unrelated season response.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'All three provider parent failures reproduced (65a1691f). Library-scoped identity-preserving repair now precedes unchanged-etag skips; Emby excludes mismatched SeasonId while continuing past fully filtered pages. Ten focused tests pass (2abae677), including library isolation/idempotency and unchanged file/playback lookup assertions. Strict infra lint, matched Leptos build, four Chromium/Firefox cases and substantive review pass. Source map and ucu-08 own evidence; row134 is Port.'

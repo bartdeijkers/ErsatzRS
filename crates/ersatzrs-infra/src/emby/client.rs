@@ -218,6 +218,7 @@ impl EmbyServiceTrait for EmbyService {
             items: response
                 .items
                 .into_iter()
+                .filter(|item| item.season_id.as_deref().is_none_or(|id| id == season_id))
                 .filter_map(project_episode)
                 .collect(),
         })

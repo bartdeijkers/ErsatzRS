@@ -51,6 +51,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Provider episode scans repair changed season membership even when metadata is
+  unchanged, exclude Emby specials from unrelated seasons, and retain valid
+  episodes after filtered pages. Season pages fall back to the show poster.
+
 - Local television scans retain retry eligibility after episode write failures or
   malformed NFO sidecars, instead of caching an incomplete season as unchanged.
 

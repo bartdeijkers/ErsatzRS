@@ -31,6 +31,13 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                           LIMIT 1
                       ) AS "SeasonPoster",
                       (
+                          SELECT a."Id" FROM "Artwork" a
+                          WHERE a."ShowMetadataId" = shm."Id"
+                            AND a."ArtworkKind" = 0
+                            AND NULLIF(TRIM(a."Path"), '') IS NOT NULL
+                          ORDER BY a."Id" LIMIT 1
+                      ) AS "ShowPoster",
+                      (
                           SELECT fa."Id"
                           FROM "Artwork" fa
                           WHERE fa."ShowMetadataId" = shm."Id"
@@ -58,7 +65,7 @@ impl TelevisionRepository for SqliteTelevisionRepository {
         let artwork = load_projected_artwork(
             &self.0,
             std::slice::from_ref(&row),
-            &["SeasonPoster", "ShowFanArt"],
+            &["SeasonPoster", "ShowPoster", "ShowFanArt"],
         )
         .await?;
         Ok(Some(SeasonDetail {
@@ -67,7 +74,8 @@ impl TelevisionRepository for SqliteTelevisionRepository {
             show_title: row.try_get("ShowTitle").repository()?,
             show_year: row.try_get("ShowYear").repository()?,
             season_number: row.try_get("SeasonNumber").repository()?,
-            season_poster_path: projected_artwork(&row, "SeasonPoster", &artwork)?,
+            season_poster_path: projected_artwork(&row, "SeasonPoster", &artwork)?
+                .or(projected_artwork(&row, "ShowPoster", &artwork)?),
             show_fanart_path: projected_artwork(&row, "ShowFanArt", &artwork)?,
         }))
     }
