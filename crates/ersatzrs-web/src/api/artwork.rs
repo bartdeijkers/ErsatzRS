@@ -953,9 +953,35 @@ mod tests {
         let repo = ersatzrs_infra::repositories::SqliteArtworkRepository(pool);
         let response = serve_local_artwork(&repo, "posters", path_str).await;
 
-        tokio::fs::remove_file(&file_path).await.ok();
-
         assert_eq!(response.status(), StatusCode::OK);
+        let original_modified = std::fs::metadata(&file_path).unwrap().modified().unwrap();
+        tokio::fs::remove_file(&file_path).await.unwrap();
+        assert_eq!(
+            serve_local_artwork(&repo, "posters", path_str)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        // Native scans register the original directly: restoring it with the
+        // same mtime must be visible without a scan/cache clone fast path.
+        tokio::fs::write(&file_path, b"recovered-image")
+            .await
+            .unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&file_path)
+            .unwrap()
+            .set_modified(original_modified)
+            .unwrap();
+        let restored = serve_local_artwork(&repo, "posters", path_str).await;
+        assert_eq!(restored.status(), StatusCode::OK);
+        assert_eq!(
+            axum::body::to_bytes(restored.into_body(), 1024)
+                .await
+                .unwrap(),
+            b"recovered-image"[..]
+        );
+        tokio::fs::remove_file(&file_path).await.unwrap();
     }
 
     #[tokio::test]

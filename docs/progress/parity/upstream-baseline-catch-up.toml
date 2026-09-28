@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
 summary    = """
-180 rows: 136 done, 44 pending.
+137/180 done; 43 pending.
 99/102 Port: runtime, cache, Vulkan.
 100-101/103 N/A; 104 Covered; 105-107 Port: watermarks, images, on-demand.
 108 Port: v2.0.2 published, hashes verified, default adopted.
@@ -12,7 +12,7 @@ summary    = """
 green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
 UCU-07 Complete: CI 36321494841, b4d659eb.
 116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130-134 Port; 135 N/A. UCU-08 Complete: CI 36453480304 at dfeaf6d0.
-136 Port: shared health.
+136-137 Port: health/artwork cache.
 
 UCU-02 Complete. Rows 11-20 prove engine selection/editor, atomic publication,
 supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.
@@ -229,3 +229,10 @@ discovered  = '2026-09-26'
 resolved    = true
 adr         = '0095'
 evidence    = 'UCU-06 owns current evidence. Isolated finite media/channel previews retain selected profiles, exact versions, subtitle/audio policy, capacity and bounded ownership. Decoded official Next local, direct HTTP, prepared-artifact, ordinary producer and retained-interval previews pass. Explicit subtitle selection preserves metadata required by retained-caption provenance. Focused regressions and strict Clippy pass. The engine selector, Legacy-only fields, first Next watermark, in-page Hls.js playback, bounded completion logs and no-JS submission pass in Chromium and Firefox. All 712 web tests, strict Clippy and the matched Leptos build pass. Row 93 is Port; UCU-06 window acceptance remains open.'
+
+[[debt]]
+id = 'row-137-artwork-cache-healing'
+description = 'Port referenced-file pruning and local-image restoration for artwork cache entries. Preserve native direct-source artwork, watermarks, blur images and all shared owners.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'UCU-09 owns row137 acceptance: 15 infra/health/hourly and 10 web/manual/localization tests pass, with strict affected all-target Clippy and license checking. Paged reference retention, transactional candidate deletion, atomic cache publication, shared-owner repointing, failure retry, concurrent passes, symlink safety and direct-original unchanged-mtime recovery are verified. Window closeout and exact-SHA CI remain pending.'

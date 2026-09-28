@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **44 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **43 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **136**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **137**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Continue at row 137. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Continue at row 138. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -61,6 +61,47 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+
+## Row 137 source map — artwork-cache healing (Port)
+
+- Upstream `96cef081`: full five-file diff, complete cleanup/cache methods and
+  `LocalFolderScanner.RefreshArtwork` audited and reconciled. UCU-09 owns acceptance evidence.
+- UI/components/validators: no new screen or control. Existing scheduled and
+  queued manual artwork cleanup own the operation; health must describe it
+  accurately and never claim all cached files are preserved after pruning.
+- Handler: delete orphaned database rows, collect live cache filenames from
+  Artwork paths, all three blur hashes and ChannelWatermark images, prune unused
+  files recursively, retain root/direct cache folders, then restore missing
+  cached images from local jpg/jpeg/png/gif/tbn/webp sources. Empty/remote keys
+  and embedded-media sources are not copied. Shared stale paths are repointed
+  together when the source path/write-time key produces a different cache name.
+- Cache/scanner: source path plus Windows-file-time timestamp is SHA-1 keyed;
+  kind selects the cache directory and hash prefix shard. Upstream scanner
+  forces refresh and bypasses cloning when an existing cache entry is missing.
+- Rust: preserve the existing bounded transactional `artwork_cleanup` database
+  helper. `artwork_cache_maintenance` now provides explicit-root filesystem
+  pruning/healing shared by the manual worker and scheduler. Candidate unlink
+  rechecks references inside a write transaction; paged snapshots avoid per-file
+  database lookups for retained images. Temporary copies publish before shared
+  path repointing, and local failures remain retryable.
+- Cache layout follows existing HTTP readers: posters/fanart/thumbnails stay
+  under `data_path("artwork")`; logo/watermark restoration uses the dedicated
+  native upload locations, which are never pruned. Root/direct cache folders,
+  originals, symlinks and referenced blur variants are retained.
+- Native local scanners store absolute source-image paths through
+  `metadata::replace_artwork`, so there is no stale copied-cache fast path.
+  The local-artwork HTTP regression removes and restores an original with its
+  mtime unchanged, proving immediate visibility without creating a scanner cache.
+- Targets: infra artwork/cache helper and maintenance integration, host manual
+  worker/scheduler composition, owning health check/text, and focused SQL/file/
+  HTTP regressions. Preserve existing direct-image serving, provider routes,
+  artwork cardinality, watermark/logo assets and audio/subtitle state.
+- Safety/acceptance: injected disposable cache roots; no traversal or symlink
+  escape; no deletion of original files; preserve referenced hashes and blur
+  variants; deterministic shared-path repointing; failed restoration remains
+  retryable; repeated cleanup is idempotent; manual/hourly paths share behavior.
+  Existing cache capabilities must be used where present. No FFmpeg build,
+  release or live-library mutation. UCU-09 owns the row acceptance.
 
 ## Row 136 source map — shared health runs (Port)
 
@@ -3773,7 +3814,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 134 | `188274e8` | fix: season scanning fixes (#3005) | Port | scanner; media-browsers | `fix(media): reconcile provider seasons and fallback artwork` | ucu-08; ten focused tests, library isolation, filtered-page continuation, matched build, Chromium/Firefox four cases and strict lint pass; see source map. |
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-08; complete diff only changes upstream changelog release heading/date/links; no ErsatzRS release or behavior change. Window gates remain. |
 | 136 | `3c41959f` | fix: health check improvements (#3006) | Port | ersatzrs-healthcheck | `fix(health): share bounded health runs and cache results` | ucu-09; one host-owned run survives reader cancellation; five-minute cache, fifteen-minute check deadline, atomic publication, explicit localized refresh and no-JS fallback. 113 infra/maintenance and four web tests pass; strict affected lint and four Chromium/Firefox cases pass. |
-| 137 | `96cef081` | fix: heal artwork cache (#3007) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: no native artwork orphan cleanup or cache healing exists. |
+| 137 | `96cef081` | fix: heal artwork cache (#3007) | Port | ersatzrs-infra | `fix(artwork): heal cached images and prune unused files` | ucu-09; shared manual/hourly cache service, retained originals/blur/watermark references, local image restoration and shared-path repointing. Native direct-source images recover with unchanged mtime. 25 focused tests, affected all-target Clippy and license check pass. |
 | 138 | `7e141a13` | fix: use static hash functions (#3008) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: C# static-hash refactor; native hashing is already stateless. |
 | 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: report Next sessions through the native sessions API once Next playback lands. |
 | 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: workflow and changelog only; QSV padding lives in their custom FFmpeg build per ADR 0008/0063. Check native QSV padding as separate debt. |

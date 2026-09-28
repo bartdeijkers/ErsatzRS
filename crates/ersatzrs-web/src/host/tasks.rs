@@ -209,9 +209,13 @@ pub fn spawn_background_tasks(
         health_shutdown.cancelled().await;
         health.shutdown().await;
     }));
+    let artwork = ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance::new(
+        maintenance.pool.clone(),
+        ersatzrs_infra::file_system_layout::data_path(""),
+    );
     tasks.extend([
         tokio::spawn(super::artwork_cleanup::run_artwork_cleanup_worker(
-            maintenance.pool.clone(),
+            artwork.clone(),
             maintenance.artwork_cleanup_rx,
             shutdown.clone(),
         )),
@@ -242,6 +246,7 @@ pub fn spawn_background_tasks(
             maintenance.application.clone(),
             maintenance.hls_sessions,
             maintenance.health,
+            artwork,
             shutdown.clone(),
         )),
         tokio::spawn(crate::host::scanning::run_scan_worker(
@@ -444,6 +449,7 @@ async fn run_maintenance_scheduler(
     application: Arc<ersatzrs_app::ApplicationServices>,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
     health: ersatzrs_infra::health::HealthCheckCoordinator,
+    artwork: ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance,
     shutdown: CancellationToken,
 ) {
     let operations = application.operations();
@@ -454,6 +460,7 @@ async fn run_maintenance_scheduler(
         build_activity: Some(operations.playout_activity()),
         hls_sessions: Some(hls_sessions),
         health: Some(health),
+        artwork: Some(artwork),
         locker: Some(operations.entity_locker()),
         shutdown: Some(shutdown),
         ..SchedulerOptions::default()

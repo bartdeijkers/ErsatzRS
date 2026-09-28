@@ -5737,7 +5737,7 @@ mod tests {
 
     #[test]
     fn artwork_orphans_health_text_is_localized_for_every_language() {
-        let message = "Orphan cleanup pending: 2 actor row(s) and 3 artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and cached image files are preserved.";
+        let message = "Orphan cleanup pending: 2 actor row(s) and 3 artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and referenced cached images are preserved.";
         let brief = "2 orphan actor row(s) and 3 orphan artwork row(s)";
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);

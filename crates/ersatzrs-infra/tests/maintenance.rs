@@ -122,6 +122,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
         MaintenanceExecution {
             cancelled: None,
             health: Some(&health),
+            artwork: None,
         },
     )
     .await
@@ -152,6 +153,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
         MaintenanceExecution {
             cancelled: None,
             health: Some(&health),
+            artwork: None,
         },
     )
     .await
@@ -1416,14 +1418,27 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let pool = common::test_db().await;
     let cache = CacheCleanupConfig::default();
     let locker = EntityLocker::new();
+    let root = tempfile::tempdir().unwrap();
+    let artwork = ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance::new(
+        pool.clone(),
+        root.path().to_owned(),
+    );
+    let folder = root.path().join("artwork/posters");
+    std::fs::create_dir_all(&folder).unwrap();
+    let stale = folder.join("AABB");
+    std::fs::write(&stale, b"stale").unwrap();
     let run = || {
-        run_maintenance_once(
+        ersatzrs_infra::maintenance::run_maintenance_once_cancellable(
             pool.clone(),
             &cache,
             None,
             &locker,
             DatabaseSchemaStatus::default(),
             None,
+            ersatzrs_infra::maintenance::MaintenanceExecution {
+                artwork: Some(&artwork),
+                ..Default::default()
+            },
         )
     };
     sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('orphan')"#)
@@ -1433,12 +1448,15 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let first = run().await.unwrap();
     assert!(first.loops_ran.artwork_cleanup());
     assert_eq!(first.artwork_cleanup.actors_deleted, 1);
+    assert!(!stale.exists());
+    std::fs::write(&stale, b"later-stale").unwrap();
     sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('later orphan')"#)
         .execute(&pool)
         .await
         .unwrap();
     let second = run().await.unwrap();
     assert!(!second.loops_ran.artwork_cleanup());
+    assert!(stale.exists());
     sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = 'maintenance.loop.artwork_cleanup.last_run'"#)
         .bind((Utc::now() - Duration::hours(2)).to_rfc3339())
         .execute(&pool).await.unwrap();
@@ -1452,6 +1470,7 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let retry = run().await.unwrap();
     assert!(retry.loops_ran.artwork_cleanup());
     assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
+    assert!(!stale.exists());
 }
 
 #[tokio::test]

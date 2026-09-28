@@ -32,6 +32,8 @@ pub struct SchedulerOptions {
     pub application: Option<Arc<ersatzrs_app::ApplicationServices>>,
     /// Host-owned health runs shared with admin readers and refreshes.
     pub health: Option<ersatzrs_infra::health::HealthCheckCoordinator>,
+    /// Shared manual/hourly artwork cache maintenance.
+    pub artwork: Option<ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
     /// Shared activity registry used by the web host to distinguish accepted
@@ -70,6 +72,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         channel_guide_dir,
         application,
         health,
+        artwork,
         mut build_requests,
         build_activity,
         hls_sessions,
@@ -104,10 +107,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
             &locker,
             startup.schema_status,
             hls_sessions.clone(),
-            MaintenanceExecution {
-                cancelled: Some(&cancelled),
-                health: health.as_ref(),
-            },
+            maintenance_execution(&cancelled, health.as_ref(), artwork.as_ref()),
         )
         .await?;
         log_report(&report);
@@ -135,7 +135,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     &locker,
                     startup.schema_status.clone(),
                     hls_sessions.clone(),
-                    MaintenanceExecution { cancelled: Some(&cancelled), health: health.as_ref() },
+                    maintenance_execution(&cancelled, health.as_ref(), artwork.as_ref()),
                 )
                 .await
                 {
@@ -172,6 +172,18 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 }
             }
         }
+    }
+}
+
+fn maintenance_execution<'a>(
+    cancelled: &'a PlayoutBuildCancellation,
+    health: Option<&'a ersatzrs_infra::health::HealthCheckCoordinator>,
+    artwork: Option<&'a ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance>,
+) -> MaintenanceExecution<'a> {
+    MaintenanceExecution {
+        cancelled: Some(cancelled),
+        health,
+        artwork,
     }
 }
 

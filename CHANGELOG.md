@@ -51,6 +51,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Hourly and manual artwork cleanup remove unreferenced cached images and restore
+  missing cache entries from local image sources, updating all shared references.
+  Preserve original artwork, referenced blur images and uploaded watermarks/logos;
+  failed repairs remain eligible for the next pass.
+
 - Share health checks across page visits and scheduled maintenance, cache complete
   results for five minutes, and add a localized Refresh action with a no-JavaScript
   fallback. Leaving the page no longer cancels checks for other readers. Bound

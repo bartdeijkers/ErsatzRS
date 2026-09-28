@@ -64,9 +64,9 @@ next_steps = '''
 2026-09-28: UCU-08 is Complete. Rows116-135, all local window gates and
 terminal green CI 36453480304 at dfeaf6d0 satisfy acceptance. Browser reports
 confirm Chromium257/Firefox233 passes with no unexpected or flaky results.
-UCU-09 row136 is Port with focused/runtime-browser evidence in its milestone.
-Continue at row137; refresh upstream at the next run and append new tail rows.
-The current 180-row ledger has 44 pending rows. Preserve accepted architecture,
+UCU-09 rows136-137 are Port with focused/runtime-browser evidence in its milestone.
+Continue at row138; refresh upstream at the next run and append new tail rows.
+The current 180-row ledger has 43 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

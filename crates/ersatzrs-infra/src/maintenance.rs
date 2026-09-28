@@ -159,6 +159,9 @@ pub enum MaintenanceError {
     /// Cache cleanup failed.
     #[error(transparent)]
     Cache(#[from] CacheCleanupError),
+    /// Artwork cache pruning or restoration failed.
+    #[error(transparent)]
+    ArtworkCache(#[from] crate::artwork_cache_maintenance::ArtworkCacheError),
     /// Health check persistence failed.
     #[error(transparent)]
     Health(#[from] ersatzrs_core::health::HealthCheckError),
@@ -209,6 +212,7 @@ pub async fn run_maintenance_once(
 pub struct MaintenanceExecution<'a> {
     pub cancelled: Option<&'a PlayoutBuildCancellation>,
     pub health: Option<&'a crate::health::HealthCheckCoordinator>,
+    pub artwork: Option<&'a crate::artwork_cache_maintenance::ArtworkCacheMaintenance>,
 }
 
 /// Cancellation-aware variant of [`run_maintenance_once`].
@@ -224,7 +228,11 @@ pub async fn run_maintenance_once_cancellable(
     hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
     execution: MaintenanceExecution<'_>,
 ) -> Result<MaintenancePassReport> {
-    let MaintenanceExecution { cancelled, health } = execution;
+    let MaintenanceExecution {
+        cancelled,
+        health,
+        artwork,
+    } = execution;
     if cancelled.is_some_and(|check| check()) {
         return Err(SchedulingError::Cancelled.into());
     }
@@ -273,8 +281,11 @@ pub async fn run_maintenance_once_cancellable(
     }
 
     if loop_due(&pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
-        report.artwork_cleanup =
-            crate::artwork_cleanup::clean_orphaned_artwork(&pool, 100_000).await?;
+        report.artwork_cleanup = if let Some(artwork) = artwork {
+            artwork.run(100_000).await?.database
+        } else {
+            crate::artwork_cleanup::clean_orphaned_artwork(&pool, 100_000).await?
+        };
         report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
         record_loop_run(&pool, "artwork_cleanup", now).await?;
     }

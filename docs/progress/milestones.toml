@@ -11457,6 +11457,47 @@ media refresh, troubleshooting freshness and localized SSR fallback.
 Row136 is Port; its coherent code/ledger/pin checkpoint is ready. Continue at
 row137 with 44 pending rows. UCU-09 window gates, push and exact-SHA CI remain;
 no intermediate push/CI and no release.
+Row136 landed as 7517ae2a; pin/ledger/clean upstream HEAD agree at 3c41959f.
+Row137 audit refreshed origin/main to the same 8bda4411 tip and verified all
+180 ordered SHA/subject pairs. Full five-file 96cef081 diff and surrounding
+cache/cleanup/scanner methods are reviewed. Database orphan cleanup already
+exists; filesystem pruning/healing does not. Native scanner artwork references
+are absolute source paths, while HTTP also serves compatibility cache hashes.
+The source map records referenced/blur/watermark retention, local-source-only
+restoration, shared-path repointing and safe disposable-root acceptance.
+Row137 implementation and evidence remain pending; no verdict/pin move.
+Row137 now has one explicitly rooted filesystem service shared by manual and
+hourly maintenance. Paged reference snapshots retain artwork/blur/watermark
+files and originals; transactional final checks guard candidate deletions.
+Repair uses the upstream source-path/FileTime SHA-1 key, stages local image
+copies and repoints all shared rows only after every required kind is present.
+Dedicated native upload stores are not pruned. Pure database cleanup remains
+available for callers without a filesystem service. The 15 selected infra,
+health and hourly-maintenance tests pass (dc3ff77c-60f5-42b5-a557-bc18f02c6654;
+1282 unrelated tests filtered), including a reference published after the
+initial snapshot, paging beyond 1000 rows, new data-root creation, failed
+publication/retry, symlink retention and shared concurrent passes. The initial
+10 filesystem/database tests also passed before the reference-loading refinement.
+Web/manual/original-image/localization proof and final strict lint remain in
+progress; no row137 verdict, pin advance, push or CI yet.
+Row137 acceptance is now complete: the same 15 focused infra tests pass, and
+10 web tests pass (dcafc742-8833-4a3e-b5fe-a87e679b38f4; 760 unrelated tests
+filtered), proving HTTP queue-to-worker filesystem cleanup, admission/shutdown,
+registered-original disappearance/reappearance with unchanged mtime, path
+validation and health guidance across all supported languages. Strict all-target
+Clippy for infra/scheduler/web passes after a constructor annotation and shared
+maintenance-input helper; offline dependency license checking passes. SHA-1
+0.11 was already locked and is now a direct dependency solely for upstream
+cache-key compatibility. Substantive Codex review confirms one shared service,
+no native scanner cache clone path, portable kind/path handling, no pruning of
+native upload stores, safe tempfile publication and original/reference retention.
+Candidate unlink is synchronous while the write transaction is held so a
+cancelled filesystem future cannot unlink after releasing its reference check.
+Formatting, architecture lint, hydration lint (31 existing suppressions), and
+structured progress validation pass. Row137 is Port; the coherent
+code/ledger/pin checkpoint is ready. There are
+43 pending rows; continue at row138. UCU-09 window gates, push and terminal
+exact-SHA CI remain. No intermediate push/CI, FFmpeg build or release.
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.

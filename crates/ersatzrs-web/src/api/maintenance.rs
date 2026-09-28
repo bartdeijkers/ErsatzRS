@@ -96,8 +96,19 @@ mod tests {
             .unwrap();
         assert_eq!(before, 1);
         let shutdown = CancellationToken::new();
-        let worker = tokio::spawn(run_artwork_cleanup_worker(
+        let root = tempfile::tempdir().unwrap();
+        let cache = root.path().join("artwork/posters");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        let stale_file = cache.join("DEADBEEF");
+        tokio::fs::write(&stale_file, b"orphaned-cache")
+            .await
+            .unwrap();
+        let maintenance = ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance::new(
             pool.clone(),
+            root.path().to_owned(),
+        );
+        let worker = tokio::spawn(run_artwork_cleanup_worker(
+            maintenance,
             receiver,
             shutdown.clone(),
         ));
@@ -107,7 +118,7 @@ mod tests {
                     let remaining: i64 = sqlx::query_scalar(
                     r#"SELECT (SELECT COUNT(*) FROM "Actor") + (SELECT COUNT(*) FROM "Artwork")"#,
                 ).fetch_one(&pool).await.unwrap();
-                    if remaining == 0 {
+                    if remaining == 0 && !stale_file.exists() {
                         break;
                     }
                     tokio::task::yield_now().await;
