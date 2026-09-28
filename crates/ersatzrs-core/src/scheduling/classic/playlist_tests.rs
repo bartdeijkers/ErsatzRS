@@ -273,6 +273,89 @@ fn classic_playlist_refresh_restores_cycle_and_rejects_legacy_cycle_state() {
 }
 
 #[test]
+fn classic_marathon_without_grouping_matches_random_across_continue() {
+    let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 0, 0).unwrap();
+    let item = ProgramScheduleItem {
+        id: 1,
+        program_schedule_id: 1,
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        playback_order: PlaybackOrder::Marathon,
+        marathon_group_by: ersatzrs_domain::MarathonGroupBy::None,
+        playout_mode: PlayoutMode::Flood,
+        ..ProgramScheduleItem::default()
+    };
+    let data = SchedulingReferenceData {
+        classic_schedule_items: vec![item.clone()],
+        media_by_key: BTreeMap::from([(
+            item_key(&item),
+            (1..=4)
+                .map(|id| SchedulingMediaItem {
+                    preferred_audio_language_code: Some("nld".into()),
+                    preferred_subtitle_language_code: Some("eng".into()),
+                    ..SchedulingMediaItem::new(id, Duration::minutes(10))
+                })
+                .collect(),
+        )]),
+        ..SchedulingReferenceData::default()
+    };
+    let finish = start + Duration::hours(3);
+    let full = build(start, finish, data.clone(), None);
+    assert_eq!(full.added_items.len(), 18);
+    let mut random = data.clone();
+    random.classic_schedule_items[0].playback_order = PlaybackOrder::Random;
+    let expected = build(start, finish, random, None);
+    assert_eq!(full.added_items, expected.added_items);
+    assert_eq!(full.anchor, expected.anchor);
+    assert_eq!(
+        full.program_schedule_anchors,
+        expected.program_schedule_anchors
+    );
+
+    let split = start + Duration::minutes(70);
+    let first = build(start, split, data.clone(), None);
+    let mut resumed = data.clone();
+    resumed.existing_items = first.added_items.clone();
+    resumed.existing_program_schedule_anchors = first.program_schedule_anchors;
+    // Round-trip the production checkpoint as a fresh process would read it.
+    let anchor = serde_json::from_str(&serde_json::to_string(&first.anchor).unwrap()).unwrap();
+    let continued = build(split, finish, resumed, anchor);
+    assert_eq!(
+        continued.added_items,
+        full.added_items[first.added_items.len()..]
+    );
+    assert_eq!(continued.anchor, full.anchor);
+
+    let mut refreshed_data = data;
+    refreshed_data.existing_items = full.added_items.clone();
+    refreshed_data.existing_program_schedule_anchors = full.program_schedule_anchors;
+    refreshed_data.existing_classic_checkpoints =
+        serde_json::from_str(&serde_json::to_string(&full.classic_checkpoints).unwrap()).unwrap();
+    let refreshed = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 50,
+                seed: 12345,
+                schedule_kind: ersatzrs_domain::PlayoutScheduleKind::Classic,
+                anchor: full.anchor,
+                ..Playout::default()
+            },
+            start: split,
+            finish,
+            mode: PlayoutBuildMode::Refresh,
+            reference_data: refreshed_data,
+        })
+        .unwrap();
+    let seam = refreshed.retain_through.unwrap();
+    let expected = full
+        .added_items
+        .into_iter()
+        .filter(|item| item.start >= seam)
+        .collect::<Vec<_>>();
+    assert_eq!(refreshed.added_items, expected);
+}
+
+#[test]
 fn classic_marathon_groups_and_batches_preserve_continue() {
     use ersatzrs_domain::MarathonGroupBy;
     let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 0, 0).unwrap();

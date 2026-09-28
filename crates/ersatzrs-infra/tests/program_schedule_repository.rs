@@ -2,8 +2,8 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, ProgramScheduleRepository, ScheduleAdminForm,
-    ScheduleItemAdmin,
+    ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
+    ScheduleAdminForm, ScheduleItemAdmin,
 };
 use ersatzrs_core::scheduling::{SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset};
 use ersatzrs_domain::{
@@ -194,6 +194,23 @@ async fn program_schedule_repository_round_trips_alternates() {
     assert_eq!(alternates[0].days_of_month, vec![1, 15]);
     assert_eq!(alternates[0].months_of_year, vec![5, 12]);
     assert!(alternates[0].limit_to_date_range);
+
+    // Row145: rejection must roll back the DELETE performed inside the repository.
+    assert!(repos
+        .playout
+        .save_alternate_schedules_admin(10, &[])
+        .await
+        .is_err());
+    assert_eq!(
+        repos.program_schedule.list_alternates(1).await.unwrap(),
+        alternates
+    );
+    let default_schedule: i64 =
+        sqlx::query_scalar(r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = 10"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(default_schedule, 1);
 
     let row = sqlx::query(
         r#"SELECT "DaysOfWeek", "DaysOfMonth", "MonthsOfYear"

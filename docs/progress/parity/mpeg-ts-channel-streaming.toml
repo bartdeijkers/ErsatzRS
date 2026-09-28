@@ -72,3 +72,10 @@ description = 'An accelerated two-item provider proof showed explicit `mode=ts-l
 discovered  = '2026-08-17'
 evidence    = 'Original bounded provider proof reported EIO and Illegal seek after file 0; Hybrid crossed two items with 307,772 packets and zero faults. UCU-05 reproduced legacy EIO/ENOSYS using local synthetic media. Per-entry multiple_requests=1 fixes the isolated chunked HTTP fixture and yields a 20.497-second real-server legacy capture with 141,215 packets and zero transport faults. Focused concat tests and the reviewed snapshot pass (da26145b). Confirmation of the original provider case remains open.'
 resolved    = false
+
+[[debt]]
+id = 'ucu09-row145-external-json-consumption'
+description = 'External JSON editing and the no-op scheduler exist. A shared reader and guide projection are implemented locally, but native/HLS/Next playback still require transient media consumption, start-time validation and Plex precondition diagnostics.'
+discovered = '2026-09-29'
+resolved = false
+evidence = 'Row145 source map in plans/upstream-catch-up.md records complete upstream 4c3683ae audit, existing empty-alternate validation and missing external runtime boundary. UCU-09 milestone evidence records the bounded runtime observation and confirms the three persisted-only consumers by source inspection. Next action is complete bounded schedule consumption and success/error acceptance. Baseline remains row144; no deferral is approved.'

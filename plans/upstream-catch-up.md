@@ -117,6 +117,39 @@ selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
 
+## Row 145 source map — playout validation and diagnostics (pending)
+
+- Complete upstream `4c3683ae` changes four behavior paths: explicit invalid
+  external-JSON start-time handling during channel refresh and item lookup;
+  distinct missing Plex server/active connection/token diagnostics; rejection
+  of empty alternate schedules; and a warning on marathon-to-random fallback.
+- Existing coverage: `ersatzrs-app::commands::save_playout_alternate_schedules`
+  rejects empty items before repository mutation/queue work. The repository
+  also requires a default schedule inside its write transaction.
+- Initial source audit identified a wider external-JSON gap: the editor saved
+  `ScheduleFile` and `ExternalJsonSchedulingEngine` deliberately does no work,
+  but no external channel/program JSON parser or equivalent upstream
+  `ExternalJsonPlayoutItemProvider` consumer was present in the Rust tree.
+  Native `load_active_media_path`, Next `schedule::read_locked` and XMLTV
+  `load_guide_items` selected persisted items. The bounded runtime observation and
+  its limitations are recorded in UCU-09 milestone evidence.
+- Upstream `MarathonHelper.GetEnumerator` returns None for an unsupported
+  grouping mode, not for an empty valid group. The local fix normalizes only
+  `MarathonGroupBy::None` to Random in the build-local schedule copy and logs the
+  upstream warning. Valid marathon grouping is unchanged.
+- The shared `ersatzrs-infra::external_json` reader and XMLTV consumer are now
+  implemented. Milestone evidence owns focused test results; native playback,
+  HLS worker and Next source preparation still need the transient media adapter.
+- Next action: trace and complete external schedule consumption through the
+  existing playback/guide boundaries, including bounded file reads, invalid
+  start-time handling and safe Plex precondition diagnostics; preserve provider
+  credentials and subtitle/audio selection. Reuse the existing probe-to-source
+  metadata converters rather than creating persisted media for temporary JSON
+  programmes. Require successful and invalid-schedule
+  runtime proof, empty-alternate mutation protection and focused regressions.
+- No row verdict or pin advance yet. The external runtime gap is recorded in
+  MPEG-TS channel streaming debt and must be accepted before this row lands.
+
 ## Row 144 source map — Next optimization release notes (N/A)
 
 - Complete upstream `b30d9670` diff adds only two CHANGELOG lines: downscale

@@ -447,8 +447,19 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         }
 
         items.sort_by_key(|item| (item.sort_order, item.id));
-        for item in &items {
+        for item in &mut items {
             if item.playback_order == PlaybackOrder::Marathon {
+                // MarathonHelper.GetEnumerator returns None for an unsupported
+                // grouping mode; PlayoutBuilder then uses Random, not an empty
+                // playlist. Change only this build's copy of the schedule item.
+                if item.marathon_group_by == ersatzrs_domain::MarathonGroupBy::None {
+                    tracing::warn!(
+                        schedule_item_id = item.id,
+                        "Unable to build marathon enumerator; falling back to random"
+                    );
+                    item.playback_order = PlaybackOrder::Random;
+                    continue;
+                }
                 let key = item_key(item);
                 let media = request
                     .reference_data

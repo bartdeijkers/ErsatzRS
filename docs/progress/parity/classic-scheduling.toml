@@ -200,3 +200,10 @@ description = 'UCU-08 row 123 review found that Classic playlist children were s
 discovered  = '2026-09-27'
 evidence    = 'The Continue oracle covers chronological/shuffled children and parent groups at four split positions, preserving complete generated items and language settings. All 228 scheduling tests, 55 affected repository tests and strict affected Clippy pass; UCU-08 row 123 source map records review and SQLite evidence.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-row145-marathon-fallback'
+description = 'MarathonGroupBy::None selected an empty playlist instead of the upstream Random fallback.'
+discovered = '2026-09-29'
+evidence = 'The build-local schedule copy now uses Random and emits the upstream warning. All 94 Classic tests pass; the focused regression also proves serialized Continue and dated Refresh checkpoints across midnight. UCU-09 owns integrated acceptance.'
+resolved = true

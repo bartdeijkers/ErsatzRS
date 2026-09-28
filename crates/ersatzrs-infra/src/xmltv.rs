@@ -70,6 +70,7 @@ async fn load_guide_items(
            JOIN "PlayoutItem" pi ON pi."PlayoutId" = p."Id"
            WHERE c."IsEnabled" = 1
              AND c."ShowInEpg" = 1
+             AND p."ScheduleKind" NOT IN (20, 'ExternalJson')
              AND pi."Start" < ?
              AND pi."Finish" > ?
            ORDER BY c."Number", pi."GuideStart", pi."GuideFinish", pi."GuideGroup", pi."Start", pi."Id""#,
@@ -166,6 +167,15 @@ async fn load_guide_items(
         });
     }
 
+    items.extend(crate::external_json::guide::load_items(pool, start, finish).await?);
+    items.sort_by(|left, right| {
+        left.channel_number
+            .cmp(&right.channel_number)
+            .then(left.guide_start.cmp(&right.guide_start))
+            .then(left.guide_finish.cmp(&right.guide_finish))
+            .then(left.guide_group.cmp(&right.guide_group))
+            .then(left.start.cmp(&right.start))
+    });
     Ok(items)
 }
 

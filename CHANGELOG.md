@@ -51,6 +51,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restore random fallback with an explicit warning when a Classic marathon has
+  no grouping mode, preserving normal Random continuation and track preferences.
+- Read external JSON programme metadata directly for XMLTV, including mirror
+  offsets and minimum guide duration, with explicit invalid-start-time errors.
+
 - Refresh unchanged local PQ/HLG media once so stored HDR/Dolby Vision metadata
   is populated, and expose Dolby Vision profile and HDR10 metadata presence in
   Media Info JSON while preserving non-video field omission.

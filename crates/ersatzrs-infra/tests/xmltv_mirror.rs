@@ -43,6 +43,101 @@ async fn fixture() -> ersatzrs_infra::db::DbPool {
 }
 
 #[tokio::test]
+async fn external_json_guide_reads_live_timeline_without_persisted_items() {
+    use ersatzrs_core::xmltv::{IconSizeHint, XmltvItemKind};
+
+    let pool = fixture().await;
+    let now = common::fixed_time();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("external.json");
+    let document = serde_json::json!({
+        "startTime": now.to_rfc3339(),
+        "guideMinimumDurationSeconds": 30,
+        "programs": [
+            {"type":"episode","title":"Episode title","showTitle":"Show title",
+             "season":2,"episode":3,"duration":60_000,"icon":"https://example.invalid/show.png"},
+            {"title":"Short filler","duration":5_000},
+            {"type":"movie","title":"Movie title","year":2025,"duration":120_000}
+        ]
+    });
+    std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+    sqlx::query(r#"UPDATE "Playout" SET "ScheduleKind"=20, "ScheduleFile"=? WHERE "Id"=20"#)
+        .bind(path.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let programmes = load_xmltv_programmes(&pool, now, now + Duration::hours(2))
+        .await
+        .unwrap();
+    assert_eq!(programmes.len(), 4);
+    for (number, offset) in [("3", Duration::zero()), ("9", Duration::hours(1))] {
+        let channel = programmes
+            .iter()
+            .filter(|item| item.channel_number == number)
+            .collect::<Vec<_>>();
+        assert_eq!(channel.len(), 2);
+        let episode = channel[0];
+        assert_eq!(episode.start, now + offset);
+        assert_eq!(episode.stop, now + offset + Duration::seconds(60));
+        assert_eq!(episode.title, "Show title");
+        assert_eq!(episode.content.kind, XmltvItemKind::Episode);
+        assert_eq!(episode.content.sub_title.as_deref(), Some("Episode title"));
+        assert_eq!(episode.content.season_number, Some(2));
+        assert_eq!(episode.content.episode_number, Some(3));
+        assert_eq!(episode.content.icon_size_hint, IconSizeHint::Thumbnail);
+        assert_eq!(
+            episode.content.icon_artwork.as_ref().unwrap().path,
+            "https://example.invalid/show.png"
+        );
+        let movie = channel[1];
+        assert_eq!(movie.start, now + offset + Duration::seconds(65));
+        assert_eq!(movie.stop, now + offset + Duration::seconds(185));
+        assert_eq!(movie.title, "Movie title");
+        assert_eq!(movie.content.year, Some(2025));
+    }
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+
+    // A previous schedule's persisted rows must not leak into the external guide.
+    let mut stale = common::playout_item(30, 20, 1);
+    stale.start = now;
+    stale.finish = now + Duration::minutes(10);
+    make_repositories(pool.clone())
+        .playout
+        .upsert_item(&stale)
+        .await
+        .unwrap();
+    assert_eq!(
+        load_xmltv_programmes(&pool, now, now + Duration::hours(2))
+            .await
+            .unwrap(),
+        programmes
+    );
+
+    std::fs::write(
+        &path,
+        br#"{"startTime":"private-invalid-input","programs":[]}"#,
+    )
+    .unwrap();
+    let error = load_xmltv_programmes(&pool, now, now + Duration::hours(2))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("invalid start time"));
+    assert!(!error.contains("private-invalid-input"));
+    assert!(!error.contains(path.to_str().unwrap()));
+    std::fs::remove_file(&path).unwrap();
+    assert!(load_xmltv_programmes(&pool, now, now + Duration::hours(2))
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
 async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
     let pool = fixture().await;
     let repos = make_repositories(pool.clone());

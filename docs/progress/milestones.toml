@@ -11416,6 +11416,35 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row145 implementation remains open. Empty alternate schedules are already
+rejected at application and transactional repository boundaries. The production
+SQLite regression now proves empty-item rejection preserves existing alternate
+rows and the default schedule (nextest 3116d968-12d5-46b5-853c-7d02fe3922d0).
+The shared external_json reader validates startTime, builds finite millisecond timelines
+and bounds file reads. XMLTV consumes transient programme metadata directly,
+including guide minimum duration, source/mirror offsets, and invalid-time errors;
+stale persisted items are excluded. Three reader tests plus the production
+SQLite guide regression pass (nextest 1644c950-18cb-4a3a-9874-6985101e541e).
+All 25 XMLTV-filtered tests pass. HTTP endpoint/runtime acceptance is still due.
+
+Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
+still require transient media integration; owning streaming debt
+ucu09-row145-external-json-consumption remains open. The earlier disposable
+kind20 playback probe reached healthy startup on the row143 matched host with
+verified v2.0.3, but its segmenter request timed out after 15 seconds without a
+validation diagnostic. The owned host shut down cleanly; this timeout is not
+causal proof and predates the implementation.
+
+MarathonHelper returns None only for unsupported grouping. Classic now warns and
+normalizes MarathonGroupBy::None to Random in the build-local schedule copy,
+preserving stored settings and existing valid groups. All 94 Classic tests and
+strict core Clippy pass; the new regression compares items/anchors to ordinary
+Random and continuation across midnight. The extended serialized Refresh
+checkpoint regression also passes
+(nextest 125c67f0-1f25-4f74-a07c-3e341c634db5); strict core/infra all-target
+Clippy passes after fixing two doc-markdown findings. No row verdict, pin
+advance, push or unapproved deferral.
+
 Row144 (b30d9670) is N/A: two release-note lines only. Exact packaged Next
 4cc93e4 carries downscale-before-tonemap ordering (except Vulkan/no-downscale)
 and guarded QSV fusion. No legacy source/build pin change; existing runtime
