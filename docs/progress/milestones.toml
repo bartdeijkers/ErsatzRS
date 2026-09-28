@@ -11498,6 +11498,24 @@ structured progress validation pass. Row137 is Port; the coherent
 code/ledger/pin checkpoint is ready. There are
 43 pending rows; continue at row138. UCU-09 window gates, push and terminal
 exact-SHA CI remain. No intermediate push/CI, FFmpeg build or release.
+Row137 landed as d39b7b93; its pin/ledger/clean reference agreed at 96cef081.
+Row138 refresh retains 8bda4411 and verifies all 180 ordered SHA/subject pairs.
+Full seven-file 7e141a13 diff reviewed: static hash APIs replace shared/local
+.NET hash instances, image hashing delegates to the existing filesystem helper,
+and inputs/algorithms/casing are unchanged. The source map covers local-file and
+artwork hashes, both folder ETags, collection/Plex fingerprints, callback tickets,
+and the test-only transcoding hash helper. Native digest state is per-call;
+folder/artwork use one-shot digest functions, collection fingerprints own their
+rolling state, callback tickets construct a new digest, and FFmpeg acceptance
+uses textual snapshots. Existing native ETags and accepted capability/listener
+contracts stay intact. Three selected regressions pass at d39b7b93
+(cdb6e95a-8fd6-42f6-b893-c097c9ce2cfa; 1262 unrelated tests filtered): upstream
+artwork FileTime/SHA-1 fixture, MD5 subtitle-path encoding, and callback binding,
+tampering and prior-host rejection. Reuse row137 shared-pass/focused lint proof
+and unchanged UCU-08 window acceptance. No Rust or runtime change is required.
+Row138 is Covered; the docs/ledger/pin checkpoint is ready. Continue at row139
+with 42 pending rows. UCU-09 window closeout and terminal exact-SHA CI remain;
+no intermediate push/CI and no release.
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.

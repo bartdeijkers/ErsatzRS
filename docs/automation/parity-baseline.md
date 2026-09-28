@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `96cef0814d1fa0078a17106c35ad6ef2176b938f` |
-| **Commit subject** | `fix: heal artwork cache (#3007)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/96cef0814d1fa0078a17106c35ad6ef2176b938f |
+| **Pinned commit** | `7e141a13b5f3697c9ccf5b99c0a37f5d18a3435e` |
+| **Commit subject** | `fix: use static hash functions (#3008)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7e141a13b5f3697c9ccf5b99c0a37f5d18a3435e |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

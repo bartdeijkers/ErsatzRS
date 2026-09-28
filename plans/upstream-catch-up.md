@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **43 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **42 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **137**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **138**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Continue at row 138. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Continue at row 139. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -61,6 +61,35 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+
+## Row 138 source map — static hash functions (Covered)
+
+- Upstream `7e141a13`: full seven-file diff reviewed. Hash inputs, algorithms
+  and hex casing stay unchanged; hashing uses .NET static helpers and image
+  file hashing delegates to the existing local filesystem helper. The shared
+  SHA-1/MD5 objects in ImageCache/FolderEtag are removed.
+- UI, validation, persistence shape and FFmpeg arguments: no upstream change.
+- `ImageCache` / `LocalFileSystem.GetHash`: native artwork cache identity uses
+  one-shot `Sha1::digest` in `artwork_cache_maintenance::cache_key`; native
+  uploads retain their existing IDs. Native file/content hash helpers construct
+  their digest locally. There is no shared mutable digest instance to replace.
+- `FolderEtag`: scanner `folder_etag::md5_lower_hex` uses one-shot `Md5::digest`;
+  its sorted paths/timestamps, subfolder traversal and lowercase encoding remain.
+- `CollectionEtag`: `core::scheduling::block::collection_etag_for_items` owns its
+  rolling fingerprint state within each call, including audio/subtitle overrides.
+  `PlexEtag`: provider ETags and `plex::sha256_hex` have no shared mutable hash
+  state. This row preserves those existing native fingerprints; the upstream
+  refactor introduces no new byte-format requirement.
+- `InternalUrlSigner`: Next `MediaRelay::credits_ticket` constructs a fresh
+  SHA-256 digest per call over its immutable process capability and binding.
+  Existing capability/listener decisions remain under ADRs 0095/0102; no new
+  authentication decision is introduced by this hash-allocation refactor.
+- `TranscodingTests`: native pipeline acceptance uses textual insta snapshots;
+  the upstream test-only SHA-256 helper rewrite changes no generated command.
+- Verification: three existing hash/ticket regressions pass; reuse row137's
+  shared-pass evidence and unchanged UCU-08 window acceptance. Source review
+  confirms no shared mutable digest in these paths. No runtime edit, new
+  regression test or FFmpeg rebuild is needed. UCU-09 owns the exact evidence.
 
 ## Row 137 source map — artwork-cache healing (Port)
 
@@ -3815,7 +3844,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream release bookkeeping` | ucu-08; complete diff only changes upstream changelog release heading/date/links; no ErsatzRS release or behavior change. Window gates remain. |
 | 136 | `3c41959f` | fix: health check improvements (#3006) | Port | ersatzrs-healthcheck | `fix(health): share bounded health runs and cache results` | ucu-09; one host-owned run survives reader cancellation; five-minute cache, fifteen-minute check deadline, atomic publication, explicit localized refresh and no-JS fallback. 113 infra/maintenance and four web tests pass; strict affected lint and four Chromium/Firefox cases pass. |
 | 137 | `96cef081` | fix: heal artwork cache (#3007) | Port | ersatzrs-infra | `fix(artwork): heal cached images and prune unused files` | ucu-09; shared manual/hourly cache service, retained originals/blur/watermark references, local image restoration and shared-path repointing. Native direct-source images recover with unchanged mtime. 25 focused tests, affected all-target Clippy and license check pass. |
-| 138 | `7e141a13` | fix: use static hash functions (#3008) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: C# static-hash refactor; native hashing is already stateless. |
+| 138 | `7e141a13` | fix: use static hash functions (#3008) | Covered | upstream-baseline-catch-up | `docs(parity): reconcile static hash functions` | ucu-09; complete seven-file audit: native digests and rolling fingerprints are call-local; existing formats and accepted callback protocol preserved. Three hash/ticket regressions pass; row137 and UCU-08 evidence reused. |
 | 139 | `2989faeb` | fix: sessions api with next engine (#3009) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: report Next sessions through the native sessions API once Next playback lands. |
 | 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: workflow and changelog only; QSV padding lives in their custom FFmpeg build per ADR 0008/0063. Check native QSV padding as separate debt. |
 | 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog and Next build trigger. |
