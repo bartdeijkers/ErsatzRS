@@ -610,6 +610,10 @@ Version 1.0.36-beta failed its isolation gate and was not published.
 
 ### Added
 
+- Add shared track selection for transient external programmes, preserving
+  language preferences, custom YAML rules, JavaScript audio metadata and
+  engine-specific subtitle eligibility without requiring library records.
+
 - Add a "New season each calendar year" option to add-on list episode
   auto-detection, numbering each year's items as one season in first-aired
   order (for example, one season per year of a web series).

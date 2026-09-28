@@ -85,6 +85,36 @@ pub struct ResolvedExternalMedia {
     pub plex_metadata: Option<Box<PlexMediaItem>>,
 }
 
+impl ResolvedExternalMedia {
+    /// Original candidates for built-in, YAML and JavaScript track selection.
+    #[must_use]
+    pub fn tracks(&self) -> crate::playback::transient::TransientPlaybackTracks {
+        crate::playback::transient::TransientPlaybackTracks::from_streams(&self.probe.streams)
+    }
+
+    /// Match upstream's local episode projection and remote movie/episode shape.
+    #[must_use]
+    pub fn audio_metadata(&self) -> crate::audio_script::transient::AudioMetadata<'_> {
+        use crate::audio_script::transient::AudioMetadata;
+        let program = &self.occurrence.program;
+        let metadata = self.plex_metadata.as_deref();
+        if let Some(movie) = metadata.filter(|_| program.kind.as_deref() != Some("episode")) {
+            AudioMetadata::Movie {
+                title: Some(&movie.title),
+                guids: &movie.guids,
+            }
+        } else {
+            AudioMetadata::Episode {
+                show_title: program.show_title.as_deref(),
+                show_guids: &[],
+                season: metadata.map_or(program.season, |item| item.season_number),
+                episode: metadata.map_or(program.episode, |item| item.episode_number),
+                guids: metadata.map_or(&[], |item| item.guids.as_slice()),
+            }
+        }
+    }
+}
+
 /// Select the current external programme without touching persisted timeline rows.
 ///
 /// # Errors

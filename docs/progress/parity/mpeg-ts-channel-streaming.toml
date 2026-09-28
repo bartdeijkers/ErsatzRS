@@ -75,7 +75,7 @@ resolved    = false
 
 [[debt]]
 id = 'ucu09-row145-external-json-consumption'
-description = 'External JSON editing and the no-op scheduler exist. A shared reader, guide projection, transient local/Plex resolver and private media-part relay are implemented locally. Native/HLS/Next consumers still require integration and end-to-end acceptance.'
+description = 'External JSON editing and the no-op scheduler exist. A shared reader, guide projection, transient local/Plex resolver, private media-part relay and transient track selection are implemented locally. Native/HLS/Next consumers still require integration and end-to-end acceptance.'
 discovered = '2026-09-29'
 resolved = false
 evidence = 'Row145 source map in plans/upstream-catch-up.md records complete upstream 4c3683ae audit, existing empty-alternate validation and missing external runtime boundary. UCU-09 milestone evidence records the bounded runtime observation and confirms the three persisted-only consumers by source inspection. Resolver tests include the real v2.0.3 local probe; relay tests cover ticket binding, range responses and current credentials. Next action is native/HLS/Next consumer integration, followed by success/error runtime acceptance. Baseline remains row144; no deferral is approved.'

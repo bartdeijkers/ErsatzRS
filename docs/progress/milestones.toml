@@ -11462,6 +11462,20 @@ without a ticket on the private listener (nextest
 after correcting test variable names, with no new lint exemptions. No consumer
 calls the new relay yet.
 
+Transient programme metadata now feeds shared built-in/YAML track selection and
+the existing bounded JavaScript movie/episode callbacks without media-ID queries.
+Original codecs, language aliases, default/forced flags, external subtitle paths,
+GUID formatting and native/Next subtitle eligibility are retained. Ordinary
+transient candidates do not inherit troubleshooting's forced-selection override.
+Stored and transient selection regressions pass: 90 tests (nextest
+8c39252e-abae-4d6c-9faa-d1b0d35d1aa6). A new size-limit test caught an omitted
+script-size check; the adapter now applies the existing explicit limit and the
+same regressions pass. All six external resolver tests pass, none skipped,
+including real checksum-verified v2.0.3 ffprobe metadata and mock Plex selection
+with empty media tables (nextest cd0ff241-1a1b-4a26-bb8e-6f99437f26bb).
+This is shared selection proof, not endpoint playback acceptance. Strict infra
+all-target Clippy passes with no new exemptions after replacing wildcard imports.
+
 Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
 still require transient media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable

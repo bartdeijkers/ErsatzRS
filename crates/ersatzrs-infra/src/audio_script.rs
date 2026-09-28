@@ -1,5 +1,8 @@
 //! Bounded, provider-independent upstream JavaScript audio callbacks (ADR 0096).
 
+#[path = "audio_script_transient.rs"]
+pub mod transient;
+
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, LazyLock,

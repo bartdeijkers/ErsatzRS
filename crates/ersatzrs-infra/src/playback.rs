@@ -1,5 +1,8 @@
-//! Shared helpers for building `FFmpeg` playback pipelines from persisted media
-//! metadata, used by both the MPEG-TS and HLS transcode paths.
+//! Shared helpers for building `FFmpeg` playback pipelines from persisted and
+//! transient media metadata, used by the MPEG-TS, HLS and Next paths.
+
+#[path = "playback_transient.rs"]
+pub mod transient;
 use crate::repositories::SqlxResultExt as _;
 
 use std::collections::HashSet;
@@ -1363,6 +1366,37 @@ async fn select_custom_playback_streams_inner(
     engine: SubtitleSelectionEngine,
     context: CustomSelectionContext<'_>,
 ) -> Result<Option<CustomStreamSelection>> {
+    let Some(selector) = load_custom_stream_selector(channel, context.diagnostics).await? else {
+        return Ok(None);
+    };
+
+    let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
+    let mut subtitles = if let Some(candidates) = context.subtitles {
+        candidates.to_vec()
+    } else if engine == SubtitleSelectionEngine::Next {
+        load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
+    } else {
+        load_subtitles_for_media_item(pool, media_item_id).await?
+    };
+    let media_server = engine == SubtitleSelectionEngine::Next
+        && is_media_server_subtitle_item(pool, media_item_id).await?;
+    transient::retain_playable_subtitles(&mut subtitles, streaming_mode, engine, media_server);
+
+    Ok(select_custom_stream_candidates(
+        selector,
+        &audio_streams,
+        &mut subtitles,
+        context.subtitles.is_some(),
+        channel,
+        content_start_time,
+        context.diagnostics,
+    ))
+}
+
+async fn load_custom_stream_selector(
+    channel: &Channel,
+    diagnostics: Option<&crate::next_engine::diagnostics::SelectionLog>,
+) -> Result<Option<StreamSelector>> {
     let Some(selector) = channel
         .stream_selector
         .as_deref()
@@ -1379,7 +1413,7 @@ async fn select_custom_playback_streams_inner(
     let yaml = match tokio::fs::read_to_string(&selector_path).await {
         Ok(yaml) => yaml,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(log) = context.diagnostics {
+            if let Some(log) = diagnostics {
                 log.debug("Custom selector file is absent; using normal stream preferences");
             }
             return Ok(None);
@@ -1391,49 +1425,12 @@ async fn select_custom_playback_streams_inner(
             });
         }
     };
-    let selector: StreamSelector =
-        serde_yaml::from_str(&yaml).map_err(|error| RepositoryError::Decode {
+    serde_yaml::from_str(&yaml)
+        .map(Some)
+        .map_err(|error| RepositoryError::Decode {
             kind: "channel stream selector",
             value: error.to_string(),
-        })?;
-
-    let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = if let Some(candidates) = context.subtitles {
-        candidates.to_vec()
-    } else if engine == SubtitleSelectionEngine::Next {
-        load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
-    } else {
-        load_subtitles_for_media_item(pool, media_item_id).await?
-    };
-    if engine == SubtitleSelectionEngine::Native
-        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
-    {
-        subtitles.retain(|subtitle| {
-            if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
-                return true;
-            }
-            subtitle.is_extracted
-                && subtitle
-                    .path
-                    .as_deref()
-                    .is_some_and(|path| !path.trim().is_empty())
-        });
-    }
-
-    if engine == SubtitleSelectionEngine::Next {
-        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
-        subtitles.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
-    }
-
-    Ok(select_custom_stream_candidates(
-        selector,
-        &audio_streams,
-        &mut subtitles,
-        context.subtitles.is_some(),
-        channel,
-        content_start_time,
-        context.diagnostics,
-    ))
+        })
 }
 
 fn select_custom_stream_candidates(
@@ -1772,8 +1769,10 @@ fn content_matches_condition(
 
 /// Engine-specific subtitle eligibility; native extraction restrictions stay local.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum SubtitleSelectionEngine {
+pub enum SubtitleSelectionEngine {
+    /// Native `FFmpeg` playback, including direct and transcoded HLS.
     Native,
+    /// The optional Next runtime, which reads embedded text directly.
     Next,
 }
 
@@ -1825,28 +1824,24 @@ async fn select_playback_subtitle_inner(
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
 
-    if engine == SubtitleSelectionEngine::Native
-        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
-    {
-        candidates.retain(|subtitle| {
-            if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
-                return true;
-            }
-            subtitle.is_extracted
-                && subtitle
-                    .path
-                    .as_deref()
-                    .is_some_and(|path| !path.trim().is_empty())
-        });
-    }
+    let media_server = engine == SubtitleSelectionEngine::Next
+        && is_media_server_subtitle_item(pool, media_item_id).await?;
+    transient::retain_playable_subtitles(&mut candidates, streaming_mode, engine, media_server);
 
-    if engine == SubtitleSelectionEngine::Next {
-        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
-        candidates.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
-    }
+    Ok(select_subtitle_preferences(
+        &candidates,
+        preferred_languages,
+        subtitle_mode,
+    ))
+}
 
+fn select_subtitle_preferences(
+    candidates: &[PlaybackSubtitle],
+    preferred_languages: &[String],
+    subtitle_mode: ChannelSubtitleMode,
+) -> Option<PlaybackSubtitle> {
     if preferred_languages.is_empty() {
-        return Ok(select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned());
+        return select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned();
     }
 
     for language in preferred_languages {
@@ -1858,11 +1853,11 @@ async fn select_playback_subtitle_inner(
             subtitle_mode,
         );
         if let Some(selected) = selected {
-            return Ok(Some(selected.clone()));
+            return Some(selected.clone());
         }
     }
 
-    Ok(None)
+    None
 }
 
 /// Resolve an exact persisted subtitle stream without preference fallback.

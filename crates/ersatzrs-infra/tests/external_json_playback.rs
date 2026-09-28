@@ -241,6 +241,30 @@ async fn external_json_plex_metadata_preserves_streams_without_library_writes() 
         .any(|stream| stream.kind == MediaStreamKind::Subtitle
             && stream.forced
             && stream.language.as_deref() == Some("eng")));
+    let selected = media
+        .tracks()
+        .select_subtitle(
+            &pool,
+            &["en".into()],
+            ersatzrs_domain::ChannelSubtitleMode::Forced,
+            ersatzrs_infra::playback::transient::TrackSelectionPolicy {
+                mode: ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter,
+                engine: ersatzrs_infra::playback::SubtitleSelectionEngine::Next,
+                media_server: true,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(selected.stream_index, 2);
+    assert!(selected.forced);
+    assert!(matches!(
+        media.audio_metadata(),
+        ersatzrs_infra::audio_script::transient::AudioMetadata::Movie {
+            title: Some("Plex programme"),
+            ..
+        }
+    ));
     assert_eq!(media.plex_metadata.unwrap().title, "Plex programme");
     for query in [
         r#"SELECT COUNT(*) FROM "MediaItem""#,
@@ -348,6 +372,9 @@ async fn external_json_local_probe_prefers_mapped_file_without_plex_credentials(
         .bind(directory.path().to_str().unwrap()).execute(&pool).await.unwrap();
     let mut item = occurrence();
     item.program.file = Some("/provider/external/clip.mkv".into());
+    item.program.show_title = Some("Fixture show".into());
+    item.program.season = 2;
+    item.program.episode = 3;
     let (_sender, cancellation) = tokio::sync::oneshot::channel();
     let media = playback::resolve(
         &pool,
@@ -358,6 +385,16 @@ async fn external_json_local_probe_prefers_mapped_file_without_plex_credentials(
     )
     .await
     .unwrap();
+    assert!(matches!(
+        media.audio_metadata(),
+        ersatzrs_infra::audio_script::transient::AudioMetadata::Episode {
+            show_title: Some("Fixture show"),
+            season: 2,
+            episode: 3,
+            guids: [],
+            show_guids: [],
+        }
+    ));
     let ExternalMediaSource::Local(path) = media.source else {
         panic!("local file should win")
     };
