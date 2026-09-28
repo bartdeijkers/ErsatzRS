@@ -1456,6 +1456,8 @@ mod tests {
 
     #[tokio::test]
     async fn media_item_info_json_supports_other_videos() {
+        use ersatzrs_core::repositories::AdminMediaRepository;
+
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
             "sqlite:{}",
@@ -1487,6 +1489,33 @@ mod tests {
         assert_eq!(subtitle_stream["IsExtracted"], true);
         assert_eq!(subtitle_stream["FileName"], "/cache/other.srt");
         assert_eq!(value["Chapters"][0]["Title"], "Opening");
+        assert_eq!(value["Streams"][0]["HasHdr10Metadata"], false);
+        assert!(value["Streams"][0].get("DvProfile").is_none());
+        assert!(value["Streams"][1].get("HasHdr10Metadata").is_none());
+
+        // Exercise the production repository-to-JSON path, including non-video
+        // rows with misleading HDR fields and explicit SDR false values.
+        let repository = ersatzrs_infra::repositories::SqliteAdminMediaRepository(pool.clone());
+        for light in [None, Some(1000_i64)] {
+            sqlx::query(r#"UPDATE "MediaStream" SET "DolbyVisionProfile" = 8, "MaxCll" = ?"#)
+                .bind(light)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let info = repository
+                .get_media_item_info_admin(10)
+                .await
+                .unwrap()
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&media_item_info_json_from_admin(info).unwrap()).unwrap();
+            assert_eq!(value["Streams"][0]["DvProfile"], 8);
+            assert_eq!(value["Streams"][0]["HasHdr10Metadata"], light.is_some());
+            for stream in value["Streams"].as_array().unwrap().iter().skip(1) {
+                assert!(stream.get("DvProfile").is_none());
+                assert!(stream.get("HasHdr10Metadata").is_none());
+            }
+        }
     }
 
     #[tokio::test]

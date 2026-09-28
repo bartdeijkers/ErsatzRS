@@ -136,6 +136,10 @@ DELETE FROM "Artwork" WHERE "ArtistMetadataId" = ${seed.artistMetadataId}
    OR "MusicVideoMetadataId" = ${seed.musicVideoMetadataId}
    OR "SongMetadataId" = ${seed.songMetadataId}
    OR "ImageMetadataId" = ${seed.imageMetadataId};
+DELETE FROM "MediaStream" WHERE "MediaVersionId" IN (
+  SELECT "Id" FROM "MediaVersion" WHERE "MusicVideoId" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId})
+);
+DELETE FROM "MediaVersion" WHERE "MusicVideoId" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId});
 DELETE FROM "MusicVideoMetadata" WHERE "Id" IN (${seed.musicVideoMetadataId}, ${seed.secondMusicVideoMetadataId});
 DELETE FROM "MusicVideo" WHERE "Id" IN (${seed.musicVideoId}, ${seed.secondMusicVideoId});
 DELETE FROM "SongMetadata" WHERE "Id" = ${seed.songMetadataId};
@@ -502,6 +506,14 @@ ORDER BY "Id" DESC LIMIT 1;
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedMediaBrowserActions(testInfo);
+    sqlite(`
+INSERT INTO "MediaVersion" ("Id", "MusicVideoId", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind")
+VALUES (${seed.musicVideoId}, ${seed.musicVideoId}, '2026-09-28', '2026-09-28', '00:00:01', 64, 64, 0);
+INSERT INTO "MediaStream" ("Index", "MediaVersionId", "MediaStreamKind", "Channels", "Default", "Forced", "DolbyVisionProfile", "MaxCll")
+VALUES (0, ${seed.musicVideoId}, 1, 0, 1, 0, 8, 1000),
+       (1, ${seed.musicVideoId}, 2, 2, 1, 0, NULL, NULL);
+`);
+
     await forceEnglish(page);
 
     await gotoHydrated(page, `/media/music/videos?query=${encodeURIComponent(seed.musicVideoTitle)}`);
@@ -533,6 +545,12 @@ ORDER BY "Id" DESC LIMIT 1;
     await expect(mediaInfoHeading).toBeVisible();
     const mediaInfo = mediaInfoHeading.locator('..');
     await expect(mediaInfo.locator('pre')).toContainText(seed.musicVideoTitle);
+    const infoJson = JSON.parse(await mediaInfo.locator('pre').innerText());
+    expect(infoJson.Streams[0].DvProfile).toBe(8);
+    expect(infoJson.Streams[0].HasHdr10Metadata).toBe(true);
+    expect(infoJson.Streams[1]).not.toHaveProperty('DvProfile');
+    expect(infoJson.Streams[1]).not.toHaveProperty('HasHdr10Metadata');
+
     await mediaInfo.getByRole('button', { name: /^close$/i }).click();
     await expect(page.getByRole('link', { name: /^troubleshoot playback$/i })).toHaveAttribute(
       'href',

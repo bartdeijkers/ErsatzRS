@@ -664,3 +664,10 @@ description = 'Requested UCU-09 look-ahead identifies additional FFmpeg runtime 
 discovered = '2026-09-28'
 resolved = false
 evidence = 'The catch-up plan FFmpeg runtime look-ahead source map records row155/177 and the exact 8.1.2-1 patch comparison against FFmpeg9 plus v2.0.2 patches. Native hardware acceptance remains unproven. The maintainer subsequently approved the expanded patch and librsvg build. Linux/Windows v2.0.3 candidates now pass local package, SVG, subtitle/audio and available NVIDIA/software-Vulkan checks; exact evidence is owned by UCU-09. Linux export code coverage is corrected too. The exact packages are now published as v2.0.3. On 2026-09-28 the maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA interop acceptance debt; all three remain unverified. Later rows still require their own ordered acceptance.'
+
+[[debt]]
+id = 'ucu09-row143-hdr-refresh-and-media-info'
+description = 'Row143 requires one-time unchanged local PQ/HLG metadata refresh and Media Info JSON fields for Dolby Vision profile and HDR10 metadata. Existing probing, persistence and Next hints cover the data, but migration invalidation and Media Info projection are missing.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'Row143 source map and UCU-09 own the audit and acceptance. Scoped local PQ/HLG migration and video-only Media Info fields are implemented. Migration suite (34), production projection, real unchanged-file HDR rescan and web JSON regression pass. Matched Chromium/Firefox pass (2/2); strict affected all-target Clippy and hydration lint pass. Row143 is Port. Existing health checks consume the refreshed metadata; no native graph or hardware validation claim changes.'

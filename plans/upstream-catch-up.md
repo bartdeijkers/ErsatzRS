@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **38 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **37 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Continue at row 143. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Continue at row 144. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,50 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 143 source map — Dolby Vision/HDR10 probing (Port)
+
+- Upstream `cbfea01c`: local statistics parse DOVI configuration and HDR10
+  mastering/content-light metadata, with one-frame PQ fallback. Repository
+  refresh persists both fields; Next hints and Media Info JSON expose them.
+  Additive migrations also reset local PQ/HLG version timestamps and folder
+  ETags so unchanged HDR files receive a one-time metadata refresh.
+- ErsatzRS already stores richer mastering/content-light/Dolby Vision fields.
+  `ersatzrs-infra/src/ffprobe.rs` reads bounded frame side data, scopes it to
+  the owning video stream and populates those fields; scanner persistence and
+  `next_engine/probe_hint.rs` retain them and derive `has_hdr10_metadata`.
+- Demonstrated gaps: `MediaItemInfoStreamJson` lacks `DvProfile` and
+  `HasHdr10Metadata`; movie/local and remote projections therefore omit them.
+  The existing HDR/DV migrations add fields but leave prior local HDR scan
+  timestamps and folder ETags unchanged. An unchanged file can keep missing
+  metadata until an operator forces a scan.
+- Next action: follow the migration contract for a scoped one-time local
+  PQ/HLG refresh, confirming ErsatzRS scanner gates first; expose nullable
+  video metadata through the existing Media Info JSON projection. Preserve
+  non-video absence, provider isolation, file/subtitle identities and playout
+  state. Verify synthetic migration isolation, probe/projection regressions
+  and real unchanged-file rescan behavior before assigning a verdict.
+- Implemented the one-time local PQ/HLG migration and video-only nullable
+  Media Info fields through the admin repository and JSON projection. The
+  migration suite passes 34 tests; the projection regression passes. A real
+  synthetic HDR episode test confirms an unchanged season skips probing before
+  migration, repairs mastering/MaxCLL/MaxFALL after it, preserves episode/version
+  and Dutch subtitle identities and file mtime, then skips again after success.
+  The fixture explicitly sets frame colour tags and asserts PQ before migration.
+- Browser boundary: `/media/music/videos/:id`, existing faceted-detail island
+  and Media Info dialog; application repository to server-function JSON to
+  existing `pre` viewer. No HTML, styles, localization keys or island structure
+  change. Browser proof extends the existing facet-detail scenario with exact
+  HDR/DV JSON fields and omission on audio; matched SSR/WASM is required.
+- Acceptance: production JSON regression passes; matched Chromium/Firefox
+  each pass the extended Media Info scenario (2 expected, no skipped,
+  unexpected, flaky or report errors). Strict all-target Clippy for core,
+  infra, scanner and web passes; hydration lint reports no new findings.
+  Review confirms scoped scan-gate invalidation, existing state/identity
+  preservation and agreement between Media Info and Next metadata presence.
+- No architecture deviation proposed. Intel QSV tonemapping output remains
+  covered only by the maintainer-approved unverified hardware debt, not by
+  metadata presence or software playback evidence.
 
 ## Row 142 source map — upstream build trigger (N/A)
 
@@ -3997,7 +4041,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | Port | ffmpeg-9-performance-and-support | `feat(ffmpeg): adopt verified v2.0.3 runtime packages` | ucu-09; exact public Linux/Windows checksums, all five QSV padding options, 13 manager tests, strict Clippy and native/Next smoke pass. Intel QSV/AMD AMF/native Linux NVIDIA output remains explicitly approved unverified hardware debt. See source map and milestone. |
 | 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next runtime release notes` | ucu-09; changelog-only diff. Exact packaged Next 4cc93e4 retains capability-gated QSV codecs and configurable send_frame defaults; row140 owns runtime integration and approved hardware debt. |
 | 142 | `00db622d` | chore: trigger new build for updated next engine | N/A | upstream-baseline-catch-up | `docs(parity): reconcile empty Next build trigger` | ucu-09; empty diff and identical parent tree; no application or runtime change. Row140 integration evidence reused; no duplicate build. |
-| 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: DolbyVision, Hdr and Color columns are already persisted under p8a-01/p8a-02; verify the probe fills them. |
+| 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | Port | ffmpeg-9-performance-and-support | `fix(media): refresh and expose HDR metadata` | ucu-09; scoped one-time local PQ/HLG rescan, video-only Media Info fields; 34 migration tests, production projection, real unchanged-file HDR/subtitle preservation, JSON regression, Chromium/Firefox and affected strict lint pass. Existing richer probe/persistence/Next hints retained. |
 | 144 | `b30d9670` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
 | 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: logging and validation for four TODOs, including the external JSON playout provider. |
 | 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: canvas feed for Next only; native graphics stay drawvg under ADR 0005. |

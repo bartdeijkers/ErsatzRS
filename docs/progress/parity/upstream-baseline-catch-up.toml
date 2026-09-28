@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
 summary    = """
-142/180; 38 pending.
+143/180; 37 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: v2.0.2 published, hashes verified, default adopted.
 109 N/A: release notes. UCU-06 Complete: local gates and
@@ -14,6 +14,7 @@ UCU-07 Complete: CI 36321494841, b4d659eb.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: v2.0.3 and smoke pass; approved hardware debt remains.
 141-142 N/A: release notes and empty build trigger.
+143 Port: scoped HDR refresh and Media Info; runtime/browser proof passes.
 
 UCU-02 is Complete; its milestone owns rows11-20 acceptance, including
 engine selection, publication, lifecycle, scheduling and decoded subtitle/audio

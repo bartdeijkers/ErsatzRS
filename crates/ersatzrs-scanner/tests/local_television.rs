@@ -464,6 +464,155 @@ async fn season_etag(pool: &SqlitePool, season: &Path) -> Option<String> {
         .unwrap()
 }
 
+/// The one-time HDR upgrade must repair metadata even when media bytes and
+/// the season directory have not changed since the previous successful scan.
+#[tokio::test]
+#[ignore = "requires verified FFmpeg 9 and ffprobe with libx265"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One end-to-end upgrade scenario preserves file and subtitle identity."
+)]
+async fn hdr_metadata_upgrade_reenters_unchanged_local_scan() {
+    let ffprobe = ffprobe_binary().expect("ffprobe is required for HDR acceptance");
+    let ffmpeg = Path::new(&ffprobe).with_file_name(format!("ffmpeg{}", env::consts::EXE_SUFFIX));
+    let temp = TempDir::new("ersatzrs-hdr-metadata-upgrade");
+    let season = temp
+        .path()
+        .join("library")
+        .join("Synthetic HDR")
+        .join("Season 01");
+    std::fs::create_dir_all(&season).unwrap();
+    let episode = season.join("Synthetic HDR - S01E01.mkv");
+    let output = std::process::Command::new(ffmpeg).args([
+        "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=blue:s=64x64:r=10",
+        "-vf", "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc",
+        "-t", "1", "-c:v", "libx265", "-pix_fmt", "yuv420p10le", "-color_trc", "smpte2084",
+        "-color_primaries", "bt2020", "-colorspace", "bt2020nc", "-x265-params",
+        "pools=1:frame-threads=1:log-level=error:colorprim=9:transfer=16:colormatrix=9:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50):max-cll=1000,400",
+    ]).arg(&episode).output().unwrap();
+    assert!(
+        output.status.success(),
+        "HDR fixture failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::write(
+        season.join("Synthetic HDR - S01E01.nl.srt"),
+        "1\n00:00:00,000 --> 00:00:01,000\nNederlandse ondertiteling\n",
+    )
+    .unwrap();
+    let original_modified = std::fs::metadata(&episode).unwrap().modified().unwrap();
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|m| m.version < 202_609_282_140)
+            .cloned()
+            .collect(),
+    )
+    .run(&pool)
+    .await
+    .unwrap();
+    seed_local_library(&pool, &temp.path().join("library"), 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    let before: (i64, i64) = sqlx::query_as(r#"SELECT "Id", "EpisodeId" FROM "MediaVersion""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let subtitles: Vec<(i64, String)> =
+        sqlx::query_as(r#"SELECT "Id", "Language" FROM "Subtitle" ORDER BY "Id""#)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(subtitles.len(), 1);
+    assert_eq!(subtitles[0].1, "dut");
+    let max_cll: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "MaxCll" FROM "MediaStream" WHERE "MediaStreamKind" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(max_cll, Some(1000));
+    pool.execute(
+        r#"UPDATE "MediaStream" SET "MasteringDisplay" = NULL, "MaxCll" = NULL, "MaxFall" = NULL"#,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    let transfer: Option<String> = sqlx::query_scalar(
+        r#"SELECT "ColorTransfer" FROM "MediaStream" WHERE "MediaStreamKind" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        transfer.as_deref(),
+        Some("smpte2084"),
+        "HDR fixture must carry PQ transfer"
+    );
+    migrations.run(&pool).await.unwrap();
+    let gate: Option<String> = sqlx::query_scalar(r#"SELECT LF."Etag" FROM "LibraryFolder" LF JOIN "MediaFile" MF ON MF."LibraryFolderId" = LF."Id""#)
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        gate, None,
+        "migration must invalidate the real scanner folder gate"
+    );
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    let repaired: (Option<String>, Option<i64>, Option<i64>) = sqlx::query_as(
+        r#"SELECT "MasteringDisplay", "MaxCll", "MaxFall" FROM "MediaStream" WHERE "MediaStreamKind" = 1"#)
+        .fetch_one(&pool).await.unwrap();
+    assert!(repaired.0.is_some());
+    assert_eq!((repaired.1, repaired.2), (Some(1000), Some(400)));
+    let after: (i64, i64) = sqlx::query_as(r#"SELECT "Id", "EpisodeId" FROM "MediaVersion""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before);
+    let after_subtitles: Vec<(i64, String)> =
+        sqlx::query_as(r#"SELECT "Id", "Language" FROM "Subtitle" ORDER BY "Id""#)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_subtitles, subtitles);
+    assert_eq!(
+        std::fs::metadata(&episode).unwrap().modified().unwrap(),
+        original_modified
+    );
+    migrations.run(&pool).await.unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+}
+
 /// A legacy collision survives an unchanged-folder scan, then the upgrade
 /// invalidates the folder and the ordinary scanner repairs it without a file touch.
 #[tokio::test]

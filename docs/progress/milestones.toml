@@ -11416,6 +11416,29 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row143 implementation adds a scoped one-time local PQ/HLG scan-gate migration
+and video-only DvProfile/HasHdr10Metadata in Media Info JSON. Existing richer
+probe storage and Next hints remain. All 34 migration tests pass, including
+provider/SDR/non-video isolation and one-time execution; the production admin
+projection regression passes. Real v2.0.3 synthetic HDR scanning passes
+(nextest 02f9a76e): unchanged season skips before migration, repairs mastering,
+MaxCLL=1000 and MaxFALL=400 after migration, retains episode/version/Dutch
+subtitle identities and file mtime, then returns to the ETag fast path.
+The initial synthetic fixture lacked PQ despite encoder colour flags; explicit
+frame tags fix the fixture, with a retained PQ assertion before the migration.
+Web JSON regression passes (nextest f65ab169), including production repository
+projection, explicit false and non-video omission. Clippy flagged projection
+length; HDR10 presence is now computed in the existing SQL projection, with
+its focused regression passing (nextest 80df0561). Matched Chromium and Firefox
+both pass the extended Media Info flow: 2 expected, zero skipped, unexpected,
+flaky or report errors (tmp/ucu09-row143-browser/playwright-results.json).
+Strict all-target Clippy for core/infra/scanner/web and hydration lint pass.
+Review: local HDR scan gates only, no media/scheduling identity changes;
+video-only field omission/false semantics match the existing Next hints.
+Existing health checks consume the restored DV metadata. Row143 is Port and
+owning debt is resolved. No generated native FFmpeg graph changed; available
+runtime proof is reused. UCU-09 window gates, push and exact-SHA CI remain.
+
 Row142 (00db622d) is N/A: empty upstream build-trigger commit, with identical
 commit and first-parent trees and no changed files. No ErsatzRS source/runtime
 change or duplicate build is warranted. Row140 integration proof remains valid.

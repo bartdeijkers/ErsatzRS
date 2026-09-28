@@ -524,7 +524,10 @@ async fn load_admin_media_streams(
         r#"SELECT "Index", "MediaStreamKind", "Title", "Codec", "Profile", "Language",
                   "Channels", "Default", "Forced", "AttachedPic", "PixelFormat",
                   "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
-                  "BitsPerRawSample", "MimeType", "FileName"
+                  "BitsPerRawSample", "MimeType", "FileName",
+                  "DolbyVisionProfile",
+                  ("MasteringDisplay" IS NOT NULL OR "MaxCll" IS NOT NULL
+                   OR "MaxFall" IS NOT NULL) AS "HasHdr10Metadata"
            FROM "MediaStream" WHERE "MediaVersionId" = ? ORDER BY "Index", "Id""#,
     )
     .bind(media_version_id)
@@ -554,6 +557,13 @@ async fn load_admin_media_streams(
             color_space: row.try_get("ColorSpace").repository()?,
             color_transfer: row.try_get("ColorTransfer").repository()?,
             color_primaries: row.try_get("ColorPrimaries").repository()?,
+            dv_profile: if kind == 1 {
+                row.try_get("DolbyVisionProfile").repository()?
+            } else {
+                None
+            },
+            has_hdr10_metadata: (kind == 1)
+                .then_some(row.try_get::<bool, _>("HasHdr10Metadata").repository()?),
             bits_per_raw_sample: (bits_per_raw_sample > 0).then_some(bits_per_raw_sample),
             mime_type: row.try_get("MimeType").repository()?,
             file_name: row.try_get("FileName").repository()?,
@@ -594,6 +604,8 @@ async fn load_admin_media_streams(
                     color_space: None,
                     color_transfer: None,
                     color_primaries: None,
+                    dv_profile: None,
+                    has_hdr10_metadata: None,
                     bits_per_raw_sample: None,
                     mime_type: None,
                     file_name: subtitle.path.as_ref().and_then(|path| {
@@ -2282,6 +2294,38 @@ mod tests {
             .await
             .expect("seed playout item");
         }
+    }
+
+    #[tokio::test]
+    async fn media_info_hdr_metadata_is_video_only_and_preserves_false() {
+        let pool = test_pool().await;
+        seed_remote_stream_detail(&pool).await;
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "DolbyVisionProfile" = 8, "MaxCll" = 1000
+            WHERE "MediaVersionId" = 22"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let streams = load_admin_media_streams(&pool, 22, &[], false)
+            .await
+            .unwrap();
+        assert_eq!(streams[0].dv_profile, Some(8));
+        assert_eq!(streams[0].has_hdr10_metadata, Some(true));
+        assert_eq!(streams[1].dv_profile, None);
+        assert_eq!(streams[1].has_hdr10_metadata, None);
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "DolbyVisionProfile" = NULL, "MaxCll" = NULL
+            WHERE "MediaVersionId" = 22"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let streams = load_admin_media_streams(&pool, 22, &[], false)
+            .await
+            .unwrap();
+        assert_eq!(streams[0].dv_profile, None);
+        assert_eq!(streams[0].has_hdr10_metadata, Some(false));
     }
 
     #[tokio::test]

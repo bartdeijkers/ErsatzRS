@@ -51,6 +51,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Refresh unchanged local PQ/HLG media once so stored HDR/Dolby Vision metadata
+  is populated, and expose Dolby Vision profile and HDR10 metadata presence in
+  Media Info JSON while preserving non-video field omission.
+
+
 - Expose native and Next playlist-worker reports through authenticated
   `GET /api/sessions`, including last access and a nullable transcode cursor.
   Next reports `state: "next"`; reading session reports does not keep streams

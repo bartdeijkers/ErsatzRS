@@ -336,6 +336,8 @@ pub struct AdminMediaInfoStream {
     pub color_space: Option<String>,
     pub color_transfer: Option<String>,
     pub color_primaries: Option<String>,
+    pub dv_profile: Option<i64>,
+    pub has_hdr10_metadata: Option<bool>,
     pub bits_per_raw_sample: Option<i64>,
     pub mime_type: Option<String>,
     pub file_name: Option<String>,
