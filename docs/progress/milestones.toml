@@ -11416,6 +11416,10 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row142 (00db622d) is N/A: empty upstream build-trigger commit, with identical
+commit and first-parent trees and no changed files. No ErsatzRS source/runtime
+change or duplicate build is warranted. Row140 integration proof remains valid.
+
 Row141 (8cc34a1e) is N/A: complete diff changes only release notes for QSV
 padding/codecs and deinterlacing. Exact packaged Next 4cc93e4 recognizes
 AV1/VC1/VP8/VP9 via hardware capability checks; software YADIF/BWDIF/W3FDIF

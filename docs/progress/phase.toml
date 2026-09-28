@@ -72,9 +72,9 @@ on 2026-09-28. Linux/Windows v2.0.3 packages are published and their public
 checksums verified; UCU-09 owns the release and runtime evidence. The managed
 runtime default is updated locally, with native/Next integration smoke passing.
 The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
-interop acceptance debt; those paths remain unverified. Row140 is Port; row141 is N/A release notes. Continue
-at row142. The refreshed upstream ledger still contains 180 rows.
-The current 180-row ledger has 39 pending rows. Preserve accepted architecture,
+interop acceptance debt; those paths remain unverified. Row140 is Port; rows141-142 are N/A bookkeeping. Continue
+at row143. The refreshed upstream ledger still contains 180 rows.
+The current 180-row ledger has 38 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI
