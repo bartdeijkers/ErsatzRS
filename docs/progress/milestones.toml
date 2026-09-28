@@ -11314,6 +11314,11 @@ Strict infra library/test Clippy and substantive review pass. Matched Leptos
 build and all four Chromium/Firefox cases pass in test-results/ucu08-row134;
 no timeout/retry weakening. Server logs confirm pinned v2.0.2 runtime overrides.
 Upstream refresh remains 8bda4411. Row135 and window gates remain; no push/CI.
+Row135 at 5bb3ddfc is N/A: full single-file diff only inserts the upstream
+26.9.0 release date/heading and comparison links. No ErsatzRS release or
+behavior is implied. All rows116-135 are reconciled; window-wide gates,
+authorized push and terminal exact-SHA green CI remain before completion.
+
 
 
 
