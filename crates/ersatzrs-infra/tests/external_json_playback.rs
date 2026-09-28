@@ -526,6 +526,39 @@ async fn external_json_local_probe_prefers_mapped_file_without_plex_credentials(
             .len(),
         1
     );
+    let selected = ersatzrs_infra::playback::transient::TransientPlaybackTracks::from_streams(
+        &media.probe.streams,
+    )
+    .subtitles
+    .into_iter()
+    .find(|track| track.language.as_deref() == Some("eng"))
+    .unwrap();
+    let artifact = ersatzrs_infra::external_json::subtitles::PreparedSubtitle::extract(
+        ersatzrs_infra::next_engine::protocol::Source::Local {
+            path,
+            probe_hint: None,
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        selected,
+        ffmpeg,
+        Instant::now() + std::time::Duration::from_secs(15),
+    )
+    .await
+    .unwrap();
+    let prepared = artifact.subtitle();
+    assert!(prepared.is_extracted);
+    assert_eq!(prepared.language.as_deref(), Some("eng"));
+    let output = std::path::PathBuf::from(prepared.path.as_ref().unwrap());
+    let text = std::fs::read_to_string(&output).unwrap();
+    assert!(text.contains("Fixture subtitle"));
+    assert!(text.contains("00:00:00,000 --> 00:00:01,000"));
+    let temporary_directory = output.parent().unwrap().to_owned();
+    drop(artifact);
+    assert!(
+        !temporary_directory.exists(),
+        "the stream owner releases its temporary subtitle"
+    );
 }
 
 #[tokio::test]
@@ -649,4 +682,159 @@ async fn create_probe_fixture(
         String::from_utf8_lossy(&output.stderr)
     );
     clip
+}
+
+#[tokio::test]
+#[ignore = "requires the verified FFmpeg runtime and loopback sockets"]
+async fn external_json_cancelled_subtitle_request_reaps_stalled_ffmpeg() {
+    use ersatzrs_infra::{
+        external_json::subtitles::PreparedSubtitle, next_engine::protocol::Source,
+        playback::transient::TransientPlaybackTracks,
+    };
+    use tokio::io::AsyncReadExt as _;
+
+    let ffmpeg = std::path::PathBuf::from(ersatzrs_ffmpeg::ffprobe_path())
+        .with_file_name(format!("ffmpeg{}", std::env::consts::EXE_SUFFIX));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let source = Source::Http {
+        uri: format!(
+            "http://{}/synthetic-stalled-subtitle",
+            listener.local_addr().unwrap()
+        ),
+        probe_hint: None,
+        is_live: None,
+        headers: Vec::new(),
+        user_agent: None,
+        keep_alive: None,
+        reconnect: Some(false),
+        reconnect_delay_max: None,
+        timeout_us: Some(60_000_000),
+        in_point_ms: None,
+        out_point_ms: None,
+    };
+    let subtitle = TransientPlaybackTracks::from_streams(&[ersatzrs_domain::MediaStream {
+        index: 2,
+        kind: MediaStreamKind::Subtitle,
+        codec: Some("subrip".into()),
+        ..Default::default()
+    }])
+    .subtitles
+    .remove(0);
+    let request = tokio::spawn(PreparedSubtitle::extract(
+        source,
+        subtitle,
+        ffmpeg,
+        Instant::now() + std::time::Duration::from_mins(1),
+    ));
+    tokio::time::timeout(std::time::Duration::from_secs(12), async {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut bytes = Vec::new();
+        let mut buffer = [0; 512];
+        while !bytes.windows(4).any(|part| part == b"\r\n\r\n") {
+            let read = socket.read(&mut buffer).await.unwrap();
+            assert_ne!(read, 0);
+            bytes.extend_from_slice(&buffer[..read]);
+            assert!(bytes.len() <= 8192);
+        }
+        assert!(bytes.starts_with(b"GET /synthetic-stalled-subtitle "));
+        request.abort();
+        assert!(matches!(request.await, Err(error) if error.is_cancelled()));
+        // Both FFmpeg's transport timeout and the worker deadline are 60 seconds.
+        // Only cancellation should close this socket inside the 12-second bound.
+        match socket.read(&mut buffer).await {
+            Ok(0) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                ) => {}
+            _ => panic!("cancelled preparation left its FFmpeg connection open"),
+        }
+    })
+    .await
+    .expect("request cancellation must terminate the extraction child");
+}
+
+#[tokio::test]
+async fn external_json_plex_sidecar_uses_current_credentials_and_rejects_redirects() {
+    use ersatzrs_infra::{
+        external_json::subtitles::PreparedSubtitle, playback::transient::TransientPlaybackTracks,
+    };
+    let pool = fixture().await;
+    server(&pool).await;
+    let upstream = MockServer::start_async().await;
+    connection(&pool, &upstream.base_url()).await;
+    synthetic_token(&pool).await;
+    let subtitle = TransientPlaybackTracks::from_streams(&[ersatzrs_domain::MediaStream {
+        index: 27,
+        kind: MediaStreamKind::ExternalSubtitle,
+        codec: Some("subrip".into()),
+        file_name: Some("/library/streams/27".into()),
+        language: Some("nld".into()),
+        ..Default::default()
+    }])
+    .subtitles
+    .remove(0);
+    let response = upstream
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/streams/27")
+                .header("X-Plex-Token", "synthetic-external-fixture");
+            then.status(200)
+                .body("1\n00:00:00,000 --> 00:00:01,000\nFixture sidecar\n");
+        })
+        .await;
+    let deadline = || Instant::now() + std::time::Duration::from_secs(5);
+    let artifact = PreparedSubtitle::fetch_plex(&pool, 10, subtitle.clone(), deadline())
+        .await
+        .unwrap();
+    let path = std::path::PathBuf::from(artifact.subtitle().path.as_ref().unwrap());
+    assert!(std::fs::read_to_string(&path)
+        .unwrap()
+        .contains("Fixture sidecar"));
+    assert_eq!(artifact.subtitle().stream_index, 27);
+    assert_eq!(artifact.subtitle().language.as_deref(), Some("nld"));
+    drop(artifact);
+    assert!(!path.parent().unwrap().exists());
+    response.assert_async().await;
+
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = 'synthetic-rotated-fixture' WHERE "Key" = 'plex.server_auth_token.fixture-plex'"#)
+        .execute(&pool).await.unwrap();
+    let redirect = upstream
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/streams/27")
+                .header("X-Plex-Token", "synthetic-rotated-fixture");
+            then.status(302).header("Location", "/unexpected-sidecar");
+        })
+        .await;
+    let destination = upstream
+        .mock_async(|when, then| {
+            when.method(GET).path("/unexpected-sidecar");
+            then.status(200).body("unexpected");
+        })
+        .await;
+    assert!(
+        PreparedSubtitle::fetch_plex(&pool, 10, subtitle.clone(), deadline())
+            .await
+            .is_err()
+    );
+    redirect.assert_async().await;
+    destination.assert_calls_async(0).await;
+    let mut oversized = subtitle;
+    oversized.path = Some("/library/streams/28".into());
+    let response = upstream
+        .mock_async(|when, then| {
+            when.method(GET).path("/library/streams/28");
+            then.status(200).header("Content-Length", "33554433");
+        })
+        .await;
+    assert!(
+        PreparedSubtitle::fetch_plex(&pool, 10, oversized, deadline())
+            .await
+            .is_err()
+    );
+    response.assert_async().await;
 }

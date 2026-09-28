@@ -12,6 +12,7 @@ const READ_TIMEOUT: StdDuration = StdDuration::from_secs(5);
 
 pub(crate) mod guide;
 pub mod playback;
+pub mod subtitles;
 
 /// Failure categories deliberately exclude input values, paths and provider URLs.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]

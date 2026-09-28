@@ -27,6 +27,8 @@ pub(crate) enum BurnError {
     OutputLimit,
     #[error("Next subtitle extraction deadline expired")]
     Deadline,
+    #[error("subtitle extraction was cancelled")]
+    Cancelled,
     #[error("Next subtitle extraction process cleanup is unconfirmed")]
     Cleanup,
 }
@@ -52,6 +54,48 @@ pub(crate) async fn extract(
     output: &Path,
     deadline: Instant,
 ) -> Result<(), BurnError> {
+    extract_inner(source, stream_index, codec, ffmpeg, output, deadline, None).await
+}
+
+/// Signal cancellation and await cleanup before releasing input/output ownership.
+pub(crate) async fn extract_cancellable(
+    source: &Source,
+    stream_index: u32,
+    codec: &str,
+    ffmpeg: &Path,
+    output: &Path,
+    deadline: Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<(), BurnError> {
+    extract_inner(
+        source,
+        stream_index,
+        codec,
+        ffmpeg,
+        output,
+        deadline,
+        Some(cancellation),
+    )
+    .await
+}
+
+async fn extract_inner(
+    source: &Source,
+    stream_index: u32,
+    codec: &str,
+    ffmpeg: &Path,
+    output: &Path,
+    deadline: Instant,
+    mut cancellation: Option<tokio::sync::oneshot::Receiver<()>>,
+) -> Result<(), BurnError> {
+    if cancellation.as_mut().is_some_and(|signal| {
+        !matches!(
+            signal.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        )
+    }) {
+        return Err(BurnError::Cancelled);
+    }
     if Instant::now() >= deadline {
         return Err(BurnError::Deadline);
     }
@@ -68,6 +112,7 @@ pub(crate) async fn extract(
     let outcome = loop {
         tokio::select! {
             biased;
+            () = cancelled(&mut cancellation) => break Err(BurnError::Cancelled),
             () = tokio::time::sleep_until(deadline) => break Err(BurnError::Deadline),
             status = child.wait() => {
                 break match status {
@@ -87,6 +132,14 @@ pub(crate) async fn extract(
         cleanup(&mut child).await?;
     }
     outcome
+}
+
+async fn cancelled(signal: &mut Option<tokio::sync::oneshot::Receiver<()>>) {
+    if let Some(signal) = signal {
+        let _ = signal.await;
+    } else {
+        std::future::pending::<()>().await;
+    }
 }
 
 async fn cleanup(child: &mut ManagedAddonChild) -> Result<(), BurnError> {

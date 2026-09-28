@@ -338,6 +338,16 @@ release section when tagging a release.
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
 ### Added
+
+- Add shared track selection for transient external programmes, preserving
+  language preferences, custom YAML rules, JavaScript audio metadata and
+  engine-specific subtitle eligibility without requiring library records.
+  Carry transient programme metadata into graphics and dynamic text, and derive
+  graphics EPG variables from the selected channel's external timeline.
+  Prepare selected embedded text and Plex sidecar subtitles with bounded work,
+  cancellation cleanup and temporary files owned by the playback caller.
+  Native/HLS/Next consumer integration and runtime acceptance remain pending.
+
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next
   playback troubleshooting, including the form without JavaScript.
@@ -609,12 +619,6 @@ SponsorBlock and primary/fallback subtitle evidence are recorded in the mileston
 Version 1.0.36-beta failed its isolation gate and was not published.
 
 ### Added
-
-- Add shared track selection for transient external programmes, preserving
-  language preferences, custom YAML rules, JavaScript audio metadata and
-  engine-specific subtitle eligibility without requiring library records.
-  Carry transient programme metadata into graphics and dynamic text, and derive
-  graphics EPG variables from the selected channel's external timeline.
 
 - Add a "New season each calendar year" option to add-on list episode
   auto-detection, numbering each year's items as one season in first-aired
