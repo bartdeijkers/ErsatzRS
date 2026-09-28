@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **41 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **40 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Continue at row 140. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Continue at row 141. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -61,6 +61,122 @@
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
+
+## FFmpeg runtime look-ahead audit (2026-09-28; no row acceptance)
+
+**Published follow-up:** expanded Linux/Windows v2.0.3 packages, including
+librsvg, are published with independently verified public archive checksums.
+UCU-09 owns exact source, release and runtime evidence. SVG alpha metadata and
+Linux Vulkan export coverage are corrected; existing codecs/filters remain.
+The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
+interop hardware acceptance debt on 2026-09-28. Those paths remain unverified.
+Row140 integration verification passes; the baseline advances with its Port verdict.
+The inventory below records the original v2.0.2 audit baseline.
+
+Requested by the maintainer before considering another runtime build. Refreshed
+legacy origin/main remains `8bda4411`; reviewed remaining rows140-180 and the
+12-patch inventory of the exact `ErsatzTV-ffmpeg` release `8.1.2-1` adopted by
+row177. This audit does not advance the ledger. The maintainer subsequently
+approved the expanded Linux/Windows runtime build, explicitly including
+librsvg; publication remains a separate gate. Only NVIDIA hardware is available
+on the build/test PC, so Intel QSV and AMD AMF hardware acceptance remain open.
+
+- Row140: QSV padding needs patches0008-0010 (timestamp, padding, colour/chroma).
+- Row155: AMF MPEG-2 decoding needs patch0011 adapted to FFmpeg9 registration
+  context. The v2.0.2 Linux decoder list lacks mpeg2_amf/vc1_amf. Exact Next
+  `4cc93e4` selects MPEG-2 only when available and deliberately excludes VC-1
+  because its AMF timestamps reorder incorrectly; do not enable VC-1 selection.
+- Row177's adopted package also contains missing hardware frame-size handling
+  (0001's hardware half; FFmpeg9 already fixes its software-pool half) and
+  Windows D3D11/QSV texture/pool fixes0003-0004. The former requires a small
+  FFmpeg9 adaptation; the latter apply with line offsets and zero fuzz. Hardware
+  runtime acceptance remains required, including the D3D11 trade-off described
+  by upstream; source applicability alone does not establish safety/parity.
+- Already covered: slowest-stream pacing0006 in FFmpeg9, sparse-stream pacing0007
+  in v2.0.2, and Vulkan/CUDA export0005 in the Windows package patch. The native
+  Linux package and Docker do not install that Windows-specific patch; review
+  their export behavior separately rather than claim universal coverage.
+- Conditional rather than rebuild prerequisites: VAAPI alignment0002 bypasses
+  an older-header guard, but the pinned native toolchain's libva commit
+  `28388a09` exposes VA-API1.25 (guard threshold1.21). OpenAPV fix0012 targets
+  APISET>=1; the cached toolchain pins `9f6fd2a7`, APISET0. Retaining dependencies
+  does not require either fix for those documented compatibility problems.
+- Row176's libvpl.dll/license is Next application packaging, not an FFmpeg patch.
+  stage-next.py currently copies only ersatztv-channel; acceptance is still due.
+- Release8.1.2-1 newly enables librsvg; v2.0.2 has no SVG decoder. This is a
+  separate capability/dependency decision, not required to compile the above
+  patches. Including it changes the dependency image and requires revisiting
+  the cached-build estimate. ARMv7 removal is upstream policy, not authorized
+  for ErsatzRS. Existing platform support remains.
+
+Comparison used the affected FFmpeg n9.0 source files plus the exact v2.0.2
+patches in disposable files, source manifests and local runtime capability
+queries. No new hardware-output proof is claimed. The upstream AMF manifest
+also reports limited unsupported-GPU validation; preserve fail-safe capability
+selection and test actual MPEG-2 output before acceptance. The earlier 30-60
+minute estimate covered package compilation/basic checks using cached
+dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 141 preliminary source map — Next release notes (pending)
+
+- Complete upstream `8cc34a1e` diff only changes CHANGELOG.md: QSV padding
+  availability, QSV AV1/VC1/VP8/VP9 decoding and default `send_frame`
+  deinterlacing with channel overrides. No application or build pin changes.
+- Exact packaged Next `4cc93e4` maps all four codec strings through QSV
+  capability checks. Its `video_filter.rs` preserves configured YADIF/BWDIF/
+  W3FDIF modes and defaults each to `0`; the checksum-verified v2.0.3 BWDIF
+  option help identifies `0` as `send_frame` and `1` as `send_field`.
+- Row140 owns the QSV runtime patch adoption. Actual QSV output remains in
+  explicitly approved hardware debt. This read-only audit does not advance
+  row141 ahead of row140 integration acceptance.
+
+## Row 140 source map — QSV hardware padding (Port)
+
+- Upstream `6e9693e9`: the complete two-file diff changes the Windows custom
+  FFmpeg artifact from g3c0520f9 to g14f231eb and advertises Next QSV hardware
+  padding on Windows/Linux. There is no application implementation in this diff.
+- Accepted ADRs 0008/0063 keep runtime production in ErsatzRS-ffmpeg and select
+  FFmpeg 9. That packaging separation does not prove this capability exists.
+- Exact packaged Next revision `4cc93e4`, `crates/ffpipeline/src/accel/qsv.rs`,
+  selects hardware padding only when `vpp_qsv` advertises `pad_w`; its emitted
+  options are pad_w/pad_h/pad_x/pad_y/pad_color. Otherwise it keeps software Pad.
+  This is an option on vpp_qsv, not a separate pad_qsv filter.
+- The checksum-verified published Linux x64 v2.0.2 runtime advertises vpp_qsv
+  but none of those padding options. Native QSV also downloads for software
+  padding. Successful existing playback therefore cannot establish hardware
+  padding acceptance. Windows package capability has not been newly checked.
+- Owning debt: ffmpeg-9-performance-and-support, row-140-qsv-hardware-padding.
+  UCU-09 owns artifact/source evidence. Required follow-up is the separate
+  runtime patch/package contract plus functional Intel QSV proof, including
+  centered geometry and preserved subtitle/audio paths. Keep the existing
+  software fallback for runtimes without the capability.
+- Read-only follow-up identified the three-patch upstream series at build-repo
+  commit `60e545dc00f3ea52fe393c02a9ab43ab16034a1f`: 0008 seeds QSV composite
+  output timestamps, 0009 adds vpp_qsv padding, and 0010 fixes colour/range,
+  chroma-grid alignment and rejection of incompatible combined operations.
+  All three apply sequentially to disposable FFmpeg n9.0 source with zero fuzz,
+  no offsets and no rejected hunks. This is source applicability, not build or
+  runtime acceptance; existing checkouts and binaries were not changed.
+- Proposed runtime follow-up: carry the complete series in the separate runtime
+  repository, build versioned Linux/Windows packages only after reconciling the
+  artifact constraint, verify checksums and option exposure, then run the
+  upstream padding harness on real Intel QSV. Cover NV12/P010, centered and
+  odd-offset geometry, coloured borders, cropped decoder surfaces, monotonic
+  timestamps at async_depth=4, and incompatible-operation rejection. Verify
+  Next chooses the hardware path while subtitles and alternate audio survive.
+  The current published package is the missing-option negative control.
+- Subsequent explicit approval authorized the expanded build and publication.
+  ErsatzRS-ffmpeg v2.0.3 now carries the complete series; exact public archives
+  match the tested bytes, and the managed default is updated locally. Both
+  package capability checks expose all five padding options. Focused manager
+  tests (13), strict crate Clippy and native/Next host playback smoke pass.
+  Next decoded proof retains Dutch 880 Hz audio and burned subtitles, preview,
+  wrapper restart, HLS after wrapper disconnect and idle session cleanup.
+- Intel QSV hardware acceptance remains unverified and is explicitly approved
+  debt (2026-09-28); retain the above geometry, colour, timestamp and media
+  checks for a suitable machine. Approval permits catch-up after integration,
+  without claiming hardware-output proof. Row140 is Port under ADRs 0008/0063
+  with approved hardware debt; the provisional N/A suggestion is not accepted.
 
 ## Row 139 source map — Next sessions API (Adapt)
 
@@ -3870,7 +3986,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 137 | `96cef081` | fix: heal artwork cache (#3007) | Port | ersatzrs-infra | `fix(artwork): heal cached images and prune unused files` | ucu-09; shared manual/hourly cache service, retained originals/blur/watermark references, local image restoration and shared-path repointing. Native direct-source images recover with unchanged mtime. 25 focused tests, affected all-target Clippy and license check pass. |
 | 138 | `7e141a13` | fix: use static hash functions (#3008) | Covered | upstream-baseline-catch-up | `docs(parity): reconcile static hash functions` | ucu-09; complete seven-file audit: native digests and rolling fingerprints are call-local; existing formats and accepted callback protocol preserved. Three hash/ticket regressions pass; row137 and UCU-08 evidence reused. |
 | 139 | `2989faeb` | fix: sessions api with next engine (#3009) | Adapt | upstream-baseline-catch-up | `fix(streaming): report native and Next sessions` | ucu-09; ADRs 0095/0103. Typed observational reports, nullable Next cursor, authenticated GET/OpenAPI; preserve native playlist bridge. Mixed-router and process-backed lifecycle tests pass; milestone owns evidence. |
-| 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: workflow and changelog only; QSV padding lives in their custom FFmpeg build per ADR 0008/0063. Check native QSV padding as separate debt. |
+| 140 | `6e9693e9` | feat: add hw accelerated padding for qsv (#3010) | Port | ffmpeg-9-performance-and-support | `feat(ffmpeg): adopt verified v2.0.3 runtime packages` | ucu-09; exact public Linux/Windows checksums, all five QSV padding options, 13 manager tests, strict Clippy and native/Next smoke pass. Intel QSV/AMD AMF/native Linux NVIDIA output remains explicitly approved unverified hardware debt. See source map and milestone. |
 | 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog and Next build trigger. |
 | 142 | `00db622d` | chore: trigger new build for updated next engine | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: Next build trigger only. |
 | 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: DolbyVision, Hdr and Color columns are already persisted under p8a-01/p8a-02; verify the probe fills them. |

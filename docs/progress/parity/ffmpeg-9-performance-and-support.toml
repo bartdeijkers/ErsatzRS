@@ -650,3 +650,17 @@ FFmpeg 9 and that the other option does not — the asymmetry that makes a
 detection mistake fatal.
 '''
 resolved    = true
+
+[[debt]]
+id = 'row-140-qsv-hardware-padding'
+description = 'UCU-09 row140 adds Next QSV hardware padding via custom vpp_qsv pad_w/pad_h/pad_x/pad_y/pad_color options. Published ErsatzRS-ffmpeg v2.0.3 includes them; actual Intel hardware output remains unverified.'
+discovered = '2026-09-28'
+resolved = false
+evidence = 'UCU-09 and the row140 source map own the exact package/Next-source audit. The expanded Linux/Windows runtime including librsvg is published as v2.0.3 with verified public checksums. On 2026-09-28 the maintainer explicitly approved Intel QSV hardware acceptance debt so catch-up may proceed after integration. Intel output remains unverified; this debt is not resolved by filter option registration.'
+
+[[debt]]
+id = 'ucu09-runtime-tail-patch-inventory'
+description = 'Requested UCU-09 look-ahead identifies additional FFmpeg runtime gaps beyond QSV padding: AMF MPEG-2 decoder registration, hardware frame-size handling, and Windows D3D11/QSV texture/pool fixes. Audit Linux Vulkan export coverage and distinguish optional SVG/dependency changes from required patches.'
+discovered = '2026-09-28'
+resolved = false
+evidence = 'The catch-up plan FFmpeg runtime look-ahead source map records row155/177 and the exact 8.1.2-1 patch comparison against FFmpeg9 plus v2.0.2 patches. Native hardware acceptance remains unproven. The maintainer subsequently approved the expanded patch and librsvg build. Linux/Windows v2.0.3 candidates now pass local package, SVG, subtitle/audio and available NVIDIA/software-Vulkan checks; exact evidence is owned by UCU-09. Linux export code coverage is corrected too. The exact packages are now published as v2.0.3. On 2026-09-28 the maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA interop acceptance debt; all three remain unverified. Later rows still require their own ordered acceptance.'

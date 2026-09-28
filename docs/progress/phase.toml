@@ -66,8 +66,15 @@ terminal green CI 36453480304 at dfeaf6d0 satisfy acceptance. Browser reports
 confirm Chromium257/Firefox233 passes with no unexpected or flaky results.
 UCU-09 rows136-137 are Port; row138 is Covered; row139 is Adapt.
 Its milestone owns the evidence.
-Continue at row140; refresh upstream at the next run and append new tail rows.
-The current 180-row ledger has 41 pending rows. Preserve accepted architecture,
+Row140 audit found missing vpp_qsv padding options in the published v2.0.2 runtime.
+The maintainer approved an expanded separate runtime update including librsvg
+on 2026-09-28. Linux/Windows v2.0.3 packages are published and their public
+checksums verified; UCU-09 owns the release and runtime evidence. The managed
+runtime default is updated locally, with native/Next integration smoke passing.
+The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
+interop acceptance debt; those paths remain unverified. Row140 is Port. Continue
+at row141. The refreshed upstream ledger still contains 180 rows.
+The current 180-row ledger has 40 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

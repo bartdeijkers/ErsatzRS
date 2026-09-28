@@ -401,6 +401,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
+  SVG decoding with correct translucent overlays and the upstream QSV/AMF
+  runtime patches. Preserve existing codecs and subtitle/audio playback;
+  Intel QSV, AMD AMF and native Linux NVIDIA interop validation remain
+  explicitly approved hardware acceptance debt.
+
 - Add Legacy/Next engine selection to playback troubleshooting, including
   engine-specific controls and in-page preview playback while retaining the
   plain HTML playlist submission fallback. Display bounded completion logs

@@ -11395,7 +11395,11 @@ acceptance = """
 Process every ledger row in this release window through 8bda4411 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
-deferrals are included. Preserve
+deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
+AMD AMF and native Linux NVIDIA interop hardware validation may remain explicit
+unverified acceptance debt after the exact runtime is published and integrated.
+This does not waive software/runtime checks available on the current machine.
+Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
@@ -11544,6 +11548,77 @@ checkpoint is ready. Continue at row140 with 41 pending rows.
 No FFmpeg arguments, scheduling decisions, admission, subtitle/audio behavior
 or browser UI changed; unchanged playback evidence is retained and UCU-09
 window smoke/closeout remain required. No intermediate push/CI or release.
+Row139 landed as 63625b4e; pin/ledger/clean reference HEAD agree at 2989faeb.
+Row140 refresh retains 8bda4411 and verifies all 180 ordered SHA/subject pairs.
+Full two-file 6e9693e9 audit disproves the provisional tooling-only acceptance:
+its changed custom Windows FFmpeg artifact delivers QSV hardware-padding
+options, also advertised for Linux. The published Linux x64 v2.0.2 archive
+matches SHA-256 ef797ab1ad7c54340b2b92c208d1ecd7223c0941a68d831e1154aea16ba33e59.
+The probed executable matches the archive payload. Its vpp_qsv help has no
+pad_w/pad_h/pad_x/pad_y/pad_color; a bounded synthetic command fails at option
+parsing with pad_w Option not found, before device execution. Exact Next 4cc93e4
+source gates hardware padding on pad_w, emits those five options, and otherwise
+keeps software Pad. Native QSV also retains a software-padding path. This is
+safe fallback evidence, not hardware-padding parity. Windows package capability
+and functional Intel QSV output are not newly verified. The new unresolved
+ffmpeg-9-performance-and-support debt records this gap. Row140 remains pending,
+with no verdict/pin advance, build, push, CI or release. Reconcile the existing
+v2.0.2 artifact constraint before implementing a separate runtime update.
+Read-only follow-up locates upstream build-repo commit
+60e545dc00f3ea52fe393c02a9ab43ab16034a1f and its related patches 0008-0010
+(timestamp, padding, colour/chroma correctness). All three apply sequentially
+to the two affected FFmpeg n9.0 source files in a disposable directory using
+patch --fuzz=0, with no offsets or rejected hunks. Upstream manifests and
+vpp-qsv-pad.sh define NV12/P010, coloured/odd-offset/cropped-surface, monotonic
+PTS and incompatible-operation checks. Their FFmpeg 8.1.2 hardware results
+are upstream evidence only, not ErsatzRS FFmpeg 9 acceptance. The source map
+records a concrete separate-package validation sequence. No build, publication,
+shared-checkout mutation or acceptance change occurred; artifact authorization
+and actual Intel QSV acceptance remain outstanding.
+Subsequent 2026-09-28 maintainer approval authorizes the expanded separate
+Linux/Windows runtime build, explicitly including librsvg. Candidate work uses
+isolated source/build trees and host Docker without socket mounts; published
+v2.0.2 artifacts and the other thread's Docker repair remain unchanged.
+Publication remains separate. Only NVIDIA hardware is available, so Intel QSV
+and AMD AMF hardware acceptance remain unverified; no row verdict or pin moves.
+Local candidate v2.0.3 now builds and passes decoded SVG dimensions, text,
+transparency and automatic overlay; drawvg/drawtext; rav1e encode/decode; and
+400-frame sparse-subtitle/alternate-audio playback on Linux and native Windows.
+The librsvg addition required rav1e's existing no-LTO profile to avoid duplicate
+Rust runtime symbols. A one-line FFmpeg alpha-mode correction fixes a measured
+127/127/191 versus expected 127/127/255 translucent-blue overlay. The existing
+Vulkan export correction now applies to Linux too. Clean Debian bookworm
+execution passes; software Vulkan produces five 256x144 frames; native Windows
+CUDA/Vulkan/NVENC produces 25 decoded H.264 BT.709 frames. QSV, AMF and native
+Linux NVIDIA interop remain unverified. No remote CI or public release occurred.
+Candidate manifest, source and evidence: `tmp/ucu09-ffmpeg-v2.0.3/candidate.json`
+(local gitignored artifacts). Linux archive SHA-256:
+eef16472707b53b709c38d5b52daa3f73b4cd843ad404b050a821954061bb9b5.
+Windows archive SHA-256:
+99968fbdd6b02a3b31ac8c92835750fa4482e9689e4a6a3ad6938666db6440c4.
+Archive payload hashes match the locally verified executables. Publication and
+any row140 acceptance remain separate; the managed runtime still pins v2.0.2.
+Subsequent explicit maintainer approval authorized runtime commit, push and
+publication, plus hardware acceptance debt for Intel QSV, AMD AMF and native
+Linux NVIDIA interop. These hardware paths remain unverified; this approved
+deferral permits ordered catch-up after runtime publication and integration.
+ErsatzRS-ffmpeg v2.0.3 is public at
+https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/tag/v2.0.3;
+main and the release tag identify 65e2da1a5915970cee9b83ff86dcaa1447adfa50.
+Independent public downloads match both exact archive hashes above. Publication
+reused the tested bytes; no duplicate runtime CI builds or Docker release ran.
+The local managed-runtime default now pins v2.0.3. All 13 focused runtime tests
+and strict ersatzrs-ffmpeg Clippy pass. Native and Next host smoke both pass
+against the exact package executable bytes. Native legacy/hybrid MPEG-TS and
+HLS segmenter respond successfully. Next decodes the selected Dutch 880 Hz
+audio and visible subtitles, serves preview, preserves HLS after wrapper
+disconnect, restarts the wrapper and removes all idle sessions. Public internal
+callback routes remain 404. The first sandbox attempt could not bind listeners;
+the unchanged test passed with host permissions and disposable databases.
+Row140 is Port under ADRs 0008/0063, with the explicitly approved hardware debt
+still unresolved. No generated native FFmpeg graph changed. Progress validation
+passes; final UCU-09 window gates, push and exact-SHA CI remain outstanding.
+
 2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
 that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
 This refresh changes the target only, not the processed pin.

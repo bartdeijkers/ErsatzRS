@@ -3,7 +3,7 @@
 MANAGED_FFMPEG_BOOTSTRAP='
 set -eu
 
-tag="${ERSATZRS_FFMPEG_RELEASE_TAG:-v2.0.2}"
+tag="${ERSATZRS_FFMPEG_RELEASE_TAG:-v2.0.3}"
 case "$(uname -m)" in
     x86_64|amd64) rid="linux-x64" ;;
     aarch64|arm64) rid="linux-arm64" ;;
