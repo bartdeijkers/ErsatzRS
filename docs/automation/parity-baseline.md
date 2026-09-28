@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6e9693e963a1ca1175badf973010b303bf847924` |
-| **Commit subject** | `feat: add hw accelerated padding for qsv (#3010)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6e9693e963a1ca1175badf973010b303bf847924 |
+| **Pinned commit** | `8cc34a1ef35c0b549f9e9df41bd6eea9c13bc341` |
+| **Commit subject** | `chore: update changelog (and get new next build, docker image)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/8cc34a1ef35c0b549f9e9df41bd6eea9c13bc341 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

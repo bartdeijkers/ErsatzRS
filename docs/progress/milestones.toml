@@ -11416,6 +11416,13 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row141 (8cc34a1e) is N/A: complete diff changes only release notes for QSV
+padding/codecs and deinterlacing. Exact packaged Next 4cc93e4 recognizes
+AV1/VC1/VP8/VP9 via hardware capability checks; software YADIF/BWDIF/W3FDIF
+preserve configured modes and default to 0 (send_frame, confirmed by v2.0.3
+option help). Row140 owns the verified runtime integration and approved
+hardware debt. No source or build pin changes in this upstream commit.
+
 Started 2026-09-28 after UCU-08 completed with terminal green CI 36453480304
 at dfeaf6d0; completion record d9d43b66 is published. Refreshed upstream remains
 8bda4411. All 180 ledger SHA/subject pairs match ordered upstream history;
