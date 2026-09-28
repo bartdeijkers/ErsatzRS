@@ -51,6 +51,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Tie HLS startup readiness to the registered worker, so a removed worker cannot
+  report a successful tune-in and replacement sessions must become ready themselves.
+
 - Honor “Probe For Interlaced Frames” during native playback and troubleshooting:
   sample the selected local video stream, preserve multi-day seek positions, and
   cache eligible version ratios without overwriting scan updates. Health reports

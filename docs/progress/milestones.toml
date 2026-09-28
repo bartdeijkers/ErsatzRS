@@ -11287,6 +11287,17 @@ owns artifact paths. TSDuck passes 87/87 (tsduck-gate.vRQ8xg). Strict affected
 lint and substantive source review pass. No runtime build/release or schema
 change. Pin/ledger advance together; align reference checkout after commit.
 Row 132 and milestone-wide closeout/push/exact-SHA CI remain.
+Row 132 is Port at d5f11315: registry-owned readiness, identity-safe publication,
+one existing-worker recovery with the original deadline, and independent waiters.
+All 28 HLS tests pass (90673701); three real routed Next lifecycle tests pass
+(37382233). Strict core/infra/web library/test lint and native lifecycle smoke
+pass; artifact ersatzrs-smoke-9846-1790608956/ersatzrs-web-smoke.log in system
+temporary directory. Published FFmpeg v2.0.2 checksum is reverified; official
+Next 4cc93e4 origin/digest verified by staging. Source map owns full digests.
+Row131 TSDuck evidence remains valid for unchanged media generation. Source
+review passes; no acceptance weakened. Row133 and window gates remain.
+Upstream 8bda4411 appends pending rows179-180 with the prior178 an exact prefix.
+
 
 """
 
@@ -11299,7 +11310,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through f8410286 (latest fetched tip) in order,
+Process every ledger row in this release window through 8bda4411 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve

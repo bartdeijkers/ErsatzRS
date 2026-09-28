@@ -263,6 +263,48 @@ pub(crate) enum InitialSegmentWaitResult {
     Timeout,
 }
 
+/// Admission is atomic in the registry; each viewer owns only its readiness wait.
+/// Recover once when an existing worker ends, never after a timeout or denial.
+pub(crate) async fn start_and_wait_for_initial_segments<F, Fut>(
+    registry: &dyn HlsSessionRegistry,
+    channel_number: &str,
+    segment_count: usize,
+    startup_timeout: Duration,
+    deadline: std::time::Instant,
+    mut start: F,
+) -> InitialSegmentWaitResult
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    for attempt in 0..2 {
+        let Ok(existing) =
+            tokio::time::timeout_at(deadline.into(), registry.try_get(channel_number)).await
+        else {
+            return InitialSegmentWaitResult::Timeout;
+        };
+        if tokio::time::timeout_at(deadline.into(), start())
+            .await
+            .is_err()
+        {
+            return InitialSegmentWaitResult::Timeout;
+        }
+        let result = wait_for_initial_segments(
+            registry,
+            channel_number,
+            segment_count,
+            startup_timeout.min(deadline.saturating_duration_since(std::time::Instant::now())),
+        )
+        .await;
+        if attempt == 0 && existing.is_some() && result == InitialSegmentWaitResult::MissingSession
+        {
+            continue;
+        }
+        return result;
+    }
+    InitialSegmentWaitResult::MissingSession
+}
+
 pub(crate) async fn wait_for_initial_segments(
     registry: &dyn HlsSessionRegistry,
     channel_number: &str,
@@ -271,6 +313,7 @@ pub(crate) async fn wait_for_initial_segments(
 ) -> InitialSegmentWaitResult {
     let deadline = tokio::time::Instant::now() + startup_timeout;
     let mut saw_at_capacity = false;
+    let mut expected = None;
     while tokio::time::Instant::now() < deadline {
         let mut poll_at =
             (tokio::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL).min(deadline);
@@ -279,11 +322,20 @@ pub(crate) async fn wait_for_initial_segments(
             break;
         };
         if let Some(handle) = handle {
+            if expected
+                .as_ref()
+                .is_some_and(|previous| !Arc::ptr_eq(previous, &handle))
+            {
+                return InitialSegmentWaitResult::MissingSession;
+            }
+            expected = Some(handle.clone());
             if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
                 saw_at_capacity = true;
             }
             match handle.startup_readiness() {
-                HlsStartupReadiness::Ready => return InitialSegmentWaitResult::Ready,
+                HlsStartupReadiness::Ready => {
+                    return publish_initial_readiness(registry, &handle, deadline).await;
+                }
                 HlsStartupReadiness::Failed => {
                     return if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
                         InitialSegmentWaitResult::AtCapacity
@@ -302,14 +354,25 @@ pub(crate) async fn wait_for_initial_segments(
                     }
                 }
                 HlsStartupReadiness::Legacy => {
-                    let Ok(playlist) =
-                        tokio::time::timeout_at(deadline, handle.trim_playlist()).await
-                    else {
-                        break;
+                    match tokio::time::timeout_at(
+                        deadline,
+                        registry.initial_segments_ready(&handle),
+                    )
+                    .await
+                    {
+                        Ok(Some(true)) => return InitialSegmentWaitResult::Ready,
+                        Ok(Some(false)) => {}
+                        Ok(None) => return InitialSegmentWaitResult::MissingSession,
+                        Err(_) => break,
+                    }
+                    let playlist = match read_initial_playlist(registry, &handle, deadline).await {
+                        Ok(playlist) => playlist,
+                        Err(InitialSegmentWaitResult::Timeout) => break,
+                        Err(result) => return result,
                     };
                     if let Some(playlist) = playlist {
-                        if count_playlist_segments(&playlist) >= segment_count {
-                            return InitialSegmentWaitResult::Ready;
+                        if count_playlist_segments(&playlist) >= segment_count.max(1) {
+                            return publish_initial_readiness(registry, &handle, deadline).await;
                         }
                     }
                 }
@@ -324,6 +387,39 @@ pub(crate) async fn wait_for_initial_segments(
         InitialSegmentWaitResult::AtCapacity
     } else {
         InitialSegmentWaitResult::Timeout
+    }
+}
+
+async fn read_initial_playlist(
+    registry: &dyn HlsSessionRegistry,
+    handle: &Arc<dyn HlsSessionHandle>,
+    deadline: tokio::time::Instant,
+) -> Result<Option<String>, InitialSegmentWaitResult> {
+    let removed = async {
+        loop {
+            if registry.initial_segments_ready(handle).await.is_none() {
+                return;
+            }
+            tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
+        }
+    };
+    tokio::select! {
+        biased;
+        () = tokio::time::sleep_until(deadline) => Err(InitialSegmentWaitResult::Timeout),
+        () = removed => Err(InitialSegmentWaitResult::MissingSession),
+        playlist = handle.trim_playlist() => Ok(playlist),
+    }
+}
+
+async fn publish_initial_readiness(
+    registry: &dyn HlsSessionRegistry,
+    handle: &Arc<dyn HlsSessionHandle>,
+    deadline: tokio::time::Instant,
+) -> InitialSegmentWaitResult {
+    match tokio::time::timeout_at(deadline, registry.mark_initial_segments_ready(handle)).await {
+        Ok(true) => InitialSegmentWaitResult::Ready,
+        Ok(false) => InitialSegmentWaitResult::MissingSession,
+        Err(_) => InitialSegmentWaitResult::Timeout,
     }
 }
 
@@ -781,17 +877,6 @@ async fn serve_hls_segmenter_playlist(
         }
     };
 
-    ensure_segmenter_worker_running_before(
-        state,
-        &channel.number,
-        channel.id,
-        channel.idle_behavior,
-        output_format,
-        path_replacements,
-        deadline,
-    )
-    .await;
-
     let Ok((initial_segment_count, startup_timeout)) =
         tokio::time::timeout_at(deadline.into(), async {
             (
@@ -809,11 +894,23 @@ async fn serve_hls_segmenter_playlist(
         )
             .into_response();
     };
-    match wait_for_initial_segments(
+    match start_and_wait_for_initial_segments(
         &*state.hls_sessions,
         &channel.number,
         initial_segment_count,
         startup_timeout,
+        deadline,
+        || {
+            ensure_segmenter_worker_running_before(
+                state,
+                &channel.number,
+                channel.id,
+                channel.idle_behavior,
+                output_format,
+                path_replacements.clone(),
+                deadline,
+            )
+        },
     )
     .await
     {
@@ -947,7 +1044,6 @@ pub async fn get_preview_master_playlist(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    ensure_preview_worker_running(&state, &channel, path_replacements, deadline).await;
 
     let Ok((initial_segment_count, startup_timeout)) =
         tokio::time::timeout_at(deadline.into(), async {
@@ -964,11 +1060,13 @@ pub async fn get_preview_master_playlist(
         )
             .into_response();
     };
-    match wait_for_initial_segments(
+    match start_and_wait_for_initial_segments(
         &*state.preview_hls_sessions,
         &channel.number,
         initial_segment_count,
         startup_timeout,
+        deadline,
+        || ensure_preview_worker_running(&state, &channel, path_replacements.clone(), deadline),
     )
     .await
     {
@@ -1266,6 +1364,8 @@ mod tests {
         readiness: Mutex<HlsStartupReadiness>,
         cancelled: AtomicUsize,
         stall_playlist: AtomicBool,
+        playlist_reads: AtomicUsize,
+        playlist_gate: Mutex<Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>>,
     }
 
     impl FakeHandle {
@@ -1282,6 +1382,8 @@ mod tests {
                 readiness: Mutex::new(HlsStartupReadiness::Legacy),
                 cancelled: AtomicUsize::new(0),
                 stall_playlist: AtomicBool::new(false),
+                playlist_reads: AtomicUsize::new(0),
+                playlist_gate: Mutex::new(None),
             })
         }
 
@@ -1311,6 +1413,12 @@ mod tests {
         }
 
         async fn trim_playlist(&self) -> Option<String> {
+            self.playlist_reads.fetch_add(1, Ordering::SeqCst);
+            let gate = self.playlist_gate.lock().unwrap().clone();
+            if let Some((entered, release)) = gate {
+                entered.notify_one();
+                release.notified().await;
+            }
             if self.stall_playlist.load(Ordering::SeqCst) {
                 std::future::pending::<()>().await;
             }
@@ -1563,6 +1671,252 @@ mod tests {
             wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1)).await,
             InitialSegmentWaitResult::Timeout
         );
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn initial_segment_wait_rejects_removed_worker_playlist() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("12");
+        handle.set_playlist("#EXTM3U\n#EXTINF:4,\na.ts\n");
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        *handle.playlist_gate.lock().unwrap() = Some((entered.clone(), release.clone()));
+        registry.insert(handle.clone()).await;
+        let wait = wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1));
+        let removal = async {
+            entered.notified().await;
+            let identity: Arc<dyn HlsSessionHandle> = handle.clone();
+            registry.remove_if_current(&identity).await;
+            assert!(registry.try_get("12").await.is_none());
+            release.notify_one();
+        };
+        let (result, ()) = tokio::join!(wait, removal);
+        assert_eq!(result, InitialSegmentWaitResult::MissingSession);
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn initial_segment_readiness_is_cached_only_for_current_worker() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("12");
+        handle.set_playlist("#EXTM3U\n#EXTINF:4,\na.ts\n");
+        registry.insert(handle.clone()).await;
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(1)).await,
+            InitialSegmentWaitResult::Ready
+        );
+        handle.stall_playlist.store(true, Ordering::SeqCst);
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 1, Duration::from_millis(20)).await,
+            InitialSegmentWaitResult::Ready
+        );
+        let replacement = FakeHandle::new("12");
+        replacement.set_playlist("#EXTM3U\n");
+        registry.insert(replacement.clone()).await;
+        let previous: Arc<dyn HlsSessionHandle> = handle;
+        assert_eq!(registry.initial_segments_ready(&previous).await, None);
+        assert!(!registry.mark_initial_segments_ready(&previous).await);
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 0, Duration::from_millis(20)).await,
+            InitialSegmentWaitResult::Timeout
+        );
+        replacement.set_playlist("#EXTM3U\n#EXTINF:4,\nb.ts\n");
+        assert_eq!(
+            wait_for_initial_segments(&registry, "12", 0, Duration::from_secs(1)).await,
+            InitialSegmentWaitResult::Ready
+        );
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_replaces_ended_existing_worker_only_once() {
+        for replacement_ends in [false, true] {
+            let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+            let old = FakeHandle::new("12");
+            let entered = Arc::new(tokio::sync::Notify::new());
+            *old.playlist_gate.lock().unwrap() =
+                Some((entered.clone(), Arc::new(tokio::sync::Notify::new())));
+            registry.insert(old.clone()).await;
+            let replacement = FakeHandle::new("12");
+            let replacement_entered = Arc::new(tokio::sync::Notify::new());
+            if replacement_ends {
+                *replacement.playlist_gate.lock().unwrap() = Some((
+                    replacement_entered.clone(),
+                    Arc::new(tokio::sync::Notify::new()),
+                ));
+            } else {
+                replacement.set_playlist("#EXTM3U\n#EXTINF:4,\nb.ts\n");
+            }
+            let created = AtomicUsize::new(0);
+            let start = || async {
+                if registry.try_get("12").await.is_none() {
+                    assert!(registry.try_insert(replacement.clone()).await);
+                    created.fetch_add(1, Ordering::SeqCst);
+                }
+            };
+            let wait = start_and_wait_for_initial_segments(
+                &registry,
+                "12",
+                1,
+                Duration::from_secs(3),
+                std::time::Instant::now() + Duration::from_secs(3),
+                start,
+            );
+            let remove = async {
+                entered.notified().await;
+                let identity: Arc<dyn HlsSessionHandle> = old.clone();
+                registry.remove_if_current(&identity).await;
+                if replacement_ends {
+                    replacement_entered.notified().await;
+                    let identity: Arc<dyn HlsSessionHandle> = replacement.clone();
+                    registry.remove_if_current(&identity).await;
+                }
+            };
+            let (result, ()) =
+                tokio::time::timeout(Duration::from_secs(2), async { tokio::join!(wait, remove) })
+                    .await
+                    .expect("removal must interrupt pending playlist I/O");
+            assert_eq!(
+                result,
+                if replacement_ends {
+                    InitialSegmentWaitResult::MissingSession
+                } else {
+                    InitialSegmentWaitResult::Ready
+                }
+            );
+            assert_eq!(created.load(Ordering::SeqCst), 1);
+            assert_eq!(old.cancelled.load(Ordering::SeqCst), 0);
+            assert_eq!(replacement.cancelled.load(Ordering::SeqCst), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn simultaneous_startup_waiters_share_worker_and_cancel_independently() {
+        for cancel_first in [false, true] {
+            let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+            let handle = FakeHandle::new("12");
+            let release = Arc::new(tokio::sync::Notify::new());
+            *handle.playlist_gate.lock().unwrap() =
+                Some((Arc::new(tokio::sync::Notify::new()), release.clone()));
+            let created = AtomicUsize::new(0);
+            let start = || async {
+                if registry.try_insert(handle.clone()).await {
+                    created.fetch_add(1, Ordering::SeqCst);
+                }
+            };
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            let (cancel, cancelled) = tokio::sync::oneshot::channel();
+            let mut cancel = Some(cancel);
+            let first = async {
+                tokio::select! {
+                    biased;
+                    _ = cancelled => None,
+                    result = start_and_wait_for_initial_segments(&registry, "12", 1, Duration::from_secs(3), deadline, start) => Some(result),
+                }
+            };
+            let second = start_and_wait_for_initial_segments(
+                &registry,
+                "12",
+                1,
+                Duration::from_secs(3),
+                deadline,
+                start,
+            );
+            let producer = async {
+                while handle.playlist_reads.load(Ordering::SeqCst) < 2 {
+                    tokio::task::yield_now().await;
+                }
+                if cancel_first {
+                    cancel.take().unwrap().send(()).unwrap();
+                }
+                handle.set_playlist("#EXTM3U\n#EXTINF:4,\na.ts\n");
+                release.notify_waiters();
+            };
+            let (first, second, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+                tokio::join!(first, second, producer)
+            })
+            .await
+            .expect("viewers must reach readiness concurrently");
+            assert_eq!(
+                first,
+                if cancel_first {
+                    None
+                } else {
+                    Some(InitialSegmentWaitResult::Ready)
+                }
+            );
+            assert_eq!(second, InitialSegmentWaitResult::Ready);
+            assert_eq!(created.load(Ordering::SeqCst), 1);
+            assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_uses_another_viewers_replacement() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let old = FakeHandle::new("12");
+        let entered = Arc::new(tokio::sync::Notify::new());
+        *old.playlist_gate.lock().unwrap() =
+            Some((entered.clone(), Arc::new(tokio::sync::Notify::new())));
+        registry.insert(old).await;
+        let replacement = FakeHandle::new("12");
+        replacement.set_playlist("#EXTM3U\n#EXTINF:4,\nb.ts\n");
+        let start = || async {
+            assert!(
+                registry.try_get("12").await.is_some(),
+                "must reuse registered replacement"
+            );
+        };
+        let wait = start_and_wait_for_initial_segments(
+            &registry,
+            "12",
+            1,
+            Duration::from_secs(3),
+            std::time::Instant::now() + Duration::from_secs(3),
+            start,
+        );
+        let replace = async {
+            entered.notified().await;
+            registry.insert(replacement.clone()).await;
+        };
+        let (result, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(wait, replace)
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, InitialSegmentWaitResult::Ready);
+        let identity: Arc<dyn HlsSessionHandle> = replacement;
+        assert!(Arc::ptr_eq(
+            &registry.try_get("12").await.unwrap(),
+            &identity
+        ));
+    }
+
+    #[tokio::test]
+    async fn startup_timeout_does_not_restart_existing_worker() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("12");
+        handle.stall_playlist.store(true, Ordering::SeqCst);
+        registry.insert(handle.clone()).await;
+        let attempts = AtomicUsize::new(0);
+        let result = start_and_wait_for_initial_segments(
+            &registry,
+            "12",
+            1,
+            Duration::from_millis(20),
+            std::time::Instant::now() + Duration::from_secs(1),
+            || async {
+                attempts.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .await;
+        assert_eq!(result, InitialSegmentWaitResult::Timeout);
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        let identity: Arc<dyn HlsSessionHandle> = handle.clone();
+        assert!(Arc::ptr_eq(
+            &registry.try_get("12").await.unwrap(),
+            &identity
+        ));
         assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
     }
 

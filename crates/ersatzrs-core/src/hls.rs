@@ -102,6 +102,22 @@ pub trait HlsSessionRegistry: Send + Sync {
     /// Late cleanup must never unregister a replacement worker.
     async fn remove_if_current(&self, handle: &Arc<dyn HlsSessionHandle>);
 
+    /// Read cached readiness only for this exact registered worker.
+    /// None means the worker has ended or has been replaced.
+    async fn initial_segments_ready(&self, handle: &Arc<dyn HlsSessionHandle>) -> Option<bool> {
+        self.try_get(handle.channel_number())
+            .await
+            .filter(|current| Arc::ptr_eq(current, handle))
+            .map(|_| false)
+    }
+
+    /// Publish readiness only while this exact worker still owns its slot.
+    async fn mark_initial_segments_ready(&self, handle: &Arc<dyn HlsSessionHandle>) -> bool {
+        self.try_get(handle.channel_number())
+            .await
+            .is_some_and(|current| Arc::ptr_eq(&current, handle))
+    }
+
     /// Track a direct HTTP response for activity reporting and channel Stop.
     /// Direct responses must not occupy or replace the HLS worker slot.
     async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>);

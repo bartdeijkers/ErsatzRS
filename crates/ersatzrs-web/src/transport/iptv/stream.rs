@@ -1598,26 +1598,27 @@ async fn serve_segmenter_wrapper_stream(
         }
     };
 
-    hls::ensure_segmenter_worker_running_before(
-        state,
-        &channel.number,
-        channel.id,
-        channel.idle_behavior,
-        OutputFormat::Hls,
-        path_replacements,
-        deadline,
-    )
-    .await;
-
     let initial_segment_count = hls::load_initial_segment_count(state).await;
     let startup_timeout = hls::load_segmenter_startup_timeout(state)
         .await
         .min(deadline.saturating_duration_since(std::time::Instant::now()));
-    let wait_result = hls::wait_for_initial_segments(
+    let wait_result = hls::start_and_wait_for_initial_segments(
         &*state.hls_sessions,
         &channel.number,
         initial_segment_count,
         startup_timeout,
+        deadline,
+        || {
+            hls::ensure_segmenter_worker_running_before(
+                state,
+                &channel.number,
+                channel.id,
+                channel.idle_behavior,
+                OutputFormat::Hls,
+                path_replacements.clone(),
+                deadline,
+            )
+        },
     )
     .await;
     if let Some(response) = segmenter_wrapper_wait_failure_response(

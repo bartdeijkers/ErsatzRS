@@ -4,7 +4,7 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_spe
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084']
 summary    = '''
-Row 130 startup ownership/deadlines verified.
+Rows 130/132 startup ownership and readiness verified.
 HLS exposes mode-aware channel URLs,
 multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
 playlists with per-channel media-sequence / `#EXT-X-DISCONTINUITY` tracking and
@@ -171,3 +171,10 @@ description = 'UCU-08 row 130: worker cleanup must preserve replacement registra
 discovered  = '2026-09-27'
 resolved    = true
 evidence    = 'Upstream 1681d1ad and native source map are recorded in plans/upstream-catch-up.md. Atomic identity-checked removal now covers native and Next cleanup; all ten registry tests pass (1102cea4-0021-4e86-8ab1-f005e257ef30). The stalled-playlist regression reproduced the missing bound (bc301f54); all 21 HLS route tests now pass (e685b45b), including bounded startup and capacity playlist reads. Nine native/Next lifecycle tests pass (d82fa5fe); strict affected library/test lint passes. Real HTTP disconnect passes (c3786ef8), as does installed Next startup/cleanup and decoded media (d0e92f99). Native lifecycle smoke, final strict core/infra/web lint and substantive row review pass; ucu-08 owns canonical evidence. Row 130 is Port.'
+
+[[debt]]
+id = 'ucu-startup-coordination'
+description = 'UCU-08 row132 requires identity-safe readiness and one bounded recovery when an existing worker ends during startup, shared by native and Next tune-in paths.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'Removed-worker stale Ready reproduced (cfe9e3de). Registry-owned readiness, exact-identity publication and one bounded existing-worker recovery now cover variant/preview/hybrid paths. All 28 HLS tests pass (90673701), including concurrent waiters, cancellation independence, replacement adoption, removal during blocked I/O and no timeout restart. Three real routed Next lifecycle tests pass (37382233) using verified official 4cc93e4 and published FFmpeg v2.0.2. Strict affected lint and native lifecycle smoke pass (ersatzrs-smoke-9846-1790608956). Source map and ucu-08 own evidence; substantive review passes. Row132 is Port.'

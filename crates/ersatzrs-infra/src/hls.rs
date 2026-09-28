@@ -13,9 +13,14 @@ use tokio::sync::RwLock;
 /// and cancellation; they cannot occupy a playlist worker's slot.
 #[derive(Default)]
 pub struct InMemoryHlsSessionRegistry {
-    inner: RwLock<HashMap<String, Arc<dyn HlsSessionHandle>>>,
+    inner: RwLock<HashMap<String, RegisteredSession>>,
     direct: RwLock<HashMap<String, Vec<Arc<dyn HlsSessionHandle>>>>,
     playout_updates_to: Option<Arc<dyn HlsSessionRegistry>>,
+}
+
+struct RegisteredSession {
+    handle: Arc<dyn HlsSessionHandle>,
+    ready: bool,
 }
 
 impl InMemoryHlsSessionRegistry {
@@ -66,7 +71,9 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
 
     async fn try_get(&self, channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
         let guard = self.inner.read().await;
-        guard.get(channel_number).cloned()
+        guard
+            .get(channel_number)
+            .map(|session| session.handle.clone())
     }
 
     async fn try_insert(&self, handle: Arc<dyn HlsSessionHandle>) -> bool {
@@ -76,13 +83,25 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
             return false;
         }
 
-        guard.insert(key, handle);
+        guard.insert(
+            key,
+            RegisteredSession {
+                handle,
+                ready: false,
+            },
+        );
         true
     }
 
     async fn insert(&self, handle: Arc<dyn HlsSessionHandle>) {
         let mut guard = self.inner.write().await;
-        guard.insert(handle.channel_number().to_string(), handle);
+        guard.insert(
+            handle.channel_number().to_string(),
+            RegisteredSession {
+                handle,
+                ready: false,
+            },
+        );
     }
 
     async fn remove(&self, channel_number: &str) {
@@ -94,10 +113,31 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         let mut guard = self.inner.write().await;
         if guard
             .get(handle.channel_number())
-            .is_some_and(|registered| Arc::ptr_eq(registered, handle))
+            .is_some_and(|registered| Arc::ptr_eq(&registered.handle, handle))
         {
             guard.remove(handle.channel_number());
         }
+    }
+
+    async fn initial_segments_ready(&self, handle: &Arc<dyn HlsSessionHandle>) -> Option<bool> {
+        self.inner
+            .read()
+            .await
+            .get(handle.channel_number())
+            .filter(|session| Arc::ptr_eq(&session.handle, handle))
+            .map(|session| session.ready)
+    }
+
+    async fn mark_initial_segments_ready(&self, handle: &Arc<dyn HlsSessionHandle>) -> bool {
+        let mut sessions = self.inner.write().await;
+        let Some(session) = sessions
+            .get_mut(handle.channel_number())
+            .filter(|session| Arc::ptr_eq(&session.handle, handle))
+        else {
+            return false;
+        };
+        session.ready = true;
+        true
     }
 
     async fn register_direct(&self, handle: Arc<dyn HlsSessionHandle>) {
