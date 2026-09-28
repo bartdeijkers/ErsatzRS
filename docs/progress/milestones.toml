@@ -11416,6 +11416,12 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row144 (b30d9670) is N/A: two release-note lines only. Exact packaged Next
+4cc93e4 carries downscale-before-tonemap ordering (except Vulkan/no-downscale)
+and guarded QSV fusion. No legacy source/build pin change; existing runtime
+proof and explicit hardware debt remain. The 2026-09-29 upstream refresh still
+ends at 8bda4411; all 180 ordered SHA/subject pairs match the ledger.
+
 Row143 implementation adds a scoped one-time local PQ/HLG scan-gate migration
 and video-only DvProfile/HasHdr10Metadata in Media Info JSON. Existing richer
 probe storage and Next hints remain. All 34 migration tests pass, including

@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
+- Latest fetched target (`origin/main`, 2026-09-29): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **37 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **36 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Continue at row 144. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Continue at row 145. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,19 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 144 source map — Next optimization release notes (N/A)
+
+- Complete upstream `b30d9670` diff adds only two CHANGELOG lines: downscale
+  before tonemapping when possible, and merge consecutive QSV filters.
+- Exact packaged Next `4cc93e4`, `pipeline.rs`, keeps tonemapping first for
+  Vulkan decode or no downscale and otherwise applies geometry first.
+  `filter_chain.rs` fuses consecutive QSV filters through `VppQsv::fuse`;
+  `qsv.rs` retains incompatible padding/tonemapping/deinterlacing guards.
+- No legacy source or build pin changes occur. Existing packaged Next already
+  carries the described behavior; row140 integration evidence remains valid.
+  No duplicate build or new hardware/performance claim is required. Explicit
+  approved hardware acceptance debt remains unverified.
 
 ## Row 143 source map — Dolby Vision/HDR10 probing (Port)
 
@@ -4042,7 +4055,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 141 | `8cc34a1e` | chore: update changelog (and get new next build, docker image) | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next runtime release notes` | ucu-09; changelog-only diff. Exact packaged Next 4cc93e4 retains capability-gated QSV codecs and configurable send_frame defaults; row140 owns runtime integration and approved hardware debt. |
 | 142 | `00db622d` | chore: trigger new build for updated next engine | N/A | upstream-baseline-catch-up | `docs(parity): reconcile empty Next build trigger` | ucu-09; empty diff and identical parent tree; no application or runtime change. Row140 integration evidence reused; no duplicate build. |
 | 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | Port | ffmpeg-9-performance-and-support | `fix(media): refresh and expose HDR metadata` | ucu-09; scoped one-time local PQ/HLG rescan, video-only Media Info fields; 34 migration tests, production projection, real unchanged-file HDR/subtitle preservation, JSON regression, Chromium/Firefox and affected strict lint pass. Existing richer probe/persistence/Next hints retained. |
-| 144 | `b30d9670` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
+| 144 | `b30d9670` | chore: update changelog for new next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next optimization release notes` | ucu-09; two changelog lines only. Exact Next 4cc93e4 carries scale/tonemap ordering and guarded QSV fusion; no legacy source or pin change. Existing runtime proof reused; hardware debt retained. |
 | 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: logging and validation for four TODOs, including the external JSON playout provider. |
 | 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: canvas feed for Next only; native graphics stay drawvg under ADR 0005. |
 | 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: YAML post-roll state must survive playout builds; upstream ships 345 lines of tests. |

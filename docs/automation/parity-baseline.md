@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `cbfea01c539687dd41ff67471db6ae2e1f7b2c43` |
-| **Commit subject** | `feat: probe dv and hdr10 metadata (#3011)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cbfea01c539687dd41ff67471db6ae2e1f7b2c43 |
+| **Pinned commit** | `b30d9670a3d6ed6ebde7dfaf6edc969b8ff5ad0c` |
+| **Commit subject** | `chore: update changelog for new next build` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b30d9670a3d6ed6ebde7dfaf6edc969b8ff5ad0c |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
