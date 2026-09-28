@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-28): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **48 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **47 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **132**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **133**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is next. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is next. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -60,6 +60,45 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## UCU-08 row 133 source map: local folder etags (Port)
+
+- Reviewed all 19 files in upstream `4a2aa157`: movie/season etags publish
+  only after all file processing and indexing succeeds; image/music-video/
+  other-video scanners also count indexing failures. Cancellation must not
+  publish a partially processed folder. .NET dependency and solution updates
+  have no direct Rust package equivalent.
+- Rust target: scanner `local_television.rs`. Confirmed unconditional season
+  etag publication after episode errors; malformed episode NFO is swallowed
+  as fallback and also permits publication. Other local media kinds have no
+  folder-etag skip and retry every scan; search reads committed SQLite metadata
+  directly, so no external indexing acknowledgement exists here.
+- Outcome: a failed local episode or malformed NFO remains retryable without a
+  file touch, while successful folders retain their fast path. Preserve
+  fallback playback, sibling processing, metadata/track ownership and IDs.
+  Exclusions: no new cache, search service, dependency upgrade or schema change;
+  row134 season scanning remains separate.
+- Required evidence: real scan with mixed success/failure, unchanged retry,
+  malformed-NFO repair with preserved mtime, successful skip, focused scanner
+  tests/lint and source review. Pin remains row132.
+- Regression `f8cf9940` reproduces erroneous etag publication after a database
+  write failure. The correction counts failed episode/extra writes and retains
+  metadata completeness separately from playable fallback success. Publication
+  remains after all awaited writes; cancellation cannot reach it midway.
+- All seven real local-TV scan tests pass (`0490d38f`), including mixed sibling
+  success/error, unchanged retries, malformed NFO repair with preserved mtime,
+  healthy fast paths, metadata/child rows, remake repair, trash restoration and
+  decoded subtitle-language restoration. Published v2.0.2 FFmpeg/ffprobe used.
+  Ten focused local-TV unit tests pass (`c4ec5adb`). Strict scanner lint is
+  running. Source review confirms other media kinds rescan without folder etags;
+  SQLite-backed search needs no external index acknowledgement. No new health
+  capability or state is introduced; existing identity/availability checks apply.
+
+- Final acceptance: strict scanner library/test Clippy and substantive source
+  review pass. Verdict: Port. Existing fallback playback is preserved while
+  failed metadata remains retryable. No schema, dependency or browser change.
+  Commit pin/ledger together, then align the reference checkout. Row134 and
+  milestone-wide gates remain; no intermediate push/CI.
 
 ## UCU-08 row 132 source map: concurrent channel startup (Port)
 
@@ -3610,7 +3649,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 130 | `1681d1ad` | fix: channel startup (#3002) | Port | upstream-baseline-catch-up | `fix(streaming): bound startup waits and preserve worker ownership` | ucu-08; identity-checked cleanup, bounded playlist I/O, real HTTP disconnect and native/Next lifecycle proof; see source map and milestone. |
 | 131 | `6ebcaf80` | fix: multiday seek | Port | ffmpeg-command-generation | `fix(playback): sample interlace state with bounded source-safe caching` | ucu-08; multi-day argv/motion, selected-stream idet, cache races, HLS Stop, native HTTP smoke and TSDuck 87/87; see source map. |
 | 132 | `d5f11315` | fix: more channel startup fixes (#3003) | Port | hls-variant-playlists-segmenter | `fix(streaming): coordinate identity-safe session readiness and recovery` | ucu-08; 28 HLS tests, three real Next lifecycle tests, strict affected lint and native lifecycle smoke pass; see source map. |
-| 133 | `4a2aa157` | fix: local folder etags (#3004) | | | | ucu-08; provisional: Port candidate. |
+| 133 | `4a2aa157` | fix: local folder etags (#3004) | Port | scanner | `fix(scanner): retain failed season scans for unchanged retries` | ucu-08; mixed failure/NFO regression, seven real scan tests, ten local-TV unit tests and strict lint pass; see source map. |
 | 134 | `188274e8` | fix: season scanning fixes (#3005) | | | | ucu-08; provisional: Port candidate. |
 | 135 | `5bb3ddfc` | prep for release v26.9.0 [no ci] | | | | ucu-08; provisional: Upstream tooling candidate. |
 | 136 | `3c41959f` | fix: health check improvements (#3006) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: health check isolation and reporting; the native health engine has the same shape. |

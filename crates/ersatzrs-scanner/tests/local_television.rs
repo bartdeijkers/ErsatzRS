@@ -361,6 +361,109 @@ async fn second_scan_skips_unchanged_season_via_etag() {
     );
 }
 
+/// Failed episode writes and malformed sidecars must not suppress the next scan.
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture"]
+async fn failed_episode_scan_does_not_publish_season_etag() {
+    let ffprobe = ffprobe_binary().expect("ffprobe is required for acceptance");
+    let fixture = big_buck_bunny_fixture().expect("media fixture is required for acceptance");
+    for malformed_nfo in [false, true] {
+        let temp = TempDir::new("ersatzrs-season-etag-failure");
+        let root = temp.path().join("library");
+        let season = root.join("Synthetic Show").join("Season 01");
+        std::fs::create_dir_all(&season).unwrap();
+        for name in ["S01E01.mkv", "S01E02.mkv"] {
+            let destination = season.join(name);
+            std::fs::hard_link(&fixture, &destination)
+                .or_else(|_| std::fs::copy(&fixture, &destination).map(|_| ()))
+                .unwrap();
+        }
+        let sidecar = season.join("S01E02.nfo");
+        std::fs::write(
+            &sidecar,
+            if malformed_nfo {
+                "<episodedetails><title>Broken</episodedetails>"
+            } else {
+                "<episodedetails><title>Recovered</title></episodedetails>"
+            },
+        )
+        .unwrap();
+        let original_mtime = std::fs::metadata(&sidecar).unwrap().modified().unwrap();
+        let pool = test_db().await;
+        seed_local_library(&pool, &root, 2).await;
+        if !malformed_nfo {
+            pool.execute(
+                r#"CREATE TRIGGER fail_second_episode BEFORE INSERT ON "EpisodeMetadata"
+                   WHEN NEW."Title" = 'Recovered'
+                   BEGIN SELECT RAISE(ABORT, 'synthetic metadata write failure'); END"#,
+            )
+            .await
+            .unwrap();
+        }
+        let config = LocalScanConfig {
+            library_id: 1,
+            ffprobe_path: ffprobe.clone(),
+        };
+        for _ in 0..2 {
+            let report = scan_local_library(&pool, &config).await.unwrap();
+            assert!(report.scanned_files >= 1, "successful siblings still scan");
+            assert_eq!(
+                season_etag(&pool, &season).await,
+                None,
+                "partial processing must remain retryable without touching a file"
+            );
+        }
+        if malformed_nfo {
+            std::fs::write(
+                &sidecar,
+                "<episodedetails><title>Recovered</title></episodedetails>",
+            )
+            .unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&sidecar)
+                .unwrap()
+                .set_modified(original_mtime)
+                .unwrap();
+        } else {
+            pool.execute("DROP TRIGGER fail_second_episode")
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            scan_local_library(&pool, &config)
+                .await
+                .unwrap()
+                .scanned_files,
+            2
+        );
+        assert!(season_etag(&pool, &season).await.is_some());
+        let recovered: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "EpisodeMetadata" WHERE "Title" = 'Recovered'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(recovered, 1);
+        assert_eq!(count(&pool, "Episode").await, 2);
+        assert_eq!(
+            scan_local_library(&pool, &config)
+                .await
+                .unwrap()
+                .scanned_files,
+            0
+        );
+    }
+}
+
+async fn season_etag(pool: &SqlitePool, season: &Path) -> Option<String> {
+    sqlx::query_scalar(r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+        .bind(season.to_string_lossy().as_ref())
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
 /// A legacy collision survives an unchanged-folder scan, then the upgrade
 /// invalidates the folder and the ordinary scanner repairs it without a file touch.
 #[tokio::test]

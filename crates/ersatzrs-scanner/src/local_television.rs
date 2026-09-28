@@ -110,6 +110,7 @@ struct ExtraVideoWork {
 }
 
 struct LocalEpisodeScan {
+    metadata_complete: bool,
     probed: FfprobeMediaVersion,
     path_text: String,
     hash: String,
@@ -1488,6 +1489,7 @@ pub(crate) async fn sync_local_show_library(
                     }
                 };
 
+            let mut complete = true;
             for extra in &season.extra_files {
                 match sync_extra_video(pool, library_path, season_id, extra, extractor).await {
                     Ok(()) => {
@@ -1500,6 +1502,7 @@ pub(crate) async fn sync_local_show_library(
                             error = %err,
                             "failed to upsert season extra; skipping"
                         );
+                        complete = false;
                     }
                 }
             }
@@ -1524,7 +1527,8 @@ pub(crate) async fn sync_local_show_library(
                 )
                 .await
                 {
-                    Ok(()) => {
+                    Ok(metadata_complete) => {
+                        complete &= metadata_complete;
                         episode_count += 1;
                         on_episode(1);
                     }
@@ -1534,12 +1538,17 @@ pub(crate) async fn sync_local_show_library(
                             error = %err,
                             "failed to upsert episode; skipping"
                         );
+                        complete = false;
                     }
                 }
             }
 
-            // Persist the new etag after the non-skipped episode scan, like
-            // ErsatzTV's `SetEtag` call following `ScanEpisodes`.
+            // Like TelevisionFolderScanner.ScanEpisodes, publish only after
+            // every episode succeeds. Metadata fallback remains playable, but
+            // a failed sidecar must be retried even if its mtime never changes.
+            if !complete {
+                continue;
+            }
             if let Err(err) =
                 library_folder::set_library_folder_etag(pool, season_folder.id, &current_etag).await
             {
@@ -1986,7 +1995,7 @@ async fn sync_local_episode(
     library_folder_id: i64,
     video_path: &Path,
     extractor: &FfprobeExtractor,
-) -> Result<()> {
+) -> Result<bool> {
     let scan = probe_local_episode(video_path, extractor).await?;
 
     for (attempt, delay_ms) in SQLITE_LOCK_RETRY_DELAYS_MS.iter().copied().enumerate() {
@@ -2001,7 +2010,7 @@ async fn sync_local_episode(
         )
         .await
         {
-            Ok(()) => return Ok(()),
+            Ok(()) => return Ok(scan.metadata_complete),
             Err(err) if is_sqlite_lock_error(&err) => {
                 warn!(
                     path = %video_path.display(),
@@ -2025,7 +2034,8 @@ async fn sync_local_episode(
         video_path,
         &scan,
     )
-    .await
+    .await?;
+    Ok(scan.metadata_complete)
 }
 
 async fn probe_local_episode(
@@ -2096,6 +2106,7 @@ async fn probe_local_episode(
     let hash = path_hash(&path_text);
 
     Ok(LocalEpisodeScan {
+        metadata_complete: nfo_path.is_none() || nfo.is_some(),
         probed,
         path_text,
         hash,
@@ -2428,6 +2439,7 @@ mod tests {
             .collect(),
         };
         let scan = LocalEpisodeScan {
+            metadata_complete: true,
             probed,
             path_text: String::new(),
             hash: String::new(),

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `d5f113159f76120adee51b2c7c91c6a5ed583c01` |
-| **Commit subject** | `fix: more channel startup fixes (#3003)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/d5f113159f76120adee51b2c7c91c6a5ed583c01 |
+| **Pinned commit** | `4a2aa1570cafa3b32e0ee9896df033f8a9297206` |
+| **Commit subject** | `fix: local folder etags (#3004)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/4a2aa1570cafa3b32e0ee9896df033f8a9297206 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

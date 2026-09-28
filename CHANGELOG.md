@@ -51,6 +51,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Local television scans retain retry eligibility after episode write failures or
+  malformed NFO sidecars, instead of caching an incomplete season as unchanged.
+
 - Tie HLS startup readiness to the registered worker, so a removed worker cannot
   report a successful tune-in and replacement sessions must become ready themselves.
 

@@ -11297,6 +11297,15 @@ Next 4cc93e4 origin/digest verified by staging. Source map owns full digests.
 Row131 TSDuck evidence remains valid for unchanged media generation. Source
 review passes; no acceptance weakened. Row133 and window gates remain.
 Upstream 8bda4411 appends pending rows179-180 with the prior178 an exact prefix.
+Row133 is Port at 4a2aa157: failed local episode/extra writes and malformed
+NFO fallback no longer publish completed season etags. Existing playable
+fallback and sibling progress remain. Regression f8cf9940 reproduced the defect;
+all seven real local-TV scan tests pass (0490d38f), including same-mtime recovery,
+metadata and subtitle restoration. Ten local-TV unit tests pass (c4ec5adb).
+Strict scanner library/test lint and source review pass. Other media kinds
+have no folder-etag skip; SQLite search has no separate indexing failure.
+Row134 and window gates remain; no intermediate push/CI.
+
 
 
 """

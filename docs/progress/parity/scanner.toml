@@ -135,3 +135,10 @@ description = 'UCU-08 row 129: complete producer-owned tag refresh. Ordinary tag
 discovered  = '2026-09-27'
 resolved    = true
 evidence    = 'plans/upstream-catch-up.md records upstream source maps and regressions. Scoped plain replacement passes 19 metadata tests; source-confined membership and typed labels/collection tags pass 35 provider tests. Movie country parsing/persistence passes ten selected scanner tests, including repeated IDs, other-owner preservation and rollback. Strict core/infra/scanner library/test lint passes. ADR 0104 was accepted on 2026-09-27. Six migration tests cover fresh schema, conservative ownership and tag backfill across all ten metadata kinds, combined legacy upgrade, ambiguity, rollback and restart. Seventeen collection cases cover atomic complete-root discovery/removal, restart, failure preservation and stable playback overrides. Durable refresh publication and recovery now have focused restart/rollback/idempotency coverage; integrated provider-to-builder restart continuity passes for three providers and three randomized orders, including source collisions and descendant invalidation. Final row review is complete; ADR 0104 is accepted and row 129 is Adapt. Plex network and browser evidence is recorded in the milestone. Final 46 migration/collection/network/continuity cases pass (657deb15-c037-46b0-9470-2c7f4010d8a9); row 129 advances the pin.'
+
+[[debt]]
+id = 'ucu-local-folder-etag-errors'
+description = 'UCU-08 row133: local season etags currently publish after failed episodes or malformed NFO fallback, suppressing unchanged-folder retries.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'Unconditional etag publication reproduced (f8cf9940). Failed episode/extra writes and malformed NFO fallback now prevent completion caching while preserving successful siblings and playback. Seven real local-TV scan tests pass (0490d38f), including unchanged retries, preserved-mtime NFO repair, metadata and subtitle restoration; ten unit tests pass (c4ec5adb). Strict scanner lint and substantive review pass. Source map and ucu-08 own acceptance. Row133 is Port.'
