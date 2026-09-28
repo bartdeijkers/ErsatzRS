@@ -10897,7 +10897,7 @@ eligible, beginning with pending row 116. No new release is implied.
 id         = 'ucu-08'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 5bb3ddfc'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-07']
@@ -11354,6 +11354,25 @@ temporary directory. All required local window gates are satisfied. Pin,
 last processed row135 and clean reference HEAD agree at 5bb3ddfc.
 UCU-08 stays In progress until authorized publication and exact-SHA green CI.
 Independent pending-row plan edits are excluded from this acceptance commit.
+Published local acceptance dfeaf6d05ca79be90d3824991925b461aace0917 to main.
+Automatic CI run 36453480304 is queued for that exact SHA:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304
+No duplicate run was dispatched. Terminal success remains required.
+CI Next engine and Chromium jobs pass. Downloaded Chromium JSON independently
+confirms 257 expected passes, 7 skips, zero unexpected failures, zero flaky
+results and no report errors. Workspace tests, Clippy and Firefox remain
+pending; this is partial CI evidence, not milestone completion.
+2026-09-28: CI 36453480304 is terminal success for published exact SHA
+dfeaf6d05ca79be90d3824991925b461aace0917. Preflight, Format, Documentation
+links, workspace Test, Clippy, Cargo deny, Next engine and both Playwright
+browsers passed. PR-only commit lint and the alternative hosted test shard
+were not selected by this main-push configuration. Downloaded browser reports
+confirm Chromium 257 passed/7 skipped and Firefox 233 passed/31 skipped, with
+zero unexpected failures, flaky results or report errors. Local HEAD, tracking
+main and live remote main agree at the accepted SHA. All local gates and
+ordered row116-135 acceptance above are satisfied; pin/ledger/clean reference
+HEAD agree at 5bb3ddfc. UCU-08 is Complete. UCU-09 is eligible, starting at
+row136 after refreshing upstream. No new release is implied.
 
 
 
