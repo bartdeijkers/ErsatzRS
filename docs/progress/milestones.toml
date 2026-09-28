@@ -11427,8 +11427,30 @@ stale persisted items are excluded. Three reader tests plus the production
 SQLite guide regression pass (nextest 1644c950-18cb-4a3a-9874-6985101e541e).
 All 25 XMLTV-filtered tests pass. HTTP endpoint/runtime acceptance is still due.
 
+The transient playback resolver now selects finite external programmes with mirror
+offsets, requires the matching Plex library, applies server-scoped replacements,
+and prefers available local files without requiring a Plex connection/token.
+Remote metadata reads return credential-free bindings, have bounded response size
+and startup cancellation/deadlines, and reject redirects. Distinct redacted
+server/library/connection/token failures are exercised. Five focused tests pass
+including real v2.0.3 ffprobe metadata with Dutch audio and English subtitles
+(nextest f3f21281-5e65-469a-a21d-a6f8688f604e; none skipped). The tested FFmpeg
+and ffprobe hashes still match the published candidate. This is resolver proof,
+not end-to-end playback acceptance. After moving the fixture to the normal
+FFmpeg locator and extracting its setup helper, the local probe passes again
+(nextest 3b9bae19-68dd-49ea-837d-7790530fdd71). Strict infra all-target Clippy
+passes with no new lint exemptions.
+
+The official PMS schema at https://developer.plex.tv/pms/ names nested arrays
+Media/Part/Stream. Shared Plex decoding now accepts those names and retains
+lowercase aliases. The external metadata fixture uses the official names;
+three existing movie/show/collection scanner fixtures also pass
+(nextest 4c34a068-a68a-4397-91d9-f1d8926e2d51). Context7 quota was exhausted;
+the official schema was read directly. The initial sandbox attempt could not
+bind its mock listener; unchanged tests passed with host socket permissions.
+
 Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
-still require transient media integration; owning streaming debt
+still require transient media integration and protected remote-media relay; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a

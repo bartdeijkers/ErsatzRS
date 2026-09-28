@@ -138,8 +138,19 @@ dependencies, not adapting this complete set or GPU acceptance.
   `MarathonGroupBy::None` to Random in the build-local schedule copy and logs the
   upstream warning. Valid marathon grouping is unchanged.
 - The shared `ersatzrs-infra::external_json` reader and XMLTV consumer are now
-  implemented. Milestone evidence owns focused test results; native playback,
-  HLS worker and Next source preparation still need the transient media adapter.
+  implemented. The transient resolver now preserves mirror timing, local-file
+  preference, server-scoped replacements, fresh stream metadata and distinct
+  redacted Plex failures. Its remote metadata client rejects redirects and
+  enforces bounded reads/deadlines. Milestone evidence owns focused results.
+- Native `load_active_media_path`, HLS `load_active_hls_item` and Next
+  `schedule::read_locked`/source preparation must consume these transient
+  bindings. Reuse existing probe-to-source helpers and protected loopback media
+  routing; never insert temporary library/media/playout rows or publish Plex
+  credentials. Preserve custom/default audio and subtitle selection and
+  troubleshooting metadata. Success/invalid-schedule runtime proof remains due.
+- The [official Plex PMS schema](https://developer.plex.tv/pms/) confirms nested
+  `Media`/`Part`/`Stream` names. Shared decoding now accepts these plus existing
+  lowercase aliases; metadata and scanner fixture evidence belongs to UCU-09.
 - Next action: trace and complete external schedule consumption through the
   existing playback/guide boundaries, including bounded file reads, invalid
   start-time handling and safe Plex precondition diagnostics; preserve provider

@@ -51,6 +51,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Decode Plex metadata using the documented `Media`, `Part` and `Stream` array
+  names while retaining compatibility with lowercase responses.
+
 - Restore random fallback with an explicit warning when a Classic marathon has
   no grouping mode, preserving normal Random continuation and track preferences.
 - Read external JSON programme metadata directly for XMLTV, including mirror

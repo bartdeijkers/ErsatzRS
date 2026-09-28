@@ -24,6 +24,7 @@ const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
 const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
 
 mod authentication;
+pub(crate) mod external;
 mod networks;
 mod tag_ownership;
 pub use networks::sync_plex_networks;
@@ -3633,7 +3634,7 @@ struct PlexMetadataItemResponse {
     key: Option<String>,
     rating_key: Option<String>,
     title: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "Media", alias = "media")]
     media: Vec<PlexMediaResponse>,
     added_at: Option<i64>,
     updated_at: Option<i64>,
@@ -3702,7 +3703,7 @@ struct PlexMediaResponse {
     height: i32,
     #[serde(default)]
     aspect_ratio: f64,
-    #[serde(default)]
+    #[serde(default, rename = "Part", alias = "part")]
     part: Vec<PlexPartResponse>,
 }
 
@@ -3713,7 +3714,7 @@ struct PlexPartResponse {
     id: i32,
     key: Option<String>,
     file: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "Stream", alias = "stream")]
     stream: Vec<PlexStreamResponse>,
 }
 

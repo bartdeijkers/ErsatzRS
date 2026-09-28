@@ -74,8 +74,8 @@ runtime default is updated locally, with native/Next integration smoke passing.
 The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
 interop acceptance debt; those paths remain unverified. Row140 is Port; rows141-142 are N/A bookkeeping; row143 ports HDR
 refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. Row145 is in progress: marathon fallback and external JSON guide projection are
-implemented locally; transient native/HLS/Next playback and runtime acceptance
-remain. The refreshed upstream ledger still contains 180 rows.
+implemented locally, together with the transient local/Plex resolver. Native/HLS/Next
+consumer and protected-relay integration plus runtime acceptance remain. The refreshed upstream ledger still contains 180 rows.
 The current 180-row ledger has 36 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 

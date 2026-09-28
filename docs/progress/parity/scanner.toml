@@ -149,3 +149,10 @@ description = 'UCU-08 row134: Plex/Jellyfin/Emby unchanged-etag episodes skip se
 discovered = '2026-09-28'
 resolved = true
 evidence = 'All three provider parent failures reproduced (65a1691f). Library-scoped identity-preserving repair now precedes unchanged-etag skips; Emby excludes mismatched SeasonId while continuing past fully filtered pages. Ten focused tests pass (2abae677), including library isolation/idempotency and unchanged file/playback lookup assertions. Strict infra lint, matched Leptos build, four Chromium/Firefox cases and substantive review pass. Source map and ucu-08 own evidence; row134 is Port.'
+
+[[debt]]
+id = 'ucu09-row145-plex-json-array-casing'
+description = 'Plex metadata decoding expected only lowercase media/part/stream, omitting the capitalized arrays in the official PMS JSON schema.'
+discovered = '2026-09-29'
+evidence = 'Serde now accepts canonical Media/Part/Stream plus lowercase aliases. The external-programme HTTP fixture proves video/audio/subtitle metadata survives canonical casing; existing Plex movie/show/collection scanner fixtures retain their snapshots. UCU-09 owns evidence and integrated acceptance.'
+resolved = true
