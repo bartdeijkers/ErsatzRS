@@ -50,7 +50,7 @@ pub(super) async fn project(
     let context = GraphicsTemplateContext {
         channel_id: channel.id,
         channel_number: channel.number.clone(),
-        media_item_id: media.item.media_item_id,
+        media: crate::graphics_template::GraphicsMedia::Persisted(media.item.media_item_id),
         media_path: media.path.clone(),
         channel_start_time: media.item.start,
         content_start_time: media.item.start,

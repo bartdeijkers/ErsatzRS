@@ -167,7 +167,7 @@ pub struct ResolvedPlaybackGraphicsElement {
 pub struct PlaybackGraphicsRenderContext {
     pub channel_id: i64,
     pub channel_number: String,
-    pub media_item_id: i64,
+    pub media: crate::graphics_template::GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
@@ -2422,7 +2422,7 @@ async fn render_playback_graphics_overlays_inner(
             let variable_context = GraphicsTemplateContext {
                 channel_id: context.channel_id,
                 channel_number: context.channel_number.clone(),
-                media_item_id: context.media_item_id,
+                media: context.media.clone(),
                 media_path: context.media_path.clone(),
                 channel_start_time: context.channel_start_time,
                 content_start_time: context.content_start_time,
@@ -3822,7 +3822,7 @@ mod tests {
         PlaybackGraphicsRenderContext {
             channel_id: 1,
             channel_number: "1".to_owned(),
-            media_item_id: 1,
+            media: crate::graphics_template::GraphicsMedia::Persisted(1),
             media_path: "synthetic-media.mkv".to_owned(),
             channel_start_time: Utc::now(),
             content_start_time: Utc::now(),

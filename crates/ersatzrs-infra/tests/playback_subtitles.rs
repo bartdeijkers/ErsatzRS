@@ -977,7 +977,7 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
     let context = GraphicsTemplateContext {
         channel_id: 110,
         channel_number: "110".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1053,7 +1053,7 @@ async fn imported_image_graphics_use_persisted_epg_context_without_source_yaml()
     let context = PlaybackGraphicsRenderContext {
         channel_id: 110,
         channel_number: "110".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1106,7 +1106,7 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
     let context = PlaybackGraphicsRenderContext {
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1149,6 +1149,31 @@ fn legacy_text_graphics_json_defaults_to_drawvg() {
 async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;
+    verify_dynamic_graphics_media(
+        &pool,
+        ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
+        "Movie",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn transient_graphics_renders_and_refreshes_without_library_records() {
+    let pool = common::test_db().await;
+    let media = ersatzrs_infra::graphics_template::GraphicsMedia::Transient(
+        serde_json::json!({"MediaItem_Title":"Transient"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    );
+    verify_dynamic_graphics_media(&pool, media, "Transient").await;
+}
+
+async fn verify_dynamic_graphics_media(
+    pool: &SqlitePool,
+    media: ersatzrs_infra::graphics_template::GraphicsMedia,
+    title: &str,
+) {
     let output_dir = tempfile::tempdir().unwrap();
     let graphics = vec![ResolvedPlaybackGraphicsElement {
         element: GraphicsElement {
@@ -1175,7 +1200,7 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
     let context = PlaybackGraphicsRenderContext {
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media,
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1186,10 +1211,9 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         frame_rate: Some(FrameRate::DEFAULT),
     };
 
-    let artifacts =
-        render_playback_graphics_overlays(&pool, &graphics, &context, output_dir.path())
-            .await
-            .unwrap();
+    let artifacts = render_playback_graphics_overlays(pool, &graphics, &context, output_dir.path())
+        .await
+        .unwrap();
 
     assert_eq!(artifacts.overlays.len(), 1);
     assert_eq!(artifacts.dynamic_text_controllers.len(), 1);
@@ -1202,7 +1226,7 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         .text_file()
         .to_path_buf();
     let initial = tokio::fs::read_to_string(&text_file).await.unwrap();
-    assert!(initial.starts_with("Movie|Dynamic|12000"));
+    assert!(initial.starts_with(&format!("{title}|Dynamic|12000")));
 
     let mut refreshed = initial.clone();
     for _ in 0..20 {
@@ -1213,7 +1237,7 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         }
     }
     assert_ne!(refreshed, initial);
-    assert!(refreshed.starts_with("Movie|Dynamic|"));
+    assert!(refreshed.starts_with(&format!("{title}|Dynamic|")));
 
     artifacts.shutdown().await;
 }
@@ -1256,7 +1280,7 @@ async fn invalid_drawtext_element_does_not_suppress_valid_static_graphics() {
     let context = PlaybackGraphicsRenderContext {
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1312,7 +1336,7 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
     let context = PlaybackGraphicsRenderContext {
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
@@ -1609,7 +1633,7 @@ async fn render_scheduled_graphics(
         &PlaybackGraphicsRenderContext {
             channel_id: 121,
             channel_number: "121".to_owned(),
-            media_item_id: 10,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
             media_path: assets.input.to_string_lossy().into_owned(),
             channel_start_time: common::fixed_time(),
             content_start_time: common::fixed_time(),

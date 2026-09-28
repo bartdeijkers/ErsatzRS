@@ -3,6 +3,9 @@ mod common;
 use chrono::Duration;
 use ersatzrs_core::repositories::{ChannelRepository as _, FfmpegProfileRepository as _};
 use ersatzrs_domain::MediaStreamKind;
+use ersatzrs_infra::graphics_template::{
+    graphics_template_variables, GraphicsMedia, GraphicsTemplateContext,
+};
 use ersatzrs_infra::{
     db::DbPool,
     external_json::{
@@ -19,6 +22,25 @@ use httpmock::prelude::*;
 use serde_json::json;
 use sqlx::Executor as _;
 use tokio::time::Instant;
+
+fn graphics_context(media: GraphicsMedia) -> GraphicsTemplateContext {
+    GraphicsTemplateContext {
+        channel_id: 1,
+        channel_number: "1".into(),
+        media,
+        media_path: "fixture.mkv".into(),
+        channel_start_time: common::fixed_time(),
+        content_start_time: common::fixed_time(),
+        stream_seek_seconds: 0.0,
+        duration_seconds: 120.0,
+        frame_width: 64,
+        frame_height: 64,
+        scaled_frame_width: 64,
+        scaled_frame_height: 64,
+        r_frame_rate: Some("25/1".into()),
+        frame_rate: Some(25.0),
+    }
+}
 
 async fn fixture() -> DbPool {
     let pool = common::test_db().await;
@@ -149,6 +171,75 @@ async fn external_json_selection_distinguishes_exhaustion_and_projects_mirrors()
 }
 
 #[tokio::test]
+async fn external_json_graphics_keep_occurrence_metadata_and_read_only_the_selected_guide() {
+    let pool = fixture().await;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("schedule.json");
+    let start = common::fixed_time();
+    let schedule = |title: &str| {
+        json!({"startTime":start.to_rfc3339(), "programs":[
+            {"type":"episode", "showTitle":"Fixture show", "title":title, "duration":120_000}
+        ]})
+    };
+    std::fs::write(&path, serde_json::to_vec(&schedule("First")).unwrap()).unwrap();
+    sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "ScheduleFile", "Seed") VALUES (1, 1, 20, ?, 1)"#)
+        .bind(path.to_str().unwrap()).execute(&pool).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    let mut mirror = common::channel(2, "2", true);
+    mirror.playout_source = ersatzrs_domain::ChannelPlayoutSource::Mirror;
+    mirror.mirror_source_channel_id = Some(1);
+    mirror.playout_offset = Some(Duration::hours(1));
+    repos.channel.upsert(&mirror).await.unwrap();
+    repos
+        .channel
+        .upsert(&common::channel(3, "3", true))
+        .await
+        .unwrap();
+    let invalid = directory.path().join("invalid.json");
+    std::fs::write(&invalid, b"not JSON").unwrap();
+    sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "ScheduleFile", "Seed") VALUES (3, 3, 20, ?, 1)"#)
+        .bind(invalid.to_str().unwrap()).execute(&pool).await.unwrap();
+    let mut context = graphics_context(GraphicsMedia::Transient(
+        json!({"MediaItem_Title":"Selected occurrence"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    ));
+    for (channel, offset) in [(1, Duration::zero()), (2, Duration::hours(1))] {
+        context.channel_id = channel;
+        context.content_start_time = start + offset;
+        let variables = graphics_template_variables(&pool, &context, 1, None)
+            .await
+            .unwrap();
+        assert_eq!(variables["MediaItem_Title"], "Selected occurrence");
+        assert_eq!(variables["Epg"][0]["Title"], "Fixture show");
+        assert_eq!(variables["Epg"][0]["SubTitle"], "First");
+        assert_eq!(variables["Epg"][0]["Start"], (start + offset).to_rfc3339());
+        assert_eq!(
+            variables["Epg"][0]["Stop"],
+            (start + offset + Duration::minutes(2)).to_rfc3339()
+        );
+    }
+    std::fs::write(&path, serde_json::to_vec(&schedule("Updated")).unwrap()).unwrap();
+    let variables =
+        graphics_template_variables(&pool, &context, 1, Some(r#"{"Custom":"Overlay"}"#))
+            .await
+            .unwrap();
+    assert_eq!(variables["MediaItem_Title"], "Selected occurrence");
+    assert_eq!(variables["Custom"], "Overlay");
+    assert_eq!(variables["Epg"][0]["SubTitle"], "Updated");
+    std::fs::write(&path, b"not JSON").unwrap();
+    assert!(graphics_template_variables(&pool, &context, 1, None)
+        .await
+        .is_err());
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
 async fn external_json_plex_preconditions_have_distinct_redacted_errors() {
     let pool = fixture().await;
     assert_eq!(
@@ -265,6 +356,13 @@ async fn external_json_plex_metadata_preserves_streams_without_library_writes() 
             ..
         }
     ));
+    let variables =
+        graphics_template_variables(&pool, &graphics_context(media.graphics_media()), 0, None)
+            .await
+            .unwrap();
+    assert_eq!(variables["MediaItem_Title"], "Plex programme");
+    assert_eq!(variables["MediaItem_Resolution"]["Width"], 64);
+    assert_eq!(variables["MediaItem_Duration"]["TotalSeconds"], 120.0);
     assert_eq!(media.plex_metadata.unwrap().title, "Plex programme");
     for query in [
         r#"SELECT COUNT(*) FROM "MediaItem""#,
@@ -395,6 +493,12 @@ async fn external_json_local_probe_prefers_mapped_file_without_plex_credentials(
             show_guids: [],
         }
     ));
+    let variables =
+        graphics_template_variables(&pool, &graphics_context(media.graphics_media()), 0, None)
+            .await
+            .unwrap();
+    assert_eq!(variables["MediaItem_Title"], "Fixture programme");
+    assert_eq!(variables["MediaItem_ShowTitle"], "Fixture show");
     let ExternalMediaSource::Local(path) = media.source else {
         panic!("local file should win")
     };

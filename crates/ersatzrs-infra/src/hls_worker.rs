@@ -1799,7 +1799,9 @@ impl HlsSessionWorker {
                             &PlaybackGraphicsRenderContext {
                                 channel_id: self.channel_id,
                                 channel_number: self.channel_number.clone(),
-                                media_item_id: active.media_item_id,
+                                media: crate::graphics_template::GraphicsMedia::Persisted(
+                                    active.media_item_id,
+                                ),
                                 media_path: active.media_path.clone(),
                                 channel_start_time: active.playout_start,
                                 content_start_time: active.playout_start,

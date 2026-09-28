@@ -1107,7 +1107,9 @@ async fn serve_channel_stream_admitted_inner(
             let graphics_context = PlaybackGraphicsRenderContext {
                 channel_id: channel.id,
                 channel_number: channel.number.clone(),
-                media_item_id: active.media_item_id,
+                media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(
+                    active.media_item_id,
+                ),
                 media_path: resolved.clone(),
                 channel_start_time: start_time,
                 content_start_time: start_time,

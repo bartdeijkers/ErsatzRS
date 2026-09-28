@@ -1347,7 +1347,7 @@ async fn preview_graphics_overlays(
         &PlaybackGraphicsRenderContext {
             channel_id: 0,
             channel_number: TRANSCODE_TROUBLESHOOTING_CHANNEL.to_owned(),
-            media_item_id: media.media_item_id,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(media.media_item_id),
             media_path: media_path.to_owned(),
             channel_start_time: now,
             content_start_time: now,
@@ -1422,7 +1422,9 @@ async fn preview_channel_graphics_overlays(
         &PlaybackGraphicsRenderContext {
             channel_id: channel.id,
             channel_number: TRANSCODE_TROUBLESHOOTING_CHANNEL.to_owned(),
-            media_item_id: active.media_item_id,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(
+                active.media_item_id,
+            ),
             media_path: media_path.to_owned(),
             channel_start_time: start_time,
             content_start_time: parse_sqlite_utc_timestamp(&active.playout_start)

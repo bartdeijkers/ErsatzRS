@@ -11476,6 +11476,22 @@ with empty media tables (nextest cd0ff241-1a1b-4a26-bb8e-6f99437f26bb).
 This is shared selection proof, not endpoint playback acceptance. Strict infra
 all-target Clippy passes with no new exemptions after replacing wildcard imports.
 
+Graphics contexts now distinguish persisted media IDs from transient programme
+metadata. Existing native/HLS/Next/troubleshooting callers keep their persisted
+binding; external media can carry its selected metadata into graphics and dynamic
+text without a fake library lookup, preserving ADR 0005's late-bound variables.
+The external graphics EPG projection shares the XMLTV timeline reader with an
+explicit channel filter. Seven resolver/graphics tests pass (nextest
+c6b7fe0d-8dca-4a48-9bc6-12665fe23f6f), including mirror offsets, file updates,
+unrelated malformed-schedule isolation, invalid current schedules and local/Plex
+metadata. Eleven graphics regressions pass (nextest
+e452fd8b-ac23-479d-b100-1f86a1e2fdd5), including real transient dynamic-text file
+refresh without library records. All three XMLTV mirror tests pass (nextest
+5e69172f-f049-4d79-bdfd-6b22a5668555); the web consumer graph type-checks.
+Strict infra/web all-target Clippy passes with no new exemptions. This does not
+prove external endpoint playback. Native input preparation still needs owned subtitle
+artifacts and cancellation/lifetime wiring before connecting the stream loader.
+
 Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
 still require transient media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable

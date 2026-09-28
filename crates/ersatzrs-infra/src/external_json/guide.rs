@@ -15,6 +15,24 @@ pub(crate) async fn load_items(
     start: DateTime<Utc>,
     finish: DateTime<Utc>,
 ) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
+    load_filtered_items(pool, None, start, finish).await
+}
+
+pub(crate) async fn load_channel_items(
+    pool: &DbPool,
+    channel_id: i64,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
+    load_filtered_items(pool, Some(channel_id), start, finish).await
+}
+
+async fn load_filtered_items(
+    pool: &DbPool,
+    channel_id: Option<i64>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
     let rows = sqlx::query(
         r#"SELECT c."Number", c."PlayoutSource", c."PlayoutOffset",
                   p."Id", p."ScheduleFile"
@@ -24,8 +42,11 @@ pub(crate) async fn load_items(
                ELSE c."Id" END
            WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
              AND p."ScheduleKind" IN (20, 'ExternalJson')
+             AND (? IS NULL OR c."Id" = ?)
            ORDER BY c."Number", p."Id""#,
     )
+    .bind(channel_id)
+    .bind(channel_id)
     .fetch_all(pool)
     .await?;
     let mut items = Vec::new();

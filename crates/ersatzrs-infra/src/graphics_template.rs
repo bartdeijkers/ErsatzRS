@@ -8,6 +8,10 @@
 //!   names (`MediaItem_Duration`, `Epg`, `Channel_StartTime`, etc.).
 use crate::repositories::SqlxResultExt as _;
 
+#[path = "graphics_template_external.rs"]
+mod external;
+pub(crate) use external::media as external_media;
+
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -19,10 +23,18 @@ use crate::db::{DbPool, DbRow};
 use crate::repositories::common::{decode_datetime, encode_datetime};
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum GraphicsMedia {
+    /// Resolve library metadata when preparing graphics.
+    Persisted(i64),
+    /// Retain the selected programme's metadata without a library lookup.
+    Transient(Map<String, Value>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct GraphicsTemplateContext {
     pub channel_id: i64,
     pub channel_number: String,
-    pub media_item_id: i64,
+    pub media: GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
@@ -50,7 +62,11 @@ pub async fn graphics_template_variables(
 ) -> Result<Value> {
     let mut root = Map::new();
     insert_common_variables(&mut root, context);
-    if let Some(media) = load_media_item_template_data(pool, context).await? {
+    let media = match &context.media {
+        GraphicsMedia::Persisted(id) => load_media_item_template_data(pool, *id).await?,
+        GraphicsMedia::Transient(data) => Some(data.clone()),
+    };
+    if let Some(media) = media {
         merge_object(&mut root, media);
     }
     if epg_entries > 0 {
@@ -166,7 +182,7 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
 
 async fn load_media_item_template_data(
     pool: &DbPool,
-    context: &GraphicsTemplateContext,
+    media_item_id: i64,
 ) -> Result<Option<Map<String, Value>>> {
     let row = sqlx::query(
         r#"SELECT mv."Width", mv."Height", mv."Duration",
@@ -209,7 +225,7 @@ async fn load_media_item_template_data(
            ORDER BY mv."Id", mm."Id", em."Id", mvm."Id", ovm."Id", rsm."Id", sm."Id"
            LIMIT 1"#,
     )
-    .bind(context.media_item_id)
+    .bind(media_item_id)
     .fetch_optional(pool)
     .await.repository()?;
 
@@ -291,6 +307,9 @@ async fn load_epg_template_data(
     context: &GraphicsTemplateContext,
     count: usize,
 ) -> Result<Vec<Value>> {
+    if matches!(context.media, GraphicsMedia::Transient(_)) {
+        return external::epg(pool, context, count).await;
+    }
     let rows = sqlx::query(
         r#"SELECT pi."Start", pi."Finish",
                   COALESCE(pi."CustomTitle", mm."Title", em."Title", mvm."Title", ovm."Title", rsm."Title", sm."Title", '') AS "Title"

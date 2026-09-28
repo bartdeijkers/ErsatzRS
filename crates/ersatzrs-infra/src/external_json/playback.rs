@@ -86,6 +86,12 @@ pub struct ResolvedExternalMedia {
 }
 
 impl ResolvedExternalMedia {
+    /// Bind graphics and dynamic text to this programme's transient metadata.
+    #[must_use]
+    pub fn graphics_media(&self) -> crate::graphics_template::GraphicsMedia {
+        crate::graphics_template::external_media(self)
+    }
+
     /// Original candidates for built-in, YAML and JavaScript track selection.
     #[must_use]
     pub fn tracks(&self) -> crate::playback::transient::TransientPlaybackTracks {
