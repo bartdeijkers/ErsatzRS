@@ -652,6 +652,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
 pub(crate) fn build_internal_app(app_state: AppState) -> Router {
     Router::new()
         .route(
+            "/ffmpeg/external-media/{source}/{expires}",
+            get(iptv::next_media::get_external_media),
+        )
+        .route(
             "/ffmpeg/next-fallback/{channel}/{start}/{finish}",
             get(iptv::next_media::get_fallback),
         )

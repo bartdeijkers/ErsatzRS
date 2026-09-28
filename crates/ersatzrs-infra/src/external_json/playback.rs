@@ -302,7 +302,7 @@ async fn prepare(
     })
 }
 
-fn part_key(value: &str) -> Result<String, ExternalPlaybackError> {
+pub(crate) fn part_key(value: &str) -> Result<String, ExternalPlaybackError> {
     let key = format!("/{}", value.trim_start_matches('/'));
     let base = reqwest::Url::parse("http://external.invalid")
         .map_err(|_| ExternalPlaybackError::InvalidPart)?;

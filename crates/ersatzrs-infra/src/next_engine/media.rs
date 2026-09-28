@@ -24,6 +24,9 @@ pub const SESSION_HEADER: &str = "x-ersatzrs-next-session";
 pub(super) const SESSION_ENV: &str = "ERSATZRS_NEXT_SESSION";
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
 
+#[path = "external_media.rs"]
+mod external;
+
 /// One process-local capability. Its published URLs contain only binding IDs;
 /// provider credentials are read when media is opened, never put in the URL.
 /// Deliberately no Debug implementation.
@@ -319,8 +322,11 @@ impl MediaRelay {
         let Source::Http { uri, headers, .. } = resolved else {
             return Err(unavailable("HTTP media source is unavailable"));
         };
-        let client = self
-            .client
+        open_http(self.http_client()?, &uri, &headers, range).await
+    }
+
+    fn http_client(&self) -> Result<&Client> {
+        self.client
             .get_or_init(|| {
                 Client::builder()
                     .redirect(reqwest::redirect::Policy::none())
@@ -330,8 +336,7 @@ impl MediaRelay {
                     .ok()
             })
             .as_ref()
-            .ok_or_else(|| unavailable("media HTTP client unavailable"))?;
-        open_http(client, &uri, &headers, range).await
+            .ok_or_else(|| unavailable("media HTTP client unavailable"))
     }
 }
 

@@ -253,6 +253,88 @@ async fn external_json_plex_metadata_preserves_streams_without_library_writes() 
 }
 
 #[tokio::test]
+async fn external_json_relay_binds_parts_and_reads_current_credentials() {
+    use ersatzrs_infra::next_engine::media::MediaRelay;
+
+    let pool = fixture().await;
+    server(&pool).await;
+    let upstream = MockServer::start_async().await;
+    connection(&pool, &upstream.base_url()).await;
+    synthetic_token(&pool).await;
+    let part = "/library/parts/50/file.mkv";
+    let response = upstream
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(part)
+                .header("X-Plex-Token", "synthetic-external-fixture")
+                .header("Range", "bytes=2-5");
+            then.status(206)
+                .header("Content-Range", "bytes 2-5/10")
+                .body("2345");
+        })
+        .await;
+    let relay = MediaRelay::new();
+    relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let expires = chrono::Utc::now() + Duration::hours(2);
+    let url = url::Url::parse(&relay.external_source_url(10, part, expires).unwrap()).unwrap();
+    let ticket = url
+        .query_pairs()
+        .find(|(key, _)| key == "ticket")
+        .unwrap()
+        .1;
+    assert!(relay
+        .open_external(
+            &pool,
+            10,
+            expires.timestamp(),
+            "/library/parts/51/file.mkv",
+            &ticket,
+            None
+        )
+        .await
+        .is_err());
+    response.assert_calls_async(0).await;
+    let opened = relay
+        .open_external(
+            &pool,
+            10,
+            expires.timestamp(),
+            part,
+            &ticket,
+            Some("bytes=2-5"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(opened.status().as_u16(), 206);
+    assert_eq!(opened.headers()["Content-Range"], "bytes 2-5/10");
+    assert_eq!(opened.text().await.unwrap(), "2345");
+    response.assert_async().await;
+
+    // A previously minted ticket must use the current credential on every open.
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = 'synthetic-rotated-fixture' WHERE "Key" = 'plex.server_auth_token.fixture-plex'"#)
+        .execute(&pool).await.unwrap();
+    let rotated = upstream
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path(part)
+                .header("X-Plex-Token", "synthetic-rotated-fixture");
+            then.status(200).body("current");
+        })
+        .await;
+    assert_eq!(
+        relay
+            .open_external(&pool, 10, expires.timestamp(), part, &ticket, None)
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+        "current"
+    );
+    rotated.assert_async().await;
+}
+
+#[tokio::test]
 #[ignore = "requires the verified FFmpeg runtime through ERSATZRS_FFPROBE"]
 async fn external_json_local_probe_prefers_mapped_file_without_plex_credentials() {
     let probe_path = std::path::PathBuf::from(ersatzrs_ffmpeg::ffprobe_path());

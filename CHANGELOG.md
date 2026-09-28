@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Security
 
+- Add expiring, source-bound media-part tickets on the private callback listener
+  for external JSON playback integration, without publishing Plex credentials.
+  Resolve current credentials at each open and preserve byte-range requests.
+
 - Disable HDHomeRun HTTP endpoints and UDP discovery while IPTV JWT protection
   is enabled. Explain the inactive settings in the selected UI language and
   reject changes to them until JWT protection is disabled.

@@ -23,6 +23,47 @@ pub async fn get_media(
     serve(&state.next_engine.media, &state.pool, binding, &headers).await
 }
 
+#[derive(serde::Deserialize)]
+pub struct ExternalMediaTicket {
+    #[serde(default)]
+    part: String,
+    #[serde(default)]
+    ticket: String,
+}
+
+pub async fn get_external_media(
+    State(state): State<AppState>,
+    Path((source, expires)): Path<(i64, i64)>,
+    Query(binding): Query<ExternalMediaTicket>,
+    headers: HeaderMap,
+) -> Response {
+    let relay = &state.next_engine.media;
+    if !relay.authorized_external(source, expires, &binding.part, &binding.ticket) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let Ok(range) = headers
+        .get(header::RANGE)
+        .map(|value| value.to_str())
+        .transpose()
+    else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    match relay
+        .open_external(
+            &state.pool,
+            source,
+            expires,
+            &binding.part,
+            &binding.ticket,
+            range,
+        )
+        .await
+    {
+        Ok(upstream) => relay_response(upstream),
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
 pub async fn get_credits(
     State(state): State<AppState>,
     Path((channel, item, media, in_point, out_point)): Path<(i64, i64, i64, u64, u64)>,

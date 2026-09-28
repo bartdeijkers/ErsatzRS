@@ -11449,8 +11449,21 @@ three existing movie/show/collection scanner fixtures also pass
 the official schema was read directly. The initial sandbox attempt could not
 bind its mock listener; unchanged tests passed with host socket permissions.
 
+The private external-media relay now uses expiring tickets bound to the host,
+Plex source and exact media part. It reuses bounded redirect handling and reads
+current credentials at each open without putting them in the published URL.
+Ticket tampering/expiry/host binding passes (nextest
+0eb57117-001f-4ceb-bf44-3cc5e0e6e301). The mock HTTP regression proves rejected
+part substitution, byte-range/206 forwarding and credential rotation (nextest
+72fb8821-0a0c-4c50-95a8-3c65ff6a36d3). The real IPv4/IPv6 shared/separate
+listener regression passes: the route returns 404 on public listeners and 401
+without a ticket on the private listener (nextest
+699208ce-db34-48d7-8bff-cdc0d32a9fcd). Strict infra/web all-target Clippy passes
+after correcting test variable names, with no new lint exemptions. No consumer
+calls the new relay yet.
+
 Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
-still require transient media integration and protected remote-media relay; owning streaming debt
+still require transient media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a
