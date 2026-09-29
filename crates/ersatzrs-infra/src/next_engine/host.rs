@@ -57,12 +57,13 @@ pub(super) struct DynamicContext {
 fn retain_dynamic_context(
     contexts: &mut HashMap<uuid::Uuid, DynamicContext>,
     request: &NextStart,
+    started_at: chrono::DateTime<Utc>,
 ) -> uuid::Uuid {
     let instance = uuid::Uuid::new_v4();
     contexts.insert(
         instance,
         DynamicContext {
-            started_at: chrono::Utc::now(),
+            started_at,
             request: request.clone(),
             transfers: Arc::default(),
             fallback: Arc::default(),
@@ -220,8 +221,11 @@ impl NextHost {
         }
         let host = self.clone();
         Some(tokio::spawn(async move {
-            let instance =
-                retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request);
+            let instance = retain_dynamic_context(
+                &mut *host.dynamic_contexts.lock().await,
+                &request,
+                session.started_at,
+            );
             let mut publishers = host.publishers.lock().await;
             let publisher = publishers
                 .entry(request.channel_id)

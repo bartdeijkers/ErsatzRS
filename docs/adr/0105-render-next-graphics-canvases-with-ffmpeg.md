@@ -6,7 +6,7 @@ Accepted 2026-09-29
 
 ## Implementation
 
-Partial — the canvas layer/schema, strict timing/header validation and finite
+Implemented — the canvas layer/schema, strict timing/header validation and finite
 FFV1/BGRA command builder are implemented. Packaged-runtime decoding proves
 transparent backgrounds, image alpha, layer ordering, content-box placement and
 duration. The managed producer now owns graphics files and live text controllers
@@ -40,8 +40,15 @@ kinds, including both text renderers, transparency, layer order, delayed motion,
 ASS timing, dynamic-text refresh and retained subtitles/alternate audio.
 Raw BGRA decoding and observed producer/artifact cleanup cover HTTP disconnect
 and session stop; revoked callbacks return Gone. Fractional motion seeks reset
-input timestamps to avoid a transparent first frame. Remaining channel/mirror
-geometry and channel-preview timing acceptance keep this implementation partial.
+input timestamps to avoid a transparent first frame. Channel previews now advance
+historical decoration selection with the chunk offset before mapping mirror time.
+Decoded source/mirror preview canvases prove pinned-version content geometry and
+alpha across scale-and-pad, stretch and crop. Official Next also preserves
+half-opacity canvas composition. Native and Next session reports expose a stable
+`startedAt`; canvas contexts and native graphics share their session's start clock
+independently of programme changes. Final native smoke, all 87 TSDuck transport
+checks, strict affected-crate lint and the row acceptance review pass. UCU-09
+owns the detailed evidence; its remaining rows and milestone closeout are open.
 Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
 frames after selection removal through the session-owned renderer.

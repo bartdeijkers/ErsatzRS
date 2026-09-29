@@ -338,12 +338,10 @@ async fn canvas_session_renders_selected_script_and_transparent_removed_graphics
         .is_err());
 }
 
-#[tokio::test]
-async fn canvas_session_selects_decorations_at_requested_chunk_time() {
+async fn seed_timed_decorations(host: &NextHost) {
     use ersatzrs_core::repositories::GraphicsRepository as _;
     use ersatzrs_domain::GraphicsElement;
 
-    let (host, instance, binding, _root) = fixture().await;
     make_repositories(host.pool.clone())
         .graphics
         .upsert_element(&GraphicsElement {
@@ -361,8 +359,16 @@ async fn canvas_session_selects_decorations_at_requested_chunk_time() {
             "DeadAirFallbackMode", "DefaultFillerCollectionType", "DefaultFillerMode",
             "DefaultFillerTrimToFit", "GraphicsElementsMode", "UseGraphicsElementsDuringFiller",
             "UseWatermarkDuringFiller", "WatermarkMode"
-        ) VALUES (901, 901, 'canvas', 0, 0, 0, 0, 0, 0, 2, 1, 0, 0);
+        ) VALUES (901, 901, 'canvas', 0, 0, 0, 0, 0, 0, 2, 1, 1, 2);
         INSERT INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (901, 901);
+        INSERT INTO "ChannelWatermark" (
+            "Id", "Name", "Mode", "ImageSource", "Image", "Location", "Size",
+            "WidthPercent", "HorizontalMarginPercent", "VerticalMarginPercent",
+            "FrequencyMinutes", "DurationSeconds", "Opacity", "PlaceWithinSourceContent", "ZIndex"
+        ) VALUES (901, 'canvas', 1, 1, NULL, 0, 0, 10, 0, 0, 0, 0, 100, 0, 0);
+        INSERT INTO "Artwork" ("Id", "ArtworkKind", "ChannelId", "Path", "DateAdded", "DateUpdated")
+            VALUES (901, 2, 1, 'https://example.test/canvas.png', '2026-09-22', '2026-09-22');
+        INSERT INTO "DecoWatermark" ("DecoId", "WatermarkId") VALUES (901, 901);
         INSERT INTO "TemplateGroup" ("Id", "Name") VALUES (901, 'canvas');
         INSERT INTO "Template" ("Id", "TemplateGroupId", "Name", "DateUpdated")
             VALUES (901, 901, 'canvas', '2026-09-22 00:00:00');
@@ -380,6 +386,12 @@ async fn canvas_session_selects_decorations_at_requested_chunk_time() {
     .execute(&host.pool)
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn canvas_session_selects_decorations_at_requested_chunk_time() {
+    let (host, instance, binding, _root) = fixture().await;
+    seed_timed_decorations(&host).await;
     let initial = CanvasRequest::parse("0", "44000", "25").unwrap();
     assert!(host
         .canvas_session(instance, &binding, &initial)
@@ -394,6 +406,89 @@ async fn canvas_session_selects_decorations_at_requested_chunk_time() {
     assert_eq!(later.graphics.len(), 1);
     assert_eq!(later.graphics[0].element.id, 901);
     assert_eq!(later.timeline.duration, std::time::Duration::from_secs(16));
+}
+
+#[tokio::test]
+async fn canvas_channel_preview_advances_decorations_on_source_and_mirror_clocks() {
+    for mirrored in [false, true] {
+        let (host, instance, original, _root) = fixture().await;
+        seed_timed_decorations(&host).await;
+        let repos = make_repositories(host.pool.clone());
+        let mut channel = repos.channel.get_with_profile(1).await.unwrap();
+        let mirror_offset = if mirrored {
+            TimeDelta::hours(1)
+        } else {
+            TimeDelta::zero()
+        };
+        if mirrored {
+            channel.id = 2;
+            channel.number = "2".into();
+            channel.playout_source = ChannelPlayoutSource::Mirror;
+            channel.mirror_source_channel_id = Some(1);
+            channel.playout_offset = Some(mirror_offset);
+            repos.channel.upsert(&channel).await.unwrap();
+            sqlx::query(r#"INSERT INTO "Artwork" ("Id", "ArtworkKind", "ChannelId", "Path", "DateAdded", "DateUpdated") VALUES (902, 2, 2, 'https://example.test/mirror.png', '2026-09-22', '2026-09-22')"#)
+                .execute(&host.pool).await.unwrap();
+        }
+        let initial = host
+            .canvas_session(
+                instance,
+                &original,
+                &CanvasRequest::parse("0", "1000", "25").unwrap(),
+            )
+            .await
+            .unwrap();
+        let mut media = initial.media;
+        let selected_at = original.start + mirror_offset + TimeDelta::seconds(10);
+        // The preview is played now, while the operator selected a historical occurrence.
+        media.item.start = Utc::now();
+        media.item.finish = media.item.start + TimeDelta::seconds(30);
+        let preview = super::super::troubleshooting::Context::new(
+            &super::super::troubleshooting::TroubleshootingPreview {
+                media: &media,
+                channel: &channel,
+                profile: &initial.profile,
+                subtitle_id: None,
+                selection_time: Some(selected_at),
+                watermark_ids: &[],
+                graphics_ids: &[],
+                replacements: &[],
+                ffmpeg: std::path::Path::new("fixture-ffmpeg"),
+                deadline: tokio::time::Instant::now() + std::time::Duration::from_secs(30),
+                diagnostics: None,
+            },
+        );
+        let binding = CanvasBinding::new(channel.id, &media, Utc::now() + TimeDelta::hours(1))
+            .for_session(instance);
+        {
+            let mut contexts = host.dynamic_contexts.lock().await;
+            let context = contexts.get_mut(&instance).unwrap();
+            context.request.channel_id = channel.id;
+            context.request.number = channel.number;
+            context.request.preview = true;
+            context.troubleshooting = Some(Arc::new(preview));
+        }
+        for (offset, count) in [("0", 0), ("19000", 0), ("20000", 1)] {
+            let selected = host
+                .canvas_session(
+                    instance,
+                    &binding,
+                    &CanvasRequest::parse(offset, "1000", "25").unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                selected.graphics.len(),
+                count,
+                "graphics mirrored={mirrored} offset={offset}"
+            );
+            assert_eq!(
+                selected.watermarks.len(),
+                count,
+                "watermarks mirrored={mirrored} offset={offset}"
+            );
+        }
+    }
 }
 
 #[tokio::test]

@@ -11416,9 +11416,9 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
-Row146 audit is in progress: upstream adds Next graphics canvas transport,
-shared render context, preview bindings and session start time. Existing Next
-image-only projection cannot cover text, script, motion, subtitle or expression
+Row146 is Adapt under accepted ADR 0105: upstream adds Next graphics canvas transport,
+shared render context, preview bindings and session start time. The initial Next
+image-only projection could not cover text, script, motion, subtitle or expression
 layers. The initial audit also found MediaItem_Stop derived from chunk duration.
 The independent correction now carries scheduled finish through native/HLS,
 Next projection and preview contexts. Its early/middle/final/late chunk and
@@ -11562,8 +11562,32 @@ hold, independent shared-asset seeks, scripts, ASS and fades. Only the reviewed
 sought-motion filter snapshot changes. Native zero-offset rendering is unchanged.
 Strict FFmpeg/infra/web all-target Clippy, formatting, new-lint-allow policy and
 progress validation pass for this HTTP/runtime checkpoint.
-Remaining channel/mirror geometry and channel-preview timing acceptance stay
-open; no row146 verdict or pin advance.
+Nine focused session/preview/runtime checks pass
+(ececad04-5c59-418d-8b32-be921d796092). A demonstrated preview-clock defect is
+fixed: timed graphics and watermarks now use historical selection time plus
+the current chunk offset, then map mirrored time to the source. Explicit
+media-preview overlay IDs remain fixed. The HTTP geometry test decodes six
+source/mirror scale-and-pad/stretch/crop cases, preserving half-opacity,
+the pinned non-default media version and the original stored schedule.
+The geometry helper extraction passes its focused rerun
+(d7fe102b-3c96-4cd3-a297-bdcd76a08442). Two real HTTP/official Next tests also
+prove half-opacity canvas composition and raw alpha
+(e210d699-46b3-49f2-bdfa-6d24b8f1fd29). The final source audit found the added
+session-report startedAt contract; native and Next now expose a stable start
+clock, shared with graphics independently of programme changes. Both model
+tests pass (40cd343f-c901-443b-a7ae-49761542b22f), as does context clock ownership
+(84ceb409-57d2-43be-968a-7df2086a17c5).
+Final native smoke passes using pinned FFmpeg v2.0.3: TS legacy/hybrid and HLS
+serve successfully, while internal callbacks remain private. TSDuck passes all
+87 transport checks across TS legacy/hybrid and HLS segmenter/direct with no
+known server failure signatures. Strict core/FFmpeg/infra/web all-target Clippy,
+formatting and new-lint-allow checks pass. Substantive Codex review maps the
+complete upstream canvas/context/preview/session diff to production wiring and
+focused/runtime evidence; no row-specific gap remains. Row146 is Adapt under
+ADRs 0005/0095/0105. The baseline advances to 28b2e00c with 146/180 reconciled
+and 34 pending; continue at row147. Milestone window gates, push and exact-SHA
+CI remain open. Existing approved hardware debt and the separately accepted
+older Next RGB media-watermark opacity bug remain unchanged.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

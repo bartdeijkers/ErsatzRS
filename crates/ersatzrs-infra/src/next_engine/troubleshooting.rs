@@ -72,10 +72,15 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
-        if let Some(at) = self.selection_time {
-            let source_time =
-                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
-                    .source_time(at)?;
+        self.graphics_at(pool, chrono::TimeDelta::zero()).await
+    }
+
+    pub(super) async fn graphics_at(
+        &self,
+        pool: &crate::db::DbPool,
+        offset: chrono::TimeDelta,
+    ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
+        if let Some(source_time) = self.source_time(offset)? {
             playback::select_playback_graphics(pool, &self.channel, self.media.item.id, source_time)
                 .await
         } else {
@@ -87,10 +92,15 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
-        if let Some(at) = self.selection_time {
-            let source_time =
-                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
-                    .source_time(at)?;
+        self.watermarks_at(pool, chrono::TimeDelta::zero()).await
+    }
+
+    pub(super) async fn watermarks_at(
+        &self,
+        pool: &crate::db::DbPool,
+        offset: chrono::TimeDelta,
+    ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
+        if let Some(source_time) = self.source_time(offset)? {
             playback::select_playback_watermarks(
                 pool,
                 &self.channel,
@@ -107,6 +117,21 @@ impl Context {
             )
             .await
         }
+    }
+
+    fn source_time(
+        &self,
+        offset: chrono::TimeDelta,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+        self.selection_time
+            .map(|at| {
+                let at = at
+                    .checked_add_signed(offset)
+                    .ok_or_else(|| unavailable("preview decoration clock overflow"))?;
+                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
+                    .source_time(at)
+            })
+            .transpose()
     }
 }
 

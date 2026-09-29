@@ -50,8 +50,11 @@ async fn live_caption_callback_rechecks_publication_and_session_after_http_read(
         host.media
             .configure("127.0.0.1:8409".parse().unwrap())
             .unwrap();
-        let instance =
-            retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request(false));
+        let instance = retain_dynamic_context(
+            &mut *host.dynamic_contexts.lock().await,
+            &request(false),
+            Utc::now(),
+        );
         let before = super::super::dynamic_projection::project_snapshot(
             &pool,
             &host.locker,
@@ -152,8 +155,11 @@ async fn direct_remote_callback_preserves_audio_timing_and_rejects_changed_publi
     host.media
         .configure("127.0.0.1:8409".parse().unwrap())
         .unwrap();
-    let instance =
-        retain_dynamic_context(&mut *host.dynamic_contexts.lock().await, &request(false));
+    let instance = retain_dynamic_context(
+        &mut *host.dynamic_contexts.lock().await,
+        &request(false),
+        Utc::now(),
+    );
     let finish = start + chrono::Duration::seconds(60);
     let before = super::super::dynamic_projection::project_snapshot(
         &pool,
@@ -241,8 +247,10 @@ async fn dynamic_callbacks_bind_normal_preview_and_replacement_instances() {
         source_platform: ersatzrs_core::path_replacement::PathPlatform::Unix,
     });
     let mut contexts = host.dynamic_contexts.lock().await;
-    let normal = retain_dynamic_context(&mut contexts, &first);
-    let preview = retain_dynamic_context(&mut contexts, &second);
+    let started_at = Utc::now();
+    let normal = retain_dynamic_context(&mut contexts, &first, started_at);
+    assert_eq!(contexts[&normal].started_at, started_at);
+    let preview = retain_dynamic_context(&mut contexts, &second, Utc::now());
     assert_ne!(normal, preview);
     assert_eq!(contexts[&normal].request.output, first.output);
     assert_eq!(contexts[&preview].request.output, second.output);
@@ -252,7 +260,7 @@ async fn dynamic_callbacks_bind_normal_preview_and_replacement_instances() {
     let _ = release_dynamic_context(&mut contexts, normal);
     assert!(!contexts.contains_key(&normal));
     assert!(contexts.contains_key(&preview));
-    let replacement = retain_dynamic_context(&mut contexts, &first);
+    let replacement = retain_dynamic_context(&mut contexts, &first, Utc::now());
     assert_ne!(replacement, normal);
     drop(contexts);
 

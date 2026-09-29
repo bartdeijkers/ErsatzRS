@@ -51,7 +51,7 @@ pub(super) async fn install(fixture: &Fixture, query: &mut PlaybackPreviewQuery)
         command: Some("return 'setcolor red\\nrect 8 8 32 32 fill\\n'".into()),
         ..Default::default()
     });
-    let elements = vec![
+    let mut elements = vec![
         GraphicsElement {
             id: 901,
             name: "Synthetic script".into(),
@@ -114,6 +114,16 @@ pub(super) async fn install(fixture: &Fixture, query: &mut PlaybackPreviewQuery)
             100.0 / 3.0,
         ),
     ];
+    let mut translucent = positioned(
+        907,
+        GraphicsElementConfig::Image(ImageGraphicsConfig {
+            image: Some(image.to_str().unwrap().into()),
+        }),
+        15.0,
+        40.0 / 3.0,
+    );
+    translucent.opacity_percent = Some(50);
+    elements.push(translucent);
     for element in elements {
         query.graphics_element.push(element.id);
         fixture
@@ -163,6 +173,11 @@ pub(super) async fn assert_composite(ffmpeg: &FsPath, playlist: &FsPath) {
             "image must cover lower-z script: {green:?}"
         );
         assert_blue(pixel(frame, 80, 24));
+        let blend = pixel(frame, 56, 32);
+        assert!(
+            blend[0] < 30 && (110..=145).contains(&blend[1]) && (110..=145).contains(&blend[2]),
+            "Next must composite half-alpha green over blue: {blend:?}"
+        );
         assert!(
             region(frame, 8..50, 60..84)
                 .filter(|rgb| rgb[0] < 50 && rgb[1] > 180 && rgb[2] > 180)

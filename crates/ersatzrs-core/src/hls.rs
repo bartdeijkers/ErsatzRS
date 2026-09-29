@@ -11,6 +11,8 @@ pub struct HlsSessionModel {
     /// Next owns its own timeline; its cursor is unavailable to the host.
     pub transcoded_until: Option<chrono::DateTime<chrono::Utc>>,
     pub last_access: chrono::DateTime<chrono::Utc>,
+    /// Session clock, independent of touches and the current programme/chunk.
+    pub started_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Runtime-only retained-media startup gate, shared by master and variant routes.

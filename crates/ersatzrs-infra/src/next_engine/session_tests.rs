@@ -227,10 +227,19 @@ fn session_model_reports_next_null_cursor_and_touch_without_changing_demand() {
     assert_eq!(report.state, "next");
     assert_eq!(report.transcoded_until, None);
     assert_eq!(report.last_access.timestamp_millis(), 1_000);
+    assert_eq!(report.started_at, session.started_at);
+    assert_eq!(
+        serde_json::to_value(&report).unwrap()["startedAt"],
+        serde_json::to_value(report.started_at).unwrap()
+    );
     assert_eq!(*session.last_access.lock().unwrap(), before);
     assert_eq!(*session.last_playback_touch.lock().unwrap(), None);
     session.touch();
     assert!(session.session_model().unwrap().last_access > report.last_access);
+    assert_eq!(
+        session.session_model().unwrap().started_at,
+        report.started_at
+    );
     assert_eq!(
         *session.last_playback_touch.lock().unwrap(),
         None,

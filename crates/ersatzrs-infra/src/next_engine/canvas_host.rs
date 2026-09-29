@@ -143,8 +143,9 @@ impl NextHost {
                 return Err(unavailable());
             }
             let media = schedule::bind_media(&self.pool, preview.media.item.clone()).await?;
-            let graphics = preview.graphics(&self.pool).await?;
-            let watermarks = preview.watermarks(&self.pool).await?;
+            let offset = timeline.now - timeline.content_start;
+            let graphics = preview.graphics_at(&self.pool, offset).await?;
+            let watermarks = preview.watermarks_at(&self.pool, offset).await?;
             (
                 preview.channel.clone(),
                 preview.profile.clone(),

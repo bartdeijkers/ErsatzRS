@@ -465,6 +465,7 @@ pub struct HlsSessionWorker {
     startup_minimum_segments: std::sync::atomic::AtomicUsize,
     startup_changed: Notify,
     last_access_ms: Arc<AtomicI64>,
+    started_at_ms: AtomicI64,
     transcoded_until_ms: AtomicI64,
     last_delete_ms: Arc<AtomicI64>,
     working_dir_ready: AtomicBool,
@@ -524,6 +525,7 @@ impl HlsSessionWorker {
             startup_minimum_segments: std::sync::atomic::AtomicUsize::new(3),
             startup_changed: Notify::new(),
             last_access_ms: Arc::new(AtomicI64::new(0)),
+            started_at_ms: AtomicI64::new(Utc::now().timestamp_millis()),
             transcoded_until_ms: AtomicI64::new(i64::MIN),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             working_dir_ready: AtomicBool::new(false),
@@ -674,7 +676,10 @@ impl HlsSessionWorker {
 
         let mut is_first = true;
         let mut last_playout_item_id = None::<(i64, DateTime<Utc>)>;
-        let mut transcoded_until = Utc::now();
+        let channel_start_time = Utc::now();
+        self.started_at_ms
+            .store(channel_start_time.timestamp_millis(), Ordering::Relaxed);
+        let mut transcoded_until = channel_start_time;
         self.report_transcoded_until(transcoded_until);
         let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
@@ -1884,7 +1889,7 @@ impl HlsSessionWorker {
                                     |media| media.graphics_media(),
                                 ),
                                 media_path: active.media_path.clone(),
-                                channel_start_time: active.playout_start,
+                                channel_start_time,
                                 content_start_time: active.playout_start,
                                 content_finish_time: active.playout_finish,
                                 stream_seek_seconds: start_position.as_secs_f64(),
@@ -1952,7 +1957,7 @@ impl HlsSessionWorker {
                 decision.request_time,
                 start_position,
                 active.content_duration,
-                active.playout_start,
+                channel_start_time,
             );
             let media_input = interval_playback.as_ref().map_or_else(
                 || {
@@ -3462,6 +3467,9 @@ fn apply_hls_software_video_fallback(playback_profile: &mut PlaybackProfile) {
 impl HlsSessionHandle for HlsSessionWorker {
     fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
         Some(ersatzrs_core::hls::HlsSessionModel {
+            started_at: DateTime::from_timestamp_millis(
+                self.started_at_ms.load(Ordering::Relaxed),
+            )?,
             channel_number: self.channel_number.clone(),
             state: format!("{:?}", self.session_state()),
             transcoded_until: DateTime::from_timestamp_millis(
@@ -7255,6 +7263,7 @@ mod tests {
             test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
         );
         worker.last_access_ms.store(1_000, Ordering::Relaxed);
+        worker.started_at_ms.store(500, Ordering::Relaxed);
         assert!(worker.session_model().unwrap().transcoded_until.is_none());
         let until = DateTime::from_timestamp_millis(9_000).unwrap();
         worker.report_transcoded_until(until);
@@ -7264,9 +7273,19 @@ mod tests {
         assert_eq!(report.state, "ZeroAndWorkAhead");
         assert_eq!(report.transcoded_until, Some(until));
         assert_eq!(report.last_access.timestamp_millis(), 1_000);
+        assert_eq!(report.started_at.timestamp_millis(), 500);
+        assert_eq!(
+            serde_json::to_value(&report).unwrap()["startedAt"],
+            serde_json::to_value(report.started_at).unwrap()
+        );
         assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 1_000);
         worker.touch();
         assert!(worker.session_model().unwrap().last_access > report.last_access);
+        worker.report_transcoded_until(until + chrono::TimeDelta::seconds(30));
+        assert_eq!(
+            worker.session_model().unwrap().started_at,
+            report.started_at
+        );
     }
 
     #[tokio::test]

@@ -18,6 +18,7 @@ use std::{
 use tokio::{io::AsyncReadExt, sync::Notify, time::Instant};
 
 pub struct NextSession {
+    pub(super) started_at: chrono::DateTime<chrono::Utc>,
     number: String,
     output: PathBuf,
     deadline: Instant,
@@ -59,12 +60,14 @@ impl NextSession {
     /// completes, including failures. The output directory must be exclusive.
     #[must_use]
     pub fn new(number: String, output: PathBuf, deadline: Instant) -> Self {
+        let started_at = chrono::Utc::now();
         Self {
+            started_at,
             number,
             output,
             deadline,
             last_access: Mutex::new(Instant::now()),
-            last_access_utc_ms: AtomicI64::new(chrono::Utc::now().timestamp_millis()),
+            last_access_utc_ms: AtomicI64::new(started_at.timestamp_millis()),
             last_playback_touch: Mutex::new(None),
             state: AtomicU8::new(0),
             admission: AtomicI32::new(0),
@@ -188,6 +191,7 @@ impl HlsSessionHandle for NextSession {
     }
     fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
         Some(ersatzrs_core::hls::HlsSessionModel {
+            started_at: self.started_at,
             channel_number: self.number.clone(),
             state: "next".to_owned(),
             transcoded_until: None,

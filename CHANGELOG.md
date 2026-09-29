@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Advance timed graphics and watermark selection with each Next channel-preview
+  chunk, including mirrored historical previews, while keeping the selected
+  programme and media version unchanged.
+
 - Keep motion graphics visible on the first Next canvas frame when a chunk
   starts between source frames. Normalize the sought motion timestamps before
   compositing, preserving delayed starts and loop/hold/disappear timing.
@@ -443,28 +447,18 @@ release section when tagging a release.
 
 ### Changed
 
-- Adopt the Next canvas schema, strict graphics request validation and a finite
-  transparent FFV1 renderer command as the first parts of ADR 0105. Its paced
-  producer retains generated files and live text controllers through process
-  cleanup and starts streaming without waiting for a media-probe prefix.
-  Expiring callback source bindings protect programme identity while allowing
-  current graphics edits. Host-side canvas selection validates active sessions
-  and current items, with explicit session scope for previews and fallback.
-  Canvas chunks retain the scheduled programme finish and select timed
-  decorations at the requested offset, including mirrored playback.
-  A private authenticated callback now prepares finite streams through the
-  shared renderer and session transfer owner, preserving decimal frame rates.
-  Canvas chunks preserve programme timing for scripts, ASS graphics, motion
-  loop/hold/disappear behavior and watermark fades. Layers sharing a motion
-  file retain independent seek positions.
-  Local-file Next troubleshooting previews now register their own callback
-  session, preserving selected tracks and revoking access when the preview ends.
-  Scheduled, dynamic, remote, fallback and preview projections now publish one
-  canvas with probe hints and session-bound callback credentials. Resolved items
-  retain their original programme clock and selected video geometry. Complete
-  integrated Next playback acceptance remains in development.
+- Include a stable `startedAt` clock in native and Next session reports, and use
+  that session clock for graphics independently of programme changes.
+
+- Render every graphics kind in Next playback through a private authenticated
+  FFmpeg canvas (ADR 0105), including scripts, both text renderers, images,
+  motion and subtitle graphics. Preserve transparency, layer order, programme
+  timing, content-box geometry, selected audio and ordinary subtitles across
+  scheduled, dynamic, remote, fallback, mirror and preview playback.
+  Session-bound callbacks validate programme identity and observe current
+  graphics edits; disconnect and stop reap producers and generated artifacts.
   Check FFV1 encoding/decoding, NUT input/output support and canvas timing
-  filters at startup; report missing container support in FFmpeg health checks.
+  filters at startup and report missing support through FFmpeg health checks.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

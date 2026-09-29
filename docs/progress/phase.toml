@@ -77,12 +77,12 @@ refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. 
 playback, private Plex relay, audio/subtitle selection and owned preparation.
 Native MPEG-TS, HLS MPEG-TS/fMP4, guide HTTP, strict lint, smoke and TSDuck
 acceptance pass. Upstream does not integrate external JSON with Next; the source
-audit corrected that earlier scope error. Row146 source audit found missing
-Next canvas delivery and chunk-dependent graphics Stop. The independent Stop
-correction passes focused tests and strict lint. ADR 0105 is accepted;
-complete the canvas and its acceptance before advancing the pin.
-The refreshed upstream ledger still contains 180 rows.
-The current 180-row ledger has 35 pending rows. Preserve accepted architecture,
+audit corrected that earlier scope error. Row146 is Adapt under accepted ADR 0105:
+all-kind canvas delivery, programme/chunk/session clocks, preview geometry,
+alpha, audio/subtitles and owned cleanup pass HTTP/official Next proof. Native
+smoke, all 87 TSDuck checks and strict lint pass. Continue at row147 (YAML
+post-roll state). UCU-09 final window gates, push and exact-SHA CI remain.
+The current 180-row ledger has 34 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

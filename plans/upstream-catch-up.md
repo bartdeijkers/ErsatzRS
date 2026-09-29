@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-29): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **35 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **34 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **145**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **146**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Continue at row 145. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Continue at row 147. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -117,7 +117,7 @@ selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
 
-## Row 146 source map — graphics canvas (pending)
+## Row 146 source map — graphics canvas (Adapt)
 
 - Upstream `28b2e00c` introduces `GraphicsLayerKind.Canvas`, signed private
   `InternalController.GetGraphicsCanvas` delivery and strict offset/duration/rate
@@ -137,14 +137,22 @@ dependencies, not adapting this complete set or GPU acceptance.
   the extracted context factory. No admin page or database schema change.
 - Rust counterparts are `next_engine::{graphics,protocol,media,troubleshooting}`,
   the existing private host router, `graphics_template`, shared playback
-  selectors/artifact ownership and FFmpeg graphics filters. Current Next
-  projection rejects non-image kinds/expressions. The independent `MediaItem_Stop`
+  selectors/artifact ownership and FFmpeg graphics filters. The initial Next
+  projection rejected non-image kinds/expressions. The independent `MediaItem_Stop`
   correction now passes scheduled finish through shared/native/Next/preview
   contexts; UCU-09 owns the focused chunk/mirror regression evidence.
 - Accepted ADR 0105 specifies a supervised FFmpeg canvas using the shared native renderer,
   preserving ADR 0005's ban on a separate graphics-rendering application.
   The ADR owns architecture and acceptance details; UCU-09 owns evidence.
   The official Next runtime and existing v2.0.3 FFmpeg artifacts are reused.
+- Completed: authenticated finite canvas delivery, shared render context,
+  programme/chunk/session clocks, transient previews, stable `startedAt` reports
+  and session-owned producer cleanup. All five graphics kinds and both text
+  renderers pass decoded HTTP and official Next proof; native smoke and all
+  87 TSDuck checks pass. UCU-09 owns the detailed evidence and exact artifacts.
+- Substantive Codex review mapped each changed upstream behavior to production
+  wiring and existing/focused proof. Final corrections advance historical preview
+  decoration selection and share the reported session clock with graphics.
 - Later row173 changes watermark-only projection; it remains an ordered future
   audit and does not justify skipping row146's full graphics behavior.
 
@@ -4140,7 +4148,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | Port | ffmpeg-9-performance-and-support | `fix(media): refresh and expose HDR metadata` | ucu-09; scoped one-time local PQ/HLG rescan, video-only Media Info fields; 34 migration tests, production projection, real unchanged-file HDR/subtitle preservation, JSON regression, Chromium/Firefox and affected strict lint pass. Existing richer probe/persistence/Next hints retained. |
 | 144 | `b30d9670` | chore: update changelog for new next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next optimization release notes` | ucu-09; two changelog lines only. Exact Next 4cc93e4 carries scale/tonemap ordering and guarded QSV fusion; no legacy source or pin change. Existing runtime proof reused; hardware debt retained. |
 | 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | Port | mpeg-ts-channel-streaming; xmltv-guide; classic-scheduling | `feat(parity): reconcile external JSON playback and validation` | ucu-09; four source paths audited; transient native playback/guide, Plex diagnostics and marathon fallback implemented. Focused runtime/lint, smoke and 87 TSDuck checks pass; approved hardware debt remains. |
-| 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: canvas feed for Next only; native graphics stay drawvg under ADR 0005. |
+| 146 | `28b2e00c` | feat: graphics canvas (#3012) | Adapt | drawvg-graphics-engine | `feat(parity): reconcile Next graphics canvases` | ucu-09; accepted ADR 0105, shared FFmpeg renderer and private canvas callback; all-kind decoded HTTP/official Next, timing/geometry/alpha, audio/subtitles, lifecycle, stable session reports, strict lint, smoke and 87 TSDuck checks pass. |
 | 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: YAML post-roll state must survive playout builds; upstream ships 345 lines of tests. |
 | 148 | `c673082e` | fix: playout item converter subtitles (#3014) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: playout item converter subtitles; subtitle parity is a priority surface. |
 | 149 | `4fffa955` | fix: plex other video tags (#3015) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: Plex other-video tags plus a native SQLite reset migration under ADR 0004. |
