@@ -11424,9 +11424,16 @@ The independent correction now carries scheduled finish through native/HLS,
 Next projection and preview contexts. Its early/middle/final/late chunk and
 mirror-offset regression plus transient metadata regression pass (nextest
 945b7ef9-0532-4020-9381-2389d75c8d14). Strict infra/web all-target Clippy passes.
-ADR 0105 is a reviewable Proposed adaptation using the managed FFmpeg
-renderer and private callback listener; no canvas implementation or acceptance
-is claimed. The source map and owning graphics debt track the full scope.
+The maintainer accepted ADR 0105 on 2026-09-29 as the adaptation using the managed FFmpeg
+renderer and private callback listener. The first implementation checkpoint
+adds schema 0.0.4, optional canvas/media layer kinds and strict HTTP timing
+validation. Five focused tests pass (nextest
+a716a521-9d6d-4882-8e61-1e4ca84961f3): existing image JSON round-trips unchanged,
+unknown kinds fail, integer/decimal/rational rates and .NET tick bounds are
+checked, and missing/duplicate headers or channel mismatches fail before work.
+Strict infra/web all-target Clippy passes. No canvas endpoint is exposed yet; producer,
+private binding/lifetime integration and decoded runtime acceptance remain.
+The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.
 Inspection of source 4cc93e4222fe334ed6aad2f694e5b3bcb611f2c9 confirms
@@ -11436,7 +11443,7 @@ HTTP inputs receive finite -t bounds without local seeking or looping; the
 offset header is the playout offset. Canvas sizing/alpha composition is handled
 by the official pipeline. This is source compatibility evidence, not a passed
 ErsatzRS canvas runtime test. No runtime rebuild or checkout movement occurred;
-ADR 0105 remains Proposed pending maintainer decision.
+ADR 0105 is accepted; canvas implementation and runtime acceptance remain.
 
 Row145 (4c3683ae) is Port after final source-to-implementation review. Empty alternate schedules are already
 rejected at application and transactional repository boundaries. The production

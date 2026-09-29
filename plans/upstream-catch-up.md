@@ -141,9 +141,9 @@ dependencies, not adapting this complete set or GPU acceptance.
   projection rejects non-image kinds/expressions. The independent `MediaItem_Stop`
   correction now passes scheduled finish through shared/native/Next/preview
   contexts; UCU-09 owns the focused chunk/mirror regression evidence.
-- ADR 0105 proposes a supervised FFmpeg canvas using the shared native renderer,
+- Accepted ADR 0105 specifies a supervised FFmpeg canvas using the shared native renderer,
   preserving ADR 0005's ban on a separate graphics-rendering application.
-  Its proposal owns architecture and acceptance details; UCU-09 owns evidence.
+  The ADR owns architecture and acceptance details; UCU-09 owns evidence.
   The official Next runtime and existing v2.0.3 FFmpeg artifacts are reused.
 - Later row173 changes watermark-only projection; it remains an ordered future
   audit and does not justify skipping row146's full graphics behavior.

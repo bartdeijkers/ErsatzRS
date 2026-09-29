@@ -17,4 +17,4 @@ description = 'Next projection supports simple image layers but cannot supply th
 discovered = '2026-09-29'
 resolved = false
 adr = '0105'
-evidence = 'Row146 source map in plans/upstream-catch-up.md identifies the canvas protocol, context, preview and lifecycle requirements. ADR 0105 proposes an FFmpeg-produced canvas using the shared native filters; it remains Proposed and unimplemented. No row146 verdict or pin advance.'
+evidence = 'Row146 source map in plans/upstream-catch-up.md identifies the canvas protocol, context, preview and lifecycle requirements. ADR 0105 is accepted for an FFmpeg-produced canvas using the shared native filters; schema/layer types and strict timing/header checks have focused proof. Producer, private callback ownership and runtime acceptance remain. No row146 verdict or pin advance.'

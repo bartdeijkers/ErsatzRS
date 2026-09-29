@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.3";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.4";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -189,10 +189,20 @@ pub struct PlayoutItem {
     pub graphics: Vec<Watermark>,
 }
 
+/// Official Next layer semantics: canvas sources already have output geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphicsLayerKind {
+    Media,
+    Canvas,
+}
+
 /// A single image/video overlay, always visible unless periodic timing is set.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Watermark {
     pub source: Source,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<GraphicsLayerKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing: Option<WatermarkTiming>,
     #[serde(skip_serializing_if = "Option::is_none")]

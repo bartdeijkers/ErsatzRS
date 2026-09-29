@@ -28,7 +28,7 @@ fn subtitle_style_preserves_explicit_values_and_accepts_older_configs() {
 fn probe_hint_publication_uses_upstream_schema_version() {
     assert_eq!(
         PLAYOUT_VERSION,
-        "https://ersatztv.org/playout/version/0.0.3"
+        "https://ersatztv.org/playout/version/0.0.4"
     );
 }
 
@@ -111,4 +111,28 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
     });
     let parsed: ChannelConfig = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), wire);
+}
+
+#[test]
+fn canvas_layers_round_trip_without_affecting_legacy_media_layers() {
+    for kind in [None, Some("media"), Some("canvas")] {
+        let mut wire = json!({
+            "source": {"source_type":"http", "uri":"http://localhost/canvas", "reconnect":false},
+            "location":"top_left", "stream_index":0
+        });
+        if let Some(kind) = kind {
+            wire["kind"] = json!(kind);
+        }
+        let layer: Watermark = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(
+            layer.kind == Some(GraphicsLayerKind::Canvas),
+            kind == Some("canvas")
+        );
+        assert_eq!(serde_json::to_value(layer).unwrap(), wire);
+    }
+    assert!(serde_json::from_value::<Watermark>(json!({
+        "source":{"source_type":"local", "path":"fixture.nut"},
+        "location":"top_left", "kind":"unknown"
+    }))
+    .is_err());
 }

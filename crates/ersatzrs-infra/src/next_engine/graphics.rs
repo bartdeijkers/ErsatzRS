@@ -118,6 +118,7 @@ fn image_layer(element: &GraphicsElement) -> Result<protocol::Watermark> {
         PlaybackWatermarkImage::Local(path.into())
     };
     Ok(protocol::Watermark {
+        kind: None,
         source: watermark::image_source(&image)?,
         location: watermark::location(element.location),
         stream_index: Some(0),

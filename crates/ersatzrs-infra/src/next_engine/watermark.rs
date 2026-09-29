@@ -33,6 +33,7 @@ pub(super) fn project_layer(selected: &ResolvedPlaybackWatermark) -> Result<prot
         WatermarkSize::ActualSize => None,
     };
     Ok(protocol::Watermark {
+        kind: None,
         timing: timing(watermark)?,
         source: image_source(&selected.image)?,
         stream_index: Some(0),

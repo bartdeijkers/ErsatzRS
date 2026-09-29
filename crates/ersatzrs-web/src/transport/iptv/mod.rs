@@ -3,6 +3,7 @@ pub mod guide;
 pub mod hls;
 pub mod identifier;
 pub mod logos;
+pub mod next_canvas;
 pub mod next_media;
 pub mod next_subtitles;
 pub mod playlist;

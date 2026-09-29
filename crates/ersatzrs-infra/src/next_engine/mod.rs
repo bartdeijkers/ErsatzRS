@@ -6,6 +6,7 @@
 
 pub(crate) mod burn_cache;
 pub(crate) mod burn_subtitles;
+pub mod canvas;
 pub mod config;
 pub mod connections;
 pub mod coordinator;

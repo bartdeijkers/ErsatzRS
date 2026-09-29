@@ -2,11 +2,13 @@
 
 ## Status
 
-Proposed
+Accepted 2026-09-29
 
 ## Implementation
 
-Not implemented
+Partial — the canvas layer/schema and strict timing/header validation are
+implemented. Producer rendering, authenticated callback/session ownership and
+decoded Next playback acceptance remain pending.
 
 ## Context
 
@@ -25,7 +27,7 @@ render graphics in its existing programme filter graph.
 
 ## Decision
 
-Propose a bounded FFmpeg canvas producer for Next, using the managed, pinned
+Use a bounded FFmpeg canvas producer for Next, using the managed, pinned
 ErsatzRS-ffmpeg runtime and the existing shared graphics selectors, templates,
 drawvg/libass/image/motion filters and in-process Lua. Its base input is a
 transparent frame at the requested output resolution and rate. It emits finite
@@ -76,9 +78,9 @@ preserves the selected graphics behavior; row173 owns its later upstream audit.
 Next gains the shared graphics feature set while FFmpeg remains the rendering
 engine. Canvas generation adds a bounded FFmpeg child and local encoded-video
 traffic to affected Next chunks. CPU and cancellation behavior need runtime
-proof; this proposal does not claim hardware or cross-platform acceptance.
+proof; this decision does not claim hardware or cross-platform acceptance.
 
-Row146 remains pending until maintainer acceptance and implementation evidence.
+Row146 remains pending until implementation and acceptance evidence are complete.
 Required evidence includes protocol/header and binding rejection tests, exact
 argv snapshots, decoded alpha/position/order/timing for all graphics kinds,
 seek/chunk/mirror/preview coverage, transparent output after graphics removal,

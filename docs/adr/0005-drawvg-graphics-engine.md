@@ -32,6 +32,10 @@ ErsatzRS graphics engine. Source SVG files may exist as authoring/reference
 fixtures, but FFmpeg `drawvg` receives generated VGS scripts, not raw SVG/XML.
 Do not reintroduce an external graphics process.
 
+ADR 0105 clarifies the optional Next boundary: a supervised FFmpeg child may
+produce its transparent graphics canvas using these same filters. This does not
+add a separate rendering application or change the native programme pipeline.
+
 Graphics element storage follows Decision C from the graphics parity slice:
 ErsatzRS treats the database as canonical, and an ErsatzTV-style YAML file at
 `GraphicsElement.Path` is parsed to upsert a fully populated DB element. Shared
@@ -92,6 +96,8 @@ VGS draw scripts.
   because they cannot represent ErsatzTV's per-kind graphics model.
 
 ## References
+
+- [ADR 0105: Next graphics canvases](0105-render-next-graphics-canvases-with-ffmpeg.md)
 
 - [ADR 0063: FFmpeg 9 runtime and profile options](0063-ffmpeg-9-runtime-and-profile-options.md)
 - [FFmpeg drawvg reference](https://ffmpeg.org/drawvg-reference.html)
