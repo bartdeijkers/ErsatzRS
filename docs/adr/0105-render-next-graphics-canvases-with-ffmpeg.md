@@ -12,8 +12,10 @@ transparent backgrounds, image alpha, layer ordering, content-box placement and
 duration. The managed producer now owns graphics files and live text controllers
 through startup, transfer and confirmed process cleanup. Paced rendering admits
 its first output without waiting for a media-probe prefix or EOF. Packaged FFmpeg
-proof covers this supervised drawvg stream. Authenticated callback/session
-integration and decoded Next playback acceptance remain pending.
+proof covers this supervised drawvg stream. Expiring source bindings now
+authenticate the channel, occurrence, version/file and timeline while excluding
+mutable graphics settings. Callback/session integration and decoded Next playback
+acceptance remain pending; no canvas route is exposed yet.
 
 ## Context
 

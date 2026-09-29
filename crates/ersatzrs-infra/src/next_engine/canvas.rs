@@ -2,6 +2,10 @@
 
 use std::time::Duration;
 
+#[path = "canvas_binding.rs"]
+mod binding;
+pub use binding::CanvasBinding;
+
 const MAX_MILLISECONDS: u64 = i64::MAX.unsigned_abs() / 10_000;
 
 /// Validated timing. Raw header values never escape in diagnostics.

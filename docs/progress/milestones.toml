@@ -11449,6 +11449,14 @@ canvas startup failure and cancellation, EOF/shutdown/disconnect/drop cleanup,
 updated command snapshots, and pinned v2.0.3 decoded image/drawvg output. The
 three-second supervised canvas starts before EOF, preserves alpha and removes
 artifacts after reaping. Strict FFmpeg/infra/web all-target Clippy passes.
+Canvas source bindings now authenticate occurrence identity and expiry using
+the existing host capability, with the exact process-session header placeholder
+and supplied probe hint preserved. Three focused tests pass (nextest
+557014c8-17c7-459b-b94e-5aeb0dac6b52): every identity field is protected, expired
+and previous-host tickets fail, mirror/transient identity is preserved, and
+mutable graphics settings do not invalidate an otherwise current occurrence.
+This is binding/source-construction proof, not active-session or HTTP proof.
+Strict infra/web all-target Clippy passes for this binding checkpoint.
 No canvas endpoint is exposed yet; private binding/lifetime integration,
 all-kind graphics coverage and decoded Next acceptance remain.
 The source map and owning graphics debt track the full scope.
