@@ -130,9 +130,11 @@ dependencies, not adapting this complete set or GPU acceptance.
   `ScheduleFile` and `ExternalJsonSchedulingEngine` deliberately does no work,
   but no external channel/program JSON parser or equivalent upstream
   `ExternalJsonPlayoutItemProvider` consumer was present in the Rust tree.
-  Native `load_active_media_path`, Next `schedule::read_locked` and XMLTV
-  `load_guide_items` selected persisted items. The bounded runtime observation and
-  its limitations are recorded in UCU-09 milestone evidence.
+  Native `load_active_media_path` and XMLTV `load_guide_items` selected persisted
+  items. Next `schedule::read_locked` also does so, but the later source audit
+  confirmed that this matches upstream and is not an external-JSON parity gap.
+  The bounded runtime observation and its limitations are recorded in UCU-09
+  milestone evidence.
 - Upstream `MarathonHelper.GetEnumerator` returns None for an unsupported
   grouping mode, not for an empty valid group. The local fix normalizes only
   `MarathonGroupBy::None` to Random in the build-local schedule copy and logs the
@@ -142,12 +144,17 @@ dependencies, not adapting this complete set or GPU acceptance.
   preference, server-scoped replacements, fresh stream metadata and distinct
   redacted Plex failures. Its remote metadata client rejects redirects and
   enforces bounded reads/deadlines. Milestone evidence owns focused results.
-- Native `load_active_media_path`, HLS `load_active_hls_item` and Next
-  `schedule::read_locked`/source preparation must consume these transient
-  bindings. Reuse existing probe-to-source helpers and protected loopback media
+- Native `load_active_media_path` and HLS `load_active_hls_item` consume these
+  transient bindings. Reuse existing probe-to-source helpers and protected loopback media
   routing; never insert temporary library/media/playout rows or publish Plex
   credentials. Preserve custom/default audio and subtitle selection and
   troubleshooting metadata. Success/invalid-schedule runtime proof remains due.
+- Scope correction: at accepted source `b30d9670` and fetched target `8bda4411`,
+  only `GetPlayoutItemProcessByChannelNumberHandler` calls the external JSON
+  provider. `SyncNextPlayoutHandler` exports persisted items; the Next callback
+  uses fallback filler. Next support is not required to port row145 and would
+  require a separately accepted ADR as a deliberate extension. Milestone
+  evidence records this correction to the earlier assessment.
 - The [official Plex PMS schema](https://developer.plex.tv/pms/) confirms nested
   `Media`/`Part`/`Stream` names. Shared decoding now accepts these plus existing
   lowercase aliases; metadata and scanner fixture evidence belongs to UCU-09.

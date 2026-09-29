@@ -352,8 +352,8 @@ release section when tagging a release.
   detection for transient native inputs without creating library records.
   Native remote HTTP playback, XMLTV and MPEG-TS HLS are verified on Linux.
   HLS retains transient subtitle files through encoder completion and programme
-  identity across transitions. Next integration and remaining transport/platform
-  acceptance remain pending.
+  identity across transitions. Remaining native transport/platform acceptance is
+  pending; external JSON playback follows upstream native-engine support.
 
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next

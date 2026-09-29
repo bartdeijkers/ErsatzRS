@@ -79,8 +79,9 @@ media-part relay, shared transient track selection, graphics metadata binding
 and owned subtitle preparation. Native stream wiring and transient video enrichment
 are implemented locally, with Linux remote HTTP playback and XMLTV proof.
 Native HLS now consumes transient metadata, subtitles and decorations, with
-multi-programme remote HTTP decode proof. Next consumer integration and remaining
-transport/platform acceptance remain.
+multi-programme remote HTTP decode proof. Remaining transport/platform acceptance
+stays open. Source audit corrected the earlier Next requirement: upstream external
+JSON playback uses the native handler, not the Next exporter or filler callback.
 The refreshed upstream ledger still contains 180 rows.
 The current 180-row ledger has 36 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.

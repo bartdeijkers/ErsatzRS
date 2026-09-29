@@ -11425,7 +11425,7 @@ and bounds file reads. XMLTV consumes transient programme metadata directly,
 including guide minimum duration, source/mirror offsets, and invalid-time errors;
 stale persisted items are excluded. Three reader tests plus the production
 SQLite guide regression pass (nextest 1644c950-18cb-4a3a-9874-6985101e541e).
-All 25 XMLTV-filtered tests pass. HTTP endpoint/runtime acceptance is still due.
+All 25 XMLTV-filtered tests pass. Subsequent HTTP/runtime evidence follows below.
 
 The transient playback resolver now selects finite external programmes with mirror
 offsets, requires the matching Plex library, applies server-scoped replacements,
@@ -11588,13 +11588,33 @@ pass (nextest e95c349e-481e-45e4-96d9-c5207287a83d), including delayed mirrors,
 prepared publication, selected audio/subtitles, graphics and normalized appends.
 Strict infrastructure/web all-target Clippy passes without new exemptions.
 
-Next schedule::read_locked still requires transient media integration. HLS fMP4,
-remaining platform/runtime scenarios and TSDuck acceptance remain unproven; owning streaming debt
+Linux fMP4 HLS now passes a separate remote Plex fixture (nextest
+87287407-f6f8-443d-a2a0-331540854606). It checks master/media playlists, changing
+initialization segments and programme discontinuities, then captures twelve
+seconds through the real FFmpeg HLS demuxer. Full audio/video decode, visibly
+burned English subtitles and probed duration longer than one eight-second
+programme pass. Strict web all-target Clippy passes after extracting the capture
+helper without changing its command or assertions. Remaining platform/runtime
+scenarios and TSDuck acceptance remain
+unproven; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a
 validation diagnostic. The owned host shut down cleanly; this timeout is not
 causal proof and predates the implementation.
+
+2026-09-29 scope audit: the earlier claim that Next external JSON consumption
+was missing upstream parity was incorrect. At both accepted source b30d9670 and
+fetched target 8bda4411, CheckForExternalJson is called only by
+GetPlayoutItemProcessByChannelNumberHandler. SyncNextPlayoutHandler exports
+persisted PlayoutItems, and InternalController.GetFallbackPlayoutJson calls
+CheckForFallbackFiller without the external JSON provider. Row145 itself changes
+only channel refresh validation, native external-provider diagnostics, alternate
+schedule validation and marathon fallback logging. Row145 follows the accepted
+upstream-parity requirement; its erroneous Next requirement is corrected rather
+than treating an absent upstream feature as deferred work. The maintainer was
+also offered an optional ADR-backed Next extension, but none is assumed approved.
+Native HLS acceptance continues. No upstream verdict or pin is advanced here.
 
 MarathonHelper returns None only for unsupported grouping. Classic now warns and
 normalizes MarathonGroupBy::None to Random in the build-local schedule copy,
