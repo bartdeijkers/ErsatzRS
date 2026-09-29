@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use crate::{
     canvas_overlay_filter, hide_banner, loglevel_error, no_standard_input, no_stats, pipe_output,
-    time_limit, CommandGenerator, ComplexFilter, FfmpegCommand, FilterChain, FrameRate, FrameSize,
-    GraphicsOverlayFilter, GraphicsPipelineOverlay, InputFile, PipelineStep, WatermarkOpacityClock,
+    time_limit, CommandGenerator, ComplexFilter, FfmpegCommand, FilterChain, FrameSize,
+    GraphicsFrameRate, GraphicsOverlayFilter, GraphicsPipelineOverlay, InputFile, PipelineStep,
+    WatermarkOpacityClock,
 };
 
 /// Render geometry and timing for one canvas chunk. Overlay filters already
@@ -14,7 +15,7 @@ use crate::{
 pub struct CanvasRenderRequest {
     pub resolution: FrameSize,
     pub content_size: FrameSize,
-    pub frame_rate: FrameRate,
+    pub frame_rate: GraphicsFrameRate,
     pub duration: Duration,
     pub opacity_clock: WatermarkOpacityClock,
     pub overlays: Vec<GraphicsPipelineOverlay>,
@@ -36,8 +37,8 @@ pub fn build_canvas_command(
         || request.resolution.height == 0
         || request.content_size.width == 0
         || request.content_size.height == 0
-        || request.frame_rate.numerator == 0
-        || request.frame_rate.denominator == 0
+        || !request.frame_rate.parsed().is_finite()
+        || request.frame_rate.parsed() <= 0.0
         || request.duration.is_zero()
     {
         return Err(InvalidCanvasRenderRequest);

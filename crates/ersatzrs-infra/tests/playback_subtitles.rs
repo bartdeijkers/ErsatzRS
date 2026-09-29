@@ -1063,7 +1063,7 @@ async fn imported_image_graphics_use_persisted_epg_context_without_source_yaml()
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(320, 180),
         square_pixel_frame_size: FrameSize::new(320, 180),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
     let graphics = [ResolvedPlaybackGraphicsElement {
         element,
@@ -1117,7 +1117,7 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
@@ -1212,7 +1212,7 @@ async fn verify_dynamic_graphics_media(
         duration_seconds: 3_600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts = render_playback_graphics_overlays(pool, &graphics, &context, output_dir.path())
@@ -1293,7 +1293,7 @@ async fn invalid_drawtext_element_does_not_suppress_valid_static_graphics() {
         duration_seconds: 3_600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts =
@@ -1350,7 +1350,7 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
@@ -1648,7 +1648,7 @@ async fn render_scheduled_graphics(
             duration_seconds: 1.0,
             frame_size: FrameSize::new(320, 180),
             square_pixel_frame_size: FrameSize::new(320, 180),
-            frame_rate: Some(FrameRate::new(25, 1)),
+            frame_rate: Some(FrameRate::new(25, 1).into()),
         },
         temp.join("rendered"),
     )

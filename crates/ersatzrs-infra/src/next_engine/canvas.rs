@@ -16,8 +16,7 @@ const MAX_MILLISECONDS: u64 = i64::MAX.unsigned_abs() / 10_000;
 pub struct CanvasRequest {
     offset: Duration,
     duration: Duration,
-    frame_rate: String,
-    parsed_frame_rate: f64,
+    frame_rate: ersatzrs_ffmpeg::GraphicsFrameRate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -36,12 +35,12 @@ impl CanvasRequest {
         if offset > MAX_MILLISECONDS || duration == 0 || duration > MAX_MILLISECONDS - offset {
             return Err(InvalidCanvasRequest);
         }
-        let parsed_frame_rate = parse_rate(rate)?;
+        let frame_rate =
+            ersatzrs_ffmpeg::GraphicsFrameRate::parse(rate).map_err(|_| InvalidCanvasRequest)?;
         Ok(Self {
             offset: Duration::from_millis(offset),
             duration: Duration::from_millis(duration),
-            frame_rate: rate.to_owned(),
-            parsed_frame_rate,
+            frame_rate,
         })
     }
 
@@ -57,12 +56,17 @@ impl CanvasRequest {
 
     #[must_use]
     pub fn frame_rate(&self) -> &str {
-        &self.frame_rate
+        self.frame_rate.as_str()
+    }
+
+    #[must_use]
+    pub fn graphics_frame_rate(&self) -> ersatzrs_ffmpeg::GraphicsFrameRate {
+        self.frame_rate.clone()
     }
 
     #[must_use]
     pub const fn parsed_frame_rate(&self) -> f64 {
-        self.parsed_frame_rate
+        self.frame_rate.parsed()
     }
 }
 
@@ -71,32 +75,6 @@ fn unsigned(value: &str) -> Result<u64, InvalidCanvasRequest> {
         return Err(InvalidCanvasRequest);
     }
     value.parse().map_err(|_| InvalidCanvasRequest)
-}
-
-fn parse_rate(value: &str) -> Result<f64, InvalidCanvasRequest> {
-    let rate = if let Some((numerator, denominator)) = value.split_once('/') {
-        let numerator = i32::try_from(unsigned(numerator)?).map_err(|_| InvalidCanvasRequest)?;
-        let denominator =
-            i32::try_from(unsigned(denominator)?).map_err(|_| InvalidCanvasRequest)?;
-        if numerator <= 0 || denominator <= 0 {
-            return Err(InvalidCanvasRequest);
-        }
-        f64::from(numerator) / f64::from(denominator)
-    } else {
-        // NumberStyles.AllowDecimalPoint: no whitespace, signs or exponents.
-        if value.is_empty()
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || byte == b'.')
-        {
-            return Err(InvalidCanvasRequest);
-        }
-        value.parse::<f64>().map_err(|_| InvalidCanvasRequest)?
-    };
-    if !rate.is_finite() || rate <= 0.0 {
-        return Err(InvalidCanvasRequest);
-    }
-    Ok(rate)
 }
 
 #[cfg(test)]

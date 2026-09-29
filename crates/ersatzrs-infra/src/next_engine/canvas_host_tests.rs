@@ -234,6 +234,111 @@ fn canvas_timing() -> super::super::canvas::CanvasRequest {
 }
 
 #[tokio::test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "manual package gate supplies the verified executable"
+)]
+async fn canvas_session_renders_selected_script_and_transparent_removed_graphics() {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::{
+        GraphicsElement, GraphicsElementConfig, GraphicsElementKind, ScriptGraphicsConfig,
+    };
+    use tokio::io::AsyncReadExt as _;
+
+    let executable = std::env::var("ERSATZRS_FFMPEG").expect("packaged FFmpeg executable");
+    let (host, instance, binding, root) = fixture().await;
+    host.dynamic_contexts
+        .lock()
+        .await
+        .get_mut(&instance)
+        .unwrap()
+        .request
+        .ffmpeg = (&executable).into();
+    sqlx::query(r#"UPDATE "Resolution" SET "Width"=64, "Height"=64 WHERE "Id"=1"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    make_repositories(host.pool.clone())
+        .graphics
+        .upsert_element(&GraphicsElement {
+            id: 901,
+            name: "Canvas script".into(),
+            kind: GraphicsElementKind::Script,
+            config: GraphicsElementConfig::Script(ScriptGraphicsConfig {
+                command: Some("return 'setcolor red\\nrect 8 8 16 16 fill\\n'".into()),
+                ..ScriptGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, 901)"#)
+        .bind(binding.item).execute(&host.pool).await.unwrap();
+    let timing = CanvasRequest::parse("0", "1000", "4.0").unwrap();
+    for selected in [true, false] {
+        if !selected {
+            sqlx::query(
+                r#"DELETE FROM "PlayoutItemGraphicsElement" WHERE "GraphicsElementId"=901"#,
+            )
+            .execute(&host.pool)
+            .await
+            .unwrap();
+        }
+        let mut reader = host
+            .render_canvas(instance, &binding, &timing)
+            .await
+            .unwrap();
+        let mut bytes = Vec::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            reader.read_to_end(&mut bytes),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let nut = root.path().join("canvas.nut");
+        std::fs::write(&nut, bytes).unwrap();
+        let decoded = tokio::process::Command::new(&executable)
+            .args(["-nostdin", "-v", "error", "-i"])
+            .arg(nut)
+            .args(["-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1"])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            decoded.status.success(),
+            "{}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 64 * 64 * 4 * 4);
+        for frame in decoded.stdout.chunks_exact(64 * 64 * 4) {
+            assert_eq!(frame[3], 0);
+            let pixel = &frame[(12 * 64 + 12) * 4..(12 * 64 + 12) * 4 + 4];
+            if selected {
+                assert_eq!(pixel, &[0, 0, 255, 255]);
+            } else {
+                assert_eq!(pixel[3], 0);
+            }
+        }
+    }
+    host.dynamic_contexts
+        .lock()
+        .await
+        .remove(&instance)
+        .unwrap()
+        .transfers
+        .shutdown()
+        .await
+        .unwrap();
+    assert!(host
+        .render_canvas(instance, &binding, &timing)
+        .await
+        .is_err());
+}
+
+#[tokio::test]
 async fn canvas_session_selects_decorations_at_requested_chunk_time() {
     use ersatzrs_core::repositories::GraphicsRepository as _;
     use ersatzrs_domain::GraphicsElement;

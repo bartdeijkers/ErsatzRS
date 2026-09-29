@@ -11475,8 +11475,24 @@ for mirrors. Seven focused timeline/session tests pass (nextest
 b208c603-c375-431d-9c1e-90ae9565b976), including a decoration becoming active
 between chunks, final-chunk truncation, late offsets and date overflow.
 Strict infra/web all-target Clippy, formatting and progress validation pass.
-No canvas endpoint is exposed yet; HTTP/render/lifetime integration,
-all-kind graphics coverage and decoded Next acceptance remain.
+The private `/ffmpeg/next-canvas` endpoint now validates capability, signed
+binding, session, method/range and timing headers before admitting rendering.
+It registers preparation in the existing session transfer registry, renders
+through the native graphics/templates path, and checks the current occurrence
+again before claiming the reader. Shared graphics frame rates retain decimal
+and rational wire spelling; native callers preserve their existing fractions.
+Twenty-four focused checks pass (nextest 9d16fb7b-f9b6-4f00-a605-cc292871c761),
+including exact argv snapshots, duplicate/tampered admission rejection, public
+IPTV listener isolation, current-session checks, and packaged v2.0.3 FFmpeg
+decoding of a selected Lua/drawvg script followed by transparent output after
+its removal. Existing packaged alpha/order/content-box and supervised producer
+cleanup checks also pass. This is callback/renderer groundwork, not official
+Next playback acceptance: projection still emits the previous media layers.
+Strict FFmpeg/infra/web all-target Clippy and formatting pass. The tested
+FFmpeg/ffprobe binaries still match the accepted v2.0.3 package digests.
+Complete per-kind seek/chunk animation and fade timing, canvas projection,
+matching capability health coverage, HTTP runtime and decoded official Next
+acceptance remain.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

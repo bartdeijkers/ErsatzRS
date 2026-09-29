@@ -32,7 +32,7 @@ async fn canvas_producer_starts_before_eof_and_reaps_before_removing_graphics() 
     let command = build_canvas_command(CanvasRenderRequest {
         resolution: FrameSize::new(64, 64),
         content_size: FrameSize::new(64, 64),
-        frame_rate: FrameRate::new(4, 1),
+        frame_rate: FrameRate::new(4, 1).into(),
         duration: Duration::from_secs(3),
         opacity_clock: WatermarkOpacityClock::default(),
         overlays: vec![GraphicsPipelineOverlay::drawvg(0, overlay.filter())],

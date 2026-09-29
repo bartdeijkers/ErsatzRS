@@ -448,7 +448,9 @@ release section when tagging a release.
   and current items, with explicit session scope for previews and fallback.
   Canvas chunks retain the scheduled programme finish and select timed
   decorations at the requested offset, including mirrored playback.
-  Private callback and Next playback integration remain in development.
+  A private authenticated callback now prepares finite streams through the
+  shared renderer and session transfer owner, preserving decimal frame rates.
+  Complete graphics timing and Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

@@ -1893,9 +1893,11 @@ impl HlsSessionWorker {
                                     .map_or(0.0, |duration| duration.as_secs_f64()),
                                 frame_size,
                                 square_pixel_frame_size,
-                                frame_rate: target_frame_rate.or_else(|| {
-                                    source_stream.as_ref().and_then(|stream| stream.frame_rate)
-                                }),
+                                frame_rate: target_frame_rate
+                                    .or_else(|| {
+                                        source_stream.as_ref().and_then(|stream| stream.frame_rate)
+                                    })
+                                    .map(Into::into),
                             },
                             output_dir,
                             interval_startup.map(|(_, deadline)| deadline),

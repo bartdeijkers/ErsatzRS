@@ -19,8 +19,14 @@ current persisted, mirror, fallback or preview occurrence, and retains the
 session start clock. Transient bindings explicitly include their owning session.
 Canvas timing separates the scheduled programme finish from bounded chunk
 duration and selects current decorations at the requested programme offset.
-HTTP/render integration and decoded Next playback acceptance remain pending;
-no canvas route is exposed yet.
+The private callback now authenticates requests and prepares streams through
+the shared renderer and session transfer owner, with a fresh occurrence check
+before returning the reader. Decimal and rational rates retain their wire
+spelling in the renderer. Complete graphics timing, canvas layer projection and
+decoded Next playback acceptance remain pending.
+Focused tests include private admission rejection and public route isolation;
+packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
+frames after selection removal through the session-owned renderer.
 
 ## Context
 

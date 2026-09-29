@@ -1262,7 +1262,8 @@ async fn serve_channel_stream_admitted_inner(
                 frame_size,
                 square_pixel_frame_size,
                 frame_rate: target_frame_rate
-                    .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+                    .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate))
+                    .map(Into::into),
             };
             let rendered = if let Some(cancellation) = retained_cancellation.as_mut() {
                 let (sender, receiver) = tokio::sync::oneshot::channel();

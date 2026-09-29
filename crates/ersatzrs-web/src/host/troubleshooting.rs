@@ -1358,7 +1358,9 @@ async fn preview_graphics_overlays(
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,
             square_pixel_frame_size,
-            frame_rate: source_stream.and_then(|stream| stream.frame_rate),
+            frame_rate: source_stream
+                .and_then(|stream| stream.frame_rate)
+                .map(Into::into),
         },
         working_dir.join("graphics"),
     )
@@ -1438,7 +1440,8 @@ async fn preview_channel_graphics_overlays(
             frame_size,
             square_pixel_frame_size,
             frame_rate: target_frame_rate
-                .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+                .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate))
+                .map(Into::into),
         },
         working_dir.join("graphics"),
     )

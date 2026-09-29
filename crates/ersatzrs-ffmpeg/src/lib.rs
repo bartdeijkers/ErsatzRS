@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 pub mod canvas;
+mod canvas_rate;
+pub use canvas_rate::{GraphicsFrameRate, InvalidGraphicsFrameRate};
 pub mod capabilities;
 pub mod command;
 pub mod concat;

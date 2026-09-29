@@ -667,6 +667,7 @@ pub(crate) fn build_internal_app(app_state: AppState) -> Router {
             "/ffmpeg/next-prepared/{instance}/{transfer}",
             get(iptv::next_media::get_prepared),
         )
+        .route("/ffmpeg/next-canvas", get(iptv::next_canvas::get_canvas))
         .route(
             "/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}",
             get(iptv::next_media::get_item),

@@ -122,7 +122,7 @@ pub async fn get_prepared(
     }
 }
 
-fn prepared_request(method: &Method, headers: &HeaderMap) -> Result<(), StatusCode> {
+pub(super) fn prepared_request(method: &Method, headers: &HeaderMap) -> Result<(), StatusCode> {
     if method != Method::GET {
         return Err(StatusCode::METHOD_NOT_ALLOWED);
     }
@@ -141,7 +141,7 @@ fn prepared_request(method: &Method, headers: &HeaderMap) -> Result<(), StatusCo
     Ok(())
 }
 
-fn prepared_response(reader: impl AsyncRead + Unpin + Send + 'static) -> Response {
+pub(super) fn prepared_response(reader: impl AsyncRead + Unpin + Send + 'static) -> Response {
     let chunks = futures_util::stream::try_unfold(reader, |mut reader| async move {
         let mut bytes = vec![0; 64 * 1024];
         let length = reader.read(&mut bytes).await?;

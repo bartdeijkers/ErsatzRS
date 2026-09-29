@@ -35,6 +35,70 @@ pub struct CanvasSession {
 }
 
 impl NextHost {
+    /// Prepare and claim a finite canvas in the owning session's transfer registry.
+    /// The HTTP boundary must validate capability, ticket and headers first.
+    ///
+    /// # Errors
+    /// Rejects stale bindings, closed/full sessions and failed or cancelled rendering.
+    pub async fn render_canvas(
+        &self,
+        instance: Uuid,
+        binding: &CanvasBinding,
+        timing: &CanvasRequest,
+    ) -> Result<super::session_transfers::TransferReader> {
+        let before = self.canvas_session(instance, binding, timing).await?;
+        let transfers = before.transfers.clone();
+        let pool = self.pool.clone();
+        let request_timing = timing.clone();
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+        let transfer_binding = super::session_transfers::TransferBinding {
+            media_item_id: binding.media,
+            playout_item_id: binding.item,
+            media_version_id: binding.version,
+            media_file_id: binding.file,
+            publication: "graphics canvas".into(),
+            start: before.timeline.now,
+            finish: before.timeline.chunk_finish,
+        };
+        let ready = transfers
+            .prepare(
+                transfer_binding,
+                deadline,
+                deadline + std::time::Duration::from_secs(5),
+                move |cancellation| {
+                    super::canvas_render::prepare(
+                        pool,
+                        before,
+                        request_timing,
+                        deadline,
+                        cancellation,
+                    )
+                },
+            )
+            .await
+            .map_err(|_| unavailable())?;
+        let mut pending = super::retained_host::PendingClaim {
+            transfers: transfers.clone(),
+            id: Some(ready.id),
+        };
+        let result = async {
+            self.canvas_session(instance, binding, timing).await?;
+            self.claim_prepared(instance, ready.id)
+                .await
+                .map_err(|_| unavailable())
+        }
+        .await;
+        if result.is_err() {
+            transfers
+                .cancel(ready.id)
+                .await
+                .map_err(|_| unavailable())?;
+        } else {
+            pending.id = None;
+        }
+        result
+    }
+
     /// Resolve an authenticated binding within one exact active process instance.
     /// The HTTP boundary must authenticate its ticket first. Call again after
     /// asynchronous producer preparation before claiming/returning its stream.

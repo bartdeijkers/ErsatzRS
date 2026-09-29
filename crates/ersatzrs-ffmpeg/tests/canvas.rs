@@ -10,7 +10,7 @@ fn request() -> CanvasRenderRequest {
     CanvasRenderRequest {
         resolution: FrameSize::new(64, 64),
         content_size: FrameSize::new(64, 32),
-        frame_rate: FrameRate::new(4, 1),
+        frame_rate: FrameRate::new(4, 1).into(),
         duration: Duration::from_secs(1),
         opacity_clock: WatermarkOpacityClock::default(),
         overlays: Vec::new(),
@@ -46,6 +46,14 @@ fn canvas_transparent_command_snapshot() {
 }
 
 #[test]
+fn canvas_decimal_rate_command_snapshot() {
+    let mut request = request();
+    request.frame_rate = ersatzrs_ffmpeg::GraphicsFrameRate::parse("29.97").unwrap();
+    let command = build_canvas_command(request).unwrap();
+    insta::assert_snapshot!(command.arguments.join("\n"));
+}
+
+#[test]
 fn canvas_ordered_graphics_command_snapshot() {
     let mut request = request();
     request.overlays = vec![image("red", 2, 50), image("blue", 1, 100)];
@@ -62,7 +70,7 @@ fn canvas_rejects_invalid_render_geometry_and_clock() {
     invalid.content_size.height = 0;
     assert!(build_canvas_command(invalid).is_err());
     let mut invalid = request();
-    invalid.frame_rate.denominator = 0;
+    invalid.frame_rate = FrameRate::new(4, 0).into();
     assert!(build_canvas_command(invalid).is_err());
     let mut invalid = request();
     invalid.duration = Duration::ZERO;

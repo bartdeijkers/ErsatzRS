@@ -178,7 +178,7 @@ pub struct PlaybackGraphicsRenderContext {
     pub duration_seconds: f64,
     pub frame_size: FrameSize,
     pub square_pixel_frame_size: FrameSize,
-    pub frame_rate: Option<FrameRate>,
+    pub frame_rate: Option<ersatzrs_ffmpeg::GraphicsFrameRate>,
 }
 
 /// Rendered `FFmpeg` overlays and the live text controllers they depend on.
@@ -2486,8 +2486,14 @@ async fn render_playback_graphics_overlays_inner(
                 frame_height: context.frame_size.height,
                 scaled_frame_width: context.square_pixel_frame_size.width,
                 scaled_frame_height: context.square_pixel_frame_size.height,
-                r_frame_rate: context.frame_rate.map(FrameRate::r_frame_rate),
-                frame_rate: context.frame_rate.map(FrameRate::parsed),
+                r_frame_rate: context
+                    .frame_rate
+                    .as_ref()
+                    .map(ersatzrs_ffmpeg::GraphicsFrameRate::r_frame_rate),
+                frame_rate: context
+                    .frame_rate
+                    .as_ref()
+                    .map(ersatzrs_ffmpeg::GraphicsFrameRate::parsed),
             };
             let variables = graphics_template_variables(
                 pool,
