@@ -126,14 +126,25 @@ impl NextHost {
         request: TroubleshootingPreview<'_>,
         start: super::host::NextStart,
     ) -> Result<(uuid::Uuid, protocol::PlayoutItem)> {
+        if Instant::now() >= request.deadline {
+            return Err(unavailable("preparation deadline expired"));
+        }
         if start.channel_id != request.channel.id || start.number != request.channel.number {
             return Err(unavailable("preview session identity differs"));
         }
         let context = std::sync::Arc::new(Context::new(&request));
+        let instance = uuid::Uuid::new_v4();
         let item = if request.media.remote_stream_id.is_none() {
-            self.prepare_troubleshooting(request).await?
+            let mut projection = timeout_at(
+                request.deadline,
+                self.prepare_troubleshooting_inner(&request),
+            )
+            .await
+            .map_err(|_| unavailable("preparation deadline expired"))??;
+            projection.publish_graphics(&self.media, Some(instance), context.media.item.start)?;
+            projection.item
         } else {
-            let before = timeout_at(
+            let mut before = timeout_at(
                 request.deadline,
                 super::remote_projection::project_publishable_for_origin(
                     &self.pool,
@@ -146,6 +157,11 @@ impl NextHost {
             )
             .await
             .map_err(|_| unavailable("preparation deadline expired"))??;
+            before.projection.publish_graphics(
+                &self.media,
+                Some(instance),
+                context.media.item.start,
+            )?;
             self.defer_item(
                 context.channel.id,
                 context.media.item.id,
@@ -153,7 +169,6 @@ impl NextHost {
                 before.projection.item,
             )?
         };
-        let instance = uuid::Uuid::new_v4();
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
@@ -226,21 +241,25 @@ impl NextHost {
         if Instant::now() >= request.deadline {
             return Err(unavailable("preparation deadline expired"));
         }
-        timeout_at(
+        let projection = timeout_at(
             request.deadline,
             self.prepare_troubleshooting_inner(&request),
         )
         .await
-        .map_err(|_| unavailable("preparation deadline expired"))?
+        .map_err(|_| unavailable("preparation deadline expired"))??;
+        if projection.canvas.is_some() {
+            return Err(unavailable("graphics require an owned preview session"));
+        }
+        Ok(projection.item)
     }
 
     async fn prepare_troubleshooting_inner(
         &self,
         request: &TroubleshootingPreview<'_>,
-    ) -> Result<protocol::PlayoutItem> {
+    ) -> Result<DeferredProjection> {
         let before = self.troubleshooting_snapshot(request).await?;
         let Some(pending) = before.projection.pending_burn.as_ref() else {
-            return Ok(before.projection.item);
+            return Ok(before.projection);
         };
         let validate = || async {
             self.troubleshooting_snapshot(request)
@@ -279,13 +298,14 @@ impl NextHost {
                 .await
         }
         .map_err(|_| unavailable("subtitle preparation failed"))?;
-        let after = self.troubleshooting_snapshot(request).await?;
+        let mut after = self.troubleshooting_snapshot(request).await?;
         if after.identity.descriptor != before.identity.descriptor
             || after.identity.cache_key != before.identity.cache_key
         {
             return Err(unavailable("selection changed during preparation"));
         }
-        install_prepared_track(after.projection.item, &prepared)
+        after.projection.item = install_prepared_track(after.projection.item, &prepared)?;
+        Ok(after.projection)
     }
 
     async fn troubleshooting_snapshot(
@@ -315,7 +335,7 @@ impl NextHost {
         let context = Context::new(request);
         let watermarks = context.watermarks(&self.pool).await?;
         let graphics = context.graphics(&self.pool).await?;
-        projection.item.graphics = super::graphics::project(
+        projection.canvas = super::graphics::project(
             &self.pool,
             request.channel,
             request.media,

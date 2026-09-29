@@ -403,7 +403,7 @@ async fn troubleshooting_fetches_selected_provider_text_and_refreshes_changed_co
 }
 
 #[tokio::test]
-async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
+async fn troubleshooting_publishes_one_canvas_for_all_selected_graphics() {
     use ersatzrs_core::repositories::GraphicsRepository as _;
     use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig};
     let fixture = Fixture::new().await;
@@ -441,19 +441,42 @@ async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
         .await
         .unwrap();
     let identity = snapshot.identity.descriptor;
-    let item = serde_json::to_value(snapshot.projection.item).unwrap();
+    assert!(snapshot.projection.canvas.is_some());
+    fixture
+        .host
+        .media
+        .configure("127.0.0.1:18419".parse().unwrap())
+        .unwrap();
+    let (instance, projected) = fixture
+        .host
+        .prepare_troubleshooting_session(request, fixture.start())
+        .await
+        .unwrap();
+    let item = serde_json::to_value(projected).unwrap();
     assert!(item.get("watermark").is_none());
-    assert_eq!(item["graphics"].as_array().unwrap().len(), 3);
-    assert_eq!(item["graphics"][0]["opacity_percent"], 70.0);
-    assert_eq!(item["graphics"][0]["timing"]["hold_ms"], 10_000);
-    assert_eq!(
-        item["graphics"][1]["source"]["uri"],
-        format!("https://example.test/{}.png", fixture.channel.number)
-    );
-    assert_eq!(item["graphics"][1]["width_percent"], 100.0);
-    assert_eq!(item["graphics"][2]["opacity_percent"], 100.0);
-    assert!(item["graphics"][1].get("timing").is_none());
     assert_eq!(item["tracks"]["audio"]["stream_index"], 2);
+    assert_eq!(item["graphics"].as_array().unwrap().len(), 1);
+    let canvas = &item["graphics"][0];
+    assert_eq!(canvas["kind"], "canvas");
+    assert_eq!(canvas["source"]["probe_hint"]["format_name"], "nut");
+    assert_eq!(canvas["source"]["probe_hint"]["video"][0]["codec"], "ffv1");
+    assert_eq!(
+        canvas["source"]["probe_hint"]["video"][0]["pix_fmt"],
+        "bgra"
+    );
+    assert!(canvas.get("opacity_percent").is_none());
+    let url = url::Url::parse(canvas["source"]["uri"].as_str().unwrap()).unwrap();
+    let binding: super::super::canvas::CanvasBinding = serde_json::from_str(
+        &url.query_pairs()
+            .find(|(key, _)| key == "binding")
+            .unwrap()
+            .1,
+    )
+    .unwrap();
+    assert_eq!(binding.session, Some(instance));
+    let mut request = fixture.request(Some(0));
+    request.watermark_ids = &[1, 2];
+    request.graphics_ids = &ids;
     image.id = image_id;
     image.opacity_percent = Some(45);
     graphics.upsert_element(&image).await.unwrap();
@@ -462,8 +485,21 @@ async fn troubleshooting_projects_every_selected_watermark_in_z_order() {
         .troubleshooting_snapshot(&request)
         .await
         .unwrap();
-    assert_ne!(
+    assert_eq!(
         identity, changed.identity.descriptor,
-        "graphics edits invalidate preparation"
+        "current graphics are read by the callback without invalidating track preparation"
     );
+    let timing = super::super::canvas::CanvasRequest::parse("0", "1000", "25").unwrap();
+    let selected = fixture
+        .host
+        .canvas_session(instance, &binding, &timing)
+        .await
+        .unwrap();
+    assert_eq!(selected.graphics[0].element.opacity_percent, Some(45));
+    assert_eq!(selected.watermarks.len(), 2);
+    fixture
+        .host
+        .finish_troubleshooting_session(instance)
+        .await
+        .unwrap();
 }

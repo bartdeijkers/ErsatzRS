@@ -153,9 +153,16 @@ async fn render_context(
             .ok_or(RemoteStreamError::PreparedProducerFailed)
     };
     let frame_size = FrameSize::new(dimension(resolution.width)?, dimension(resolution.height)?);
-    let source = playback::load_source_video_stream(pool, session.media.media_version_id)
-        .await
-        .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+    let source = playback::load_source_video_stream_by_index(
+        pool,
+        session.media.media_version_id,
+        session.video_stream_index,
+    )
+    .await
+    .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+    if session.video_stream_index.is_some() && source.is_none() {
+        return Err(RemoteStreamError::PreparedProducerFailed);
+    }
     let square_pixel_frame_size = match session.profile.profile.scaling_behavior {
         ScalingBehavior::Stretch | ScalingBehavior::Crop => frame_size,
         ScalingBehavior::ScaleAndPad => source

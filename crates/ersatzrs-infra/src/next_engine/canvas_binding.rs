@@ -15,6 +15,13 @@ pub struct CanvasBinding {
     /// Persisted manifests use the active process header when this is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<uuid::Uuid>,
+    /// Next resets a dynamically resolved item's start. Retain that signed
+    /// origin so its chunk offsets still address the original programme.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playout_start: Option<DateTime<Utc>>,
+    /// Frozen video track used for source-content geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_stream_index: Option<i32>,
     pub channel: i64,
     pub item: i64,
     pub media: i64,
@@ -34,6 +41,8 @@ impl CanvasBinding {
     pub fn new(channel: i64, media: &ScheduledMedia, expires: DateTime<Utc>) -> Self {
         Self {
             session: None,
+            playout_start: None,
+            video_stream_index: None,
             channel,
             item: media.item.id,
             media: media.item.media_item_id,
@@ -63,11 +72,45 @@ impl CanvasBinding {
             && self.finish > self.start
             && self.in_point_ms >= 0
             && self.out_point_ms >= 0
+            && self.video_stream_index.is_none_or(|index| index >= 0)
+            && self
+                .playout_start
+                .is_none_or(|start| start >= self.start && start < self.finish)
             && *self
                 == Self {
                     session: self.session,
+                    playout_start: self.playout_start,
+                    video_stream_index: self.video_stream_index,
                     ..Self::new(channel, media, self.expires)
                 }
+    }
+
+    pub(crate) fn timeline(
+        &self,
+        request: &super::CanvasRequest,
+    ) -> Result<super::CanvasTimeline, super::InvalidCanvasRequest> {
+        super::CanvasTimeline::new(self.start, self.finish, &self.programme_request(request)?)
+    }
+
+    pub(crate) fn programme_request(
+        &self,
+        request: &super::CanvasRequest,
+    ) -> Result<super::CanvasRequest, super::InvalidCanvasRequest> {
+        let start = self.playout_start.unwrap_or(self.start);
+        if start < self.start || start >= self.finish {
+            return Err(super::InvalidCanvasRequest);
+        }
+        let delta = u64::try_from((start - self.start).num_milliseconds())
+            .map_err(|_| super::InvalidCanvasRequest)?;
+        let offset = u64::try_from(request.offset().as_millis())
+            .ok()
+            .and_then(|offset| offset.checked_add(delta))
+            .ok_or(super::InvalidCanvasRequest)?;
+        super::CanvasRequest::parse(
+            &offset.to_string(),
+            &request.duration().as_millis().to_string(),
+            request.frame_rate(),
+        )
     }
 }
 

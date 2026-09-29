@@ -410,7 +410,7 @@ impl NextHost {
                     let mut items = Vec::with_capacity(media.len());
                     for media in media {
                         if media.remote_stream_id.is_some() {
-                            let snapshot = super::remote_projection::project_publishable(
+                            let mut snapshot = super::remote_projection::project_publishable(
                                 &self.pool,
                                 &channel,
                                 &media,
@@ -418,6 +418,11 @@ impl NextHost {
                                 selection::AudioDirective::Select,
                             )
                             .await?;
+                            snapshot.projection.publish_graphics(
+                                &self.media,
+                                None,
+                                media.item.start,
+                            )?;
                             items.push(self.defer_item(
                                 channel_id,
                                 media.item.id,
@@ -468,7 +473,7 @@ impl NextHost {
                             &mut projection,
                         )
                         .await?;
-                        projection.item.graphics = super::graphics::project(
+                        projection.canvas = super::graphics::project(
                             &self.pool,
                             &channel,
                             &media,
@@ -493,6 +498,7 @@ impl NextHost {
                                 projection.item,
                             )?;
                         }
+                        projection.publish_graphics(&self.media, None, media.item.start)?;
                         items.push(projection.item);
                     }
                     let (items, gaps) =

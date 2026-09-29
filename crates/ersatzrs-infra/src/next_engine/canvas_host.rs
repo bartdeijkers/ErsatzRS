@@ -25,6 +25,7 @@ use super::{
 pub struct CanvasSession {
     pub request: NextStart,
     pub started_at: DateTime<Utc>,
+    pub video_stream_index: Option<i32>,
     pub timeline: CanvasTimeline,
     pub channel: Channel,
     pub profile: PlaybackProfile,
@@ -49,7 +50,9 @@ impl NextHost {
         let before = self.canvas_session(instance, binding, timing).await?;
         let transfers = before.transfers.clone();
         let pool = self.pool.clone();
-        let request_timing = timing.clone();
+        let request_timing = binding
+            .programme_request(timing)
+            .map_err(|_| unavailable())?;
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
         let transfer_binding = super::session_transfers::TransferBinding {
             media_item_id: binding.media,
@@ -117,8 +120,7 @@ impl NextHost {
         {
             return Err(unavailable());
         }
-        let timeline = CanvasTimeline::new(binding.start, binding.finish, timing)
-            .map_err(|_| unavailable())?;
+        let timeline = binding.timeline(timing).map_err(|_| unavailable())?;
         let (request, started_at, preview, fallback, transfers) = {
             let contexts = self.dynamic_contexts.lock().await;
             let context = contexts
@@ -199,6 +201,7 @@ impl NextHost {
             return Err(unavailable());
         }
         Ok(CanvasSession {
+            video_stream_index: binding.video_stream_index,
             request,
             started_at,
             timeline,

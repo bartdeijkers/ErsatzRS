@@ -28,8 +28,12 @@ requested source phase, and timed fades use the programme clock. Canvas inputs
 have explicit instance identities so shared assets retain independent seeks.
 Local-file troubleshooting previews now use the same session admission and
 cleanup as Remote Stream previews, enabling session-bound canvas callbacks.
-Complete integrated graphics proof, canvas layer projection and
-decoded Next playback acceptance remain pending.
+Canvas projections now carry stable occurrence metadata separately from issued
+credentials. Publication and demand-time paths issue the official canvas layer
+with non-consuming FFV1/BGRA/NUT probe hints. Dynamic-item start rebasing is signed
+into the binding and restored before selecting or rendering the chunk; selected
+video indexes determine source-content geometry. Complete integrated graphics
+proof, capability health coverage and decoded Next playback acceptance remain pending.
 Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
 frames after selection removal through the session-owned renderer.

@@ -7,6 +7,8 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
     let start = chrono::DateTime::from_timestamp(1_000, 0).unwrap();
     let binding = CanvasBinding {
+        playout_start: None,
+        video_stream_index: None,
         session: None,
         channel: 1,
         item: 2,
@@ -63,9 +65,38 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     assert!(!relay.authorized_canvas(&binding, ticket, binding.expires));
     assert!(!MediaRelay::new().authorized_canvas(&binding, ticket, start));
     assert!(!relay.authorized_canvas(&binding, "invalid", start));
+    assert_canvas_tampering(&relay, &binding, ticket, start);
+    let session = Uuid::new_v4();
+    let scoped = binding.for_session(session);
+    let Source::Http { headers, .. } = relay.canvas_source(&scoped, probe_hint.unwrap()).unwrap()
+    else {
+        panic!("HTTP canvas source");
+    };
+    assert!(headers
+        .iter()
+        .any(|header| header == &format!("{SESSION_HEADER}: {session}")));
+}
+
+fn assert_canvas_tampering(
+    relay: &MediaRelay,
+    binding: &super::super::canvas::CanvasBinding,
+    ticket: &str,
+    start: chrono::DateTime<chrono::Utc>,
+) {
     for field in [
-        "channel", "item", "media", "version", "file", "start", "finish", "in", "out", "expires",
+        "channel",
+        "item",
+        "media",
+        "version",
+        "file",
+        "start",
+        "finish",
+        "in",
+        "out",
+        "expires",
         "session",
+        "playout_start",
+        "video_stream_index",
     ] {
         let mut changed = binding.clone();
         match field {
@@ -79,19 +110,12 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
             "in" => changed.in_point_ms += 1,
             "out" => changed.out_point_ms += 1,
             "session" => changed.session = Some(Uuid::nil()),
+            "playout_start" => changed.playout_start = Some(start + chrono::TimeDelta::seconds(1)),
+            "video_stream_index" => changed.video_stream_index = Some(1),
             _ => changed.expires += chrono::TimeDelta::seconds(1),
         }
         assert!(!relay.authorized_canvas(&changed, ticket, start), "{field}");
     }
-    let session = Uuid::new_v4();
-    let scoped = binding.for_session(session);
-    let Source::Http { headers, .. } = relay.canvas_source(&scoped, probe_hint.unwrap()).unwrap()
-    else {
-        panic!("HTTP canvas source");
-    };
-    assert!(headers
-        .iter()
-        .any(|header| header == &format!("{SESSION_HEADER}: {session}")));
 }
 
 #[test]

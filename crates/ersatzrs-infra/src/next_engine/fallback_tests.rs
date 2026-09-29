@@ -588,3 +588,71 @@ async fn ephemeral_remote_validation_refuses_schedule_changes_after_preparation(
 fn canvas_timing() -> super::super::canvas::CanvasRequest {
     super::super::canvas::CanvasRequest::parse("44000", "44000", "25").unwrap()
 }
+
+#[tokio::test]
+async fn fallback_canvas_reissues_signed_origin_for_reused_occurrence() {
+    use super::super::canvas::{CanvasBinding, CanvasRequest};
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    let (host, instance, start, _root) = fixture().await;
+    make_repositories(host.pool.clone())
+        .graphics
+        .upsert_element(&ersatzrs_domain::GraphicsElement {
+            id: 901,
+            name: "Fallback canvas".into(),
+            ..ersatzrs_domain::GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO "DecoGroup" ("Id", "Name") VALUES (901, 'canvas');
+        INSERT INTO "Deco" (
+            "Id", "DecoGroupId", "Name", "BreakContentMode", "DeadAirFallbackCollectionType",
+            "DeadAirFallbackMode", "DefaultFillerCollectionType", "DefaultFillerMode",
+            "DefaultFillerTrimToFit", "GraphicsElementsMode", "UseGraphicsElementsDuringFiller",
+            "UseWatermarkDuringFiller", "WatermarkMode"
+        ) VALUES (901, 901, 'canvas', 0, 0, 0, 0, 0, 0, 2, 1, 0, 0);
+        INSERT INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (901, 901);
+        UPDATE "Playout" SET "DecoId"=901 WHERE "Id"=1;
+    "#,
+    )
+    .execute(&host.pool)
+    .await
+    .unwrap();
+    for offset in [90, 105, 120] {
+        let item = resolve(&host, instance, start, offset).await.unwrap();
+        assert_eq!(item.graphics.len(), 1);
+        let protocol::Source::Http { uri, .. } = &item.graphics[0].source else {
+            panic!("canvas HTTP source");
+        };
+        let url = url::Url::parse(uri).unwrap();
+        let binding: CanvasBinding = serde_json::from_str(
+            &url.query_pairs()
+                .find(|(key, _)| key == "binding")
+                .unwrap()
+                .1,
+        )
+        .unwrap();
+        assert_eq!(binding.session, Some(instance));
+        assert_eq!(binding.start, start + Duration::seconds(90));
+        assert_eq!(binding.finish, start + Duration::seconds(150));
+        let session = host
+            .canvas_session(
+                instance,
+                &binding,
+                &CanvasRequest::parse("0", "1000", "25").unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(session.timeline.now, start + Duration::seconds(offset));
+        assert_eq!(session.timeline.content_start, binding.start);
+        assert_eq!(session.graphics[0].element.id, 901);
+        let item = serde_json::to_value(item).unwrap();
+        if offset != 90 {
+            assert_eq!(
+                item["tracks"]["video"]["source"]["in_point_ms"],
+                (offset - 90) * 1000
+            );
+        }
+    }
+}

@@ -11512,8 +11512,31 @@ and no playout rows are created. The web host uses its existing shutdown path
 for these sessions, including preparation or process-start failure.
 Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation
 pass for this session-admission checkpoint.
+Canvas projection is now connected across scheduled, dynamic, Remote Stream,
+fallback and preview paths. Stable canvas metadata participates in publication
+identity; process credentials are issued afterwards. One FFV1/BGRA/NUT layer
+replaces the prior image-only projection and carries non-consuming probe hints.
+Signed dynamic-item start offsets restore the original programme clock, and
+the selected video index is retained for content-box geometry. Mutable graphic
+edits are read by the callback while persisted item edits still fence track
+preparation. The 237-check selection is covered by 236 passes in nextest
+61354374-07a0-44c4-8963-85c6f2f8a02a plus the two passing follow-up checks in
+a83e2255-73da-4e8f-8991-0403825c18af: the manual subtitle deadline test needed
+its explicit packaged-FFmpeg environment variable; the final preview audio
+assertion was also rerun. Coverage includes every graphics kind's projection,
+signed offset/track tampering, preview isolation, prepared Remote Stream
+projection, existing Next source/track regressions, private admission and decoded
+script/transparent rendering with the checksum-verified v2.0.3 executable.
+Review also identified that cached local fallback items must reissue canvas
+offsets on every callback. The final 14-test affected selection passes
+(0ed7a867-6f37-4900-b258-c9d8c0c26eae), including three successive fallback
+resolutions that retain the original programme start while advancing both
+media seeks and the canvas clock. Optional canvas metadata is boxed to keep
+preparation futures within the existing size limit.
+Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation
+pass for the final projection checkpoint.
 All-kind integrated HTTP/Next proof (including dynamic text and preview/mirror
-geometry), canvas projection and matching capability health coverage remain.
+geometry) and matching capability health coverage remain.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

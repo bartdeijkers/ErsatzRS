@@ -107,7 +107,7 @@ pub(crate) async fn project_snapshot(
     )
     .await?;
     super::credits::attach(pool, relay, &channel, &media.item, &mut projection).await?;
-    projection.item.graphics = super::graphics::project(
+    projection.canvas = super::graphics::project(
         pool,
         &channel,
         media,
@@ -212,7 +212,7 @@ pub(crate) async fn fingerprint(
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
     Ok(Identity {
         descriptor: digest(&json!({"binding": binding, "item": projection.item,
-            "persisted_item": media.item, "channel": channel, "audio_script": script,
+            "canvas": projection.canvas, "persisted_item": media.item, "channel": channel, "audio_script": script,
             "audio_language": preferences.default_audio_language,
             "subtitle_language": preferences.default_subtitle_language,
             "fallback_subtitle_language": preferences.fallback_subtitle_language,

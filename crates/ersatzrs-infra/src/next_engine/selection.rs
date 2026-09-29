@@ -19,8 +19,23 @@ use super::protocol as wire;
 /// Deliberately no Debug: source paths and subtitle metadata may be private.
 pub(crate) struct DeferredProjection {
     pub item: wire::PlayoutItem,
+    pub canvas: Option<Box<super::graphics::CanvasProjection>>,
     pub pending_burn: Option<PendingBurn>,
     pub selected_subtitle: Option<PlaybackSubtitle>,
+}
+
+impl DeferredProjection {
+    pub(super) fn publish_graphics(
+        &mut self,
+        relay: &super::media::MediaRelay,
+        session: Option<uuid::Uuid>,
+        start: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        if let Some(canvas) = &self.canvas {
+            self.item.graphics = vec![canvas.publish(relay, session, start)?];
+        }
+        Ok(())
+    }
 }
 
 /// Exact selected embedded/provider track and its original, sought media source.
@@ -208,6 +223,7 @@ async fn project_deferred_item_selected(
     )
     .await?;
     Ok(DeferredProjection {
+        canvas: None,
         pending_burn,
         selected_subtitle,
         item: wire::PlayoutItem {

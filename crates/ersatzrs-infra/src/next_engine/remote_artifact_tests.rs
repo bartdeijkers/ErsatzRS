@@ -134,8 +134,8 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
         .await
         .unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
-    assert_eq!(initial.projection.item.graphics.len(), 3);
-    let graphics = serde_json::to_value(&initial.projection.item.graphics).unwrap();
+    assert!(initial.projection.canvas.is_some());
+    let canvas = serde_json::to_value(&initial.projection.canvas).unwrap();
     let original_key = initial.identity.cache_key.clone();
     let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
         .await
@@ -143,8 +143,8 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
     assert_ne!(ready.identity.cache_key, original_key);
     assert!(ready.prepared_remote.is_none());
     assert_eq!(
-        serde_json::to_value(&ready.projection.item.graphics).unwrap(),
-        graphics
+        serde_json::to_value(&ready.projection.canvas).unwrap(),
+        canvas
     );
     let tracks = ready.projection.item.tracks.unwrap();
     let audio = tracks.audio.unwrap();

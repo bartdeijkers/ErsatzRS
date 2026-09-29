@@ -151,6 +151,7 @@ pub(crate) async fn materialize_prepared(
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
     concrete.item.graphics = std::mem::take(&mut projected.projection.item.graphics);
+    concrete.canvas = projected.projection.canvas.take();
     let current = Box::pin(context.origin.snapshot(
         pool,
         locker,
@@ -431,7 +432,7 @@ pub(super) async fn project_for_origin(
             context.watermarks(pool).await?,
         ),
     };
-    projection.item.graphics = super::graphics::project(
+    projection.canvas = super::graphics::project(
         pool,
         channel,
         media,
@@ -451,7 +452,7 @@ pub(super) async fn project_for_origin(
             .ok_or_else(unavailable)?,
     };
     let descriptor = digest(&json!({
-        "binding":material, "item":media.item, "selection":projection.item,
+        "binding":material, "item":media.item, "selection":projection.item, "canvas": projection.canvas,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
         "audio_script":script, "audio_language":preferences.default_audio_language,
         "subtitle_language":preferences.default_subtitle_language,

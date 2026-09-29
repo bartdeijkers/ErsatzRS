@@ -395,3 +395,26 @@ async fn canvas_session_selects_decorations_at_requested_chunk_time() {
     assert_eq!(later.graphics[0].element.id, 901);
     assert_eq!(later.timeline.duration, std::time::Duration::from_secs(16));
 }
+
+#[tokio::test]
+async fn canvas_session_restores_programme_offset_after_dynamic_item_resolution() {
+    let (host, instance, mut binding, _root) = fixture().await;
+    binding.playout_start = Some(binding.start + TimeDelta::seconds(10));
+    binding.video_stream_index = Some(0);
+    let request = CanvasRequest::parse("5000", "1000", "25").unwrap();
+    let session = host
+        .canvas_session(instance, &binding, &request)
+        .await
+        .unwrap();
+    assert_eq!(session.timeline.content_start, binding.start);
+    assert_eq!(session.timeline.content_finish, binding.finish);
+    assert_eq!(session.timeline.now, binding.start + TimeDelta::seconds(15));
+    assert_eq!(session.video_stream_index, Some(0));
+    for start in [binding.start - TimeDelta::milliseconds(1), binding.finish] {
+        binding.playout_start = Some(start);
+        assert!(host
+            .canvas_session(instance, &binding, &request)
+            .await
+            .is_err());
+    }
+}

@@ -12,6 +12,7 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
         producer_remote: None,
         retained_remote: None,
         projection: DeferredProjection {
+            canvas: None,
             pending_burn: None,
             selected_subtitle: Some(crate::playback::PlaybackSubtitle {
                 id: 1,

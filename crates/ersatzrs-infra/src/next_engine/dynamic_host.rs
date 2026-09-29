@@ -143,6 +143,9 @@ impl NextHost {
                 ));
             }
         }
+        before
+            .projection
+            .publish_graphics(&self.media, Some(instance), now)?;
         if let Some(retained) = before.retained_remote.take() {
             return Box::pin(
                 self.resolve_retained(before, retained, &request, instance, audio, now, deadline),
@@ -226,7 +229,7 @@ impl NextHost {
         .map_err(|_| unavailable("subtitle preparation failed"))?;
         // Metadata and membership may change while FFmpeg is running. Never
         // attach a completed artifact to a different selection or publication.
-        let after = self
+        let mut after = self
             .project_session_snapshot(request, instance, item_id, now, until, audio)
             .await?;
         if &after.identity.descriptor != digest
@@ -235,6 +238,9 @@ impl NextHost {
         {
             return Err(unavailable("publication changed during preparation"));
         }
+        after
+            .projection
+            .publish_graphics(&self.media, Some(instance), now)?;
         let item = install_prepared_track(after.projection.item, &prepared)?;
         dynamic_item::resolve_at(&item, now)
             .map_err(|_| unavailable("requested item timing is invalid"))
