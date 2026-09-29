@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Exclude unsupported media-server closed captions before subtitle selection in
+  native playback, Next and troubleshooting, including Plex Other Videos. Keep
+  local captions and stored metadata intact, and reject unsupported pinned tracks.
+
 - Fetch Plex sidecar subtitles, including Other Videos, through their current
   owning server with header authentication. Prepare bounded local artifacts
   instead of forwarding persisted token-bearing URLs to playback.

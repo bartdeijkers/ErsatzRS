@@ -26,8 +26,8 @@ use ersatzrs_infra::{
     hls_worker::build_hls_command_with_opacity_clock,
     playback::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
-        load_playback_profile, load_source_audio_streams, load_source_video_stream,
-        load_subtitles_for_media_item, render_playback_graphics_overlays,
+        load_playback_profile, load_playback_subtitle_candidates, load_source_audio_streams,
+        load_source_video_stream, render_playback_graphics_overlays,
         resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
         select_custom_playback_streams, select_playback_audio_stream_index,
         select_playback_graphics, select_playback_subtitle, select_playback_watermarks,
@@ -1154,7 +1154,7 @@ async fn load_preview_subtitle(
     media_item_id: i64,
     subtitle_id: i64,
 ) -> Option<PlaybackSubtitle> {
-    let subtitles = load_subtitles_for_media_item(pool, media_item_id)
+    let subtitles = load_playback_subtitle_candidates(pool, media_item_id)
         .await
         .ok()?;
     let mut selected = subtitles

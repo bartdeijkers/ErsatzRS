@@ -11453,8 +11453,23 @@ recovers from the wrong-machine active connection before subtitle preparation;
 Plex Other Video burn/convert and native rendering also remain green. Strict
 all-target Clippy for infra/ffmpeg/web, formatting, the new-allow policy, progress
 validation and diff checks pass for this partial provider checkpoint.
-Projection availability, Plex Other Video caption eligibility, remaining
-converter branch acceptance and final row review remain. No row148 verdict or
+The provider-caption follow-up now classifies Plex Other Videos and shares the
+upstream eia_608 exclusion across native ranking, Next and troubleshooting.
+Exact native pins reject unsupported provider captions; raw metadata is retained.
+Three seven-provider regressions fail before the fix
+(da5a8abc-7d30-45e6-b598-c1a1527718d4), exposing native caption selection and missing
+Plex Other Video classification. All 79 selected playback/provider/troubleshooting
+checks pass (d79e8465-cd05-4cff-8a9d-b21ee4578b4b), including valid pins, explicit
+off, local caption retention and unchanged stored metadata. Strict lint requested
+a helper extraction for pinned validation; all four provider-matrix tests pass
+again afterward (dc24f956-4538-4650-8db1-5a2308a42cfe). The added native custom
+selector assertion passes for all seven types alongside Next selection and local
+caption retention (031c2898-93bd-49dc-92f1-5d5a92bc6ed3). Strict all-target
+infra/ffmpeg/web Clippy, formatting, new-allow policy, progress and diff checks
+pass. This is a selection checkpoint; existing decoded provider runtime evidence
+belongs to 4cd2001e, and integrated row acceptance remains open.
+Projection availability, remaining converter branch acceptance and final row
+review remain. No row148 verdict or
 pin advance; the baseline remains b3f7f3fe.
 
 Row147 is Port: upstream b3f7f3fe adds post-roll, mid-roll and graphics state to

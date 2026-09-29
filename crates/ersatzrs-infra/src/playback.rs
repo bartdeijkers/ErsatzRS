@@ -1227,6 +1227,22 @@ pub async fn load_subtitles_for_media_item(
         .collect()
 }
 
+/// Load playback candidates without provider captions unsupported by the streaming path.
+/// Metadata readers keep using `load_subtitles_for_media_item` to retain all tracks.
+/// This mirrors the shared streaming/troubleshooting provider rule upstream.
+///
+/// # Errors
+/// Returns database errors from subtitle or provider classification queries.
+pub async fn load_playback_subtitle_candidates(
+    pool: &DbPool,
+    media_item_id: i64,
+) -> Result<Vec<PlaybackSubtitle>> {
+    let mut subtitles = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+    subtitles.retain(|subtitle| provider_subtitle_supported(subtitle, media_server));
+    Ok(subtitles)
+}
+
 /// Filter embedded metadata against the resolved file before preference ranking.
 /// External/generated subtitles are separate sources and remain available.
 async fn load_subtitles_for_media_version(
@@ -1424,8 +1440,7 @@ async fn select_custom_playback_streams_inner(
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
     };
-    let media_server = engine == SubtitleSelectionEngine::Next
-        && is_media_server_subtitle_item(pool, media_item_id).await?;
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
     transient::retain_playable_subtitles(&mut subtitles, streaming_mode, engine, media_server);
 
     Ok(select_custom_stream_candidates(
@@ -1870,8 +1885,7 @@ async fn select_playback_subtitle_inner(
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
 
-    let media_server = engine == SubtitleSelectionEngine::Next
-        && is_media_server_subtitle_item(pool, media_item_id).await?;
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
     transient::retain_playable_subtitles(&mut candidates, streaming_mode, engine, media_server);
 
     Ok(select_subtitle_preferences(
@@ -2026,6 +2040,19 @@ async fn select_pinned_playback_subtitle_inner(
             "media version {media_version_id} has no compatible subtitle row for stream {stream_index}"
         ),
     })?;
+    validate_pinned_subtitle_support(pool, media_item_id, &subtitle, streaming_mode, engine)
+        .await?;
+    Ok(subtitle)
+}
+
+async fn validate_pinned_subtitle_support(
+    pool: &DbPool,
+    media_item_id: i64,
+    subtitle: &PlaybackSubtitle,
+    streaming_mode: StreamingMode,
+    engine: SubtitleSelectionEngine,
+) -> Result<()> {
+    let stream_index = subtitle.stream_index;
     if engine == SubtitleSelectionEngine::Native
         && streaming_mode != StreamingMode::HttpLiveStreamingDirect
         && subtitle.subtitle_kind == subtitle_kind::EMBEDDED
@@ -2043,9 +2070,20 @@ async fn select_pinned_playback_subtitle_inner(
             ),
         });
     }
+    if engine == SubtitleSelectionEngine::Native
+        && !provider_subtitle_supported(
+            subtitle,
+            is_media_server_subtitle_item(pool, media_item_id).await?,
+        )
+    {
+        return Err(RepositoryError::unavailable(
+            "pinned subtitle stream",
+            "selected provider caption is unsupported",
+        ));
+    }
     if engine == SubtitleSelectionEngine::Next
         && !next_subtitle_supported(
-            &subtitle,
+            subtitle,
             is_media_server_subtitle_item(pool, media_item_id).await?,
         )
     {
@@ -2054,12 +2092,16 @@ async fn select_pinned_playback_subtitle_inner(
             value: "selected subtitle is unsupported by Next".to_owned(),
         });
     }
-    Ok(subtitle)
+    Ok(())
+}
+
+fn provider_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> bool {
+    !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
 }
 
 fn next_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> bool {
     (!subtitle.is_image() || subtitle.subtitle_kind == subtitle_kind::EMBEDDED)
-        && !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
+        && provider_subtitle_supported(subtitle, media_server)
 }
 
 /// Resolve a troubleshooting selection by row identity against the exact media version.
@@ -2099,6 +2141,7 @@ async fn is_media_server_subtitle_item(pool: &DbPool, media_item_id: i64) -> Res
     sqlx::query_scalar(
         r#"SELECT EXISTS(SELECT 1 FROM "PlexMovie" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "PlexEpisode" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "PlexOtherVideo" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "JellyfinMovie" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "JellyfinEpisode" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "EmbyMovie" WHERE "Id"=?1)

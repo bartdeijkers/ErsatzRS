@@ -1,16 +1,45 @@
 //! Provider closed-caption eligibility is independent of local/HTTP transport.
 use super::*;
 
-const PROVIDERS: [(&str, bool); 6] = [
-    (r#"INSERT INTO "PlexMovie" ("Id") VALUES (10)"#, false),
-    (r#"INSERT INTO "PlexEpisode" ("Id") VALUES (10)"#, true),
-    (r#"INSERT INTO "JellyfinMovie" ("Id") VALUES (10)"#, false),
-    (r#"INSERT INTO "JellyfinEpisode" ("Id") VALUES (10)"#, true),
-    (r#"INSERT INTO "EmbyMovie" ("Id") VALUES (10)"#, false),
-    (r#"INSERT INTO "EmbyEpisode" ("Id") VALUES (10)"#, true),
+#[derive(Clone, Copy)]
+enum Owner {
+    Movie,
+    Episode,
+    OtherVideo,
+}
+
+const PROVIDERS: [(&str, Owner); 7] = [
+    (
+        r#"INSERT INTO "PlexMovie" ("Id") VALUES (10)"#,
+        Owner::Movie,
+    ),
+    (
+        r#"INSERT INTO "PlexEpisode" ("Id") VALUES (10)"#,
+        Owner::Episode,
+    ),
+    (
+        r#"INSERT INTO "JellyfinMovie" ("Id") VALUES (10)"#,
+        Owner::Movie,
+    ),
+    (
+        r#"INSERT INTO "JellyfinEpisode" ("Id") VALUES (10)"#,
+        Owner::Episode,
+    ),
+    (
+        r#"INSERT INTO "EmbyMovie" ("Id") VALUES (10)"#,
+        Owner::Movie,
+    ),
+    (
+        r#"INSERT INTO "EmbyEpisode" ("Id") VALUES (10)"#,
+        Owner::Episode,
+    ),
+    (
+        r#"INSERT INTO "PlexOtherVideo" ("Id") VALUES (10)"#,
+        Owner::OtherVideo,
+    ),
 ];
 
-async fn captions_fixture(provider: Option<(&'static str, bool)>) -> DbPool {
+async fn captions_fixture(provider: Option<(&'static str, Owner)>) -> DbPool {
     let pool = fixture_pool().await;
     for sql in [
         r#"UPDATE "MediaStream" SET "Codec"='eia_608' WHERE "Id"=5"#,
@@ -22,8 +51,8 @@ async fn captions_fixture(provider: Option<(&'static str, bool)>) -> DbPool {
     ] {
         sqlx::query(sql).execute(&pool).await.unwrap();
     }
-    if let Some((insert, episode)) = provider {
-        if episode {
+    if let Some((insert, owner)) = provider {
+        if matches!(owner, Owner::Episode) {
             for sql in [
                 r#"INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (11,1,0),(12,1,0)"#,
                 r#"INSERT INTO "Show" ("Id") VALUES (11)"#,
@@ -36,6 +65,15 @@ async fn captions_fixture(provider: Option<(&'static str, bool)>) -> DbPool {
             ] {
                 sqlx::query(sql).execute(&pool).await.unwrap();
             }
+        }
+        if matches!(owner, Owner::OtherVideo) {
+            sqlx::raw_sql(r#"
+                INSERT INTO "OtherVideo" ("Id") VALUES (10);
+                INSERT INTO "OtherVideoMetadata" ("Id","OtherVideoId","MetadataKind","DateAdded","DateUpdated") VALUES (30,10,0,'2026-09-29','2026-09-29');
+                UPDATE "Subtitle" SET "MovieMetadataId"=NULL,"OtherVideoMetadataId"=30;
+                UPDATE "MediaVersion" SET "MovieId"=NULL,"OtherVideoId"=10 WHERE "Id"=100;
+                DELETE FROM "Movie" WHERE "Id"=10;
+            "#).execute(&pool).await.unwrap();
         }
         sqlx::query(insert).execute(&pool).await.unwrap();
     }
@@ -91,7 +129,7 @@ async fn all_provider_item_types_exclude_captions_before_ranking_on_local_and_ht
             remote.tracks.unwrap().subtitle.unwrap().stream_index,
             Some(6)
         );
-        // Native selection remains unchanged, including its extracted-text policy.
+        // The shared provider rule also applies before native preference ranking.
         let native = crate::playback::select_playback_subtitle(
             &pool,
             10,
@@ -102,7 +140,13 @@ async fn all_provider_item_types_exclude_captions_before_ranking_on_local_and_ht
         .await
         .unwrap()
         .unwrap();
-        assert_eq!(native.codec.as_deref(), Some("eia_608"));
+        assert_eq!(native.codec.as_deref(), Some("subrip"));
+        // Filtering playback candidates must leave stored metadata intact.
+        assert!(crate::playback::load_subtitles_for_media_item(&pool, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(|subtitle| subtitle.codec.as_deref() == Some("eia_608")));
     }
 }
 
@@ -181,6 +225,18 @@ async fn custom_provider_selection_filters_captions_but_local_item_captions_rema
     );
     for provider in PROVIDERS {
         let pool = captions_fixture(Some(provider)).await;
+        let native = crate::playback::select_custom_playback_streams(
+            &pool,
+            100,
+            10,
+            &channel,
+            item().start,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(native.subtitle.unwrap().stream_index, 6);
         assert_eq!(
             project(&pool, &channel, &item())
                 .await
@@ -235,4 +291,58 @@ async fn custom_provider_selection_filters_captions_but_local_item_captions_rema
             .stream_index,
         Some(4)
     );
+}
+
+#[tokio::test]
+async fn provider_caption_troubleshooting_and_native_pins_preserve_exact_selection() {
+    for provider in PROVIDERS {
+        let pool = captions_fixture(Some(provider)).await;
+        let error = crate::playback::select_pinned_playback_subtitle(
+            &pool,
+            10,
+            100,
+            4,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        )
+        .await
+        .err()
+        .unwrap();
+        assert!(error
+            .to_string()
+            .contains("selected provider caption is unsupported"));
+        assert!(
+            crate::playback::select_next_troubleshooting_subtitle(&pool, 10, 100, 1)
+                .await
+                .is_err()
+        );
+        let candidates = crate::playback::load_playback_subtitle_candidates(&pool, 10)
+            .await
+            .unwrap();
+        assert!(!candidates.iter().any(|subtitle| subtitle.id == 1));
+        assert!(candidates.iter().any(|subtitle| subtitle.id == 4));
+        assert_eq!(
+            crate::playback::select_next_troubleshooting_subtitle(&pool, 10, 100, 4)
+                .await
+                .unwrap()
+                .id,
+            4
+        );
+    }
+    let pool = captions_fixture(None).await;
+    assert!(
+        crate::playback::load_playback_subtitle_candidates(&pool, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(|subtitle| subtitle.id == 1)
+    );
+    assert!(crate::playback::select_pinned_playback_subtitle(
+        &pool,
+        10,
+        100,
+        4,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    )
+    .await
+    .is_ok());
 }

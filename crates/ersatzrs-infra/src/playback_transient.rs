@@ -3,9 +3,9 @@
 //! provider-subtitle lookup. Extraction owners may supply prepared subtitle paths.
 
 use super::{
-    load_custom_stream_selector, next_subtitle_supported, select_custom_stream_candidates,
-    select_subtitle_preferences, CustomStreamSelection, PlaybackAudioStream, PlaybackSubtitle,
-    StreamSelector, SubtitleSelectionEngine,
+    load_custom_stream_selector, next_subtitle_supported, provider_subtitle_supported,
+    select_custom_stream_candidates, select_subtitle_preferences, CustomStreamSelection,
+    PlaybackAudioStream, PlaybackSubtitle, StreamSelector, SubtitleSelectionEngine,
 };
 use crate::{db::DbPool, ffmpeg_config::use_embedded_subtitles, metadata::subtitle_kind};
 use chrono::{DateTime, Utc};
@@ -167,6 +167,7 @@ pub(super) fn retain_playable_subtitles(
     engine: SubtitleSelectionEngine,
     media_server: bool,
 ) {
+    subtitles.retain(|subtitle| provider_subtitle_supported(subtitle, media_server));
     if engine == SubtitleSelectionEngine::Native && mode != StreamingMode::HttpLiveStreamingDirect {
         subtitles.retain(|subtitle| {
             subtitle.subtitle_kind != subtitle_kind::EMBEDDED
