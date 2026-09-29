@@ -11594,9 +11594,9 @@ initialization segments and programme discontinuities, then captures twelve
 seconds through the real FFmpeg HLS demuxer. Full audio/video decode, visibly
 burned English subtitles and probed duration longer than one eight-second
 programme pass. Strict web all-target Clippy passes after extracting the capture
-helper without changing its command or assertions. Remaining platform/runtime
-scenarios and TSDuck acceptance remain
-unproven; owning streaming debt
+helper without changing its command or assertions. The subsequent smoke and
+TSDuck results are recorded below; final row acceptance review remains open.
+The owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a
@@ -11615,6 +11615,19 @@ upstream-parity requirement; its erroneous Next requirement is corrected rather
 than treating an absent upstream feature as deferred work. The maintainer was
 also offered an optional ADR-backed Next extension, but none is assumed approved.
 Native HLS acceptance continues. No upstream verdict or pin is advanced here.
+
+The native streaming smoke gate passes on checkpoint 95a16294 with the verified
+v2.0.3 Linux runtime: public callback routes return 404, both native MPEG-TS
+modes return playable transport bytes, and the HLS segmenter publishes its
+variant and initial media segments. The TSDuck gate also passes all 87 checks
+across legacy MPEG-TS, hybrid MPEG-TS, HLS segmenter and HLS direct. All four
+captures have zero continuity-counter errors and zero PTS/DTS/PCR leaps; the
+segmenter audio pip-cadence check and server failure-signature scan pass.
+These calibration-channel checks cover ordinary streaming regressions; external
+JSON programme/subtitle acceptance is provided by the separate fixtures above.
+The final source-to-implementation acceptance review remains before row145 lands.
+The XMLTV debt record is reconciled with the already-passing remote HTTP fixture;
+this does not close the remaining streaming acceptance.
 
 MarathonHelper returns None only for unsupported grouping. Classic now warns and
 normalizes MarathonGroupBy::None to Random in the build-local schedule copy,

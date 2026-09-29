@@ -63,7 +63,7 @@ literal escape-like path components such as `%20` survive unchanged.
 
 [[debt]]
 id = 'ucu09-row145-external-json-guide'
-description = 'External JSON playouts previously produced no guide items. The shared reader and XMLTV projection are implemented locally; real HTTP guide acceptance remains open.'
+description = 'External JSON playouts previously produced no guide items. The shared reader and XMLTV projection now serve transient programmes, verified through the real HTTP endpoint.'
 discovered = '2026-09-29'
-evidence = 'UCU-09 milestone evidence records reader and SQLite guide tests for episode/movie metadata, minimum guide duration, mirror offsets, invalid start times and exclusion of stale persisted items. Integrated playback is tracked in streaming debt ucu09-row145-external-json-consumption.'
-resolved = false
+evidence = 'UCU-09 milestone evidence records reader and SQLite guide tests for episode/movie metadata, minimum guide duration, mirror offsets, invalid start times and exclusion of stale persisted items. The remote HTTP fixture also verifies the external title in XMLTV without provider paths or tokens (nextest 5ea77904-42e4-451e-9d74-a2b973e3d6ba). Remaining transport acceptance is tracked separately in streaming debt ucu09-row145-external-json-consumption.'
+resolved = true
