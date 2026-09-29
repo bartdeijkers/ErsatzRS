@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b30d9670a3d6ed6ebde7dfaf6edc969b8ff5ad0c` |
-| **Commit subject** | `chore: update changelog for new next build` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b30d9670a3d6ed6ebde7dfaf6edc969b8ff5ad0c |
+| **Pinned commit** | `4c3683ae88ed9145169d600188f1f4abcfb4b4c6` |
+| **Commit subject** | `chore: address four TODOs asking for logging and validation (#2964)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/4c3683ae88ed9145169d600188f1f4abcfb4b4c6 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

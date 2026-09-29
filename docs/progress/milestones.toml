@@ -11416,7 +11416,7 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
-Row145 implementation remains open. Empty alternate schedules are already
+Row145 (4c3683ae) is Port after final source-to-implementation review. Empty alternate schedules are already
 rejected at application and transactional repository boundaries. The production
 SQLite regression now proves empty-item rejection preserves existing alternate
 rows and the default schedule (nextest 3116d968-12d5-46b5-853c-7d02fe3922d0).
@@ -11595,9 +11595,9 @@ seconds through the real FFmpeg HLS demuxer. Full audio/video decode, visibly
 burned English subtitles and probed duration longer than one eight-second
 programme pass. Strict web all-target Clippy passes after extracting the capture
 helper without changing its command or assertions. The subsequent smoke and
-TSDuck results are recorded below; final row acceptance review remains open.
+TSDuck results are recorded below; final row acceptance review is complete.
 The owning streaming debt
-ucu09-row145-external-json-consumption remains open. The earlier disposable
+ucu09-row145-external-json-consumption is resolved. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a
 validation diagnostic. The owned host shut down cleanly; this timeout is not
@@ -11614,7 +11614,7 @@ schedule validation and marathon fallback logging. Row145 follows the accepted
 upstream-parity requirement; its erroneous Next requirement is corrected rather
 than treating an absent upstream feature as deferred work. The maintainer was
 also offered an optional ADR-backed Next extension, but none is assumed approved.
-Native HLS acceptance continues. No upstream verdict or pin is advanced here.
+Subsequent native HLS and transport acceptance completes this scope; row145 is Port.
 
 The native streaming smoke gate passes on checkpoint 95a16294 with the verified
 v2.0.3 Linux runtime: public callback routes return 404, both native MPEG-TS
@@ -11625,7 +11625,11 @@ captures have zero continuity-counter errors and zero PTS/DTS/PCR leaps; the
 segmenter audio pip-cadence check and server failure-signature scan pass.
 These calibration-channel checks cover ordinary streaming regressions; external
 JSON programme/subtitle acceptance is provided by the separate fixtures above.
-The final source-to-implementation acceptance review remains before row145 lands.
+Final review confirms all four changed upstream paths: invalid start-time errors
+in guide/native selection, distinct redacted Plex prerequisite warnings, empty
+alternate rejection before mutation and MarathonGroupBy::None Random fallback.
+Transient-ID branches preserve metadata and owned subtitle lifetimes; ordinary
+stored-item regressions and transport checks pass. Row145 lands with its pin.
 The XMLTV debt record is reconciled with the already-passing remote HTTP fixture;
 this does not close the remaining streaming acceptance.
 

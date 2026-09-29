@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
 summary    = """
-144/180; 36 pending.
+145/180; 35 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: v2.0.2 published, hashes verified, default adopted.
 109 N/A: release notes. UCU-06 Complete: local gates and
@@ -16,10 +16,10 @@ UCU-07 Complete: CI 36321494841, b4d659eb.
 141-142 N/A: release notes and empty build trigger.
 143 Port: scoped HDR refresh and Media Info; runtime/browser proof passes.
 144 N/A: Next optimization release notes.
+145 Port: external JSON native playback/guide, diagnostics and marathon fallback;
+focused runtime, strict lint, smoke and TSDuck acceptance pass.
 
-UCU-02 is Complete; its milestone owns rows11-20 acceptance, including
-engine selection, publication, lifecycle, scheduling and decoded subtitle/audio
-proof. All-six-platform acceptance remains open; source authorization and
+UCU-02 is Complete; its milestone owns rows11-20 runtime acceptance. All-six-platform acceptance remains open; source authorization and
 provider credential isolation are preserved.
 
 Row 21 is Adapt (ADR 0096), explicitly accepted by the maintainer. Shared bounded

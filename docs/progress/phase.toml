@@ -73,17 +73,13 @@ checksums verified; UCU-09 owns the release and runtime evidence. The managed
 runtime default is updated locally, with native/Next integration smoke passing.
 The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
 interop acceptance debt; those paths remain unverified. Row140 is Port; rows141-142 are N/A bookkeeping; row143 ports HDR
-refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. Row145 is in progress: marathon fallback and external JSON guide projection are
-implemented locally, together with the transient local/Plex resolver, private
-media-part relay, shared transient track selection, graphics metadata binding
-and owned subtitle preparation. Native stream wiring and transient video enrichment
-are implemented locally, with Linux remote HTTP playback and XMLTV proof.
-Native HLS now consumes transient metadata, subtitles and decorations, with
-multi-programme remote HTTP decode proof. Remaining transport/platform acceptance
-stays open. Source audit corrected the earlier Next requirement: upstream external
-JSON playback uses the native handler, not the Next exporter or filler callback.
+refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. Row145 is Port: marathon fallback, external JSON guide and transient native
+playback, private Plex relay, audio/subtitle selection and owned preparation.
+Native MPEG-TS, HLS MPEG-TS/fMP4, guide HTTP, strict lint, smoke and TSDuck
+acceptance pass. Upstream does not integrate external JSON with Next; the source
+audit corrected that earlier scope error. Continue with row146.
 The refreshed upstream ledger still contains 180 rows.
-The current 180-row ledger has 36 pending rows. Preserve accepted architecture,
+The current 180-row ledger has 35 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

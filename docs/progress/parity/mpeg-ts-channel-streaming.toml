@@ -75,7 +75,7 @@ resolved    = false
 
 [[debt]]
 id = 'ucu09-row145-external-json-consumption'
-description = 'External JSON editing and the no-op scheduler exist. Shared transient media, track selection, graphics and owned subtitle preparation are implemented locally. Native stream and HLS consumers have Linux remote HTTP decode proof with subtitles; XMLTV is also verified. Remaining native transport/platform acceptance stays open. Source audit confirmed that Next external JSON playback is absent upstream; its earlier inclusion here was an incorrect parity requirement.'
+description = 'External JSON native playback now consumes transient local/Plex metadata, selected audio/subtitles and graphics without creating library or timeline rows. The source audit confirmed Next external JSON playback is absent upstream.'
 discovered = '2026-09-29'
-resolved = false
-evidence = 'Row145 source map in plans/upstream-catch-up.md records complete upstream 4c3683ae audit, existing empty-alternate validation and missing external runtime boundary. UCU-09 milestone evidence owns resolver, relay, transient enrichment and native HTTP/HLS proof, including decoded captures with burned subtitles and zero library inserts. Software probing is not QSV hardware acceptance. Next action is remaining native end-to-end acceptance; Next external JSON support would be a separate ADR-backed extension. Baseline remains row144; no external JSON deferral is approved.'
+resolved = true
+evidence = 'UCU-09 owns source review, resolver/relay and subtitle ownership regressions, native HTTP and MPEG-TS/fMP4 HLS decoded multi-programme captures, XMLTV, zero library inserts, strict affected lint, smoke and 87 passing TSDuck checks. Software probing does not claim hardware acceptance; the approved UCU-09 hardware debt remains explicit.'

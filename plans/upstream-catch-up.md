@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-29): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **36 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **35 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **139**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **145**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -117,7 +117,7 @@ selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
 
-## Row 145 source map — playout validation and diagnostics (pending)
+## Row 145 source map — playout validation and diagnostics (Port)
 
 - Complete upstream `4c3683ae` changes four behavior paths: explicit invalid
   external-JSON start-time handling during channel refresh and item lookup;
@@ -148,7 +148,8 @@ dependencies, not adapting this complete set or GPU acceptance.
   transient bindings. Reuse existing probe-to-source helpers and protected loopback media
   routing; never insert temporary library/media/playout rows or publish Plex
   credentials. Preserve custom/default audio and subtitle selection and
-  troubleshooting metadata. Success/invalid-schedule runtime proof remains due.
+  troubleshooting metadata. UCU-09 owns the successful native HTTP/HLS, guide,
+  invalid-schedule, smoke and TSDuck acceptance evidence.
 - Scope correction: at accepted source `b30d9670` and fetched target `8bda4411`,
   only `GetPlayoutItemProcessByChannelNumberHandler` calls the external JSON
   provider. `SyncNextPlayoutHandler` exports persisted items; the Next callback
@@ -4107,7 +4108,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 142 | `00db622d` | chore: trigger new build for updated next engine | N/A | upstream-baseline-catch-up | `docs(parity): reconcile empty Next build trigger` | ucu-09; empty diff and identical parent tree; no application or runtime change. Row140 integration evidence reused; no duplicate build. |
 | 143 | `cbfea01c` | feat: probe dv and hdr10 metadata (#3011) | Port | ffmpeg-9-performance-and-support | `fix(media): refresh and expose HDR metadata` | ucu-09; scoped one-time local PQ/HLG rescan, video-only Media Info fields; 34 migration tests, production projection, real unchanged-file HDR/subtitle preservation, JSON regression, Chromium/Firefox and affected strict lint pass. Existing richer probe/persistence/Next hints retained. |
 | 144 | `b30d9670` | chore: update changelog for new next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next optimization release notes` | ucu-09; two changelog lines only. Exact Next 4cc93e4 carries scale/tonemap ordering and guarded QSV fusion; no legacy source or pin change. Existing runtime proof reused; hardware debt retained. |
-| 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: logging and validation for four TODOs, including the external JSON playout provider. |
+| 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | Port | mpeg-ts-channel-streaming; xmltv-guide; classic-scheduling | `feat(parity): reconcile external JSON playback and validation` | ucu-09; four source paths audited; transient native playback/guide, Plex diagnostics and marathon fallback implemented. Focused runtime/lint, smoke and 87 TSDuck checks pass; approved hardware debt remains. |
 | 146 | `28b2e00c` | feat: graphics canvas (#3012) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: canvas feed for Next only; native graphics stay drawvg under ADR 0005. |
 | 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: YAML post-roll state must survive playout builds; upstream ships 345 lines of tests. |
 | 148 | `c673082e` | fix: playout item converter subtitles (#3014) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: playout item converter subtitles; subtitle parity is a priority surface. |
