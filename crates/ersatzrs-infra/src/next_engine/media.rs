@@ -140,7 +140,13 @@ impl MediaRelay {
             is_live: Some(false),
             headers: vec![
                 format!("{ACCESS_HEADER}: {}", self.capability),
-                format!("{SESSION_HEADER}: {{{{{SESSION_ENV}}}}}"),
+                format!(
+                    "{SESSION_HEADER}: {}",
+                    binding.session.map_or_else(
+                        || format!("{{{{{SESSION_ENV}}}}}"),
+                        |session| session.to_string()
+                    )
+                ),
                 format!("{CANVAS_HEADER}: {}", self.canvas_ticket(binding)?),
             ],
             user_agent: None,

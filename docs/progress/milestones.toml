@@ -11457,7 +11457,17 @@ and previous-host tickets fail, mirror/transient identity is preserved, and
 mutable graphics settings do not invalidate an otherwise current occurrence.
 This is binding/source-construction proof, not active-session or HTTP proof.
 Strict infra/web all-target Clippy passes for this binding checkpoint.
-No canvas endpoint is exposed yet; private binding/lifetime integration,
+The host-side canvas resolver now loads only the current occurrence from the
+exact admitted session, retaining that session's start clock and transfer owner.
+Persisted/mirror items use the locked schedule reader; transient preview/fallback
+items use their session-owned context and the existing respective selectors.
+Transient source tickets explicitly bind their session, preventing even identical
+preview occurrences in another process from reusing them. Seven focused tests
+pass (nextest d30879de-8c8a-4832-9aee-7be860c817fc), including changed media-file
+binding, wrong/stopped process, mirror times, transient preview without SQL
+persistence, current fallback ownership, source authentication and expiry.
+Strict infra/web all-target Clippy also passes for this session checkpoint.
+No canvas endpoint is exposed yet; HTTP/render/lifetime integration,
 all-kind graphics coverage and decoded Next acceptance remain.
 The source map and owning graphics debt track the full scope.
 

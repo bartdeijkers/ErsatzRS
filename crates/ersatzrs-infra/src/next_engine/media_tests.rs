@@ -7,6 +7,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
     let start = chrono::DateTime::from_timestamp(1_000, 0).unwrap();
     let binding = CanvasBinding {
+        session: None,
         channel: 1,
         item: 2,
         media: 3,
@@ -64,6 +65,7 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
     assert!(!relay.authorized_canvas(&binding, "invalid", start));
     for field in [
         "channel", "item", "media", "version", "file", "start", "finish", "in", "out", "expires",
+        "session",
     ] {
         let mut changed = binding.clone();
         match field {
@@ -76,10 +78,20 @@ fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths
             "finish" => changed.finish += chrono::TimeDelta::seconds(1),
             "in" => changed.in_point_ms += 1,
             "out" => changed.out_point_ms += 1,
+            "session" => changed.session = Some(Uuid::nil()),
             _ => changed.expires += chrono::TimeDelta::seconds(1),
         }
         assert!(!relay.authorized_canvas(&changed, ticket, start), "{field}");
     }
+    let session = Uuid::new_v4();
+    let scoped = binding.for_session(session);
+    let Source::Http { headers, .. } = relay.canvas_source(&scoped, probe_hint.unwrap()).unwrap()
+    else {
+        panic!("HTTP canvas source");
+    };
+    assert!(headers
+        .iter()
+        .any(|header| header == &format!("{SESSION_HEADER}: {session}")));
 }
 
 #[test]

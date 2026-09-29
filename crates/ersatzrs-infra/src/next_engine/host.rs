@@ -46,6 +46,7 @@ pub struct NextHost {
 
 /// One exact Next process instance; normal playback and preview never share it.
 pub(super) struct DynamicContext {
+    pub started_at: chrono::DateTime<Utc>,
     pub request: NextStart,
     pub troubleshooting: Option<Arc<super::troubleshooting::Context>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
@@ -61,6 +62,7 @@ fn retain_dynamic_context(
     contexts.insert(
         instance,
         DynamicContext {
+            started_at: chrono::Utc::now(),
             request: request.clone(),
             transfers: Arc::default(),
             fallback: Arc::default(),

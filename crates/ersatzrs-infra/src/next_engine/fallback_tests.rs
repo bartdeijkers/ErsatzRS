@@ -117,6 +117,7 @@ async fn shared_manifest_gaps_reach_normal_and_preview_sessions_only_on_their_ch
             contexts.insert(
                 instance,
                 super::super::host::DynamicContext {
+                    started_at: chrono::Utc::now(),
                     request,
                     transfers: Arc::default(),
                     fallback: Arc::default(),
@@ -197,6 +198,7 @@ pub(super) async fn fixture() -> (Arc<NextHost>, Uuid, DateTime<Utc>, tempfile::
     host.dynamic_contexts.lock().await.insert(
         instance,
         super::super::host::DynamicContext {
+            started_at: chrono::Utc::now(),
             request: super::super::host::NextStart {
                 channel_id: 1,
                 preview: false,
@@ -242,6 +244,30 @@ async fn resolve(
         gap.finish,
     )
     .await
+}
+
+#[tokio::test]
+async fn canvas_session_uses_only_the_current_session_fallback_occurrence() {
+    let (host, instance, start, _root) = fixture().await;
+    resolve(&host, instance, start, 90).await.unwrap();
+    let fallback = host
+        .dynamic_contexts
+        .lock()
+        .await
+        .get(&instance)
+        .unwrap()
+        .fallback
+        .clone();
+    let item = fallback.lock().await.as_ref().unwrap().item.clone();
+    let media = schedule::bind_media(&host.pool, item).await.unwrap();
+    let binding =
+        super::super::canvas::CanvasBinding::new(1, &media, Utc::now() + Duration::hours(1))
+            .for_session(instance);
+    let selected = host.canvas_session(instance, &binding).await.unwrap();
+    assert_eq!(selected.media.item.id, 0);
+    assert_eq!(selected.media.item.start, media.item.start);
+    fallback.lock().await.take();
+    assert!(host.canvas_session(instance, &binding).await.is_err());
 }
 
 #[tokio::test]

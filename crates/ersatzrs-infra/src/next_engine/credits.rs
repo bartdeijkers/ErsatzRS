@@ -305,6 +305,7 @@ mod tests {
         host.dynamic_contexts.lock().await.insert(
             instance,
             host::DynamicContext {
+                started_at: chrono::Utc::now(),
                 request: host::NextStart {
                     channel_id: channel.id,
                     preview: false,

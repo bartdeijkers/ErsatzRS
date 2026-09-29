@@ -11,6 +11,10 @@ use super::super::schedule::ScheduledMedia;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CanvasBinding {
+    /// Transient preview/fallback sources are issued for one process only.
+    /// Persisted manifests use the active process header when this is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<uuid::Uuid>,
     pub channel: i64,
     pub item: i64,
     pub media: i64,
@@ -29,6 +33,7 @@ impl CanvasBinding {
     #[must_use]
     pub fn new(channel: i64, media: &ScheduledMedia, expires: DateTime<Utc>) -> Self {
         Self {
+            session: None,
             channel,
             item: media.item.id,
             media: media.item.media_item_id,
@@ -42,6 +47,13 @@ impl CanvasBinding {
         }
     }
 
+    #[must_use]
+    /// Restrict a transient source to its owning admitted process.
+    pub fn for_session(mut self, session: uuid::Uuid) -> Self {
+        self.session = Some(session);
+        self
+    }
+
     /// Revalidate against the current persisted or session-owned preview item.
     /// Call before and after asynchronous preparation; matching graphics IDs are
     /// deliberately unnecessary because the callback renders current selection.
@@ -51,7 +63,11 @@ impl CanvasBinding {
             && self.finish > self.start
             && self.in_point_ms >= 0
             && self.out_point_ms >= 0
-            && *self == Self::new(channel, media, self.expires)
+            && *self
+                == Self {
+                    session: self.session,
+                    ..Self::new(channel, media, self.expires)
+                }
     }
 }
 

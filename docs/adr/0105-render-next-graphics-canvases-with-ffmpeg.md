@@ -14,8 +14,11 @@ through startup, transfer and confirmed process cleanup. Paced rendering admits
 its first output without waiting for a media-probe prefix or EOF. Packaged FFmpeg
 proof covers this supervised drawvg stream. Expiring source bindings now
 authenticate the channel, occurrence, version/file and timeline while excluding
-mutable graphics settings. Callback/session integration and decoded Next playback
-acceptance remain pending; no canvas route is exposed yet.
+mutable graphics settings. Host-side lookup now validates the active session and
+current persisted, mirror, fallback or preview occurrence, and retains the
+session start clock. Transient bindings explicitly include their owning session.
+HTTP/render integration and decoded Next playback acceptance remain pending;
+no canvas route is exposed yet.
 
 ## Context
 

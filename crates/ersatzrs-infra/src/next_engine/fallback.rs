@@ -47,7 +47,7 @@ fn from_timestamp_ticks(ticks: i64) -> Result<DateTime<Utc>> {
 
 pub(super) struct Occurrence {
     gap: Gap,
-    item: PlayoutItem,
+    pub(super) item: PlayoutItem,
     audio: Option<usize>,
     descriptor: String,
     concrete: Option<protocol::PlayoutItem>,

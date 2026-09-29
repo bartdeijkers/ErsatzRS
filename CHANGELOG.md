@@ -444,8 +444,9 @@ release section when tagging a release.
   producer retains generated files and live text controllers through process
   cleanup and starts streaming without waiting for a media-probe prefix.
   Expiring callback source bindings protect programme identity while allowing
-  current graphics edits. Private callback and Next playback integration remain
-  in development.
+  current graphics edits. Host-side canvas selection validates active sessions
+  and current items, with explicit session scope for previews and fallback.
+  Private callback and Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

@@ -55,7 +55,7 @@ pub(super) struct Context {
 }
 
 impl Context {
-    fn new(request: &TroubleshootingPreview<'_>) -> Self {
+    pub(super) fn new(request: &TroubleshootingPreview<'_>) -> Self {
         Self {
             media: request.media.clone(),
             channel: request.channel.clone(),
@@ -153,6 +153,7 @@ impl NextHost {
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
+                started_at: chrono::Utc::now(),
                 request: start,
                 troubleshooting: Some(context),
                 transfers: std::sync::Arc::default(),
