@@ -36,6 +36,41 @@ use crate::{
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
 
+pub(crate) fn prepare_graphics_image_filters(
+    input: &mut InputFile,
+    overlay: &WatermarkOverlay,
+    resolution: FrameSize,
+    clock: &WatermarkOpacityClock,
+) {
+    if overlay.size == ersatzrs_domain::WatermarkSize::Scaled {
+        input
+            .filter_steps
+            .push(watermark_scale_filter(overlay, resolution));
+    }
+    if let Some(expression) = overlay
+        .opacity_expression
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        input
+            .filter_steps
+            .push(watermark_opacity_expression_filter_with_clock(
+                expression, clock,
+            ));
+    } else if overlay.opacity < 100 {
+        input
+            .filter_steps
+            .push(watermark_opacity_filter(overlay.opacity));
+    }
+    input.filter_steps.extend(
+        overlay
+            .fade_points
+            .iter()
+            .copied()
+            .map(crate::watermark_fade_filter),
+    );
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     MpegTs,
@@ -270,7 +305,7 @@ impl GraphicsPipelineOverlay {
         }
     }
 
-    const fn z_index(&self) -> i32 {
+    pub(crate) const fn z_index(&self) -> i32 {
         match self {
             Self::Drawvg { z_index, .. }
             | Self::Drawtext { z_index, .. }
@@ -1579,33 +1614,11 @@ fn build_transcode_pipeline(
             GraphicsPipelineOverlay::NativeImage {
                 mut input, overlay, ..
             } => {
-                if overlay.size == ersatzrs_domain::WatermarkSize::Scaled {
-                    input
-                        .filter_steps
-                        .push(watermark_scale_filter(&overlay, request.desired.frame_size));
-                }
-                if let Some(expression) = overlay
-                    .opacity_expression
-                    .as_deref()
-                    .filter(|value| !value.trim().is_empty())
-                {
-                    input
-                        .filter_steps
-                        .push(watermark_opacity_expression_filter_with_clock(
-                            expression,
-                            &request.watermark_opacity_clock,
-                        ));
-                } else if overlay.opacity < 100 {
-                    input
-                        .filter_steps
-                        .push(watermark_opacity_filter(overlay.opacity));
-                }
-                input.filter_steps.extend(
-                    overlay
-                        .fade_points
-                        .iter()
-                        .copied()
-                        .map(crate::watermark_fade_filter),
+                prepare_graphics_image_filters(
+                    &mut input,
+                    &overlay,
+                    request.desired.frame_size,
+                    &request.watermark_opacity_clock,
                 );
                 let square_pixel_frame_size = request
                     .source_video_stream

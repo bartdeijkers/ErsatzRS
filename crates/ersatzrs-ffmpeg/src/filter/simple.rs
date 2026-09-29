@@ -423,6 +423,19 @@ pub fn watermark_overlay_filter(
     filter
 }
 
+/// Composite onto a transparent canvas without negotiating an opaque YUV format.
+#[must_use]
+pub fn canvas_overlay_filter(
+    watermark: &WatermarkOverlay,
+    resolution: FrameSize,
+    square_pixel_frame_size: FrameSize,
+) -> String {
+    let position = watermark_overlay_position(watermark, resolution, square_pixel_frame_size);
+    let mut filter = format!("overlay={position}:format=rgb");
+    append_overlay_timing_options(&mut filter, watermark);
+    filter
+}
+
 #[must_use]
 pub fn watermark_overlay_cuda_filter(
     watermark: &WatermarkOverlay,

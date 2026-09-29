@@ -439,9 +439,9 @@ release section when tagging a release.
 
 ### Changed
 
-- Adopt the Next canvas schema and strict graphics request validation as the
-  first part of ADR 0105. Canvas rendering and playback integration remain in
-  development.
+- Adopt the Next canvas schema, strict graphics request validation and a finite
+  transparent FFV1 renderer command as the first parts of ADR 0105. Producer
+  supervision and Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

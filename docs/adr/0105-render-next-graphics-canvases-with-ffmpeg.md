@@ -6,8 +6,10 @@ Accepted 2026-09-29
 
 ## Implementation
 
-Partial — the canvas layer/schema and strict timing/header validation are
-implemented. Producer rendering, authenticated callback/session ownership and
+Partial — the canvas layer/schema, strict timing/header validation and finite
+FFV1/BGRA command builder are implemented. Packaged-runtime decoding proves
+transparent backgrounds, image alpha, layer ordering, content-box placement and
+duration. Producer supervision, authenticated callback/session ownership and
 decoded Next playback acceptance remain pending.
 
 ## Context

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod canvas;
 pub mod capabilities;
 pub mod command;
 pub mod concat;
@@ -16,6 +17,7 @@ pub mod pipeline;
 pub mod runtime;
 pub mod version;
 
+pub use canvas::*;
 pub use capabilities::*;
 pub use command::*;
 pub use concat::*;
