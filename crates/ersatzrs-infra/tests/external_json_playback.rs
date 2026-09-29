@@ -342,6 +342,7 @@ async fn external_json_plex_metadata_preserves_streams_without_library_writes() 
                 mode: ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter,
                 engine: ersatzrs_infra::playback::SubtitleSelectionEngine::Next,
                 media_server: true,
+                prepare_embedded_text: false,
             },
         )
         .await

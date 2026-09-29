@@ -346,7 +346,10 @@ release section when tagging a release.
   graphics EPG variables from the selected channel's external timeline.
   Prepare selected embedded text and Plex sidecar subtitles with bounded work,
   cancellation cleanup and temporary files owned by the playback caller.
-  Native/HLS/Next consumer integration and runtime acceptance remain pending.
+  Connect native stream preparation to these bindings, return unavailable-programme
+  responses for missing Plex prerequisites, and retain subtitle ownership through
+  stream cleanup. Native enrichment, HLS/Next integration and endpoint acceptance
+  remain pending.
 
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next

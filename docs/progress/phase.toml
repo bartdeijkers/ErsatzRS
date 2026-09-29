@@ -76,8 +76,8 @@ interop acceptance debt; those paths remain unverified. Row140 is Port; rows141-
 refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. Row145 is in progress: marathon fallback and external JSON guide projection are
 implemented locally, together with the transient local/Plex resolver, private
 media-part relay, shared transient track selection, graphics metadata binding
-and owned subtitle preparation.
-Native/HLS/Next consumer integration plus runtime acceptance
+and owned subtitle preparation. Native stream wiring is now implemented locally;
+transient video enrichment, remote/HTTP acceptance and HLS/Next consumer integration
 remain. The refreshed upstream ledger still contains 180 rows.
 The current 180-row ledger has 36 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.

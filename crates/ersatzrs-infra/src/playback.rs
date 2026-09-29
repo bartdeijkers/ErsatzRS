@@ -2179,8 +2179,11 @@ pub async fn select_playback_watermarks(
     select_context_watermarks(pool, channel, context, Some(playout_item_id), now).await
 }
 
-/// Select decoration and channel watermarks for an ephemeral fallback item.
-pub(crate) async fn select_fallback_watermarks(
+/// Select decoration and channel watermarks for an ephemeral item.
+///
+/// # Errors
+/// Returns errors reading playout and decoration settings.
+pub async fn select_fallback_watermarks(
     pool: &DbPool,
     channel: &Channel,
     item: &ersatzrs_domain::PlayoutItem,
@@ -2259,7 +2262,11 @@ pub async fn select_playback_graphics(
     select_context_graphics(pool, context, Some(playout_item_id), now).await
 }
 
-pub(crate) async fn select_fallback_graphics(
+/// Select graphics for an ephemeral item without looking up an item row.
+///
+/// # Errors
+/// Returns errors reading playout and decoration settings.
+pub async fn select_fallback_graphics(
     pool: &DbPool,
     item: &ersatzrs_domain::PlayoutItem,
     now: DateTime<Utc>,

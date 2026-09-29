@@ -11505,11 +11505,35 @@ argv, pre-cancelled/expired no-launch behavior and endpoint confinement.
 The existing real FFmpeg deadline/cache-cleanup regression also passes
 (nextest 5492f1cc-dfa1-4199-8aee-63758f0ee4df). Strict infrastructure all-target
 Clippy passes without new lint exemptions.
-Native consumers still need to retain subtitle ownership in their stream
-supervisors before connecting the stream loader; this is not endpoint acceptance.
+Native stream preparation now selects external programmes before its persisted
+loader, uses the fresh probe and transient track/graphics bindings, prepares
+selected subtitles, and retains subtitle ownership in both direct and capacity-wait
+supervisors. No transient media IDs reach persisted media/track/deco lookups.
+Missing Plex server, connection or token produces a redacted warning and HTTP 503;
+invalid start times have an explicit error diagnostic. Native timeline strings use
+the existing SQLite/tick formatter: runtime testing caught and fixed an RFC3339
+adapter mismatch that had removed the finite output duration.
 
-Native load_active_media_path, HLS worker item loading and Next schedule::read_locked
-still require transient media integration; owning streaming debt
+The v2.0.3 native handler fixture passes (nextest
+a659dc4c-89df-4de4-9286-ed322a4b40cc): programme duration/seek assertions, finite
+MPEG-TS capture, complete audio/video decode, visibly burned English subtitles,
+and zero MediaItem/MediaVersion/PlayoutItem inserts. This is a handler/encoder
+fixture, not HTTP/TSDuck or cross-platform acceptance. A too-small 64x64 fixture
+produced visible but dim antialiased glyphs; inspected retained frames established
+that cause, and the source/output fixture was enlarged to 320x180 without lowering
+the brightness assertion. The native bitmap argv snapshot uses the separate
+sidecar at index zero, not the Plex stream ID. Seven related checks passed in
+nextest 6612ae11-6984-43d7-bf3b-4bf5c295b18f (whose then-failing visual fixture is
+superseded by the successful run above): invalid/exhausted schedules, three Plex
+precondition responses, bitmap argv, persisted delayed mirrors/invalid pins,
+capacity switching, and disconnect cleanup with subtitle ownership. Four transient
+selection regressions pass (nextest 9c1f8d7f-c514-477b-8c21-7d61395ca226), including
+explicit pending-extraction eligibility without pretending a track is extracted.
+Strict infrastructure/web all-target Clippy passes without new exemptions.
+
+Transient native interlace/QSV enrichment and remote/HTTP playback proof remain.
+HLS worker item loading and Next schedule::read_locked still require transient
+media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a

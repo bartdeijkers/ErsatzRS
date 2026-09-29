@@ -18,6 +18,8 @@ pub struct TrackSelectionPolicy {
     pub mode: StreamingMode,
     pub engine: SubtitleSelectionEngine,
     pub media_server: bool,
+    /// Caller will extract selected native embedded text before building input.
+    pub prepare_embedded_text: bool,
 }
 
 /// Original track metadata for a transient programme. Consumers retain this for
@@ -104,12 +106,14 @@ impl TransientPlaybackTracks {
         policy: TrackSelectionPolicy,
     ) -> Option<CustomStreamSelection> {
         let mut subtitles = self.subtitles.clone();
-        retain_playable_subtitles(
-            &mut subtitles,
-            policy.mode,
-            policy.engine,
-            policy.media_server,
-        );
+        if !(policy.prepare_embedded_text && policy.engine == SubtitleSelectionEngine::Native) {
+            retain_playable_subtitles(
+                &mut subtitles,
+                policy.mode,
+                policy.engine,
+                policy.media_server,
+            );
+        }
         select_custom_stream_candidates(
             selector,
             &self.audio,
@@ -141,12 +145,14 @@ impl TransientPlaybackTracks {
         {
             subtitles.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
         }
-        retain_playable_subtitles(
-            &mut subtitles,
-            policy.mode,
-            policy.engine,
-            policy.media_server,
-        );
+        if !(policy.prepare_embedded_text && policy.engine == SubtitleSelectionEngine::Native) {
+            retain_playable_subtitles(
+                &mut subtitles,
+                policy.mode,
+                policy.engine,
+                policy.media_server,
+            );
+        }
         Ok(select_subtitle_preferences(
             &subtitles,
             languages,
@@ -239,6 +245,7 @@ mod tests {
             mode: StreamingMode::HttpLiveStreamingSegmenter,
             engine,
             media_server: false,
+            prepare_embedded_text: false,
         }
     }
 
@@ -263,6 +270,30 @@ mod tests {
         assert!(subtitle.default);
         assert_eq!(tracks.subtitles[2].subtitle_kind, subtitle_kind::SIDECAR);
         assert_eq!(tracks.subtitles[2].path.as_deref(), Some("fixture.fr.srt"));
+    }
+
+    #[test]
+    fn transient_native_custom_selection_requires_an_extraction_owner_for_text() {
+        let tracks = tracks();
+        let yaml = "items:\n- subtitle_language: [eng]\n";
+        let mut native = policy(SubtitleSelectionEngine::Native);
+        let select = |policy| {
+            tracks.select_custom_rules(
+                serde_yaml::from_str(yaml).unwrap(),
+                &Channel::default(),
+                Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+                policy,
+            )
+        };
+        assert!(select(native).is_none_or(|selection| selection.subtitle.is_none()));
+        native.prepare_embedded_text = true;
+        let selected = select(native).unwrap().subtitle.unwrap();
+        assert_eq!(selected.stream_index, 3);
+        assert!(!selected.is_extracted);
+        assert!(
+            selected.path.is_none(),
+            "selection must not pretend extraction already happened"
+        );
     }
 
     #[test]
