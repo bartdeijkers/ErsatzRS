@@ -454,6 +454,8 @@ release section when tagging a release.
   loop/hold/disappear behavior and watermark fades. Layers sharing a motion
   file retain independent seek positions.
   Canvas layer projection and complete Next playback integration remain in development.
+  Local-file Next troubleshooting previews now register their own callback
+  session, preserving selected tracks and revoking access when the preview ends.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

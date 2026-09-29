@@ -239,28 +239,23 @@ async fn prepare_inner(
         deadline,
         diagnostics: Some(diagnostics.clone()),
     };
-    let item = if selected.media.remote_stream_id.is_some() {
-        let start = ersatzrs_infra::next_engine::host::NextStart {
-            channel_id: selected.channel.id,
-            preview: true,
-            number: selected.channel.number.clone(),
-            executable: paths.executable.clone(),
-            output: paths.output.clone(),
-            ffmpeg: runtime.ffmpeg.path.clone().into(),
-            ffprobe: runtime.ffprobe.path.clone().into(),
-            replacements: replacements.clone(),
-            idle_timeout: None,
-            deadline,
-        };
-        let (instance, item) = state
-            .next_engine
-            .prepare_troubleshooting_session(request, start)
-            .await?;
-        *session = Some(instance);
-        item
-    } else {
-        state.next_engine.prepare_troubleshooting(request).await?
+    let start = ersatzrs_infra::next_engine::host::NextStart {
+        channel_id: selected.channel.id,
+        preview: true,
+        number: selected.channel.number.clone(),
+        executable: paths.executable.clone(),
+        output: paths.output.clone(),
+        ffmpeg: runtime.ffmpeg.path.clone().into(),
+        ffprobe: runtime.ffprobe.path.clone().into(),
+        replacements: replacements.clone(),
+        idle_timeout: None,
+        deadline,
     };
+    let (instance, item) = state
+        .next_engine
+        .prepare_troubleshooting_session(request, start)
+        .await?;
+    *session = Some(instance);
     let manifest = tempfile::tempdir()?;
     let working = &paths.output;
     let mut configuration = config::channel_config(

@@ -26,6 +26,8 @@ spelling in the renderer. Canvas filter clocks preserve programme offsets while
 output timestamps start at zero; motion and subtitle inputs resume at their
 requested source phase, and timed fades use the programme clock. Canvas inputs
 have explicit instance identities so shared assets retain independent seeks.
+Local-file troubleshooting previews now use the same session admission and
+cleanup as Remote Stream previews, enabling session-bound canvas callbacks.
 Complete integrated graphics proof, canvas layer projection and
 decoded Next playback acceptance remain pending.
 Focused tests include private admission rejection and public route isolation;

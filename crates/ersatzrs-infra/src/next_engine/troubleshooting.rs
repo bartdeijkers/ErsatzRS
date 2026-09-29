@@ -116,7 +116,7 @@ struct Snapshot {
 }
 
 impl NextHost {
-    /// Publish one transient Remote Stream occurrence and admit its exact process
+    /// Prepare one transient occurrence and admit its exact process
     /// instance. The caller must revoke the session after stopping that process,
     /// including on startup failure, before releasing output or transcode capacity.
     /// # Errors
@@ -130,25 +130,29 @@ impl NextHost {
             return Err(unavailable("preview session identity differs"));
         }
         let context = std::sync::Arc::new(Context::new(&request));
-        let before = timeout_at(
-            request.deadline,
-            super::remote_projection::project_publishable_for_origin(
-                &self.pool,
-                &context.channel,
-                &context.media,
-                &context.profile.resolution,
-                selection::AudioDirective::Select,
-                super::remote_projection::Origin::Troubleshooting(context.clone()),
-            ),
-        )
-        .await
-        .map_err(|_| unavailable("preparation deadline expired"))??;
-        let item = self.defer_item(
-            context.channel.id,
-            context.media.item.id,
-            &before.identity.descriptor,
-            before.projection.item,
-        )?;
+        let item = if request.media.remote_stream_id.is_none() {
+            self.prepare_troubleshooting(request).await?
+        } else {
+            let before = timeout_at(
+                request.deadline,
+                super::remote_projection::project_publishable_for_origin(
+                    &self.pool,
+                    &context.channel,
+                    &context.media,
+                    &context.profile.resolution,
+                    selection::AudioDirective::Select,
+                    super::remote_projection::Origin::Troubleshooting(context.clone()),
+                ),
+            )
+            .await
+            .map_err(|_| unavailable("preparation deadline expired"))??;
+            self.defer_item(
+                context.channel.id,
+                context.media.item.id,
+                &before.identity.descriptor,
+                before.projection.item,
+            )?
+        };
         let instance = uuid::Uuid::new_v4();
         self.dynamic_contexts.lock().await.insert(
             instance,

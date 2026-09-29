@@ -2,7 +2,7 @@ use super::*;
 use crate::{db::DbPool, next_engine::schedule};
 
 struct Fixture {
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
     pool: DbPool,
     host: NextHost,
     media: ScheduledMedia,
@@ -49,7 +49,7 @@ impl Fixture {
             .unwrap();
         let host = NextHost::new(pool.clone(), locker, root.path().join("next"));
         Self {
-            _root: root,
+            root,
             pool,
             host,
             media,
@@ -73,6 +73,116 @@ impl Fixture {
             diagnostics: None,
         }
     }
+
+    fn start(&self) -> super::super::host::NextStart {
+        super::super::host::NextStart {
+            channel_id: self.channel.id,
+            number: self.channel.number.clone(),
+            preview: true,
+            executable: "unused-next".into(),
+            output: self.root.path().join("output"),
+            ffmpeg: "unused-ffmpeg".into(),
+            ffprobe: "unused-ffprobe".into(),
+            replacements: vec![],
+            idle_timeout: None,
+            deadline: Instant::now() + std::time::Duration::from_secs(10),
+        }
+    }
+}
+
+#[tokio::test]
+async fn troubleshooting_local_sessions_preserve_tracks_and_isolate_canvas_lifetimes() {
+    use super::super::canvas::{CanvasBinding, CanvasRequest};
+    let mut fixture = Fixture::new().await;
+    fixture.media.item.id = 0;
+    let before: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&fixture.pool)
+        .await
+        .unwrap();
+    let mut sessions = Vec::new();
+    for _ in 0..2 {
+        let (instance, item) = fixture
+            .host
+            .prepare_troubleshooting_session(fixture.request(Some(2)), fixture.start())
+            .await
+            .unwrap();
+        let json = serde_json::to_value(item).unwrap();
+        assert_eq!(json["tracks"]["audio"]["stream_index"], 2);
+        assert_eq!(json["tracks"]["subtitle"]["stream_index"], 0);
+        assert_eq!(json["tracks"]["subtitle"]["source"]["in_point_ms"], 1000);
+        assert_eq!(json["tracks"]["video"]["source"]["in_point_ms"], 1000);
+        sessions.push(instance);
+    }
+    assert_ne!(sessions[0], sessions[1]);
+    let binding = CanvasBinding::new(
+        fixture.channel.id,
+        &fixture.media,
+        chrono::Utc::now() + chrono::TimeDelta::hours(1),
+    )
+    .for_session(sessions[0]);
+    let timing = CanvasRequest::parse("0", "1000", "25").unwrap();
+    assert!(fixture
+        .host
+        .canvas_session(sessions[0], &binding, &timing)
+        .await
+        .is_ok());
+    assert!(fixture
+        .host
+        .canvas_session(sessions[1], &binding, &timing)
+        .await
+        .is_err());
+    fixture
+        .host
+        .finish_troubleshooting_session(sessions[0])
+        .await
+        .unwrap();
+    assert!(fixture
+        .host
+        .canvas_session(sessions[0], &binding, &timing)
+        .await
+        .is_err());
+    let second_binding = binding.for_session(sessions[1]);
+    assert!(fixture
+        .host
+        .canvas_session(sessions[1], &second_binding, &timing)
+        .await
+        .is_ok());
+    fixture
+        .host
+        .finish_troubleshooting_session(sessions[1])
+        .await
+        .unwrap();
+    assert!(fixture.host.dynamic_contexts.lock().await.is_empty());
+    let after: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(&fixture.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+}
+
+#[tokio::test]
+async fn troubleshooting_local_failed_preparation_never_admits_a_session() {
+    let fixture = Fixture::new().await;
+    assert!(fixture
+        .host
+        .prepare_troubleshooting_session(fixture.request(Some(999)), fixture.start())
+        .await
+        .is_err());
+    let mut expired = fixture.request(Some(0));
+    expired.deadline = Instant::now() - std::time::Duration::from_secs(1);
+    assert!(fixture
+        .host
+        .prepare_troubleshooting_session(expired, fixture.start())
+        .await
+        .is_err());
+    let mut foreign = fixture.start();
+    foreign.channel_id += 1;
+    assert!(fixture
+        .host
+        .prepare_troubleshooting_session(fixture.request(Some(0)), foreign)
+        .await
+        .is_err());
+    assert!(fixture.host.dynamic_contexts.lock().await.is_empty());
 }
 
 #[tokio::test]

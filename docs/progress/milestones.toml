@@ -11504,6 +11504,14 @@ The complete non-ignored native pipeline snapshot selection plus the single-open
 audio/video regression pass: 219 tests (22da72e7-93a7-4264-ad97-70ec16e2ba5f).
 Strict FFmpeg/infra/web all-target Clippy and formatting pass for this timing
 checkpoint; no existing native snapshots were changed.
+Local-file troubleshooting previews now enter the same owned session lifecycle
+as Remote Stream previews. Six focused admission, track/seek, callback-isolation
+and revocation checks pass (nextest 8f7f5e2c-0c11-42bb-93a1-0958b017573d).
+Failed preparation admits no session; simultaneous previews remain independent
+and no playout rows are created. The web host uses its existing shutdown path
+for these sessions, including preparation or process-start failure.
+Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation
+pass for this session-admission checkpoint.
 All-kind integrated HTTP/Next proof (including dynamic text and preview/mirror
 geometry), canvas projection and matching capability health coverage remain.
 The source map and owning graphics debt track the full scope.
