@@ -11531,7 +11531,20 @@ selection regressions pass (nextest 9c1f8d7f-c514-477b-8c21-7d61395ca226), inclu
 explicit pending-extraction eligibility without pretending a track is extracted.
 Strict infrastructure/web all-target Clippy passes without new exemptions.
 
-Transient native interlace/QSV enrichment and remote/HTTP playback proof remain.
+Transient native video enrichment now preserves optional local interlace sampling
+and the QSV mixed-H.264-profile planning safeguard without library identity reads
+or writes. Sampling retains the upstream global setting, local-file/three-second
+eligibility and ratio threshold; optional probes share the startup deadline capped
+at ten seconds and preserve source flags on failure. Twelve focused infrastructure
+tests pass with the verified v2.0.3 runtime (nextest
+6b6d894a-3151-496d-ab58-101d2ccaa32c), including real selected-stream interlace
+sampling with only a configuration table, mixed-profile software probing with no
+database tables, expired deadlines, stored-cache guards and probe cancellation.
+The web graph check and strict infrastructure/web all-target Clippy pass.
+Software H.264 parsing is not Intel QSV execution;
+the approved hardware acceptance debt remains unverified.
+
+Remote/HTTP playback proof remains.
 HLS worker item loading and Next schedule::read_locked still require transient
 media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable

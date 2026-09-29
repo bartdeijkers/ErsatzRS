@@ -348,8 +348,9 @@ release section when tagging a release.
   cancellation cleanup and temporary files owned by the playback caller.
   Connect native stream preparation to these bindings, return unavailable-programme
   responses for missing Plex prerequisites, and retain subtitle ownership through
-  stream cleanup. Native enrichment, HLS/Next integration and endpoint acceptance
-  remain pending.
+  stream cleanup. Preserve optional interlace sampling and mixed H.264 profile
+  detection for transient native inputs without creating library records.
+  HLS/Next integration and endpoint acceptance remain pending.
 
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next

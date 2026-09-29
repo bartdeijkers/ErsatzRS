@@ -744,6 +744,49 @@ pub async fn enrich_source_video_stream_for_playback(
     Some(stream)
 }
 
+/// Preserve native interlace and QSV profile-count safeguards for transient
+/// media without reading or writing a library identity. Optional probes share
+/// the caller's startup deadline, capped at ten seconds. Probe failures preserve
+/// existing container metadata and use redacted diagnostics.
+pub async fn enrich_transient_source_video_stream_for_playback(
+    pool: &DbPool,
+    source_stream: Option<SourceVideoStream>,
+    media_path: &str,
+    duration: Duration,
+    deinterlace: bool,
+    acceleration: HardwareAccelerationKind,
+    deadline: tokio::time::Instant,
+) -> Option<SourceVideoStream> {
+    let mut stream = source_stream?;
+    let deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(10));
+    crate::interlace_probe::enrich_transient(
+        pool,
+        media_path,
+        duration,
+        deinterlace,
+        &mut stream,
+        deadline,
+    )
+    .await;
+    if should_probe_h264_profile_count(&stream, acceleration)
+        && tokio::time::Instant::now() < deadline
+    {
+        if let Ok(Ok(count)) = tokio::time::timeout_at(
+            deadline,
+            trace_headers_profile_count(&ffmpeg_path(), media_path),
+        )
+        .await
+        {
+            stream.has_multiple_profiles = count > 1;
+        } else {
+            tracing::info!(
+                "transient H.264 profile-count probe unavailable; preserving source flags"
+            );
+        }
+    }
+    Some(stream)
+}
+
 fn should_probe_h264_profile_count(
     stream: &SourceVideoStream,
     acceleration: HardwareAccelerationKind,
@@ -3820,6 +3863,10 @@ fn derive_color_params(
         is_bt2020_ten: is_bt2020 && is_ten_bit,
     }
 }
+
+#[cfg(test)]
+#[path = "playback_transient_probe_tests.rs"]
+mod transient_probe_tests;
 
 #[cfg(test)]
 mod tests {

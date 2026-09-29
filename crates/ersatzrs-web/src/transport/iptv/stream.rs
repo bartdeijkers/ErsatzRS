@@ -743,7 +743,16 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     } else if active.external.is_some() {
-        source_stream
+        ersatzrs_infra::playback::enrich_transient_source_video_stream_for_playback(
+            &state.pool,
+            source_stream,
+            &resolved,
+            active.content_duration.unwrap_or_default(),
+            playback_profile.profile.deinterlace_video == Some(true),
+            effective_acceleration,
+            startup_deadline,
+        )
+        .await
     } else {
         enrich_source_video_stream_for_playback(
             &state.pool,
