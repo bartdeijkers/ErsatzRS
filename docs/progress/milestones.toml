@@ -11416,6 +11416,35 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row147 is Port: upstream b3f7f3fe adds post-roll, mid-roll and graphics state to
+YAML anchors, including explicit clears and legacy missing-field defaults.
+All three corresponding core regressions fail before the fix
+(fe1c0326-8da8-4a84-ad83-b63710b91de5), including an uninterrupted/Continue
+item comparison. SerializedYamlContext now captures all three and restores
+missing/null values as empty. Named/default contexts, variable JSON and the
+new upstream field shapes are covered. The first SQL restart test exposed an
+additional production gap: yaml_reference_data never loaded graphics path IDs.
+It now reuses the existing graphics lookup across reset/default/named/imported
+sequence instructions, loading the same complete definition as the engine.
+Five focused checks pass (ddb01a1f-03e5-4da5-a78c-7b44a2f0e5a3), including
+three real SQLite builder/persistence/reopen cycles across midnight. Items match
+uninterrupted output with roll kinds, variables and audio/subtitle preferences.
+All 78 selected YAML tests pass (49a372d6-8592-4acb-b3d2-7e2c2c917156), including
+existing named-schedule, shuffle, restart and Refresh continuity regressions.
+The environment-gated imported real-world database test returns without that
+optional fixture; no real-profile claim is made. Six final focused checks pass
+(38efa297-9116-4158-83ff-ba6bf1780099) after extracting a comparison helper that
+checks complete persisted items, normalizing only assigned database identities.
+Strict core/infra all-target Clippy, formatting and lint-allow policy pass.
+Native smoke passes TS legacy/hybrid, HLS and private-callback isolation using
+pinned FFmpeg v2.0.3. Row146 TSDuck evidence remains valid: this row changes
+scheduling state/reference loading, not the FFmpeg or transport pipelines.
+Substantive Codex review maps every changed upstream state field and test
+scenario to the implementation and production SQLite proof. No migration,
+health readiness change, new architecture deviation or row-specific deferral
+is required. Row147 is Port; pin advances to b3f7f3fe, 147/180 reconciled and
+33 pending. Continue at row148; milestone closeout, push and exact-SHA CI remain.
+
 Row146 is Adapt under accepted ADR 0105: upstream adds Next graphics canvas transport,
 shared render context, preview bindings and session start time. The initial Next
 image-only projection could not cover text, script, motion, subtitle or expression

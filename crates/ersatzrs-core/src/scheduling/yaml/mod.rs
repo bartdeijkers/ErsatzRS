@@ -376,7 +376,13 @@ impl YamlPlayoutEngine {
         }
     }
 
-    fn definition_for_playout(playout: &Playout) -> Result<YamlPlayoutDefinition, SchedulingError> {
+    /// Load the definition and imports used by both reference loading and scheduling.
+    ///
+    /// # Errors
+    /// Returns an error when the schedule or an import cannot be read or parsed.
+    pub fn definition_for_playout(
+        playout: &Playout,
+    ) -> Result<YamlPlayoutDefinition, SchedulingError> {
         let content = playout
             .schedule_file
             .as_ref()
@@ -681,6 +687,24 @@ struct SerializedYamlContext {
     pre_roll_sequence: Option<String>,
     #[serde(
         default,
+        alias = "PostRollSequence",
+        skip_serializing_if = "Option::is_none"
+    )]
+    post_roll_sequence: Option<String>,
+    #[serde(
+        default,
+        alias = "MidRollSequence",
+        skip_serializing_if = "Option::is_none"
+    )]
+    mid_roll_sequence: Option<SerializedMidRoll>,
+    #[serde(
+        default,
+        alias = "GraphicsElements",
+        skip_serializing_if = "Option::is_none"
+    )]
+    graphics_elements: Option<BTreeMap<EntityId, Option<String>>>,
+    #[serde(
+        default,
         alias = "ActiveSchedule",
         skip_serializing_if = "Option::is_none"
     )]
@@ -699,6 +723,14 @@ struct SerializedYamlContext {
     smart_shuffle: super::SchedulingSmartShuffleState,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     playlist_states: BTreeMap<String, super::classic::ClassicPlaylistCheckpoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializedMidRoll {
+    #[serde(alias = "Sequence")]
+    sequence: String,
+    #[serde(alias = "Expression")]
+    expression: String,
 }
 
 #[derive(Debug, Clone)]
@@ -828,6 +860,16 @@ impl YamlContext {
             guide_group_locked: self.guide_group_locked,
             watermark_ids: self.watermark_ids.iter().copied().collect(),
             pre_roll_sequence: self.pre_roll_sequence.clone(),
+            post_roll_sequence: self.post_roll_sequence.clone(),
+            mid_roll_sequence: self
+                .mid_roll_sequence
+                .as_ref()
+                .map(|(sequence, expression)| SerializedMidRoll {
+                    sequence: sequence.clone(),
+                    expression: expression.clone(),
+                }),
+            graphics_elements: (!self.graphics_elements.is_empty())
+                .then(|| self.graphics_elements.clone()),
             active_schedule: self.active_schedule.clone(),
             schedule_indices,
             smart_shuffle: self.smart_shuffle_state.clone(),
@@ -850,6 +892,11 @@ impl YamlContext {
                 self.guide_group_locked = state.guide_group_locked;
                 self.watermark_ids = state.watermark_ids.into_iter().collect();
                 self.pre_roll_sequence = state.pre_roll_sequence;
+                self.post_roll_sequence = state.post_roll_sequence;
+                self.mid_roll_sequence = state
+                    .mid_roll_sequence
+                    .map(|roll| (roll.sequence, roll.expression));
+                self.graphics_elements = state.graphics_elements.unwrap_or_default();
                 self.restored_playlist_states = state.playlist_states;
                 self.active_schedule = state.active_schedule;
                 self.list_states = state

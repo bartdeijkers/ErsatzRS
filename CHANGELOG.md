@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve YAML post-roll, mid-roll and graphics settings across Continue builds
+  and restarts, including graphics variables and explicitly cleared settings.
+  Resolve graphics paths in SQL-backed YAML builds, including imported sequences
+  and named schedules.
+
 - Advance timed graphics and watermark selection with each Next channel-preview
   chunk, including mirrored historical previews, while keeping the selected
   programme and media version unchanged.

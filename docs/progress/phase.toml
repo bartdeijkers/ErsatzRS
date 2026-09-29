@@ -80,9 +80,11 @@ acceptance pass. Upstream does not integrate external JSON with Next; the source
 audit corrected that earlier scope error. Row146 is Adapt under accepted ADR 0105:
 all-kind canvas delivery, programme/chunk/session clocks, preview geometry,
 alpha, audio/subtitles and owned cleanup pass HTTP/official Next proof. Native
-smoke, all 87 TSDuck checks and strict lint pass. Continue at row147 (YAML
-post-roll state). UCU-09 final window gates, push and exact-SHA CI remain.
-The current 180-row ledger has 34 pending rows. Preserve accepted architecture,
+smoke, all 87 TSDuck checks and strict lint pass. Row147 ports YAML roll/graphics
+state and production graphics reference loading: 78 YAML checks, six final
+checks, SQLite midnight/restart proof, lint and smoke pass. Continue at row148
+(playout converter subtitles). UCU-09 window gates, push and exact-SHA CI remain.
+The current 180-row ledger has 33 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `28b2e00c56025e4f34083b9b3555fff13a3cbf4a` |
-| **Commit subject** | `feat: graphics canvas (#3012)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/28b2e00c56025e4f34083b9b3555fff13a3cbf4a |
+| **Pinned commit** | `b3f7f3fe56230e5922e9740c8feee74bbaad0e86` |
+| **Commit subject** | `fix: preserve YAML post-roll state across playout builds (#3013)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b3f7f3fe56230e5922e9740c8feee74bbaad0e86 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,7 +59,7 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `8bda4411d8fe17a99ea8fda3a567efb54f26acdb` (verified 2026-09-28),
+The latest fetched target is `8bda4411d8fe17a99ea8fda3a567efb54f26acdb` (verified 2026-09-29),
 currently **180 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original

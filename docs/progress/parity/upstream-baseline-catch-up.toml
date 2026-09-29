@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-146/180; 34 pending.
+147/180; 33 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: v2.0.2 published, hashes verified, default adopted.
 109 N/A: release notes. UCU-06 Complete: local gates and
@@ -19,10 +19,10 @@ UCU-07 Complete: CI 36321494841, b4d659eb.
 145 Port: external JSON native playback/guide, diagnostics and marathon fallback;
 focused runtime, strict lint, smoke and TSDuck acceptance pass.
 146 Adapt (0105): all-kind private canvas and official Next proof, stable session
-clocks, owned cleanup, strict lint, native smoke and 87 TSDuck checks pass.
+clocks, cleanup, lint, smoke and 87 TSDuck checks pass.
+147 Port: YAML roll/graphics state and SQL reference loading; restart proof passes.
 
-UCU-02 is Complete; its milestone owns rows11-20 runtime acceptance. All-six-platform acceptance remains open; source authorization and
-provider credential isolation are preserved.
+UCU-02 is Complete. Platform acceptance remains open; credential isolation is preserved.
 
 Row 21 is Adapt (accepted ADR 0096): bounded JavaScript callbacks feed native,
 preview and Next playback after pins/YAML selection. Metadata, audio-only,
@@ -59,7 +59,7 @@ The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. See milestones. Refresh upstream each run; p9a-01 depends on ucu-09.
+explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
 
 [[debt]]

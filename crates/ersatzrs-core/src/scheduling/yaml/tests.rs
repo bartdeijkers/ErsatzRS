@@ -2275,3 +2275,6 @@ playout:
         "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
     }));
 }
+
+#[path = "ambient_state_tests.rs"]
+mod ambient_state;

@@ -27,3 +27,10 @@ description = 'A fallback shorter than the remaining YAML duration window was cl
 discovered  = '2026-09-27'
 evidence    = 'Resolved in UCU-08 row 126: use the complete remaining interval, matching upstream and native scripted scheduling. Red/green regression proves the short-fallback defect; both-engine matrices preserve fallback-owned history, locked/unlocked guide groups, main-content position and audio/subtitle preferences. All 96 YAML/scripted tests and strict core lint pass; milestone evidence owns test IDs and window gates.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-row147-yaml-ambient-state'
+description = 'Continue loses active post-roll, mid-roll and graphics settings because YAML anchor serialization omits those fields. Preserve active values, explicit clears and legacy missing-field defaults; verify generated items across a persisted restart.'
+discovered = '2026-09-29'
+resolved = true
+evidence = 'Upstream b3f7f3fe adds all three fields to YamlPlayoutContext.State. Three red core regressions confirm the missing anchor fields. Five checks pass after serialization and production graphics-reference loading are corrected, including three SQLite restart builds across midnight (ddb01a1f-03e5-4da5-a78c-7b44a2f0e5a3). All 78 YAML checks pass (49a372d6-8592-4acb-b3d2-7e2c2c917156), followed by six final checks after extracting the full persisted-item comparison (38efa297-9116-4158-83ff-ba6bf1780099). Imported/reset/named graphics lookup, strict core/infra all-target lint and native smoke pass. UCU-09 owns acceptance; row147 is Port.'

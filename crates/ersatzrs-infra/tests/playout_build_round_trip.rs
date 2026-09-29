@@ -15,6 +15,8 @@ mod common;
 mod gaps;
 #[path = "playout_build_round_trip/playlist_restart.rs"]
 mod playlist_restart;
+#[path = "playout_build_round_trip/yaml_ambient.rs"]
+mod yaml_ambient;
 #[path = "playout_build_round_trip/yaml_sequence.rs"]
 mod yaml_sequence;
 
