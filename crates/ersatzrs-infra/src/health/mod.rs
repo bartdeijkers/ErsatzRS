@@ -537,6 +537,8 @@ fn runtime_issue_name(issue: &FfmpegRuntimeIssue) -> String {
         | FfmpegRuntimeIssue::RequiredDecoder { name }
         | FfmpegRuntimeIssue::RequiredHwaccel { name }
         | FfmpegRuntimeIssue::OptionalHwaccel { name } => name.clone(),
+        FfmpegRuntimeIssue::RequiredMuxer { name } => format!("muxer {name}"),
+        FfmpegRuntimeIssue::RequiredDemuxer { name } => format!("demuxer {name}"),
         FfmpegRuntimeIssue::RequiredConfigurationFlag { flag } => flag.clone(),
         FfmpegRuntimeIssue::RequiredEncoderOption { encoder, option } => {
             format!("{encoder} {option}")
@@ -786,6 +788,32 @@ mod tests {
 
         assert_eq!(result.status, HealthCheckStatus::Pass);
         assert_eq!(result.brief_message, "Search projection ready");
+    }
+
+    #[tokio::test]
+    async fn canvas_capability_health_reports_missing_input_and_output_support() {
+        let pool = test_pool().await;
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.issues = vec![
+            FfmpegRuntimeIssue::RequiredEncoder {
+                name: "ffv1".into(),
+            },
+            FfmpegRuntimeIssue::RequiredMuxer { name: "nut".into() },
+            FfmpegRuntimeIssue::RequiredDemuxer { name: "nut".into() },
+        ];
+        let failed = FFmpegCapabilitiesHealthCheck::new(report, pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(failed.status, HealthCheckStatus::Fail);
+        for missing in ["ffv1", "muxer nut", "demuxer nut"] {
+            assert!(failed.message.contains(missing), "{missing}");
+        }
+        let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(ready.status, HealthCheckStatus::NotApplicable);
     }
 
     #[tokio::test]

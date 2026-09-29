@@ -11535,8 +11535,17 @@ media seeks and the canvas clock. Optional canvas metadata is boxed to keep
 preparation futures within the existing size limit.
 Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation
 pass for the final projection checkpoint.
+Canvas runtime requirements now include FFV1 encoding/decoding, NUT muxing and
+demuxing, plus reverse/settb/trim alongside the existing graphics filters.
+The collector reads format directions independently and startup rejects missing
+requirements; health distinguishes missing NUT input/output support. All 36
+focused version/capability/health checks pass (6c64489c-e684-4014-9761-a31e2cbd9d52),
+including a real startup check and smoke transcodes with the checksum-verified
+v2.0.3 FFmpeg/ffprobe package. This does not discharge hardware acceptance debt.
+Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation pass
+for this capability checkpoint.
 All-kind integrated HTTP/Next proof (including dynamic text and preview/mirror
-geometry) and matching capability health coverage remain.
+geometry) remains.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.
@@ -11548,6 +11557,21 @@ offset header is the playout offset. Canvas sizing/alpha composition is handled
 by the official pipeline. This is source compatibility evidence, not a passed
 ErsatzRS canvas runtime test. No runtime rebuild or checkout movement occurred;
 ADR 0105 is accepted; canvas implementation and runtime acceptance remain.
+
+Runtime restoration update: the former temporary 4cc93e4 staging was absent
+and its official develop asset now returns 404. The replacement official
+linux-x64 artifact is ersatztv-next-v0.1.0-e7997fa-linux-x64.tar.gz,
+archive SHA-256 0da684c1526c0db9881d8e4c4fa126754244dc4a46dd5996679988d83cd1a736
+(release 297263149, asset 596945156). Repository staging verified origin,
+archive digest and license; the executable reports 0.1.0-e7997fa and hashes to
+d2f7b77af578e0eebc0fea8cd669d35a562404a157630fd7f8d02c0be28a26c4.
+The source comparison from 4cc93e4222fe334ed6aad2f694e5b3bcb611f2c9 to
+e7997fa29dd208bc3a13965be6e43e0e18f450bf contains exactly three commits:
+0a69d2d (QSV composite-format guards), 96ca524 (QSV upload capability checks),
+and e7997fa (Windows libvpl packaging patch). Canvas protocol, channel-session
+timing and non-QSV pipeline sources are unchanged. This staged artifact is the
+candidate for software canvas runtime acceptance; QSV remains unverified.
+No Next/FFmpeg build, release, shared-checkout change or parity-pin advance occurred.
 
 Row145 (4c3683ae) is Port after final source-to-implementation review. Empty alternate schedules are already
 rejected at application and transactional repository boundaries. The production

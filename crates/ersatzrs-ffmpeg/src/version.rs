@@ -48,15 +48,20 @@ const REQUIRED_FILTERS: &[&str] = &[
     "overlay",
     "pad",
     "realtime",
+    "reverse",
     "setpts",
+    "settb",
     "scale",
     "subtitles",
     "tonemap",
+    "trim",
     "yadif",
     "zscale",
 ];
-const REQUIRED_ENCODERS: &[&str] = &["aac", "ac3", "libsvtav1", "libx264", "libx265"];
-const REQUIRED_DECODERS: &[&str] = &["av1", "h264", "hevc"];
+const REQUIRED_ENCODERS: &[&str] = &["aac", "ac3", "ffv1", "libsvtav1", "libx264", "libx265"];
+const REQUIRED_DECODERS: &[&str] = &["av1", "ffv1", "h264", "hevc"];
+const REQUIRED_MUXERS: &[&str] = &["nut"];
+const REQUIRED_DEMUXERS: &[&str] = &["nut"];
 const REQUIRED_CONFIGURATION_FLAGS: &[&str] = &[
     "--enable-cairo",
     "--enable-libfontconfig",
@@ -179,6 +184,10 @@ pub struct FfmpegRuntimeCheckConfig {
     pub required_encoders: Vec<String>,
     /// Decoders that must be present in `ffmpeg -decoders`.
     pub required_decoders: Vec<String>,
+    /// Output containers that must be supported by `ffmpeg -formats`.
+    pub required_muxers: Vec<String>,
+    /// Input containers that must be supported by `ffmpeg -formats`.
+    pub required_demuxers: Vec<String>,
     /// Configuration flags that must appear in `ffmpeg -version`.
     pub required_configuration_flags: Vec<String>,
     /// Hardware accelerators that must be present.
@@ -200,6 +209,8 @@ impl Default for FfmpegRuntimeCheckConfig {
             required_filters: to_owned_vec(REQUIRED_FILTERS),
             required_encoders: to_owned_vec(REQUIRED_ENCODERS),
             required_decoders: to_owned_vec(REQUIRED_DECODERS),
+            required_muxers: to_owned_vec(REQUIRED_MUXERS),
+            required_demuxers: to_owned_vec(REQUIRED_DEMUXERS),
             required_configuration_flags: to_owned_vec(REQUIRED_CONFIGURATION_FLAGS),
             required_hwaccels: Vec::new(),
             optional_hwaccels: Vec::new(),
@@ -307,6 +318,10 @@ pub struct FfmpegCapabilityReport {
     pub encoders: BTreeSet<String>,
     /// Decoder names from `ffmpeg -decoders`.
     pub decoders: BTreeSet<String>,
+    /// Output container names from `ffmpeg -formats`.
+    pub muxers: BTreeSet<String>,
+    /// Input container names from `ffmpeg -formats`.
+    pub demuxers: BTreeSet<String>,
     /// Bitstream filter names from `ffmpeg -bsfs`.
     pub bitstream_filters: BTreeSet<String>,
     /// Hardware accelerator names from `ffmpeg -hwaccels`.
@@ -856,6 +871,10 @@ pub enum FfmpegRuntimeIssue {
     RequiredEncoder { name: String },
     /// Required decoder is missing.
     RequiredDecoder { name: String },
+    /// Required output container is missing.
+    RequiredMuxer { name: String },
+    /// Required input container is missing.
+    RequiredDemuxer { name: String },
     /// Required configure flag is missing.
     RequiredConfigurationFlag { flag: String },
     /// Required hardware accelerator is missing.
@@ -946,6 +965,8 @@ impl FfmpegRuntimeReport {
             filters: BTreeSet::from_iter(to_owned_vec(REQUIRED_FILTERS)),
             encoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_ENCODERS)),
             decoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_DECODERS)),
+            muxers: BTreeSet::from_iter(to_owned_vec(REQUIRED_MUXERS)),
+            demuxers: BTreeSet::from_iter(to_owned_vec(REQUIRED_DEMUXERS)),
             bitstream_filters: BTreeSet::from(["dovi_split".to_owned()]),
             hwaccels: BTreeSet::new(),
             configuration_flags: flags.clone(),
@@ -1102,6 +1123,34 @@ pub fn parse_capability_names(output: &str) -> BTreeSet<String> {
             (is_capability_line && name != "=").then(|| name.to_owned())
         })
         .collect()
+}
+
+/// Parse input and output support separately; a demuxer alone cannot produce a canvas.
+fn parse_container_formats(output: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut muxers = BTreeSet::new();
+    let mut demuxers = BTreeSet::new();
+    for line in output.lines() {
+        let mut parts = line.split_whitespace();
+        let (Some(flags), Some(names)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if names == "="
+            || !flags
+                .bytes()
+                .all(|byte| matches!(byte, b'D' | b'E' | b'd' | b'.'))
+        {
+            continue;
+        }
+        for name in names.split(',').filter(|name| !name.is_empty()) {
+            if flags.contains('E') {
+                muxers.insert(name.to_owned());
+            }
+            if flags.contains('D') {
+                demuxers.insert(name.to_owned());
+            }
+        }
+    }
+    (muxers, demuxers)
 }
 
 /// Parse names from `ffmpeg -hwaccels` output.
@@ -1428,11 +1477,22 @@ async fn collect_ffmpeg_capabilities(
         output: error.to_string(),
     })?;
 
+    let formats = String::from_utf8(
+        run_tool("ffmpeg", &config.ffmpeg_path, &["-hide_banner", "-formats"]).await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
+    let (muxers, demuxers) = parse_container_formats(&formats);
+
     let mut report = FfmpegCapabilityReport {
         runtime_identity: None,
         filters: parse_capability_names(&filters),
         encoders: parse_capability_names(&encoders),
         decoders: parse_capability_names(&decoders),
+        muxers,
+        demuxers,
         bitstream_filters: parse_bitstream_filters(&bitstream_filters),
         hwaccels: parse_hwaccels(&hwaccels),
         configuration_flags: BTreeSet::new(),
@@ -2374,6 +2434,16 @@ fn collect_runtime_issues(
             issues.push(FfmpegRuntimeIssue::RequiredDecoder { name: name.clone() });
         }
     }
+    for name in &config.required_muxers {
+        if !capabilities.muxers.contains(name) {
+            issues.push(FfmpegRuntimeIssue::RequiredMuxer { name: name.clone() });
+        }
+    }
+    for name in &config.required_demuxers {
+        if !capabilities.demuxers.contains(name) {
+            issues.push(FfmpegRuntimeIssue::RequiredDemuxer { name: name.clone() });
+        }
+    }
     for flag in &config.required_configuration_flags {
         if !capabilities.has_configuration_flag(flag) {
             issues.push(FfmpegRuntimeIssue::RequiredConfigurationFlag { flag: flag.clone() });
@@ -2752,10 +2822,13 @@ h264_nvenc AVOptions:
                 "overlay",
                 "pad",
                 "realtime",
+                "reverse",
                 "setpts",
+                "settb",
                 "scale",
                 "subtitles",
                 "tonemap",
+                "trim",
                 "yadif",
                 "zscale",
             ]
@@ -2778,6 +2851,8 @@ h264_nvenc AVOptions:
             filters: BTreeSet::new(),
             encoders: BTreeSet::from(["libx264".to_owned()]),
             decoders: BTreeSet::from(["h264".to_owned()]),
+            muxers: BTreeSet::from(["nut".to_owned()]),
+            demuxers: BTreeSet::from(["nut".to_owned()]),
             bitstream_filters: BTreeSet::new(),
             hwaccels: BTreeSet::new(),
             configuration_flags: BTreeSet::new(),
@@ -3044,6 +3119,8 @@ mod unix_tests {
             }]
         );
         assert!(!report.has_errors());
+        assert!(report.capabilities.muxers.contains("nut"));
+        assert!(report.capabilities.demuxers.contains("nut"));
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
 
@@ -3177,6 +3254,9 @@ Decoders:
  V....D h264            H.264 decoder
 EOF
     ;;
+  "-hide_banner -formats")
+    printf 'Formats:\n DE nut NUT\n'
+    ;;
   "-hide_banner -bsfs")
     printf 'Bitstream filters:\ndovi_split\n'
     ;;
@@ -3220,6 +3300,9 @@ Decoders:
  V....D h264_cuvid      Nvidia CUVID H264 decoder
  V....D hevc_cuvid      Nvidia CUVID HEVC decoder
 EOF
+    ;;
+  "-hide_banner -formats")
+    printf 'Formats:\n DE nut NUT\n'
     ;;
   "-hide_banner -bsfs")
     printf 'Bitstream filters:\ndovi_split\n'
@@ -3312,3 +3395,7 @@ esac
         path
     }
 }
+
+#[cfg(test)]
+#[path = "canvas_capability_tests.rs"]
+mod canvas_capability_tests;

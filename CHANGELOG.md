@@ -459,6 +459,8 @@ release section when tagging a release.
   canvas with probe hints and session-bound callback credentials. Resolved items
   retain their original programme clock and selected video geometry. Complete
   integrated Next playback acceptance remains in development.
+  Check FFV1 encoding/decoding, NUT input/output support and canvas timing
+  filters at startup; report missing container support in FFmpeg health checks.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

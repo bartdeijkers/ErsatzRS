@@ -32,8 +32,10 @@ Canvas projections now carry stable occurrence metadata separately from issued
 credentials. Publication and demand-time paths issue the official canvas layer
 with non-consuming FFV1/BGRA/NUT probe hints. Dynamic-item start rebasing is signed
 into the binding and restored before selecting or rendering the chunk; selected
-video indexes determine source-content geometry. Complete integrated graphics
-proof, capability health coverage and decoded Next playback acceptance remain pending.
+video indexes determine source-content geometry. Startup and health checks now
+require FFV1 encoding/decoding, NUT muxing/demuxing and the canvas timing filters;
+container support is collected separately for input and output. Complete
+integrated graphics proof and decoded Next playback acceptance remain pending.
 Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
 frames after selection removal through the session-owned renderer.
