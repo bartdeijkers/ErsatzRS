@@ -11544,8 +11544,26 @@ including a real startup check and smoke transcodes with the checksum-verified
 v2.0.3 FFmpeg/ffprobe package. This does not discharge hardware acceptance debt.
 Strict FFmpeg/infra/web all-target Clippy, formatting and progress validation pass
 for this capability checkpoint.
-All-kind integrated HTTP/Next proof (including dynamic text and preview/mirror
-geometry) remains.
+Integrated canvas runtime checks now pass with checksum-verified FFmpeg v2.0.3
+and the audited official Next e7997fa executable. Nextest
+4593b2b3-5d4c-421d-979f-a04d3037919a runs four checks serially: all-kind decoded
+Next preview, raw private-HTTP alpha and lifecycle, and existing local/remote
+preview regressions. Image, Text (drawvg and drawtext), Script, Motion and
+Subtitle graphics preserve transparency, layer order, delayed motion, ASS timing,
+live elapsed-text refresh, selected Dutch audio and ordinary subtitles. The HTTP
+test observes the fixture-owned process and artifact directory disappear after
+client disconnect before session stop, then separately while stopping a session
+whose HTTP body remains open. Revoked callback replay returns Gone.
+The raw offset test found a transparent first motion frame when the seek falls
+between 25 fps source frames. Resetting sought motion timestamps fixes the
+demonstrated framesync gap; all seven timing/runtime/snapshot checks pass
+(80c5eb78-66f9-45ec-818e-25db2fdec480), including loop/disappear fractional seeks,
+hold, independent shared-asset seeks, scripts, ASS and fades. Only the reviewed
+sought-motion filter snapshot changes. Native zero-offset rendering is unchanged.
+Strict FFmpeg/infra/web all-target Clippy, formatting, new-lint-allow policy and
+progress validation pass for this HTTP/runtime checkpoint.
+Remaining channel/mirror geometry and channel-preview timing acceptance stay
+open; no row146 verdict or pin advance.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

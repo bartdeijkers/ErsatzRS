@@ -286,6 +286,47 @@ fn motion_source(root: &Path) -> std::path::PathBuf {
 
 #[test]
 #[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+fn canvas_motion_fractional_seek_starts_with_an_opaque_frame() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("fractional.nut");
+    let generated = Command::new(runtime())
+        .args([
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=16x16:r=25:d=2,format=bgra",
+            "-c:v",
+            "ffv1",
+            "-f",
+            "nut",
+        ])
+        .arg(&source)
+        .output()
+        .unwrap();
+    assert!(generated.status.success());
+    // The motion starts at programme second one; 1.5 means a 0.5-second seek,
+    // halfway between the 25 fps source frames at 0.48 and 0.52 seconds.
+    for behavior in [MotionEndBehavior::Loop, MotionEndBehavior::Disappear] {
+        let frames = decode(
+            root.path(),
+            request(root.path(), motion(&source, behavior), 1500),
+        );
+        for frame in frames.chunks_exact(64 * 64 * 4) {
+            let pixel = &frame[(4 * 64 + 4) * 4..(4 * 64 + 4) * 4 + 4];
+            assert_eq!(
+                pixel,
+                [0, 0, 255, 255],
+                "sought motion must cover the first canvas frame"
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
 fn canvas_shared_motion_asset_keeps_independent_layer_seek_positions() {
     let root = tempfile::tempdir().unwrap();
     let source = motion_source(root.path());

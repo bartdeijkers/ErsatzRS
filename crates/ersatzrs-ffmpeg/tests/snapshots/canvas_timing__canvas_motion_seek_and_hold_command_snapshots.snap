@@ -22,7 +22,7 @@ color=c=black@0.0:s=64x64:r=4/1,format=bgra
 -i
 motion.nut
 -filter_complex
-[0:0][1:0]overlay=x=0:y=0:format=rgb:enable='gte((t+4.25),1)'[vge0];[vge0]format=bgra[vpf]
+[1:0]setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=0:y=0:format=rgb:enable='gte((t+4.25),1)'[vge0];[vge0]format=bgra[vpf]
 -map
 [vpf]
 -t

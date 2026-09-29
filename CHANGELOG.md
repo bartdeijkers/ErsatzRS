@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep motion graphics visible on the first Next canvas frame when a chunk
+  starts between source frames. Normalize the sought motion timestamps before
+  compositing, preserving delayed starts and loop/hold/disappear timing.
+
 - Keep graphics template programme stop times tied to the scheduled finish,
   independently of seek offsets and rendering chunk durations, including
   mirrored and preview playback.

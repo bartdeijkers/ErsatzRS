@@ -664,6 +664,9 @@ fn render_motion_graphics_element(
             .push("reverse,trim=end_frame=1,setpts=PTS-STARTPTS".into());
     } else if seek > 0.0 {
         input.input_options.extend(["-ss".into(), trim_float(seek)]);
+        // A seek between source frames can leave a positive first timestamp.
+        // Framesync must see the first decoded motion frame at chunk time zero.
+        input.filter_steps.push("setpts=PTS-STARTPTS".into());
     }
     let delay = (start - offset).max(0.0);
     if delay > 0.0 {

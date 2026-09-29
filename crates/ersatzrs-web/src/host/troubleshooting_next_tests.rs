@@ -278,6 +278,16 @@ async fn run_real_preview(mode: remote_runtime::Mode) {
 }
 
 async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
+    run_real_preview_configured(mode, custom, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; decoded private HTTP canvas preview"]
+async fn real_next_canvas_preview_composites_alpha_preserves_tracks_and_revokes_callback() {
+    run_real_preview_configured(remote_runtime::Mode::Local, false, true).await;
+}
+
+async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, canvas: bool) {
     let fixture = Fixture::new().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -285,7 +295,7 @@ async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
     let mut paths = fixture.paths();
     paths.executable = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let clip = fixture.root.path().join("fixture.mkv");
-    generate_clip(&ffmpeg, &clip).await;
+    generate_clip(&ffmpeg, &clip, canvas).await;
     let subtitle = fixture.root.path().join("fixture.nl.srt");
     tokio::fs::write(
         &subtitle,
@@ -315,7 +325,10 @@ async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
     query.seek_seconds = Some(1);
     query.subtitle_id = Some(2);
     let _selector = custom.then(|| configure_runtime_selector(&mut query));
-    let origin = if mode == remote_runtime::Mode::Local {
+    if canvas {
+        canvas_runtime::install(&fixture, &mut query).await;
+    }
+    let origin = if mode == remote_runtime::Mode::Local && !canvas {
         None
     } else {
         Some(remote_runtime::Origin::start(&fixture, mode).await)
@@ -345,6 +358,9 @@ async fn run_real_preview_selected(mode: remote_runtime::Mode, custom: bool) {
         .unwrap()
         .is_some());
     assert_decoded_tracks(&ffmpeg, &playlist).await;
+    if canvas {
+        canvas_runtime::assert_composite(&ffmpeg, &playlist).await;
+    }
     let log = tokio::fs::read_to_string(paths.output.join("logs.txt"))
         .await
         .unwrap();
@@ -393,7 +409,15 @@ fn configure_runtime_selector(query: &mut PlaybackPreviewQuery) -> tempfile::Nam
 #[path = "troubleshooting_remote_runtime_tests.rs"]
 mod remote_runtime;
 
-async fn generate_clip(ffmpeg: &FsPath, clip: &FsPath) {
+#[path = "troubleshooting_canvas_runtime_tests.rs"]
+mod canvas_runtime;
+
+// Process reaping is observed through a disposable POSIX wrapper.
+#[cfg(unix)]
+#[path = "troubleshooting_canvas_http_tests.rs"]
+mod canvas_http;
+
+async fn generate_clip(ffmpeg: &FsPath, clip: &FsPath, canvas: bool) {
     let mut generate = Command::new(ffmpeg);
     generate
         .args([
@@ -404,7 +428,11 @@ async fn generate_clip(ffmpeg: &FsPath, clip: &FsPath) {
             "-f",
             "lavfi",
             "-i",
-            "color=black:s=320x180:r=25",
+            if canvas {
+                "color=blue:s=320x180:r=25"
+            } else {
+                "color=black:s=320x180:r=25"
+            },
             "-f",
             "lavfi",
             "-i",

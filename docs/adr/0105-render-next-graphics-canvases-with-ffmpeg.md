@@ -34,8 +34,14 @@ with non-consuming FFV1/BGRA/NUT probe hints. Dynamic-item start rebasing is sig
 into the binding and restored before selecting or rendering the chunk; selected
 video indexes determine source-content geometry. Startup and health checks now
 require FFV1 encoding/decoding, NUT muxing/demuxing and the canvas timing filters;
-container support is collected separately for input and output. Complete
-integrated graphics proof and decoded Next playback acceptance remain pending.
+container support is collected separately for input and output. The real HTTP
+callback and official Next preview now have decoded proof for all five graphics
+kinds, including both text renderers, transparency, layer order, delayed motion,
+ASS timing, dynamic-text refresh and retained subtitles/alternate audio.
+Raw BGRA decoding and observed producer/artifact cleanup cover HTTP disconnect
+and session stop; revoked callbacks return Gone. Fractional motion seeks reset
+input timestamps to avoid a transparent first frame. Remaining channel/mirror
+geometry and channel-preview timing acceptance keep this implementation partial.
 Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
 frames after selection removal through the session-owned renderer.
