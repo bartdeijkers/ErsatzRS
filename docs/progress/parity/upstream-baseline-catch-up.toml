@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-147/180; 33 pending.
+148/180; 32 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: v2.0.2 published, hashes verified, default adopted.
 109 N/A: release notes. UCU-06 Complete: local gates and
@@ -13,16 +13,18 @@ UCU-07 Complete: CI 36321494841, b4d659eb.
 116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130-134 Port; 135 N/A. UCU-08 Complete: CI 36453480304 at dfeaf6d0.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: v2.0.3 and smoke pass; approved hardware debt remains.
-141-142 N/A: release notes and empty build trigger.
-143 Port: scoped HDR refresh and Media Info; runtime/browser proof passes.
-144 N/A: Next optimization release notes.
+141-142 N/A: release/build bookkeeping.
+143 Port: HDR refresh/Media Info; runtime/browser proof passes.
+144 N/A: release notes.
 145 Port: external JSON native playback/guide, diagnostics and marathon fallback;
 focused runtime, strict lint, smoke and TSDuck acceptance pass.
 146 Adapt (0105): all-kind private canvas and official Next proof, stable session
 clocks, cleanup, lint, smoke and 87 TSDuck checks pass.
-147 Port: YAML roll/graphics state and SQL reference loading; restart proof passes.
+147 Port: YAML roll/graphics persistence and SQL references; restart proof passes.
+148 Port: subtitle ownership/eligibility, availability, prepared pins and seek;
+runtime proof passes.
 
-UCU-02 is Complete. Platform acceptance remains open; credential isolation is preserved.
+UCU-02 Complete; platform acceptance open; credentials isolated.
 
 Row 21 is Adapt (accepted ADR 0096): bounded JavaScript callbacks feed native,
 preview and Next playback after pins/YAML selection. Metadata, audio-only,

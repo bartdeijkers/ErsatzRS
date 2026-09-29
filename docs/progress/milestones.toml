@@ -11416,14 +11416,14 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
-Row148 audit is in progress. Upstream c673082e changes Next subtitle source
+Row148 is Port. Final acceptance below completes the earlier checkpoints. Upstream c673082e changes Next subtitle source
 conversion, shared MusicVideo metadata loading, Plex Other Video subtitle owner
 resolution and native/troubleshooting provider eligibility. It checks local and
 extracted file availability, proxies persisted sidecars, retains unpersisted
 remote sources, binds image subtitles to the effective video input even without
 audio, and avoids double-seeking generated credits. Rust already carries the
 image input and media seek explicitly and loads MusicVideo subtitle metadata;
-generated credits use their own bounded source. Full branch acceptance remains.
+generated credits use their own bounded source. Final branch acceptance is recorded below.
 The demonstrated Plex gap is being corrected in shared provider preparation:
 movie/episode/OtherVideo ownership resolves a clean stream path against the
 current server and credential, then uses bounded header-authenticated fetches
@@ -11468,9 +11468,42 @@ caption retention (031c2898-93bd-49dc-92f1-5d5a92bc6ed3). Strict all-target
 infra/ffmpeg/web Clippy, formatting, new-allow policy, progress and diff checks
 pass. This is a selection checkpoint; existing decoded provider runtime evidence
 belongs to 4cd2001e, and integrated row acceptance remains open.
-Projection availability, remaining converter branch acceptance and final row
-review remain. No row148 verdict or
-pin advance; the baseline remains b3f7f3fe.
+Source availability now omits null/blank/missing/directory/malformed-HTTP
+sidecars under automatic selection, while exact pins remain errors. Provider
+identity validation stays offline during projection and database errors are not
+converted to omissions. The original missing-source regression fails before the
+fix (c2f8c0f8-bc7c-4acc-8fa5-1e1395046d60). Existing relative-file fixtures now
+materialize their claimed sidecars. Prepared-media admission defers only the
+local byte check until the artifact path is resolved, including exact pins and
+troubleshooting/fallback origins. All 245 Next tests pass
+(ce9457a4-7a40-4c28-a23e-10590ecfc5b3), including music-video metadata selection,
+explicit image sources with silence, unchanged metadata, valid remote sources,
+seek retention, prepared-file pins and database-error propagation. All three
+serialized decoded runtime checks pass (a9b49152-736b-4f2f-a784-6149568f00f8):
+provider sidecars and HLS preserve selected audio/text, and generated music-video
+credits burn/convert after seek without double rebasing. Strict affected
+all-target Clippy passes.
+Final source review maps every upstream changed branch to the existing native
+selectors, Next projection, provider preparation and credits path. The accepted
+private callback architecture (ADRs 0095/0102) retains authenticated exact-item
+materialization and local owned artifacts instead of adding a second subtitle
+proxy. Embedded Burn preparation validates the exact media version and creates
+or verifies its artifact on demand, rather than trusting legacy IsExtracted/Path
+metadata. The legacy project_item convenience path has no production callers.
+No new architecture decision or hardware claim is introduced. Native smoke
+passes: public internal callbacks remain 404, both MPEG-TS routes return bytes,
+and HLS variant/session playlists contain segments. URI review additionally
+covers unpersisted remote sidecars, loopback hosts and case-insensitive schemes.
+Published FFmpeg rejects uppercase protocol names, so projection normalizes valid
+HTTP(S) URLs before passing them to FFmpeg. The 65-check selection run passes
+(38795838-df28-4d45-9fb6-f40d12463388); after the final normalization edit, all four
+availability regressions pass again (91c34207-403f-48b0-a67c-ba803f4497b2), as does
+strict all-target infra/ffmpeg/web Clippy. The preceding 245-test, decoded-runtime
+and native-smoke evidence is reused for unchanged inputs and transport paths;
+these runs preceded the URI-only normalization. Row146's 87 TSDuck checks remain
+applicable to unchanged transport generation. No broad rerun is claimed.
+Row148 is Port; pin advances to c673082e, 148/180 reconciled and 32 pending.
+Continue at row149; UCU-09 closeout, push and exact-SHA CI remain.
 
 Row147 is Port: upstream b3f7f3fe adds post-roll, mid-roll and graphics state to
 YAML anchors, including explicit clears and legacy missing-field defaults.

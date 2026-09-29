@@ -3767,6 +3767,12 @@ pub fn subtitle_input_for_stream(
     Some(input)
 }
 
+/// Recognize absolute HTTP(S) sidecars using URI scheme semantics, including case.
+pub(crate) fn subtitle_is_http(path: &str) -> bool {
+    url::Url::parse(path)
+        .is_ok_and(|uri| matches!(uri.scheme(), "http" | "https") && uri.host_str().is_some())
+}
+
 fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
     let path = subtitle.path.as_deref()?.trim();
     if path.is_empty() {
@@ -3780,8 +3786,9 @@ fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<S
                 .into_owned(),
         );
     }
-    if path.starts_with("http://") || path.starts_with("https://") {
-        return Some(path.to_owned());
+    if subtitle_is_http(path) {
+        // FFmpeg protocol names are case-sensitive even though URI schemes are not.
+        return url::Url::parse(path).ok().map(|uri| uri.to_string());
     }
 
     let candidate = PathBuf::from(path);

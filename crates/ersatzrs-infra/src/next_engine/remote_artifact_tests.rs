@@ -50,6 +50,12 @@ async fn fixture() -> (
     tokio::fs::write(root.path().join("objects/prepared.media"), b"media")
         .await
         .unwrap();
+    tokio::fs::write(
+        root.path().join("objects/fixture.nl.srt"),
+        "1\n00:00:01,000 --> 00:00:02,000\nCaption\n",
+    )
+    .await
+    .unwrap();
     let channel = make_repositories(pool.clone())
         .channel
         .get_with_profile(channel.id)
@@ -186,4 +192,25 @@ async fn prepared_open_refuses_missing_bytes_and_stale_publication() {
                 .is_err()
         );
     }
+}
+
+#[tokio::test]
+async fn prepared_sidecar_pins_are_checked_against_the_materialized_source() {
+    let (root, pool, locker, channel, start) = fixture().await;
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=2,"SubtitleStreamIndex"=9"#)
+        .execute(&pool).await.unwrap();
+    let initial = published(&pool, &locker, &channel, start).await;
+    let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
+        .await
+        .unwrap();
+    assert!(ready.projection.item.tracks.unwrap().subtitle.is_some());
+    tokio::fs::remove_file(root.path().join("objects/fixture.nl.srt"))
+        .await
+        .unwrap();
+    let initial = published(&pool, &locker, &channel, start).await;
+    assert!(
+        materialize_prepared(&pool, &locker, initial, Some(2), root.path())
+            .await
+            .is_err()
+    );
 }

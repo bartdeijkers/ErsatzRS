@@ -354,6 +354,7 @@ impl NextHost {
                 resolution: &request.profile.resolution,
                 subtitle_id: request.subtitle_id,
                 diagnostics: request.diagnostics.clone(),
+                source_pending: false,
             },
         )
         .await?;

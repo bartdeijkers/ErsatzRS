@@ -155,7 +155,28 @@ async fn item_preferences_and_relative_sidecars_preserve_indices_and_seek() {
         preferred_subtitle_language_code: Some("nld".to_owned()),
         ..item()
     };
-    let projected = project(&pool, &channel, &item).await.unwrap();
+    let root = tempfile::tempdir().unwrap();
+    tokio::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:01,000 --> 00:00:02,000\nCaption\n",
+    )
+    .await
+    .unwrap();
+    let projected = project_item(
+        &pool,
+        &channel,
+        &item,
+        100,
+        wire::Source::Local {
+            path: root.path().join("fixture.mkv").to_str().unwrap().to_owned(),
+            probe_hint: None,
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        &Resolution::default(),
+    )
+    .await
+    .unwrap();
     let value = serde_json::to_value(projected).unwrap();
     assert!(value.get("source").is_none());
     assert_eq!(value["tracks"]["audio"]["stream_index"], 2);
@@ -163,10 +184,7 @@ async fn item_preferences_and_relative_sidecars_preserve_indices_and_seek() {
     assert_eq!(value["tracks"]["subtitle"]["stream_index"], 0);
     assert_eq!(
         value["tracks"]["subtitle"]["source"]["path"],
-        std::path::Path::new("media")
-            .join("fixture.nl.srt")
-            .to_str()
-            .unwrap()
+        root.path().join("fixture.nl.srt").to_str().unwrap()
     );
     for kind in ["video", "audio", "subtitle"] {
         assert_eq!(value["tracks"][kind]["source"]["in_point_ms"], 1000);
@@ -1121,3 +1139,6 @@ fn local_source_seek_preserves_milliseconds_and_open_ended_intervals() {
         }
     }
 }
+
+#[path = "subtitle_availability_tests.rs"]
+mod subtitle_availability_tests;

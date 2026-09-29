@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Omit unavailable automatic Next sidecars while preserving errors for exact
+  selections. Validate prepared-media sidecars against the materialized file,
+  retain valid remote sources, normalize HTTP(S) schemes for FFmpeg and preserve
+  subtitle seek offsets.
+
 - Exclude unsupported media-server closed captions before subtitle selection in
   native playback, Next and troubleshooting, including Plex Other Videos. Keep
   local captions and stored metadata intact, and reject unsupported pinned tracks.

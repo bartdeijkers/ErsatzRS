@@ -147,6 +147,7 @@ pub(crate) async fn materialize_prepared(
         &context.resolution,
         selection::AudioDirective::Published(audio),
         &context.origin,
+        false,
     ))
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
@@ -405,8 +406,10 @@ pub(super) async fn project_for_origin(
     }
     let (publication, liveness, prepared, retained) = publication_binding(pool, &binding).await?;
     let source = selection_source(&binding, media, liveness, prepared)?;
-    let mut projection =
-        project_selection(pool, channel, media, source, resolution, audio, &origin).await?;
+    let mut projection = project_selection(
+        pool, channel, media, source, resolution, audio, &origin, prepared,
+    )
+    .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
     let (graphics, watermarks) = match &origin {
@@ -489,34 +492,27 @@ async fn project_selection(
     resolution: &Resolution,
     audio: selection::AudioDirective,
     origin: &Origin,
+    source_pending: bool,
 ) -> Result<selection::DeferredProjection> {
-    if let Origin::Troubleshooting(context) = origin {
-        selection::project_troubleshooting_item_with_audio(
-            pool,
-            selection::TroubleshootingSelection {
-                channel,
-                item: &media.item,
-                media_version_id: media.media_version_id,
-                source,
-                resolution,
-                subtitle_id: context.subtitle_id,
-                diagnostics: context.diagnostics.clone(),
-            },
-            audio,
-        )
-        .await
-    } else {
-        selection::project_deferred_item_with_audio(
-            pool,
+    let (subtitle_id, diagnostics) = match origin {
+        Origin::Troubleshooting(context) => (context.subtitle_id, context.diagnostics.clone()),
+        Origin::Persisted | Origin::Fallback(_) => (None, None),
+    };
+    selection::project_troubleshooting_item_with_audio(
+        pool,
+        selection::TroubleshootingSelection {
             channel,
-            &media.item,
-            media.media_version_id,
+            item: &media.item,
+            media_version_id: media.media_version_id,
             source,
             resolution,
-            audio,
-        )
-        .await
-    }
+            subtitle_id,
+            diagnostics,
+            source_pending,
+        },
+        audio,
+    )
+    .await
 }
 
 async fn load_binding(pool: &DbPool, id: i64) -> Result<Binding> {

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-29): `8bda4411d8fe17a99ea8fda3a567efb54f26acdb`
   — build: publish develop builds to separate repo (#3045).
-- Ledger: **180 commits**, **33 pending**. The original plan covered 152 through
+- Ledger: **180 commits**, **32 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **147**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **148**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Continue at row 148. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Continue at row 149. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,28 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 148 source map — subtitle conversion (Port)
+
+- Upstream `c673082e` changes `PlayoutItemConverter`, Next metadata loading,
+  subtitle-path ownership and native/troubleshooting provider classification.
+  Rust maps these to `next_engine::selection`, `remote_projection`, shared
+  `playback` selectors and `provider_subtitles` preparation.
+- Plex movie, episode and Other Video sidecars resolve current owner identity
+  and header credentials before bounded preparation. Provider eia_608 exclusion
+  is shared across native, Next and troubleshooting; stored metadata is retained.
+- Automatic selection omits unusable sidecars; exact pins fail explicitly.
+  Prepared-media file checks occur against the materialized artifact. HTTP(S)
+  sources include unpersisted and loopback URLs and normalize scheme case.
+- Existing image input identity, music-video metadata subtitles and generated
+  credit timing retain their source/seek semantics. Embedded Burn preparation
+  validates the exact version rather than trusting old extraction metadata.
+- Accepted ADRs 0095/0102 keep exact-item private callbacks and owned local
+  artifacts; no additional subtitle proxy or architecture deviation is required.
+- UCU-09 records provider/caption regressions, 245 Next checks, three decoded
+  runtime checks, four final availability checks, strict lint and native smoke.
+  It distinguishes final URI checks from reused unchanged transport evidence.
+  No hardware acceptance or milestone-wide closeout is claimed.
 
 ## Row 147 source map — YAML ambient state (Port)
 
@@ -4175,7 +4197,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 145 | `4c3683ae` | chore: address four TODOs asking for logging and validation (#2964) | Port | mpeg-ts-channel-streaming; xmltv-guide; classic-scheduling | `feat(parity): reconcile external JSON playback and validation` | ucu-09; four source paths audited; transient native playback/guide, Plex diagnostics and marathon fallback implemented. Focused runtime/lint, smoke and 87 TSDuck checks pass; approved hardware debt remains. |
 | 146 | `28b2e00c` | feat: graphics canvas (#3012) | Adapt | drawvg-graphics-engine | `feat(parity): reconcile Next graphics canvases` | ucu-09; accepted ADR 0105, shared FFmpeg renderer and private canvas callback; all-kind decoded HTTP/official Next, timing/geometry/alpha, audio/subtitles, lifecycle, stable session reports, strict lint, smoke and 87 TSDuck checks pass. |
 | 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | Port | yaml-scheduling | `fix(scheduling): preserve YAML roll and graphics state` | ucu-09; compatible anchor fields, explicit clears and production graphics lookup; 78 YAML checks, six final regressions with SQLite restart/midnight and imports, strict lint and native smoke pass. |
-| 148 | `c673082e` | fix: playout item converter subtitles (#3014) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: playout item converter subtitles; subtitle parity is a priority surface. |
+| 148 | `c673082e` | fix: playout item converter subtitles (#3014) | Port | mpeg-ts-channel-streaming | `fix(parity): reconcile Next subtitle source availability` | ucu-09; provider ownership/caption eligibility, automatic availability, exact/prepared pins, music-video metadata and URI/seek semantics; focused and decoded runtime checks, strict lint and native smoke pass. |
 | 149 | `4fffa955` | fix: plex other video tags (#3015) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: Plex other-video tags plus a native SQLite reset migration under ADR 0004. |
 | 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: default the Next channel config to show errors over fallback. |
 | 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: music video credits in the troubleshooter under ADR 0076. |

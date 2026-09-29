@@ -82,14 +82,13 @@ all-kind canvas delivery, programme/chunk/session clocks, preview geometry,
 alpha, audio/subtitles and owned cleanup pass HTTP/official Next proof. Native
 smoke, all 87 TSDuck checks and strict lint pass. Row147 ports YAML roll/graphics
 state and production graphics reference loading: 78 YAML checks, six final
-checks, SQLite midnight/restart proof, lint and smoke pass. Row148 has a partial
-Plex subtitle checkpoint: current-owner header authentication and bounded
-preparation, including Other Videos, pass focused and decoded native/Next proof.
-Provider caption eligibility now covers native/Next/troubleshooting and Plex
-Other Videos. Continue row148 with source availability and remaining converter
-acceptance; its verdict and pin remain unchanged. UCU-09 window gates,
-push and exact-SHA CI remain.
-The current 180-row ledger has 33 pending rows. Preserve accepted architecture,
+checks, SQLite midnight/restart proof, lint and smoke pass. Row148 is Port:
+provider ownership/caption eligibility, automatic sidecar availability, exact
+pins, prepared-media resolution, music-video metadata and seek handling pass
+focused checks, decoded native/Next proof, strict lint and native smoke.
+Valid HTTP(S) schemes are normalized for FFmpeg. Continue at row149; UCU-09
+window gates, push and exact-SHA CI remain.
+The current 180-row ledger has 32 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

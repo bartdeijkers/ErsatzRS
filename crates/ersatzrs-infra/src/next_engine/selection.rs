@@ -15,6 +15,9 @@ use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
 
 use super::protocol as wire;
 
+#[path = "subtitle_availability.rs"]
+mod availability;
+
 /// Projection requiring sidecar preparation before it can be published.
 /// Deliberately no Debug: source paths and subtitle metadata may be private.
 pub(crate) struct DeferredProjection {
@@ -53,6 +56,8 @@ pub(crate) struct TroubleshootingSelection<'a> {
     /// None keeps channel preferences; zero means explicitly disabled.
     pub subtitle_id: Option<i64>,
     pub diagnostics: Option<super::diagnostics::SelectionLog>,
+    /// Prepared media is not materialized yet; never publish this projection directly.
+    pub source_pending: bool,
 }
 
 /// Restrict troubleshooting subtitle candidates before normal track selection.
@@ -79,6 +84,7 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
             audio,
             subtitle_id: request.subtitle_id,
             diagnostics: request.diagnostics,
+            source_pending: request.source_pending,
         },
     )
     .await
@@ -179,6 +185,7 @@ pub(crate) async fn project_deferred_item_with_audio(
             audio,
             subtitle_id: None,
             diagnostics: None,
+            source_pending: false,
         },
     )
     .await
@@ -188,6 +195,7 @@ struct SelectionDirectives {
     audio: AudioDirective,
     subtitle_id: Option<i64>,
     diagnostics: Option<super::diagnostics::SelectionLog>,
+    source_pending: bool,
 }
 
 async fn project_deferred_item_selected(
@@ -204,6 +212,12 @@ async fn project_deferred_item_selected(
         .filter(|duration| *duration > 0)
         .ok_or_else(|| invalid("invalid item duration"))?;
     apply_item_seek(&mut source, item)?;
+    let source_pending = directives.source_pending;
+    let explicit_subtitle = directives.subtitle_id.is_some_and(|id| id > 0)
+        || item
+            .pinned_stream_selection
+            .as_ref()
+            .is_some_and(|pin| pin.subtitle_stream_index.is_some());
     let selected =
         select_projection_tracks(pool, channel, item, media_version_id, directives).await?;
     let audio = match selected.audio {
@@ -213,15 +227,23 @@ async fn project_deferred_item_selected(
         },
         None => silent_audio(duration_ms),
     };
-    let selected_subtitle = selected.subtitle;
-    let (subtitle, pending_burn) = project_deferred_subtitle(
+    let mut selected_subtitle = selected.subtitle;
+    let provider = availability::retain(
         pool,
+        &mut selected_subtitle,
+        &source,
+        explicit_subtitle,
+        item.media_item_id,
+        source_pending,
+    )
+    .await?;
+    let (subtitle, pending_burn) = project_deferred_subtitle(
+        provider,
         selected_subtitle.as_ref(),
         &source,
         channel.next_engine_text_subtitle_mode,
         item,
-    )
-    .await?;
+    )?;
     Ok(DeferredProjection {
         canvas: None,
         pending_burn,
@@ -373,20 +395,13 @@ async fn troubleshooting_subtitles(
     }
 }
 
-async fn project_deferred_subtitle(
-    pool: &DbPool,
+fn project_deferred_subtitle(
+    provider: bool,
     selected_subtitle: Option<&PlaybackSubtitle>,
     source: &wire::Source,
     mode: ersatzrs_domain::NextEngineTextSubtitleMode,
     item: &PlayoutItem,
 ) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
-    let provider = if let Some(selected) = selected_subtitle {
-        crate::provider_subtitles::binding(pool, selected.id)
-            .await?
-            .is_some()
-    } else {
-        false
-    };
     Ok(if provider {
         let selected = selected_subtitle.ok_or_else(|| invalid("provider subtitle changed"))?;
         // A placeholder is never published directly: the existing deferred
@@ -535,7 +550,7 @@ fn subtitle_track(
     .ok_or_else(|| invalid("selected subtitle is unavailable"))?;
     let subtitle_source = if &input.path == media_path {
         source.clone()
-    } else if input.path.starts_with("http://") || input.path.starts_with("https://") {
+    } else if crate::playback::subtitle_is_http(&input.path) {
         wire::Source::Http {
             probe_hint: None,
             is_live: None,

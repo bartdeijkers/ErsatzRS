@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b3f7f3fe56230e5922e9740c8feee74bbaad0e86` |
-| **Commit subject** | `fix: preserve YAML post-roll state across playout builds (#3013)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b3f7f3fe56230e5922e9740c8feee74bbaad0e86 |
+| **Pinned commit** | `c673082ed844d46ed9adf73fac52db4fba953883` |
+| **Commit subject** | `fix: playout item converter subtitles (#3014)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c673082ed844d46ed9adf73fac52db4fba953883 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
