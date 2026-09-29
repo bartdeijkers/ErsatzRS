@@ -17,6 +17,8 @@ authenticate the channel, occurrence, version/file and timeline while excluding
 mutable graphics settings. Host-side lookup now validates the active session and
 current persisted, mirror, fallback or preview occurrence, and retains the
 session start clock. Transient bindings explicitly include their owning session.
+Canvas timing separates the scheduled programme finish from bounded chunk
+duration and selects current decorations at the requested programme offset.
 HTTP/render integration and decoded Next playback acceptance remain pending;
 no canvas route is exposed yet.
 

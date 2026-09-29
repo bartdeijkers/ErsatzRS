@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    canvas::CanvasBinding,
+    canvas::{CanvasBinding, CanvasRequest, CanvasTimeline},
     host::{NextHost, NextStart},
     schedule::{self, ScheduledMedia},
     session_transfers::SessionTransfers,
@@ -25,6 +25,7 @@ use super::{
 pub struct CanvasSession {
     pub request: NextStart,
     pub started_at: DateTime<Utc>,
+    pub timeline: CanvasTimeline,
     pub channel: Channel,
     pub profile: PlaybackProfile,
     pub media: ScheduledMedia,
@@ -45,12 +46,15 @@ impl NextHost {
         &self,
         instance: Uuid,
         binding: &CanvasBinding,
+        timing: &CanvasRequest,
     ) -> Result<CanvasSession> {
         if binding.expires <= Utc::now()
             || binding.session.is_some_and(|expected| expected != instance)
         {
             return Err(unavailable());
         }
+        let timeline = CanvasTimeline::new(binding.start, binding.finish, timing)
+            .map_err(|_| unavailable())?;
         let (request, started_at, preview, fallback, transfers) = {
             let contexts = self.dynamic_contexts.lock().await;
             let context = contexts
@@ -102,7 +106,7 @@ impl NextHost {
             let profile = playback::load_channel_playback_profile(&self.pool, channel.id)
                 .await?
                 .ok_or_else(unavailable)?;
-            let at = ChannelPlayoutContext::for_channel(&channel).source_time(media.item.start)?;
+            let at = ChannelPlayoutContext::for_channel(&channel).source_time(timeline.now)?;
             let (graphics, watermarks) = if binding.item == 0 {
                 (
                     playback::select_fallback_graphics(&self.pool, &media.item, at).await?,
@@ -133,6 +137,7 @@ impl NextHost {
         Ok(CanvasSession {
             request,
             started_at,
+            timeline,
             channel,
             profile,
             media,

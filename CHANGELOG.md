@@ -446,6 +446,8 @@ release section when tagging a release.
   Expiring callback source bindings protect programme identity while allowing
   current graphics edits. Host-side canvas selection validates active sessions
   and current items, with explicit session scope for previews and fallback.
+  Canvas chunks retain the scheduled programme finish and select timed
+  decorations at the requested offset, including mirrored playback.
   Private callback and Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding

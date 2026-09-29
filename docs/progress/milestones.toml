@@ -11467,6 +11467,14 @@ pass (nextest d30879de-8c8a-4832-9aee-7be860c817fc), including changed media-fil
 binding, wrong/stopped process, mirror times, transient preview without SQL
 persistence, current fallback ownership, source authentication and expiry.
 Strict infra/web all-target Clippy also passes for this session checkpoint.
+Canvas request timing now preserves the scheduled programme finish separately
+from finite chunk duration and remaining content, with upstream's nonempty
+late-offset fallback and checked date arithmetic. Current decoration selection
+uses programme start plus request offset, translated back to the source clock
+for mirrors. Seven focused timeline/session tests pass (nextest
+b208c603-c375-431d-9c1e-90ae9565b976), including a decoration becoming active
+between chunks, final-chunk truncation, late offsets and date overflow.
+Strict infra/web all-target Clippy, formatting and progress validation pass.
 No canvas endpoint is exposed yet; HTTP/render/lifetime integration,
 all-kind graphics coverage and decoded Next acceptance remain.
 The source map and owning graphics debt track the full scope.

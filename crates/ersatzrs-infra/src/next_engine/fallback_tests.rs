@@ -263,11 +263,17 @@ async fn canvas_session_uses_only_the_current_session_fallback_occurrence() {
     let binding =
         super::super::canvas::CanvasBinding::new(1, &media, Utc::now() + Duration::hours(1))
             .for_session(instance);
-    let selected = host.canvas_session(instance, &binding).await.unwrap();
+    let selected = host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .unwrap();
     assert_eq!(selected.media.item.id, 0);
     assert_eq!(selected.media.item.start, media.item.start);
     fallback.lock().await.take();
-    assert!(host.canvas_session(instance, &binding).await.is_err());
+    assert!(host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -577,4 +583,8 @@ async fn ephemeral_remote_validation_refuses_schedule_changes_after_preparation(
             .await
             .is_err()
     );
+}
+
+fn canvas_timing() -> super::super::canvas::CanvasRequest {
+    super::super::canvas::CanvasRequest::parse("44000", "44000", "25").unwrap()
 }

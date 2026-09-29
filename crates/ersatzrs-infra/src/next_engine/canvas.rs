@@ -6,6 +6,9 @@ use std::time::Duration;
 mod binding;
 pub use binding::CanvasBinding;
 
+mod timeline;
+pub use timeline::CanvasTimeline;
+
 const MAX_MILLISECONDS: u64 = i64::MAX.unsigned_abs() / 10_000;
 
 /// Validated timing. Raw header values never escape in diagnostics.

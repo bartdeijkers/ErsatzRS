@@ -52,25 +52,44 @@ async fn fixture() -> (NextHost, Uuid, CanvasBinding, tempfile::TempDir) {
 #[tokio::test]
 async fn canvas_session_requires_current_item_and_exact_active_process() {
     let (host, instance, binding, _root) = fixture().await;
-    let first = host.canvas_session(instance, &binding).await.unwrap();
-    let second = host.canvas_session(instance, &binding).await.unwrap();
+    let first = host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .unwrap();
+    let second = host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .unwrap();
     assert_eq!(first.started_at, second.started_at);
+    assert_eq!(first.timeline.now, binding.start + TimeDelta::seconds(44));
+    assert_eq!(first.timeline.content_finish, binding.finish);
     assert!(Arc::ptr_eq(&first.transfers, &second.transfers));
     assert!(first.graphics.is_empty());
-    assert!(host.canvas_session(Uuid::new_v4(), &binding).await.is_err());
+    assert!(host
+        .canvas_session(Uuid::new_v4(), &binding, &canvas_timing())
+        .await
+        .is_err());
     let mut wrong_channel = binding.clone();
     wrong_channel.channel += 1;
-    assert!(host.canvas_session(instance, &wrong_channel).await.is_err());
+    assert!(host
+        .canvas_session(instance, &wrong_channel, &canvas_timing())
+        .await
+        .is_err());
     sqlx::query(r#"DELETE FROM "MediaFile" WHERE "Id"=1"#)
         .execute(&host.pool)
         .await
         .unwrap();
     assert!(
-        host.canvas_session(instance, &binding).await.is_err(),
+        host.canvas_session(instance, &binding, &canvas_timing())
+            .await
+            .is_err(),
         "the replacement file cannot satisfy the published binding"
     );
     host.dynamic_contexts.lock().await.remove(&instance);
-    assert!(host.canvas_session(instance, &binding).await.is_err());
+    assert!(host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -104,12 +123,19 @@ async fn canvas_session_reads_mirror_timeline_without_accepting_source_times() {
     shifted.channel = 2;
     shifted.start += TimeDelta::hours(1);
     shifted.finish += TimeDelta::hours(1);
-    let session = host.canvas_session(instance, &shifted).await.unwrap();
+    let session = host
+        .canvas_session(instance, &shifted, &canvas_timing())
+        .await
+        .unwrap();
     assert_eq!(session.media.item.start, shifted.start);
     assert_eq!(session.media.item.finish, shifted.finish);
+    assert_eq!(session.timeline.now, shifted.start + TimeDelta::seconds(44));
     shifted.start -= TimeDelta::hours(1);
     shifted.finish -= TimeDelta::hours(1);
-    assert!(host.canvas_session(instance, &shifted).await.is_err());
+    assert!(host
+        .canvas_session(instance, &shifted, &canvas_timing())
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -158,7 +184,10 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
         session.request.preview = true;
         session.troubleshooting = Some(Arc::new(context));
     }
-    let selected = host.canvas_session(instance, &binding).await.unwrap();
+    let selected = host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .unwrap();
     assert_eq!(selected.media.item.id, 0);
     assert!(selected.graphics.is_empty());
     let other = Uuid::new_v4();
@@ -176,7 +205,9 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
         contexts.insert(other, duplicate);
     }
     assert!(
-        host.canvas_session(other, &binding).await.is_err(),
+        host.canvas_session(other, &binding, &canvas_timing())
+            .await
+            .is_err(),
         "identical preview media does not authorize a different process"
     );
     host.dynamic_contexts
@@ -186,7 +217,9 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
         .unwrap()
         .troubleshooting = None;
     assert!(
-        host.canvas_session(instance, &binding).await.is_err(),
+        host.canvas_session(instance, &binding, &canvas_timing())
+            .await
+            .is_err(),
         "a transient preview must not resolve as an ordinary session item"
     );
     let rows: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem" WHERE "Id"=0"#)
@@ -194,4 +227,66 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
         .await
         .unwrap();
     assert_eq!(rows, 0);
+}
+
+fn canvas_timing() -> super::super::canvas::CanvasRequest {
+    super::super::canvas::CanvasRequest::parse("44000", "44000", "25").unwrap()
+}
+
+#[tokio::test]
+async fn canvas_session_selects_decorations_at_requested_chunk_time() {
+    use ersatzrs_core::repositories::GraphicsRepository as _;
+    use ersatzrs_domain::GraphicsElement;
+
+    let (host, instance, binding, _root) = fixture().await;
+    make_repositories(host.pool.clone())
+        .graphics
+        .upsert_element(&GraphicsElement {
+            id: 901,
+            name: "Chunk decoration".into(),
+            ..GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO "DecoGroup" ("Id", "Name") VALUES (901, 'canvas');
+        INSERT INTO "Deco" (
+            "Id", "DecoGroupId", "Name", "BreakContentMode", "DeadAirFallbackCollectionType",
+            "DeadAirFallbackMode", "DefaultFillerCollectionType", "DefaultFillerMode",
+            "DefaultFillerTrimToFit", "GraphicsElementsMode", "UseGraphicsElementsDuringFiller",
+            "UseWatermarkDuringFiller", "WatermarkMode"
+        ) VALUES (901, 901, 'canvas', 0, 0, 0, 0, 0, 0, 2, 1, 0, 0);
+        INSERT INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (901, 901);
+        INSERT INTO "TemplateGroup" ("Id", "Name") VALUES (901, 'canvas');
+        INSERT INTO "Template" ("Id", "TemplateGroupId", "Name", "DateUpdated")
+            VALUES (901, 901, 'canvas', '2026-09-22 00:00:00');
+        INSERT INTO "DecoTemplateGroup" ("Id", "Name") VALUES (901, 'canvas');
+        INSERT INTO "DecoTemplate" ("Id", "DecoTemplateGroupId", "Name", "DateUpdated")
+            VALUES (901, 901, 'canvas', '2026-09-22 00:00:00');
+        INSERT INTO "DecoTemplateItem" ("Id", "DecoTemplateId", "DecoId", "StartTime", "EndTime")
+            VALUES (901, 901, 901, '12:00:30', '12:01:00');
+        INSERT INTO "PlayoutTemplate" (
+            "Id", "PlayoutId", "TemplateId", "DateUpdated", "DecoTemplateId", "Index",
+            "LimitToDateRange", "StartMonth", "StartDay", "EndMonth", "EndDay"
+        ) VALUES (901, 1, 901, '2026-09-22 00:00:00', 901, 0, 0, 1, 1, 12, 31);
+        "#,
+    )
+    .execute(&host.pool)
+    .await
+    .unwrap();
+    let initial = CanvasRequest::parse("0", "44000", "25").unwrap();
+    assert!(host
+        .canvas_session(instance, &binding, &initial)
+        .await
+        .unwrap()
+        .graphics
+        .is_empty());
+    let later = host
+        .canvas_session(instance, &binding, &canvas_timing())
+        .await
+        .unwrap();
+    assert_eq!(later.graphics.len(), 1);
+    assert_eq!(later.graphics[0].element.id, 901);
+    assert_eq!(later.timeline.duration, std::time::Duration::from_secs(16));
 }
