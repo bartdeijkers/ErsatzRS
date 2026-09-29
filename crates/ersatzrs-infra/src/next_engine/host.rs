@@ -31,7 +31,7 @@ use tokio::{sync::Mutex, time::Instant};
 /// Keeping publishers alive prevents an old blocking publication from racing a
 /// replacement session after cancellation.
 pub struct NextHost {
-    pub media: super::media::MediaRelay,
+    pub media: Arc<super::media::MediaRelay>,
     pub(super) pool: DbPool,
     pub(super) locker: EntityLocker,
     root: PathBuf,
@@ -96,7 +96,7 @@ impl NextHost {
     #[must_use]
     pub fn new(pool: DbPool, locker: EntityLocker, root: PathBuf) -> Self {
         Self {
-            media: super::media::MediaRelay::new(),
+            media: Arc::new(super::media::MediaRelay::new()),
             pool,
             locker,
             burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),

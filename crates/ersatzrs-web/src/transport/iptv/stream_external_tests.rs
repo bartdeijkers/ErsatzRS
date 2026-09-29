@@ -7,6 +7,9 @@ use super::*;
 use chrono::Timelike as _;
 use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_core::repositories::FfmpegProfileRepository as _;
+use ersatzrs_domain::StreamingMode;
+use ersatzrs_ffmpeg::OutputFormat;
+use ersatzrs_infra::db::DbPool;
 use sqlx::Executor as _;
 
 #[path = "stream_external_http_tests.rs"]

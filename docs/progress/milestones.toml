@@ -11557,8 +11557,39 @@ media/version/playout-item counts stay zero. This extends the earlier isolated
 handler evidence to real HTTP; it does not establish TSDuck or native Windows
 acceptance. Strict web all-target Clippy passes for the HTTP fixture.
 
-HLS worker item loading and Next schedule::read_locked still require transient
-media integration; owning streaming debt
+Native HLS now loads transient occurrences through the shared resolver, shares
+the host private media relay, and uses fresh video/audio metadata, transient YAML
+and audio-script selection, owned native subtitles, inherited decorations and
+transient graphics variables. Native subtitle helpers moved into the shared
+infrastructure layer without changing their argv contract. The subtitle owner
+outlives encoder supervision. Programme transition identity includes the start
+time because transient item IDs are placeholders.
+
+The extended Linux v2.0.3 HTTP fixture passes (nextest
+dc749141-7a52-4094-a7e7-25807296abb3): private/public MPEG-TS, XMLTV, HLS master and
+media playlists, more than one eight-second external programme in the HLS capture,
+full audio/video decode, visible subtitles and zero persisted media/version/item
+rows. The earlier one-programme fixture could not satisfy the existing
+three-segment startup contract. A subsequent discontinuity assertion was corrected
+after source inspection: MPEG-TS HLS deliberately strips discontinuities while
+normalizing timestamps and counters. The test now requires the existing continuous
+playlist contract and a multi-programme decoded capture. Four native regressions
+also passed in nextest f79d4c87-b958-4e6e-acfd-bf6c926f0d11 (whose old HLS fixture
+failure is superseded above): bitmap argv, invalid/exhausted schedules, Plex
+prerequisites and local native subtitle playback.
+
+Review corrected admission classification to inspect only the external schedule;
+provider metadata, probes and subtitle preparation start after capacity admission.
+The final combined run 5ea77904-42e4-451e-9d74-a2b973e3d6ba passes the remote
+native/HLS fixture again and a regression whose database contains only Channel
+and Playout tables, proving classification needs no provider/media tables.
+Twenty-three existing HLS loader, command/snapshot and continuity regressions
+pass (nextest e95c349e-481e-45e4-96d9-c5207287a83d), including delayed mirrors,
+prepared publication, selected audio/subtitles, graphics and normalized appends.
+Strict infrastructure/web all-target Clippy passes without new exemptions.
+
+Next schedule::read_locked still requires transient media integration. HLS fMP4,
+remaining platform/runtime scenarios and TSDuck acceptance remain unproven; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable
 kind20 playback probe reached healthy startup on the row143 matched host with
 verified v2.0.3, but its segmenter request timed out after 15 seconds without a

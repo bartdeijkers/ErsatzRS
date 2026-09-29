@@ -1,13 +1,10 @@
 //! Native external JSON bindings. Ephemeral IDs never reach media-row queries.
 
 use super::{
-    encode_sql_datetime, load_active_media_path, subtitle_input_for_stream, ActivePlayoutItem,
-    AppState, Arc, DateTime, DbPool, Duration, InputFile, OutputFormat, PlaybackSubtitle,
-    RepositoryError, StreamingMode, Utc,
+    encode_sql_datetime, load_active_media_path, ActivePlayoutItem, AppState, Arc, DateTime,
+    Duration, RepositoryError, Utc,
 };
-use ersatzrs_infra::external_json::{playback as external, subtitles::PreparedSubtitle};
-use ersatzrs_infra::playback::transient::TrackSelectionPolicy;
-use ersatzrs_infra::playback::SubtitleSelectionEngine;
+use ersatzrs_infra::external_json::playback as external;
 
 fn failure(error: impl std::fmt::Display) -> RepositoryError {
     RepositoryError::Unavailable {
@@ -102,106 +99,9 @@ pub(super) async fn load(
     }))
 }
 
-pub(super) async fn policy(
-    pool: &DbPool,
-    mode: StreamingMode,
-    media: &external::ResolvedExternalMedia,
-) -> ersatzrs_core::repositories::Result<TrackSelectionPolicy> {
-    Ok(TrackSelectionPolicy {
-        mode,
-        engine: SubtitleSelectionEngine::Native,
-        media_server: matches!(media.source, external::ExternalMediaSource::Plex { .. }),
-        prepare_embedded_text: ersatzrs_infra::ffmpeg_config::use_embedded_subtitles(pool).await?
-            && ersatzrs_infra::ffmpeg_config::extract_embedded_subtitles(pool).await?,
-    })
-}
-
-pub(super) async fn prepare_subtitle(
-    pool: &DbPool,
-    media: &external::ResolvedExternalMedia,
-    path: &str,
-    selected: PlaybackSubtitle,
-    mode: StreamingMode,
-    deadline: tokio::time::Instant,
-) -> Result<
-    (PlaybackSubtitle, Option<PreparedSubtitle>),
-    ersatzrs_infra::external_json::subtitles::PreparationError,
-> {
-    use ersatzrs_infra::{metadata::subtitle_kind, next_engine::protocol::Source};
-    let artifact = if selected.subtitle_kind == subtitle_kind::SIDECAR {
-        let external::ExternalMediaSource::Plex {
-            media_source_id, ..
-        } = &media.source
-        else {
-            return Ok((selected, None));
-        };
-        PreparedSubtitle::fetch_plex(pool, *media_source_id, selected, deadline).await?
-    } else if !selected.is_image() && mode != StreamingMode::HttpLiveStreamingDirect {
-        let source = match &media.source {
-            external::ExternalMediaSource::Local(_) => Source::Local {
-                path: path.into(),
-                probe_hint: None,
-                in_point_ms: None,
-                out_point_ms: None,
-            },
-            external::ExternalMediaSource::Plex { .. } => Source::Http {
-                uri: path.into(),
-                probe_hint: None,
-                is_live: Some(false),
-                headers: Vec::new(),
-                user_agent: None,
-                keep_alive: None,
-                reconnect: Some(true),
-                reconnect_delay_max: Some(2),
-                timeout_us: Some(15_000_000),
-                in_point_ms: None,
-                out_point_ms: None,
-            },
-        };
-        PreparedSubtitle::extract(
-            source,
-            selected,
-            ersatzrs_ffmpeg::ffmpeg_path().into(),
-            deadline,
-        )
-        .await?
-    } else {
-        return Ok((selected, None));
-    };
-    Ok((artifact.subtitle().clone(), Some(artifact)))
-}
-
-pub(super) fn decoration_item(
-    media: &external::ResolvedExternalMedia,
-) -> ersatzrs_domain::PlayoutItem {
-    ersatzrs_domain::PlayoutItem {
-        playout_id: media.occurrence.playout_id,
-        ..Default::default()
-    }
-}
-
-pub(super) fn subtitle_input(
-    subtitle: &PlaybackSubtitle,
-    media_path: &str,
-    format: OutputFormat,
-    mode: StreamingMode,
-) -> Option<InputFile> {
-    if mode != StreamingMode::HttpLiveStreamingDirect
-        && subtitle.is_image()
-        && subtitle.subtitle_kind == ersatzrs_infra::metadata::subtitle_kind::SIDECAR
-    {
-        let path = subtitle.path.as_ref()?;
-        let mut input =
-            InputFile::image_subtitle(path.clone(), ersatzrs_ffmpeg::SubtitleMethod::Burn)
-                .with_stream_index(0);
-        if let Some(codec) = &subtitle.codec {
-            input = input.with_subtitle_codec(codec);
-        }
-        Some(input)
-    } else {
-        subtitle_input_for_stream(subtitle, media_path, format, mode)
-    }
-}
+pub(super) use ersatzrs_infra::external_json::native::{
+    decoration_item, policy, prepare_subtitle, subtitle_input,
+};
 
 #[cfg(test)]
 #[path = "stream_external_tests.rs"]

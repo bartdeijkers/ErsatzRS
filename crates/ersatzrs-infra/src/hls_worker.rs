@@ -1,3 +1,6 @@
+#[path = "hls_worker_external.rs"]
+mod external;
+
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -457,6 +460,7 @@ pub struct HlsSessionWorker {
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    media_relay: std::sync::OnceLock<Arc<crate::next_engine::media::MediaRelay>>,
     startup: std::sync::Mutex<HlsStartupReadiness>,
     startup_minimum_segments: std::sync::atomic::AtomicUsize,
     startup_changed: Notify,
@@ -515,6 +519,7 @@ impl HlsSessionWorker {
             output_format,
             path_replacements,
             ffmpeg_runtime,
+            media_relay: std::sync::OnceLock::new(),
             startup: std::sync::Mutex::new(HlsStartupReadiness::Legacy),
             startup_minimum_segments: std::sync::atomic::AtomicUsize::new(3),
             startup_changed: Notify::new(),
@@ -668,7 +673,7 @@ impl HlsSessionWorker {
         self.touch();
 
         let mut is_first = true;
-        let mut last_playout_item_id = None::<i64>;
+        let mut last_playout_item_id = None::<(i64, DateTime<Utc>)>;
         let mut transcoded_until = Utc::now();
         self.report_transcoded_until(transcoded_until);
         let mut next_mpegts_output_ts_offset = None::<Duration>;
@@ -783,7 +788,7 @@ impl HlsSessionWorker {
                 )
             {
                 match self
-                    .startup_read(load_active_hls_item(
+                    .startup_read(external::retained(
                         &pool,
                         self.channel_id,
                         &self.path_replacements,
@@ -791,14 +796,8 @@ impl HlsSessionWorker {
                     ))
                     .await
                 {
-                    Ok(Some(active)) => {
+                    Ok(Some(retained)) => {
                         startup_classified = true;
-                        let retained = active.remote_stream.as_ref().is_some_and(|stream| {
-                            matches!(
-                                stream.source,
-                                crate::remote_stream::RemoteStreamSource::RetainedIntervals(_)
-                            )
-                        });
                         if !retained {
                             self.set_startup_readiness(HlsStartupReadiness::Legacy);
                         }
@@ -915,7 +914,7 @@ impl HlsSessionWorker {
                 // Frozen interval startup includes admission wait, but never
                 // starts a resolver or capacity-slate encoder without capacity.
                 let retained_wait = self
-                    .startup_read(load_active_hls_item(
+                    .startup_read(external::retained(
                         &pool,
                         self.channel_id,
                         &self.path_replacements,
@@ -924,14 +923,7 @@ impl HlsSessionWorker {
                     .await
                     .ok()
                     .flatten()
-                    .is_some_and(|active| {
-                        active.remote_stream.is_some_and(|stream| {
-                            matches!(
-                                stream.source,
-                                crate::remote_stream::RemoteStreamSource::RetainedIntervals(_)
-                            )
-                        })
-                    });
+                    .unwrap_or(false);
                 if let Some(reclaim) = request_active_transcode_reclaim(
                     &self.channel_number,
                     HLS_ACTIVE_WATCH_WINDOW,
@@ -1122,12 +1114,13 @@ impl HlsSessionWorker {
             }
 
             let active = match self
-                .startup_read(load_active_hls_item(
+                .startup_read(Box::pin(external::load(
+                    &self,
                     &pool,
                     self.channel_id,
                     &self.path_replacements,
                     decision.request_time,
-                ))
+                )))
                 .await
             {
                 Ok(Some(active)) => active,
@@ -1175,11 +1168,18 @@ impl HlsSessionWorker {
             }
 
             let source_stream = match self
-                .startup_read(load_source_video_stream_by_index(
-                    &pool,
-                    active.media_version_id,
-                    active.video_stream_index,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::source_video_stream_from_probe(&media.probe)
+                    } else {
+                        load_source_video_stream_by_index(
+                            &pool,
+                            active.media_version_id,
+                            active.video_stream_index,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(stream) => stream,
@@ -1196,7 +1196,13 @@ impl HlsSessionWorker {
                 }
             };
             let source_audio_streams = match self
-                .startup_read(load_source_audio_streams(&pool, active.media_version_id))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::source_audio_streams_from_probe(&media.probe)
+                    } else {
+                        load_source_audio_streams(&pool, active.media_version_id).await
+                    }
+                })
                 .await
             {
                 Ok(streams) => streams,
@@ -1403,6 +1409,16 @@ impl HlsSessionWorker {
             }
             let source_stream = if interval_playback.is_some() {
                 source_stream
+            } else if active.external.is_some() {
+                tokio::select! {
+                    biased;
+                    () = self.cancel.notified() => break,
+                    stream = crate::playback::enrich_transient_source_video_stream_for_playback(
+                        &pool, source_stream, &active.media_path, active.content_duration.unwrap_or_default(),
+                        playback_profile.profile.deinterlace_video == Some(true),
+                        playback_profile.profile.hardware_acceleration, external::deadline(&self),
+                    ) => stream,
+                }
             } else {
                 tokio::select! {
                     biased;
@@ -1467,14 +1483,7 @@ impl HlsSessionWorker {
                 None
             } else {
                 match self
-                    .startup_read(select_channel_custom_streams(
-                        &pool,
-                        active.media_version_id,
-                        active.media_item_id,
-                        &channel_for_streams,
-                        active.playout_start,
-                        StreamingMode::HttpLiveStreamingSegmenter,
-                    ))
+                    .startup_read(external::custom(&pool, &active, &channel_for_streams))
                     .await
                 {
                     Ok(selection) => selection,
@@ -1501,23 +1510,37 @@ impl HlsSessionWorker {
                     .and_then(|selection| selection.audio_stream_index)
                     .is_none()
             {
-                crate::audio_script::select(
-                    &pool,
-                    &channel_for_streams,
-                    active.media_item_id,
-                    active.media_version_id,
-                    crate::audio_script::AudioScriptPreferences {
-                        language: preferred_audio_language.as_deref(),
-                        title: preferred_audio_title,
-                        streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
-                    },
-                    if interval_playback.is_some() {
-                        &previous_audio_streams
-                    } else {
-                        &source_audio_streams
-                    },
-                )
-                .await
+                if let Some(media) = &active.external {
+                    crate::audio_script::transient::select(
+                        &channel_for_streams,
+                        media.audio_metadata(),
+                        crate::audio_script::AudioScriptPreferences {
+                            language: preferred_audio_language.as_deref(),
+                            title: preferred_audio_title,
+                            streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                        },
+                        &media.tracks(),
+                    )
+                    .await
+                } else {
+                    crate::audio_script::select(
+                        &pool,
+                        &channel_for_streams,
+                        active.media_item_id,
+                        active.media_version_id,
+                        crate::audio_script::AudioScriptPreferences {
+                            language: preferred_audio_language.as_deref(),
+                            title: preferred_audio_title,
+                            streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                        },
+                        if interval_playback.is_some() {
+                            &previous_audio_streams
+                        } else {
+                            &source_audio_streams
+                        },
+                    )
+                    .await
+                }
             } else {
                 None
             };
@@ -1612,12 +1635,11 @@ impl HlsSessionWorker {
                 selection.subtitle
             } else {
                 match self
-                    .startup_read(select_channel_playback_subtitle(
+                    .startup_read(external::subtitle(
                         &pool,
-                        active.media_item_id,
+                        &active,
                         &preferred_subtitle_languages,
                         subtitle_mode,
-                        StreamingMode::HttpLiveStreamingSegmenter,
                         &channel_for_streams,
                         &playback_profile.resolution,
                         start_seconds,
@@ -1641,6 +1663,30 @@ impl HlsSessionWorker {
                     }
                 }
             };
+            // Keep the owner until the encoder is supervised to completion.
+            let (subtitle, _external_subtitle_owner) =
+                if let (Some(media), Some(selected)) = (&active.external, subtitle.as_ref()) {
+                    if let Ok((selected, owner)) = crate::external_json::native::prepare_subtitle(
+                        &pool,
+                        media,
+                        &active.media_path,
+                        selected.clone(),
+                        StreamingMode::HttpLiveStreamingSegmenter,
+                        external::deadline(&self),
+                    )
+                    .await
+                    {
+                        (Some(selected), owner)
+                    } else {
+                        tracing::warn!(
+                            channel_id = self.channel_id,
+                            "external HLS subtitle preparation failed"
+                        );
+                        break;
+                    }
+                } else {
+                    (subtitle, None)
+                };
             let mut retained_subtitle_input = None;
             let retained_subtitle_verified =
                 if let (
@@ -1678,7 +1724,12 @@ impl HlsSessionWorker {
                 break;
             }
             let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-                subtitle_input_for_stream(
+                let input = if active.external.is_some() {
+                    crate::external_json::native::subtitle_input
+                } else {
+                    subtitle_input_for_stream
+                };
+                input(
                     subtitle,
                     &active.media_path,
                     self.output_format,
@@ -1718,13 +1769,26 @@ impl HlsSessionWorker {
                 ..Channel::default()
             };
             let watermark_inputs = match self
-                .startup_read(select_playback_watermarks(
-                    &pool,
-                    &watermark_channel,
-                    active.playout_item_id,
-                    active.disable_watermarks,
-                    now,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::select_fallback_watermarks(
+                            &pool,
+                            &watermark_channel,
+                            &crate::external_json::native::decoration_item(media),
+                            now,
+                        )
+                        .await
+                    } else {
+                        select_playback_watermarks(
+                            &pool,
+                            &watermark_channel,
+                            active.playout_item_id,
+                            active.disable_watermarks,
+                            now,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(watermarks) => {
@@ -1773,12 +1837,24 @@ impl HlsSessionWorker {
             let mut graphics_cleanup_dir = None;
             let mut dynamic_text_controllers = Vec::new();
             let graphics_overlays = match self
-                .startup_read(select_playback_graphics(
-                    &pool,
-                    &watermark_channel,
-                    active.playout_item_id,
-                    now,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::select_fallback_graphics(
+                            &pool,
+                            &crate::external_json::native::decoration_item(media),
+                            now,
+                        )
+                        .await
+                    } else {
+                        select_playback_graphics(
+                            &pool,
+                            &watermark_channel,
+                            active.playout_item_id,
+                            now,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(graphics) => {
@@ -1799,8 +1875,13 @@ impl HlsSessionWorker {
                             &PlaybackGraphicsRenderContext {
                                 channel_id: self.channel_id,
                                 channel_number: self.channel_number.clone(),
-                                media: crate::graphics_template::GraphicsMedia::Persisted(
-                                    active.media_item_id,
+                                media: active.external.as_ref().map_or_else(
+                                    || {
+                                        crate::graphics_template::GraphicsMedia::Persisted(
+                                            active.media_item_id,
+                                        )
+                                    },
+                                    |media| media.graphics_media(),
                                 ),
                                 media_path: active.media_path.clone(),
                                 channel_start_time: active.playout_start,
@@ -1856,7 +1937,7 @@ impl HlsSessionWorker {
                 .next_output_ts_offset(is_first, next_mpegts_output_ts_offset)
                 .await;
             let append_requires_discontinuity =
-                last_playout_item_id != Some(active.playout_item_id);
+                last_playout_item_id != Some((active.playout_item_id, active.playout_start));
             let discontinuity = hls_output_discontinuity(
                 self.output_format,
                 is_first,
@@ -2075,7 +2156,7 @@ impl HlsSessionWorker {
                             next_mpegts_output_ts_offset,
                             duration,
                         );
-                        last_playout_item_id = Some(active.playout_item_id);
+                        last_playout_item_id = Some((active.playout_item_id, active.playout_start));
                     }
                 }
                 HlsProcessOutcome::Failed(error_message) => {
@@ -5632,6 +5713,7 @@ async fn load_active_hls_item_with_artifact_root(
             "ChannelMusicVideoCreditsTemplate",
         )?,
         remote_stream,
+        external: None,
     }))
 }
 
@@ -5690,7 +5772,7 @@ fn decode_hls_bool(row: &crate::db::DbRow, column: &'static str) -> RepositoryRe
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ActiveHlsItem {
     media_path: String,
     playout_item_id: i64,
@@ -5721,6 +5803,7 @@ struct ActiveHlsItem {
     channel_music_video_credits_mode: ChannelMusicVideoCreditsMode,
     channel_music_video_credits_template: Option<String>,
     remote_stream: Option<ResolvedRemoteStream>,
+    external: Option<Arc<crate::external_json::playback::ResolvedExternalMedia>>,
 }
 
 impl ActiveHlsItem {
@@ -10718,6 +10801,7 @@ mod tests {
             channel_music_video_credits_mode: ChannelMusicVideoCreditsMode::None,
             channel_music_video_credits_template: None,
             remote_stream: None,
+            external: None,
         }
     }
 

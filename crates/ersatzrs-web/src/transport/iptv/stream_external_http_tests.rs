@@ -128,6 +128,7 @@ async fn external_native_remote_http_preserves_subtitles_without_library_rows() 
         "both subtitle preparation and playback must read through the relay"
     );
     assert_public_transport(&state, &public, root.path(), &client).await;
+    assert_hls_transport(&state, &public, root.path(), &client).await;
     let counts: (i64, i64, i64) = sqlx::query_as(
         r#"SELECT
         (SELECT COUNT(*) FROM "MediaItem"),
@@ -194,5 +195,74 @@ async fn assert_public_transport(
     assert!(
         assert_capture(&capture).await > 4,
         "public stream lost subtitles"
+    );
+}
+
+async fn assert_hls_transport(
+    state: &AppState,
+    public: &Server,
+    root: &std::path::Path,
+    client: &reqwest::Client,
+) {
+    schedule(
+        &state.pool,
+        root,
+        Utc::now(),
+        serde_json::Value::Array(
+            (0..3)
+                .map(|_| {
+                    serde_json::json!({
+                        "title":"Remote fixture", "serverKey":"Fixture", "duration":8000,
+                        "plexFile":"/library/parts/50/file.mkv", "ratingKey":"42"
+                    })
+                })
+                .collect(),
+        ),
+    )
+    .await;
+    let url = public.url("/iptv/channel/1.m3u8?mode=segmenter");
+    let playlist = client.get(&url).send().await.unwrap();
+    assert_eq!(playlist.status(), StatusCode::OK);
+    let master = playlist.text().await.unwrap();
+    assert!(master.contains("#EXT-X-STREAM-INF:"));
+    let variant = master
+        .lines()
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .unwrap();
+    let base = reqwest::Url::parse(&url).unwrap().join(variant).unwrap();
+    let playlist = client.get(base.clone()).send().await.unwrap();
+    assert_eq!(playlist.status(), StatusCode::OK);
+    let text = playlist.text().await.unwrap();
+    assert!(
+        text.contains("#EXTINF:"),
+        "missing HLS media segments: {text}"
+    );
+    // MPEG-TS HLS normalizes timestamps/counters and intentionally suppresses
+    // discontinuity tags. More than eight seconds requires another occurrence.
+    let seconds: f64 = text
+        .lines()
+        .filter_map(|line| line.strip_prefix("#EXTINF:"))
+        .map(|value| value.trim_end_matches(',').parse::<f64>().unwrap())
+        .sum();
+    assert!(
+        seconds > 8.0,
+        "HLS did not cross an external programme boundary"
+    );
+    assert!(!text.contains("#EXT-X-DISCONTINUITY\n"));
+    let mut bytes = Vec::new();
+    for line in text
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+    {
+        let segment = client.get(base.join(line).unwrap()).send().await.unwrap();
+        assert_eq!(segment.status(), StatusCode::OK);
+        bytes.extend_from_slice(&segment.bytes().await.unwrap());
+    }
+    state.hls_sessions.stop_channel("1").await;
+    let capture = root.join("hls.ts");
+    std::fs::write(&capture, bytes).unwrap();
+    assert!(
+        assert_capture(&capture).await > 4,
+        "HLS lost selected subtitles"
     );
 }

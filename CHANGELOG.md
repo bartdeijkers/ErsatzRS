@@ -350,8 +350,10 @@ release section when tagging a release.
   responses for missing Plex prerequisites, and retain subtitle ownership through
   stream cleanup. Preserve optional interlace sampling and mixed H.264 profile
   detection for transient native inputs without creating library records.
-  Native remote HTTP playback and XMLTV are verified on Linux; HLS/Next
-  integration and remaining transport/platform acceptance remain pending.
+  Native remote HTTP playback, XMLTV and MPEG-TS HLS are verified on Linux.
+  HLS retains transient subtitle files through encoder completion and programme
+  identity across transitions. Next integration and remaining transport/platform
+  acceptance remain pending.
 
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next

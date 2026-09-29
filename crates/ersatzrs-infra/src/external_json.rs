@@ -11,6 +11,7 @@ const MAX_SCHEDULE_BYTES: u64 = 32 * 1024 * 1024;
 const READ_TIMEOUT: StdDuration = StdDuration::from_secs(5);
 
 pub(crate) mod guide;
+pub mod native;
 pub mod playback;
 pub mod subtitles;
 

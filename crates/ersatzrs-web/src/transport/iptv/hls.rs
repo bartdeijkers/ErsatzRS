@@ -170,6 +170,12 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     else {
         return;
     };
+    if worker
+        .configure_media_relay(Arc::clone(&state.next_engine.media))
+        .is_err()
+    {
+        return;
+    }
     worker.initialize_startup(deadline, minimum_segments);
     if state.hls_sessions.try_insert(worker.clone()).await {
         worker.start(
@@ -546,6 +552,12 @@ async fn ensure_preview_worker_running(
     else {
         return;
     };
+    if worker
+        .configure_media_relay(Arc::clone(&state.next_engine.media))
+        .is_err()
+    {
+        return;
+    }
     worker.initialize_startup(deadline, minimum_segments);
     if state.preview_hls_sessions.try_insert(worker.clone()).await {
         worker.start(
