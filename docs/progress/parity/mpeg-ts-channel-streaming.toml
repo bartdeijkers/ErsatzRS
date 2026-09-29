@@ -79,3 +79,10 @@ description = 'External JSON native playback now consumes transient local/Plex m
 discovered = '2026-09-29'
 resolved = true
 evidence = 'UCU-09 owns source review, resolver/relay and subtitle ownership regressions, native HTTP and MPEG-TS/fMP4 HLS decoded multi-programme captures, XMLTV, zero library inserts, strict affected lint, smoke and 87 passing TSDuck checks. Software probing does not claim hardware acceptance; the approved UCU-09 hardware debt remains explicit.'
+
+[[debt]]
+id = 'ucu09-row148-next-subtitle-sources'
+description = 'Row148 requires safe provider sidecar projection including Plex Other Videos, unavailable-file handling, effective image-subtitle sources, music-video metadata subtitles and correct generated-credit timing. The demonstrated Plex preparation bypass is corrected; remaining converter branches still require acceptance.'
+discovered = '2026-09-29'
+resolved = false
+evidence = 'Upstream c673082e source audit covers converter, subtitle resolution, native/troubleshooting provider eligibility and music-video loading. Shared Plex preparation now uses current owner credentials and clean stream-path bindings. Six focused tests and decoded native/official Next burn and convert proof pass, including Plex Other Videos; canonical evidence is in UCU-09. Remaining projection/eligibility changes and converter acceptance remain open; no row148 verdict or pin advance.'

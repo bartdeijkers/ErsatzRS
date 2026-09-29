@@ -11,14 +11,23 @@ async fn real_next_provider_external_text_burns_and_converts_after_seek() {
     let root = tempfile::tempdir().unwrap();
     let clip = bilingual_clip(&ffmpeg, root.path()).await;
     let bytes = std::sync::Arc::new(tokio::fs::read(&clip).await.unwrap());
-    for kind in [RemoteMediaSourceKind::Jellyfin, RemoteMediaSourceKind::Emby] {
+    for kind in RemoteMediaSourceKind::ALL {
         for convert in [false, true] {
             let server = fixture_media_server().await;
             let (pool, locker) = provider_text_pool(&clip, &text_profile(), kind).await;
+            if kind == RemoteMediaSourceKind::Plex {
+                use_plex_other_video(&pool).await;
+            }
             sqlx::query(
                 r#"UPDATE "Subtitle" SET "SubtitleKind"=1,"Path"=? WHERE "Language"='nld'"#,
             )
-            .bind((kind == RemoteMediaSourceKind::Emby).then_some("source-id"))
+            .bind(match kind {
+                RemoteMediaSourceKind::Plex => {
+                    Some("https://old.example.test/library/streams/123?X-Plex-Token=synthetic-old")
+                }
+                RemoteMediaSourceKind::Jellyfin => None,
+                RemoteMediaSourceKind::Emby => Some("source-id"),
+            })
             .execute(&pool)
             .await
             .unwrap();
@@ -29,23 +38,11 @@ async fn real_next_provider_external_text_burns_and_converts_after_seek() {
                 .execute(&pool)
                 .await
                 .unwrap();
-            let (header, value, subtitle_path) = if kind == RemoteMediaSourceKind::Jellyfin {
-                (
-                    "Authorization",
-                    "MediaBrowser Token=\"<api-key>\"",
-                    "/Videos/fixture-item/fixture-item/Subtitles/3/3/Stream.srt",
-                )
-            } else {
-                (
-                    "X-Emby-Token",
-                    "<api-key>",
-                    "/Videos/fixture-item/source-id/Subtitles/3/Stream.srt",
-                )
-            };
+            let (header, value, media_path, subtitle_path) = provider_endpoints(kind);
             let media = server
                 .mock_async(|when, then| {
                     when.method(httpmock::Method::GET)
-                        .path("/Videos/fixture-item/stream")
+                        .path(media_path)
                         .header(header, value);
                     let bytes = bytes.clone();
                     then.respond_with(move |request| fixture_range_response(request, &bytes));
@@ -96,6 +93,44 @@ async fn real_next_provider_external_text_burns_and_converts_after_seek() {
             assert!(media.calls_async().await > 0);
             callback.stop().await;
         }
+    }
+}
+
+async fn use_plex_other_video(pool: &crate::db::DbPool) {
+    // Exercise the newly supported owner through native rendering and Next.
+    sqlx::raw_sql(r#"
+        INSERT INTO "OtherVideo" ("Id") VALUES (10);
+        INSERT INTO "PlexOtherVideo" ("Id") VALUES (10);
+        INSERT INTO "OtherVideoMetadata" ("Id","OtherVideoId","MetadataKind","DateAdded","DateUpdated")
+            VALUES (30,10,0,'2026-09-29','2026-09-29');
+        UPDATE "Subtitle" SET "MovieMetadataId"=NULL,"OtherVideoMetadataId"=30;
+        UPDATE "MediaVersion" SET "MovieId"=NULL,"OtherVideoId"=10 WHERE "MovieId"=10;
+        DELETE FROM "Movie" WHERE "Id"=10;
+    "#).execute(pool).await.unwrap();
+}
+
+fn provider_endpoints(
+    kind: RemoteMediaSourceKind,
+) -> (&'static str, &'static str, &'static str, &'static str) {
+    match kind {
+        RemoteMediaSourceKind::Plex => (
+            "X-Plex-Token",
+            "<token>",
+            "/library/parts/11/file.mkv",
+            "/library/streams/123",
+        ),
+        RemoteMediaSourceKind::Jellyfin => (
+            "Authorization",
+            "MediaBrowser Token=\"<api-key>\"",
+            "/Videos/fixture-item/stream",
+            "/Videos/fixture-item/fixture-item/Subtitles/3/3/Stream.srt",
+        ),
+        RemoteMediaSourceKind::Emby => (
+            "X-Emby-Token",
+            "<api-key>",
+            "/Videos/fixture-item/stream",
+            "/Videos/fixture-item/source-id/Subtitles/3/Stream.srt",
+        ),
     }
 }
 

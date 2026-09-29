@@ -11416,6 +11416,47 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row148 audit is in progress. Upstream c673082e changes Next subtitle source
+conversion, shared MusicVideo metadata loading, Plex Other Video subtitle owner
+resolution and native/troubleshooting provider eligibility. It checks local and
+extracted file availability, proxies persisted sidecars, retains unpersisted
+remote sources, binds image subtitles to the effective video input even without
+audio, and avoids double-seeking generated credits. Rust already carries the
+image input and media seek explicitly and loads MusicVideo subtitle metadata;
+generated credits use their own bounded source. Full branch acceptance remains.
+The demonstrated Plex gap is being corrected in shared provider preparation:
+movie/episode/OtherVideo ownership resolves a clean stream path against the
+current server and credential, then uses bounded header-authenticated fetches
+and the existing artifact/deferred callback paths. Stored metadata is unchanged.
+Six focused provider tests pass (5342caa5-1078-4ba4-9390-19dbc5fa3cc5):
+movie/episode/OtherVideo ownership, legacy URL normalization, credential rotation,
+atomic artifact content, unchanged persisted metadata, invalid/ambiguous ownership
+and rejection of an unscoped global credential before HTTP when multiple Plex
+servers exist. Native rendering and official Next burn/convert after seek pass
+for Plex movies plus Jellyfin/Emby (99d34d52-3a47-4b43-8813-59199addcb8f), then
+Plex Other Video plus Jellyfin/Emby on final source
+(f025d8be-9158-4400-9b21-1f5068792825). The decoded oracle checks the selected
+Dutch cues, excludes unselected English cues, checks burned pixels/converted
+WebVTT and selected audio. Fixtures use stale token-bearing Plex URLs but the
+mock requires current owner header credentials. Published FFmpeg v2.0.3 and
+Next e7997fa binaries match their previously recorded SHA-256 digests.
+The broader existing HLS regression then exposed preparation-before-video
+ordering: an active Plex endpoint reporting the wrong machine was used before
+video-open discovery could replace it (5e316227-d5f8-44bb-b7e8-6728ef182770).
+Shared subtitle preparation now reuses the existing bounded machine-identity
+resolver before requesting the sidecar; it preserves source-specific credential
+checks and remains inside the overall fetch deadline. The runtime fixture no
+longer activates the correct connection manually. Final serialized acceptance
+passes all eight selected tests (4fd4a9e4-1a85-44e6-9b11-2267c387aa7f), including
+both decoded runtime regressions and all six provider checks. The HLS proof
+recovers from the wrong-machine active connection before subtitle preparation;
+Plex Other Video burn/convert and native rendering also remain green. Strict
+all-target Clippy for infra/ffmpeg/web, formatting, the new-allow policy, progress
+validation and diff checks pass for this partial provider checkpoint.
+Projection availability, Plex Other Video caption eligibility, remaining
+converter branch acceptance and final row review remain. No row148 verdict or
+pin advance; the baseline remains b3f7f3fe.
+
 Row147 is Port: upstream b3f7f3fe adds post-roll, mid-roll and graphics state to
 YAML anchors, including explicit clears and legacy missing-field defaults.
 All three corresponding core regressions fail before the fix

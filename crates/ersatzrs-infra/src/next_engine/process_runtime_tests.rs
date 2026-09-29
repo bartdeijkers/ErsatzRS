@@ -521,15 +521,15 @@ async fn assert_media_server_sessions(
             .await
             .unwrap();
         source::tests::seed_provider(&pool, kind).await;
-        // An inaccessible server path forces HTTP. Plex uses the local sidecar;
-        // Jellyfin/Emby retain provider identities and fetch authenticated text.
+        // An inaccessible server path forces HTTP. All provider sidecars
+        // retain provider identities and fetch authenticated text.
         sqlx::query(r#"UPDATE "MediaFile" SET "Path" = 'server-only/fixture.mkv' WHERE "Id" = 1"#)
             .execute(&pool)
             .await
             .unwrap();
         sqlx::query(r#"UPDATE "Subtitle" SET "Path" = ? WHERE "Id" = 2"#)
             .bind(if kind == RemoteMediaSourceKind::Plex {
-                subtitle.to_str().unwrap()
+                "/library/streams/123"
             } else {
                 "fixture-source"
             })
@@ -607,7 +607,7 @@ async fn fixture_provider_subtitle<'a>(
 ) -> Option<httpmock::Mock<'a>> {
     use ersatzrs_core::repositories::RemoteMediaSourceKind;
     let subtitle_path = match kind {
-        RemoteMediaSourceKind::Plex => None,
+        RemoteMediaSourceKind::Plex => Some("/library/streams/123"),
         RemoteMediaSourceKind::Jellyfin => {
             Some("/Videos/fixture-item/fixture-item/Subtitles/9/9/Stream.srt")
         }

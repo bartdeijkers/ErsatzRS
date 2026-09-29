@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fetch Plex sidecar subtitles, including Other Videos, through their current
+  owning server with header authentication. Prepare bounded local artifacts
+  instead of forwarding persisted token-bearing URLs to playback.
+
 - Preserve YAML post-roll, mid-roll and graphics settings across Continue builds
   and restarts, including graphics variables and explicitly cleared settings.
   Resolve graphics paths in SQL-backed YAML builds, including imported sequences
