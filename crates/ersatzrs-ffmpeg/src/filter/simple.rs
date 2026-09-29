@@ -291,8 +291,28 @@ pub fn subtitle_graphics_lavfi_input(
     size: FrameSize,
     fonts_dir: Option<&str>,
 ) -> String {
+    subtitle_graphics_lavfi_input_at(path, size, fonts_dir, Duration::ZERO)
+}
+
+/// Render subtitle events at a programme offset while returning chunk-local PTS.
+#[must_use]
+pub fn subtitle_graphics_lavfi_input_at(
+    path: &str,
+    size: FrameSize,
+    fonts_dir: Option<&str>,
+    offset: Duration,
+) -> String {
     let mut subtitles = subtitles_filter(path, fonts_dir);
     subtitles.push_str(":alpha=1");
+    let subtitles = if offset.is_zero() {
+        subtitles
+    } else {
+        format!(
+            "settb=AVTB,setpts=PTS+{}/TB,{subtitles},setpts=PTS-{}/TB",
+            seconds(offset),
+            seconds(offset)
+        )
+    };
     format!(
         "color=c=black@0.0:s={}x{},format=rgba,{subtitles}",
         size.width, size.height

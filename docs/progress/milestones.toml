@@ -11490,9 +11490,22 @@ cleanup checks also pass. This is callback/renderer groundwork, not official
 Next playback acceptance: projection still emits the previous media layers.
 Strict FFmpeg/infra/web all-target Clippy and formatting pass. The tested
 FFmpeg/ffprobe binaries still match the accepted v2.0.3 package digests.
-Complete per-kind seek/chunk animation and fade timing, canvas projection,
-matching capability health coverage, HTTP runtime and decoded official Next
-acceptance remain.
+Canvas rendering now evaluates script/drawtext filters and watermark fades on
+programme time while output timestamps begin at zero for each chunk. ASS sources
+resume their event clock; motion layers seek relative to their start, loop at the
+source duration, retain the final frame during Hold, and disappear after their
+active interval. A dedicated canvas rendering entrypoint leaves the native
+programme input clock unchanged. Fifty-two focused checks pass (nextest
+47496c48-8600-49bd-8dac-d28d47e74d2d), including packaged decoded script/ASS
+before/after seek, motion start/loop/hold/disappear and partial watermark fade.
+A shared-motion-file regression first reproduced the wrong later-layer colour;
+explicit canvas input instances now preserve each layer's independent seek.
+The complete non-ignored native pipeline snapshot selection plus the single-open
+audio/video regression pass: 219 tests (22da72e7-93a7-4264-ad97-70ec16e2ba5f).
+Strict FFmpeg/infra/web all-target Clippy and formatting pass for this timing
+checkpoint; no existing native snapshots were changed.
+All-kind integrated HTTP/Next proof (including dynamic text and preview/mirror
+geometry), canvas projection and matching capability health coverage remain.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

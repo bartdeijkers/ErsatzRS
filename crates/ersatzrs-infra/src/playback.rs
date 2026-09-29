@@ -2381,8 +2381,15 @@ pub async fn render_playback_graphics_overlays(
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
 ) -> Result<PlaybackGraphicsArtifacts> {
-    render_playback_graphics_overlays_inner(pool, graphics, context, output_dir.as_ref(), None)
-        .await
+    render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        None,
+        Duration::ZERO,
+    )
+    .await
 }
 
 /// Render overlays within the caller's shared playback startup deadline.
@@ -2411,6 +2418,38 @@ pub async fn render_playback_graphics_overlays_cancellable(
         context,
         output_dir.as_ref(),
         Some(&mut startup),
+        Duration::ZERO,
+    )
+    .await
+}
+
+/// Render source phases for an independent Next canvas chunk. Native programme
+/// pipelines keep their existing zero-offset input clock through the other entrypoints.
+/// Cancellation still waits for probes and controllers before releasing assets.
+///
+/// # Errors
+/// Returns invalid timing, rendering, database, cancellation or deadline errors.
+pub async fn render_playback_canvas_overlays_cancellable(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid canvas offset"))?;
+    let mut startup = GraphicsStartupBudget {
+        deadline,
+        cancellation,
+    };
+    render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        Some(&mut startup),
+        offset,
     )
     .await
 }
@@ -2463,6 +2502,7 @@ async fn render_playback_graphics_overlays_inner(
     context: &PlaybackGraphicsRenderContext,
     output_dir: &Path,
     mut startup: Option<&mut GraphicsStartupBudget>,
+    stream_offset: Duration,
 ) -> Result<PlaybackGraphicsArtifacts> {
     let output_dir = output_dir.to_path_buf();
     let renderer = GraphicsTemplateRenderer::new(&output_dir);
@@ -2510,6 +2550,7 @@ async fn render_playback_graphics_overlays_inner(
                 context,
                 &element,
                 startup.as_deref_mut(),
+                stream_offset,
             )
             .await?;
             let drawtext_config = match &element.config {
@@ -2610,13 +2651,15 @@ async fn graphics_render_context_with_motion_probe(
     context: &PlaybackGraphicsRenderContext,
     element: &GraphicsElement,
     startup: Option<&mut GraphicsStartupBudget>,
+    stream_offset: Duration,
 ) -> Result<GraphicsRenderContext> {
     let render_context =
-        GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size);
+        GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size)
+            .with_stream_offset(stream_offset);
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return Ok(render_context);
     };
-    if config.end_behavior != MotionEndBehavior::Hold {
+    if config.end_behavior != MotionEndBehavior::Hold && stream_offset.is_zero() {
         return Ok(render_context);
     }
     let Some(video_path) = config

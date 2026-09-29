@@ -9,9 +9,9 @@ use ersatzrs_domain::{
 use mlua::{Lua, Table, Value};
 
 use crate::{
-    subtitle_graphics_lavfi_input, DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder,
-    DrawtextFont, DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment,
-    DrawtextYAlignment, FrameSize, GraphicsPipelineOverlay, InputFile, WatermarkOverlay,
+    DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder, DrawtextFont,
+    DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment, DrawtextYAlignment,
+    FrameSize, GraphicsPipelineOverlay, InputFile, WatermarkOverlay,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -210,6 +210,7 @@ pub struct GraphicsRenderContext {
     pub frame_size: FrameSize,
     pub square_pixel_frame_size: FrameSize,
     motion_source_durations: BTreeMap<i64, f64>,
+    stream_offset: std::time::Duration,
 }
 
 impl GraphicsRenderContext {
@@ -219,7 +220,16 @@ impl GraphicsRenderContext {
             frame_size,
             square_pixel_frame_size,
             motion_source_durations: BTreeMap::new(),
+            stream_offset: std::time::Duration::ZERO,
         }
+    }
+
+    /// Offset for an independently rendered canvas chunk. Native programme
+    /// pipelines retain the default zero value and their existing input clock.
+    #[must_use]
+    pub fn with_stream_offset(mut self, offset: std::time::Duration) -> Self {
+        self.stream_offset = offset;
+        self
     }
 
     #[must_use]
@@ -474,6 +484,7 @@ pub fn graphics_motion_overlay(
         Some(graphics_motion_enable_expression(
             config,
             context.motion_source_duration(element.id),
+            context.stream_offset.as_secs_f64(),
         )),
         config.end_behavior == MotionEndBehavior::Disappear,
     ))
@@ -618,10 +629,47 @@ fn render_motion_graphics_element(
         })?;
     let mut input =
         InputFile::graphics_motion(video_path, config.end_behavior == MotionEndBehavior::Loop);
-    if let Some(start) = config.start_seconds.filter(|value| *value > 0.0) {
+    let start = config.start_seconds.unwrap_or_default().max(0.0);
+    let offset = context.stream_offset.as_secs_f64();
+    let mut seek = (offset - start).max(0.0);
+    if let Some(duration) = context
+        .motion_source_duration(element.id)
+        .filter(|duration| *duration > 0.0)
+    {
+        match config.end_behavior {
+            MotionEndBehavior::Loop => seek %= duration,
+            MotionEndBehavior::Disappear if seek >= duration => return Ok(None),
+            MotionEndBehavior::Hold
+                if seek > duration + config.hold_seconds.unwrap_or_default().max(0.0) =>
+            {
+                return Ok(None)
+            }
+            MotionEndBehavior::Disappear | MotionEndBehavior::Hold => {}
+        }
+    }
+    let held_frame = config.end_behavior == MotionEndBehavior::Hold
+        && context
+            .motion_source_duration(element.id)
+            .is_some_and(|duration| seek >= duration && duration > 0.0);
+    if held_frame {
+        let duration = context
+            .motion_source_duration(element.id)
+            .unwrap_or_default();
+        input
+            .input_options
+            .extend(["-ss".into(), trim_float((duration - 1.0).max(0.0))]);
+        // Decode at most the final second, then retain the exact last frame.
         input
             .filter_steps
-            .push(format!("setpts=PTS+{}/TB", trim_float(start)));
+            .push("reverse,trim=end_frame=1,setpts=PTS-STARTPTS".into());
+    } else if seek > 0.0 {
+        input.input_options.extend(["-ss".into(), trim_float(seek)]);
+    }
+    let delay = (start - offset).max(0.0);
+    if delay > 0.0 {
+        input
+            .filter_steps
+            .push(format!("setpts=PTS+{}/TB", trim_float(delay)));
     }
     Ok(Some(RenderedGraphicsElement::NativeImage {
         id: element.id,
@@ -648,10 +696,11 @@ fn render_subtitle_graphics_element(
         })?;
     let output_path = output_dir.join(graphics_ass_file_name(element));
     render_subtitle_template_file(template_path, &output_path, variables)?;
-    let input = InputFile::graphics_subtitle(subtitle_graphics_lavfi_input(
+    let input = InputFile::graphics_subtitle(crate::subtitle_graphics_lavfi_input_at(
         &output_path.to_string_lossy(),
         context.frame_size,
         None,
+        context.stream_offset,
     ));
     Ok(Some(RenderedGraphicsElement::NativeImage {
         id: element.id,
@@ -1363,7 +1412,7 @@ fn f64_from_usize(value: usize) -> f64 {
 fn graphics_enable_expression(element: &GraphicsElement) -> Option<String> {
     match &element.config {
         GraphicsElementConfig::Motion(config) => {
-            Some(graphics_motion_enable_expression(config, None))
+            Some(graphics_motion_enable_expression(config, None, 0.0))
         }
         _ => None,
     }
@@ -1372,20 +1421,26 @@ fn graphics_enable_expression(element: &GraphicsElement) -> Option<String> {
 fn graphics_motion_enable_expression(
     config: &ersatzrs_domain::MotionGraphicsConfig,
     source_duration_seconds: Option<f64>,
+    offset: f64,
 ) -> String {
     let start = config.start_seconds.unwrap_or(0.0).max(0.0);
+    let time = if offset > 0.0 {
+        format!("(t+{})", trim_float(offset))
+    } else {
+        "t".into()
+    };
     match config.end_behavior {
         MotionEndBehavior::Disappear | MotionEndBehavior::Loop => {
-            format!("gte(t,{})", trim_float(start))
+            format!("gte({time},{})", trim_float(start))
         }
         MotionEndBehavior::Hold => {
             let source_duration = source_duration_seconds.unwrap_or_default().max(0.0);
             let hold_duration = config.hold_seconds.unwrap_or_default().max(0.0);
             let end = start + source_duration + hold_duration;
             if end <= start {
-                return format!("gte(t,{})", trim_float(start));
+                return format!("gte({time},{})", trim_float(start));
             }
-            format!("between(t,{},{})", trim_float(start), trim_float(end))
+            format!("between({time},{},{})", trim_float(start), trim_float(end))
         }
     }
 }

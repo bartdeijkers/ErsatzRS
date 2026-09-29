@@ -39,6 +39,9 @@ impl MediaStream {
 pub struct InputFile {
     pub kind: InputKind,
     pub path: String,
+    /// Inputs normally share one decoder by path. A distinct instance keeps
+    /// canvas layers with independent seek positions on separate decoders.
+    pub input_instance: usize,
     pub streams: Vec<MediaStream>,
     pub input_options: Vec<String>,
     pub filter_steps: Vec<String>,
@@ -55,6 +58,7 @@ impl InputFile {
         Self {
             kind,
             path: path.into(),
+            input_instance: 0,
             streams: vec![MediaStream::new(stream_index)],
             input_options: Vec::new(),
             filter_steps: Vec::new(),
@@ -64,6 +68,10 @@ impl InputFile {
             allow_readrate: true,
             seek_after_input: false,
         }
+    }
+
+    pub(crate) fn source_key(&self) -> (&str, usize) {
+        (&self.path, self.input_instance)
     }
 
     #[must_use]

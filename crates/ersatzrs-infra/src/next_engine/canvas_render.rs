@@ -60,7 +60,7 @@ pub(super) async fn prepare(
     let (cancelled, artifacts) = stage(
         &mut cancellation,
         cancel,
-        playback::render_playback_graphics_overlays_cancellable(
+        playback::render_playback_canvas_overlays_cancellable(
             &pool,
             &session.graphics,
             &context,

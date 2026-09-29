@@ -450,7 +450,10 @@ release section when tagging a release.
   decorations at the requested offset, including mirrored playback.
   A private authenticated callback now prepares finite streams through the
   shared renderer and session transfer owner, preserving decimal frame rates.
-  Complete graphics timing and Next playback integration remain in development.
+  Canvas chunks preserve programme timing for scripts, ASS graphics, motion
+  loop/hold/disappear behavior and watermark fades. Layers sharing a motion
+  file retain independent seek positions.
+  Canvas layer projection and complete Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF

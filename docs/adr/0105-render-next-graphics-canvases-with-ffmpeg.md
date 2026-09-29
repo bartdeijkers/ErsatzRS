@@ -22,7 +22,11 @@ duration and selects current decorations at the requested programme offset.
 The private callback now authenticates requests and prepares streams through
 the shared renderer and session transfer owner, with a fresh occurrence check
 before returning the reader. Decimal and rational rates retain their wire
-spelling in the renderer. Complete graphics timing, canvas layer projection and
+spelling in the renderer. Canvas filter clocks preserve programme offsets while
+output timestamps start at zero; motion and subtitle inputs resume at their
+requested source phase, and timed fades use the programme clock. Canvas inputs
+have explicit instance identities so shared assets retain independent seeks.
+Complete integrated graphics proof, canvas layer projection and
 decoded Next playback acceptance remain pending.
 Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent

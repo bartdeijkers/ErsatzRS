@@ -9,9 +9,8 @@ use crate::{
     WatermarkOpacityClock,
 };
 
-/// Render geometry and timing for one canvas chunk. Overlay filters already
-/// contain the programme seek and dynamic-template context; the canvas clock
-/// itself starts at zero for each request.
+/// Render geometry and timing for one canvas chunk. Source inputs carry their
+/// seek; filter evaluation uses the programme clock while output starts at zero.
 pub struct CanvasRenderRequest {
     pub resolution: FrameSize,
     pub content_size: FrameSize,
@@ -60,18 +59,31 @@ pub fn build_canvas_command(
     let mut image_index = 0;
     for overlay in request.overlays {
         match overlay {
-            GraphicsPipelineOverlay::Drawvg { filter, .. } => chain
-                .graphics_overlay
-                .push(GraphicsOverlayFilter::Drawvg(filter)),
-            GraphicsPipelineOverlay::Drawtext { filter, .. } => chain
-                .graphics_overlay
-                .push(GraphicsOverlayFilter::Drawtext(filter)),
+            GraphicsPipelineOverlay::Drawvg { filter, .. } => {
+                chain
+                    .graphics_overlay
+                    .push(GraphicsOverlayFilter::Drawvg(programme_filter(
+                        filter,
+                        &request.opacity_clock,
+                    )));
+            }
+            GraphicsPipelineOverlay::Drawtext { filter, .. } => {
+                chain
+                    .graphics_overlay
+                    .push(GraphicsOverlayFilter::Drawtext(programme_filter(
+                        filter,
+                        &request.opacity_clock,
+                    )));
+            }
             GraphicsPipelineOverlay::NativeImage {
-                mut input, overlay, ..
+                mut input,
+                mut overlay,
+                ..
             } => {
-                crate::pipeline::prepare_graphics_image_filters(
+                input.input_instance = image_index + 1;
+                prepare_image_filters(
                     &mut input,
-                    &overlay,
+                    &mut overlay,
                     request.resolution,
                     &request.opacity_clock,
                 );
@@ -119,4 +131,30 @@ pub fn build_canvas_command(
         pipe_output(),
     ];
     Ok(CommandGenerator::generate_command(&inputs, &steps, false))
+}
+
+fn programme_filter(filter: String, clock: &WatermarkOpacityClock) -> String {
+    let offset = clock.content_seconds_at_spawn;
+    if offset <= 0.0 {
+        return filter;
+    }
+    format!("settb=AVTB,setpts=PTS+{offset}/TB,{filter},setpts=PTS-{offset}/TB")
+}
+
+fn prepare_image_filters(
+    input: &mut InputFile,
+    overlay: &mut crate::WatermarkOverlay,
+    resolution: FrameSize,
+    clock: &WatermarkOpacityClock,
+) {
+    let fades = std::mem::take(&mut overlay.fade_points);
+    crate::pipeline::prepare_graphics_image_filters(input, overlay, resolution, clock);
+    if !fades.is_empty() {
+        let filter = fades
+            .into_iter()
+            .map(crate::watermark_fade_filter)
+            .collect::<Vec<_>>()
+            .join(",");
+        input.filter_steps.push(programme_filter(filter, clock));
+    }
 }
