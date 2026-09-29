@@ -11439,8 +11439,18 @@ z-order, content-box placement and exact finite duration (nextest
 96076895-6ca7-4039-b807-032cd104448d). The 32 existing native graphics/watermark
 snapshot regressions pass unchanged (nextest
 f6dca839-d2a7-416f-b633-ac8701de8330); strict FFmpeg all-target Clippy passes.
-No canvas endpoint is exposed yet; supervised producer, private binding/lifetime
-integration, all-kind graphics coverage and decoded Next acceptance remain.
+The managed producer now retains graphics files and live text controllers until
+confirmed child cleanup, then awaits controllers before removing their directory.
+Canvas startup admits first output rather than waiting for the ordinary 64 KiB
+probe prefix; the transparent base is paced for playback-time text refreshes.
+The final 25-test selection passes (nextest
+02cd87df-32ff-46c3-b220-67d4195fcc2c), covering ordinary/session transfer regressions,
+canvas startup failure and cancellation, EOF/shutdown/disconnect/drop cleanup,
+updated command snapshots, and pinned v2.0.3 decoded image/drawvg output. The
+three-second supervised canvas starts before EOF, preserves alpha and removes
+artifacts after reaping. Strict FFmpeg/infra/web all-target Clippy passes.
+No canvas endpoint is exposed yet; private binding/lifetime integration,
+all-kind graphics coverage and decoded Next acceptance remain.
 The source map and owning graphics debt track the full scope.
 
 Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.

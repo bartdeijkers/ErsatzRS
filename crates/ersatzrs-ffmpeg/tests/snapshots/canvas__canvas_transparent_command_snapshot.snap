@@ -10,6 +10,8 @@ expression: "command.arguments.join(\"\\n\")"
 error
 -f
 lavfi
+-readrate
+1
 -i
 color=c=black@0.0:s=64x64:r=4/1,format=bgra
 -filter_complex

@@ -47,7 +47,8 @@ pub fn build_canvas_command(
         request.resolution.width,
         request.resolution.height,
         request.frame_rate.r_frame_rate(),
-    ))];
+    ))
+    .with_input_options(["-readrate", "1"])];
     let mut chain = FilterChain {
         pixel_format: vec!["format=bgra".to_owned()],
         ..FilterChain::default()

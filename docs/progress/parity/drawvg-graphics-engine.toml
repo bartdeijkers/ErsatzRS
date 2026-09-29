@@ -13,8 +13,8 @@ import/persistence/render and decoded four-kind graphics evidence.
 
 [[debt]]
 id = 'ucu09-row146-next-graphics-canvas'
-description = 'Next projection supports simple image layers but cannot yet supply the full graphics canvas introduced by upstream row146. Shared MediaItem_Stop, the canvas protocol and finite FFV1 command builder have focused proof; supervised canvas delivery and complete runtime acceptance remain.'
+description = 'Next projection supports simple image layers but cannot yet supply the full graphics canvas introduced by upstream row146. Shared MediaItem_Stop, the canvas protocol, paced FFV1 command and supervised producer lifetime have focused proof; private callback integration and complete Next runtime acceptance remain.'
 discovered = '2026-09-29'
 resolved = false
 adr = '0105'
-evidence = 'Row146 source map in plans/upstream-catch-up.md identifies the canvas protocol, context, preview and lifecycle requirements. ADR 0105 is accepted. Schema/layer types and strict timing/header checks have focused proof. Canvas command snapshots and packaged FFmpeg decoding prove alpha, image ordering, placement and duration (nextest 96076895-6ca7-4039-b807-032cd104448d); 32 native graphics/watermark snapshots pass unchanged (f6dca839-d2a7-416f-b633-ac8701de8330). Supervised producer, private callback ownership, all-kind graphics and Next runtime acceptance remain. No row146 verdict or pin advance.'
+evidence = 'Row146 source map in plans/upstream-catch-up.md identifies the canvas protocol, context, preview and lifecycle requirements. ADR 0105 is accepted. Schema/layer types and strict timing/header checks have focused proof. The latest 25-test producer selection passes (nextest 02cd87df-32ff-46c3-b220-67d4195fcc2c): owned graphics cleanup, prompt paced startup, ordinary/session regressions, snapshots and packaged FFmpeg decoded alpha/image/drawvg output. Earlier 32 native graphics/watermark snapshots passed unchanged (f6dca839-d2a7-416f-b633-ac8701de8330). Private callback ownership, all-kind graphics and Next runtime acceptance remain. No row146 verdict or pin advance.'

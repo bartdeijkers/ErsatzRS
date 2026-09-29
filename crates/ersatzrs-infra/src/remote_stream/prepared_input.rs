@@ -23,6 +23,22 @@ use super::{
 const PREFIX_BYTES: usize = 64 * 1024;
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
 
+fn check_prepared_startup(
+    deadline: tokio::time::Instant,
+    cancellation: &mut oneshot::Receiver<()>,
+) -> Result<(), RemoteStreamError> {
+    if !matches!(
+        cancellation.try_recv(),
+        Err(oneshot::error::TryRecvError::Empty)
+    ) {
+        Err(RemoteStreamError::PreparedCancelled)
+    } else if tokio::time::Instant::now() >= deadline {
+        Err(RemoteStreamError::PreparedTimeout)
+    } else {
+        Ok(())
+    }
+}
+
 /// Playback-owned producer started once, with a bounded replayable media prefix.
 /// Dropping this owner terminates its managed process group/job; prefer `cancel`
 /// to await cleanup when preparation or metadata probing fails.
@@ -37,10 +53,14 @@ pub struct PreparedRemoteStreamInput {
 }
 
 // An interrupted cleanup future must not delete files before group/job reaping.
-struct PreparedInputDirectory(Option<tempfile::TempDir>);
+struct PreparedInputDirectory(
+    Option<tempfile::TempDir>,
+    Vec<crate::dynamic_text::DynamicTextController>,
+);
 
 impl PreparedInputDirectory {
-    fn remove_after_reap(mut self) {
+    async fn remove_after_reap(mut self) {
+        crate::dynamic_text::shutdown_dynamic_text_controllers(std::mem::take(&mut self.1)).await;
         drop(self.0.take());
     }
 }
@@ -78,7 +98,15 @@ impl PreparedRemoteStreamInput {
         deadline: tokio::time::Instant,
         cancellation: oneshot::Receiver<()>,
     ) -> Result<Self, RemoteStreamError> {
-        Self::start_inner(command, Some(request_json), context, deadline, cancellation).await
+        Self::start_inner(
+            command,
+            Some(request_json),
+            context,
+            deadline,
+            cancellation,
+            None,
+        )
+        .await
     }
 
     /// Start an ordinary installed add-on without writing a prepared request.
@@ -92,7 +120,32 @@ impl PreparedRemoteStreamInput {
         deadline: tokio::time::Instant,
         cancellation: oneshot::Receiver<()>,
     ) -> Result<Self, RemoteStreamError> {
-        Self::start_inner(command, None, context, deadline, cancellation).await
+        Self::start_inner(command, None, context, deadline, cancellation, None).await
+    }
+
+    /// Start a canvas producer with ownership of its generated files and live
+    /// text controllers. These follow the managed child through startup, byte
+    /// transfer and cancellation, and are removed only after confirmed reaping.
+    ///
+    /// # Errors
+    /// Returns redacted startup errors; uncertain cleanup retains private files.
+    pub async fn start_with_graphics(
+        command: &RemoteStreamCommand,
+        context: RemoteStreamSpawnContext,
+        deadline: tokio::time::Instant,
+        cancellation: oneshot::Receiver<()>,
+        directory: tempfile::TempDir,
+        controllers: Vec<crate::dynamic_text::DynamicTextController>,
+    ) -> Result<Self, RemoteStreamError> {
+        Self::start_inner(
+            command,
+            None,
+            context,
+            deadline,
+            cancellation,
+            Some(PreparedInputDirectory(Some(directory), controllers)),
+        )
+        .await
     }
 
     async fn start_inner(
@@ -101,33 +154,50 @@ impl PreparedRemoteStreamInput {
         context: RemoteStreamSpawnContext,
         deadline: tokio::time::Instant,
         mut cancellation: oneshot::Receiver<()>,
+        artifacts: Option<PreparedInputDirectory>,
     ) -> Result<Self, RemoteStreamError> {
-        if request_json.is_some_and(|request| request.len() > MAX_REQUEST_BYTES) {
-            return Err(RemoteStreamError::PreparedRequestTooLarge);
+        let invalid = if request_json.is_some_and(|request| request.len() > MAX_REQUEST_BYTES) {
+            Some(RemoteStreamError::PreparedRequestTooLarge)
+        } else {
+            check_prepared_startup(deadline, &mut cancellation).err()
+        };
+        if let Some(error) = invalid {
+            if let Some(artifacts) = artifacts {
+                artifacts.remove_after_reap().await;
+            }
+            return Err(error);
         }
-        if !matches!(
-            cancellation.try_recv(),
-            Err(oneshot::error::TryRecvError::Empty)
-        ) {
-            return Err(RemoteStreamError::PreparedCancelled);
-        }
-        if tokio::time::Instant::now() >= deadline {
-            return Err(RemoteStreamError::PreparedTimeout);
-        }
-        let temporary_directory = tempfile::Builder::new()
-            .prefix("ersatzrs-prepared-input-")
-            .tempdir()
-            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+        let graphics = artifacts.is_some();
+        let temporary_directory = match artifacts {
+            Some(artifacts) => artifacts,
+            None => PreparedInputDirectory(
+                Some(
+                    tempfile::Builder::new()
+                        .prefix("ersatzrs-prepared-input-")
+                        .tempdir()
+                        .map_err(|_| RemoteStreamError::PreparedProducerFailed)?,
+                ),
+                Vec::new(),
+            ),
+        };
+        let temporary_path = temporary_directory
+            .0
+            .as_ref()
+            .ok_or(RemoteStreamError::PreparedProducerFailed)?
+            .path();
         let mut producer_command = command.clone();
         for variable in ["TMPDIR", "TMP", "TEMP"] {
             producer_command.environment.insert(
                 variable.to_owned(),
-                temporary_directory.path().to_string_lossy().into_owned(),
+                temporary_path.to_string_lossy().into_owned(),
             );
         }
-        let mut producer =
+        let Ok(mut producer) =
             spawn_remote_stream_producer_with_stdin(&producer_command, request_json.is_some())
-                .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+        else {
+            temporary_directory.remove_after_reap().await;
+            return Err(RemoteStreamError::PreparedProducerFailed);
+        };
         let stdout = producer.stdout().take();
         let stderr_task = producer
             .stderr()
@@ -139,13 +209,18 @@ impl PreparedRemoteStreamInput {
             stderr_task,
             prefix: Vec::with_capacity(PREFIX_BYTES),
             exited: None,
-            temporary_directory: Some(PreparedInputDirectory(Some(temporary_directory))),
+            temporary_directory: Some(temporary_directory),
             diagnostics: Some(RemoteStreamProducerDiagnostics {
-                label: "prepared add-on".to_owned(),
+                label: if graphics {
+                    "graphics canvas"
+                } else {
+                    "prepared add-on"
+                }
+                .to_owned(),
                 context,
                 effective_seek: None,
                 secrets: remote_stream_environment_secrets(command),
-                suppress_diagnostics: command_has_file_backed_secret(command),
+                suppress_diagnostics: graphics || command_has_file_backed_secret(command),
                 prepared: None,
             }),
         };
@@ -153,20 +228,9 @@ impl PreparedRemoteStreamInput {
             biased;
             _ = &mut cancellation => Err(RemoteStreamError::PreparedCancelled),
             () = tokio::time::sleep_until(deadline) => Err(RemoteStreamError::PreparedTimeout),
-            result = input.read_prefix(request_json) => result,
+            result = input.read_prefix(request_json, if graphics { 1 } else { PREFIX_BYTES }) => result,
         };
-        let outcome = outcome.and_then(|()| {
-            if !matches!(
-                cancellation.try_recv(),
-                Err(oneshot::error::TryRecvError::Empty)
-            ) {
-                Err(RemoteStreamError::PreparedCancelled)
-            } else if tokio::time::Instant::now() >= deadline {
-                Err(RemoteStreamError::PreparedTimeout)
-            } else {
-                Ok(())
-            }
-        });
+        let outcome = outcome.and_then(|()| check_prepared_startup(deadline, &mut cancellation));
         if let Err(error) = outcome {
             input.cancel().await?;
             return Err(error);
@@ -174,7 +238,11 @@ impl PreparedRemoteStreamInput {
         Ok(input)
     }
 
-    async fn read_prefix(&mut self, request_json: Option<&[u8]>) -> Result<(), RemoteStreamError> {
+    async fn read_prefix(
+        &mut self,
+        request_json: Option<&[u8]>,
+        minimum_bytes: usize,
+    ) -> Result<(), RemoteStreamError> {
         let producer = self
             .producer
             .as_mut()
@@ -198,7 +266,7 @@ impl PreparedRemoteStreamInput {
             .as_mut()
             .ok_or(RemoteStreamError::MissingStdout)?;
         let mut chunk = [0_u8; 8192];
-        while self.prefix.len() < PREFIX_BYTES {
+        while self.prefix.len() < minimum_bytes {
             let length = chunk.len().min(PREFIX_BYTES - self.prefix.len());
             let read = stdout
                 .read(&mut chunk[..length])
@@ -272,7 +340,7 @@ impl PreparedRemoteStreamInput {
                 return Err(RemoteStreamError::PreparedTerminationUnconfirmed);
             }
             if let Some(directory) = directory {
-                directory.remove_after_reap();
+                directory.remove_after_reap().await;
             }
             if result.load(std::sync::atomic::Ordering::Acquire) == 2 {
                 Err(RemoteStreamError::PreparedProducerFailed)
@@ -399,7 +467,7 @@ async fn cleanup_prepared_input(
     }
     if reaped {
         if let Some(directory) = directory {
-            directory.remove_after_reap();
+            directory.remove_after_reap().await;
         }
         Ok(())
     } else {
@@ -463,7 +531,7 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
     let task = tokio::spawn(async move {
         if producer_task.await {
             if let Some(directory) = directory {
-                directory.remove_after_reap();
+                directory.remove_after_reap().await;
             }
         }
     });
@@ -484,6 +552,171 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::time::Duration;
+
+    async fn graphics_artifacts() -> (
+        tempfile::TempDir,
+        Vec<crate::dynamic_text::DynamicTextController>,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let controller = crate::dynamic_text::DynamicTextController::start(
+            crate::dynamic_text::DynamicTextControllerRequest {
+                element_id: 1,
+                template: "canvas".to_owned(),
+                variables: serde_json::json!({}),
+                text_file: directory.path().join("text.txt"),
+                refresh_interval_milliseconds: 100,
+                playback_offset_seconds: 0.0,
+                playback_duration_seconds: 60.0,
+            },
+        )
+        .await
+        .unwrap();
+        (directory, vec![controller])
+    }
+
+    #[tokio::test]
+    async fn graphics_input_preflight_and_spawn_failure_remove_owned_artifacts() {
+        for mode in ["cancelled", "expired", "spawn"] {
+            let (directory, controllers) = graphics_artifacts().await;
+            let path = directory.path().to_owned();
+            let command = RemoteStreamCommand {
+                tool_paths: Vec::new(),
+                program: path.join("missing-producer").to_string_lossy().into_owned(),
+                args: Vec::new(),
+                working_directory: path.clone(),
+                environment: BTreeMap::new(),
+            };
+            let (sender, receiver) = oneshot::channel();
+            if mode == "cancelled" {
+                sender.send(()).unwrap();
+            }
+            let deadline = tokio::time::Instant::now()
+                + if mode == "expired" {
+                    Duration::ZERO
+                } else {
+                    Duration::from_secs(15)
+                };
+            let result = PreparedRemoteStreamInput::start_with_graphics(
+                &command,
+                RemoteStreamSpawnContext::probe(),
+                deadline,
+                receiver,
+                directory,
+                controllers,
+            )
+            .await;
+            match mode {
+                "cancelled" => assert!(matches!(result, Err(RemoteStreamError::PreparedCancelled))),
+                "expired" => assert!(matches!(result, Err(RemoteStreamError::PreparedTimeout))),
+                _ => assert!(matches!(
+                    result,
+                    Err(RemoteStreamError::PreparedProducerFailed)
+                )),
+            }
+            assert!(
+                !path.exists(),
+                "{mode} must stop controllers and remove files"
+            );
+        }
+    }
+
+    // Unix shell fixtures exercise the shared managed-process owner. The
+    // portable preflight test above also covers Windows admission failures.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn graphics_input_admits_first_output_without_waiting_for_probe_prefix_or_eof() {
+        let (directory, controllers) = graphics_artifacts().await;
+        let path = directory.path().to_owned();
+        let (command, _) = commands("printf N; while :; do :; done");
+        let (_sender, receiver) = oneshot::channel();
+        let prepared = PreparedRemoteStreamInput::start_with_graphics(
+            &command,
+            RemoteStreamSpawnContext::probe(),
+            tokio::time::Instant::now() + Duration::from_secs(2),
+            receiver,
+            directory,
+            controllers,
+        )
+        .await
+        .expect("one output byte must admit a running canvas producer");
+        assert_eq!(prepared.prefix(), b"N");
+        assert!(prepared.exited.is_none());
+        assert!(path.join("text.txt").exists());
+        prepared.cancel().await.unwrap();
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn graphics_input_keeps_files_until_producer_exit_and_transfer_cleanup() {
+        for mode in ["eof", "cancel", "disconnect", "shutdown", "drop"] {
+            let (directory, controllers) = graphics_artifacts().await;
+            let path = directory.path().to_owned();
+            let script = if mode == "eof" {
+                "cat \"$TMPDIR/text.txt\""
+            } else {
+                "test -f \"$TMPDIR/text.txt\" || exit 7; head -c 70000 /dev/zero; while :; do :; done"
+            };
+            let (command, _) = commands(script);
+            let (_sender, receiver) = oneshot::channel();
+            let prepared = PreparedRemoteStreamInput::start_with_graphics(
+                &command,
+                RemoteStreamSpawnContext::probe(),
+                tokio::time::Instant::now() + Duration::from_secs(15),
+                receiver,
+                directory,
+                controllers,
+            )
+            .await
+            .unwrap();
+            assert!(path.join("text.txt").exists());
+            assert!(prepared.diagnostics.as_ref().unwrap().suppress_diagnostics);
+            let pid = prepared.producer.as_ref().unwrap().id();
+            if mode == "cancel" {
+                prepared.cancel().await.unwrap();
+            } else {
+                let (writer, mut reader) = tokio::io::duplex(1);
+                let mut transfer = prepared.transfer_to(writer).await.unwrap();
+                match mode {
+                    "eof" => {
+                        let mut bytes = Vec::new();
+                        reader.read_to_end(&mut bytes).await.unwrap();
+                        transfer.wait().await.unwrap();
+                        assert_eq!(bytes, b"canvas");
+                    }
+                    "disconnect" => {
+                        drop(reader);
+                        assert!(matches!(
+                            transfer.wait().await,
+                            Err(RemoteStreamError::PreparedProducerFailed)
+                        ));
+                    }
+                    "shutdown" => {
+                        transfer.shutdown().await.unwrap();
+                    }
+                    _ => {
+                        drop(transfer);
+                    }
+                }
+            }
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while path.exists() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            if let Some(pid) = pid {
+                assert_eq!(
+                    nix::sys::signal::kill(
+                        nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap()),
+                        None
+                    ),
+                    Err(nix::errno::Errno::ESRCH)
+                );
+            }
+        }
+    }
 
     #[tokio::test]
     async fn prepared_input_rejects_cancelled_expired_and_oversized_requests_before_spawn() {

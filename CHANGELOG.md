@@ -440,8 +440,10 @@ release section when tagging a release.
 ### Changed
 
 - Adopt the Next canvas schema, strict graphics request validation and a finite
-  transparent FFV1 renderer command as the first parts of ADR 0105. Producer
-  supervision and Next playback integration remain in development.
+  transparent FFV1 renderer command as the first parts of ADR 0105. Its paced
+  producer retains generated files and live text controllers through process
+  cleanup and starts streaming without waiting for a media-probe prefix.
+  Private callback and Next playback integration remain in development.
 
 - Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF
