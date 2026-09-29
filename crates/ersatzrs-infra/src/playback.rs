@@ -171,6 +171,9 @@ pub struct PlaybackGraphicsRenderContext {
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
+    /// Scheduled finish, independent of the current rendering chunk.
+    /// None retains the duration-derived stop for inputs without a known finish.
+    pub content_finish_time: Option<DateTime<Utc>>,
     pub stream_seek_seconds: f64,
     pub duration_seconds: f64,
     pub frame_size: FrameSize,
@@ -2476,6 +2479,7 @@ async fn render_playback_graphics_overlays_inner(
                 media_path: context.media_path.clone(),
                 channel_start_time: context.channel_start_time,
                 content_start_time: context.content_start_time,
+                content_finish_time: context.content_finish_time,
                 stream_seek_seconds: context.stream_seek_seconds,
                 duration_seconds: context.duration_seconds,
                 frame_width: context.frame_size.width,
@@ -3880,6 +3884,7 @@ mod tests {
             media_path: "synthetic-media.mkv".to_owned(),
             channel_start_time: Utc::now(),
             content_start_time: Utc::now(),
+            content_finish_time: None,
             stream_seek_seconds: 0.0,
             duration_seconds: 60.0,
             frame_size: FrameSize::new(1920, 1080),

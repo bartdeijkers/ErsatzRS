@@ -1351,6 +1351,9 @@ async fn preview_graphics_overlays(
             media_path: media_path.to_owned(),
             channel_start_time: now,
             content_start_time: now,
+            content_finish_time: chrono::Duration::from_std(program_duration)
+                .ok()
+                .and_then(|duration| now.checked_add_signed(duration)),
             stream_seek_seconds: seconds_i64_as_f64(seek_seconds),
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,
@@ -1429,6 +1432,7 @@ async fn preview_channel_graphics_overlays(
             channel_start_time: start_time,
             content_start_time: parse_sqlite_utc_timestamp(&active.playout_start)
                 .unwrap_or(start_time),
+            content_finish_time: parse_sqlite_utc_timestamp(&active.playout_finish),
             stream_seek_seconds: start_position.as_secs_f64(),
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,

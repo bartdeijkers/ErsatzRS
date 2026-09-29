@@ -11416,6 +11416,18 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row146 audit is in progress: upstream adds Next graphics canvas transport,
+shared render context, preview bindings and session start time. Existing Next
+image-only projection cannot cover text, script, motion, subtitle or expression
+layers. The initial audit also found MediaItem_Stop derived from chunk duration.
+The independent correction now carries scheduled finish through native/HLS,
+Next projection and preview contexts. Its early/middle/final/late chunk and
+mirror-offset regression plus transient metadata regression pass (nextest
+945b7ef9-0532-4020-9381-2389d75c8d14). Strict infra/web all-target Clippy passes.
+ADR 0105 is a reviewable Proposed adaptation using the managed FFmpeg
+renderer and private callback listener; no canvas implementation or acceptance
+is claimed. The source map and owning graphics debt track the full scope.
+
 Row145 (4c3683ae) is Port after final source-to-implementation review. Empty alternate schedules are already
 rejected at application and transactional repository boundaries. The production
 SQLite regression now proves empty-item rejection preserves existing alternate

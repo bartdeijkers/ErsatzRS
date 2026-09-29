@@ -77,7 +77,10 @@ refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. 
 playback, private Plex relay, audio/subtitle selection and owned preparation.
 Native MPEG-TS, HLS MPEG-TS/fMP4, guide HTTP, strict lint, smoke and TSDuck
 acceptance pass. Upstream does not integrate external JSON with Next; the source
-audit corrected that earlier scope error. Continue with row146.
+audit corrected that earlier scope error. Row146 source audit found missing
+Next canvas delivery and chunk-dependent graphics Stop. The independent Stop
+correction passes focused tests and strict lint. ADR 0105 remains Proposed;
+complete the canvas and its acceptance before advancing the pin.
 The refreshed upstream ledger still contains 180 rows.
 The current 180-row ledger has 35 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.

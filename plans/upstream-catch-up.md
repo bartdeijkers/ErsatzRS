@@ -117,6 +117,37 @@ selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
 
+## Row 146 source map — graphics canvas (pending)
+
+- Upstream `28b2e00c` introduces `GraphicsLayerKind.Canvas`, signed private
+  `InternalController.GetGraphicsCanvas` delivery and strict offset/duration/rate
+  headers; `PlayoutItemConverter.SelectGraphics` emits FFV1/BGRA/NUT hints.
+- `GetGraphicsCanvasStreamHandler` reloads channel/item/decorations, applies
+  mirror offsets, derives session time, clips the chunk to the programme and
+  supplies transparent frames if selected elements disappear. A stale offset
+  still produces a finite requested chunk.
+- `GraphicsEngineContextFactory` shares crop/stretch/content-box geometry;
+  `GraphicsElementLoader` now binds `MediaItem_Stop` to programme finish rather
+  than chunk duration. Native `FFmpegLibraryProcessService` uses this factory.
+- `SyncNextPlayoutHandler` shares `IncludeForNextPlayout` loading with canvas
+  lookup. Preview preparation/start retains a transient channel/item in
+  `ITroubleshootingPlayoutItemStore`; normal/Next session models expose start time.
+- Tests cover invariant scheduled stop across chunk offsets and invalid HTTP
+  headers before rendering. Startup registration and native pipeline tests wire
+  the extracted context factory. No admin page or database schema change.
+- Rust counterparts are `next_engine::{graphics,protocol,media,troubleshooting}`,
+  the existing private host router, `graphics_template`, shared playback
+  selectors/artifact ownership and FFmpeg graphics filters. Current Next
+  projection rejects non-image kinds/expressions. The independent `MediaItem_Stop`
+  correction now passes scheduled finish through shared/native/Next/preview
+  contexts; UCU-09 owns the focused chunk/mirror regression evidence.
+- ADR 0105 proposes a supervised FFmpeg canvas using the shared native renderer,
+  preserving ADR 0005's ban on a separate graphics-rendering application.
+  Its proposal owns architecture and acceptance details; UCU-09 owns evidence.
+  The official Next runtime and existing v2.0.3 FFmpeg artifacts are reused.
+- Later row173 changes watermark-only projection; it remains an ordered future
+  audit and does not justify skipping row146's full graphics behavior.
+
 ## Row 145 source map — playout validation and diagnostics (Port)
 
 - Complete upstream `4c3683ae` changes four behavior paths: explicit invalid

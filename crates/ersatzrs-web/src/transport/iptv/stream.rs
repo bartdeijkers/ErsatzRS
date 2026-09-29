@@ -1254,6 +1254,7 @@ async fn serve_channel_stream_admitted_inner(
                 media_path: resolved.clone(),
                 channel_start_time: start_time,
                 content_start_time: start_time,
+                content_finish_time: parse_sqlite_utc_timestamp(&active.playout_finish),
                 stream_seek_seconds: start_position.as_secs_f64(),
                 duration_seconds: active
                     .program_duration()

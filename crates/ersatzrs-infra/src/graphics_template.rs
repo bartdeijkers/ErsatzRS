@@ -38,6 +38,9 @@ pub struct GraphicsTemplateContext {
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
+    /// Scheduled finish, independent of the current rendering chunk.
+    /// None retains the duration-derived stop for inputs without a known finish.
+    pub content_finish_time: Option<DateTime<Utc>>,
     pub stream_seek_seconds: f64,
     pub duration_seconds: f64,
     pub frame_width: u32,
@@ -167,7 +170,12 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
     root.insert(
         "MediaItem_Stop".to_owned(),
         Value::String(
-            (context.content_start_time + duration_millis(context.duration_seconds)).to_rfc3339(),
+            context
+                .content_finish_time
+                .unwrap_or_else(|| {
+                    context.content_start_time + duration_millis(context.duration_seconds)
+                })
+                .to_rfc3339(),
         ),
     );
     root.insert(

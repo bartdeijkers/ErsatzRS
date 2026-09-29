@@ -54,6 +54,7 @@ pub(super) async fn project(
         media_path: media.path.clone(),
         channel_start_time: media.item.start,
         content_start_time: media.item.start,
+        content_finish_time: Some(media.item.finish),
         stream_seek_seconds: 0.0,
         duration_seconds: (media.item.out_point - media.item.in_point)
             .to_std()

@@ -1886,6 +1886,7 @@ impl HlsSessionWorker {
                                 media_path: active.media_path.clone(),
                                 channel_start_time: active.playout_start,
                                 content_start_time: active.playout_start,
+                                content_finish_time: active.playout_finish,
                                 stream_seek_seconds: start_position.as_secs_f64(),
                                 duration_seconds: active
                                     .program_duration

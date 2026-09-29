@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep graphics template programme stop times tied to the scheduled finish,
+  independently of seek offsets and rendering chunk durations, including
+  mirrored and preview playback.
+
 - Decode Plex metadata using the documented `Media`, `Part` and `Stream` array
   names while retaining compatibility with lowercase responses.
 

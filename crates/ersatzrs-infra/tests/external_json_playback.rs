@@ -31,6 +31,7 @@ fn graphics_context(media: GraphicsMedia) -> GraphicsTemplateContext {
         media_path: "fixture.mkv".into(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 0.0,
         duration_seconds: 120.0,
         frame_width: 64,
@@ -56,6 +57,35 @@ async fn fixture() -> DbPool {
         .await
         .unwrap();
     pool
+}
+
+#[tokio::test]
+async fn graphics_scheduled_stop_survives_seek_chunks_and_mirror_offsets() {
+    let pool = fixture().await;
+    let mut context = graphics_context(GraphicsMedia::Transient(serde_json::Map::new()));
+    // Match upstream GraphicsCanvasContextTests, including a late chunk and a
+    // mirrored occurrence. Chunk length and seek must never move programme Stop.
+    for shift in [0, 3600] {
+        context.content_start_time = common::fixed_time() + chrono::Duration::seconds(shift);
+        let finish = context.content_start_time + chrono::Duration::minutes(30);
+        context.content_finish_time = Some(finish);
+        for (seek, duration) in [(0.0, 44.0), (44.0, 44.0), (1760.0, 40.0), (1801.0, 44.0)] {
+            context.stream_seek_seconds = seek;
+            context.duration_seconds = duration;
+            let variables = graphics_template_variables(&pool, &context, 0, None)
+                .await
+                .unwrap();
+            assert_eq!(variables["MediaItem_Stop"], json!(finish.to_rfc3339()));
+            assert_eq!(
+                variables["MediaItem_Start"],
+                json!(context.content_start_time.to_rfc3339())
+            );
+            assert_eq!(
+                variables["MediaItem_StreamSeek"]["TotalSeconds"],
+                json!(seek)
+            );
+        }
+    }
 }
 
 async fn server(pool: &DbPool) {
