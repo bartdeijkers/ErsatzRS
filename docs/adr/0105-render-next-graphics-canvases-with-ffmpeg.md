@@ -42,6 +42,12 @@ binding. Validate the current item or preview binding before rendering; reject
 cross-channel, expired and stale capabilities. Credentials and private source
 paths must not enter published playout JSON or diagnostics.
 
+The staged official Next revision `4cc93e4222fe334ed6aad2f694e5b3bcb611f2c9`
+preserves configured HTTP source headers when it adds canvas request context.
+Use that existing authenticated-source mechanism; a public or unauthenticated
+canvas URL is unnecessary. This differs from libass subtitle fetching, where
+the renderer does not forward the Next source headers.
+
 Preserve the official `x-etv-offset-ms`, `x-etv-duration-ms`,
 `x-etv-frame-rate` and optional `x-etv-channel` protocol headers. They are Next
 wire fields, distinct from the machine API's `X-Ers-Api-Key`. Reject duplicate,

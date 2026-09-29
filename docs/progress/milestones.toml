@@ -11428,6 +11428,16 @@ ADR 0105 is a reviewable Proposed adaptation using the managed FFmpeg
 renderer and private callback listener; no canvas implementation or acceptance
 is claimed. The source map and owning graphics debt track the full scope.
 
+Exact Next compatibility audit: the staged binary reports 0.1.0-4cc93e4.
+Inspection of source 4cc93e4222fe334ed6aad2f694e5b3bcb611f2c9 confirms
+GraphicsLayerKind::Canvas, schema 0.0.4 parsing and preservation of configured
+HTTP headers alongside x-etv-channel/offset-ms/duration-ms/frame-rate. Canvas
+HTTP inputs receive finite -t bounds without local seeking or looping; the
+offset header is the playout offset. Canvas sizing/alpha composition is handled
+by the official pipeline. This is source compatibility evidence, not a passed
+ErsatzRS canvas runtime test. No runtime rebuild or checkout movement occurred;
+ADR 0105 remains Proposed pending maintainer decision.
+
 Row145 (4c3683ae) is Port after final source-to-implementation review. Empty alternate schedules are already
 rejected at application and transactional repository boundaries. The production
 SQLite regression now proves empty-item rejection preserves existing alternate
