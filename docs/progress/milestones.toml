@@ -11544,7 +11544,19 @@ The web graph check and strict infrastructure/web all-target Clippy pass.
 Software H.264 parsing is not Intel QSV execution;
 the approved hardware acceptance debt remains unverified.
 
-Remote/HTTP playback proof remains.
+Native remote HTTP playback now passes on Linux with the verified v2.0.3 runtime
+(nextest bc4d474b-c2fb-4448-b116-f5d0776c7c46). The disposable Plex fixture requires
+its synthetic token for metadata and media requests, serves synthetic media,
+and supplies the selected Dutch audio and English embedded subtitle metadata.
+The production private listener serves a finite programme through the media relay;
+the public IPTV concat route serves a bounded captured prefix. Both captures pass
+audio/video decode and visible burned-subtitle assertions. The public XMLTV route
+includes the external programme without exposing provider paths or credentials,
+the private callback is absent on the public listener, and all three persisted
+media/version/playout-item counts stay zero. This extends the earlier isolated
+handler evidence to real HTTP; it does not establish TSDuck or native Windows
+acceptance. Strict web all-target Clippy passes for the HTTP fixture.
+
 HLS worker item loading and Next schedule::read_locked still require transient
 media integration; owning streaming debt
 ucu09-row145-external-json-consumption remains open. The earlier disposable

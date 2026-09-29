@@ -9,6 +9,9 @@ use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_core::repositories::FfmpegProfileRepository as _;
 use sqlx::Executor as _;
 
+#[path = "stream_external_http_tests.rs"]
+mod http;
+
 async fn fixture(root: &std::path::Path) -> (AppState, Channel) {
     use crate::host::state::{IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};

@@ -77,8 +77,9 @@ refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. 
 implemented locally, together with the transient local/Plex resolver, private
 media-part relay, shared transient track selection, graphics metadata binding
 and owned subtitle preparation. Native stream wiring and transient video enrichment
-are implemented locally; remote/HTTP acceptance and HLS/Next consumer integration
-remain. The refreshed upstream ledger still contains 180 rows.
+are implemented locally, with Linux remote HTTP playback and XMLTV proof.
+HLS/Next consumer integration and remaining transport/platform acceptance remain.
+The refreshed upstream ledger still contains 180 rows.
 The current 180-row ledger has 36 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
