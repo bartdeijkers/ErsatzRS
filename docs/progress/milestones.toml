@@ -11416,6 +11416,32 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row180 is Port after the full 8bda4411 thirteen-file audit. Development builds
+now render their embedded Unreleased changelog on home/health instead of the
+previous release. Tagged builds retain exact version selection; missing tagged
+notes do not silently show another release. Two focused tests pass
+(7fbe3d36-a465-4e69-9248-3da18bc9a11e), covering main/develop/untagged selection,
+exact beta identity and HTML sanitization. Strict web all-targets Clippy passes
+in 3m35s; hydration lint and progress validation pass. Matched Leptos build and
+two Chromium route-family checks pass in 4.7s, including 320px screenshots
+reviewed for home/health. Evidence: tmp/ucu09-row180/ and
+ test-results/ucu09-row180/playwright-results.json. Embedded changelog delivery
+and localized card chrome remain; no new GitHub release client or DOM/island
+structure. The upstream separate develop repository, version/tag policy and
+legacy Docker deprecation warning have no equivalent here. Pin advances to
+8bda4411; 180/181 accepted, 1 pending. Continue row181 runtime corrections;
+final window gates, fresh upstream audit, push and exact-SHA CI remain.
+
+Pending row181 look-ahead: exact FFmpeg 8.1.2-1...8.1.2-2 release delta adds
+three QSV fixes plus a oneVPL dispatcher patch. All apply to exact n9.0 / the
+v2.0.3 oneVPL d77f9195 dependency with no fuzz/offsets. Existing QSV timestamp
+patch remains compatible. Published v2.0.3 lacks these corrections; owning debt
+ucu09-row181-legacy-qsv-runtime remains open. Cached Linux/Windows SVG build
+images are present. Isolated v2.0.4 source now contains the corrections and a small oneVPL image
+layer over the retained SVG images. No new runtime build or publication started. Exact Next
+e7997fa...6b49dae delta contains the related QSV/VideoToolbox changes and also
+requires consumer/runtime review. Audit files are in tmp/ucu09-row181/.
+
 Row179 is N/A after the complete seven-file 5d65c231 audit. Changes concern
 upstream draft verification, release-note extraction, develop retention,
 serialized SHA-tagged publication, workflow references, signing, tag selection

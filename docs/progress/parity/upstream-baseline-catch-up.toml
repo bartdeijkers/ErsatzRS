@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-179/181; 2 pending.
+180/181; 1 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -67,6 +67,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row181-legacy-qsv-runtime'
+description = 'Upstream FFmpeg 8.1.2-2 adds fixed QSV decode pool retention, D3D11 handle initialization and child-context transfers, plus legacy oneVPL device discovery. Published ErsatzRS-ffmpeg v2.0.3 does not include these new corrections; row181 remains pending.'
+discovered = '2026-09-30'
+evidence = 'Exact release delta in tmp/ucu09-row181/runtime-compare.json and build-dependency-compare.json. All three new FFmpeg patches apply to n9.0 without fuzz or offsets; existing QSV timestamp patch remains compatible. Earlier hardware-validation debt does not waive implementation. Runtime build/publication/integration and focused regression evidence remain required; no new build or release started.'
+resolved = false
 
 [[debt]]
 id = 'ucu09-row174-subtitle-eligibility'

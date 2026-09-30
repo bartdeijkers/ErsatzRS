@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5d65c23109dc5aa6298fcd986fae2ddee1be64f3` |
-| **Commit subject** | `build: immutable releases (#3044)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5d65c23109dc5aa6298fcd986fae2ddee1be64f3 |
+| **Pinned commit** | `8bda4411d8fe17a99ea8fda3a567efb54f26acdb` |
+| **Commit subject** | `build: publish develop builds to separate repo (#3045)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/8bda4411d8fe17a99ea8fda3a567efb54f26acdb |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

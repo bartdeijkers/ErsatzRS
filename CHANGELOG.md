@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Show this build's unreleased changelog on development home and health pages;
+  tagged releases continue to show their exact version's notes.
+
 - Include Next's Windows oneVPL DLL and license beside its executable in both
   release packaging paths, rejecting archives with missing companions.
 
