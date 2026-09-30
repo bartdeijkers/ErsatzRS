@@ -124,9 +124,10 @@ Row168 is N/A: upstream release heading/date/links only. Row169 ports provider
 rotation, Media Info and Next schema 0.0.5; 163 regressions, decoded Next rotation,
 two browser cases, corrected orientation health and Next HTTP smoke pass. Row170 ports Default VAAPI driver omission; 14 config/protocol
 checks, strict lint and exact Next consumer review pass. Row171 is Covered under ADRs 0005/0105: shared libass and encoded canvas
-replace the Skia subtitle bitmap loop; focused projection passes. Continue row172;
+replace the Skia subtitle bitmap loop; focused projection passes. Row172 ports Jellyfin query/type guards and proves unchanged-ETag season
+parent repair; 47 checks and strict lint pass. Continue row173;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 10 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 9 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

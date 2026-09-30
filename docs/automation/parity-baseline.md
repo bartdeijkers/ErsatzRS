@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `62b7a5e9550e0f574efc3ca3007d8bd800988649` |
-| **Commit subject** | `perf: graphics engine subtitles (#3037)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/62b7a5e9550e0f574efc3ca3007d8bd800988649 |
+| **Pinned commit** | `27f9d2174f377e27baa553872c73fcac863a52d7` |
+| **Commit subject** | `fix: jellyfin 12 collections as shows (#3038)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/27f9d2174f377e27baa553872c73fcac863a52d7 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -40,7 +40,7 @@ impl Provider {
             json!({"MediaContainer": {"totalSize": total, "Metadata": items}})
         } else {
             let items = if present {
-                vec![json!({"Id": "collection-1", "Name": name})]
+                vec![json!({"Id": "collection-1", "Type": "BoxSet", "Name": name})]
             } else {
                 vec![]
             };

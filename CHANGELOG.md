@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Jellyfin collection members as their real media types during scans by
+  disabling collection collapsing and rejecting unexpected response types. For
+  affected show libraries, scan again, empty the trash to remove bogus collection
+  shows, then deep scan collections to restore collection search results.
+
 - Let libva select the Next VAAPI driver when the profile uses Default, instead
   of forcing Intel iHD on AMD devices. Explicit driver and device choices remain.
 

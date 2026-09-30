@@ -11416,6 +11416,28 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row172 is Port after the complete 27f9d217 five-file audit. All three Jellyfin
+item query builders disable collection collapsing; five projections require
+exact returned media types. Existing season upsert already repairs ShowId with
+unchanged ETag, so no SQL change is needed. Production scan proof preserves
+season/episode identity, restores their parents, retains the ETag and skips
+unchanged playback metadata. HTTP mocks assert the flag on movie, show, single
+show, season, episode, collection and member requests. The type matrix rejects
+wrong/missing types. All 47 Jellyfin/Emby tests pass in 6.757s
+(2f8fb507-3a5c-4eb5-bc97-2ebb144cc677), including collection discovery, media
+tracks and Classic continuity. Initial strict type checking exposed 17 old
+fixtures missing real Type fields; corrected fixtures retain their assertions.
+Lint then found an oversized test; fixture setup was extracted without an allow.
+Final strict infra all-target Clippy, architecture lint and diff checks pass.
+The refactored repair regression passes again
+(b30bf84e-9cad-4587-8642-5628fdda4364). Substantive review confirms complete query
+coverage, unchanged Emby production behavior, transactional library-scoped season
+identity and unchanged health/capability requirements. Changelog includes the
+upstream scan/trash/deep-collection-scan recovery procedure; no live-library
+mutation, migration, runtime or UI change. Logs/source: tmp/ucu09-row172/.
+Pin advances to 27f9d217; 172/181 accepted, 9 pending. Continue row173;
+final window gates, fresh upstream audit, push and exact-SHA CI remain.
+
 Row171 is Covered under accepted ADRs 0005/0105 after the full 62b7a5e9
 two-file audit. Upstream optimizes Skia subtitle bitmap alpha/cropping and Pipe
 buffering/reader advancement. Native libass filters and the shared Next FFmpeg

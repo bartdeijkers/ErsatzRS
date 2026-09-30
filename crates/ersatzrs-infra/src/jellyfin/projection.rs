@@ -50,6 +50,9 @@ pub(super) fn project_library(response: JellyfinLibraryResponse) -> Option<Jelly
 }
 
 pub(super) fn project_show(item: JellyfinLibraryItemResponse) -> Option<JellyfinShowItem> {
+    if item.item_type.as_deref() != Some("Series") {
+        return None;
+    }
     let name = item.name.unwrap_or_default();
     let release_date = item.premiere_date;
     let tagline = item
@@ -138,6 +141,9 @@ pub(super) fn project_actors(people: &[JellyfinPersonResponse]) -> Vec<JellyfinA
 }
 
 pub(super) fn project_season(item: JellyfinLibraryItemResponse) -> Option<JellyfinSeasonItem> {
+    if item.item_type.as_deref() != Some("Season") {
+        return None;
+    }
     let name = item.name.unwrap_or_default();
     let item_id = item.id.as_deref().unwrap_or_default();
     let poster_artwork_path = item
@@ -170,6 +176,9 @@ pub(super) fn project_season(item: JellyfinLibraryItemResponse) -> Option<Jellyf
 pub(super) fn project_collection(
     item: JellyfinLibraryItemResponse,
 ) -> Option<JellyfinCollectionItem> {
+    if item.item_type.as_deref() != Some("BoxSet") {
+        return None;
+    }
     Some(JellyfinCollectionItem {
         item_id: item.id?,
         etag: item.etag,
@@ -197,6 +206,9 @@ pub(super) fn project_collection_media_item(
 }
 
 pub(super) fn project_movie(item: JellyfinLibraryItemResponse) -> Option<JellyfinMediaItem> {
+    if item.item_type.as_deref() != Some("Movie") {
+        return None;
+    }
     if item.location_type.as_deref() != Some("FileSystem") {
         return None;
     }
@@ -266,6 +278,9 @@ pub(super) fn project_movie(item: JellyfinLibraryItemResponse) -> Option<Jellyfi
 }
 
 pub(super) fn project_episode(item: JellyfinLibraryItemResponse) -> Option<JellyfinMediaItem> {
+    if item.item_type.as_deref() != Some("Episode") {
+        return None;
+    }
     if item.location_type.as_deref() != Some("FileSystem") {
         return None;
     }
@@ -476,6 +491,47 @@ mod tests {
     use ersatzrs_domain::DolbyVisionMetadataState;
 
     use super::{project_stream, JellyfinMediaStreamResponse};
+
+    #[test]
+    fn jellyfin_projections_require_the_expected_provider_type() {
+        for kind in [
+            None,
+            Some("BoxSet"),
+            Some("Series"),
+            Some("Season"),
+            Some("Movie"),
+            Some("Episode"),
+            Some("Folder"),
+        ] {
+            let item = || {
+                serde_json::from_value(serde_json::json!({
+                    "Id": "fixture-item", "Name": "Fixture", "Type": kind,
+                    "LocationType": "FileSystem", "Path": "fixture.mkv"
+                }))
+                .unwrap()
+            };
+            assert_eq!(
+                super::project_show(item()).is_some(),
+                kind == Some("Series")
+            );
+            assert_eq!(
+                super::project_season(item()).is_some(),
+                kind == Some("Season")
+            );
+            assert_eq!(
+                super::project_movie(item()).is_some(),
+                kind == Some("Movie")
+            );
+            assert_eq!(
+                super::project_episode(item()).is_some(),
+                kind == Some("Episode")
+            );
+            assert_eq!(
+                super::project_collection(item()).is_some(),
+                kind == Some("BoxSet")
+            );
+        }
+    }
 
     #[test]
     fn jellyfin_profile_8_1_fixture_projects_a_complete_record() {

@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-171/181; 10 pending.
+172/181; 9 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -68,6 +68,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row172-jellyfin-collections'
+description = 'Jellyfin item queries can collapse collection members and projections accept wrong item types; verify season parent repair with unchanged ETag.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns full 27f9d217 review, 47 passing Jellyfin/Emby checks, final production repair regression and strict lint. Query flags and exact types prevent collection substitution; existing transactional upsert repairs season parents without changing identity or ETag. Recovery instructions are in CHANGELOG.md.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row170-vaapi-default'
