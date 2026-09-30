@@ -1,10 +1,10 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..76884783 (fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..b6666882 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-180/181; 1 pending.
+181/182; 1 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -70,10 +70,10 @@ explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas.
 
 [[debt]]
 id = 'ucu09-row181-legacy-qsv-runtime'
-description = 'Upstream FFmpeg 8.1.2-2 adds fixed QSV decode pool retention, D3D11 handle initialization and child-context transfers, plus legacy oneVPL device discovery. Published ErsatzRS-ffmpeg v2.0.3 does not include these new corrections; row181 remains pending.'
+description = 'Integrate the published v2.0.4 QSV and oneVPL corrections and official Next 6b49dae, then close row181 runtime acceptance. Published package integration, strict lint and integrated smoke now pass.'
 discovered = '2026-09-30'
-evidence = 'Exact release delta in tmp/ucu09-row181/runtime-compare.json and build-dependency-compare.json. All three new FFmpeg patches apply to n9.0 without fuzz or offsets; existing QSV timestamp patch remains compatible. Earlier hardware-validation debt does not waive implementation. Runtime build/publication/integration and focused regression evidence remain required; no new build or release started.'
-resolved = false
+evidence = 'UCU-09 owns published runtime commit 657482cc, exact draft/public checksum verification and passing available hardware/software checks. Next scaling, selected audio, bitmap subtitles, direct watermarks and production HTTP canvas pass; the image fixture now passes three scheduled production-route cases including local/HTTP templates, Burn/Convert, disabled watermarks and cleanup. Strict affected lint and Next HTTP smoke pass. Native Windows Next CUDA/NVENC, RGB alpha, subtitle and selected-audio output also pass. See milestone evidence and tmp/ucu09-row181/. Approved hardware debt is unchanged.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row174-subtitle-eligibility'

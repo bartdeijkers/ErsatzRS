@@ -31,6 +31,10 @@ pub(super) struct Origin {
 }
 
 impl Origin {
+    pub(super) fn image_url(&self) -> String {
+        format!("{}/image.ppm", self.base)
+    }
+
     pub async fn start(fixture: &Fixture, mode: Mode) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -50,6 +54,10 @@ impl Origin {
         };
         let captured = Arc::new(tokio::sync::Mutex::new(None));
         let app = Router::new()
+            .route_service(
+                "/image.ppm",
+                tower_http::services::ServeFile::new(fixture.root.path().join("green.ppm")),
+            )
             .route(
                 "/ffmpeg/next-canvas",
                 get(crate::transport::iptv::next_canvas::get_canvas),

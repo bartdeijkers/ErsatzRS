@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-30): `76884783996ac3aa11a232622939b8bd03ed0d86`
-  — build: bump ffmpeg to 8.1.2-2 (#3046).
-- Ledger: **181 commits**, **28 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-30): `b6666882e157216bc2dedb68af0feb411b950b71`
+  — feat: enable mpeg2video when using next engine (#3047).
+- Ledger: **182 commits**, **1 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **155**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **181**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -62,7 +62,24 @@
   pipeline. The rejected native-only proposal cannot justify exclusions.
 
 
-## Row 181 pending runtime audit: legacy QSV corrections
+## Row 182 source map: Next MPEG-2 output
+
+- Upstream `b6666882`: `ChannelConfigConverter` maps MPEG-2 and forces 8-bit;
+  `Core/Next/Config/ChannelConfig` adds the `mpeg2video` wire value;
+  `StartFFmpegNextSessionHandler` emits CODECS only when both codecs are known.
+- Rust targets: `next_engine/config.rs`, `protocol.rs` and their regressions;
+  shared `transport/iptv/variant.rs` playlist codec projection. Audit callers,
+  health and validation before implementation so an accepted profile does not
+  get rejected elsewhere.
+- Preserve explicit rejection of other unsupported codecs, HDR policy, selected
+  audio/subtitles, and existing H.264/HEVC bit depth. Verify actual decoded
+  software MPEG-2 output with the published runtime and official Next 6b49dae.
+- No UI layout change or database migration is indicated by the source delta.
+  Hardware claims require evidence; existing approved debt is not expanded.
+- Ordered implementation follows row181 acceptance. Source diff and history
+  prefix proof are in `tmp/ucu09-row182/`.
+
+## Row 181 source map: legacy QSV corrections
 
 - `76884783` adopts ErsatzTV-ffmpeg `8.1.2-2`, updates bundled revision health,
   Windows checksum and Docker digest, and documents new runtime/Next fixes.
@@ -74,17 +91,21 @@
   ErsatzRS QSV timestamp correction remains compatible (ten-line offset only).
 - The accompanying oneVPL dispatcher fix covers non-primary Intel adapters and
   missing runtime device IDs. It applies without fuzz/offsets to the published
-  v2.0.3 dependency revision `d77f9195`. The current recipe has no such patch.
-- Missing implementation is recorded as `ucu09-row181-legacy-qsv-runtime`.
+  v2.0.3 dependency revision `d77f9195`; v2.0.4 now includes the patch.
+- Implementation closure is recorded as `ucu09-row181-legacy-qsv-runtime`.
   Previously approved hardware-validation debt does not waive these corrections.
 - Reuse existing Linux/Windows SVG dependency images by exact image ID; add the
   small dispatcher layer and rebuild only necessary runtime packages. Do not
   rebuild/publish the unrelated multi-platform Docker runtime. Preserve all
   published artifacts; publication of a replacement is a separate gate.
-- Source-only evidence is under `tmp/ucu09-row181/`. Runtime compilation,
-  available software/NVIDIA regressions, package checksums and integration
-  remain required. Next consumer changes also need exact-source/runtime review.
-  No row verdict or baseline advance is justified yet.
+- Runtime v2.0.4 is now published from `657482cc` with exact tested draft/public
+  archive checksums; the app's managed pin selects it locally. Required available
+  runtime checks pass. Official Next 6b49dae passes scaling, audio/subtitles,
+  direct watermarks and the production HTTP canvas preview. The stale infra-only
+  image fixture is migrated to passing scheduled production-route coverage.
+  Strict lint and Next HTTP smoke pass. Native Windows Next CUDA/NVENC, alpha,
+  subtitles and selected audio pass. Milestone evidence owns detailed results;
+  row181 is accepted and the baseline advances to `76884783`.
 
 ## Row 180 source and visual map: development release notes
 
@@ -5094,4 +5115,5 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 178 | `f8410286` | build: fix docker workflow quoting | N/A | Upstream-only digest-list syntax; ErsatzRS uses Buildx Bake | UCU-09 source audit; row176 workflow lint | Complete two-line fix reviewed. No matching broken shell assignments in ErsatzRS; image/channel arguments are quoted. |
 | 179 | `5d65c231` | build: immutable releases (#3044) | N/A | Upstream develop-release scripts and workflow policy | UCU-09 full seven-file audit | No product behavior changes. ErsatzRS retains separate CI, tag-triggered releases and explicit beta publication acceptance; no automatic develop publication or retention policy is introduced. |
 | 180 | `8bda4411` | build: publish develop builds to separate repo (#3045) | Port | Embedded development release-note selection; upstream repository/tag policies N/A | UCU-09 focused tests, lint and browser evidence | Development home/health show Unreleased; tagged builds keep exact notes. Matched build and two browser checks pass. No GitHub client or legacy Docker-tag warning is introduced. |
-| 181 | `76884783` | build: bump ffmpeg to 8.1.2-2 (#3046) | | | | ucu-09; pending ordered source audit; existing pinned ErsatzRS-ffmpeg artifacts and acceptance contracts remain in force. |
+| 181 | `76884783` | build: bump ffmpeg to 8.1.2-2 (#3046) | Adapt | ADRs 0008/0063; managed FFmpeg 9 and Next runtime | `fix(next): integrate legacy QSV runtime corrections` | ucu-09; published v2.0.4 at 657482cc, exact public archive hashes, 13 acquisition tests, Linux/Windows decoded runtime proof, migrated production canvas coverage, strict affected lint and Next HTTP smoke pass. Approved hardware debt remains unverified. |
+| 182 | `b6666882` | feat: enable mpeg2video when using next engine (#3047) | | | | ucu-09; pending ordered implementation after row181. Next protocol/profile MPEG-2 projection, forced 8-bit output and complete HLS codec signaling require focused and decoded runtime proof. |

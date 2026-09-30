@@ -567,9 +567,10 @@ release section when tagging a release.
   Check FFV1 encoding/decoding, NUT input/output support and canvas timing
   filters at startup and report missing support through FFmpeg health checks.
 
-- Use the checksum-verified ErsatzRS-ffmpeg v2.0.3 packages by default, adding
+- Use the checksum-verified ErsatzRS-ffmpeg v2.0.4 packages by default, adding
   SVG decoding with correct translucent overlays and the upstream QSV/AMF
-  runtime patches. Preserve existing codecs and subtitle/audio playback;
+  runtime patches, including legacy Intel decoder-pool retention, D3D11 frame
+  transfers and oneVPL device discovery. Preserve existing codecs and subtitle/audio playback;
   Intel QSV, AMD AMF and native Linux NVIDIA interop validation remain
   explicitly approved hardware acceptance debt.
 

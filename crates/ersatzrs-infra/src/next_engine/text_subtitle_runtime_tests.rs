@@ -316,7 +316,9 @@ async fn callback_connection(
                         socket.shutdown().await.unwrap();
                         return;
                     }
-                    let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
+                    let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap_or_else(|| {
+                        panic!("unexpected fixture callback path: {}", target.split('?').next().unwrap())
+                    })
                         .split('/').collect();
                     assert_eq!(parts.len(), 4);
                     let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap())

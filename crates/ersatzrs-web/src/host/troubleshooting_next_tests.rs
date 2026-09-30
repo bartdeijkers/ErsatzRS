@@ -467,6 +467,9 @@ mod remote_runtime;
 #[path = "troubleshooting_canvas_runtime_tests.rs"]
 mod canvas_runtime;
 
+#[path = "troubleshooting_image_graphics_runtime_tests.rs"]
+mod image_graphics_runtime;
+
 // Process reaping is observed through a disposable POSIX wrapper.
 #[cfg(unix)]
 #[path = "troubleshooting_canvas_http_tests.rs"]
@@ -537,7 +540,7 @@ async fn output(mut command: Command) -> Vec<u8> {
     result.stdout
 }
 
-async fn assert_decoded_tracks(ffmpeg: &FsPath, playlist: &FsPath) {
+async fn assert_decoded_audio(ffmpeg: &FsPath, playlist: &FsPath) {
     let mut audio = Command::new(ffmpeg);
     audio
         .args(["-v", "error", "-nostdin", "-i"])
@@ -561,6 +564,10 @@ async fn assert_decoded_tracks(ffmpeg: &FsPath, playlist: &FsPath) {
         (820.0..940.0).contains(&frequency),
         "expected Dutch 880 Hz track, found {frequency}"
     );
+}
+
+async fn assert_decoded_tracks(ffmpeg: &FsPath, playlist: &FsPath) {
+    assert_decoded_audio(ffmpeg, playlist).await;
     let mut video = Command::new(ffmpeg);
     video
         .args(["-v", "error", "-nostdin", "-i"])

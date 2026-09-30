@@ -11392,7 +11392,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 76884783 (latest fetched tip) in order,
+Process every ledger row in this release window through b6666882 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
@@ -11416,6 +11416,21 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row181 is Adapt after the full 76884783 runtime/bundling/changelog audit,
+preserving ADRs 0008/0063 managed FFmpeg 9 delivery. Published v2.0.4 at runtime
+commit 657482cc includes all three QSV corrections and the oneVPL dispatcher
+patch. Exact public archives match tested candidate hashes. The managed pin
+selects v2.0.4 and 13 acquisition tests pass. Official Next 6b49dae passes decoded
+Linux software and native Windows NVIDIA output, including selected audio,
+subtitles, scaling and RGB opacity. Migrated scheduled image-graphics coverage
+uses production canvas routes. Strict affected lint, formatting and Next HTTP
+smoke pass; smoke proves HLS/TS playback, selected 880 Hz audio, burned subtitles,
+preview isolation, wrapper restart and idle cleanup. See tmp/ucu09-row181/ and
+tmp/ucu09-ffmpeg-v2.0.4/candidate.json for exact identities and logs. Approved
+Intel QSV, AMD AMF and native Linux NVIDIA hardware debt remains unverified.
+Pin advances to 76884783; 181/182 accepted, one pending. Row182, final window
+gates, fresh upstream refresh, push and exact-SHA green CI remain.
+
 Row180 is Port after the full 8bda4411 thirteen-file audit. Development builds
 now render their embedded Unreleased changelog on home/health instead of the
 previous release. Tagged builds retain exact version selection; missing tagged
@@ -11432,15 +11447,41 @@ legacy Docker deprecation warning have no equivalent here. Pin advances to
 8bda4411; 180/181 accepted, 1 pending. Continue row181 runtime corrections;
 final window gates, fresh upstream audit, push and exact-SHA CI remain.
 
-Pending row181 look-ahead: exact FFmpeg 8.1.2-1...8.1.2-2 release delta adds
-three QSV fixes plus a oneVPL dispatcher patch. All apply to exact n9.0 / the
-v2.0.3 oneVPL d77f9195 dependency with no fuzz/offsets. Existing QSV timestamp
-patch remains compatible. Published v2.0.3 lacks these corrections; owning debt
-ucu09-row181-legacy-qsv-runtime remains open. Cached Linux/Windows SVG build
-images are present. Isolated v2.0.4 source now contains the corrections and a small oneVPL image
-layer over the retained SVG images. No new runtime build or publication started. Exact Next
-e7997fa...6b49dae delta contains the related QSV/VideoToolbox changes and also
-requires consumer/runtime review. Audit files are in tmp/ucu09-row181/.
+2026-09-30 row181 refresh appends b6666882 as row182 (Next MPEG-2 output).
+All 181 existing ledger SHAs remain the exact ordered prefix of the refreshed
+182-commit history. Accepted pin stays at row180; current count is 180/182,
+two pending. Source and prefix proof: tmp/ucu09-row182/. No acceptance is waived.
+
+Pending row181 runtime integration: ErsatzRS-ffmpeg v2.0.4 is published from
+657482cc0bfe25e1483dbce624e03997835ea3f9 after explicit maintainer approval.
+Exact Linux and Windows archives, downloaded draft assets and anonymous public
+downloads match the tested binaries and recorded SHA-256 checksums. Source and
+package identities are in tmp/ucu09-ffmpeg-v2.0.4/candidate.json. Three QSV patches
+and the oneVPL dispatcher correction compile for both packages; SVG alpha/text,
+sparse subtitles/alternate audio, drawvg/drawtext/rav1e, Windows NVIDIA interop,
+Linux software Vulkan and Debian bookworm execution pass. Existing approved
+hardware debt remains unverified. Existing Docker artifacts are unchanged;
+no duplicate runtime build was requested. The local managed-runtime pin now
+selects v2.0.4; all 13 focused managed-acquisition tests pass with runtime
+overrides cleared. Acceptance remains pending integration closeout.
+
+Official Next 6b49dae with v2.0.4 passes decoded scaling/selected audio/bitmap
+subtitles (a1ed3701-96c8-4098-a017-f61bdfbaaa21, two of three selected cases),
+direct ordered watermarks (a03ac1b7-2484-43b6-9d42-d4e5ee2d45cd), and the production
+private HTTP canvas preview including alpha, tracks and callback revocation
+(ea556b43-d9a6-40dd-8841-6c2d37a80819). The older infra image-graphics runtime test
+failed because its fixture did not implement /ffmpeg/next-canvas introduced by
+ADR 0105. Migrated that case to a scheduled channel using production HTTP routes;
+all three cases now pass (97168b02-58d6-42a7-93f9-f761fb1ac52d, 57.5s), preserving
+local/HTTP image templates, selected Dutch audio, embedded Burn/Convert subtitles,
+image visibility with disabled watermarks, callback revocation and cleanup.
+The infra fixture retains direct-watermark geometry/order coverage. Strict lint
+passes for the affected crates after two fixture-only lint corrections, with no
+new exemptions. Native Windows official Next 6b49dae with published v2.0.4 also
+passes CUDA/NVENC H.264 playback, half-alpha RGB overlay, burned subtitles and
+selected 883 Hz audio; exact executable/DLL hashes are recorded. Integrated
+HTTP smoke now passes, including both session cleanup paths and wrapper restart. Detailed logs:
+tmp/ucu09-row181/. Row182 MPEG-2 work and final window gates remain.
 
 Row179 is N/A after the complete seven-file 5d65c231 audit. Changes concern
 upstream draft verification, release-note extraction, develop retention,
