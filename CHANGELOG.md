@@ -55,6 +55,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Return typed errors from authenticated FFmpeg-profile, smart-collection and
+  empty-trash machine APIs: invalid requests use 400, missing records 404,
+  profile conflicts 409 and operational failures 500. Prevent profile deletion
+  from removing dependent channels or playouts, and show localized feedback
+  when the default or an in-use profile cannot be deleted. Keep loaded profile
+  row actions and format labels in the selected UI language.
+
 - Recover the last motion-graphics frame when seeking near EOF and stop Hold
   at its exact expiry, including zero hold time. Anchor media troubleshooting
   graphics at the selected seek in both engines and expose the numeric

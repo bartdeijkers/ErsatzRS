@@ -184,6 +184,18 @@ for the header. Missing or invalid credentials return HTTP 401.
 `GET /api/openapi.json` describes the implemented machine endpoints and their
 authentication scheme; fetching it also requires the header. For example,
 `POST /api/maintenance/clean_artwork` queues cleanup after authenticating.
+The machine CRUD endpoints are `GET /api/ffmpeg/profiles`,
+`POST /api/ffmpeg/profiles/new`, `PUT /api/ffmpeg/profiles/update`,
+`DELETE /api/ffmpeg/delete/{id}`, and their smart-collection counterparts at
+`/api/collections/smart`, `/api/collections/smart/new`,
+`/api/collections/smart/update` and `/api/collections/smart/delete/{id}`.
+Profile updates select `ffmpegProfileId`; smart-collection updates select `id`.
+JSON uses camelCase and accepts enum names or their numeric values.
+`POST /api/maintenance/empty_trash` runs the existing trash cleanup operation.
+Invalid requests return 400, missing records 404, profile conflicts 409 and
+operational failures 500. Duplicate smart-collection names remain 400.
+Default profiles cannot be deleted (400); profiles referenced by channels
+cannot be deleted (409). Rejected deletions preserve channels and playouts.
 `GET /api/sessions` returns normal playlist workers from both streaming engines
 with `channelNumber`, `state`, `transcodedUntil` and `lastAccess`. Next reports
 `state: "next"` and `transcodedUntil: null`; a native cursor is also null before

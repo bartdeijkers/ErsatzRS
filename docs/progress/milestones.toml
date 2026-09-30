@@ -11416,6 +11416,36 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row156 is Port after the complete a4642d95 audit. Authenticated profile,
+smart-collection and empty-trash machine routes reuse application/repository
+operations and return typed 400/404/409/safe 500 responses. Mixed known profile
+errors remain 400; operational errors remain 500. SQLite write transactions
+reject duplicate races, absent updates and default/in-use profile deletions
+without cascading channels/playouts. Smart query validation and affected
+playout refresh remain; API updates preserve HDR/tune and nullable QSV fields.
+The initial production-router regression reproduced missing machine routes
+(7ca0308c). Loopback peer information corrected the private-router fixture;
+the next causal failure exposed channel-number RowNotFound being classified
+as storage unavailable. Its adapter now retains typed absence versus failure.
+All 32 HTTP/repository/application/security/localization checks pass
+(e981b0d8-f2e7-48aa-a5ad-729244d779a4), plus channel-number round trip
+(3e6e24c1-674c-4cc2-b93d-25670dc92742). Strict affected app/infra/web/FFmpeg
+all-target Clippy, architecture/hydration lint, formatting and progress pass.
+Matched Leptos and test-results/ucu09-row156-browser-accepted prove all six
+new English/Dutch deletion cases in Chromium/Firefox, persisted rejection and
+successful delete/refetch. The whole selection has 15 passes and one unchanged
+Firefox no-JS skip; Chromium no-JS and both hydrated editors pass. Browser
+failures exposed missing island language context and async callback fallback;
+initialize/capture the island language without DOM/shared-primitive changes.
+Native smoke passes legacy/hybrid MPEG-TS, HLS and private callback rejection.
+Published v2.0.3 FFmpeg/ffprobe and official Next e7997fa digests are reverified;
+no FFmpeg build, package, schema, dependency or generated FFmpeg change.
+Substantive review confirms auth before extraction/writes, management-only
+routing, exact wire projections, typed errors and transaction safety. Reuse
+unchanged row154 Next and row146 transport proof; final window gates remain.
+Pin advances to a4642d95; 156/181 accepted, 25 pending. Continue row157.
+No intermediate push/CI or release; approved hardware debt stays unverified.
+
 Row155 is Port after the complete d1c2ab3a audit: optional Next AMF adapter
 protocol added with exact uint32 bounds and None profile output. The regression
 reproduced dropped index zero (de702681). All 14 Next config/protocol checks

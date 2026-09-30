@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-155/181; 26 pending.
+156/181; 25 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
@@ -30,6 +30,8 @@ runtime proof passes.
 native argv, lint and both smoke paths pass.
 155 Port: optional Next AMF index/default; 14 wire/config checks, lint, exact
 package checksums pass; hardware debt remains.
+156 Port: typed machine CRUD, safe deletion and localized island callbacks;
+33 focused checks, 15 browser passes, strict lint and native smoke pass.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 
@@ -245,3 +247,10 @@ discovered = '2026-09-28'
 resolved = true
 adr = '0095'
 evidence = 'UCU-09 owns passing mixed-router, model and process-backed lifecycle evidence. Typed reports and authenticated GET/OpenAPI are implemented; reads preserve idle lifetime and the accepted native Next playlist bridge.'
+
+[[debt]]
+id = 'ucu09-row156-machine-api-status'
+description = 'Row156: expose the affected profile/smart-collection and empty-trash machine routes with upstream typed statuses, safe persistence/deletion and API-key enforcement. Existing application/repository operations and browser handlers must be preserved.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 owns passing typed HTTP, wire, duplicate-race, dependent-graph and auth/listener checks; matched Chromium/Firefox deletion feedback and successful refetch pass. Strict lint and native smoke pass. Source map: plans/upstream-catch-up.md, Row156. Window closeout and exact-SHA CI remain required.'

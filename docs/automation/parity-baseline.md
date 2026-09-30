@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `d1c2ab3abcd7da9191b40b4cbc252ea973f4a9ec` |
-| **Commit subject** | `chore: updates for new next, ffmpeg builds` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/d1c2ab3abcd7da9191b40b4cbc252ea973f4a9ec |
+| **Pinned commit** | `a4642d95bbd1715033a48df12306aedfd6169216` |
+| **Commit subject** | `fix: api response codes (#3020)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a4642d95bbd1715033a48df12306aedfd6169216 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

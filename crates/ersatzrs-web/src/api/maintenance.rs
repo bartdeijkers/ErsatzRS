@@ -34,6 +34,14 @@ pub async fn clean_artwork(
     }
 }
 
+/// Machine trash maintenance preserves typed failures and an upstream unit body.
+pub async fn empty_trash(
+    State(state): State<AppState>,
+) -> Result<axum::Json<serde_json::Value>, super::machine::MachineError> {
+    state.application.empty_media_trash().await?;
+    Ok(axum::Json(serde_json::json!({})))
+}
+
 /// Native form fallback for the admin health refresh action.
 pub async fn refresh_health(State(state): State<AppState>) -> axum::response::Response {
     use axum::response::{IntoResponse, Redirect};

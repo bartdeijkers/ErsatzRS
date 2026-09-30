@@ -1,7 +1,7 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{FfmpegProfileRepository, Result};
+use ersatzrs_core::repositories::{FfmpegProfileRepository, RepositoryError, Result};
 use ersatzrs_domain::ffmpeg::{ContentLightLevel, MasteringDisplayMetadata};
 use ersatzrs_domain::{EntityId, FFmpegProfile, Resolution};
 use sqlx::{Pool, Row};
@@ -13,6 +13,20 @@ use super::common::{
 
 #[derive(Clone)]
 pub struct SqliteFfmpegProfileRepository(pub Pool<crate::db::Db>);
+
+const UPDATE_PROFILE_SQL: &str = r#"UPDATE "FFmpegProfile" SET
+    "Name" = ?, "ThreadCount" = ?, "TranscodeAudio" = ?, "TranscodeVideo" = ?,
+    "HardwareAcceleration" = ?, "VaapiDisplay" = ?, "VaapiDriver" = ?, "VaapiDevice" = ?,
+    "QsvExtraHardwareFrames" = ?, "ResolutionId" = ?, "ScalingBehavior" = ?, "PadMode" = ?,
+    "VideoFormat" = ?, "VideoProfile" = ?, "VideoPreset" = ?, "VideoTune" = ?,
+    "AllowBFrames" = ?, "BitDepth" = ?,
+    "VideoBitrate" = ?, "VideoBufferSize" = ?, "TonemapAlgorithm" = ?, "OutputDynamicRange" = ?,
+    "HdrMasteringDisplay" = ?, "HdrMaxCll" = ?, "HdrMaxFall" = ?,
+    "AudioFormat" = ?,
+    "AudioBitrate" = ?, "AudioBufferSize" = ?, "NormalizeLoudnessMode" = ?, "TargetLoudness" = ?,
+    "AudioChannels" = ?, "AudioSampleRate" = ?, "NormalizeFramerate" = ?, "NormalizeColors" = ?,
+    "DeinterlaceVideo" = ?
+WHERE "Id" = ?"#;
 
 const INSERT_PROFILE_SQL: &str = r#"INSERT INTO "FFmpegProfile" (
     "Id", "Name", "ThreadCount", "TranscodeAudio", "TranscodeVideo",
@@ -135,28 +149,11 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     async fn upsert(&self, profile: &FFmpegProfile) -> Result<()> {
         let mut transaction = crate::db::begin_write(&self.0).await.repository()?;
 
-        let updated = bind_profile_columns(
-            sqlx::query(
-                r#"UPDATE "FFmpegProfile" SET
-                    "Name" = ?, "ThreadCount" = ?, "TranscodeAudio" = ?, "TranscodeVideo" = ?,
-                    "HardwareAcceleration" = ?, "VaapiDisplay" = ?, "VaapiDriver" = ?, "VaapiDevice" = ?,
-                    "QsvExtraHardwareFrames" = ?, "ResolutionId" = ?, "ScalingBehavior" = ?, "PadMode" = ?,
-                    "VideoFormat" = ?, "VideoProfile" = ?, "VideoPreset" = ?, "VideoTune" = ?,
-                    "AllowBFrames" = ?, "BitDepth" = ?,
-                    "VideoBitrate" = ?, "VideoBufferSize" = ?, "TonemapAlgorithm" = ?, "OutputDynamicRange" = ?,
-                    "HdrMasteringDisplay" = ?, "HdrMaxCll" = ?, "HdrMaxFall" = ?,
-                    "AudioFormat" = ?,
-                    "AudioBitrate" = ?, "AudioBufferSize" = ?, "NormalizeLoudnessMode" = ?, "TargetLoudness" = ?,
-                    "AudioChannels" = ?, "AudioSampleRate" = ?, "NormalizeFramerate" = ?, "NormalizeColors" = ?,
-                    "DeinterlaceVideo" = ?
-                   WHERE "Id" = ?"#,
-            ),
-            profile,
-        )
-        .bind(profile.id)
-        .execute(&mut *transaction)
-        .await
-        .repository()?;
+        let updated = bind_profile_columns(sqlx::query(UPDATE_PROFILE_SQL), profile)
+            .bind(profile.id)
+            .execute(&mut *transaction)
+            .await
+            .repository()?;
 
         if updated.rows_affected() == 0 {
             let insert = sqlx::query(INSERT_PROFILE_SQL).bind(profile.id);
@@ -171,11 +168,55 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let exists: bool =
+            sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "FFmpegProfile" WHERE "Id" = ?)"#)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        if !exists {
+            return Err(RepositoryError::NotFound {
+                kind: "ffmpeg profile",
+                id,
+            });
+        }
+        let default: Option<String> =
+            sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+                .bind(ersatzrs_domain::config::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+        if let Some(value) = default {
+            let default_id: i64 = value.parse().map_err(|_| RepositoryError::Decode {
+                kind: "default FFmpeg profile",
+                value: "invalid profile id".into(),
+            })?;
+            if default_id == id {
+                return Err(RepositoryError::Validation {
+                    field: "default_profile_id",
+                    message: "Cannot delete default FFmpeg Profile".into(),
+                });
+            }
+        }
+        let used: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel" WHERE "FFmpegProfileId" = ?"#)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        if used > 0 {
+            return Err(RepositoryError::Conflict(format!(
+                "Cannot delete FFmpeg Profile that is used by {used} {}",
+                if used == 1 { "channel" } else { "channels" },
+            )));
+        }
         sqlx::query(r#"DELETE FROM "FFmpegProfile" WHERE "Id" = ?"#)
             .bind(id)
-            .execute(&self.0)
+            .execute(&mut *tx)
             .await
             .repository()?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -213,67 +254,57 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     }
 
     async fn save_admin(&self, profile: &FFmpegProfile) -> Result<EntityId> {
-        if profile.id > 0 {
-            self.upsert(profile).await?;
-            return Ok(profile.id);
-        }
-        let result = sqlx::query(
-            r#"INSERT INTO "FFmpegProfile" (
-                "Name", "ThreadCount", "TranscodeAudio", "TranscodeVideo",
-                "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
-                "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
-                "VideoFormat", "VideoProfile", "VideoPreset", "VideoTune", "AllowBFrames", "BitDepth",
-                "VideoBitrate", "VideoBufferSize", "TonemapAlgorithm", "OutputDynamicRange",
-                "HdrMasteringDisplay", "HdrMaxCll", "HdrMaxFall",
-                "AudioFormat",
-                "AudioBitrate", "AudioBufferSize", "NormalizeLoudnessMode", "TargetLoudness",
-                "AudioChannels", "AudioSampleRate", "NormalizeFramerate", "NormalizeColors",
-                "DeinterlaceVideo"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let duplicate: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS(SELECT 1 FROM "FFmpegProfile" WHERE "Name" = ? AND "Id" <> ?)"#,
         )
         .bind(&profile.name)
-        .bind(profile.thread_count)
-        .bind(profile.transcode_audio)
-        .bind(profile.transcode_video)
-        .bind(encode_enum(profile.hardware_acceleration))
-        .bind(&profile.vaapi_display)
-        .bind(encode_enum(profile.vaapi_driver))
-        .bind(&profile.vaapi_device)
-        .bind(profile.qsv_extra_hardware_frames)
-        .bind(profile.resolution_id)
-        .bind(encode_enum(profile.scaling_behavior))
-        .bind(encode_enum(profile.pad_mode))
-        .bind(encode_enum(profile.video_format))
-        .bind(&profile.video_profile)
-        .bind(&profile.video_preset)
-        .bind(&profile.video_tune)
-        .bind(profile.allow_b_frames)
-        .bind(encode_enum(profile.bit_depth))
-        .bind(profile.video_bitrate)
-        .bind(profile.video_buffer_size)
-        .bind(encode_enum(profile.tonemap_algorithm))
-        .bind(encode_enum(profile.output_dynamic_range))
-        .bind(
-            profile
-                .hdr_mastering_display
-                .map(MasteringDisplayMetadata::to_ffmpeg_value),
-        )
-        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_cll)))
-        .bind(profile.hdr_content_light.map(|light| content_light_column(light.max_fall)))
-        .bind(encode_enum(profile.audio_format))
-        .bind(profile.audio_bitrate)
-        .bind(profile.audio_buffer_size)
-        .bind(encode_enum(profile.normalize_loudness_mode))
-        .bind(profile.target_loudness)
-        .bind(profile.audio_channels)
-        .bind(profile.audio_sample_rate)
-        .bind(profile.normalize_framerate)
-        .bind(profile.normalize_colors)
-        .bind(profile.deinterlace_video)
-        .execute(&self.0)
+        .bind(profile.id)
+        .fetch_one(&mut *tx)
         .await
         .repository()?;
-        Ok(crate::db::last_insert_id(result))
+        if duplicate {
+            return Err(RepositoryError::Conflict(format!(
+                "An FFmpeg profile named \"{}\" already exists.",
+                profile.name,
+            )));
+        }
+        let resolution_exists: bool =
+            sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "Resolution" WHERE "Id" = ?)"#)
+                .bind(profile.resolution_id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        if !resolution_exists {
+            return Err(RepositoryError::Validation {
+                field: "resolution_id",
+                message: "Resolution does not exist".into(),
+            });
+        }
+        if profile.id > 0 {
+            let changed = bind_profile_columns(sqlx::query(UPDATE_PROFILE_SQL), profile)
+                .bind(profile.id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            if changed.rows_affected() == 0 {
+                return Err(RepositoryError::NotFound {
+                    kind: "ffmpeg profile",
+                    id: profile.id,
+                });
+            }
+            tx.commit().await.repository()?;
+            return Ok(profile.id);
+        }
+        // NULL requests SQLite's generated integer primary key.
+        let insert = sqlx::query(INSERT_PROFILE_SQL).bind(Option::<EntityId>::None);
+        let result = bind_profile_columns(insert, profile)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        let id = crate::db::last_insert_id(result);
+        tx.commit().await.repository()?;
+        Ok(id)
     }
 
     async fn copy_admin(&self, id: EntityId, name: &str) -> Result<EntityId> {

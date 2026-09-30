@@ -275,6 +275,31 @@ pub async fn list_ffmpeg_profiles(
         .collect())
 }
 
+pub async fn list_ffmpeg_profiles_for_api(
+    repository: &dyn FfmpegProfileRepository,
+) -> Result<Vec<(ersatzrs_domain::FFmpegProfile, String)>> {
+    let resolutions: BTreeMap<_, _> = repository
+        .list_resolutions()
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.name))
+        .collect();
+    repository
+        .list()
+        .await?
+        .into_iter()
+        .map(|profile| {
+            let resolution = resolutions.get(&profile.resolution_id).cloned().ok_or(
+                ApplicationError::MissingReference {
+                    kind: "FFmpeg profile resolution",
+                    id: profile.resolution_id,
+                },
+            )?;
+            Ok((profile, resolution))
+        })
+        .collect()
+}
+
 pub async fn count_ffmpeg_profiles(repository: &dyn FfmpegProfileRepository) -> Result<u64> {
     u64::try_from(repository.list().await?.len()).map_err(|_| ApplicationError::InvalidData {
         kind: "ffmpeg profiles",

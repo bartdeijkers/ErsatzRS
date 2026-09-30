@@ -62,9 +62,10 @@ pub async fn save_ffmpeg_profile_form(
         .await
     {
         Ok(_) => Redirect::to("/ffmpeg"),
-        Err(ersatzrs_app::ApplicationError::Validation { field: "name", .. }) => {
-            Redirect::to(&format!("/ffmpeg/{}?error=duplicate", input.id))
-        }
+        Err(
+            ersatzrs_app::ApplicationError::Validation { field: "name", .. }
+            | ersatzrs_app::ApplicationError::Conflict(_),
+        ) => Redirect::to(&format!("/ffmpeg/{}?error=duplicate", input.id)),
         Err(error) => {
             tracing::error!(%error, profile_id = input.id, "failed to save FFmpeg profile from HTML form");
             Redirect::to(&format!("/ffmpeg/{}?error=save", input.id))

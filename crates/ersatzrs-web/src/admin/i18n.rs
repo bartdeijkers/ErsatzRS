@@ -1472,6 +1472,9 @@ pub enum TextKey {
     HardwareAcceleration,
     HardwareIfPossible,
     NewProfileName,
+    ProfileDeleteDefault,
+    ProfileDeleteInUse,
+    ProfileDeleteFailed,
     NoneOption,
     NumHelp,
     OptionalDisplayTitle,
@@ -3477,6 +3480,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::HardwareAcceleration,
     TextKey::HardwareIfPossible,
     TextKey::NewProfileName,
+    TextKey::ProfileDeleteDefault,
+    TextKey::ProfileDeleteInUse,
+    TextKey::ProfileDeleteFailed,
     TextKey::NoneOption,
     TextKey::NumHelp,
     TextKey::OptionalDisplayTitle,
@@ -4355,11 +4361,23 @@ pub fn ffmpeg_profile_audio_format_text(language: UiLanguage, format: i32) -> St
 
 pub fn ffmpeg_profile_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
-    languages_for(use_i18n()).ffmpeg_profile_error_message(&message)
+    ffmpeg_profile_error_text(use_i18n(), &message)
 }
 
 pub fn ffmpeg_profile_error_text(language: UiLanguage, error: &str) -> String {
-    languages_for(language).ffmpeg_profile_error_message(error)
+    let key = if error.contains("ffmpeg-profile-delete-default") {
+        Some(TextKey::ProfileDeleteDefault)
+    } else if error.contains("ffmpeg-profile-delete-in-use") {
+        Some(TextKey::ProfileDeleteInUse)
+    } else if error.contains("ffmpeg-profile-delete-failed") {
+        Some(TextKey::ProfileDeleteFailed)
+    } else {
+        None
+    };
+    key.map_or_else(
+        || languages_for(language).ffmpeg_profile_error_message(error),
+        |key| text(language, key).to_owned(),
+    )
 }
 
 pub fn settings_error_text(language: UiLanguage, error: &str) -> String {

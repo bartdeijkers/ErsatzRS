@@ -74,7 +74,8 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(number)
             .fetch_one(&self.0)
             .await
-            .repository()?;
+            // Number lookups have no entity id until a row is found.
+            .map_err(|error| not_found("channel number", 0, error))?;
         map_channel(&row)
     }
 

@@ -111,6 +111,13 @@ pub struct SaveFfmpegProfile {
     pub form: FfmpegProfileAdminForm,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct SaveFfmpegProfileForApi {
+    pub form: FfmpegProfileAdminForm,
+    pub is_update: bool,
+    pub qsv_extra_hardware_frames: Option<i32>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeleteFfmpegProfile {
     pub id: EntityId,
@@ -713,6 +720,71 @@ pub async fn save_ffmpeg_profile(
     }
 
     let profile = normalize_ffmpeg_profile(command.form, repository).await?;
+    repository.save_admin(&profile).await.map_err(Into::into)
+}
+
+/// Validate the machine profile mutation before any write. Mixed known upstream
+/// error kinds are a bad request; operational failures retain their category.
+pub async fn save_ffmpeg_profile_for_api(
+    mut command: SaveFfmpegProfileForApi,
+    repository: &dyn FfmpegProfileRepository,
+) -> crate::Result<EntityId> {
+    command.form.name = command.form.name.trim().to_owned();
+    let form = &command.form;
+    let mut errors = Vec::new();
+    let name = form.name.trim();
+    if name.is_empty() || name.chars().count() > 50 {
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "FFmpeg profile name is invalid".into(),
+        });
+    } else if repository.name_exists(form.id, name).await? {
+        errors.push(ApplicationError::Conflict(format!(
+            "An FFmpeg profile named \"{name}\" already exists.",
+        )));
+    }
+    if form.thread_count < 0 {
+        errors.push(ApplicationError::Validation {
+            field: "thread_count",
+            message: "Thread count must be 0 or greater.".into(),
+        });
+    }
+    if !repository
+        .list_resolutions()
+        .await?
+        .iter()
+        .any(|r| r.id == form.resolution_id)
+    {
+        errors.push(ApplicationError::Validation {
+            field: "resolution_id",
+            message: "Resolution does not exist".into(),
+        });
+    }
+    if command.is_update
+        && (form.id <= 0 || repository.get_optional_admin(form.id).await?.is_none())
+    {
+        errors.push(ApplicationError::NotFound {
+            kind: "ffmpeg profile",
+            id: form.id,
+        });
+    }
+    if errors.len() == 1 {
+        return Err(errors.remove(0));
+    }
+    if !errors.is_empty() {
+        return Err(ApplicationError::Validation {
+            field: "request",
+            message: errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; "),
+        });
+    }
+    let mut profile = normalize_ffmpeg_profile(command.form, repository).await?;
+    if profile.hardware_acceleration == HardwareAccelerationKind::Qsv {
+        profile.qsv_extra_hardware_frames = command.qsv_extra_hardware_frames;
+    }
     repository.save_admin(&profile).await.map_err(Into::into)
 }
 
@@ -2724,7 +2796,17 @@ pub async fn save_smart_collection(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<EntityId> {
-    if command.id < 0 {
+    save_smart_collection_for_api(command, false, repository, queue, operations).await
+}
+
+pub async fn save_smart_collection_for_api(
+    command: SaveSmartCollection,
+    is_update: bool,
+    repository: &dyn CollectionRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<EntityId> {
+    if command.id < 0 && !is_update {
         return validation_error("smart_collection_id", "must be zero or greater");
     }
     let name = command.name.trim();
@@ -2750,6 +2832,12 @@ pub async fn save_smart_collection(
             message: error.to_string(),
         },
     )?;
+    if is_update && command.id <= 0 {
+        return Err(ApplicationError::NotFound {
+            kind: "smart collection",
+            id: command.id,
+        });
+    }
     let id = repository.save_smart_admin(command.id, name, query).await?;
     if command.id > 0 {
         for playout_id in repository.playout_ids_using_smart(command.id).await? {

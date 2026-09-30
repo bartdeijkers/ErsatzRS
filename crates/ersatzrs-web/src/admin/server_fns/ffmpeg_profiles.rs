@@ -877,7 +877,16 @@ pub async fn delete_ffmpeg_profile(id: i64) -> Result<(), ServerFnError> {
         .application
         .delete_ffmpeg_profile(DeleteFfmpegProfile { id })
         .await
-        .map_err(ServerFnError::new)
+        .map_err(|error| match error {
+            ersatzrs_app::ApplicationError::Validation {
+                field: "default_profile_id",
+                ..
+            } => ServerFnError::new("ffmpeg-profile-delete-default"),
+            ersatzrs_app::ApplicationError::Conflict(_) => {
+                ServerFnError::new("ffmpeg-profile-delete-in-use")
+            }
+            _ => ServerFnError::new("ffmpeg-profile-delete-failed"),
+        })
 }
 
 /// Copies a profile, giving the copy `new_name`. Returns the new profile's id.

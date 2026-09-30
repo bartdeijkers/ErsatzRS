@@ -1,7 +1,7 @@
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::{
@@ -80,6 +80,39 @@ pub fn build_app(app_state: AppState) -> Router {
         Router::new()
             .route("/healthz", get(super::bootstrap::healthz))
             .route("/api/openapi.json", get(super::api_security::openapi))
+            .route("/api/ffmpeg/profiles", get(api::machine_profiles::list))
+            .route(
+                "/api/ffmpeg/profiles/new",
+                post(api::machine_profiles::create),
+            )
+            .route(
+                "/api/ffmpeg/profiles/update",
+                put(api::machine_profiles::update),
+            )
+            .route(
+                "/api/ffmpeg/delete/{id}",
+                delete(api::machine_profiles::delete),
+            )
+            .route(
+                "/api/collections/smart",
+                get(api::machine_collections::list),
+            )
+            .route(
+                "/api/collections/smart/new",
+                post(api::machine_collections::create),
+            )
+            .route(
+                "/api/collections/smart/update",
+                put(api::machine_collections::update),
+            )
+            .route(
+                "/api/collections/smart/delete/{id}",
+                delete(api::machine_collections::delete),
+            )
+            .route(
+                "/api/maintenance/empty_trash",
+                post(api::maintenance::empty_trash),
+            )
             .route("/api/sessions", get(api::sessions::list_sessions))
             .route(
                 "/changelog.md",

@@ -974,6 +974,21 @@ impl ApplicationServices {
         queries::get_ffmpeg_profile(id, self.ports.ffmpeg_profiles()).await
     }
 
+    /// Read all machine profile records with their required resolution names.
+    pub async fn list_ffmpeg_profiles_for_api(
+        &self,
+    ) -> Result<Vec<(ersatzrs_domain::FFmpegProfile, String)>> {
+        queries::list_ffmpeg_profiles_for_api(self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Validate upstream machine mutation categories before persisting a profile.
+    pub async fn save_ffmpeg_profile_for_api(
+        &self,
+        command: commands::SaveFfmpegProfileForApi,
+    ) -> Result<i64> {
+        commands::save_ffmpeg_profile_for_api(command, self.ports.ffmpeg_profiles()).await
+    }
+
     /// Validate and persist one `FFmpeg` profile.
     pub async fn save_ffmpeg_profile(&self, command: commands::SaveFfmpegProfile) -> Result<i64> {
         commands::save_ffmpeg_profile(command, self.ports.ffmpeg_profiles()).await
@@ -1650,6 +1665,22 @@ impl ApplicationServices {
     ) -> Result<ersatzrs_domain::EntityId> {
         commands::save_smart_collection(
             command,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Validate a machine smart-collection mutation without treating missing updates as creates.
+    pub async fn save_smart_collection_for_api(
+        &self,
+        command: commands::SaveSmartCollection,
+        is_update: bool,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_smart_collection_for_api(
+            command,
+            is_update,
             self.ports.collections(),
             self.ports.playout_builds(),
             &self.operations,

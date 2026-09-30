@@ -215,9 +215,12 @@ pub async fn serve_concat_playlist(
     {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => {
-            tracing::debug!(%error, channel_number, "channel not found for concat playlist");
+        Err(ersatzrs_core::repositories::RepositoryError::NotFound { .. }) => {
             return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(_) => {
+            tracing::error!("concat channel lookup failed");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
     let mode = query

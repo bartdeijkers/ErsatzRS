@@ -101,9 +101,11 @@ motion EOF/expiry/loop boundaries and preview clocks under ADRs 0005/0105;
 75 focused checks, native argv, 18 browser cases, lint and both smoke paths pass.
 Row155 ports the optional Next AMF adapter field; 14 protocol/config checks,
 strict lint and both package checksums pass. Automatic selection is unchanged;
-approved AMD hardware debt remains. Continue at row156; UCU-09 window gates,
-push and exact-SHA CI remain.
-The current 181-row ledger has 26 pending rows. Preserve accepted architecture,
+approved AMD hardware debt remains. Row156 ports typed machine CRUD and trash
+errors, guarded profile deletion and localized island callbacks. All 33 focused
+checks, strict lint, 15 browser cases and native smoke pass. Continue at row157;
+UCU-09 window gates, push and exact-SHA CI remain.
+The current 181-row ledger has 25 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI
