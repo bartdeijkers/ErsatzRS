@@ -6054,14 +6054,7 @@ pub async fn create_playout(
             schedule_file = validate_playout_schedule_path(&command.schedule_file, schedule_kind)?;
         }
         4 => {
-            schedule_file = command.schedule_file.trim().to_owned();
-            let script = first_playout_command_token(&schedule_file);
-            if script.is_empty() || std::fs::metadata(&script).is_err() {
-                return validation_error(
-                    "schedule_file",
-                    playout_schedule_file_missing_message(schedule_kind),
-                );
-            }
+            schedule_file = validate_scripted_playout_file(&command.schedule_file)?;
         }
         _ => unreachable!("validated schedule kind"),
     }
@@ -6270,7 +6263,7 @@ fn parse_playout_create_kind(kind: &str) -> crate::Result<i32> {
 
 fn validate_playout_schedule_path(value: &str, kind: i32) -> crate::Result<String> {
     let value = value.trim();
-    if value.is_empty() || std::fs::metadata(value).is_err() {
+    if value.is_empty() || !std::path::Path::new(value).is_file() {
         return validation_error("schedule_file", playout_schedule_file_missing_message(kind));
     }
     Ok(value.to_owned())
@@ -6287,25 +6280,11 @@ fn playout_schedule_file_missing_message(kind: i32) -> &'static str {
 
 fn validate_scripted_playout_file(value: &str) -> crate::Result<String> {
     let value = value.trim();
-    let script = first_playout_command_token(value);
-    if script.is_empty() || std::fs::metadata(&script).is_err() {
+    let command = ersatzrs_core::scheduling::ScriptedScheduleCommand::parse(value);
+    if !command.is_some_and(|command| std::path::Path::new(&command.file).is_file()) {
         return validation_error("schedule_file", playout_schedule_file_missing_message(4));
     }
     Ok(value.to_owned())
-}
-
-fn first_playout_command_token(value: &str) -> String {
-    let value = value.trim();
-    if let Some(rest) = value.strip_prefix('"') {
-        rest.split_once('"')
-            .map_or_else(|| rest.to_owned(), |(token, _)| token.to_owned())
-    } else {
-        value
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    }
 }
 
 fn normalize_playout_date_filter(filter: &mut ersatzrs_core::repositories::PlayoutDateFilterAdmin) {

@@ -6,6 +6,8 @@ use mlua::{Lua, Table};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod command;
+pub use command::ScriptedScheduleCommand;
 mod resolver;
 pub use resolver::ScriptedContentResolver;
 
@@ -38,14 +40,16 @@ impl ScriptedSchedulingEngine {
         request: SchedulingRequest,
         resolver: Option<Arc<dyn ScriptedContentResolver>>,
     ) -> Result<SchedulingResult, SchedulingError> {
-        let script_file = request
+        let command = request
             .playout
             .schedule_file
             .clone()
             .ok_or(SchedulingError::MissingScheduleFile)?;
-        let script = fs::read_to_string(&script_file)
-            .map_err(|_| SchedulingError::ScheduleFileMissing(script_file.clone()))?;
-        Self::schedule_script_resolved(&script, request, resolver)
+        let command =
+            ScriptedScheduleCommand::parse(&command).ok_or(SchedulingError::MissingScheduleFile)?;
+        let script = fs::read_to_string(&command.file)
+            .map_err(|_| SchedulingError::ScheduleFileMissing(command.file.clone()))?;
+        Self::schedule_script_resolved(&script, request, resolver, Some(&command))
     }
 }
 
@@ -60,13 +64,14 @@ impl ScriptedSchedulingEngine {
         script: &str,
         request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
-        Self::schedule_script_resolved(script, request, None)
+        Self::schedule_script_resolved(script, request, None, None)
     }
 
     fn schedule_script_resolved(
         script: &str,
         mut request: SchedulingRequest,
         resolver: Option<Arc<dyn ScriptedContentResolver>>,
+        command: Option<&ScriptedScheduleCommand>,
     ) -> Result<SchedulingResult, SchedulingError> {
         let (item_policies, legacy_policy) = Self::smart_shuffle_policies_from_script(script)?;
         request
@@ -99,6 +104,13 @@ impl ScriptedSchedulingEngine {
         state.borrow_mut().resolver = resolver;
         state.borrow_mut().seed = request.playout.seed;
         let lua = Lua::new();
+        if let Some(command) = command {
+            let arguments = lua
+                .create_sequence_from(command.arguments.iter().cloned())
+                .map_err(lua_error)?;
+            arguments.set(0, command.file.as_str()).map_err(lua_error)?;
+            lua.globals().set("arg", arguments).map_err(lua_error)?;
+        }
         register_all(&lua, &state).map_err(lua_error)?;
         run_lua_script(&lua, script).map_err(lua_error)?;
 

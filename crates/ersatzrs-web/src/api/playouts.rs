@@ -6,6 +6,10 @@ use serde::Deserialize;
 
 use crate::host::state::AppState;
 
+#[cfg(test)]
+#[path = "playout_schedule_tests.rs"]
+mod schedule_tests;
+
 #[derive(Debug, Deserialize)]
 pub struct PlayoutCreatePostForm {
     #[serde(default)]

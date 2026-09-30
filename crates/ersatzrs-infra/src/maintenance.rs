@@ -831,7 +831,8 @@ async fn load_scheduling_reference_data(
             let (definition_policies, definition_legacy_policy) = playout
                 .schedule_file
                 .as_deref()
-                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(ersatzrs_core::scheduling::ScriptedScheduleCommand::parse)
+                .and_then(|command| std::fs::read_to_string(command.file).ok())
                 .and_then(|script| {
                     ersatzrs_core::scheduling::ScriptedSchedulingEngine::smart_shuffle_policies_from_script(
                         &script,

@@ -2023,32 +2023,8 @@ mod legacy_sql_regressions {
 
     #[cfg(feature = "ssr")]
     fn first_command_token(value: &str) -> String {
-        let trimmed = value.trim_start();
-        let Some(first) = trimmed.chars().next() else {
-            return String::new();
-        };
-
-        if first != '"' && first != '\'' {
-            return trimmed
-                .split_whitespace()
-                .next()
-                .unwrap_or_default()
-                .to_owned();
-        }
-
-        // Mirror .NET's `CommandLineParser.SplitCommandLine`, which ErsatzTV uses:
-        // backslashes inside a quoted token are literal, not escape characters, so
-        // a Windows path like `"C:\Program Files\schedule.lua"` keeps its
-        // separators. Reading until the matching close quote is sufficient.
-        let quote = first;
-        let mut token = String::new();
-        for ch in trimmed[quote.len_utf8()..].chars() {
-            if ch == quote {
-                return token;
-            }
-            token.push(ch);
-        }
-        token
+        ersatzrs_core::scheduling::ScriptedScheduleCommand::parse(value)
+            .map_or_else(String::new, |command| command.file)
     }
 
     /// Now, formatted to match the stored UTC `Start`/`Finish` text columns for a

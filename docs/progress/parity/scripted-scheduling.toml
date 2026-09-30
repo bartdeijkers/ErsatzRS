@@ -9,6 +9,13 @@ Continuous scripted builds remove played items older than the build start minus 
 '''
 
 [[debt]]
+id          = 'scripted-command-validation-execution'
+description = 'UCU-09 row 163: production creation accepts quoted script commands while execution and policy loading read the complete string as a filename. File validation also accepts directories. Unify path and argument handling across validation and execution, preserving the in-process Lua engine.'
+discovered  = '2026-09-30'
+evidence    = 'UCU-09 row 163: three causal production failures corrected; 46 scripted checks pass (fa43ae73-139d-41e5-88f3-ec76c2fda5ec), including real SQLite validation/no-reset effects, quoted execution/arguments, invalid waits and existing restart/source-resolution coverage. Strict lint and structural checks pass; detailed evidence is in the milestone.'
+resolved    = true
+
+[[debt]]
 id          = 'scripted-playlist-child-history-continuation'
 description = 'UCU-08 row 122 regression reproduces playlist children restarting after a split build. Scripted history records only the active child, and restoration does not reconstruct the parent cycle before advancing. The working correction writes every child and replays the parent once; SQLite restart and real-source execution now pass.'
 discovered  = '2026-09-27'

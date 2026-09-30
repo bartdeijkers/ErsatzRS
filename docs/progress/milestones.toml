@@ -11416,6 +11416,31 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row163 is Port after the full db5a81e4 five-file audit. Empty command guards
+map to fallible parsing in the native Lua worker; invalid wait times already
+return an error before changing the clock. The shared creation validator applies
+to Scripted, Sequential and External JSON file paths; Sequential's inline-YAML
+update contract is preserved. Production application validation accepted directories
+and quoted commands that execution treated as literal filenames. Initial production
+regressions reproduced three failures (a6dc1233-dbd6-4a4b-88da-95945800fcf7).
+Creation and updates now share actual-file validation; validation, policy loading
+and execution share command tokenization with literal Windows backslashes and
+existing native single-quote support. File-based Lua receives arg[0] and positional
+arguments, including empty strings; no shell or external scheduling process is added.
+All 46 focused scripted checks pass (fa43ae73-139d-41e5-88f3-ec76c2fda5ec): real SQLite application
+create/update rejection without persistence or reset requests, accepted quoted files
+and arguments, empty builds, invalid waits without clock mutation, source resolution,
+lookup failure/cancellation, smart-shuffle declarations, history restart/continuation
+and existing graphics/watermark snapshots. Strict affected all-target Clippy,
+architecture/hydration lint, formatting and progress checks pass. An explicit fixture
+default corrected the only Clippy finding. The continuation lost prior temporary
+logs; the final test/lint evidence was recovered under tmp/ucu09-row163/.
+Review confirms validation precedes writes and queue requests, both file readers
+use the same parser, and inline script execution remains unchanged. No schema,
+health capability, UI markup, generated FFmpeg command or runtime package change;
+reuse the existing browser/transport evidence. Required final window gates remain.
+Pin advances to db5a81e4; 163/181 accepted, 18 pending. Continue row164.
+
 Row162 is Port after the full 4e951c17 six-file source audit. Upstream refresh locking/reload/removal/cancellation maps
 to fresh, owned filesystem snapshots shared by settings and stream startup;
 there is no mutable cache or additional scheduler task. Edited, added, removed

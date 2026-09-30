@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `4e951c1724d7f42324462a0ae70db3589b599938` |
-| **Commit subject** | `fix: mpeg-ts script reliability (#3026)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/4e951c1724d7f42324462a0ae70db3589b599938 |
+| **Pinned commit** | `db5a81e44dd5980dcc34e67899c0b1afc1c21bb2` |
+| **Commit subject** | `fix: scripted schedule file validation (#3027)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/db5a81e44dd5980dcc34e67899c0b1afc1c21bb2 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

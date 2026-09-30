@@ -32,7 +32,7 @@ pub use classic::{
     ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
     ClassicSchedulingEngine,
 };
-pub use scripted::{ScriptedContentResolver, ScriptedSchedulingEngine};
+pub use scripted::{ScriptedContentResolver, ScriptedScheduleCommand, ScriptedSchedulingEngine};
 pub use smart_shuffle::{
     block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,

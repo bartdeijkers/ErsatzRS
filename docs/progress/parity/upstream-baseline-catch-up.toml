@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-162/181; 19 pending.
+163/181; 18 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -29,6 +29,8 @@ and native smoke pass.
 161 Covered: FFmpeg font ownership replaces shared mapper; nine checks pass.
 162 Port: fresh script choices, selection recovery and no-JS settings;
 19 checks, six browser cases, strict lint and native smoke pass.
+163 Port: shared script path validation/execution and Lua arguments;
+46 focused checks and strict lint pass.
 Window gates remain.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.

@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Validate schedule files before saving or queuing a playout build, rejecting
+  empty paths and directories. Use the same quoted script path during validation,
+  policy loading and execution, and pass supplied arguments to Lua's `arg` table.
+
 - Discover current MPEG-TS scripts in FFmpeg settings and recover missing selections
   to Default or the first available script. Settings and stream startup share fresh
   definitions, so edits, removals and corrected invalid files take effect on reload.
