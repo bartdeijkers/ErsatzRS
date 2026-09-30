@@ -8,10 +8,10 @@ license.workspace = true
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
-jiff = "=0.2.23"
-icu_collator = "=2.2.0"
-pest = "=2.8.6"
-pest_derive = "=2.8.6"
+jiff = "=0.2.37"
+icu_collator = "=2.2.1"
+pest = "=2.9.2"
+pest_derive = "=2.9.2"
 regex = "1"
 uuid = "1"
 mlua = { version = "0.12", features = ["lua54", "vendored"] }
