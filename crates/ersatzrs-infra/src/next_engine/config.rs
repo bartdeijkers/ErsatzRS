@@ -171,6 +171,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         bitrate_kbps: positive(profile.video_bitrate),
         buffer_kbps: positive(profile.video_buffer_size),
         accel,
+        amf_device: None,
         filters: wire::VideoFilters {
             libplacebo: wire::LibplaceboOptions {
                 tonemapping: tonemap.to_owned(),

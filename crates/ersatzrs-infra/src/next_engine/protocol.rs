@@ -107,6 +107,9 @@ pub struct Video {
     pub buffer_kbps: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accel: Option<Acceleration>,
+    /// Windows adapter index. Omission keeps Next's automatic AMD selection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amf_device: Option<u32>,
     pub filters: VideoFilters,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_device: Option<String>,

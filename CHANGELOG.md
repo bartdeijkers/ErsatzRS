@@ -481,6 +481,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Match Next's optional AMF adapter-index protocol, validating its unsigned
+  range while retaining automatic device selection in generated profiles.
+  AMD hardware playback remains explicitly unverified.
+
 - Include a stable `startedAt` clock in native and Next session reports, and use
   that session clock for graphics independently of programme changes.
 

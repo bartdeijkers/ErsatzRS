@@ -135,6 +135,39 @@ fn hardware_and_vaapi_driver_choices_survive_the_wire_mapping() {
 }
 
 #[test]
+fn amf_adapter_wire_preserves_auto_and_validates_explicit_indexes() {
+    let mut profile = profile();
+    profile.profile.hardware_acceleration = HardwareAccelerationKind::Amf;
+    let config = config(&profile).unwrap();
+    let automatic = serde_json::to_value(&config.normalization.video).unwrap();
+    assert!(automatic.get("amf_device").is_none());
+    let decoded: wire::Video = serde_json::from_value(automatic.clone()).unwrap();
+    assert!(serde_json::to_value(decoded)
+        .unwrap()
+        .get("amf_device")
+        .is_none());
+    for adapter in [Value::Null, json!(0), json!(2), json!(u32::MAX)] {
+        let mut explicit = automatic.clone();
+        explicit["amf_device"] = adapter.clone();
+        let decoded: wire::Video = serde_json::from_value(explicit).unwrap();
+        assert_eq!(
+            serde_json::to_value(decoded).unwrap()["amf_device"],
+            adapter
+        );
+    }
+    for invalid in [
+        json!(-1),
+        json!(u64::from(u32::MAX) + 1),
+        json!(1.5),
+        json!("2"),
+    ] {
+        let mut explicit = automatic.clone();
+        explicit["amf_device"] = invalid;
+        assert!(serde_json::from_value::<wire::Video>(explicit).is_err());
+    }
+}
+
+#[test]
 fn tonemapping_and_scaling_are_not_silently_reset_to_defaults() {
     for (algorithm, name) in [
         (FFmpegProfileTonemapAlgorithm::Linear, "linear"),

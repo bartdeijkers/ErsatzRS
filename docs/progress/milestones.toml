@@ -11416,6 +11416,21 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row155 is Port after the complete d1c2ab3a audit: optional Next AMF adapter
+protocol added with exact uint32 bounds and None profile output. The regression
+reproduced dropped index zero (de702681). All 14 Next config/protocol checks
+pass (c61b962d-935d-432f-8bdd-b6d5ba1ff9c4), including absent/null/default,
+explicit boundaries, invalid values and hardware/subtitle/track/canvas policy.
+Strict FFmpeg/infra/web all-target Clippy, architecture lint and formatting
+pass. Published v2.0.3 Linux/Windows archives and all four executables are
+checksum-reverified; exact official Next e7997fa digest agrees. Expanded AMF
+wrappers are registered; exact Next deliberately excludes VC-1 hardware decode
+for timestamp correctness. AMD hardware output remains approved unverified
+debt. Runtime/default wire output are unchanged, so row154 playback/browser
+proof remains valid. No native policy expansion, dependency, new runtime build
+or publication. Pin advances to d1c2ab3a; 155/181 accepted, 26 pending.
+Continue row156. No intermediate push/CI; window closeout remains required.
+
 Row154 is Adapt under accepted ADRs 0005/0105 after the complete 908fa961
 source audit. Causal checks reproduced near-EOF transparent Hold output,
 NTSC first-frame drift, an unshifted preview anchor and missing numeric seek.
