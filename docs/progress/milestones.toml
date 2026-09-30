@@ -11416,6 +11416,15 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row178 is N/A after the complete f8410286 two-line workflow diff. The fix closes
+quotes around upstream per-architecture digest-list assignments. ErsatzRS uses
+Buildx Bake's multi-platform target and quoted image/channel arguments, with no
+matching assignments. Row176's actionlint evidence remains valid for this
+unchanged workflow; no build or publication is justified. Source map in the
+plan and full diff in tmp/ucu09-row178/. Pin advances to f8410286;
+178/181 accepted, 3 pending. Continue row179; final window gates, fresh upstream
+audit, push and exact-SHA CI remain.
+
 Row177 is Adapt under accepted ADRs 0008/0063 after all nine b1ed47db files
 were reviewed. Upstream's ARMv7 removal is not adopted: the six-target release
 matrix and Docker arm/v7 remain. ErsatzRS images acquire FFmpeg separately;

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b1ed47db7b17ece980fc48eb07c21bcdf4e9e18e` |
-| **Commit subject** | `feat!: drop arm32v7 support; bump ffmpeg (#3043)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b1ed47db7b17ece980fc48eb07c21bcdf4e9e18e |
+| **Pinned commit** | `f8410286d265701304193365d757b061ca0e0168` |
+| **Commit subject** | `build: fix docker workflow quoting` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f8410286d265701304193365d757b061ca0e0168 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
