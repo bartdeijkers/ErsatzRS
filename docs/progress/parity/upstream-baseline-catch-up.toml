@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-166/181; 15 pending.
+167/181; 14 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -68,6 +68,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row167-local-paths'
+description = 'Local library admin saves accept relative/file-URI paths, decode percent names, omit cross-library conflict checks and replace cascade-parent path rows. Port the full upstream path contract, preserve unchanged media identity and show localized offending-path errors.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns full source/platform review, eleven production regressions, two native Windows probes, eight Chromium/Firefox JS/no-JS cases and strict affected lint. Saves preserve media identity, reject invalid/conflicting paths without mutation and show localized escaped correction forms. Source/UI map in plans/upstream-catch-up.md.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row164-dependent-selections'

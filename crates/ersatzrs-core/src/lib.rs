@@ -6,6 +6,7 @@ pub mod content_variants;
 pub mod health;
 pub mod hls;
 pub mod language_codes;
+pub mod local_library_paths;
 pub mod locking;
 pub mod maintenance;
 pub mod media_chapters;

@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Row 161 is Covered (FFmpeg font ownership; no shared mapper). Row 162 is Port (fresh MPEG-TS script choices, selection recovery and no-JS settings). Row 163 is Port (shared script validation/execution and Lua arguments). Row 164 is Port (dependent selection clearing, saved display and stable template hydration; four browser cases). Row 165 is Covered (credits fallback, typed HLS errors and graphics/process ownership; 18 checks). Row 166 is Covered (case-insensitive YAML discovery and scanner metadata/subtitle proof). Continue at row 167. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Row 161 is Covered (FFmpeg font ownership; no shared mapper). Row 162 is Port (fresh MPEG-TS script choices, selection recovery and no-JS settings). Row 163 is Port (shared script validation/execution and Lua arguments). Row 164 is Port (dependent selection clearing, saved display and stable template hydration; four browser cases). Row 165 is Covered (credits fallback, typed HLS errors and graphics/process ownership; 18 checks). Row 166 is Covered (case-insensitive YAML discovery and scanner metadata/subtitle proof). Row 167 is Port (native path validation, retained media identity and localized correction forms; eleven production, two Windows and eight browser checks). Continue at row 168. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,44 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 167 source and UI map — local library paths (Port)
+
+Upstream `5eb9102c33abff262207f829fdaf72329e84ba86` adds shared native path
+qualification/normalization/conflict rules, create/update checks and path-specific
+editor errors. Its full seven-file diff and platform test matrix are audited.
+
+- Core `LocalLibraryPaths`: map to a small core helper using native platform
+  path semantics, lexical dot-segment normalization and case-insensitive keys.
+  Preserve literal percent characters; reject relative paths, URI schemes and
+  invisible/quoted prefixes. Windows fully qualified drive/UNC paths and Unix
+  roots have their native counterparts. Malformed stored paths must not panic.
+- Create/update handlers: application validates before writes; infra checks
+  overlaps against other local libraries inside the write transaction, retaining
+  the Images/Other Videos exception. The previously accepted relative
+  paths/file URIs and percent-decoding are removed; overlap checks now serialize
+  with persistence.
+- Update reconciliation: preserve matched LibraryPath identities and scanned
+  children; delete only removed paths. The admin repository now preserves
+  existing parent IDs, matching the already-safe general library repository.
+  Production database tests prove idempotence, rollback and rejection safety.
+- UI: `/media/sources/local/add` and `/{id}/edit` use existing label/control rows,
+  paths textarea and top Save toolbar. Keep that geometry and CSS. The previous native
+  HTML POST hid errors behind an add-page redirect; now show localized
+  offending-path feedback and preserve correction inputs for JS and no-JS use.
+  Resolve both editor routes with in-order SSR so the form is present without
+  JavaScript; use the existing form component for escaped correction responses.
+  Update every supported culture, preserve escaping and keep private paths out
+  of logs. The server-function route must use the same application validation.
+
+Required proof: native platform rule fixtures, production app/SQLite rejection
+without mutation, overlap boundaries/Images exception/legacy recovery, unchanged
+media/path identity across repeated saves, and Chromium/Firefox UI validation and
+successful correction. Reuse pinned ICU4X simple case mapping already present in
+the workspace; no new external package or runtime is needed. All eleven production
+checks, two native Windows probes and eight Chromium/Firefox JS/no-JS cases pass,
+along with strict affected lint. UCU-09 owns exact evidence. Review and screenshot
+inspection confirm the path correction flow and retained media identity.
 
 ## Row 166 source map — remote-stream YAML extensions (Covered)
 
@@ -4782,7 +4820,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 164 | `3f4255be` | fix: many ui bug fixes (#3028) | Port | schedules-templates-decorations-deco-templates | `fix(scheduling): clear dependent choices and stabilize hydration` | ucu-09; full fourteen-file source map, persisted child clearing, saved option display and server-resolved template hydration. Four browser cases and strict lint pass. |
 | 165 | `3054e5d0` | fix: more bug fixes (#3029) | Covered | upstream-baseline-catch-up | `test(streaming): verify credits fallback and process ownership` | ucu-09; full seven-file audit. Existing shared credits renderer, typed HLS diagnostics, owned graphics/process cleanup and fresh UI options cover upstream fixes. 18 checks and strict lint pass. |
 | 166 | `3d31bfdd` | fix: remote stream yaml extension (#3030) | Covered | upstream-baseline-catch-up | `test(scanner): verify remote YAML extension parity` | ucu-09; native discovery already accepts both extensions case-insensitively. Three discovery/metadata/subtitle checks and strict lint pass. |
-| 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: local library paths must be absolute and errors must name the path. |
+| 167 | `5eb9102c` | fix: local library path validation (#3031) | Port | media-source-configuration; library-management | `fix(libraries): validate paths and preserve scanned media` | ucu-09; native path rules, transactional conflicts, identity-preserving saves and localized correction forms. Eleven production checks, two Windows probes, eight browser cases and strict lint pass. |
 | 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: upstream release preparation. |
 | 169 | `ee038ba4` | feat: next engine rotation (#3034) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: Rotation is persisted and orientation applied once under p8c-02; Next projection is Adapt when that row runs. |
 | 170 | `e8b7bb63` | fix: amd vaapi accel when driver is set to default (#3036) | | | | ucu-09; provisional: Port; ErsatzRS repeats the defect: `crates/ersatzrs-infra/src/next_engine/config.rs` maps `VaapiDriver::Auto | VaapiDriver::IHD` to wire `Ihd`, so an unset driver forces iHD on AMD instead of letting libva pick the driver for `vaapi_device`. `config_tests.rs` asserts the current mapping and changes with it. |

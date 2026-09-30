@@ -348,6 +348,10 @@ hydration-asset rebuilds happen once at commit time, not on every iteration.
 
 ## Admin UI E2E
 
+Run `local-library-paths.spec.ts` for local-library validation feedback, draft
+correction, localized errors, literal percent paths and unchanged scanned-media
+identity. It exercises Chromium and Firefox with JavaScript enabled and disabled.
+
 Run `dependent-group-selections.spec.ts` for Deco and Playout Templates group
 changes. It verifies cleared child IDs, replacement save/reload persistence and
 retained date filters in Chromium and Firefox, using the wrapper's isolated database.

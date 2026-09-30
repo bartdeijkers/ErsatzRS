@@ -11416,6 +11416,38 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row167 is Port after the full 5eb9102c seven-file source/platform-test audit.
+Native absolute-path validation and lexical normalization preserve literal percent
+characters. Transactional overlap checks retain the Images/Other Videos exception.
+Admin saves reconcile path identities, preserving scanned children and equivalent
+legacy duplicates while allowing correction of relative stored spellings. Old
+web tests of a separate SQL helper are replaced by production application/SQLite
+coverage. All 11 focused checks pass (final e97d4f06-bee6-45d2-98d7-1d8d652753f8), including
+simultaneous claims, rollback, malformed legacy paths and textarea escaping.
+Two native Windows probes pass using the unmodified production qualification and
+normalization functions, the installed SDK and stable lld-link. The PE x64 tests
+ran on Windows and cover drive/UNC roots, URI/invisible prefixes, dot segments and
+literal percent characters. Platform-independent ICU4X simple-case comparison
+uses the pinned dependency already present in the workspace.
+Strict affected four-crate all-target Clippy and formatting pass; final web lint
+also passes after explicit settings-error handling and the test-only module
+boundary correction. The final focused rerun passes 11/11 in 0.474s. Browser
+evidence remains valid: those corrections only expose settings-load errors and
+mark test-only SQL explicitly; the successful form/save path is unchanged.
+Architecture/hydration lint and progress validation pass
+without new exception budgets. Matched SSR/WASM
+browser acceptance passes all eight Chromium/Firefox JS/no-JS cases in 11.8s:
+rejection without mutation, retained draft, successful correction, media identity,
+overlap rejection, Dutch errors and escaped input. Dark English and light Dutch
+screenshots were inspected. JSON: test-results/ucu09-row167-browser-restart/
+playwright-results.json; logs and native Windows source/hash: tmp/ucu09-row167/.
+The first browser build terminated with exit 143 before tests; the warm restart
+completed without test retries. Cache cleanup followed the existing >60-GiB rule.
+Review confirms no new schema, runtime, scheduling or health capability changes;
+existing playback/transport evidence remains applicable. Pin advances to 5eb9102c;
+167/181 accepted, 14 pending. Continue row168; final window gates, upstream refresh,
+push and exact-SHA CI remain.
+
 Row166 is Covered after the full 3d31bfdd scanner/changelog audit. Native
 collect_remote_stream_files already accepts yml/yaml case-insensitively and
 preserves recursive discovery and manifest-first ordering. The existing discovery

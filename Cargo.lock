@@ -1181,6 +1181,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "ersatzrs-domain",
+ "icu_casemap",
  "icu_collator",
  "insta",
  "jiff",

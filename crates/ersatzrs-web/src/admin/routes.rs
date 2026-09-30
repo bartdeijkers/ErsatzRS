@@ -656,6 +656,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("add"),
                 )
                 view=LocalLibraryEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(
@@ -666,6 +667,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("edit"),
                 )
                 view=LocalLibraryEditorPage
+                ssr=SsrMode::InOrder
             />
 
             <Route

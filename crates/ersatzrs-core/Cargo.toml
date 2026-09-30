@@ -10,6 +10,7 @@ async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 jiff = "=0.2.23"
 icu_collator = "=2.2.0"
+icu_casemap = { version = "=2.2.0", default-features = false, features = ["compiled_data"] }
 pest = "=2.8.6"
 pest_derive = "=2.8.6"
 regex = "1"

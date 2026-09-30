@@ -27,3 +27,6 @@ pub mod watermarks;
 
 #[cfg(test)]
 mod machine_crud_tests;
+
+#[cfg(test)]
+mod local_library_tests;

@@ -443,6 +443,23 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn save_local_library_admin(&self, library: &LocalLibraryAdmin) -> Result<EntityId> {
+        for path in &library.paths {
+            if !ersatzrs_core::local_library_paths::is_fully_qualified(&path.path) {
+                return Err(RepositoryError::Validation {
+                    field: "library_path_absolute",
+                    message: path.path.clone(),
+                });
+            }
+            if !tokio::fs::metadata(&path.path)
+                .await
+                .is_ok_and(|metadata| metadata.is_dir())
+            {
+                return Err(RepositoryError::Validation {
+                    field: "library_path_exists",
+                    message: path.path.clone(),
+                });
+            }
+        }
         if library.id != 0 {
             let managed: i64 = sqlx::query_scalar(
                 r#"SELECT COUNT(*) FROM "AddonMediaListLibrary" WHERE "LibraryId" = ?"#,
@@ -458,6 +475,51 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
             }
         }
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        // Validate conflicts under the same write lock as persistence. Concurrent
+        // saves must not both acquire overlapping library roots.
+        let other_paths = sqlx::query(
+            r#"SELECT library."MediaKind", path."Path"
+               FROM "LibraryPath" path
+               JOIN "Library" library ON library."Id" = path."LibraryId"
+               JOIN "LocalLibrary" local ON local."Id" = library."Id"
+               WHERE library."Id" <> ?"#,
+        )
+        .bind(library.id)
+        .fetch_all(&mut *tx)
+        .await
+        .repository()?;
+        for path in &library.paths {
+            for other in &other_paths {
+                let kind = other.try_get("MediaKind").repository()?;
+                let existing: String = other.try_get("Path").repository()?;
+                if ersatzrs_core::local_library_paths::conflicts(
+                    library.media_kind,
+                    &path.path,
+                    kind,
+                    &existing,
+                ) {
+                    return Err(RepositoryError::Validation {
+                        field: "library_path_conflict",
+                        message: path.path.clone(),
+                    });
+                }
+            }
+        }
+        if library.id != 0 {
+            let exists: bool =
+                sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "LocalLibrary" WHERE "Id" = ?)"#)
+                    .bind(library.id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .repository()?;
+            if !exists {
+                return Err(RepositoryError::NotFound {
+                    kind: "local library",
+                    id: library.id,
+                });
+            }
+        }
+
         let id = if library.id == 0 {
             let source = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
                 .execute(&mut *tx)
@@ -496,18 +558,56 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                 .repository()?;
             library.id
         };
-        sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        for path in &library.paths {
-            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+        let existing =
+            sqlx::query(r#"SELECT "Id", "Path" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
                 .bind(id)
-                .bind(&path.path)
-                .execute(&mut *tx)
+                .fetch_all(&mut *tx)
                 .await
                 .repository()?;
+        let mut retained = std::collections::HashSet::new();
+        let mut seen = std::collections::HashSet::new();
+        for path in &library.paths {
+            let key = ersatzrs_core::local_library_paths::comparison_key(&path.path);
+            if !seen.insert(key.clone()) {
+                continue;
+            }
+            let mut matched = false;
+            for row in &existing {
+                let existing_path: String = row.try_get("Path").repository()?;
+                if ersatzrs_core::local_library_paths::comparison_key(&existing_path) == key {
+                    // Preserve every existing equivalent row: deleting a legacy
+                    // duplicate here could discard its distinct scanned children.
+                    let path_id = row.try_get::<i64, _>("Id").repository()?;
+                    retained.insert(path_id);
+                    if !ersatzrs_core::local_library_paths::is_fully_qualified(&existing_path) {
+                        // An operator correcting a legacy relative spelling must
+                        // not get the same invalid value back on the next edit.
+                        sqlx::query(r#"UPDATE "LibraryPath" SET "Path" = ? WHERE "Id" = ? AND "LibraryId" = ?"#)
+                            .bind(&path.path).bind(path_id).bind(id)
+                            .execute(&mut *tx).await.repository()?;
+                    }
+                    matched = true;
+                }
+            }
+            if !matched {
+                sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                    .bind(id)
+                    .bind(&path.path)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
+        }
+        for row in existing {
+            let path_id: i64 = row.try_get("Id").repository()?;
+            if !retained.contains(&path_id) {
+                sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "Id" = ? AND "LibraryId" = ?"#)
+                    .bind(path_id)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
         }
         tx.commit().await.repository()?;
         Ok(id)

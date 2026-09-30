@@ -150,7 +150,7 @@ notes  = 'SSR multipart form; `/channels/add` and `/channels/:id` smoke clean.'
 name   = 'LocalLibrariesPage'
 status = '✅'
 routes = ['/media/sources/local', '/media/sources/local/add', '/media/sources/local/:id/edit']
-notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
+notes  = 'Delete dialog server fn smoke clean. UCU-09 row167 uses in-order SSR for local editor forms and localized HTML correction responses; eight Chromium/Firefox JS/no-JS cases prove validation, draft recovery, escaped input and retained media identity in tests/e2e/local-library-paths.spec.ts. The production router contract is audited by tests/e2e/admin-route-contract.spec.ts.'
 
 [[page]]
 name   = 'JellyfinSourcesPage` etc.'

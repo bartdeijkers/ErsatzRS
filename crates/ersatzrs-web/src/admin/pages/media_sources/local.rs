@@ -220,8 +220,15 @@ pub fn LocalLibraryEditorPage() -> impl IntoView {
 }
 
 #[component]
-fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
+fn LocalLibraryEditorForm(
+    initial_form: LocalLibraryForm,
+    #[prop(optional)] error: Option<String>,
+) -> impl IntoView {
     let lib_id = initial_form.id;
+    #[cfg(target_os = "windows")]
+    let path_example = r"C:\Media\Movies";
+    #[cfg(not(target_os = "windows"))]
+    let path_example = "/media/movies";
     let media_kind_opts: Vec<(i32, String)> = vec![
         (1, tr(TextKey::Movies).into()),
         (2, tr(TextKey::TvShows).into()),
@@ -237,6 +244,12 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
         .map(|p| p.path.as_str())
         .collect::<Vec<_>>()
         .join("\n");
+    // Leptos treats textarea children as raw text during SSR. Encode the
+    // content explicitly so a rejected path cannot close the textarea tag.
+    let paths_html = paths_text
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
 
     view! {
         <div class=style::page>
@@ -258,6 +271,7 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                 </div>
 
                 <div class=style::editor_form>
+                    {error.map(|message| view! { <p class=style::error_msg role="alert">{message}</p> })}
                     <a
                         href=format!("/media/remote/streams/playlists/{lib_id}")
                         class=style::back_link
@@ -308,14 +322,47 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                             class=style::form_input
                             name="paths_text"
                             rows="5"
-                            placeholder="/mnt/media/movies"
-                        >{paths_text}</textarea>
+                            placeholder=path_example
+                            inner_html=paths_html
+                        ></textarea>
                         <p class=style::cell_muted>{tr(TextKey::EnterOnePathPerLine)}</p>
                     </div>
                 </div>
             </form>
         </div>
     }
+}
+
+/// Render the same correction form for a failed HTML POST, retaining all input.
+/// This response needs no JavaScript; Leptos escapes submitted paths and names.
+#[cfg(feature = "ssr")]
+pub(crate) fn local_library_error_document(
+    initial_form: LocalLibraryForm,
+    message: String,
+    language: crate::admin::i18n::UiLanguage,
+    is_dark_mode: bool,
+) -> String {
+    let owner = Owner::new();
+    owner.with(|| {
+        provide_context(language);
+        view! {
+            <!DOCTYPE html>
+            <html lang=language.code()>
+                <head>
+                    <meta charset="utf-8"/>
+                    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                    <title>{tr(TextKey::LocalLibraries)}</title>
+                    <link rel="stylesheet" href="/public/bundle.css"/>
+                </head>
+                <body data-theme=if is_dark_mode { "dark" } else { "light" }>
+                    <main class=style::validation_page>
+                        <LocalLibraryEditorForm initial_form error=message/>
+                    </main>
+                </body>
+            </html>
+        }
+        .to_html()
+    })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

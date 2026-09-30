@@ -2409,30 +2409,23 @@ impl ApplicationServices {
         let mut seen = std::collections::HashSet::new();
         let mut paths = Vec::new();
         for path in library.paths {
-            let trimmed = path.path.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let uri_path = trimmed
-                .strip_prefix("file://localhost")
-                .or_else(|| trimmed.strip_prefix("file://"))
-                .unwrap_or(trimmed);
-            let decoded = urlencoding::decode(uri_path)
-                .map_or_else(|_| uri_path.to_owned(), std::borrow::Cow::into_owned);
-            let path_buf = std::path::Path::new(&decoded);
-            let normalized =
-                dunce::canonicalize(path_buf).unwrap_or_else(|_| path_buf.to_path_buf());
-            let normalized = normalized
-                .to_string_lossy()
-                .trim_end_matches(['/', '\\'])
-                .to_owned();
-            if !std::path::Path::new(&normalized).is_dir() {
+            if !ersatzrs_core::local_library_paths::is_fully_qualified(&path.path) {
                 return Err(ApplicationError::Validation {
-                    field: "path",
-                    message: format!("does not exist: {normalized}"),
+                    field: "library_path_absolute",
+                    message: path.path,
                 });
             }
-            if !normalized.is_empty() && seen.insert(normalized.clone()) {
+            let normalized =
+                ersatzrs_core::local_library_paths::normalize(&path.path).ok_or_else(|| {
+                    ApplicationError::Validation {
+                        field: "library_path_absolute",
+                        message: path.path.clone(),
+                    }
+                })?;
+            let normalized = normalized.to_string_lossy().into_owned();
+            if seen.insert(ersatzrs_core::local_library_paths::comparison_key(
+                &normalized,
+            )) {
                 paths.push(ersatzrs_core::repositories::LocalLibraryPathAdmin {
                     id: path.id,
                     path: normalized,

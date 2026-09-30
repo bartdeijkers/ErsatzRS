@@ -4,5 +4,7 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/media_sources/`'
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: list/editor/libraries/paths pages for Local/Jellyfin/Emby/Plex; Local library create/update validates normalized existing paths, accepts `file://` path input, deduplicates normalized paths, and writes atomically; Plex OAuth PIN island; shared `PathsEditor` sub-component.
+UCU-09 row167 completes native path validation, transactional overlap checks, localized correction forms and identity-preserving admin saves. Eleven production checks, two native Windows probes and eight Chromium/Firefox JS/no-JS cases pass; the milestone owns evidence.
+
+Ported: list/editor/libraries/paths pages for Local/Jellyfin/Emby/Plex; Local library create/update now requires native absolute filesystem paths, keeps percent characters literal and rejects `file://` input; invalid or conflicting paths show localized errors without losing the draft or saved media; Plex OAuth PIN island; shared `PathsEditor` sub-component.
 '''

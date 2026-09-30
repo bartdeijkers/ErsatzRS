@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Require absolute filesystem paths for local libraries, keep percent characters
+  literal, and reject overlaps with other libraries while retaining the Images /
+  Other Videos exception. Show localized offending-path errors with correction
+  inputs retained. Saving unchanged paths preserves their scanned media.
+
 - Clear dependent playlist and template selections when changing groups in
   Deco and Playout Templates editors, so hidden previous choices cannot be saved.
   Show persisted template selections correctly when opening the editor.
