@@ -11416,6 +11416,37 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row160 is Port after the complete b403012f movie-order UI, handler, migration
+and retired Sortable dependency audit. Whole-poster drag and accessible moves now
+share displayed row order; saving, detail refresh and selection exclude overlapping
+reorders. Failed saves restore authoritative data with localized feedback in all
+nine cultures. Existing island boundaries and ADR 0048 membership identities remain.
+The repository rejects foreign/stale rows atomically and missing collections,
+including empty orders. Duplicate movies retain independent audio/subtitle overrides.
+The one-time migration disables only legacy non-movie custom ordering, preserving
+membership, indices, overrides and movie-only/empty settings.
+Two causal regressions fail before the repository fix
+(c2a12a21-52ba-47ad-bd77-78bdfe753cb7). Final 13 focused checks pass
+(33d81943-fea0-4fac-89cc-f061b06bd780), including migration upgrade/repeat startup,
+rollback, duplicate-row identity and all-culture error localization. Strict affected
+app/infra/web all-target Clippy, architecture, hydration and formatting pass.
+The matched Leptos bundle passes all eight unique Chromium/Firefox collection
+cases: poster drag, pending-save exclusion, keyboard moves, reload persistence,
+selection/removal and English/Dutch failed-save restoration and retry. Initial
+browser run passed seven; Firefox's remaining case clicked immediately after reload
+before hydration (trace contains no reorder request). The test now awaits the same
+bounded hydration readiness used on initial navigation. The unchanged bundle passes
+that focused Firefox case; no assertion/deadline or production change was needed.
+Evidence: test-results/ucu09-row160-browser/playwright-results.json and
+ test-results/ucu09-row160-firefox-verify/playwright-results.json.
+Substantive review confirms transaction rollback, scoped repair, stable row identity,
+protected existing server functions and preserved dependent Refresh. No generated
+FFmpeg, capability or health contract changes; reuse the verified v2.0.3 runtime
+and prior transport proof. Required final window gates remain.
+Pin, ledger and reference HEAD advance to b403012f: 160/181 accepted, 21 pending.
+Continue row161; no intermediate push/CI. Final upstream refresh, window acceptance,
+authorized push and terminal exact-SHA CI remain; approved hardware debt is unchanged.
+
 Row159 is Port after the complete 94c8c014 SchedulerService audit. Upstream
 adds per-dispatch operational error isolation and separate cancellation handling,
 including startup capability/Next sync, reset/build, provider scans, cleanup,

@@ -3274,6 +3274,11 @@ pub async fn set_collection_custom_order(
         .await?
     {
         refresh_collection_playouts(command.collection_id, repository, queue, operations).await?;
+    } else {
+        return Err(crate::ApplicationError::NotFound {
+            kind: "collection",
+            id: command.collection_id,
+        });
     }
     Ok(())
 }
@@ -3306,9 +3311,6 @@ pub async fn update_collection_custom_order(
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     validate_positive_id(command.collection_id, "collection_id")?;
-    if command.ordered_row_ids.is_empty() {
-        return Ok(());
-    }
     validate_entity_ids(&command.ordered_row_ids, "collection_item_id")?;
     let unique = command
         .ordered_row_ids

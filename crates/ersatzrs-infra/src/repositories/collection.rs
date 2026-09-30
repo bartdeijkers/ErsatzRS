@@ -1664,9 +1664,21 @@ impl CollectionRepository for SqliteCollectionRepository {
         ordered_row_ids: &[EntityId],
     ) -> Result<u64> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let exists =
+            sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "Collection" WHERE "Id" = ?"#)
+                .bind(collection_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+        if exists.is_none() {
+            return Err(ersatzrs_core::repositories::RepositoryError::NotFound {
+                kind: "collection",
+                id: collection_id,
+            });
+        }
         let mut updated = 0;
         for (index, row_id) in ordered_row_ids.iter().enumerate() {
-            updated += sqlx::query(
+            let affected = sqlx::query(
                 r#"UPDATE "CollectionItem" SET "CustomIndex" = ?
                    WHERE "CollectionId" = ? AND "Id" = ?"#,
             )
@@ -1681,6 +1693,13 @@ impl CollectionRepository for SqliteCollectionRepository {
             .await
             .repository()?
             .rows_affected();
+            if affected != 1 {
+                return Err(ersatzrs_core::repositories::RepositoryError::Validation {
+                    field: "collection_item_id",
+                    message: "Collection does not contain the selected item.".to_owned(),
+                });
+            }
+            updated += affected;
         }
         tx.commit().await.repository()?;
         Ok(updated)

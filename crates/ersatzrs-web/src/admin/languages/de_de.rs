@@ -3234,6 +3234,12 @@ fn filler_error_message(error: &str) -> String {
 
 fn media_browser_error_message(error: &str) -> String {
     let trimmed = error.trim();
+    if trimmed.ends_with("Collection does not contain the selected item.") {
+        return "Die Sammlung enthält das ausgewählte Element nicht.".to_owned();
+    }
+    if trimmed.contains("collection with id ") && trimmed.ends_with(" not found") {
+        return "Die Sammlung existiert nicht.".to_owned();
+    }
     if trimmed == "Pinned stream selection is invalid or no longer available." {
         return "Die angeheftete Streamauswahl ist ungültig oder nicht mehr verfügbar.".to_owned();
     }

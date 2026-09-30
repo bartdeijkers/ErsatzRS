@@ -73,6 +73,9 @@ INSERT INTO "MovieMetadata" (
 ) VALUES
   (${firstMovieId}, 0, '${seed.firstTitle}', '${seed.firstTitle}', '${seed.firstTitle.toLowerCase()}', '2026-07-26T00:00:00Z', '2026-07-26T00:00:00Z', 2026),
   (${secondMovieId}, 0, '${seed.secondTitle}', '${seed.secondTitle}', '${seed.secondTitle.toLowerCase()}', '2026-07-26T00:00:00Z', '2026-07-26T00:00:00Z', 2026);
+INSERT INTO "Artwork" ("MovieMetadataId", "ArtworkKind", "Path", "DateAdded", "DateUpdated")
+  SELECT "Id", 0, 'synthetic-row160.png', '2026-09-30', '2026-09-30'
+  FROM "MovieMetadata" WHERE "MovieId" IN (${firstMovieId}, ${secondMovieId});
 INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
   VALUES (${collectionId}, ${firstMovieId}, 0), (${collectionId}, ${secondMovieId}, 1);
 PRAGMA foreign_keys=ON;
@@ -92,6 +95,10 @@ async function gotoHydrated(page: Page, route: string): Promise<void> {
   const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
   expect(response?.status(), `GET ${route}`).toBe(200);
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
+  await waitForHydration(page);
+}
+
+async function waitForHydration(page: Page): Promise<void> {
   await expect
     .poll(
       () =>
@@ -157,4 +164,86 @@ test.describe('collection detail parity', () => {
     await expect(selectionCount).toHaveCount(0);
     expect(runtimeErrors).toEqual([]);
   });
+
+  test('drags posters, excludes overlapping saves and preserves selection mode', async ({ page }, testInfo) => {
+    const seed = seedForProject(testInfo);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/artwork/**', route => route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180"><rect width="120" height="180" fill="teal"/></svg>',
+    }));
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/collections/${seed.collectionId}`);
+    const toggle = page.getByLabel('Use Custom Playback Order');
+    await toggle.check();
+    await expect(page.getByRole('button', { name: 'Move Down' }).first()).toBeEnabled();
+    const firstPoster = page.getByRole('img', { name: seed.firstTitle, exact: true });
+    const secondPoster = page.getByRole('img', { name: seed.secondTitle, exact: true });
+    await expect(firstPoster).toBeVisible();
+    let releaseSave!: () => void;
+    const gate = new Promise<void>(resolve => { releaseSave = resolve; });
+    let saveRequests = 0;
+    await page.route('**/admin-api/update_collection_custom_order*', async route => {
+      saveRequests += 1;
+      await gate;
+      await route.continue();
+    });
+    try {
+      await firstPoster.dragTo(secondPoster);
+      await expect.poll(() => saveRequests).toBe(1);
+      await expect(toggle).toBeDisabled();
+      await expect(page.locator('[draggable="true"]')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Move Down' }).first()).toBeDisabled();
+    } finally {
+      releaseSave();
+    }
+    const currentOrder = () => sqlite(`SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId} ORDER BY "CustomIndex";`);
+    await expect.poll(currentOrder).toBe(`${seed.secondMovieId}\n${seed.firstMovieId}`);
+    await expect(toggle).toBeEnabled();
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator('[data-collection-item-id] img').first()).toHaveAttribute('alt', seed.secondTitle);
+    await page.getByRole('button', { name: 'Move Down' }).first().click();
+    await expect.poll(currentOrder).toBe(`${seed.firstMovieId}\n${seed.secondMovieId}`);
+    await expect(page.locator('[data-collection-item-id] img').first()).toHaveAttribute('alt', seed.firstTitle);
+    await expect(toggle).toBeEnabled();
+    await page.getByRole('button', { name: 'Move Down' }).first().click();
+    await expect.poll(currentOrder).toBe(`${seed.secondMovieId}\n${seed.firstMovieId}`);
+    await page.getByLabel('Select', { exact: true }).first().click();
+    await expect(page.locator('[draggable="true"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Move Down' }).first()).toBeDisabled();
+    expect(errors).toEqual([]);
+  });
+
+  for (const culture of [
+    { code: 'en-us', toggle: 'Use Custom Playback Order', move: 'Move Down', failed: 'Reorder failed' },
+    { code: 'nl', toggle: 'Aangepaste afspeelvolgorde gebruiken', move: 'Omlaag verplaatsen', failed: 'Volgorde wijzigen mislukt' },
+  ]) {
+    test(`restores the persisted poster order after a rejected save (${culture.code})`, async ({ page }, testInfo) => {
+      const seed = seedForProject(testInfo);
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.request.post('/admin-api/settings/ui/save', {
+        form: { is_dark_mode: 'true', language: culture.code }, maxRedirects: 0,
+      });
+      await gotoHydrated(page, `/media/collections/${seed.collectionId}`);
+      await page.getByLabel(culture.toggle).check();
+      await expect(page.getByRole('button', { name: culture.move }).first()).toBeEnabled();
+      sqlite(`CREATE TRIGGER "FailCollectionOrder" BEFORE UPDATE OF "CustomIndex" ON "CollectionItem" WHEN NEW."CollectionId" = ${seed.collectionId} BEGIN SELECT RAISE(ABORT, 'synthetic order failure'); END;`);
+      try {
+        await page.getByRole('button', { name: culture.move }).first().click();
+        await expect(page.getByText(new RegExp(culture.failed)).last()).toBeVisible();
+        await expect(page.getByLabel(culture.toggle)).toBeEnabled();
+        const cards = page.locator('[data-collection-item-id]');
+        await expect(cards.first()).toContainText(seed.firstTitle);
+        expect(sqlite(`SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId} ORDER BY "CustomIndex";`)).toBe(`${seed.firstMovieId}\n${seed.secondMovieId}`);
+      } finally {
+        sqlite('DROP TRIGGER "FailCollectionOrder";');
+      }
+      await page.getByRole('button', { name: culture.move }).first().click();
+      await expect.poll(() => sqlite(`SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId} ORDER BY "CustomIndex" LIMIT 1;`)).toBe(String(seed.secondMovieId));
+      expect(errors).toEqual([]);
+    });
+  }
 });

@@ -324,7 +324,7 @@ notes  = '`tests/e2e/scheduling-route-family.spec.ts` covers hydrated list/add/i
 name   = 'CollectionDetailPage'
 status = '✅'
 routes = ['/media/collections/:id']
-notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection and proves completed hydration, card rendering, custom-order persistence, accessible move controls, selected-item removal, and the post-mutation refresh.'
+notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection and proves completed hydration, card rendering, custom-order persistence, poster drag, repeated accessible moves, pending-save and selection exclusion, selected-item removal, post-mutation refresh, and English/Dutch failed-save restoration and retry.'
 
 [[page]]
 name   = 'HealthPage'

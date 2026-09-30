@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep movie collection poster and keyboard ordering consistent, prevent
+  overlapping order saves and restore rejected orders. Reject stale or foreign
+  collection rows atomically and repair legacy non-movie custom-order settings
+  while retaining memberships and audio/subtitle overrides.
+
 - Continue independent scheduler maintenance after a job fails, while reporting
   the failure and retaining its cadence for retry. Stop before starting another
   maintenance job when shutdown is requested.
