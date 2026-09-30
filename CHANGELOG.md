@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Check out Windows batch scripts with CRLF line endings, including the bundled
+  MPEG-TS script, while retaining LF for shell scripts.
+
 - Respect Use Embedded Subtitles for Next automatic selection and skip embedded
   text without a usable extracted path before choosing subtitle preferences.
 

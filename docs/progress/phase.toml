@@ -127,9 +127,9 @@ checks, strict lint and exact Next consumer review pass. Row171 is Covered under
 replace the Skia subtitle bitmap loop; focused projection passes. Row172 ports Jellyfin query/type guards and proves unchanged-ETag season
 parent repair; 47 checks and strict lint pass. Row173 ports direct plain watermark layers and verifies RGB opacity;
 249 regressions, three runtime checks, strict lint and Next smoke pass. Row174 ports both-engine automatic subtitle eligibility; affected checks,
-decoded sidecar/preparation proof, strict lint and Next smoke pass. Continue row175;
+decoded sidecar/preparation proof, strict lint and Next smoke pass. Row175 ports CRLF batch checkout rules; isolated checkout proof passes. Continue row176;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 7 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 6 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

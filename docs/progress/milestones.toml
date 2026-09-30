@@ -11416,6 +11416,19 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row175 is Port after the complete 04f49b0a one-file audit. `.gitattributes`
+now explicitly selects CRLF for batch files; the existing global LF rule covers
+shell scripts. Isolated real Git checkouts pass with core.autocrlf=false and
+true: the embedded MPEG-TS batch source has CRLF, shell scripts retain LF,
+and repository blobs stay normalized to LF. CMD/PowerShell launcher attributes
+remain unchanged. The local batch asset was refreshed to the same checkout
+bytes for subsequent builds. Bootstrap embeds those bytes and release workflows
+check out before compiling/staging assets. No script commands, Rust, UI, schema,
+health requirements or runtime artifacts change. Source and byte-level evidence:
+tmp/ucu09-row175/{upstream.diff,checkout-proof.txt}; source map in the plan.
+Pin advances to 04f49b0a; 175/181 accepted, 6 pending. Continue row176;
+final window gates, fresh upstream audit, push and exact-SHA CI remain.
+
 Row174 is Port after the full d7b265e0 three-file audit. Both engines now
 respect Use Embedded Subtitles during automatic selection. Embedded text needs
 extracted metadata and a nonblank path before preference ranking except in HLS
