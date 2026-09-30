@@ -654,6 +654,8 @@ release section when tagging a release.
   maintenance in ErsatzTV PR #2849.
   Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
   prerequisite for the first upstream step.
+  Verify existing blank credits-template fallback and streaming graphics/process
+  cleanup against the later upstream reliability fixes.
 
 - Keep detailed future work in `plans/`, completion history and evidence in
   progress TOMLs, and reusable design artifacts under documentation. Milestones

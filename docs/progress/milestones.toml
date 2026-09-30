@@ -11416,6 +11416,33 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row165 is Covered after the full 3054e5d0 seven-file audit. The source map in
+plans/upstream-catch-up.md traces both credits handlers to the shared native/Next/
+troubleshooting renderer: names are trimmed and checked before extension handling.
+A new regression uses persisted music-video metadata and compares absent, empty
+and whitespace template names with the exact embedded default and named-default
+rendering, retaining artist/title, resolution and seek context. Existing missing
+file fallback, explicit subtitle-off and selected audio tests pass.
+HLS fallible operations already have channel-scoped diagnostics and typed outcomes;
+cancellation kills/reaps the owned process, cleans working artifacts and removes
+only the current registry owner. Under ADRs 0005/0105 the graphics renderer is
+FFmpeg-owned, with explicit shutdown of dynamic-text controllers and cleanup on
+completion/refusal, so the external graphics pipe/task leak does not exist.
+Template/DecoTemplate time options are freshly collected bounded ranges; Playouts
+uses owned resources and typed polling error reporting rather than the upstream
+event callback/table reference. No production UI change or new exception swallowing.
+All 16 focused credits/lifecycle tests pass (ab36fdbf-61c9-4d9d-b78f-c9212d57852b).
+The two real-FFmpeg cleanup regressions are ignored by default and were explicitly
+run with the accepted v2.0.3 runtime: both pass (8d835159-94db-4f53-8c01-f74d8e888fbf),
+proving direct-process and script-grandchild cleanup after body drop. Strict infra
+all-target Clippy, architecture/hydration lint, formatting and progress checks pass.
+Durable logs: tmp/ucu09-row165/focused.log, process-runtime.log and clippy.log.
+Review found no required production correction. No dependency/schema, health
+capability or generated FFmpeg change; reuse row164 browser and earlier decoded
+transport/graphics evidence. Final window gates remain mandatory.
+Upstream refresh still ends at 76884783, with all 181 ordered ledger SHA/subject
+pairs verified. Pin advances to 3054e5d0; 165/181 accepted, 16 pending. Continue row166.
+
 Row164 is Port after the full 3f4255be fourteen-file source/UI audit, mapped in
 plans/upstream-catch-up.md. Existing owned lists, optional progress lookups,
 selection guards and retired Trakt cover the other upstream changes. Deco break

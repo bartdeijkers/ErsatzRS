@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Row 161 is Covered (FFmpeg font ownership; no shared mapper). Row 162 is Port (fresh MPEG-TS script choices, selection recovery and no-JS settings). Row 163 is Port (shared script validation/execution and Lua arguments). Row 164 is Port (dependent selection clearing, saved display and stable template hydration; four browser cases). Continue at row 165. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Row 161 is Covered (FFmpeg font ownership; no shared mapper). Row 162 is Port (fresh MPEG-TS script choices, selection recovery and no-JS settings). Row 163 is Port (shared script validation/execution and Lua arguments). Row 164 is Port (dependent selection clearing, saved display and stable template hydration; four browser cases). Row 165 is Covered (credits fallback, typed HLS errors and graphics/process ownership; 18 checks). Continue at row 166. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,38 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 165 source map — worker errors, credits and graphics ownership (Covered)
+
+Upstream `3054e5d0569ed8696ffe8c2c99480df99557b61a` changes seven files;
+the complete diff is audited independently.
+
+- `HlsSessionWorker`: Rust `infra::hls_worker` handles fallible operations at
+  their call sites with channel-scoped diagnostics and explicit process outcomes.
+  Cancellation is an owned Notify signal, followed by process cleanup and
+  identity-checked registry removal; no unobserved C# exception continuation.
+- Both credits query/process handlers: `music_video_credits` trims and rejects
+  blank template names before extension handling, then uses the embedded default.
+  Native playback, Next and troubleshooting share that renderer. Prove null,
+  empty and whitespace names against an explicit built-in template with real
+  database metadata; retain existing missing-template and track-selection proof.
+- `StreamingControllerBase`: accepted ADRs 0005/0105 replace the external
+  graphics pipe/task with FFmpeg-owned filters and prepared artifacts. The
+  stream supervisor kills/reaps the process on body drop, observes stderr and
+  stops dynamic-text controllers and cleans owned graphics directories on
+  completion/refusal. No parallel graphics
+  engine needs cancellation. Existing process-backed cleanup tests apply.
+- Template/DecoTemplate editors: native start-time options are freshly collected
+  from the bounded 0..1440 five-minute range, not appended to a retained list.
+- Playouts notification handling: native owned resources and activity polling
+  return typed errors with one visible failure report; there is no C# event
+  callback/table reference to catch. Existing UI remains unchanged.
+
+No UI geometry, control, API, schema, runtime package or health capability change
+is indicated. Reuse row164 browser acceptance and earlier decoded graphics proof;
+All 16 focused credits/lifecycle checks and both explicit real-FFmpeg cleanup
+cases pass, with strict affected lint. UCU-09 owns detailed evidence and review;
+no production correction or new runtime build is required. Continue row166.
 
 ## Row 164 source and UI map — dependent selections and lifecycle (Port)
 
@@ -4736,7 +4768,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | Port | upstream-baseline-catch-up | `fix(settings): refresh MPEG-TS script choices and recover selection` | ucu-09; shared fresh discovery, form-only fallback, preserved names and complete no-JS form. 19 focused checks, six browser cases, strict lint and native MPEG-TS/HLS smoke pass; no runtime rebuild. |
 | 163 | `db5a81e4` | fix: scripted schedule file validation (#3027) | Port | scripted-scheduling | `fix(scheduling): align script validation and execution` | ucu-09; actual-file validation and shared quoted command parsing preserve persistence/reset safety and Lua arguments. 46 focused checks and strict lint pass; invalid waits already fail without clock mutation. |
 | 164 | `3f4255be` | fix: many ui bug fixes (#3028) | Port | schedules-templates-decorations-deco-templates | `fix(scheduling): clear dependent choices and stabilize hydration` | ucu-09; full fourteen-file source map, persisted child clearing, saved option display and server-resolved template hydration. Four browser cases and strict lint pass. |
-| 165 | `3054e5d0` | fix: more bug fixes (#3029) | | | | ucu-09; provisional: Port (selective). Claude 2026-09-23 triage: HLS session worker, credits query and streaming controller fixes. |
+| 165 | `3054e5d0` | fix: more bug fixes (#3029) | Covered | upstream-baseline-catch-up | `test(streaming): verify credits fallback and process ownership` | ucu-09; full seven-file audit. Existing shared credits renderer, typed HLS diagnostics, owned graphics/process cleanup and fresh UI options cover upstream fixes. 18 checks and strict lint pass. |
 | 166 | `3d31bfdd` | fix: remote stream yaml extension (#3030) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: the scanner already accepts yml and yaml, crates/ersatzrs-scanner/src/lib.rs:699. |
 | 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: local library paths must be absolute and errors must name the path. |
 | 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: upstream release preparation. |
