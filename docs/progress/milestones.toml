@@ -11416,6 +11416,18 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row179 is N/A after the complete seven-file 5d65c231 audit. Changes concern
+upstream draft verification, release-note extraction, develop retention,
+serialized SHA-tagged publication, workflow references, signing, tag selection
+and one old changelog compare link. ErsatzRS has no per-main-push develop
+publication pipeline. Existing CI, tag-triggered releases, beta draft guards
+and explicit publication/native-acceptance gates remain authoritative. No
+application behavior or missing runtime parity is hidden by this classification;
+new release settings/retention automation would be separate maintainer policy.
+No remote mutations or unnecessary builds. Full diff: tmp/ucu09-row179/;
+source map in the plan. Pin advances to 5d65c231; 179/181 accepted, 2 pending.
+Continue row180; final window gates, fresh upstream audit, push and exact-SHA CI remain.
+
 Row178 is N/A after the complete f8410286 two-line workflow diff. The fix closes
 quotes around upstream per-architecture digest-list assignments. ErsatzRS uses
 Buildx Bake's multi-platform target and quoted image/channel arguments, with no

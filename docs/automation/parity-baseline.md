@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f8410286d265701304193365d757b061ca0e0168` |
-| **Commit subject** | `build: fix docker workflow quoting` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f8410286d265701304193365d757b061ca0e0168 |
+| **Pinned commit** | `5d65c23109dc5aa6298fcd986fae2ddee1be64f3` |
+| **Commit subject** | `build: immutable releases (#3044)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5d65c23109dc5aa6298fcd986fae2ddee1be64f3 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
