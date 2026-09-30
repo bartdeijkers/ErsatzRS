@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-151/181; 30 pending.
+152/181; 29 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
@@ -26,6 +26,7 @@ runtime proof passes.
 150 Port: Next error cards; decoded matrix, smoke/lint pass.
 151 Port: music-video credits preview; 762 web checks, both browsers/no-JS/mobile,
 seek/audio/archive/persistence, strict lint and native/Next smoke pass.
+152 N/A: upstream Next AMF release notes; hardware debt unchanged.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 
@@ -55,9 +56,8 @@ timing, audio/subtitles and Dynamic/deco fallback pass. Row28: pad/stretch/crop.
 Row29: authenticated provider Convert, EIA-608 exclusion and content watermark placement.
 Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
 Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
-Rows 68-71 port Plex title refresh and Classic playlist continuity. Row 75
-drops FFmpeg crop metadata workarounds; NVIDIA overlay output passes, with AMD
-live output unproven. Rows 76-77 fix Classic checkpoints and dormant anchors.
+68-71: Plex titles/Classic continuity. 75: no crop-metadata workaround;
+NVIDIA overlay passes, AMD live output unproven. 76-77: Classic anchors/checkpoints.
 The accepted Next RGB opacity bug remains open.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and

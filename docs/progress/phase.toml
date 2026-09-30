@@ -94,9 +94,10 @@ cards: wire/overlay compatibility, decoded gap/failed-media Burn/Convert and
 explicit-off cases, ordinary audio/subtitles, host smoke and lint pass.
 Row151 ports music-video credits troubleshooting: both-engine seek/archive,
 audio/subtitle precedence, 762 web checks, strict lint, Chromium/Firefox/no-JS
-geometry and native/Next smoke pass. Continue at row152; UCU-09 window gates,
+geometry and native/Next smoke pass. Row152 is N/A: upstream AMF release notes,
+with approved hardware debt unchanged. Continue at row153; UCU-09 window gates,
 push and exact-SHA CI remain.
-The current 181-row ledger has 30 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 29 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

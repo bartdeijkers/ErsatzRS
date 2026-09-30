@@ -11416,6 +11416,16 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row152 is N/A: the complete upstream 495e3799 diff adds one CHANGELOG line
+announcing Next AMF detection and optional scaling on Windows. No source,
+protocol, dependency or build pin changes. The accepted row140 runtime and
+ADR 0095 integration remain; native/Next acceleration mappings already exist.
+This note does not prove AMD hardware behavior: approved AMF hardware debt stays
+unverified. No Rust edit, package, dependency or new ADR is required. Progress
+and diff validation pass; row151 code/runtime evidence remains valid.
+Pin advances to 495e3799; 152/181 reconciled, 29 pending. Continue at row153.
+No intermediate push or CI.
+
 Row151 is Port: upstream 0840e0fb adds optional music-video credits selection
 to playback troubleshooting. The source/visual map covers the SSR field,
 query forwarding, both preparation paths, subtitle precedence, seek timing and
