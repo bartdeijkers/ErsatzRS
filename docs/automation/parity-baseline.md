@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5eb9102c33abff262207f829fdaf72329e84ba86` |
-| **Commit subject** | `fix: local library path validation (#3031)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5eb9102c33abff262207f829fdaf72329e84ba86 |
+| **Pinned commit** | `558855083c7602b6f50ed63675ff61d1d325f98d` |
+| **Commit subject** | `prep for release v26.10.0 [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/558855083c7602b6f50ed63675ff61d1d325f98d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

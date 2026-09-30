@@ -120,9 +120,9 @@ diagnostics and graphics/process ownership: 18 checks and strict lint pass. Row1
 discovery: three scanner checks and strict lint pass. Row167 ports native path validation, transactional overlap checks,
 identity-preserving saves and localized correction forms: eleven production checks,
 two native Windows probes, eight browser cases and strict affected lint pass.
-Continue row168;
+Row168 is N/A: upstream release heading/date/links only. Continue row169;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 14 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 13 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

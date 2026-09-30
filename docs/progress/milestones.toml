@@ -11416,6 +11416,14 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row168 is N/A after reviewing the complete 55885508 diff: only upstream
+CHANGELOG.md gains the 26.10.0 release heading/date and comparison links. There
+is no source, dependency, build or runtime change and no ErsatzRS release is
+implied. Prior runtime/browser evidence remains valid; no duplicate build is
+needed. Full diff: tmp/ucu09-row168/upstream.diff. Structured validation passes.
+Pin advances to 55885508; 168/181 accepted, 13 pending. Continue row169;
+final UCU-09 window gates, upstream refresh, push and exact-SHA CI remain.
+
 Row167 is Port after the full 5eb9102c seven-file source/platform-test audit.
 Native absolute-path validation and lexical normalization preserve literal percent
 characters. Transactional overlap checks retain the Images/Other Videos exception.
