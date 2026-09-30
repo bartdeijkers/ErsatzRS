@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-156/181; 25 pending.
+157/181; 24 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
@@ -28,10 +28,12 @@ runtime proof passes.
 152-153 N/A: notes; AAC argv/decode pass; hardware debt unchanged.
 154 Adapt (0005/0105): motion boundaries/preview clocks; 75 focused, 18 browser,
 native argv, lint and both smoke paths pass.
-155 Port: optional Next AMF index/default; 14 wire/config checks, lint, exact
-package checksums pass; hardware debt remains.
+155 Port: optional Next AMF index/default; 14 checks, lint and checksums pass;
+hardware remains unverified.
 156 Port: typed machine CRUD, safe deletion and localized island callbacks;
 33 focused checks, 15 browser passes, strict lint and native smoke pass.
+157 Port: native completion/sample ownership, URI redaction and smart 409;
+53 focused checks, 24 browser cases and lint pass. Window gates remain.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 
@@ -254,3 +256,10 @@ description = 'Row156: expose the affected profile/smart-collection and empty-tr
 discovered = '2026-09-30'
 resolved = true
 evidence = 'UCU-09 owns passing typed HTTP, wire, duplicate-race, dependent-graph and auth/listener checks; matched Chromium/Firefox deletion feedback and successful refetch pass. Strict lint and native smoke pass. Source map: plans/upstream-catch-up.md, Row156. Window closeout and exact-SHA CI remain required.'
+
+[[debt]]
+id = 'ucu09-row157-troubleshooting-cleanup'
+description = 'Reconcile immediate native preview completion, bounded owned media-sample cleanup, URI credential redaction and smart-collection conflict responses. Preserve the accepted native/Next ownership architecture and existing track selection.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 owns 53 passing focused checks, matched Chromium/Firefox completion/navigation and real sample ZIP track proof, strict affected lint and progress/architecture/hydration checks. Atomic ownership, bounded cleanup and existing track selection are preserved under ADR 0095. Window closeout and exact-SHA CI remain required.'

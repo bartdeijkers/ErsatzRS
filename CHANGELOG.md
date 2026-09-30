@@ -57,10 +57,15 @@ release section when tagging a release.
 
 - Return typed errors from authenticated FFmpeg-profile, smart-collection and
   empty-trash machine APIs: invalid requests use 400, missing records 404,
-  profile conflicts 409 and operational failures 500. Prevent profile deletion
-  from removing dependent channels or playouts, and show localized feedback
+  profile and smart-collection conflicts 409 and operational failures 500.
+  Prevent profile deletion from removing dependent channels or playouts, and show localized feedback
   when the default or an in-use profile cannot be deleted. Keep loaded profile
   row actions and format labels in the selected UI language.
+
+- End troubleshooting readiness promptly when native playback exits, retaining
+  completed diagnostics and process-owned cleanup. Bound media-sample capture
+  and remove temporary samples after failures or disconnected requests. Remove
+  URI credentials from exported environment diagnostics.
 
 - Recover the last motion-graphics frame when seeking near EOF and stop Hold
   at its exact expiry, including zero hold time. Anchor media troubleshooting

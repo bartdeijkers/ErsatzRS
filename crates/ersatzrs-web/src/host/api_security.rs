@@ -110,14 +110,14 @@ fn describe_machine_mutations(document: &mut serde_json::Value) {
             "post",
             "CreateSmartCollection",
             Some("SmartCollectionMutation"),
-            &[400, 500][..],
+            &[400, 409, 500][..],
         ),
         (
             "/api/collections/smart/update",
             "put",
             "UpdateSmartCollection",
             Some("SmartCollectionMutation"),
-            &[400, 404, 500][..],
+            &[400, 404, 409, 500][..],
         ),
         (
             "/api/collections/smart/delete/{id}",

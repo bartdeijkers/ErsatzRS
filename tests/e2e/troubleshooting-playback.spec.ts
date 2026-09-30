@@ -187,6 +187,80 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     expect(errors).toEqual([]);
   });
 
+  test('failed native playback completes promptly and leaves diagnostics for the next request', async ({ page }) => {
+    const invalid = path.join(root, 'invalid-preview.mkv');
+    writeFileSync(invalid, 'synthetic invalid media');
+    sql(`UPDATE "MediaFile" SET "Path"='${quote(invalid)}' WHERE "Id"=${id};`);
+    try {
+      const response = await page.request.get(
+        `/api/troubleshoot/playback.m3u8?mediaItem=${id}&ffmpegProfile=${profile}&streamingEngine=Legacy`,
+        { timeout: 10_000, maxRedirects: 0 },
+      );
+      expect(response.status()).toBe(500);
+      const log = await page.request.get('/api/troubleshoot/playback/log');
+      expect(log.status()).toBe(200);
+      expect((await log.json()).text).toMatch(/exit status:/);
+    } finally {
+      sql(`UPDATE "MediaFile" SET "Path"='${quote(path.join(root, 'preview.mkv'))}' WHERE "Id"=${id};`);
+    }
+    // The following normal engine cases must still acquire the same preview lock.
+  });
+
+  test('navigation during a native preview retires browser callbacks and retains worker cleanup', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
+    await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption('Legacy');
+    await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+    await page.goto('/ffmpeg');
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/troubleshoot/playback/log');
+      return (await response.json())?.text ?? '';
+    }, { timeout: 15_000 }).toMatch(/exit status:/);
+    expect(errors).toEqual([]);
+  });
+
+  test('media sample ZIP preserves alternate audio and embedded subtitles', async ({ page }) => {
+    const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+    const ffprobe = process.env.ErsatzRS_FFPROBE__PATH ?? process.env.FFPROBE_PATH ?? 'ffprobe';
+    const clip = path.join(root, 'sample-tracks.mkv');
+    const subtitle = path.join(root, 'sample-tracks.srt');
+    writeFileSync(subtitle, '1\n00:00:00,000 --> 00:00:02,000\nSynthetic Dutch subtitle\n');
+    execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'color=blue:s=64x48:r=5:d=2',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2',
+      '-f', 'lavfi', '-i', 'sine=frequency=880:duration=2', '-i', subtitle,
+      '-map', '0:v', '-map', '1:a', '-map', '2:a', '-map', '3:s',
+      '-c:v', 'ffv1', '-c:a', 'pcm_s16le', '-c:s', 'srt',
+      '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=nld',
+      '-metadata:s:s:0', 'language=nld', clip]);
+    sql(`UPDATE "MediaFile" SET "Path"='${quote(clip)}' WHERE "Id"=${id};`);
+    try {
+      const response = await page.request.get(`/api/troubleshoot/playback/sample/${id}`);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('application/zip');
+      const archive = path.join(root, 'sample.zip');
+      const extracted = path.join(root, 'captured-sample.mkv');
+      writeFileSync(archive, await response.body());
+      execFileSync('python3', ['-c',
+        'import pathlib,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; names=z.namelist(); assert len(names)==1 and names[0].endswith(".mkv"); pathlib.Path(sys.argv[2]).write_bytes(z.read(names[0]))',
+        archive, extracted]);
+      const streams = JSON.parse(execFileSync(ffprobe,
+        ['-v', 'error', '-show_streams', '-of', 'json', extracted], { encoding: 'utf8' })).streams;
+      expect(streams).toHaveLength(4);
+      expect(streams.filter((stream: any) => stream.codec_type === 'audio')
+        .map((stream: any) => [stream.codec_name, stream.tags.language])).toEqual([
+          ['pcm_s16le', 'eng'], ['pcm_s16le', 'nld'],
+        ]);
+      expect(streams.find((stream: any) => stream.codec_type === 'subtitle').tags.language).toBe('nld');
+      expect(streams.find((stream: any) => stream.codec_type === 'video').codec_name).toBe('ffv1');
+    } finally {
+      sql(`UPDATE "MediaFile" SET "Path"='${quote(path.join(root, 'preview.mkv'))}' WHERE "Id"=${id};`);
+    }
+  });
+
   for (const engine of ['Legacy', 'Next']) {
     test(`${engine} plays in the page and provides reports`, async ({ page }, info) => {
       test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,

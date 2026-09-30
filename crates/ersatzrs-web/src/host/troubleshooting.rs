@@ -43,7 +43,7 @@ use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::process::Command;
-use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
+use tokio::sync::{oneshot, Mutex, OwnedMutexGuard, RwLock};
 
 use crate::transport::iptv::stream;
 
@@ -433,8 +433,9 @@ async fn start_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format).await?;
+    let completion =
+        spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
+    wait_for_preview_output(&working_dir, output_format, completion).await?;
     Ok(())
 }
 
@@ -721,8 +722,9 @@ async fn start_channel_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format).await?;
+    let completion =
+        spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
+    wait_for_preview_output(&working_dir, output_format, completion).await?;
     Ok(())
 }
 
@@ -1583,7 +1585,7 @@ fn spawn_preview_ffmpeg(
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
-) -> ApiResult<()> {
+) -> ApiResult<oneshot::Receiver<bool>> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
     process
@@ -1604,16 +1606,23 @@ fn spawn_preview_ffmpeg(
     let mut child = process.spawn()?;
     let stderr = child.stderr.take();
     let stdout = child.stdout.take();
-    tokio::spawn(write_preview_logs(
-        working_dir.join("logs.txt"),
-        stderr,
-        stdout,
-        child,
-        dynamic_text_controllers,
-        ownership,
-        tokio::time::Instant::now() + Duration::from_mins(2),
-    ));
-    Ok(())
+    let (finished, completion) = oneshot::channel();
+    let log_path = working_dir.join("logs.txt");
+    tokio::spawn(async move {
+        let succeeded = write_preview_logs(
+            log_path,
+            stderr,
+            stdout,
+            child,
+            dynamic_text_controllers,
+            ownership,
+            tokio::time::Instant::now() + Duration::from_mins(2),
+        )
+        .await;
+        // Diagnostics and owner cleanup complete even if the request disconnected.
+        let _ = finished.send(succeeded);
+    });
+    Ok(completion)
 }
 
 async fn write_preview_logs(
@@ -1624,7 +1633,7 @@ async fn write_preview_logs(
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
-) {
+) -> bool {
     let mut logs = Vec::new();
     let mut progress_output = Vec::new();
     let result = tokio::time::timeout_at(deadline, async {
@@ -1635,6 +1644,7 @@ async fn write_preview_logs(
         child.wait().await
     })
     .await;
+    let succeeded = matches!(&result, Ok(Ok(status)) if status.success());
     let needs_cleanup = !matches!(&result, Ok(Ok(_)));
     match result {
         Ok(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
@@ -1656,6 +1666,7 @@ async fn write_preview_logs(
         logs.extend_from_slice(progress::speed_diagnostic(speed).as_bytes());
     }
     let _ = tokio::fs::write(log_path, logs).await;
+    succeeded
 }
 
 async fn read_preview_pipe(
@@ -1677,6 +1688,7 @@ async fn read_preview_pipe(
 async fn wait_for_preview_output(
     working_dir: &PathBuf,
     output_format: OutputFormat,
+    mut completion: oneshot::Receiver<bool>,
 ) -> ApiResult<()> {
     let playlist_path = working_dir.join("live.m3u8");
     let segment_extension = match output_format {
@@ -1685,6 +1697,15 @@ async fn wait_for_preview_output(
     };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     loop {
+        match completion.try_recv() {
+            Ok(succeeded) => {
+                return completed_preview_output(working_dir, segment_extension, succeeded).await
+            }
+            Err(oneshot::error::TryRecvError::Closed) => {
+                return Err("troubleshooting worker ended without completion".into())
+            }
+            Err(oneshot::error::TryRecvError::Empty) => {}
+        }
         if tokio::fs::try_exists(&playlist_path).await?
             && count_segments(working_dir, segment_extension).await? >= 1
         {
@@ -1693,8 +1714,30 @@ async fn wait_for_preview_output(
         if tokio::time::Instant::now() >= deadline {
             return Err("timed out waiting for troubleshooting HLS output".into());
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::select! {
+            biased;
+            finished = &mut completion => {
+                return completed_preview_output(working_dir, segment_extension, finished.unwrap_or(false)).await;
+            }
+            () = tokio::time::sleep(Duration::from_millis(100)) => {}
+        }
     }
+}
+
+async fn completed_preview_output(
+    working_dir: &PathBuf,
+    segment_extension: &str,
+    succeeded: bool,
+) -> ApiResult<()> {
+    if !succeeded {
+        return Err("troubleshooting playback process failed".into());
+    }
+    if tokio::fs::try_exists(working_dir.join("live.m3u8")).await?
+        && count_segments(working_dir, segment_extension).await? >= 1
+    {
+        return Ok(());
+    }
+    Err("troubleshooting playback completed without HLS output".into())
 }
 
 async fn count_segments(working_dir: &PathBuf, extension: &str) -> ApiResult<usize> {
@@ -1819,13 +1862,17 @@ async fn build_media_sample_archive(
         .await?;
     let ffmpeg_path = ersatzrs_ffmpeg::resolve_ffmpeg_path(configured_ffmpeg_path.as_deref()).path;
     let extension = media_sample_extension(&media_path);
-    let sample_path = std::env::temp_dir().join(format!(
+    let sample_dir = tempfile::Builder::new()
+        .prefix("ersatzrs-media-sample-")
+        .tempdir()?;
+    let sample_path = sample_dir.path().join(format!(
         "ersatzrs-media-sample-{}.{}",
         uuid::Uuid::new_v4(),
         extension.trim_start_matches('.')
     ));
 
-    let status = Command::new(ffmpeg_path)
+    let mut process = Command::new(ffmpeg_path);
+    process
         .arg("-nostdin")
         .arg("-i")
         .arg(&media_path)
@@ -1836,12 +1883,49 @@ async fn build_media_sample_archive(
         .arg("-c")
         .arg("copy")
         .arg(&sample_path)
-        .kill_on_drop(true)
-        .status()
-        .await?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    // A disconnected request drops this handle, not the worker. The worker
+    // retains the directory until the bounded child and archive read finish.
+    tokio::spawn(capture_media_sample_archive(
+        process,
+        sample_dir,
+        sample_path,
+        tokio::time::Instant::now() + Duration::from_mins(2),
+    ))
+    .await?
+}
+
+async fn capture_media_sample_archive(
+    mut process: Command,
+    sample_dir: tempfile::TempDir,
+    sample_path: PathBuf,
+    deadline: tokio::time::Instant,
+) -> ApiResult<Option<Vec<u8>>> {
+    let mut child = process.spawn()?;
+    let result = tokio::time::timeout_at(deadline, child.wait()).await;
+    let status = match result {
+        Ok(Ok(status)) => status,
+        failure => {
+            // Reap before deleting the output, including on Windows. A failed
+            // termination must not remove files that a child may still own.
+            if !matches!(
+                tokio::time::timeout(Duration::from_secs(5), child.kill()).await,
+                Ok(Ok(()))
+            ) {
+                let _retained_directory = sample_dir.keep();
+                return Err("media sample process termination is unconfirmed".into());
+            }
+            return match failure {
+                Ok(Err(error)) => Err(error.into()),
+                _ => Err("media sample capture deadline expired".into()),
+            };
+        }
+    };
 
     if !status.success() {
-        let _ = tokio::fs::remove_file(&sample_path).await;
         return Ok(None);
     }
 
@@ -1851,7 +1935,6 @@ async fn build_media_sample_archive(
         .unwrap_or("sample.mkv")
         .to_owned();
     let bytes = tokio::fs::read(&sample_path).await?;
-    let _ = tokio::fs::remove_file(&sample_path).await;
     Ok(Some(build_store_zip(vec![(file_name, bytes)])?))
 }
 
@@ -2110,6 +2193,80 @@ mod tests {
     // Unix shell fixture only; the deadline/kill path is shared Tokio code on all hosts.
     #[cfg(unix)]
     #[tokio::test]
+    async fn preview_readiness_stops_when_process_exits_without_output() {
+        for exit in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
+            let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+            let child = Command::new("sh")
+                .args(["-c", &format!("exit {exit}")])
+                .spawn()
+                .unwrap();
+            let log_path = root.path().join("logs.txt");
+            let (finished, completion) = oneshot::channel();
+            tokio::spawn(async move {
+                let succeeded = write_preview_logs(
+                    log_path,
+                    None,
+                    None,
+                    child,
+                    Vec::new(),
+                    ownership,
+                    tokio::time::Instant::now() + Duration::from_mins(2),
+                )
+                .await;
+                let _ = finished.send(succeeded);
+            });
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                wait_for_preview_output(&root.path().to_path_buf(), OutputFormat::Hls, completion),
+            )
+            .await
+            .expect("process completion must end readiness without waiting 20 seconds");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains(if exit == 0 {
+                "completed without HLS output"
+            } else {
+                "process failed"
+            }));
+            assert!(lock.try_lock().is_ok());
+            assert!(root.path().join("logs.txt").exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn completed_preview_requires_success_and_matching_segments() {
+        for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
+            let root = tempfile::tempdir().unwrap();
+            tokio::fs::write(root.path().join("live.m3u8"), b"#EXTM3U")
+                .await
+                .unwrap();
+            tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
+                .await
+                .unwrap();
+            for succeeded in [true, false] {
+                let (finished, completion) = oneshot::channel();
+                finished.send(succeeded).unwrap();
+                assert_eq!(
+                    wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                        .await
+                        .is_ok(),
+                    succeeded
+                );
+            }
+            let (finished, completion) = oneshot::channel();
+            drop(finished);
+            assert!(
+                wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    // Unix shell fixture only; the deadline/kill path is shared Tokio code on all hosts.
+    #[cfg(unix)]
+    #[tokio::test]
     async fn preview_deadline_terminates_a_stalled_child_before_releasing_ownership() {
         use super::*;
         let root = tempfile::tempdir().unwrap();
@@ -2224,6 +2381,95 @@ mod tests {
                 .windows(excluded.len())
                 .any(|bytes| bytes == excluded.as_bytes()));
         }
+    }
+
+    // Unix shell fixtures only; production capture uses Tokio and TempDir on every host.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn media_sample_cleanup_handles_success_failure_and_read_error() {
+        for exit in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = root.path().to_path_buf();
+            let sample = directory.join("sample.mkv");
+            let mut process = Command::new("sh");
+            process
+                .args(["-c", "printf synthetic > \"$1\"; exit \"$2\"", "fixture"])
+                .arg(&sample)
+                .arg(exit.to_string());
+            let result = capture_media_sample_archive(
+                process,
+                root,
+                sample,
+                tokio::time::Instant::now() + Duration::from_secs(2),
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.is_some(), exit == 0);
+            assert!(!directory.exists());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        tokio::fs::create_dir(&sample).await.unwrap();
+        tokio::fs::write(sample.join("partial"), b"partial")
+            .await
+            .unwrap();
+        let mut process = Command::new("sh");
+        process.args(["-c", "exit 0"]);
+        assert!(capture_media_sample_archive(
+            process,
+            root,
+            sample,
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        )
+        .await
+        .is_err());
+        assert!(
+            !directory.exists(),
+            "failed archive read must remove the sample"
+        );
+    }
+
+    // Unix child fixtures; process deadlines and detached ownership are platform-neutral.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn media_sample_cleanup_outlives_disconnected_caller_and_reaps_deadline() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        let mut process = Command::new("sh");
+        process
+            .args(["-c", "printf partial > \"$1\"; exec sleep 0.1", "fixture"])
+            .arg(&sample);
+        let worker = tokio::spawn(capture_media_sample_archive(
+            process,
+            root,
+            sample,
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        ));
+        drop(worker);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while directory.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("disconnected worker must finish and remove its sample");
+
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        let mut process = Command::new("sh");
+        process.args(["-c", "exec sleep 30"]).kill_on_drop(true);
+        let error =
+            capture_media_sample_archive(process, root, sample, tokio::time::Instant::now())
+                .await
+                .unwrap_err();
+        assert!(error.to_string().contains("deadline expired"));
+        assert!(
+            !directory.exists(),
+            "child must be reaped before removing sample output"
+        );
     }
 
     #[test]

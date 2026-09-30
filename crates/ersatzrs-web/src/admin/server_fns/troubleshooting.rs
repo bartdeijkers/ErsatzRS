@@ -1266,11 +1266,45 @@ fn troubleshooting_environment_from(
             let value = if is_sensitive_environment_key(&key) {
                 "<redacted>".to_owned()
             } else {
-                value
+                redact_environment_uri(value)
             };
             (key, value)
         })
         .collect()
+}
+
+#[cfg(feature = "ssr")]
+fn redact_environment_uri(value: String) -> String {
+    let Ok(mut uri) = reqwest::Url::parse(&value) else {
+        return value;
+    };
+    if !uri.has_host() {
+        return value;
+    }
+    let has_user_info = !uri.username().is_empty() || uri.password().is_some();
+    let query: Vec<_> = uri
+        .query_pairs()
+        .map(|(key, value)| {
+            let value = if is_sensitive_environment_key(&key) {
+                "<redacted>".into()
+            } else {
+                value
+            };
+            (key.into_owned(), value.into_owned())
+        })
+        .collect();
+    let has_sensitive_query = uri
+        .query_pairs()
+        .any(|(key, _)| is_sensitive_environment_key(&key));
+    if !has_user_info && !has_sensitive_query {
+        return value;
+    }
+    let _ = uri.set_username("");
+    let _ = uri.set_password(None);
+    if has_sensitive_query {
+        uri.query_pairs_mut().clear().extend_pairs(query);
+    }
+    uri.into()
 }
 
 #[cfg(feature = "ssr")]
@@ -2454,6 +2488,27 @@ mod tests {
         assert!(stability.contains("\"packet_count\": 10"));
         assert!(temp.path().join("commands.json").exists());
         assert!(!temp.path().join("sample.ts").exists());
+    }
+
+    #[test]
+    fn troubleshooting_environment_removes_uri_credentials() {
+        let environment = troubleshooting_environment_from([
+            (
+                "ERSATZRS_TEST_URI".into(),
+                "https://fixture-user:fixture-password@example.invalid/search?token=fixture-token&index=media".into(),
+            ),
+            ("ERSATZRS_TEST_PATH".into(), "relative/path with spaces".into()),
+        ]);
+        let uri = &environment["ERSATZRS_TEST_URI"];
+        for credential in ["fixture-user", "fixture-password", "fixture-token"] {
+            assert!(!uri.contains(credential), "synthetic credential leaked");
+        }
+        assert!(uri.contains("example.invalid/search"));
+        assert!(uri.contains("index=media"));
+        assert_eq!(
+            environment["ERSATZRS_TEST_PATH"],
+            "relative/path with spaces"
+        );
     }
 
     #[test]

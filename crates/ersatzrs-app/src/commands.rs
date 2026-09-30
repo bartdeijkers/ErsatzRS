@@ -2796,7 +2796,16 @@ pub async fn save_smart_collection(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<EntityId> {
-    save_smart_collection_for_api(command, false, repository, queue, operations).await
+    save_smart_collection_for_api(command, false, repository, queue, operations)
+        .await
+        .map_err(|error| match error {
+            // Browser forms retain their existing field-validation contract.
+            ApplicationError::Conflict(message) => ApplicationError::Validation {
+                field: "name",
+                message,
+            },
+            error => error,
+        })
 }
 
 pub async fn save_smart_collection_for_api(
@@ -2810,32 +2819,54 @@ pub async fn save_smart_collection_for_api(
         return validation_error("smart_collection_id", "must be zero or greater");
     }
     let name = command.name.trim();
+    let mut errors = Vec::new();
     if name.is_empty() {
-        return validation_error("name", "Smart collection name is required");
-    }
-    if name.chars().count() > 50 {
-        return validation_error(
-            "name",
-            "Smart collection name must be 50 characters or less",
-        );
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "Smart collection name is required".into(),
+        });
+    } else if name.chars().count() > 50 {
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "Smart collection name must be 50 characters or less".into(),
+        });
     }
     if repository.smart_admin_name_exists(command.id, name).await? {
-        return validation_error("name", "SmartCollection name must be unique");
+        errors.push(ApplicationError::Conflict(
+            "SmartCollection name must be unique".into(),
+        ));
     }
     let query = command.query.trim();
     if query.is_empty() {
-        return validation_error("query", "Smart collection query is required");
-    }
-    ersatzrs_core::search::SearchExpression::parse_validated_user_query(query).map_err(
-        |error| ApplicationError::Validation {
+        errors.push(ApplicationError::Validation {
+            field: "query",
+            message: "Smart collection query is required".into(),
+        });
+    } else if let Err(error) =
+        ersatzrs_core::search::SearchExpression::parse_validated_user_query(query)
+    {
+        errors.push(ApplicationError::Validation {
             field: "query",
             message: error.to_string(),
-        },
-    )?;
-    if is_update && command.id <= 0 {
-        return Err(ApplicationError::NotFound {
+        });
+    }
+    if is_update && (command.id <= 0 || repository.get_smart_admin(command.id).await?.is_none()) {
+        errors.push(ApplicationError::NotFound {
             kind: "smart collection",
             id: command.id,
+        });
+    }
+    if errors.len() == 1 {
+        return Err(errors.remove(0));
+    }
+    if !errors.is_empty() {
+        return Err(ApplicationError::Validation {
+            field: "request",
+            message: errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; "),
         });
     }
     let id = repository.save_smart_admin(command.id, name, query).await?;
@@ -9549,6 +9580,32 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[tokio::test]
+    async fn smart_collection_duplicate_keeps_browser_field_validation() {
+        let repository = RecordingCollectionRepository {
+            duplicate_name: true,
+            ..RecordingCollectionRepository::default()
+        };
+        let queue = RecordingQueue::default();
+        let operations = coordinator();
+        let command = SaveSmartCollection {
+            id: 0,
+            name: "Existing".into(),
+            query: "title:synthetic".into(),
+        };
+        assert!(matches!(
+            save_smart_collection(command.clone(), &repository, &queue, &operations).await,
+            Err(crate::ApplicationError::Validation { field: "name", .. })
+        ));
+        assert!(matches!(
+            super::save_smart_collection_for_api(command, false, &repository, &queue, &operations)
+                .await,
+            Err(crate::ApplicationError::Conflict(_))
+        ));
+        assert!(repository.saved.lock().unwrap().is_empty());
+        assert!(queue.requests.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

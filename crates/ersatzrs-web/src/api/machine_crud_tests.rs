@@ -373,7 +373,7 @@ mod tests {
                 .call("POST", "/api/collections/smart/new", request)
                 .await
                 .0,
-            StatusCode::BAD_REQUEST
+            StatusCode::CONFLICT
         );
         for (name, query) in [(" ", "title:synthetic"), ("Other", ""), ("Other", "(")] {
             assert_eq!(
@@ -459,6 +459,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn smart_name_conflicts_and_mixed_errors_preserve_existing_rows() {
+        let fixture = Fixture::new().await;
+        assert_eq!(
+            fixture
+                .call(
+                    "POST",
+                    "/api/collections/smart/new",
+                    json!({"name":"Picks","query":"title:synthetic"})
+                )
+                .await
+                .0,
+            StatusCode::OK
+        );
+        let (_, other) = fixture
+            .call(
+                "POST",
+                "/api/collections/smart/new",
+                json!({"name":"Other collection","query":"title:other"}),
+            )
+            .await;
+        assert_eq!(
+            fixture
+                .call(
+                    "PUT",
+                    "/api/collections/smart/update",
+                    json!({"id":other["id"],"name":"Picks","query":"title:synthetic"})
+                )
+                .await
+                .0,
+            StatusCode::CONFLICT
+        );
+        let (_, rows) = fixture
+            .call("GET", "/api/collections/smart", Value::Null)
+            .await;
+        let retained = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == other["id"])
+            .unwrap();
+        assert_eq!(retained["name"], "Other collection");
+        assert_eq!(retained["query"], "title:other");
+        assert_eq!(
+            fixture
+                .call(
+                    "DELETE",
+                    &format!("/api/collections/smart/delete/{}", other["id"]),
+                    Value::Null
+                )
+                .await
+                .0,
+            StatusCode::OK
+        );
+        // Upstream joins different known error categories as a bad request.
+        for (method, path, body) in [
+            (
+                "POST",
+                "/api/collections/smart/new",
+                json!({"name":"Picks","query":"("}),
+            ),
+            (
+                "PUT",
+                "/api/collections/smart/update",
+                json!({"id":999,"name":"Picks","query":"title:synthetic"}),
+            ),
+        ] {
+            assert_eq!(
+                fixture.call(method, path, body).await.0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        let (_, rows) = fixture
+            .call("GET", "/api/collections/smart", Value::Null)
+            .await;
+        assert_eq!(rows.as_array().unwrap().len(), 1);
+        assert_eq!(rows[0]["name"], "Picks");
+        assert_eq!(rows[0]["query"], "title:synthetic");
+    }
+
+    #[tokio::test]
     async fn machine_mutations_authenticate_before_body_or_writes_and_stay_off_streaming_listener()
     {
         let fixture = Fixture::new().await;
@@ -511,7 +591,7 @@ mod tests {
         assert!(
             description["paths"]["/api/collections/smart/new"]["post"]["responses"]
                 .get("409")
-                .is_none()
+                .is_some()
         );
         assert_eq!(description["security"], json!([{"ApiKey":[]}]));
     }
@@ -655,16 +735,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn smart_duplicate_race_keeps_bad_request_contract_and_single_persisted_row() {
+    async fn smart_duplicate_race_returns_conflict_and_single_persisted_row() {
         let fixture = Fixture::new().await;
         let request = json!({"name":"Concurrent smart","query":"title:synthetic"});
         let (a, b) = tokio::join!(
-            fixture.call("POST", "/api/collections/smart/new", request.clone()),
-            fixture.call("POST", "/api/collections/smart/new", request)
+            fixture.call("POST", "/api/collections/smart/new", request),
+            fixture.call(
+                "POST",
+                "/api/collections/smart/new",
+                json!({"name":"CONCURRENT SMART","query":"title:synthetic"})
+            )
         );
         let mut statuses = [a.0.as_u16(), b.0.as_u16()];
         statuses.sort_unstable();
-        assert_eq!(statuses, [200, 400]);
+        assert_eq!(statuses, [200, 409]);
         assert_eq!(
             fixture
                 .call("GET", "/api/collections/smart", Value::Null)

@@ -103,9 +103,11 @@ Row155 ports the optional Next AMF adapter field; 14 protocol/config checks,
 strict lint and both package checksums pass. Automatic selection is unchanged;
 approved AMD hardware debt remains. Row156 ports typed machine CRUD and trash
 errors, guarded profile deletion and localized island callbacks. All 33 focused
-checks, strict lint, 15 browser cases and native smoke pass. Continue at row157;
+checks, strict lint, 15 browser cases and native smoke pass. Row157 ports
+immediate native completion, owned sample cleanup, URI redaction and smart
+conflicts: 53 focused checks, 24 browser cases and strict lint pass. Continue row158;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 25 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 24 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

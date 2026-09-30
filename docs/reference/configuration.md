@@ -192,8 +192,8 @@ The machine CRUD endpoints are `GET /api/ffmpeg/profiles`,
 Profile updates select `ffmpegProfileId`; smart-collection updates select `id`.
 JSON uses camelCase and accepts enum names or their numeric values.
 `POST /api/maintenance/empty_trash` runs the existing trash cleanup operation.
-Invalid requests return 400, missing records 404, profile conflicts 409 and
-operational failures 500. Duplicate smart-collection names remain 400.
+Invalid requests return 400, missing records 404, profile and smart-collection
+conflicts 409, and operational failures 500. Mixed known error categories return 400.
 Default profiles cannot be deleted (400); profiles referenced by channels
 cannot be deleted (409). Rejected deletions preserve channels and playouts.
 `GET /api/sessions` returns normal playlist workers from both streaming engines
@@ -306,7 +306,8 @@ Treat these values as secrets:
 
 Do not commit them, paste them into issue reports, or include them in
 screenshots. The troubleshooting export redacts recognized secret-bearing
-configuration, but review diagnostics before sharing them.
+configuration and user information or secret query values in allowed environment
+URIs, but review diagnostics before sharing them.
 
 ## Next channel configuration overlays
 

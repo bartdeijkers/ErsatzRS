@@ -11416,6 +11416,54 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row157 is Port after the complete 13-file 2bbfbd10 audit. Smart collection
+create/update duplicates return Conflict 409; mixed known validation/not-found/
+conflict errors remain 400 and operational errors 500. Transactional uniqueness
+uses the same case-insensitive predicate as admission. Browser field validation,
+query preservation and affected playout Refresh remain unchanged.
+Native preview readiness receives process completion after bounded diagnostic
+writing and ownership cleanup, ending immediately on failure or successful EOF
+without output. Both HLS formats require a successful outcome and matching
+segments; rejected admission never releases another owner's lock. Existing Next
+owned preparation/readiness/process supervision already covers the upstream
+notifier/controller changes; no global notification service is introduced.
+Sample capture retains a TempDir in its worker through bounded child wait/reap,
+read and in-memory ZIP construction. Caller disconnect does not drop the worker.
+Success, nonzero exit, read error and deadline cleanup pass; unconfirmed child
+termination deliberately retains its directory rather than deleting active files.
+General reports retain canonical FFmpeg settings and snapshot logs. URI user
+information and sensitive query values are removed without altering plain paths.
+Causal regressions reproduce waiting after process exit and URI disclosure
+(668a6790-501f-4f8c-bc6e-c589f6d4138b). Final 53 focused checks pass
+(6bc9fdd5-40c8-4076-8cdc-b97de2222fab), including smart error aggregation,
+case-variant duplicate races, rejected-write preservation, browser validation,
+scheduling refresh, both-format readiness, lock/log stability and sample cleanup.
+Settled-source strict app/infra/web/FFmpeg all-target Clippy, architecture and
+hydration lint, formatting and progress validation pass. The initial overlong
+CRUD test was split; no lint baseline was widened. The incomplete sandbox build
+ended with SIGTERM before tests; the same supported host-permission wrapper
+completed. The initial progress parse error was the new debt's missing required
+evidence field; corrected and validated before verdict/pin advancement.
+Matched Leptos Chromium passes all 12 cases. Firefox initially has five passes,
+one pending Next startup exceeding the existing five-second clock check, and
+six serially blocked cases. Trace shows a pending startup request rather than a
+reported HTTP error. The unchanged Firefox serial selection then passes all 12
+(test-results/ucu09-row157-firefox-verify/playwright-results.json); no timeout,
+assertion or Next production changes, and no original-cause resolution claimed.
+All 24 unique cases are proven across those runs: failed native playback retains
+logs and releases ownership, navigation retires browser callbacks while worker
+cleanup completes, normal native/Next tracks/graphics/credits and no-JS behavior
+remain, and real downloaded ZIPs pass CRC and ffprobe checks for four copied
+streams (video, English/Dutch alternate audio and embedded Dutch subtitles).
+Exact published v2.0.3 FFmpeg/ffprobe and official Next e7997fa checksums are
+reverified. No dependency/schema/generated argv/runtime rebuild or release;
+health requirements and approved unverified hardware debt are unchanged.
+Substantive review confirms owner-only cleanup, stable diagnostics before wake,
+reaping before sample deletion and existing typed application/repository errors.
+Reuse unchanged row156 smoke and row146 transport proof; window gates remain.
+Pin advances to 2bbfbd10; 157/181 accepted, 24 pending. Continue row158.
+No intermediate push/CI or release.
+
 Row156 is Port after the complete a4642d95 audit. Authenticated profile,
 smart-collection and empty-trash machine routes reuse application/repository
 operations and return typed 400/404/409/safe 500 responses. Mixed known profile

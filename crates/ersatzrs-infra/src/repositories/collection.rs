@@ -443,7 +443,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     async fn save_smart_admin(&self, id: EntityId, name: &str, query: &str) -> Result<EntityId> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let duplicate: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS(SELECT 1 FROM "SmartCollection" WHERE "Name" = ? AND "Id" <> ?)"#,
+            r#"SELECT EXISTS(SELECT 1 FROM "SmartCollection" WHERE LOWER("Name") = LOWER(?) AND "Id" <> ?)"#,
         )
         .bind(name)
         .bind(id)
@@ -451,10 +451,9 @@ impl CollectionRepository for SqliteCollectionRepository {
         .await
         .repository()?;
         if duplicate {
-            return Err(ersatzrs_core::repositories::RepositoryError::Validation {
-                field: "name",
-                message: "SmartCollection name must be unique".into(),
-            });
+            return Err(ersatzrs_core::repositories::RepositoryError::Conflict(
+                "SmartCollection name must be unique".into(),
+            ));
         }
         if id == 0 {
             let result =
