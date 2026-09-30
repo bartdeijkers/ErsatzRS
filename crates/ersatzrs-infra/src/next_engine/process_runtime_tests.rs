@@ -1207,3 +1207,6 @@ mod retained_nut_runtime_tests;
 
 #[path = "producer_prefix_runtime_tests.rs"]
 mod producer_prefix_runtime_tests;
+
+#[path = "fallback_error_runtime_tests.rs"]
+mod fallback_error_runtime_tests;

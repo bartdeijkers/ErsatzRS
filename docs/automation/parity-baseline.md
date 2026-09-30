@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `4fffa955c987af7592076c6c3be33302312a0ccb` |
-| **Commit subject** | `fix: plex other video tags (#3015)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/4fffa955c987af7592076c6c3be33302312a0ccb |
+| **Pinned commit** | `599dc5ea5245bfb7d2a7b083339fb7864f7e099c` |
+| **Commit subject** | `feat: show errors over next fallback by default (#3016)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/599dc5ea5245bfb7d2a7b083339fb7864f7e099c |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

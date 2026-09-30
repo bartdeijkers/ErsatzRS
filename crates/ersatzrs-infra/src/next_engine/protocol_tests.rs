@@ -111,6 +111,28 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
     });
     let parsed: ChannelConfig = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), wire);
+    for (input, expected) in [
+        (json!(null), None),
+        (json!({}), Some(json!({}))),
+        (json!({"show_error": null}), Some(json!({}))),
+        (
+            json!({"show_error": false}),
+            Some(json!({"show_error": false})),
+        ),
+        (
+            json!({"show_error": true}),
+            Some(json!({"show_error": true})),
+        ),
+    ] {
+        let mut input_wire = wire.clone();
+        input_wire["fallback"] = input;
+        let parsed: ChannelConfig = serde_json::from_value(input_wire).unwrap();
+        let mut expected_wire = wire.clone();
+        if let Some(fallback) = expected {
+            expected_wire["fallback"] = fallback;
+        }
+        assert_eq!(serde_json::to_value(parsed).unwrap(), expected_wire);
+    }
 }
 
 #[test]

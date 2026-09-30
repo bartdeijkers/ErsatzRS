@@ -373,6 +373,10 @@ release section when tagging a release.
 
 ### Added
 
+- Show Next emergency playback and schedule-gap reasons on fallback video by
+  default, including when subtitles normally use Convert mode. Channel
+  configuration overlays can explicitly disable the error card.
+
 - Add shared track selection for transient external programmes, preserving
   language preferences, custom YAML rules, JavaScript audio metadata and
   engine-specific subtitle eligibility without requiring library records.

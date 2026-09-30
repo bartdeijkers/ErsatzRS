@@ -86,3 +86,10 @@ description = 'Row148 requires safe provider sidecar projection including Plex O
 discovered = '2026-09-29'
 resolved = true
 evidence = 'Upstream c673082e source audit covers converter, subtitle resolution, native/troubleshooting provider eligibility and music-video loading. Shared Plex preparation now uses current owner credentials and clean stream-path bindings. Six focused tests and decoded native/official Next burn and convert proof pass, including Plex Other Videos; canonical evidence is in UCU-09. Provider caption eligibility now includes Plex Other Videos across native/Next/troubleshooting with a seven-provider regression matrix. Automatic missing-source omission, exact-pin errors, deferred prepared-file checks, music-video metadata, image sources, seek and HTTP(S) normalization pass. UCU-09 records 245 Next checks, three decoded runtime checks, four final availability checks, strict lint and native smoke, with the scope of reused transport evidence. Row148 is Port.'
+
+[[debt]]
+id = 'ucu09-row150'
+description = 'Generated Next channel configuration omits fallback.show_error, leaving emergency fallback reasons invisible. Row150 requires default error-card rendering independent of normal subtitle mode.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 records the failing default regression, 19 wire/overlay and 246 Next checks, eight decoded official-engine gap/failed-media Burn/Convert and explicit-off cases, normal HLS audio/subtitle retention, real-host playback smoke and final strict lint. Generated fallback.show_error is true, nullable/false wire values and overlay precedence are preserved. No new runtime or native-engine contract is introduced.'

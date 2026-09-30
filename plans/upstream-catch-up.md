@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-30): `76884783996ac3aa11a232622939b8bd03ed0d86`
   — build: bump ffmpeg to 8.1.2-2 (#3046).
-- Ledger: **181 commits**, **32 pending**. The original plan covered 152 through
+- Ledger: **181 commits**, **31 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **149**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **150**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Continue at row 150. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Continue at row 151. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,24 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 150 source map — visible Next fallback reasons (Port)
+
+- Upstream `599dc5ea` adds optional `fallback.show_error` to channel configuration
+  and enables it in `ChannelConfigConverter`. There is no new UI, validator,
+  persistence or scheduling policy.
+- Rust targets `next_engine::protocol::ChannelConfig` and `config::channel_config`.
+  Keep older omitted/null configuration valid and preserve explicit false values;
+  generated configurations enable the error card for Burn and Convert alike.
+- Official Next `e7997fa` already renders a fallback ASS error card and burns it
+  regardless of ordinary subtitle conversion. Use that existing runtime behavior.
+- Accepted ADR 0095 continues to own the optional engine integration; no new
+  deviation or FFmpeg package is needed. Existing overlays can disable the card.
+- Acceptance: generated/default and nullable wire contracts, overlay precedence,
+  and decoded official-engine gap/failed-media video in Burn/Convert with explicit
+  off. Finite troubleshooting retains upstream failure reporting.
+  All checks, host smoke and strict lint pass; UCU-09 owns detailed evidence.
+  The mpeg-ts-channel-streaming / ucu09-row150 debt is resolved.
 
 ## Row 149 source map — Plex Other Video folder tags (Port)
 
@@ -4221,7 +4239,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 147 | `b3f7f3fe` | fix: preserve YAML post-roll state across playout builds (#3013) | Port | yaml-scheduling | `fix(scheduling): preserve YAML roll and graphics state` | ucu-09; compatible anchor fields, explicit clears and production graphics lookup; 78 YAML checks, six final regressions with SQLite restart/midnight and imports, strict lint and native smoke pass. |
 | 148 | `c673082e` | fix: playout item converter subtitles (#3014) | Port | mpeg-ts-channel-streaming | `fix(parity): reconcile Next subtitle source availability` | ucu-09; provider ownership/caption eligibility, automatic availability, exact/prepared pins, music-video metadata and URI/seek semantics; focused and decoded runtime checks, strict lint and native smoke pass. |
 | 149 | `4fffa955` | fix: plex other video tags (#3015) | Port | scanner | `fix(infra): restore Plex Other Video folder tags` | ucu-09; portable roots, owned folder tags, scoped SQLite refresh; provider/restart/search/subtitle/rollback checks and strict lint pass. |
-| 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | | | | ucu-09; provisional: Adapt (ADR 0095). Claude 2026-09-23 triage: default the Next channel config to show errors over fallback. |
+| 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | Port | mpeg-ts-channel-streaming | `feat(infra): show Next fallback error reasons` | ucu-09; optional wire contract and enabled default; eight decoded gap/failed-media Burn/Convert/off cases, normal HLS audio/subtitles, host smoke and strict lint pass. |
 | 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: music video credits in the troubleshooter under ADR 0076. |
 | 152 | `495e3799` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
 | 153 | `0e1b355f` | chore: update dependencies (#3018) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: dependency bumps; verify AAC above two channels in a native argv snapshot instead. |

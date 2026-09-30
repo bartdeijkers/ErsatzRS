@@ -225,3 +225,24 @@ fn text_subtitle_normalization_uses_explicit_channel_mode() {
         assert_eq!(json["normalization"]["subtitle"]["mode"], expected);
     }
 }
+
+#[test]
+fn generated_fallback_errors_are_enabled_in_both_subtitle_modes() {
+    for mode in [
+        NextEngineTextSubtitleMode::Burn,
+        NextEngineTextSubtitleMode::Convert,
+    ] {
+        let config = channel_config(
+            &profile(),
+            mode,
+            Path::new("playouts/current"),
+            Path::new("ffmpeg"),
+            Path::new("ffprobe"),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(config).unwrap()["fallback"],
+            serde_json::json!({"show_error": true})
+        );
+    }
+}

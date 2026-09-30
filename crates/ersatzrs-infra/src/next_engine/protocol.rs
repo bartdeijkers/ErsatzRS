@@ -7,9 +7,18 @@ pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.4";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<Fallback>,
     pub playout: PlayoutFolder,
     pub ffmpeg: Ffmpeg,
     pub normalization: Normalization,
+}
+
+/// Emergency fallback card policy; ordinary subtitle selection is independent.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct Fallback {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_error: Option<bool>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

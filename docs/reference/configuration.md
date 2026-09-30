@@ -326,6 +326,16 @@ sets the software deinterlacer's mode:
 }
 ```
 
+Generated Next configurations enable `fallback.show_error`. When Next substitutes
+black video and silence for a schedule gap or failed item, it burns the reason
+into that video, including when ordinary subtitles use Convert mode. This is
+independent of selected programme or library fallback captions. To keep plain
+black emergency fallback, set an overlay to:
+
+```json
+{ "fallback": { "show_error": false } }
+```
+
 Changes take effect when the next engine session starts, including after an idle
 session has stopped. Existing sessions are not restarted by editing a file.
 Malformed configuration causes Next startup to fail; it is not silently ignored.

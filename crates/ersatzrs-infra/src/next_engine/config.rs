@@ -56,6 +56,9 @@ pub fn channel_config(
     ffprobe_path: &Path,
 ) -> Result<wire::ChannelConfig, ConfigError> {
     Ok(wire::ChannelConfig {
+        fallback: Some(wire::Fallback {
+            show_error: Some(true),
+        }),
         playout: wire::PlayoutFolder {
             folder: runtime_path(playout_folder)?,
             virtual_start: None,

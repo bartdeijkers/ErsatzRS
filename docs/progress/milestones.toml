@@ -11416,6 +11416,39 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row150 implements upstream 599dc5ea's fallback.show_error default through the
+existing ADR 0095 Next configuration. Optional omitted/null wire fields remain
+compatible and explicit false remains exact; generated Burn/Convert configs
+both enable the error card. The regression fails before the fix
+(47ea3e2f-4c1e-4376-ae1d-1029c421764f). All 19 focused configuration, protocol and
+overlay checks pass (5e568a32-9da5-49cd-b7d5-24e962de3fbf), followed by all 246
+Next unit checks (05a062e3-443b-4c04-86ca-9953fcb464d0).
+The decoded official-engine matrix passes
+(b075f36f-a6bf-4e89-9255-45e2a450bc08): fallback video contains burned text in
+Burn and Convert modes, generated ASS contains the actual gap reason, and an
+explicit false overlay yields black video with no error-card file in both modes.
+The same run preserves selected audio and external subtitle burn in normal HLS.
+Next e7997fa and FFmpeg/ffprobe from the published v2.0.3 Linux package match
+previously recorded SHA-256 digests; the archive checksum also matches. Source
+review uses that exact Next revision's fallback configuration and rendering.
+There is no new renderer, package, dependency, persistence or native-engine
+change. Overlay documentation and changelog describe the operator-visible
+behavior. Lint requested extraction of the long fixture's pixel observation
+helper; all eight gap/failed-media, Burn/Convert and default/explicit-off cases
+pass on the final fixture (d24e4991-2b78-4b01-813d-fce544204604). The generated
+card identifies the scheduled gap or the actual failed item, and the decoded
+video contains its burned text. No timeout or rendering assertion was weakened.
+The real-host Next smoke passes: private callbacks remain 404 publicly, HLS
+serves segments, Hybrid MPEG-TS retains H.264/AAC, decoded Dutch 880 Hz audio
+and burned subtitles, HLS survives wrapper disconnect, preview playback works,
+wrappers restart and idle expiry removes owned sessions. Native transport code
+is unchanged; integrated window TSDuck/closeout gates remain separate.
+Final strict all-target infra/scanner/web Clippy, formatting, new-allow policy,
+progress validation and diff checks pass. Row150 is Port: the upstream wire and
+default behavior are preserved within the accepted ADR 0095 integration, with
+no new deviation. Pin advances to 599dc5ea; 150/181 reconciled, 31 pending.
+Continue at row151; UCU-09 closeout, push and exact-SHA CI remain.
+
 Row149 is Port: upstream 4fffa955's Plex Other Video folder tags now use current
 server library locations, loaded once with a bounded request before publication
 and reused across all pages. Portable parsing preserves the first matching root,

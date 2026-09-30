@@ -89,9 +89,11 @@ focused checks, decoded native/Next proof, strict lint and native smoke.
 Valid HTTP(S) schemes are normalized for FFmpeg. Row149 ports Plex Other Video
 folder tags with portable server paths, scoped migration, repeat/restart identity,
 independent tag ownership, subtitle retention, search visibility and rollback
-proof. Focused checks and strict lint pass. Continue at row150; UCU-09 window
-gates, push and exact-SHA CI remain.
-The current 181-row ledger has 32 pending rows. Preserve accepted architecture,
+proof. Focused checks and strict lint pass. Row150 enables Next fallback error
+cards: wire/overlay compatibility, decoded gap/failed-media Burn/Convert and
+explicit-off cases, ordinary audio/subtitles, host smoke and lint pass.
+Continue at row151; UCU-09 window gates, push and exact-SHA CI remain.
+The current 181-row ledger has 31 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI
