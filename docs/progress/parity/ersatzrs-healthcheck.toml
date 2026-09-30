@@ -149,3 +149,10 @@ description = 'UCU-09 row136: health page reads and maintenance must share one b
 discovered  = '2026-09-28'
 evidence    = 'UCU-09 row136 ports upstream 3c41959f. Seven coordinator regressions cover shared/last-reader cancellation, cache/expiry/forced refresh, timeout, panic, publication recovery and shutdown. Maintenance shares the same cache; 113 infra/maintenance and four web tests pass. Strict affected lint, hydration lint and four Chromium/Firefox hydrated/no-JS cases pass after correcting the initial SSR boundary. Detailed evidence and the reproduced/corrected browser failure are in the UCU-09 milestone; source map is in plans/upstream-catch-up.md.'
 resolved    = true
+
+[[debt]]
+id = 'source-orientation-stream-kind'
+description = 'Source Orientation selects persisted audio kind 2 instead of video kind 1 and misses copied rotated videos; the old fixture repeats the incorrect value.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 row169 corrects the persisted video kind to 1. The fixture now uses the production stream writer; a76578f9-f005-48a6-8fce-f71547472fae passes copied rotated video, transcoded/unrotated exclusions and a negative audio case. Strict affected lint passes. UCU-09 owns complete evidence.'
+resolved = true

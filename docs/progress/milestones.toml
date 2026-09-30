@@ -11416,6 +11416,32 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row169 is Port after the complete ee038ba4 23-file source audit. Plex orientation
+and Jellyfin/Emby signed rotation now reach the existing persisted Rotation field;
+Media Info exposes it, and normal/troubleshooting Next publication shares schema
+0.0.5. Existing local ffprobe normalization and fresh retained/persisted probe hints
+are reused. Native autorotation is unchanged; no second transpose is introduced.
+All 163 selected regressions pass (69aabbea-d8ba-49b9-af94-80506aa3969a), covering
+provider mappings, SQL persistence, known/unknown metadata, wire publication and
+Media Info serialization. Official Next decoded proof passes
+(37d9ca94-f90d-4524-bf41-78b2d3094c5f): four rotations, portrait padding and 880-Hz
+audio. Exact e7997fa Next and published v2.0.3 FFmpeg/ffprobe checksums match.
+Both matched Chromium/Firefox Media Info cases pass in 16.7s, and the Rotation
+field is visible in the inspected screenshot. JSON:
+test-results/ucu09-row169-browser/playwright-results.json. Health review found the existing orientation
+query selected audio kind 2 rather than video kind 1. It is corrected, and the
+fixture now uses the production stream writer; a76578f9-f005-48a6-8fce-f71547472fae
+proves copied rotated video, transcoded/unrotated exclusions and excluded audio.
+Final strict core/infra/web all-target Clippy, architecture/hydration lint,
+formatting and progress validation pass. Required Next HTTP smoke passes
+(ersatzrs-smoke-162873-1790794121): private callbacks stay private, MPEG-TS/HLS and
+preview play, Dutch audio/subtitle pixels decode, wrapper restart succeeds and
+idle sessions drain. Logs/source/checksums: tmp/ucu09-row169/. Browser/runtime
+proof remains valid after the isolated health correction. No new schema, runtime
+build or release; approved hardware debt remains unchanged. Pin advances to
+ee038ba4; 169/181 accepted, 12 pending. Continue row170; final window gates,
+upstream refresh, push and exact-SHA CI remain.
+
 Row168 is N/A after reviewing the complete 55885508 diff: only upstream
 CHANGELOG.md gains the 26.10.0 release heading/date and comparison links. There
 is no source, dependency, build or runtime change and no ErsatzRS release is

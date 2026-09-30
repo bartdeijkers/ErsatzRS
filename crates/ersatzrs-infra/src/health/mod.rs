@@ -1917,12 +1917,6 @@ mod tests {
                    )"#
             ),
             format!(
-                r#"INSERT INTO "MediaStream" (
-                       "Id", "Index", "Codec", "MediaStreamKind", "Channels",
-                       "Default", "Forced", "MediaVersionId", "Rotation"
-                   ) VALUES ({id}, 0, 'h264', 2, 0, 1, 0, {id}, {rotation})"#
-            ),
-            format!(
                 r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
                    VALUES ({id}, '/media/portrait-{id}.mp4', 'hash-{id}')"#
             ),
@@ -1945,6 +1939,22 @@ mod tests {
                 .await
                 .expect("seed rotated playout item");
         }
+        // Use the production writer so this fixture cannot duplicate an
+        // incorrect persisted enum value from the health query.
+        let mut tx = pool.begin().await.unwrap();
+        crate::media_server::jellyfin_emby::replace_streams(
+            &mut tx,
+            id,
+            &[ersatzrs_domain::MediaStream {
+                kind: ersatzrs_domain::MediaStreamKind::Video,
+                codec: Some("h264".into()),
+                rotation: Some(rotation),
+                ..Default::default()
+            }],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
     }
 
     /// ADR 0003 / `p8c-02`: MPEG-TS cannot carry a display matrix, so a
@@ -1993,6 +2003,20 @@ mod tests {
             result.message.contains("portrait-92.mp4") && result.message.contains("270"),
             "{}",
             result.message
+        );
+        // Even a malformed audio row with rotation must not be reported.
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "MediaStreamKind" = 2 WHERE "MediaVersionId" = 92"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            super::run_source_orientation_check(&pool)
+                .await
+                .unwrap()
+                .status,
+            HealthCheckStatus::NotApplicable
         );
     }
 

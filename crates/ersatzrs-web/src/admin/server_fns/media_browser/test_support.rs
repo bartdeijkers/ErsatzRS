@@ -1502,6 +1502,11 @@ mod tests {
                 .execute(&pool)
                 .await
                 .unwrap();
+            sqlx::query(r#"UPDATE "MediaStream" SET "Rotation" = ? WHERE "MediaStreamKind" = 1"#)
+                .bind(light.map(|_| 270_i64))
+                .execute(&pool)
+                .await
+                .unwrap();
             let info = repository
                 .get_media_item_info_admin(10)
                 .await
@@ -1510,6 +1515,12 @@ mod tests {
             let value: serde_json::Value =
                 serde_json::from_str(&media_item_info_json_from_admin(info).unwrap()).unwrap();
             assert_eq!(value["Streams"][0]["DvProfile"], 8);
+            if light.is_some() {
+                assert_eq!(value["Streams"][0]["Rotation"], 270);
+            } else {
+                assert!(value["Streams"][0].get("Rotation").is_none());
+            }
+            assert!(value["Streams"][1].get("Rotation").is_none());
             assert_eq!(value["Streams"][0]["HasHdr10Metadata"], light.is_some());
             for stream in value["Streams"].as_array().unwrap().iter().skip(1) {
                 assert!(stream.get("DvProfile").is_none());

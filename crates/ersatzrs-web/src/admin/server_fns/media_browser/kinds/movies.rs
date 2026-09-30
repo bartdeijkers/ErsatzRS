@@ -738,6 +738,7 @@ fn media_item_info_json_from_admin_with_language(
                 color_primaries: stream.color_primaries,
                 dv_profile: stream.dv_profile,
                 has_hdr10_metadata: stream.has_hdr10_metadata,
+                rotation: stream.rotation,
                 bits_per_raw_sample: stream.bits_per_raw_sample,
                 mime_type: stream.mime_type,
                 file_name: stream.file_name,
@@ -1535,6 +1536,7 @@ pub(in crate::admin::server_fns::media_browser) async fn load_media_info_streams
                   "MasteringDisplay",
                   "MaxCll",
                   "MaxFall",
+                  "Rotation",
                   "BitsPerRawSample",
                   "MimeType",
                   "FileName"
@@ -1588,6 +1590,7 @@ pub(in crate::admin::server_fns::media_browser) async fn load_media_info_streams
                 } else {
                     None
                 },
+                rotation: r.try_get("Rotation")?,
                 bits_per_raw_sample: positive_i64(r.try_get("BitsPerRawSample").unwrap_or(0)),
                 mime_type: r.try_get::<Option<String>, _>("MimeType").unwrap_or(None),
                 file_name: r.try_get::<Option<String>, _>("FileName").unwrap_or(None),
@@ -1627,6 +1630,7 @@ pub(in crate::admin::server_fns::media_browser) async fn load_media_info_streams
                 color_primaries: None,
                 dv_profile: None,
                 has_hdr10_metadata: None,
+                rotation: None,
                 bits_per_raw_sample: None,
                 mime_type: None,
                 file_name: s.path.as_ref().and_then(|p| {

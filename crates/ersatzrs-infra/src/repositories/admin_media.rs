@@ -525,7 +525,7 @@ async fn load_admin_media_streams(
                   "Channels", "Default", "Forced", "AttachedPic", "PixelFormat",
                   "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
                   "BitsPerRawSample", "MimeType", "FileName",
-                  "DolbyVisionProfile",
+                  "DolbyVisionProfile", "Rotation",
                   ("MasteringDisplay" IS NOT NULL OR "MaxCll" IS NOT NULL
                    OR "MaxFall" IS NOT NULL) AS "HasHdr10Metadata"
            FROM "MediaStream" WHERE "MediaVersionId" = ? ORDER BY "Index", "Id""#,
@@ -557,13 +557,12 @@ async fn load_admin_media_streams(
             color_space: row.try_get("ColorSpace").repository()?,
             color_transfer: row.try_get("ColorTransfer").repository()?,
             color_primaries: row.try_get("ColorPrimaries").repository()?,
-            dv_profile: if kind == 1 {
-                row.try_get("DolbyVisionProfile").repository()?
-            } else {
-                None
-            },
+            dv_profile: (kind == 1)
+                .then_some(row.try_get("DolbyVisionProfile").repository()?)
+                .flatten(),
             has_hdr10_metadata: (kind == 1)
                 .then_some(row.try_get::<bool, _>("HasHdr10Metadata").repository()?),
+            rotation: row.try_get("Rotation").repository()?,
             bits_per_raw_sample: (bits_per_raw_sample > 0).then_some(bits_per_raw_sample),
             mime_type: row.try_get("MimeType").repository()?,
             file_name: row.try_get("FileName").repository()?,
@@ -606,6 +605,7 @@ async fn load_admin_media_streams(
                     color_primaries: None,
                     dv_profile: None,
                     has_hdr10_metadata: None,
+                    rotation: None,
                     bits_per_raw_sample: None,
                     mime_type: None,
                     file_name: subtitle.path.as_ref().and_then(|path| {
@@ -2293,6 +2293,21 @@ mod tests {
             .execute(pool)
             .await
             .expect("seed playout item");
+        }
+    }
+
+    #[tokio::test]
+    async fn media_info_rotation_preserves_known_zero_and_unknown() {
+        let pool = test_pool().await;
+        seed_remote_stream_detail(&pool).await;
+        for rotation in [Some(270_i64), Some(0), None] {
+            sqlx::query(r#"UPDATE "MediaStream" SET "Rotation" = ? WHERE "MediaVersionId" = 22 AND "MediaStreamKind" = 1"#)
+                .bind(rotation).execute(&pool).await.unwrap();
+            let streams = load_admin_media_streams(&pool, 22, &[], false)
+                .await
+                .unwrap();
+            assert_eq!(streams[0].rotation, rotation);
+            assert_eq!(streams[1].rotation, None);
         }
     }
 

@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.4";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {

@@ -448,6 +448,7 @@ pub(super) fn project_stream(stream: JellyfinMediaStreamResponse) -> Option<Medi
         } else {
             None
         },
+        rotation: is_video.then(|| stream.rotation.unwrap_or_default().rem_euclid(360)),
         bits_per_raw_sample: if is_video {
             stream.bit_depth.unwrap_or_default()
         } else {
@@ -498,5 +499,32 @@ mod tests {
         assert_eq!(stream.dolby_vision_bl_present, Some(true));
         assert_eq!(stream.dolby_vision_el_present, Some(false));
         assert_eq!(stream.dolby_vision_rpu_present, Some(true));
+    }
+}
+
+#[cfg(test)]
+mod rotation_tests {
+    use super::*;
+
+    #[test]
+    fn provider_rotation_normalizes_video_and_ignores_other_streams() {
+        for (angle, expected) in [
+            (None, 0),
+            (Some(-90), 270),
+            (Some(450), 90),
+            (Some(180), 180),
+            (Some(0), 0),
+            (Some(i32::MIN), 232),
+        ] {
+            for kind in ["Video", "Audio", "Subtitle"] {
+                let response: JellyfinMediaStreamResponse =
+                    serde_json::from_value(serde_json::json!({
+                        "Type": kind, "Codec": "h264", "Rotation": angle
+                    }))
+                    .unwrap();
+                let stream = project_stream(response).unwrap();
+                assert_eq!(stream.rotation, (kind == "Video").then_some(expected));
+            }
+        }
     }
 }

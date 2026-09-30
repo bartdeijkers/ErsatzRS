@@ -4,6 +4,8 @@ rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzr
 status     = 'Deferred'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
+UCU-09 row169 adds provider rotation and Next schema 0.0.5, with decoded four-angle/audio and HTTP smoke proof. Native autorotation is unchanged; the orientation health query now uses the correct video kind. The milestone owns evidence; existing hardware debt is unchanged.
+
 Deferred after Phase 8 and explicitly non-blocking for Phase 9. The FFmpeg 9
 differential review found no additional mandatory
 command migration after ADR 0063. Phase 8 added operation-scoped NVIDIA graph

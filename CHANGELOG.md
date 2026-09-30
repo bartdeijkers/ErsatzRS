@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve Plex, Jellyfin and Emby video rotation metadata, expose it in Media Info,
+  and publish Next playouts using the rotation-aware 0.0.5 schema. Correct the
+  orientation health check so copied rotated video is reported.
+
 - Require absolute filesystem paths for local libraries, keep percent characters
   literal, and reject overlaps with other libraries while retaining the Images /
   Other Videos exception. Show localized offending-path errors with correction

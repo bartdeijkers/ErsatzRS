@@ -1993,6 +1993,12 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         } else {
             None
         },
+        rotation: is_video.then_some(match stream.orientation {
+            Some(8) => 270,
+            Some(3) => 180,
+            Some(6) => 90,
+            _ => 0,
+        }),
         bits_per_raw_sample: if is_video {
             stream.bit_depth.unwrap_or_default()
         } else {
@@ -3784,6 +3790,7 @@ struct PlexStreamResponse {
     channels: Option<i32>,
     width: Option<i32>,
     height: Option<i32>,
+    orientation: Option<i32>,
     pixel_aspect_ratio: Option<String>,
     scan_type: Option<String>,
     frame_rate: Option<String>,
@@ -3812,6 +3819,28 @@ mod stream_projection_tests {
     use ersatzrs_domain::DolbyVisionMetadataState;
 
     use super::{project_stream, PlexStreamResponse};
+
+    #[test]
+    fn plex_rotation_maps_provider_orientation_without_changing_audio_or_subtitles() {
+        for (orientation, expected) in [
+            (None, 0),
+            (Some(8), 270),
+            (Some(3), 180),
+            (Some(6), 90),
+            (Some(1), 0),
+            (Some(99), 0),
+        ] {
+            for kind in [1, 2, 3] {
+                let response: PlexStreamResponse = serde_json::from_value(serde_json::json!({
+                    "streamType": kind, "codec": "h264", "orientation": orientation,
+                    "index": 0
+                }))
+                .unwrap();
+                let stream = project_stream(response).unwrap();
+                assert_eq!(stream.rotation, (kind == 1).then_some(expected));
+            }
+        }
+    }
 
     #[test]
     fn plex_positive_but_partial_dolby_fixture_is_rejected_safely() {

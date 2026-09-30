@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `558855083c7602b6f50ed63675ff61d1d325f98d` |
-| **Commit subject** | `prep for release v26.10.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/558855083c7602b6f50ed63675ff61d1d325f98d |
+| **Pinned commit** | `ee038ba460a237e277c2ed2fbb413bfac13795f8` |
+| **Commit subject** | `feat: next engine rotation (#3034)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ee038ba460a237e277c2ed2fbb413bfac13795f8 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -457,6 +457,7 @@ pub(super) fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStr
         } else {
             None
         },
+        rotation: is_video.then(|| stream.rotation.unwrap_or_default().rem_euclid(360)),
         bits_per_raw_sample: if is_video {
             stream.bit_depth.unwrap_or_default()
         } else {
@@ -510,5 +511,31 @@ mod tests {
             .dolby_vision_metadata_hint
             .as_deref()
             .is_some_and(|hint| hint.contains("Emby")));
+    }
+}
+
+#[cfg(test)]
+mod rotation_tests {
+    use super::*;
+
+    #[test]
+    fn provider_rotation_normalizes_video_and_ignores_other_streams() {
+        for (angle, expected) in [
+            (None, 0),
+            (Some(-90), 270),
+            (Some(450), 90),
+            (Some(180), 180),
+            (Some(0), 0),
+            (Some(i32::MIN), 232),
+        ] {
+            for kind in ["Video", "Audio", "Subtitle"] {
+                let response: EmbyMediaStreamResponse = serde_json::from_value(serde_json::json!({
+                    "Type": kind, "Codec": "h264", "Rotation": angle
+                }))
+                .unwrap();
+                let stream = project_stream(response).unwrap();
+                assert_eq!(stream.rotation, (kind == "Video").then_some(expected));
+            }
+        }
     }
 }

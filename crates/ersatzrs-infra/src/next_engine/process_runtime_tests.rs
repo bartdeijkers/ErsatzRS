@@ -1210,3 +1210,6 @@ mod producer_prefix_runtime_tests;
 
 #[path = "fallback_error_runtime_tests.rs"]
 mod fallback_error_runtime_tests;
+
+#[path = "rotation_runtime_tests.rs"]
+mod rotation_runtime_tests;

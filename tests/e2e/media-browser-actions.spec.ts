@@ -509,9 +509,9 @@ ORDER BY "Id" DESC LIMIT 1;
     sqlite(`
 INSERT INTO "MediaVersion" ("Id", "MusicVideoId", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind")
 VALUES (${seed.musicVideoId}, ${seed.musicVideoId}, '2026-09-28', '2026-09-28', '00:00:01', 64, 64, 0);
-INSERT INTO "MediaStream" ("Index", "MediaVersionId", "MediaStreamKind", "Channels", "Default", "Forced", "DolbyVisionProfile", "MaxCll")
-VALUES (0, ${seed.musicVideoId}, 1, 0, 1, 0, 8, 1000),
-       (1, ${seed.musicVideoId}, 2, 2, 1, 0, NULL, NULL);
+INSERT INTO "MediaStream" ("Index", "MediaVersionId", "MediaStreamKind", "Channels", "Default", "Forced", "DolbyVisionProfile", "MaxCll", "Rotation")
+VALUES (0, ${seed.musicVideoId}, 1, 0, 1, 0, 8, 1000, 270),
+       (1, ${seed.musicVideoId}, 2, 2, 1, 0, NULL, NULL, NULL);
 `);
 
     await forceEnglish(page);
@@ -548,6 +548,9 @@ ORDER BY "Id" DESC LIMIT 1;
     const infoJson = JSON.parse(await mediaInfo.locator('pre').innerText());
     expect(infoJson.Streams[0].DvProfile).toBe(8);
     expect(infoJson.Streams[0].HasHdr10Metadata).toBe(true);
+    expect(infoJson.Streams[0].Rotation).toBe(270);
+    expect(infoJson.Streams[1]).not.toHaveProperty('Rotation');
+    await page.screenshot({ path: testInfo.outputPath('media-info-rotation.png'), fullPage: true });
     expect(infoJson.Streams[1]).not.toHaveProperty('DvProfile');
     expect(infoJson.Streams[1]).not.toHaveProperty('HasHdr10Metadata');
 
