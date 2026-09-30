@@ -624,6 +624,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
     let stream_selectors_disabled = context.stream_selectors.is_empty();
     let preferred_audio_title = context.preferred_audio_title.clone();
     let selected_subtitle_id = context.selected_subtitle_id;
+    let is_music_video = context.kind == "Music Video";
 
     view! {
         <form method="get" action="/api/troubleshoot/playback.m3u8" class=style::playbackForm data-playback-troubleshooting>
@@ -678,6 +679,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                             }).collect_view()}
                         </select>
                     </label>
+                    {is_music_video.then(|| playback_credits_field(context.music_video_credits_templates))}
                     {playback_watermark_field(context.watermarks)}
                     <div class=style::wideField>
                         {playback_multi_select_field(tr(TextKey::GraphicsElements), "graphicsElement", context.graphics_elements)}
@@ -720,6 +722,20 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
         </form>
     }
     .into_any()
+}
+
+fn playback_credits_field(templates: Vec<String>) -> impl IntoView {
+    view! {
+        <label class=style::playbackField>
+            <span>{tr(TextKey::MusicVideoCreditsTemplate)}</span>
+            <select class=style::select name="musicVideoCreditsTemplate">
+                <option value="" selected>{tr(TextKey::NoneOption)}</option>
+                {templates.into_iter().map(|template| view! {
+                    <option value=template.clone()>{template.clone()}</option>
+                }).collect_view()}
+            </select>
+        </label>
+    }
 }
 
 fn playback_watermark_field(

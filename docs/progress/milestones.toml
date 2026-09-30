@@ -11416,6 +11416,41 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row151 is Port: upstream 0840e0fb adds optional music-video credits selection
+to playback troubleshooting. The source/visual map covers the SSR field,
+query forwarding, both preparation paths, subtitle precedence, seek timing and
+archive side effects. Existing ADRs 0076 and 0095 own the renderer and ephemeral
+Next integration; no new deviation, schema or runtime package is introduced.
+The application/runtime boundary lists templates; generated ASS and the exact
+read template remain in the owned preview folder, without persisted channel or
+playout changes. Native channel projection retains credits configuration.
+All 51 focused troubleshooting checks pass after correcting the missing
+MusicVideo summary projection (ac28f460-2079-42d8-9dae-809ae4143759). The final
+762 web tests pass (24abfbe1-ee63-4852-b2ed-3a8fb58d2912), including Dutch audio,
+rebased ASS, reviewed native argv, archive members and persisted-state guards.
+Seven renderer checks pass (3b43a210-2a4c-41df-a24d-b9c7ca79b1d2). Strict web,
+application and infrastructure all-target Clippy, architecture/hydration lint,
+formatting, new-allow policy and the complete web parity gate pass. The broader
+gate exposed a stale four-field sessions assertion after accepted ADR 0105 added
+startedAt; it now requires the exact five-field contract. A named summary helper
+satisfies the test-length lint without removing any assertion.
+All 14 Chromium/Firefox scenarios pass in test-results/ucu09-row151-final:
+both engines decode credits after seeking and archive ASS/template; ordinary
+controls and playback remain intact. Two no-JS mobile cases pass again in
+test-results/ucu09-row151-geometry after scrolling the field into the screenshot.
+Reviewed 320px screenshots show the selector between Subtitle and Watermarks,
+readable labels and no overflow, against the documented Razor-derived contract.
+The initial missing selector is fixed; the unchanged white-pixel threshold now
+uses a white-text preset, while Music Factory keeps no-JS selection coverage.
+Native smoke passes MPEG-TS and HLS with private callbacks rejected publicly.
+Official Next smoke passes H.264/AAC, decoded Dutch 880 Hz audio, burned subtitles,
+preview playback, wrapper disconnect/restart and idle cleanup. Next e7997fa and
+the published FFmpeg v2.0.3 archive match their recorded SHA-256 checksums.
+Health capabilities and transport mux are unchanged. The existing 87-check
+TSDuck transport evidence remains applicable; integrated UCU-09 window gates
+remain separate. Pin advances to 0840e0fb; 151/181 reconciled, 30 pending.
+Continue at row152; no intermediate push or CI.
+
 Row150 implements upstream 599dc5ea's fallback.show_error default through the
 existing ADR 0095 Next configuration. Optional omitted/null wire fields remain
 compatible and explicit false remains exact; generated Burn/Convert configs

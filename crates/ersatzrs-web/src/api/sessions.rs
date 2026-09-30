@@ -98,7 +98,23 @@ mod tests {
         assert_eq!(rows[0]["state"], "SeekAndRealtime");
         assert_eq!(rows[1], serde_json::to_value(&before).unwrap());
         assert!(rows[1]["transcodedUntil"].is_null());
-        assert_eq!(rows[1].as_object().unwrap().len(), 4);
+        assert_eq!(
+            rows[1]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            [
+                "channelNumber",
+                "state",
+                "transcodedUntil",
+                "lastAccess",
+                "startedAt"
+            ]
+            .into_iter()
+            .collect()
+        );
         assert_eq!(
             next.session_model().unwrap(),
             before,

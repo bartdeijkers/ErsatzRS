@@ -333,6 +333,10 @@ pub trait AdminHealthRuntime: Send + Sync {
 #[async_trait]
 pub trait AdminTroubleshootingRuntime: Send + Sync {
     async fn list_stream_selectors(&self) -> Result<Vec<String>, AdminTroubleshootingRuntimeError>;
+    /// List bundled and operator music-video credits templates for previews.
+    async fn list_music_video_credits_templates(
+        &self,
+    ) -> Result<Vec<String>, AdminTroubleshootingRuntimeError>;
     async fn start_playback_preview(
         &self,
         request: PlaybackPreviewRequest,
@@ -744,6 +748,7 @@ pub struct PlaybackPreviewRequest {
     pub stream_selector: Option<String>,
     pub preferred_audio_title: Option<String>,
     pub subtitle_id: Option<EntityId>,
+    pub music_video_credits_template: Option<String>,
     pub seek_seconds: Option<i64>,
     pub start: Option<String>,
 }

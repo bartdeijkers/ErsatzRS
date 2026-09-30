@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-30): `76884783996ac3aa11a232622939b8bd03ed0d86`
   — build: bump ffmpeg to 8.1.2-2 (#3046).
-- Ledger: **181 commits**, **31 pending**. The original plan covered 152 through
+- Ledger: **181 commits**, **30 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Continue at row 151. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Continue at row 152. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,38 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 151 source map — troubleshooting music-video credits (Port)
+
+- Upstream `0840e0fb` adds the music-only optional template dropdown to
+  `PlaybackTroubleshooting.razor`, forwards `musicVideoCreditsTemplate` through
+  the controller and Prepare/Start handlers, and archives the template and ASS.
+  Generated credits replace the chosen subtitle while audio selection remains.
+- Native preparation renders ASS at the selected seek; Next uses the transient
+  troubleshooting item rather than creating a database playout. Archive filtering
+  includes `music-video-credits` files. Channel previews retain channel settings.
+- Rust targets the application preview request/read model and runtime port,
+  SSR playback form/context, query adapter, both host preparation paths, and the
+  existing `music_video_credits` renderer. No schema, scheduler or new capability.
+- ADR 0076 retains the existing minijinja/Scriban-compatible renderer; ADR 0095
+  retains the optional engine and existing owned ephemeral artifact contract.
+- Visual map: upstream 64px download toolbar, extra-large content container,
+  responsive label/select rows, music-only None/template field between subtitles
+  and watermarks. Reuse `playbackField`, existing select styling and translations;
+  the SSR form and existing preview JavaScript preserve the no-JS GET path.
+  No shared island primitive or CSS changes are planned.
+- Acceptance: template listing/query, music-only/None gating, audio/subtitle
+  precedence, seek timing and unchanged persisted channel/playout state pass
+  focused regressions. All 762 web tests, strict boundary/web lint, architecture,
+  hydration and web parity gates pass. Chromium/Firefox pass all 14 scenarios:
+  both engines decode credits after seeking and archive ASS/template. Two no-JS
+  mobile cases also pass after capturing the visible credits field; the reviewed
+  320px geometry matches the Razor-derived field order and existing form styling.
+  Native and official Next host smoke pass. Health capabilities and transport mux
+  are unchanged; UCU-09 still owns the full window closeout and TSDuck gates.
+- Review corrected a missing music-video summary projection, retained native
+  channel credits settings, portable snapshot redaction and the stale sessions
+  test after ADR 0105's startedAt addition. No new deviation or runtime build.
 
 ## Row 150 source map — visible Next fallback reasons (Port)
 
@@ -4240,7 +4272,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 148 | `c673082e` | fix: playout item converter subtitles (#3014) | Port | mpeg-ts-channel-streaming | `fix(parity): reconcile Next subtitle source availability` | ucu-09; provider ownership/caption eligibility, automatic availability, exact/prepared pins, music-video metadata and URI/seek semantics; focused and decoded runtime checks, strict lint and native smoke pass. |
 | 149 | `4fffa955` | fix: plex other video tags (#3015) | Port | scanner | `fix(infra): restore Plex Other Video folder tags` | ucu-09; portable roots, owned folder tags, scoped SQLite refresh; provider/restart/search/subtitle/rollback checks and strict lint pass. |
 | 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | Port | mpeg-ts-channel-streaming | `feat(infra): show Next fallback error reasons` | ucu-09; optional wire contract and enabled default; eight decoded gap/failed-media Burn/Convert/off cases, normal HLS audio/subtitles, host smoke and strict lint pass. |
-| 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: music video credits in the troubleshooter under ADR 0076. |
+| 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | Port | support-pages | `feat(web): troubleshoot music-video credits` | ucu-09; optional music-only template, both-engine seek/audio/subtitle precedence and archived ASS/template; 762 web checks, strict lint, 14 browser cases, no-JS/mobile review and native/Next smoke pass. |
 | 152 | `495e3799` | chore: update changelog for new next build | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: changelog only. |
 | 153 | `0e1b355f` | chore: update dependencies (#3018) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: dependency bumps; verify AAC above two channels in a native argv snapshot instead. |
 | 154 | `908fa961` | fix: graphics engine motion (#3019) | | | | ucu-09; provisional: Adapt (ADR 0005). Claude 2026-09-23 triage: graphics motion timing and hold, and seek seconds reaching templates. |

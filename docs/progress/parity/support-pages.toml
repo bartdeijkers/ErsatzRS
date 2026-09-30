@@ -1,8 +1,8 @@
 feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
-status     = 'In progress'
-adr        = ['0013', '0089']
+status     = 'Ported'
+adr        = ['0013', '0076', '0089', '0095']
 summary    = '''
 Upstream catch-up row 1 (1e5c0b12, PR #2842) was Covered when upstream removed
 release notes. Row 65 (3e1918c9, PR #2942) restores a release-notes card on
@@ -34,7 +34,10 @@ artifacts, and keeps raw `.ts` samples only when the user opts in. Playback
 troubleshooting archives and media samples have real download side effects, and
 the generated troubleshooting HLS session route serves the produced playlist
 and segments. UCU-06 row 93 adds Legacy/Next controls, shared Hls.js playback,
-completion logs and in-order SSR for the no-JS GET form; Chromium and Firefox
+completion logs and in-order SSR for the no-JS GET form. UCU-09 row151 adds a
+music-only credits template selector, seek-correct generated ASS and exact
+template copies in both-engine diagnostic archives, preserving audio and
+persisted channel/playout state. Chromium and Firefox
 prove both engines, reports and narrow layouts. Visible labels/statuses use the shared persisted-language i18n
 layer for `en-us`, `pl`, `pt-br`, and `nl`; focused Rust and e2e tests cover the
 health/logs/troubleshooting/sequential/block/playback route family.
@@ -77,3 +80,10 @@ description = 'ADR 0089 removed Logs and Troubleshooting from the navigation dra
 discovered  = '2026-09-09'
 evidence    = 'Fixed 2026-09-09: `SystemPageLayout` now wraps all eight system pages — `HealthPage`, `LogsPage`, `TroubleshootingPage`, `MpegTroubleshootingPage`, `SequentialScheduleValidationPage`, `BlockPlayoutTroubleshootingPage`, `BlockPlayoutHistoryPage`, and `PlaybackTroubleshootingPage`. Against the running dev host every one of the eight `/system/*` routes serves exactly one `data-system-route-tabs` strip with exactly one `aria-current="page"`, and `/system/troubleshooting/*` holds the Troubleshooting tab. Covered by `troubleshooting_detail_keeps_the_troubleshooting_tab_selected` and the `one drawer Support link drives the system route tabs` case in `tests/e2e/support-pages.spec.ts`.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-row151'
+description = 'Playback troubleshooting does not yet have accepted music-video credits template selection and both-engine runtime/archive proof for upstream row151.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'Resolved by UCU-09 row151: 762 web checks, generated/native argv, seek/audio/subtitle precedence, archives and persisted-state guards pass; strict lint and web parity pass. All 14 Chromium/Firefox cases and two final no-JS 320px screenshot cases pass, with both engines decoding credits after seek. Native/official Next smoke passes. The owning milestone records exact runs, source review and artifact checksums.'

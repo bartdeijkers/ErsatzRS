@@ -372,6 +372,8 @@ release section when tagging a release.
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
 ### Added
+- Playback troubleshooting adds a music-video credits template selector for both
+  engines and includes the template and generated ASS in diagnostic downloads.
 
 - Show Next emergency playback and schedule-gap reasons on fallback video by
   default, including when subtitles normally use Convert mode. Channel

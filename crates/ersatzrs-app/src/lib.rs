@@ -2186,9 +2186,19 @@ impl ApplicationServices {
                 operation: "load playback stream selectors",
                 message: error.to_string(),
             })?;
+        let music_video_credits_templates = self
+            .ports
+            .troubleshooting_runtime()
+            .list_music_video_credits_templates()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "load playback music-video credits templates",
+                message: error.to_string(),
+            })?;
         Ok(queries::PlaybackTroubleshootingReadModel {
             data,
             stream_selectors,
+            music_video_credits_templates,
         })
     }
 

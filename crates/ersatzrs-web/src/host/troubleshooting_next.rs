@@ -147,6 +147,10 @@ async fn select(
         .ok_or(PreviewNotFound("media item does not exist"))?;
     info.media_version_id = media.media_version_id;
     info.path.clone_from(&media.path);
+    channel = credits::channel(query, &info, &channel);
+    if credits::enabled(&channel, &info) {
+        subtitle_id = Some(0);
+    }
     Ok(Selection {
         channel,
         media,
@@ -284,19 +288,53 @@ async fn prepare_inner(
         item.start.timestamp_millis(),
         item.finish.timestamp_millis()
     );
-    let playout = protocol::Playout {
+    let mut playout = protocol::Playout {
         version: protocol::PLAYOUT_VERSION.to_owned(),
         items: vec![item],
     };
-    tokio::fs::write(manifest.path().join(name), serde_json::to_vec(&playout)?).await?;
     prepare_troubleshooting_folder(working).await?;
     write_preview_artifacts(state, query, &selected.info, &selected.profile, working).await?;
+    attach_preview_credits(&state.pool, &selected, working, &mut playout).await?;
+    tokio::fs::write(manifest.path().join(&name), serde_json::to_vec(&playout)?).await?;
     Ok((
         manifest,
         configuration,
         selected.channel.number,
         diagnostics,
     ))
+}
+
+async fn attach_preview_credits(
+    pool: &DbPool,
+    selected: &Selection,
+    working: &FsPath,
+    playout: &mut protocol::Playout,
+) -> ApiResult<()> {
+    if let Some(subtitle) = credits::prepare(
+        pool,
+        &selected.info,
+        &selected.channel,
+        &selected.profile,
+        selected.media.item.in_point.to_std()?,
+        working,
+    )
+    .await?
+    {
+        let tracks = playout.items[0]
+            .tracks
+            .as_mut()
+            .ok_or("preview tracks are unavailable")?;
+        tracks.subtitle = Some(protocol::Track {
+            stream_index: Some(0),
+            source: Some(protocol::Source::Local {
+                path: subtitle.path.ok_or("preview credits path is unavailable")?,
+                probe_hint: None,
+                in_point_ms: Some(0),
+                out_point_ms: None,
+            }),
+        });
+    }
+    Ok(())
 }
 
 struct RuntimePaths {

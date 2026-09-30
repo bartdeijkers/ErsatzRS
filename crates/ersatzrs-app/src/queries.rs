@@ -57,6 +57,7 @@ pub struct SeasonDetailReadModel {
 pub struct PlaybackTroubleshootingReadModel {
     pub data: ersatzrs_core::repositories::PlaybackTroubleshootingAdmin,
     pub stream_selectors: Vec<String>,
+    pub music_video_credits_templates: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

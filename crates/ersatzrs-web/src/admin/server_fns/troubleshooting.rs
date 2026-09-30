@@ -80,6 +80,7 @@ pub struct PlaybackTroubleshootingContext {
     pub selected_ffmpeg_profile_id: i64,
     pub ffmpeg_profiles: Vec<PlaybackTroubleshootingOption>,
     pub stream_selectors: Vec<String>,
+    pub music_video_credits_templates: Vec<String>,
     pub subtitles: Vec<PlaybackTroubleshootingSubtitle>,
     pub watermarks: Vec<PlaybackTroubleshootingOption>,
     pub graphics_elements: Vec<PlaybackTroubleshootingOption>,
@@ -1891,6 +1892,7 @@ fn playback_context_from_admin(
             selected_ffmpeg_profile_id: default_profile_id,
             ffmpeg_profiles,
             stream_selectors: read.stream_selectors,
+            music_video_credits_templates: read.music_video_credits_templates,
             subtitles: read
                 .data
                 .subtitles
@@ -1924,6 +1926,7 @@ fn playback_context_from_admin(
             selected_ffmpeg_profile_id: channel.ffmpeg_profile_id,
             ffmpeg_profiles,
             stream_selectors: read.stream_selectors,
+            music_video_credits_templates: read.music_video_credits_templates,
             subtitles: Vec::new(),
             watermarks,
             graphics_elements,
@@ -1934,6 +1937,7 @@ fn playback_context_from_admin(
         mode: PlaybackTroubleshootingMode::Missing,
         ffmpeg_profiles,
         stream_selectors: read.stream_selectors,
+        music_video_credits_templates: read.music_video_credits_templates,
         watermarks,
         graphics_elements,
         ..PlaybackTroubleshootingContext::default()
@@ -1989,6 +1993,9 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             ffmpeg_profiles,
             stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
                 .await,
+            music_video_credits_templates:
+                ersatzrs_infra::music_video_credits::list_music_video_credit_template_names()
+                    .await?,
             subtitles,
             watermarks,
             graphics_elements,
@@ -2013,6 +2020,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             ffmpeg_profiles,
             stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
                 .await,
+            music_video_credits_templates: Vec::new(),
             subtitles: Vec::new(),
             watermarks,
             graphics_elements,
@@ -2059,6 +2067,7 @@ async fn load_playback_media_item_row(
               CASE
                 WHEN movie."Id" IS NOT NULL THEN 'Movie'
                 WHEN episode."Id" IS NOT NULL THEN 'Episode'
+                WHEN music_video."Id" IS NOT NULL THEN 'MusicVideo'
                 WHEN other_video."Id" IS NOT NULL THEN 'OtherVideo'
                 WHEN remote_stream."Id" IS NOT NULL THEN 'RemoteStream'
                 WHEN song."Id" IS NOT NULL THEN 'Song'
@@ -2068,6 +2077,7 @@ async fn load_playback_media_item_row(
               COALESCE(
                 movie_meta."Title",
                 episode_meta."Title",
+                music_video_meta."Title",
                 other_video_meta."Title",
                 remote_stream_meta."Title",
                 song_meta."Title",
@@ -2080,6 +2090,8 @@ async fn load_playback_media_item_row(
            LEFT JOIN "MovieMetadata" movie_meta ON movie_meta."MovieId" = movie."Id"
            LEFT JOIN "Episode" episode ON episode."Id" = mi."Id"
            LEFT JOIN "EpisodeMetadata" episode_meta ON episode_meta."EpisodeId" = episode."Id"
+           LEFT JOIN "MusicVideo" music_video ON music_video."Id" = mi."Id"
+           LEFT JOIN "MusicVideoMetadata" music_video_meta ON music_video_meta."MusicVideoId" = music_video."Id"
            LEFT JOIN "OtherVideo" other_video ON other_video."Id" = mi."Id"
            LEFT JOIN "OtherVideoMetadata" other_video_meta ON other_video_meta."OtherVideoId" = other_video."Id"
            LEFT JOIN "RemoteStream" remote_stream ON remote_stream."Id" = mi."Id"
@@ -2091,6 +2103,7 @@ async fn load_playback_media_item_row(
            LEFT JOIN "MediaVersion" mv
                   ON mv."MovieId" = movie."Id"
                   OR mv."EpisodeId" = episode."Id"
+                  OR mv."MusicVideoId" = music_video."Id"
                   OR mv."OtherVideoId" = other_video."Id"
                   OR mv."RemoteStreamId" = remote_stream."Id"
                   OR mv."SongId" = song."Id"

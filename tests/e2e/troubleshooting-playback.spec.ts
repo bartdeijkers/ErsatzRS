@@ -6,6 +6,7 @@ import path from 'node:path';
 
 const db = process.env.E2E_DB_PATH;
 const id = 935_001;
+const musicId = id + 10;
 const quote = (value: string) => value.replaceAll("'", "''");
 function sql(statement: string): string {
   if (!db) throw new Error('Use the isolated Playwright wrapper (E2E_DB_PATH required)');
@@ -36,6 +37,13 @@ test.describe('playback troubleshooting engines', () => {
       '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=nld',
       '-metadata:s:a:0', 'title=Dutch', clip]);
+    const musicClip = path.join(root, 'music-video.mkv');
+    execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'color=black:s=320x180:r=25:d=16',
+      '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=16',
+      '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast',
+      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=nld',
+      '-metadata:s:a:0', 'title=Dutch', musicClip]);
     writeFileSync(subtitle, '1\n00:00:01,000 --> 00:00:06,000\nPreview subtitle proof\n');
     for (const color of ['red', 'lime', 'blue']) {
       execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
@@ -74,6 +82,18 @@ INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channel
 VALUES (0,'h264',1,NULL,0,NULL,1,0,${id}),(1,'aac',2,'nld',1,'Dutch',1,0,${id});
 INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated")
 VALUES (${id},${id},1,'Dutch',9,'subrip',1,0,0,'nld',0,'${quote(subtitle)}','2026-09-26 00:00:00','2026-09-26 00:00:00');
+INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (${musicId},${id},0),(${musicId + 1},${id},0);
+INSERT INTO "Artist" ("Id") VALUES (${musicId + 1});
+INSERT INTO "ArtistMetadata" ("Id","ArtistId","Title","MetadataKind","DateAdded","DateUpdated")
+VALUES (${musicId + 1},${musicId + 1},'Synthetic credits artist',0,'2026-09-30 00:00:00','2026-09-30 00:00:00');
+INSERT INTO "MusicVideo" ("Id","ArtistId") VALUES (${musicId},${musicId + 1});
+INSERT INTO "MusicVideoMetadata" ("Id","MusicVideoId","Title","MetadataKind","DateAdded","DateUpdated")
+VALUES (${musicId},${musicId},'Synthetic credits song',0,'2026-09-30 00:00:00','2026-09-30 00:00:00');
+INSERT INTO "MediaVersion" ("Id","MusicVideoId","Duration","Width","Height","VideoScanKind","DateAdded","DateUpdated")
+VALUES (${musicId},${musicId},'00:00:16',320,180,0,'2026-09-30 00:00:00','2026-09-30 00:00:00');
+INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (${musicId},${musicId},'${quote(musicClip)}','music-preview');
+INSERT INTO "MediaStream" ("Id","Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId")
+VALUES (${musicId},0,'h264',1,NULL,0,NULL,1,0,${musicId}),(${musicId + 1},1,'aac',2,'nld',1,'Dutch',1,0,${musicId});
 INSERT INTO "ChannelWatermark" ("Id","Name","DurationSeconds","FrequencyMinutes","HorizontalMarginPercent","ImageSource","Image","Location","Mode","Opacity","PlaceWithinSourceContent","Size","VerticalMarginPercent","WidthPercent","ZIndex")
 VALUES (${id},'Preview watermark A',15,15,5,0,'${quote(path.join(root, 'red.png'))}',3,1,100,0,1,5,15,0),
 (${id + 1},'Preview watermark B',15,15,5,0,'${quote(path.join(root, 'lime.png'))}',2,1,100,0,1,5,15,1);
@@ -107,6 +127,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
     await page.waitForFunction(() =>
       (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+    await expect(page.locator('select[name="musicVideoCreditsTemplate"]')).toHaveCount(0);
     const engine = page.getByRole('combobox', { name: 'Streaming Engine', exact: true });
     const watermarks = page.locator('select[name="watermark"]');
     const selector = page.locator('select[name="streamSelector"]');
@@ -228,6 +249,81 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       expect(errors).toEqual([]);
     });
   }
+
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} music-video credits are visible after seeking and archived`, async ({ page }) => {
+      test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,
+        'Official Next runtime acceptance requires ETV_NEXT_FOLDER.');
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}&preferredAudioTitle=Dutch`);
+      const credits = page.locator('select[name="musicVideoCreditsTemplate"]');
+      await expect(credits).toBeVisible();
+      await expect(credits).toHaveValue('');
+      // This preset renders white text at source 9–16s; seeking to 9s must
+      // rebase it into the preview. The Music Factory preset uses yellow/black.
+      await credits.selectOption('_default.ass');
+      await page.locator('select[name="streamingEngine"]').selectOption(engine);
+      await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+      await page.locator('input[name="seekSeconds"]').fill('9');
+      const request = page.waitForRequest(request =>
+        new URL(request.url()).pathname === '/api/troubleshoot/playback.m3u8');
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      expect(new URL((await request).url()).searchParams.get('musicVideoCreditsTemplate'))
+        .toBe('_default.ass');
+      await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => {
+        if (video.readyState < 2) return 0;
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 180;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(video, 0, 0, 320, 180);
+        const pixels = context.getImageData(0, 0, 320, 180).data;
+        let white = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+          if (pixels[i] > 180 && pixels[i + 1] > 180 && pixels[i + 2] > 180) white++;
+        }
+        return white;
+      })).toBeGreaterThan(20);
+      await expect(page.locator('textarea')).toHaveValue(
+        engine === 'Next' ? /Next troubleshooting completed/ : /exit status:/);
+      const archive = await page.request.get('/api/troubleshoot/playback/archive');
+      expect(archive.status()).toBe(200);
+      const bytes = await archive.body();
+      for (const member of ['music-video-credits.ass', 'music-video-credits-template.sbntxt',
+        'Synthetic credits song', '{{ title }}']) {
+        expect(bytes.includes(Buffer.from(member))).toBe(true);
+      }
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('music-video credits selector is responsive and submits without JavaScript', async ({ browser, baseURL }, info) => {
+    const context = await browser.newContext({ baseURL, javaScriptEnabled: false, viewport: { width: 320, height: 720 } });
+    try {
+      const page = await context.newPage();
+      let submitted: URL | undefined;
+      await page.route('**/api/troubleshoot/playback.m3u8?**', route => {
+        submitted = new URL(route.request().url());
+        return route.fulfill({ contentType: 'text/plain', body: 'Captured credits submission' });
+      });
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+      const credits = page.locator('select[name="musicVideoCreditsTemplate"]');
+      await expect(credits).toBeVisible();
+      const box = await credits.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+      await credits.selectOption('_MusicFactory_ArtistTitle');
+      await page.locator('select[name="streamingEngine"]').selectOption('Next');
+      await credits.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `test-results/troubleshooting-credits-${info.project.name}.png`, fullPage: true });
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('body')).toContainText('Captured credits submission');
+      expect(submitted?.searchParams.get('musicVideoCreditsTemplate')).toBe('_MusicFactory_ArtistTitle');
+      expect(submitted?.searchParams.get('streamingEngine')).toBe('Next');
+    } finally { await context.close(); }
+  });
 
   test('no-JavaScript form submits the selected engine, tracks and all watermarks', async ({ browser, baseURL }) => {
     const context = await browser.newContext({ baseURL, javaScriptEnabled: false });

@@ -22,6 +22,7 @@ pub struct PlaybackPreviewQuery {
     stream_selector: Option<String>,
     preferred_audio_title: Option<String>,
     subtitle_id: Option<i64>,
+    music_video_credits_template: Option<String>,
     seek_seconds: Option<i64>,
     start: Option<String>,
     start_from_beginning: bool,
@@ -61,6 +62,7 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
                 "watermark" => query.watermark.extend(integer()?),
                 "graphicsElement" => query.graphics_element.extend(integer()?),
                 "streamingMode" => query.streaming_mode = Some(value),
+                "musicVideoCreditsTemplate" => query.music_video_credits_template = Some(value),
                 "streamSelector" => query.stream_selector = Some(value),
                 "preferredAudioTitle" => query.preferred_audio_title = Some(value),
                 "start" => query.start = Some(value),
@@ -87,6 +89,7 @@ impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
             stream_selector: query.stream_selector,
             preferred_audio_title: query.preferred_audio_title,
             subtitle_id: query.subtitle_id,
+            music_video_credits_template: query.music_video_credits_template,
             seek_seconds: if query.start_from_beginning {
                 Some(0)
             } else {
@@ -188,6 +191,28 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_query_preserves_optional_unicode_credits_and_rejects_duplicates() {
+        for engine in ["Legacy", "Next"] {
+            let query: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
+                "streamingEngine={engine}&musicVideoCreditsTemplate=Caf%C3%A9+%26+Title&subtitleId=9"
+            )).unwrap();
+            let request: PlaybackPreviewRequest = query.into();
+            assert_eq!(
+                request.music_video_credits_template.as_deref(),
+                Some("Café & Title")
+            );
+            assert_eq!(request.subtitle_id, Some(9));
+        }
+        let query: PlaybackPreviewQuery =
+            serde_urlencoded::from_str("musicVideoCreditsTemplate=").unwrap();
+        assert_eq!(query.music_video_credits_template.as_deref(), Some(""));
+        assert!(serde_urlencoded::from_str::<PlaybackPreviewQuery>(
+            "musicVideoCreditsTemplate=a&musicVideoCreditsTemplate=b"
+        )
+        .is_err());
+    }
 
     #[test]
     fn preview_engine_defaults_to_legacy_and_both_engines_retain_all_watermarks() {

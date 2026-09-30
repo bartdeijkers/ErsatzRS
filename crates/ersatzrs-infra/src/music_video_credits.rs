@@ -168,6 +168,29 @@ pub(crate) async fn render_music_video_credits_subtitle(
     resolution: &Resolution,
     stream_seek_seconds: i64,
 ) -> Result<Option<String>> {
+    Ok(render_music_video_credits_artifact(
+        pool,
+        media_item_id,
+        channel,
+        resolution,
+        stream_seek_seconds,
+    )
+    .await?
+    .map(|(ass, _)| ass))
+}
+
+/// Render credits together with the template bytes used, for diagnostic archives.
+/// No temporary files are created; the caller owns the artifact lifecycle.
+///
+/// # Errors
+/// Returns database or template read failures.
+pub async fn render_music_video_credits_artifact(
+    pool: &DbPool,
+    media_item_id: i64,
+    channel: &Channel,
+    resolution: &Resolution,
+    stream_seek_seconds: i64,
+) -> Result<Option<(String, String)>> {
     if channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::GenerateSubtitles {
         return Ok(None);
     }
@@ -176,27 +199,24 @@ pub(crate) async fn render_music_video_credits_subtitle(
         return Ok(None);
     };
     data.stream_seek = Duration::seconds(stream_seek_seconds.max(0));
-    let rendered = if let Some(template_name) = channel
+    let template = if let Some(name) = channel
         .music_video_credits_template
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        match load_template(template_name).await {
-            Ok(template) => render_music_video_credits_template(&template, &data),
+        match load_template(name).await {
+            Ok(template) => template,
             Err(error) => {
-                tracing::warn!(
-                    %error,
-                    template = template_name,
-                    "music video credits template does not exist; falling back to built-in template"
-                );
-                render_builtin_default(&data)
+                tracing::warn!(%error, template = name, "music video credits template does not exist; falling back to built-in template");
+                BUILTIN_TEMPLATES[0].1.to_owned()
             }
         }
     } else {
-        render_builtin_default(&data)
+        BUILTIN_TEMPLATES[0].1.to_owned()
     };
-    Ok(Some(rendered))
+    let rendered = render_music_video_credits_template(&template, &data);
+    Ok(Some((rendered, template)))
 }
 
 async fn load_music_video_credits_data(
@@ -295,7 +315,17 @@ async fn load_names(
         .collect())
 }
 
+/// Read a bundled or operator template without allowing filesystem traversal.
+///
+/// # Errors
+/// Returns an invalid template name, missing template or read failure.
 async fn load_template(name: &str) -> Result<String> {
+    if name.is_empty() || name.contains(['/', '\\', ':', '\0']) || matches!(name, "." | "..") {
+        return Err(RepositoryError::unavailable(
+            "music video credits template",
+            "invalid template name",
+        ));
+    }
     let file_name = format!("{name}.{EXTENSION}");
     let editable = music_video_credits_templates_folder().join(&file_name);
     match tokio::fs::read_to_string(&editable).await {
@@ -673,6 +703,26 @@ mod tests {
             duration: Duration::seconds(720),
             stream_seek: Duration::seconds(60),
         }
+    }
+
+    #[tokio::test]
+    async fn credits_template_reader_rejects_traversal_on_all_platforms() {
+        for name in [
+            "",
+            "..",
+            ".",
+            "../private",
+            "a/b",
+            r"a\b",
+            "C:private",
+            "bad\0name",
+        ] {
+            assert!(load_template(name).await.is_err());
+        }
+        assert!(load_template("_ArtistTitleAlbum_CenterTop")
+            .await
+            .unwrap()
+            .contains("_first_start_ts"));
     }
 
     #[test]

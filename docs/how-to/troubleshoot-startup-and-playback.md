@@ -37,6 +37,17 @@ When the admin UI opens, use these pages in order:
 Copy only redacted diagnostics. Do not publish provider tokens, database URLs
 with passwords, private media paths, or playlist URLs containing access tokens.
 
+## Preview music-video credits
+
+Open a music video's playback troubleshooter from its media details. Choose a
+**Music Video Credits Template**, select the streaming engine and FFmpeg profile,
+and click **Play**. The template replaces the selected subtitle for this preview;
+audio selection is preserved. **(none)** keeps normal subtitle selection.
+
+Use **Seek Seconds** to check the card's timing later in the video. After playback
+finishes, **Download Results** includes the template and generated ASS alongside
+FFmpeg reports. These preview choices do not change channel or playout settings.
+
 ## Install TSDuck for MPEG-TS diagnostics
 
 The **Troubleshooting** page's MPEG-TS result and the manual playback gate in

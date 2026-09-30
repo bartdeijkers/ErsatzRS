@@ -50,6 +50,9 @@ use crate::transport::iptv::stream;
 #[path = "troubleshooting_next.rs"]
 mod next;
 
+#[path = "troubleshooting_credits.rs"]
+mod credits;
+
 #[path = "troubleshooting_progress.rs"]
 mod progress;
 
@@ -130,6 +133,7 @@ struct PlaybackPreviewQuery {
     stream_selector: Option<String>,
     preferred_audio_title: Option<String>,
     subtitle_id: Option<i64>,
+    music_video_credits_template: Option<String>,
     seek_seconds: Option<i64>,
     start: Option<String>,
 }
@@ -147,6 +151,7 @@ impl From<PlaybackPreviewRequest> for PlaybackPreviewQuery {
             stream_selector: request.stream_selector,
             preferred_audio_title: request.preferred_audio_title,
             subtitle_id: request.subtitle_id,
+            music_video_credits_template: request.music_video_credits_template,
             seek_seconds: request.seek_seconds,
             start: request.start,
         }
@@ -168,6 +173,14 @@ impl std::error::Error for PreviewNotFound {}
 impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
     async fn list_stream_selectors(&self) -> Result<Vec<String>, AdminTroubleshootingRuntimeError> {
         Ok(list_channel_stream_selectors().await)
+    }
+
+    async fn list_music_video_credits_templates(
+        &self,
+    ) -> Result<Vec<String>, AdminTroubleshootingRuntimeError> {
+        ersatzrs_infra::music_video_credits::list_music_video_credit_template_names()
+            .await
+            .map_err(|error| AdminTroubleshootingRuntimeError::unavailable(error.to_string()))
     }
 
     async fn start_playback_preview(
@@ -291,8 +304,11 @@ async fn start_playback_preview(
         media.duration_seconds,
         seek_seconds,
     ));
-    let selector_channel =
-        preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter);
+    let selector_channel = credits::channel(
+        query,
+        &media,
+        &preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter),
+    );
     let language_preferences = playback_language_preferences(&state.pool).await?;
     let preferred_audio_language = language_preferences.audio_language(
         None,
@@ -300,7 +316,7 @@ async fn start_playback_preview(
         selector_channel.preferred_audio_title.as_deref(),
         StreamingMode::HttpLiveStreamingSegmenter,
     );
-    let (selected_audio_stream_index, subtitle_input) =
+    let (selected_audio_stream_index, mut subtitle_input) =
         preview_selected_streams(PreviewSelectedStreamsRequest {
             pool: &state.pool,
             channel: &selector_channel,
@@ -308,11 +324,32 @@ async fn start_playback_preview(
             media_item_id,
             media_path: &media_path,
             output_format,
-            subtitle_id: query.subtitle_id,
+            subtitle_id: if credits::enabled(&selector_channel, &media) {
+                Some(0)
+            } else {
+                query.subtitle_id
+            },
             seek_seconds,
             content_start_time: Utc::now(),
         })
         .await?;
+    if let Some(subtitle) = credits::prepare(
+        &state.pool,
+        &media,
+        &selector_channel,
+        &playback_profile,
+        Duration::from_secs(u64::try_from(seek_seconds)?),
+        &working_dir,
+    )
+    .await?
+    {
+        subtitle_input = subtitle_input_for_stream(
+            &subtitle,
+            &media_path,
+            output_format,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        );
+    }
     let selected_audio_stream_index = match selected_audio_stream_index {
         Some(index) => Some(index),
         None => {
@@ -466,7 +503,12 @@ async fn start_channel_playback_preview(
     let start_seconds = duration_as_i64_seconds(start_position);
     let program_duration = active_program_duration(&active)
         .unwrap_or_else(|| Duration::from_secs_f64(preview_duration_seconds(0.0, 0)));
-    let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
+    let credits_channel = credits::channel(query, &media, &channel);
+    let subtitle_mode = if credits::enabled(&credits_channel, &media) {
+        ChannelSubtitleMode::None
+    } else {
+        active.subtitle_mode.unwrap_or(channel.subtitle_mode)
+    };
     let preferred_subtitle_language = active
         .preferred_subtitle_language_code
         .as_deref()
@@ -508,6 +550,9 @@ async fn start_channel_playback_preview(
         )
         .await
         {
+            Ok(Some(selection)) if credits::enabled(&credits_channel, &media) => {
+                (selection.audio_stream_index, None)
+            }
             Ok(Some(selection)) => (
                 selection.audio_stream_index,
                 subtitle_input_from_optional_subtitle(
@@ -617,6 +662,25 @@ async fn start_channel_playback_preview(
         working_dir: &working_dir,
     })
     .await;
+    let subtitle_input = if let Some(subtitle) = credits::prepare(
+        &state.pool,
+        &media,
+        &credits_channel,
+        &playback_profile,
+        start_position,
+        &working_dir,
+    )
+    .await?
+    {
+        subtitle_input_for_stream(
+            &subtitle,
+            &media_path,
+            output_format,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        )
+    } else {
+        subtitle_input
+    };
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let no_subtitle = Option::<PlaybackSubtitle>::None;
     let metadata = stream::playback_output_metadata(
@@ -1038,6 +1102,11 @@ async fn preview_selected_streams(
         .await
         {
             Ok(Some(selection)) => {
+                if channel.music_video_credits_mode
+                    == ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles
+                {
+                    return Ok((selection.audio_stream_index, None));
+                }
                 let explicit_subtitle = if let Some(id) = subtitle_id {
                     load_preview_subtitle(pool, media_item_id, id).await
                 } else {
@@ -1693,6 +1762,7 @@ fn is_archive_member(file_name: &str) -> bool {
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
         || lower.contains("capabilities")
         || lower.contains("stream-selector")
+        || lower.contains("music-video-credits")
         || lower.contains("ffreport")
         || lower.contains("outcome")
 }
@@ -2075,6 +2145,8 @@ mod tests {
         assert!(is_archive_member("stream-selector.yml"));
         assert!(is_archive_member("FFREPORT.log"));
         assert!(is_archive_member("playback-outcome.txt"));
+        assert!(is_archive_member("music-video-credits.ass"));
+        assert!(is_archive_member("music-video-credits-template.sbntxt"));
         assert!(!is_archive_member("live.m3u8"));
         assert!(!is_archive_member("seg00001.ts"));
     }
@@ -2087,6 +2159,11 @@ mod tests {
         tokio::fs::create_dir_all(&deeper).await.unwrap();
         for (path, bytes) in [
             (root.path().join("logs.txt"), "native-log"),
+            (root.path().join("music-video-credits.ass"), "credits-ass"),
+            (
+                root.path().join("music-video-credits-template.sbntxt"),
+                "credits-template",
+            ),
             (report_dir.join("playback-outcome.txt"), "next-outcome"),
             (report_dir.join("channel.json"), "next-config"),
             (report_dir.join("seg00001.ts"), "excluded-media"),
@@ -2105,7 +2182,14 @@ mod tests {
             .await
             .unwrap()
             .expect("Next report makes the archive downloadable");
-        for expected in ["native-log", "next-outcome", "next-config", "FFREPORT.log"] {
+        for expected in [
+            "native-log",
+            "next-outcome",
+            "next-config",
+            "FFREPORT.log",
+            "credits-ass",
+            "credits-template",
+        ] {
             assert!(zip
                 .windows(expected.len())
                 .any(|bytes| bytes == expected.as_bytes()));
