@@ -440,7 +440,7 @@ pub(super) async fn project_for_origin(
         channel,
         media,
         resolution,
-        &projection.item,
+        &mut projection.item,
         &watermarks,
         &graphics,
     )

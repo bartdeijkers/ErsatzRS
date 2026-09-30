@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Publish plain Next watermarks as direct media layers, avoiding a graphics
+  canvas when no graphics elements or opacity expressions require it. The pinned
+  Next runtime now also applies configured opacity correctly to RGB images.
+
 - Keep Jellyfin collection members as their real media types during scans by
   disabling collection collapsing and rejecting unexpected response types. For
   affected show libraries, scan again, empty the trash to remove bogus collection

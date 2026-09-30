@@ -11416,6 +11416,31 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row173 is Port after complete c0184f00 source/test/changelog audit.
+Shared graphics projection now selects ordered explicit Media layers for plain
+permanent/intermittent watermarks across all five production callers; mixed and
+expression graphics retain the accepted canvas. All 249 Next regressions pass
+(00a8d296-ff6d-4ea6-b544-b7b641c1092b), including 15 focused wire/branch cases.
+Three real Next permanent/multiple/intermittent tests pass
+(4a92dc71-6d00-4a2c-93d3-25bda88a0e7f): size/position, layer order, wall-cycle
+fades, dynamic burned captions, selected audio and disable behavior. The restored
+RGB opacity assertion initially assumed a black background; the fixture is blue.
+Correct 50-percent red-over-blue output [127, 0, 126] now passes bounded channel
+assertions and resolves row-26-next-rgb-watermark-opacity. Exact accepted e7997fa
+source ensures alpha before opacity and formats the still image before looping;
+Next/FFmpeg v2.0.3 checksums match. Strict infra all-target lint passes in 25.05s,
+as do architecture/progress/diff checks. Next HTTP smoke passes
+(ersatzrs-smoke-239490-1790796977): private callbacks remain private, HLS/TS/preview
+play, Dutch audio and subtitle pixels decode, wrapper restart works and idle
+sessions drain. Substantive review confirms identity includes direct layers,
+prepared streams retain them and mixed graphics preserve canvas ownership.
+Native pipeline is unchanged; existing transport evidence is retained and final
+window TSDuck remains required. No new runtime build/release or hardware claim.
+Fresh upstream fetch retains the 181-row target at 76884783. Pin advances to
+c0184f00; 173/181 accepted, 8 pending. Continue row174; final window gates,
+upstream refresh, push and exact-SHA CI remain. Logs/source/checksums:
+tmp/ucu09-row173/.
+
 Row172 is Port after the complete 27f9d217 five-file audit. All three Jellyfin
 item query builders disable collection collapsing; five projections require
 exact returned media types. Existing season upsert already repairs ShowId with

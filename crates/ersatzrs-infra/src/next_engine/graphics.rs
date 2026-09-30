@@ -58,7 +58,7 @@ pub(super) async fn project(
     channel: &Channel,
     media: &ScheduledMedia,
     resolution: &Resolution,
-    projected: &protocol::PlayoutItem,
+    projected: &mut protocol::PlayoutItem,
     watermarks: &[ResolvedPlaybackWatermark],
     graphics: &[ResolvedPlaybackGraphicsElement],
 ) -> Result<Option<Box<CanvasProjection>>> {
@@ -67,6 +67,22 @@ pub(super) async fn project(
             .iter()
             .any(|selected| selected.watermark.mode != ChannelWatermarkMode::None)
     {
+        return Ok(None);
+    }
+    if graphics.is_empty()
+        && watermarks.iter().all(|selected| {
+            matches!(
+                selected.watermark.mode,
+                ChannelWatermarkMode::None
+                    | ChannelWatermarkMode::Permanent
+                    | ChannelWatermarkMode::Intermittent
+            )
+        })
+    {
+        projected.graphics = super::watermark::project(watermarks)?;
+        for layer in &mut projected.graphics {
+            layer.kind = Some(protocol::GraphicsLayerKind::Media);
+        }
         return Ok(None);
     }
     let width = u32::try_from(resolution.width)

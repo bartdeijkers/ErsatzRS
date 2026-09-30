@@ -76,10 +76,10 @@ async fn assert_overlay(ffmpeg: &Path, segment: &Path, scaled: bool, disabled: b
     let index = ((9 + height / 2) * 320 + left + width / 2) * 3;
     let center = &pixels[index..index + 3];
     if scaled {
-        // Next 946aa52 applies opacity before adding alpha to RGB images.
-        // The maintainer accepts this upstream limitation pending its fix;
-        // retain the RGB fixture and observed value without claiming alpha parity.
-        println!("Next RGB watermark at configured 50 percent: {center:?}");
+        assert!(
+            (105..=145).contains(&center[0]) && center[1] < 35 && (105..=145).contains(&center[2]),
+            "half-opacity RGB red over blue: {center:?}"
+        );
     } else {
         assert!(center[0] > 210 && center[2] < 35, "opaque red: {center:?}");
     }

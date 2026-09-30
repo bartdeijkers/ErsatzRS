@@ -112,7 +112,7 @@ pub(crate) async fn project_snapshot(
         &channel,
         media,
         &profile.resolution,
-        &projection.item,
+        &mut projection.item,
         &watermarks,
         &graphics,
     )

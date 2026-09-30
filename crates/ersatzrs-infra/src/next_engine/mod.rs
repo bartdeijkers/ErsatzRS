@@ -40,6 +40,4 @@ mod source;
 pub mod troubleshooting;
 pub mod version;
 
-// Keep direct-media protocol fixtures for regression coverage; row146 publishes canvases.
-#[cfg(test)]
 mod watermark;

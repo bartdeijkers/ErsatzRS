@@ -482,7 +482,7 @@ impl NextHost {
                             &channel,
                             &media,
                             &profile.resolution,
-                            &projection.item,
+                            &mut projection.item,
                             &watermarks,
                             &graphics,
                         )
