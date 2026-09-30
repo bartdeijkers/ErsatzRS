@@ -149,6 +149,7 @@ pub enum AudioFormat {
 pub enum VideoFormat {
     H264,
     Hevc,
+    Mpeg2Video,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

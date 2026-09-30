@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-30): `b6666882e157216bc2dedb68af0feb411b950b71`
   — feat: enable mpeg2video when using next engine (#3047).
-- Ledger: **182 commits**, **1 pending**. The original plan covered 152 through
+- Ledger: **182 commits**, **0 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **181**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **182**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -76,8 +76,9 @@
   software MPEG-2 output with the published runtime and official Next 6b49dae.
 - No UI layout change or database migration is indicated by the source delta.
   Hardware claims require evidence; existing approved debt is not expanded.
-- Ordered implementation follows row181 acceptance. Source diff and history
-  prefix proof are in `tmp/ucu09-row182/`.
+- Ordered implementation and local row acceptance are complete. Source diff,
+  focused/runtime proof and history checks are in `tmp/ucu09-row182/`; the
+  milestone owns final window and platform acceptance.
 
 ## Row 181 source map: legacy QSV corrections
 
@@ -5116,4 +5117,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 179 | `5d65c231` | build: immutable releases (#3044) | N/A | Upstream develop-release scripts and workflow policy | UCU-09 full seven-file audit | No product behavior changes. ErsatzRS retains separate CI, tag-triggered releases and explicit beta publication acceptance; no automatic develop publication or retention policy is introduced. |
 | 180 | `8bda4411` | build: publish develop builds to separate repo (#3045) | Port | Embedded development release-note selection; upstream repository/tag policies N/A | UCU-09 focused tests, lint and browser evidence | Development home/health show Unreleased; tagged builds keep exact notes. Matched build and two browser checks pass. No GitHub client or legacy Docker-tag warning is introduced. |
 | 181 | `76884783` | build: bump ffmpeg to 8.1.2-2 (#3046) | Adapt | ADRs 0008/0063; managed FFmpeg 9 and Next runtime | `fix(next): integrate legacy QSV runtime corrections` | ucu-09; published v2.0.4 at 657482cc, exact public archive hashes, 13 acquisition tests, Linux/Windows decoded runtime proof, migrated production canvas coverage, strict affected lint and Next HTTP smoke pass. Approved hardware debt remains unverified. |
-| 182 | `b6666882` | feat: enable mpeg2video when using next engine (#3047) | | | | ucu-09; pending ordered implementation after row181. Next protocol/profile MPEG-2 projection, forced 8-bit output and complete HLS codec signaling require focused and decoded runtime proof. |
+| 182 | `b6666882` | feat: enable mpeg2video when using next engine (#3047) | Port | Next protocol/config, profile health and HLS variants | `feat(next): support MPEG-2 output` | ucu-09; 13 config/health and six playlist checks, decoded Linux/Windows MPEG-2 with selected audio/subtitles and alpha, preserved H.264 scaling, strict workspace Clippy. Eight-bit projection and required bitrate match Next; incomplete CODECS omitted. |

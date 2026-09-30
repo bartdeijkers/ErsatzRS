@@ -20,6 +20,8 @@ use super::protocol as wire;
 pub enum ConfigError {
     #[error("Next does not support the selected video output codec")]
     VideoCodec,
+    #[error("Next MPEG-2 output requires a positive video bitrate")]
+    VideoBitrate,
     #[error("Next does not support the selected audio output codec")]
     AudioCodec,
     #[error("Next does not support the selected HDR output contract")]
@@ -124,6 +126,12 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
     let format = match profile.video_format {
         FFmpegProfileVideoFormat::H264 => wire::VideoFormat::H264,
         FFmpegProfileVideoFormat::Hevc => wire::VideoFormat::Hevc,
+        FFmpegProfileVideoFormat::Mpeg2Video => {
+            if positive(profile.video_bitrate).is_none() {
+                return Err(ConfigError::VideoBitrate);
+            }
+            wire::VideoFormat::Mpeg2Video
+        }
         _ => return Err(ConfigError::VideoCodec),
     };
     let accel = match profile.hardware_acceleration {
@@ -157,9 +165,9 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
     };
     Ok(wire::Video {
         format,
-        bit_depth: match profile.bit_depth {
-            FFmpegProfileBitDepth::EightBit => 8,
-            FFmpegProfileBitDepth::TenBit => 10,
+        bit_depth: match (profile.video_format, profile.bit_depth) {
+            (FFmpegProfileVideoFormat::Mpeg2Video, _) | (_, FFmpegProfileBitDepth::EightBit) => 8,
+            (_, FFmpegProfileBitDepth::TenBit) => 10,
         },
         width: positive(playback.resolution.width).ok_or(ConfigError::Resolution)?,
         height: positive(playback.resolution.height).ok_or(ConfigError::Resolution)?,

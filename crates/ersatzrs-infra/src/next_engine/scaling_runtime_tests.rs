@@ -124,19 +124,42 @@ async fn assert_selected_audio(ffmpeg: &Path, segment: &Path) {
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_scaling_modes_preserve_geometry_selected_audio_and_subtitles() {
+    scaling_cases(
+        FFmpegProfileVideoFormat::H264,
+        &[
+            ScalingBehavior::ScaleAndPad,
+            ScalingBehavior::Stretch,
+            ScalingBehavior::Crop,
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires official Next and FFmpeg; decoded MPEG-2 with selected tracks"]
+async fn real_next_mpeg2_forces_eight_bits_preserves_geometry_audio_and_subtitles() {
+    scaling_cases(
+        FFmpegProfileVideoFormat::Mpeg2Video,
+        &[ScalingBehavior::ScaleAndPad],
+    )
+    .await;
+}
+
+async fn scaling_cases(format: FFmpegProfileVideoFormat, modes: &[ScalingBehavior]) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let root = tempfile::tempdir().unwrap();
     let clip = generate_scaling_clip(&ffmpeg, root.path()).await;
-    for mode in [
-        ScalingBehavior::ScaleAndPad,
-        ScalingBehavior::Stretch,
-        ScalingBehavior::Crop,
-    ] {
+    for &mode in modes {
         let profile = FFmpegProfile {
             scaling_behavior: mode,
-            video_format: FFmpegProfileVideoFormat::H264,
+            video_format: format,
+            bit_depth: if format == FFmpegProfileVideoFormat::Mpeg2Video {
+                ersatzrs_domain::FFmpegProfileBitDepth::TenBit
+            } else {
+                ersatzrs_domain::FFmpegProfileBitDepth::EightBit
+            },
             audio_format: FFmpegProfileAudioFormat::Aac,
             video_bitrate: 1000,
             video_buffer_size: 2000,
@@ -198,10 +221,41 @@ async fn real_next_scaling_modes_preserve_geometry_selected_audio_and_subtitles(
             .unwrap();
         assert_scaling_frame(&ffmpeg, &output.join(segment), mode).await;
         assert_selected_audio(&ffmpeg, &output.join(segment)).await;
+        assert_video_codec(&ffprobe, &output.join(segment), format).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         assert!(!output.exists());
     }
+}
+
+async fn assert_video_codec(ffprobe: &Path, segment: &Path, format: FFmpegProfileVideoFormat) {
+    let mut probe = Command::new(ffprobe);
+    probe
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,pix_fmt",
+            "-of",
+            "json",
+        ])
+        .arg(segment);
+    let value: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let stream = &value["streams"][0];
+    assert_eq!(
+        stream["codec_name"],
+        if format == FFmpegProfileVideoFormat::Mpeg2Video {
+            "mpeg2video"
+        } else {
+            "h264"
+        }
+    );
+    assert_eq!(
+        stream["pix_fmt"], "yuv420p",
+        "actual decoded eight-bit output"
+    );
 }
 
 async fn assert_source_watermark(ffmpeg: &Path, segment: &Path, expected_y: usize) {

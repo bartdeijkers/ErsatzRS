@@ -447,6 +447,10 @@ release section when tagging a release.
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
 ### Added
+
+- Support MPEG-2 video output with the Next engine, using 8-bit output and an
+  explicit positive video bitrate. Preserve selected audio and subtitles;
+  omit the HLS `CODECS` attribute when either codec identifier is unknown.
 - Playback troubleshooting adds a music-video credits template selector for both
   engines and includes the template and generated ASS in diagnostic downloads.
 

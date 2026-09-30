@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-181/182; 1 pending.
-UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
+182/182; no pending ledger rows. Final window/platform acceptance and CI remain.
+UCU-06/07/08 Complete; evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
 141-142/144/152-153 N/A; AAC surround decoding is proven.
@@ -65,7 +65,7 @@ RGB opacity is proven; UCU-09 owns evidence.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
+explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream; p9a-01 waits for ucu-09.
 """
 
 [[debt]]

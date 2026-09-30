@@ -121,24 +121,36 @@ fn codec_inf(spec: &ChannelStreamingSpec) -> String {
         _ => "",
     };
 
-    let mut codecs = Vec::new();
-    if !video_codec.is_empty() {
-        codecs.push(video_codec);
-    }
-    if !audio_codec.is_empty() {
-        codecs.push(audio_codec);
-    }
-
-    if codecs.is_empty() {
+    if video_codec.is_empty() || audio_codec.is_empty() {
         String::new()
     } else {
-        format!(",CODECS=\"{}\"", codecs.join(","))
+        format!(",CODECS=\"{video_codec},{audio_codec}\"")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codec_attribute_requires_both_audio_and_video_identifiers() {
+        let mut spec = h264_aac_1080p();
+        assert_eq!(codec_inf(&spec), ",CODECS=\"avc1.4D4028,mp4a.40.2\"");
+        spec.video_format = FFmpegProfileVideoFormat::Mpeg2Video;
+        assert!(
+            codec_inf(&spec).is_empty(),
+            "MPEG-2 must not advertise audio-only CODECS"
+        );
+        spec.video_format = FFmpegProfileVideoFormat::H264;
+        spec.audio_format = FFmpegProfileAudioFormat::Copy;
+        assert!(
+            codec_inf(&spec).is_empty(),
+            "unknown audio must not advertise video-only CODECS"
+        );
+        spec.video_format = FFmpegProfileVideoFormat::Hevc;
+        spec.audio_format = FFmpegProfileAudioFormat::Ac3;
+        assert_eq!(codec_inf(&spec), ",CODECS=\"hvc1.1.6.L93.B0,ac-3\"");
+    }
 
     #[test]
     fn next_conversion_links_selected_rendition_for_channel_and_preview() {

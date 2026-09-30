@@ -11416,6 +11416,30 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row182 is Port after the complete b6666882 source audit. Next config maps
+MPEG-2 to mpeg2video and forces eight-bit output without changing H.264/HEVC
+bit depth. A positive MPEG-2 bitrate is required before startup, matching the
+official Next validator; the health check shares that projection and tests
+both valid and missing-bitrate profiles. HLS CODECS is omitted when either
+identifier is unknown, preserving complete H.264/AAC and HEVC/AC3 signaling.
+Thirteen config/health tests pass (287f5a8d-ac27-42a7-a7ed-d7f59a530813), as do
+six playlist tests (d40fccb9-6720-4fc1-8775-78af964adcbd). Real Next 6b49dae with
+published FFmpeg v2.0.4 decodes MPEG-2 yuv420p from a ten-bit profile preference,
+with correct geometry, selected Dutch audio and subtitles; existing H.264 scaling
+also passes (0477edd2-ed95-492f-873e-e8926464c302). Native Windows software MPEG-2
+proves video, RGB alpha overlay, burned subtitles and selected 883 Hz audio.
+Strict workspace all-target Clippy passes in 3m09s. Evidence: tmp/ucu09-row182/
+and tmp/ucu09-closeout/clippy.log. Pin advances to b6666882, matching the refreshed
+upstream tip; 182/182 rows accepted. No hardware proof or exception is inferred.
+
+Final UCU-09 closeout is in progress. Full test-closeout is running; matched
+Leptos, parity, native/Next smoke, TSDuck, final refresh, push and green exact-SHA
+CI remain. The final audit found existing six-platform application acceptance
+debt in ADRs 0095/0096/0098. It is separate from the three approved GPU-validation
+exceptions. Maintainer clarification has been requested; no platform acceptance
+has been waived or claimed. ADR 0095 remains Accepted with a current Partial
+Implementation statement and clearly separated historical checkpoints.
+
 Row181 is Adapt after the full 76884783 runtime/bundling/changelog audit,
 preserving ADRs 0008/0063 managed FFmpeg 9 delivery. Published v2.0.4 at runtime
 commit 657482cc includes all three QSV corrections and the oneVPL dispatcher

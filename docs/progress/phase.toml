@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-09: reconcile the remaining upstream tail'
+current_focus = 'UCU-09: final window and platform acceptance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -127,7 +127,7 @@ checks, strict lint and exact Next consumer review pass. Row171 is Covered under
 replace the Skia subtitle bitmap loop; focused projection passes. Row172 ports Jellyfin query/type guards and proves unchanged-ETag season
 parent repair; 47 checks and strict lint pass. Row173 ports direct plain watermark layers and verifies RGB opacity;
 249 regressions, three runtime checks, strict lint and Next smoke pass. Row174 ports both-engine automatic subtitle eligibility; affected checks,
-decoded sidecar/preparation proof, strict lint and Next smoke pass. Row175 ports CRLF batch checkout rules; isolated checkout proof passes. Row176 ports Windows oneVPL packaging; seven offline tests and native ZIP/startup proof pass. Row177 adapts immutable FFmpeg delivery under ADRs 0008/0063; package hashes and 13 runtime tests pass. Row178 is N/A (upstream Docker quoting). Row179 is N/A (upstream develop-release tooling). Row180 ports development release notes; focused tests, strict lint and two browser checks pass. Row181 adapts the published v2.0.4 runtime and official Next 6b49dae; exact public hashes, available runtime proofs, strict lint and Next HTTP smoke pass. Continue row182 MPEG-2 output;
+decoded sidecar/preparation proof, strict lint and Next smoke pass. Row175 ports CRLF batch checkout rules; isolated checkout proof passes. Row176 ports Windows oneVPL packaging; seven offline tests and native ZIP/startup proof pass. Row177 adapts immutable FFmpeg delivery under ADRs 0008/0063; package hashes and 13 runtime tests pass. Row178 is N/A (upstream Docker quoting). Row179 is N/A (upstream develop-release tooling). Row180 ports development release notes; focused tests, strict lint and two browser checks pass. Row181 adapts the published v2.0.4 runtime and official Next 6b49dae; exact public hashes, available runtime proofs, strict lint and Next HTTP smoke pass. Row182 ports MPEG-2 with eight-bit projection, health and HLS signaling; focused and decoded Linux/Windows checks and workspace Clippy pass. All 182 rows are accepted locally. Finish final window gates and resolve the recorded platform acceptance;
 UCU-09 window gates, push and exact-SHA CI remain.
 The current 182-row ledger has 2 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.

@@ -73,7 +73,6 @@ fn unsupported_explicit_output_is_rejected_without_codec_or_hdr_fallback() {
     for format in [
         FFmpegProfileVideoFormat::None,
         FFmpegProfileVideoFormat::Av1,
-        FFmpegProfileVideoFormat::Mpeg2Video,
         FFmpegProfileVideoFormat::Copy,
     ] {
         let mut profile = profile();
@@ -92,6 +91,28 @@ fn unsupported_explicit_output_is_rejected_without_codec_or_hdr_fallback() {
     let mut profile = profile();
     profile.profile.output_dynamic_range = OutputDynamicRange::Hdr10Bt2020Pq;
     assert!(matches!(config(&profile), Err(ConfigError::HdrOutput)));
+}
+
+#[test]
+fn mpeg2_output_forces_eight_bits_and_requires_explicit_positive_bitrate() {
+    let mut profile = profile();
+    profile.profile.video_format = FFmpegProfileVideoFormat::Mpeg2Video;
+    for depth in [
+        FFmpegProfileBitDepth::EightBit,
+        FFmpegProfileBitDepth::TenBit,
+    ] {
+        profile.profile.bit_depth = depth;
+        let video = &json_config(&profile)["normalization"]["video"];
+        assert_eq!(video["format"], "mpeg2video");
+        assert_eq!(video["bit_depth"], 8);
+        assert_eq!(video["bitrate_kbps"], 4000);
+        let decoded: wire::VideoFormat = serde_json::from_value(video["format"].clone()).unwrap();
+        assert!(matches!(decoded, wire::VideoFormat::Mpeg2Video));
+    }
+    for bitrate in [0, -1] {
+        profile.profile.video_bitrate = bitrate;
+        assert!(matches!(config(&profile), Err(ConfigError::VideoBitrate)));
+    }
 }
 
 #[test]
