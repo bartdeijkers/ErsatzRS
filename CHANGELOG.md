@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Clear dependent playlist and template selections when changing groups in
+  Deco and Playout Templates editors, so hidden previous choices cannot be saved.
+  Show persisted template selections correctly when opening the editor.
+  Resolve the Playout Templates form before hydration so its controls attach reliably.
+
 - Validate schedule files before saving or queuing a playout build, rejecting
   empty paths and directories. Use the same quoted script path during validation,
   policy loading and execution, and pass supplied arguments to Lua's `arg` table.

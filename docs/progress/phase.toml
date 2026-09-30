@@ -114,9 +114,10 @@ eight browser cases and strict lint pass. Row161 covers font-cache concurrency
 through existing FFmpeg ownership; nine focused checks pass. Row162 ports fresh
 MPEG-TS script choices, selection recovery and complete no-JS FFmpeg settings:
 19 focused checks, six browser cases, strict lint and native smoke pass. Row163 ports
-shared script validation/execution and arguments: 46 checks and strict lint pass. Continue row164;
+shared script validation/execution and arguments: 46 checks and strict lint pass. Row164 ports dependent selection clearing, saved option
+display and stable template hydration: four browser cases and strict lint pass. Continue row165;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 18 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 17 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

@@ -213,6 +213,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("playouts"), ParamSegment("id"), StaticSegment("templates"))
                 view=PlayoutTemplatesEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route path=StaticSegment("blocks") view=BlocksPage/>
             <Route path=StaticSegment("decos") view=DecosPage/>

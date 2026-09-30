@@ -11416,6 +11416,40 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row164 is Port after the full 3f4255be fourteen-file source/UI audit, mapped in
+plans/upstream-catch-up.md. Existing owned lists, optional progress lookups,
+selection guards and retired Trakt cover the other upstream changes. Deco break
+content now clears its playlist ID on group changes. Playout Templates clears
+child IDs/names, preserves group choices and renders saved selected options.
+Browser verification exposed two concrete defects before acceptance: the first
+run passed both Deco cases but showed Select for saved templates in both browsers;
+the second passed Deco but found dead template controls caused by a hydration
+text-node mismatch in the island's asynchronous not-found branch. The route now
+resolves concrete form data on the server and passes it into the island with
+in-order SSR, following the existing Health page boundary. No retries, extended
+deadlines or error filtering were added.
+Final matched SSR/WASM Chromium and Firefox verification passes all four cases
+in 13.8 seconds, without skips, retries, flaky results or captured console/page
+errors. Actual SQLite persistence proves stale optional IDs clear, replacements
+survive Save/reload and all nondefault date filters remain unchanged. Initial
+saved selections and hidden Deco fields are asserted. Artifacts and JSON are in
+test-results/ucu09-row164-browser-accepted-artifacts and
+test-results/ucu09-row164-browser-accepted/playwright-results.json; earlier
+browser and browser-final directories retain both causal failures. Screenshots
+were inspected: existing editor/action layout is preserved; the template editor
+shows the saved replacement selections and date filters. The Deco screenshot
+captures the upper editor; the playlist persistence is proven by browser assertions.
+Strict web all-target Clippy, architecture/hydration lint, formatting and progress
+checks pass. Durable command logs are under tmp/ucu09-row164/ (final Clippy:
+clippy-hydration.log; browser: browser-accepted.log). Published v2.0.3 FFmpeg and
+ffprobe plus official e7997fa Next executable checksums match accepted artifacts.
+Substantive review confirms group changes update the saved model, optional blank
+selections persist as None, required template validation remains, and date filters,
+localization and fallback forms are preserved. Only the affected template route
+changes SSR mode; no shared router, health capability, schema, dependency or FFmpeg
+command change. Existing runtime/transport evidence is reused; final window gates
+remain required. Pin advances to 3f4255be; 164/181 accepted, 17 pending. Continue row165.
+
 Row163 is Port after the full db5a81e4 five-file audit. Empty command guards
 map to fallible parsing in the native Lua worker; invalid wait times already
 return an error before changing the clock. The shared creation validator applies

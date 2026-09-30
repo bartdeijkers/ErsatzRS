@@ -54,7 +54,7 @@ notes  = ''
 name   = 'TimelinePage` (`/playouts`)'
 status = '✅'
 routes = ['/playouts', '/playouts/add', '/playouts/add/:kind', '/playouts/classic/:id', '/playouts/block/:id', '/playouts/scripted/:id', '/playouts/:id/alternate-schedules', '/playouts/:id/templates']
-notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback. 2026-07-31: `tests/e2e/channel-watch.spec.ts` proves `/playouts/add` disables a mirror backed by a source playout. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; kind and nested editor workflows remain covered by their owning scheduling/browser specs.'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback. 2026-07-31: `tests/e2e/channel-watch.spec.ts` proves `/playouts/add` disables a mirror backed by a source playout. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; kind and nested editor workflows remain covered by their owning scheduling/browser specs. UCU-09 row164: concrete server-resolved template island props and in-order SSR pass Chromium/Firefox selection and save/reload checks in dependent-group-selections.spec.ts, without hydration errors.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -180,7 +180,7 @@ notes  = 'Hydrated group/template add flow and route-family console check covere
 name   = 'TemplateEditorPage'
 status = '✅'
 routes = ['/templates/:id']
-notes  = 'Editor geometry, add/remove/content sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`.'
+notes  = 'Editor geometry, add/remove/content sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`. UCU-09 row164: dependent-group-selections.spec.ts proves playlist-group changes clear the saved child and replacement persistence in Chromium/Firefox.'
 
 [[page]]
 name   = 'DecosPage'

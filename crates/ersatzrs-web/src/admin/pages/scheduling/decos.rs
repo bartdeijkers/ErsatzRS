@@ -2107,6 +2107,13 @@ fn DecoBreakSelectionRows(
             on:change=move |event| {
                 if let Ok(value) = event_target_value(&event).parse::<i64>() {
                     selected_playlist_group.set(value);
+                    if let Some(index) = selected_break_index.get_untracked() {
+                        form.update(|form| {
+                            if let Some(item) = form.break_content.get_mut(index) {
+                                item.playlist_id = None;
+                            }
+                        });
+                    }
                 }
             }
         >

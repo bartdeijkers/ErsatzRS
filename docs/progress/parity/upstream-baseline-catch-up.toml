@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-163/181; 18 pending.
+164/181; 17 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -31,6 +31,8 @@ and native smoke pass.
 19 checks, six browser cases, strict lint and native smoke pass.
 163 Port: shared script path validation/execution and Lua arguments;
 46 focused checks and strict lint pass.
+164 Port: dependent selection clearing, saved display and stable template hydration;
+four Chromium/Firefox cases and strict lint pass.
 Window gates remain.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
@@ -64,6 +66,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row164-dependent-selections'
+description = 'The row164 source audit finds Deco break content and Playout Templates retain child IDs after the selected group changes. Visible options change, but Save can persist the hidden previous choice. Clear dependent IDs/names in the form model and prove replacement persistence in both browsers.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns the full source map, two causal browser failures and final four passing Chromium/Firefox cases. Persisted dependent choices clear and replacement saves retain date filters. Server-resolved island props and in-order SSR repair the demonstrated hydration mismatch; strict web lint and structural checks pass. Final window gates remain.'
+resolved = true
 
 [[debt]]
 id          = 'ucu-next-runtime-path-resolution'
