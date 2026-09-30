@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b403012f2233a2d76e13925e30b68a8c9d34457a` |
-| **Commit subject** | `fix: movie custom order ui (#3024)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b403012f2233a2d76e13925e30b68a8c9d34457a |
+| **Pinned commit** | `810c1dbd0273163f2a5582cb55683ea3ee7a0235` |
+| **Commit subject** | `fix: font cache thread safety (#3025)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/810c1dbd0273163f2a5582cb55683ea3ee7a0235 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

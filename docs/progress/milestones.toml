@@ -11416,6 +11416,25 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row161 is Covered after the complete 810c1dbd two-file font-cache audit.
+Upstream makes CustomFontMapper updates concurrent and copy-on-write, scopes and
+locks loaded-file bookkeeping, and records success only after loading while
+isolating per-file failures. The accepted ADR 0005/0077/0105 renderer has no Skia
+mapper or shared loaded-typeface registry: drawtext uses owned file/family
+selectors, drawvg text emits per-session vectors, and child FFmpeg/libass owns
+font loading. Startup awaits bundled font extraction before workers/listeners;
+failed reads cannot poison a loaded-font set. Exact official Next e7997fa source
+passes its owned font directory to FFmpeg and has neither changed C# class.
+Nine focused existing regressions pass (f4c67661-3fb7-4b5d-b073-649bb11ee0c8):
+stale packaged-font replacement, default font editor persistence, selector/path
+escaping, reload and style mapping, software/hardware overlay composition.
+No production or generated command change; reuse strict lint and decoded graphics,
+canvas and subtitle evidence from accepted rows146/154 and the drawtext feature.
+No FFmpeg build or release is needed. Source map in plans/upstream-catch-up.md.
+Pin, accepted ledger and clean reference advance to 810c1dbd: 161/181 accepted,
+20 pending. Continue row162. Required final window gates, upstream refresh,
+authorized push and terminal exact-SHA CI remain; hardware debt is unchanged.
+
 Row160 is Port after the complete b403012f movie-order UI, handler, migration
 and retired Sortable dependency audit. Whole-poster drag and accessible moves now
 share displayed row order; saving, detail refresh and selection exclude overlapping

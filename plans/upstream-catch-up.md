@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Continue at row 161. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Row 160 is Port (movie ordering, save recovery and scoped legacy repair). Row 161 is Covered (FFmpeg font ownership; no shared mapper). Continue at row 162. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,32 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 161 source map — font-cache concurrency (Covered)
+
+Upstream `810c1dbd0273163f2a5582cb55683ea3ee7a0235` changes only
+`CustomFontMapper.cs` and `GraphicsEngineFonts.cs`. It replaces a shared mutable
+font dictionary/list with concurrent copy-on-write updates, makes the loaded-file
+set instance-owned and locked, records a file only after successful loading, and
+logs individual failures so later files and retries remain possible.
+
+ErsatzRS has no Skia/RichTextKit mapper or process-wide loaded-typeface set.
+Under accepted ADRs 0005/0077/0105, native graphics and the Next canvas share the
+FFmpeg renderer. `graphics_element_drawtext_overlay` builds an owned font-file
+or family selector per request; the packaged default is Roboto. Drawvg text
+writes per-session vector commands without a font cache. FFmpeg owns drawtext
+and libass font loading inside each child. The bundled font extraction is awaited
+in host startup before workers/listeners, overwrites stale files and has no
+successful-load registry that can become poisoned after a failed read.
+The official pinned Next e7997fa source passes owned `fonts_folder` settings to
+FFmpeg `fontsdir`; it has no copy of either changed C# class.
+
+The row concerns concurrency and failed-load bookkeeping in the retired renderer;
+it does not change the accepted text-rendering contract or require a new cache,
+lock, graphics service, dependency, runtime build or release. Existing graphics
+and subtitle runtime evidence remains applicable. Nine existing font extraction,
+editor and drawtext checks pass; UCU-09 owns exact evidence. No production change.
+Pin advances to 810c1dbd; 161/181 accepted, 20 pending. Continue row162.
 
 ## Row 160 source and hydration map — movie collection ordering (Port)
 
@@ -4591,7 +4617,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | Covered | upstream-baseline-catch-up | `test(parity): verify atomic provider operation admission` | ucu-09; existing mutex/owned admission and transactional Plex generation checks cover atomic flag replacement; Trakt remains deliberately retired. Eight contenders per provider admit one owner; 22 focused checks and strict lint pass. No production or FFmpeg change. |
 | 159 | `94c8c014` | fix: scheduler service reliability (#3023) | Port | upstream-baseline-catch-up | `fix(scheduler): isolate maintenance failures without starving jobs` | ucu-09; loop failures preserve independent cleanup/search/health and remain due for retry; cancellation stops the pass and first error remains visible. All 24 maintenance checks, strict lint and architecture pass; see source map and milestone. |
 | 160 | `b403012f` | fix: movie custom order ui (#3024) | Port | upstream-baseline-catch-up | `fix(collections): preserve movie ordering across saves and failures` | ucu-09; poster/keyboard order, save exclusion and localized recovery; atomic membership validation and scoped legacy migration preserve row overrides. 13 focused checks, eight browser cases and strict lint pass; see source map and milestone. |
-| 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: no font cache to race in the native drawtext and graphics path. |
+| 161 | `810c1dbd` | fix: font cache thread safety (#3025) | Covered | upstream-baseline-catch-up | `docs(parity): reconcile font cache ownership` | ucu-09; accepted FFmpeg renderer has no shared Skia mapper or loaded-file registry. Nine font extraction/editor/drawtext checks pass; existing decoded evidence retained. No runtime rebuild. |
 | 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: MPEG-TS script reliability. |
 | 163 | `db5a81e4` | fix: scripted schedule file validation (#3027) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: scripted schedule file validation. |
 | 164 | `3f4255be` | fix: many ui bug fixes (#3028) | | | | ucu-09; provisional: Port (selective). Claude 2026-09-23 triage: Razor editor fixes; map each page to its Leptos equivalent, several may already be correct. |
