@@ -414,7 +414,7 @@ notes  = 'The production router contract is audited by `tests/e2e/admin-route-co
 name   = 'SettingsPages'
 status = '✅'
 routes = ['/settings/ffmpeg', '/settings/logging', '/settings/hdhr', '/settings/scanner', '/settings/playout', '/settings/ui', '/settings/xmltv']
-notes  = '`tests/e2e/settings-i18n.spec.ts` covers all settings pages in every supported culture plus FFmpeg form persistence; `tests/e2e/island-hydration.spec.ts` covers their island startup and injected storage failure. UCU-08 row 127 adds in-order SSR for HDHomeRun/UI settings and tests JWT-enabled/disabled controls, saves and discovery in Chromium/Firefox with and without JavaScript (`tests/e2e/hdhr-jwt.spec.ts`).'
+notes  = '`tests/e2e/settings-i18n.spec.ts` covers all settings pages in every supported culture plus FFmpeg form persistence; `tests/e2e/island-hydration.spec.ts` covers their island startup and injected storage failure. UCU-08 row 127 adds in-order SSR for HDHomeRun/UI settings and tests JWT-enabled/disabled controls, saves and discovery in Chromium/Firefox with and without JavaScript (`tests/e2e/hdhr-jwt.spec.ts`). UCU-09 row162 adds in-order SSR for FFmpeg settings and verifies discovered/edited/deleted script choices, operator names, persisted selection, retained track preferences and no-JS saves in both browsers (`tests/e2e/mpegts-script-settings.spec.ts`).'
 
 [[page]]
 name   = 'OtherVideosPages'

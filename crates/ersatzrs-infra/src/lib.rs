@@ -71,6 +71,7 @@ pub mod media_server;
 pub mod metadata;
 pub(crate) mod metadata_query;
 pub(crate) mod minijinja_compat;
+pub mod mpegts_scripts;
 pub mod music_video_credits;
 pub mod next_engine;
 pub mod playback;

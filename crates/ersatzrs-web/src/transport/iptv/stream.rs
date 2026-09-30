@@ -47,6 +47,7 @@ use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls_worker::{
     build_mpeg_ts_slate_command, MpegTsSlateCommandRequest, ALL_STREAMS_IN_USE_SLATE_MESSAGE,
 };
+use ersatzrs_infra::mpegts_scripts::{MpegTsScript, MpegTsScriptDefinition};
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
@@ -72,7 +73,6 @@ use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
     ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
-use serde::Deserialize;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
 #[cfg(test)]
@@ -96,22 +96,6 @@ const MPEG_TS_HLS_RECLAIM_WATCH_WINDOW: Duration = Duration::from_secs(30);
 const MPEG_TS_HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(5);
 const MPEG_TS_HLS_RECLAIM_GRACE: Duration = Duration::from_secs(6);
 const MPEG_TS_HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct MpegTsScriptDefinition {
-    name: String,
-    #[serde(default)]
-    linux_script: Option<String>,
-    #[serde(default)]
-    windows_script: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MpegTsScript {
-    id: String,
-    folder: PathBuf,
-    definition: MpegTsScriptDefinition,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MpegTsScriptRenderData {
@@ -2311,36 +2295,11 @@ fn mpegts_script_id_eq(left: &str, right: &str) -> bool {
 }
 
 async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Option<MpegTsScript> {
-    let mut entries = tokio::fs::read_dir(&root).await.ok()?;
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let Ok(file_type) = entry.file_type().await else {
-            continue;
-        };
-        if !file_type.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().into_owned();
-        if !mpegts_script_id_eq(&id, script_id) {
-            continue;
-        }
-        let folder = entry.path();
-        let yaml = tokio::fs::read_to_string(folder.join("mpegts.yml"))
-            .await
-            .ok()?;
-        let definition = match serde_yaml::from_str::<MpegTsScriptDefinition>(&yaml) {
-            Ok(definition) => definition,
-            Err(error) => {
-                tracing::warn!(%error, script_id, "failed to parse MPEG-TS script YAML definition");
-                return None;
-            }
-        };
-        return Some(MpegTsScript {
-            id,
-            folder,
-            definition,
-        });
-    }
-    None
+    ersatzrs_infra::mpegts_scripts::discover_in(root)
+        .await
+        .ok()?
+        .into_iter()
+        .find(|script| mpegts_script_id_eq(&script.id, script_id))
 }
 
 async fn render_mpegts_script_command(
@@ -5590,6 +5549,36 @@ mod tests {
             rendered,
             r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -muxrate 9830400 -pcr_period 20 -metadata service_name="Channel One""#
         );
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_missing_platform_name_or_file_returns_fallback_error() {
+        let root = tempfile::tempdir().unwrap();
+        let data = MpegTsScriptRenderData {
+            hls_url: "http://127.0.0.1/test.m3u8".into(),
+            channel_name: "Synthetic channel".into(),
+            ffmpeg_path: "ffmpeg".into(),
+            muxrate_bps: 12_000_000,
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+        };
+        for name in [None, Some(" ".into()), Some("missing-script".into())] {
+            let script = MpegTsScript {
+                id: "custom".into(),
+                folder: root.path().to_owned(),
+                definition: MpegTsScriptDefinition {
+                    name: "Custom".into(),
+                    linux_script: name.clone(),
+                    windows_script: name,
+                },
+            };
+            assert_eq!(
+                render_mpegts_script_command(&script, &data)
+                    .await
+                    .unwrap_err()
+                    .kind(),
+                std::io::ErrorKind::NotFound,
+            );
+        }
     }
 
     #[test]

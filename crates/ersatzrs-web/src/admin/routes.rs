@@ -246,6 +246,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("settings"), StaticSegment("ffmpeg"))
                 view=FfmpegSettingsPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("settings"), StaticSegment("logging"))

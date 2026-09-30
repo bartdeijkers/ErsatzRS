@@ -55,6 +55,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Discover current MPEG-TS scripts in FFmpeg settings and recover missing selections
+  to Default or the first available script. Settings and stream startup share fresh
+  definitions, so edits, removals and corrected invalid files take effect on reload.
+  Preserve operator-defined script names and render the FFmpeg settings form
+  completely when JavaScript is disabled.
+
 - Keep movie collection poster and keyboard ordering consistent, prevent
   overlapping order saves and restore rejected orders. Reject stale or foreign
   collection rows atomically and repair legacy non-movie custom-order settings

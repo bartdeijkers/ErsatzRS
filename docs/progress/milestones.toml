@@ -11416,6 +11416,40 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row162 is Port after the full 4e951c17 six-file source audit. Upstream refresh locking/reload/removal/cancellation maps
+to fresh, owned filesystem snapshots shared by settings and stream startup;
+there is no mutable cache or additional scheduler task. Edited, added, removed
+and repaired definitions appear on the next read. Existing owned folder identity,
+platform script selection, Unicode environment values, temporary file ownership
+and built-in fallback remain. Settings uses the current sorted catalog and repairs
+a missing selection to case-insensitive Default, then the first available script;
+viewing the form does not persist that selection before Save.
+All 19 focused checks pass (23c48831-fd3c-4f48-8b34-58d356944af8): concurrent
+independent discovery, malformed sibling isolation/retry, edits/removal, empty
+catalog, selection recovery, missing platform name/file, folder identity,
+Unicode case/environment, seeded-default preservation/upgrades and existing command
+snapshots. These backend paths are unchanged by the later UI corrections.
+Initial browser proof exposed forced Default labels hiding an operator name and
+out-of-order SSR leaving the no-JS page on Loading. Preserve operator names while
+localizing the built-in label, and apply the established in-order SSR route pattern
+only to FFmpeg settings. Firefox navigation aborts occurred when the test left
+before hydration; use the existing bounded readiness wait, without filtering
+errors or extending assertion/test deadlines. Final matched Chromium/Firefox
+proof passes all six cases without skips/retries: script names, JS/no-JS discovery,
+edit/delete reload, Save persistence, form-only fallback and retained track
+preferences (test-results/ucu09-row162-browser-final/playwright-results.json).
+Final strict infra/web/FFmpeg all-target Clippy, architecture, hydration and
+formatting checks pass; there are no new lint allowances. Substantive review
+confirms existing form/command boundaries, failure visibility, no state shared
+between discovery callers and no capability/schema/mux contract change.
+Published v2.0.3 executable digests match accepted release evidence; no runtime
+build or release. Native host smoke passes: public internal callbacks remain 404,
+legacy/hybrid MPEG-TS return stream bytes, and segmenter/session HLS return playlists
+with initial segments. Reuse unchanged transport proof; final window TSDuck remains.
+Pin, ledger and clean reference advance to 4e951c17: 162/181 accepted, 19 pending.
+Continue row163. Final window gates, upstream refresh, authorized push and terminal
+exact-SHA CI remain; no intermediate push/CI. Approved hardware debt is unchanged.
+
 Row161 is Covered after the complete 810c1dbd two-file font-cache audit.
 Upstream makes CustomFontMapper updates concurrent and copy-on-write, scopes and
 locks loaded-file bookkeeping, and records success only after loading while
