@@ -11416,6 +11416,36 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row158 is Covered after auditing the full f6bd089f EntityLocker diff and
+all changed flag callers, including Razor admission paths. Upstream replaces
+six plain bool flags with CompareExchange acquisition/release and Volatile
+reads. Rust already atomically inserts/removes/observes external provider keys
+under the shared OperationCoordinator mutex, retains the owned guard through
+NativeMediaSourceRuntime worker success/failure, and polls snapshots instead of
+global notification subscriptions. ADR 0051 owns that existing boundary.
+Plex pending-flow claims, sign-out and account-generation checks use SQLite
+write transactions; late discovery/rejection/completion cannot overwrite a
+replacement identity. Native Trakt is deliberately Dropped under accepted
+ADRs 0066/0067/0069, so no retired singleton flag or provider is reintroduced.
+Troubleshooting already shares one owned Tokio guard across both engines
+under ADR 0095; row157 process/preparation/diagnostic ownership proof is reused.
+The new contention regression starts eight cloned callers simultaneously for
+Plex, Jellyfin and Emby. Exactly one owner wins each key; losing admission does
+not unlock it, another source can run and release independently, and owner
+drop restores idle/retry admission. All 22 focused operation/Plex/preview checks
+pass (26e3b9af-d481-4572-97b0-8831f8ea7fa8), including superseded completion,
+sign-out, late unauthorized responses, credential rollback, inventory retention
+and preview admission/diagnostic ownership. Strict affected all-target Clippy,
+architecture lint, formatting and progress validation pass.
+Substantive review confirms source flag transitions are covered by existing
+atomic state/identity operations and correct guard lifetime. Only a regression
+and acceptance records change; no production behavior, schema, UI, health
+requirement, dependency, generated argv, runtime build or release. Reuse row157
+matched browser/native/Next proof; no redundant Playwright or playback rerun.
+Pin advances to f6bd089f; 158/181 accepted, 23 pending. Continue row159.
+Window closeout, upstream refresh, authorized push and exact-SHA CI remain;
+no intermediate push/CI, and approved hardware debt stays unverified.
+
 Row157 is Port after the complete 13-file 2bbfbd10 audit. Smart collection
 create/update duplicates return Conflict 409; mixed known validation/not-found/
 conflict errors remain 400 and operational errors 500. Transactional uniqueness

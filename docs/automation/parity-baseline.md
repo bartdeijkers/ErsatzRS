@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `2bbfbd10e10de2f49978c0efbe8b82e9d082dc43` |
-| **Commit subject** | `fix: playback troubleshooting (#3021)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2bbfbd10e10de2f49978c0efbe8b82e9d082dc43 |
+| **Pinned commit** | `f6bd089f5b392b6753f6cacbeeecf55964cb85a2` |
+| **Commit subject** | `fix: entity locker concurrency (#3022)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f6bd089f5b392b6753f6cacbeeecf55964cb85a2 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

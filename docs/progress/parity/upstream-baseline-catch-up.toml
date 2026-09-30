@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-157/181; 24 pending.
+158/181; 23 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
@@ -26,14 +26,16 @@ runtime proof passes.
 150 Port: Next error cards; decoded matrix, smoke/lint pass.
 151 Port: credits preview; full web/browser/runtime/lint/smoke pass.
 152-153 N/A: notes; AAC argv/decode pass; hardware debt unchanged.
-154 Adapt (0005/0105): motion boundaries/preview clocks; 75 focused, 18 browser,
-native argv, lint and both smoke paths pass.
+154 Adapt (0005/0105): motion/preview timing; 75 focused, 18 browser, argv,
+lint and both smoke paths pass.
 155 Port: optional Next AMF index/default; 14 checks, lint and checksums pass;
 hardware remains unverified.
-156 Port: typed machine CRUD, safe deletion and localized island callbacks;
-33 focused checks, 15 browser passes, strict lint and native smoke pass.
+156 Port: machine CRUD/deletion/localization; 33 focused, 15 browser, lint
+and native smoke pass.
 157 Port: native completion/sample ownership, URI redaction and smart 409;
-53 focused checks, 24 browser cases and lint pass. Window gates remain.
+53 focused checks, 24 browser cases and lint pass.
+158 Covered: atomic admission, Plex fencing; Trakt retired.
+22 focused checks and lint pass. Window gates remain.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 

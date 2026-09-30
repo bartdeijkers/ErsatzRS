@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Continue at row 158. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Continue at row 159. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,32 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 158 source map — atomic operation admission (Covered)
+
+Full `f6bd089f5b392b6753f6cacbeeecf55964cb85a2` diff changes only
+EntityLocker: Plex, Trakt, Plex/Jellyfin/Emby collections and troubleshooting
+flags use CompareExchange for acquire/release and Volatile.Read for observation.
+Inspect the Razor admission paths as well as handlers; the six flags cannot be
+judged from the playout/library lock sets alone.
+
+| Upstream surface | Existing Rust counterpart | Acceptance |
+| --- | --- | --- |
+| Three provider collection flags and status notifications | Application OperationCoordinator keyed by provider/source; Mutex-protected insertion/status; owned guard retained by NativeMediaSourceRuntime worker (ADR 0051) | Simultaneous attempts through cloned coordinators admit exactly one owner; rejection cannot release it; independent keys remain usable and drop permits retry |
+| Plex sign-in/sign-out/discovery flag | Persisted pending-flow claim and credential-generation checks in Plex authentication transactions | Existing superseded completion, sign-out, late rejection, rollback and inventory tests; no stale write over a replacement identity |
+| Troubleshooting flag | Shared Tokio owned preview guard for both engines (ADR 0095) | Reuse row157 lock/preparation/process/diagnostic completion and browser disconnection evidence |
+| Trakt flag | Native Trakt deliberately Dropped under ADRs 0066/0067/0069 | No retired global lock or provider implementation reintroduced; provider-neutral add-on list ownership remains unchanged |
+
+No production change is indicated. Add a real contested admission regression
+for all three external provider keys rather than a second flag implementation.
+No UI, schema, health requirement, dependency, runtime artifact or generated
+FFmpeg change is implied. All 22 operation/Plex/preview checks, strict affected
+lint, architecture, formatting and progress validation pass. Eight simultaneous
+cloned callers admit exactly one owner for each provider; rejection and releasing
+a different source preserve that owner, and dropping it permits a retry.
+Reuse unchanged row157 browser/runtime proof. UCU-09 owns detailed evidence.
+Pin advances to `f6bd089f`; 158/181 accepted, 23 pending. Continue row159;
+window closeout, push and exact-SHA CI remain. No intermediate push or CI.
 
 ## Row 157 source map — troubleshooting completion and cleanup (Port)
 
@@ -4481,7 +4507,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 155 | `d1c2ab3a` | chore: updates for new next, ffmpeg builds | Port | ffmpeg-9-performance-and-support | `feat(parity): reconcile optional Next AMF adapter protocol` | ucu-09; typed optional uint32 index, automatic default preserved. 14 protocol/config checks, strict affected lint and exact Linux/Windows v2.0.3 checksum verification pass. Approved hardware debt stays unverified; no new runtime build. |
 | 156 | `a4642d95` | fix: api response codes (#3020) | Port | upstream-baseline-catch-up | `fix(parity): reconcile machine API errors and safe profile deletion` | ucu-09; typed CRUD/trash/concat status, transactional duplicate/update/delete guards and preserved profile/collection operations; 33 focused checks, strict lint, 15 browser passes and native smoke. Localized island callbacks corrected; no FFmpeg rebuild. |
 | 157 | `2bbfbd10` | fix: playback troubleshooting (#3021) | Port | upstream-baseline-catch-up | `fix(parity): retain troubleshooting completion and sample ownership` | ucu-09; immediate native completion, bounded owned capture/archive cleanup, URI credential redaction and smart conflicts 409 with mixed known errors 400. All 53 focused checks, 24 Chromium/Firefox cases and strict lint pass; real sample audio/subtitle preservation. No FFmpeg rebuild. |
-| 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: native locking is lease-based, not the C# EntityLocker. |
+| 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | Covered | upstream-baseline-catch-up | `test(parity): verify atomic provider operation admission` | ucu-09; existing mutex/owned admission and transactional Plex generation checks cover atomic flag replacement; Trakt remains deliberately retired. Eight contenders per provider admit one owner; 22 focused checks and strict lint pass. No production or FFmpeg change. |
 | 159 | `94c8c014` | fix: scheduler service reliability (#3023) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: scheduler reliability; read for the real failure modes rather than copying the C# design. |
 | 160 | `b403012f` | fix: movie custom order ui (#3024) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: manual collection custom order plus a data reset migration. |
 | 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: no font cache to race in the native drawtext and graphics path. |
