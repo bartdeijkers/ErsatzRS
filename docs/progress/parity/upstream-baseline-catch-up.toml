@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-169/181; 12 pending.
+170/181; 11 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -68,6 +68,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream each run; p9a-01 depends on ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row170-vaapi-default'
+description = 'Next Auto VAAPI driver selection forces Intel iHD instead of leaving libva to select the driver for the chosen device.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns the complete e8b7bb63 audit, 14 passing configuration/protocol regressions, strict infra lint and exact e7997fa consumer/health review. Default omits the driver; explicit choices and device are retained. No AMD hardware-output claim. Source map in plans/upstream-catch-up.md.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row169-rotation'

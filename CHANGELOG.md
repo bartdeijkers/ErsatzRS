@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Let libva select the Next VAAPI driver when the profile uses Default, instead
+  of forcing Intel iHD on AMD devices. Explicit driver and device choices remain.
+
 - Preserve Plex, Jellyfin and Emby video rotation metadata, expose it in Media Info,
   and publish Next playouts using the rotation-aware 0.0.5 schema. Correct the
   orientation health check so copied rotated video is reported.

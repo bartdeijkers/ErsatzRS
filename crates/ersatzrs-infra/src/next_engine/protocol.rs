@@ -113,6 +113,7 @@ pub struct Video {
     pub filters: VideoFilters,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_device: Option<String>,
+    /// Omission lets libva choose the driver for the selected VAAPI device.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_driver: Option<VaapiDriver>,
 }

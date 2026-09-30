@@ -11416,6 +11416,22 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row170 is Port after the complete e8b7bb63 three-file audit. Default VAAPI now
+omits the optional Next driver instead of forcing Intel iHD; explicit supported
+drivers and device selection remain intact. All 14 config/protocol regressions
+pass (4dcbea25-85a4-4346-b59c-b454230fe8db), including production-converter field
+absence, explicit choices, retained device and JSON round-trip. Strict infra
+all-target Clippy passes in 1m48s. Substantive source/health review confirms the
+exact accepted Next e7997fa consumes None in capability probing and sets
+LIBVA_DRIVER_NAME only for Some; existing health already recognizes Default.
+No hardware-filter/runtime change or AMD hardware-output claim is made. Existing
+approved hardware debt is unchanged. Row169 decoded/HTTP smoke evidence remains
+applicable to unchanged playback paths; final window gates remain required.
+Source, review and check logs: tmp/ucu09-row170/. Required cache cleanup removed
+69.5 GiB after row169 crossed the 60-GiB threshold, with no active compiler.
+Pin advances to e8b7bb63; 170/181 accepted, 11 pending. Continue row171; final
+window gates, fresh upstream audit, push and exact-SHA CI remain.
+
 Row169 is Port after the complete ee038ba4 23-file source audit. Plex orientation
 and Jellyfin/Emby signed rotation now reach the existing persisted Rotation field;
 Media Info exposes it, and normal/troubleshooting Next publication shares schema

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `ee038ba460a237e277c2ed2fbb413bfac13795f8` |
-| **Commit subject** | `feat: next engine rotation (#3034)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ee038ba460a237e277c2ed2fbb413bfac13795f8 |
+| **Pinned commit** | `e8b7bb638831548e85a78992ba1b3b0ebf982aea` |
+| **Commit subject** | `fix: amd vaapi accel when driver is set to default (#3036)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e8b7bb638831548e85a78992ba1b3b0ebf982aea |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

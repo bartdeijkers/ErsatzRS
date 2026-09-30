@@ -122,9 +122,10 @@ identity-preserving saves and localized correction forms: eleven production chec
 two native Windows probes, eight browser cases and strict affected lint pass.
 Row168 is N/A: upstream release heading/date/links only. Row169 ports provider
 rotation, Media Info and Next schema 0.0.5; 163 regressions, decoded Next rotation,
-two browser cases, corrected orientation health and Next HTTP smoke pass. Continue row170;
+two browser cases, corrected orientation health and Next HTTP smoke pass. Row170 ports Default VAAPI driver omission; 14 config/protocol
+checks, strict lint and exact Next consumer review pass. Continue row171;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 12 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 11 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

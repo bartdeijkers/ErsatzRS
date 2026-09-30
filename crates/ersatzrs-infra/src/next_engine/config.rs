@@ -137,12 +137,13 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         HardwareAccelerationKind::V4l2m2m => return Err(ConfigError::Accelerator),
     };
     let vaapi_driver = if profile.hardware_acceleration == HardwareAccelerationKind::Vaapi {
-        Some(match profile.vaapi_driver {
-            VaapiDriver::Auto | VaapiDriver::IHD => wire::VaapiDriver::Ihd,
-            VaapiDriver::I965 => wire::VaapiDriver::I965,
-            VaapiDriver::RadeonSI => wire::VaapiDriver::Radeonsi,
+        match profile.vaapi_driver {
+            VaapiDriver::Auto => None,
+            VaapiDriver::IHD => Some(wire::VaapiDriver::Ihd),
+            VaapiDriver::I965 => Some(wire::VaapiDriver::I965),
+            VaapiDriver::RadeonSI => Some(wire::VaapiDriver::Radeonsi),
             VaapiDriver::Nouveau => return Err(ConfigError::VaapiDriver),
-        })
+        }
     } else {
         None
     };

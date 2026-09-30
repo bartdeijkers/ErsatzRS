@@ -117,14 +117,20 @@ fn hardware_and_vaapi_driver_choices_survive_the_wire_mapping() {
     profile.profile.hardware_acceleration = HardwareAccelerationKind::Vaapi;
     profile.profile.vaapi_device = Some("devices/render-node".to_owned());
     for (driver, name) in [
-        (VaapiDriver::Auto, "ihd"),
-        (VaapiDriver::IHD, "ihd"),
-        (VaapiDriver::I965, "i965"),
-        (VaapiDriver::RadeonSI, "radeonsi"),
+        (VaapiDriver::Auto, None),
+        (VaapiDriver::IHD, Some("ihd")),
+        (VaapiDriver::I965, Some("i965")),
+        (VaapiDriver::RadeonSI, Some("radeonsi")),
     ] {
         profile.profile.vaapi_driver = driver;
         let config = json_config(&profile);
-        assert_eq!(config["normalization"]["video"]["vaapi_driver"], name);
+        let video = &config["normalization"]["video"];
+        assert_eq!(
+            video.get("vaapi_driver"),
+            name.map(serde_json::Value::from).as_ref()
+        );
+        let decoded: wire::Video = serde_json::from_value(video.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), *video);
         assert_eq!(
             config["normalization"]["video"]["vaapi_device"],
             "devices/render-node"
