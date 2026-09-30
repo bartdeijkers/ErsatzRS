@@ -650,6 +650,9 @@ Release archive staging requires Python 3.12 and public HTTPS access to the
 `ersatztv-channel` executable, its MIT license and `origin.json`. Archive
 packaging then moves the executable (with `.exe` on Windows) to the package
 root beside ErsatzRS, retaining only license/provenance in `next/`.
+Windows packages also require `libvpl.dll` and `libvpl-LICENSE.txt` from the
+same verified Next archive beside `ersatztv-channel.exe` at the package root.
+Missing or invalid companions fail staging before the destination is published.
 It requires the release API's SHA-256 digest and records
 the selected asset, revision and license hash. Missing artifacts, invalid
 checksums or missing licenses fail packaging; no GitHub credential is needed.

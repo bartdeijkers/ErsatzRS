@@ -9,6 +9,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import warnings
 import zipfile
 
 spec = importlib.util.spec_from_file_location("stage_next", Path(__file__).with_name("stage-next.py"))
@@ -28,6 +29,8 @@ def fixture(rid, missing=False, link=False):
                 info = zipfile.ZipInfo(f"{root}/{name}.exe")
                 info.external_attr = (0o120777 if link else 0o100755) << 16
                 archive.writestr(info, b"MZ-fixture")
+            archive.writestr(f"{root}/libvpl.dll", b"MZ-oneVPL-fixture")
+            archive.writestr(f"{root}/libvpl-LICENSE.txt", b"oneVPL license fixture\n")
             archive.writestr("../../outside", b"must not extract")
         suffix = ".zip"
     else:
@@ -73,8 +76,12 @@ class StageNextTests(unittest.TestCase):
                 folder = Path(temp)
                 output = self.stage(folder, rid)
                 suffix = ".exe" if rid == "win-x64" else ""
+                companions = {"libvpl.dll", "libvpl-LICENSE.txt"} if rid == "win-x64" else set()
                 self.assertEqual({p.name for p in output.iterdir()},
-                                 {"ersatztv-channel" + suffix, "LICENSE", "origin.json"})
+                                 {"ersatztv-channel" + suffix, "LICENSE", "origin.json"} | companions)
+                if rid == "win-x64":
+                    self.assertEqual((output / "libvpl.dll").read_bytes(), b"MZ-oneVPL-fixture")
+                    self.assertEqual((output / "libvpl-LICENSE.txt").read_bytes(), b"oneVPL license fixture\n")
                 self.assertEqual(json.loads((output / "origin.json").read_text())["rid"], rid)
                 self.assertFalse((folder / "outside").exists())
                 self.assertTrue((output / ("ersatztv-channel" + suffix)).stat().st_mode & 0o100)
@@ -86,6 +93,35 @@ class StageNextTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
                 self.stage(folder, metadata=metadata, data=data + b"changed")
             self.assertFalse((folder / "next").exists())
+
+    def test_invalid_windows_companions_reject_entire_stage(self):
+        for name in ("libvpl.dll", "libvpl-LICENSE.txt"):
+            for defect in ("missing", "empty", "duplicate", "link"):
+                with self.subTest(name=name, defect=defect), tempfile.TemporaryDirectory() as temp:
+                    metadata, data = fixture("win-x64")
+                    buffer = io.BytesIO()
+                    with zipfile.ZipFile(io.BytesIO(data)) as original, zipfile.ZipFile(buffer, "w") as archive:
+                        for info in original.infolist():
+                            content = original.read(info)
+                            if info.filename.endswith("/" + name):
+                                if defect == "missing":
+                                    continue
+                                if defect == "empty":
+                                    content = b""
+                                if defect == "link":
+                                    info.external_attr = 0o120777 << 16
+                                if defect == "duplicate":
+                                    archive.writestr(info, content)
+                            with warnings.catch_warnings():
+                                warnings.simplefilter("ignore", UserWarning)
+                                archive.writestr(info, content)
+                    data = buffer.getvalue()
+                    metadata["assets"][0].update(size=len(data), digest="sha256:" + hashlib.sha256(data).hexdigest())
+                    folder = Path(temp)
+                    with self.assertRaises(ValueError):
+                        self.stage(folder, "win-x64", metadata, data)
+                    self.assertFalse((folder / "next").exists())
+                    self.assertEqual(list(folder.iterdir()), [])
 
     def test_missing_or_linked_binary_rejected_for_zip_and_tar(self):
         for rid in ("linux-x64", "win-x64"):

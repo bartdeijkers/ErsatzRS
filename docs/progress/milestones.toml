@@ -11416,6 +11416,22 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row176 is Port after the complete 6f0449c2 workflow audit. Windows Next staging
+requires libvpl.dll and libvpl-LICENSE.txt from the same checksum-verified archive;
+both release branches move them beside the channel executable. Seven offline
+tests pass, covering all six RIDs and missing/empty/duplicate/symlink companions,
+checksum failures and atomic destination publication. Real official Windows
+archive 6b49dae, SHA256 24e67c20f104e55804a0f8e05d5fa9e51730698e2bf0356835b8855e0e14f126,
+passes staging. Native PowerShell packaging verifies root ZIP entries and exact
+file hashes; the packaged executable starts and reports 0.1.0-6b49dae. Bash
+layout checks retain identical files. This newer archive is packaging-only
+evidence; accepted playback remains e7997fa and approved QSV hardware debt stays
+unverified. No new FFmpeg build, publication or runtime adoption. Actionlint
+passes with existing runner labels configured and unrelated existing SC2129
+redirect-style warning excluded. Source, metadata and logs: tmp/ucu09-row176/.
+Pin advances to 6f0449c2; 176/181 accepted, 5 pending. Continue row177;
+final window gates, fresh upstream audit, push and exact-SHA CI remain.
+
 Row175 is Port after the complete 04f49b0a one-file audit. `.gitattributes`
 now explicitly selects CRLF for batch files; the existing global LF rule covers
 shell scripts. Isolated real Git checkouts pass with core.autocrlf=false and

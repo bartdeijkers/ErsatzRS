@@ -20,6 +20,7 @@ PLATFORMS = {
     "osx-x64": "macos-x64", "osx-arm64": "macos-arm64",
 }
 BINARIES = ("ersatztv-channel",)
+WINDOWS_COMPANIONS = ("libvpl.dll", "libvpl-LICENSE.txt")
 MAX_ARCHIVE = 128 * 1024 * 1024
 
 
@@ -57,6 +58,7 @@ def read_binaries(payload, rid, root):
     names = [n + (".exe" if rid == "win-x64" else "") for n in BINARIES]
     result = {}
     if rid == "win-x64":
+        names.extend(WINDOWS_COMPANIONS)
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             for name in names:
                 matches = [i for i in archive.infolist() if i.filename == f"{root}/{name}"]

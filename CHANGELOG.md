@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Include Next's Windows oneVPL DLL and license beside its executable in both
+  release packaging paths, rejecting archives with missing companions.
+
 - Check out Windows batch scripts with CRLF line endings, including the bundled
   MPEG-TS script, while retaining LF for shell scripts.
 

@@ -117,6 +117,8 @@ jobs:
           python scripts/release/stage-next.py --rid win-x64 --output "$stage/next"
           if ($LASTEXITCODE -ne 0) { throw 'Next runtime staging failed' }
           Move-Item "$stage/next/ersatztv-channel.exe" "$stage/ersatztv-channel.exe"
+          Move-Item "$stage/next/libvpl.dll" "$stage/libvpl.dll" -ErrorAction Stop
+          Move-Item "$stage/next/libvpl-LICENSE.txt" "$stage/libvpl-LICENSE.txt" -ErrorAction Stop
           Compress-Archive -Path $stage -DestinationPath $archive
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive))
@@ -408,6 +410,10 @@ jobs:
           next_binary="ersatztv-channel"
           if [ "$RID" = "win-x64" ]; then next_binary="${next_binary}.exe"; fi
           mv "$stage/next/$next_binary" "$stage/$next_binary"
+          if [ "$RID" = "win-x64" ]; then
+            mv "$stage/next/libvpl.dll" "$stage/libvpl.dll"
+            mv "$stage/next/libvpl-LICENSE.txt" "$stage/libvpl-LICENSE.txt"
+          fi
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
             if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then
