@@ -1009,6 +1009,12 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
         .unwrap(),
         "Override Slot Movie"
     );
+    assert_eq!(variables["MediaItem_SeekSeconds"], 12.0);
+    assert_eq!(variables["MediaItem_StreamSeek"]["TotalSeconds"], 12.0);
+    assert_eq!(
+        render_graphics_template("{{ MediaItem_SeekSeconds }}", &variables).unwrap(),
+        "12.0"
+    );
     let start_seconds =
         evaluate_graphics_number("MediaItem_Duration.TotalSeconds - 5", &variables).unwrap();
     assert!((start_seconds - 3595.0).abs() < f64::EPSILON);
@@ -1369,7 +1375,7 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
     assert_eq!(*z_index, 14);
     assert_eq!(input.path, missing_motion.to_string_lossy());
     assert_eq!(input.filter_steps, vec!["setpts=PTS+4/TB"]);
-    assert_eq!(overlay.enable.as_deref(), Some("between(t,4,6.5)"));
+    assert_eq!(overlay.enable.as_deref(), Some("gte(t,4)*lt(t,6.5)"));
     assert!(!overlay.eof_action_pass);
 
     artifacts.shutdown().await;

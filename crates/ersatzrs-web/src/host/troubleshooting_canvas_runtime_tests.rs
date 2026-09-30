@@ -160,7 +160,7 @@ fn positioned(id: i64, config: GraphicsElementConfig, x: f64, y: f64) -> Graphic
 
 pub(super) async fn assert_composite(ffmpeg: &FsPath, playlist: &FsPath) {
     let first = frame(ffmpeg, playlist, "0").await;
-    let later = frame(ffmpeg, playlist, "3").await;
+    let later = frame(ffmpeg, playlist, "1").await;
     for frame in [&first, &later] {
         let red = pixel(frame, 16, 16);
         assert!(
@@ -205,6 +205,10 @@ pub(super) async fn assert_composite(ffmpeg: &FsPath, playlist: &FsPath) {
         magenta[0] > 180 && magenta[1] < 40 && magenta[2] > 180,
         "timed libass graphic missing: {magenta:?}"
     );
+    // Preview seeks to source second one: overlays anchored at second two
+    // must appear after exactly one output second and ASS must expire at three.
+    let expired = frame(ffmpeg, playlist, "3").await;
+    assert_blue(pixel(&expired, 228, 16));
     let text_mask = |frame: &[u8]| {
         region(frame, 128..210, 60..90)
             .map(|rgb| rgb.iter().all(|c| *c > 180))

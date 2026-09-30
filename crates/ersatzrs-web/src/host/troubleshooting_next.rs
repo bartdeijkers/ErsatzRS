@@ -57,6 +57,7 @@ struct Selection {
     info: PreviewMediaItem,
     profile: PlaybackProfile,
     selected_at: Option<DateTime<Utc>>,
+    playback_start: DateTime<Utc>,
     subtitle_id: Option<i64>,
 }
 
@@ -104,7 +105,8 @@ async fn select(
             .load_preview_media_admin(id, Some(media.media_version_id))
             .await?
             .ok_or(PreviewNotFound("media item does not exist"))?;
-        seek_media_item(&mut media.item, query.seek_seconds, info.duration_seconds)?;
+        let seek = preview_media_seek_seconds(state, &info, query.seek_seconds).await?;
+        seek_media_item(&mut media.item, Some(seek), info.duration_seconds)?;
         (
             preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter),
             media,
@@ -157,6 +159,7 @@ async fn select(
         info,
         profile,
         selected_at,
+        playback_start: start,
         subtitle_id,
     })
 }
@@ -171,10 +174,16 @@ fn seek_media_item(
         duration_seconds,
         seek,
     )))?;
+    let seek = TimeDelta::try_seconds(seek).ok_or(PreviewNotFound("invalid preview seek"))?;
+    // Join a running programme: Next applies elapsed item time to every track
+    // and canvas. An additional source in-point would seek the media twice.
     item.finish = item.start + duration;
-    item.in_point = TimeDelta::try_seconds(seek).ok_or(PreviewNotFound("invalid preview seek"))?;
-    item.out_point = item
-        .in_point
+    item.start = item
+        .start
+        .checked_sub_signed(seek)
+        .ok_or(PreviewNotFound("invalid preview programme start"))?;
+    item.in_point = TimeDelta::zero();
+    item.out_point = seek
         .checked_add(&duration)
         .ok_or(PreviewNotFound("invalid preview source range"))?;
     Ok(())
@@ -269,7 +278,7 @@ async fn prepare_inner(
         FsPath::new(&runtime.ffmpeg.path),
         FsPath::new(&runtime.ffprobe.path),
     )?;
-    configuration.playout.virtual_start = Some(item.start);
+    configuration.playout.virtual_start = Some(selected.playback_start);
     configuration.ffmpeg.reports_folder = Some(
         working
             .to_str()

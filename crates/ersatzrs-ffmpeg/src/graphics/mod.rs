@@ -211,6 +211,7 @@ pub struct GraphicsRenderContext {
     pub square_pixel_frame_size: FrameSize,
     motion_source_durations: BTreeMap<i64, f64>,
     stream_offset: std::time::Duration,
+    stream_duration: Option<std::time::Duration>,
 }
 
 impl GraphicsRenderContext {
@@ -221,6 +222,7 @@ impl GraphicsRenderContext {
             square_pixel_frame_size,
             motion_source_durations: BTreeMap::new(),
             stream_offset: std::time::Duration::ZERO,
+            stream_duration: None,
         }
     }
 
@@ -229,6 +231,13 @@ impl GraphicsRenderContext {
     #[must_use]
     pub fn with_stream_offset(mut self, offset: std::time::Duration) -> Self {
         self.stream_offset = offset;
+        self
+    }
+
+    /// Finite remaining output duration, independent of the motion start time.
+    #[must_use]
+    pub fn with_stream_duration(mut self, duration: std::time::Duration) -> Self {
+        self.stream_duration = Some(duration);
         self
     }
 
@@ -631,6 +640,12 @@ fn render_motion_graphics_element(
         InputFile::graphics_motion(video_path, config.end_behavior == MotionEndBehavior::Loop);
     let start = config.start_seconds.unwrap_or_default().max(0.0);
     let offset = context.stream_offset.as_secs_f64();
+    if context
+        .stream_duration
+        .is_some_and(|duration| start >= offset + duration.as_secs_f64())
+    {
+        return Ok(None);
+    }
     let mut seek = (offset - start).max(0.0);
     if let Some(duration) = context
         .motion_source_duration(element.id)
@@ -640,7 +655,7 @@ fn render_motion_graphics_element(
             MotionEndBehavior::Loop => seek %= duration,
             MotionEndBehavior::Disappear if seek >= duration => return Ok(None),
             MotionEndBehavior::Hold
-                if seek > duration + config.hold_seconds.unwrap_or_default().max(0.0) =>
+                if seek >= duration + config.hold_seconds.unwrap_or_default().max(0.0) =>
             {
                 return Ok(None)
             }
@@ -663,10 +678,31 @@ fn render_motion_graphics_element(
             .filter_steps
             .push("reverse,trim=end_frame=1,setpts=PTS-STARTPTS".into());
     } else if seek > 0.0 {
-        input.input_options.extend(["-ss".into(), trim_float(seek)]);
-        // A seek between source frames can leave a positive first timestamp.
-        // Framesync must see the first decoded motion frame at chunk time zero.
-        input.filter_steps.push("setpts=PTS-STARTPTS".into());
+        let input_seek = if config.end_behavior == MotionEndBehavior::Hold {
+            context
+                .motion_source_duration(element.id)
+                .filter(|duration| *duration > 0.0)
+                .map_or(seek, |duration| seek.min((duration - 1.0).max(0.0)))
+        } else {
+            seek
+        };
+        input
+            .input_options
+            .extend(["-ss".into(), trim_float(input_seek)]);
+        // Keep a decoded EOF frame when the requested phase falls between the
+        // final source timestamp and duration. Clamp decoding to the last second;
+        // extending that frame before trimming avoids an empty sought input.
+        // Retain input seek timestamps until trimming; normalizing earlier can
+        // advance a frame when the clamped seek falls between source frames.
+        if input_seek < seek {
+            input.filter_steps.push(format!(
+                "tpad=stop_mode=clone:stop_duration=1,trim=start={},setpts=PTS-STARTPTS",
+                trim_float(seek - input_seek)
+            ));
+        } else {
+            // Fractional input seeks can leave a positive first timestamp.
+            input.filter_steps.push("setpts=PTS-STARTPTS".into());
+        }
     }
     let delay = (start - offset).max(0.0);
     if delay > 0.0 {
@@ -1443,7 +1479,11 @@ fn graphics_motion_enable_expression(
             if end <= start {
                 return format!("gte({time},{})", trim_float(start));
             }
-            format!("between({time},{},{})", trim_float(start), trim_float(end))
+            format!(
+                "gte({time},{})*lt({time},{})",
+                trim_float(start),
+                trim_float(end)
+            )
         }
     }
 }

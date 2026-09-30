@@ -11416,6 +11416,28 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row154 is Adapt under accepted ADRs 0005/0105 after the complete 908fa961
+source audit. Causal checks reproduced near-EOF transparent Hold output,
+NTSC first-frame drift, an unshifted preview anchor and missing numeric seek.
+75 focused checks pass (46b12aef-2f24-4fb2-be86-30cdffd8d4c7), including
+decoded EOF/exclusive expiry/full-loop/NTSC boundaries, actual official Next
+canvas, Dutch audio, subtitles/credits and artifact/session cleanup.
+The reviewed complete native preview argv snapshot passes (bb7f86f8), covering
+media/source seeks, recovered last frame, shifted script clock and finite output.
+Matched Leptos SSR/WASM and all 18 Chromium/Firefox cases pass in
+ test-results/ucu09-row154-browser/: both engines decode held blue motion and
+ timed green script, then black after expiry; existing controls, credits,
+ archives and no-JS checks pass. Strict FFmpeg/infra/web all-target Clippy,
+ architecture/hydration lint and formatting pass. Native and Next smoke pass:
+ IPTV/HLS, Dutch audio/subtitles, preview, public callback rejection, wrapper
+ restart and idle cleanup. Row146's 87 TSDuck checks remain valid for unchanged
+ transport/mux; final UCU-09 pipeline-wide TSDuck remains required.
+Startup/runtime health requires tpad. Published v2.0.3 Linux archive and exact
+Next e7997fa binary checksums are reverified; no build or publication needed.
+Pin advances to 908fa961; 154/181 reconciled, 27 pending. Continue row155.
+Window closeout, authorized push and terminal exact-SHA green CI remain.
+No intermediate push/CI or acceptance weakening.
+
 Row153 is N/A: the full upstream 0e1b355f audit updates twelve NuGet project
 manifests and one Next AAC release note; no handler/repository/schema/builder
 or runtime pin changes. The .NET package versions do not map to Cargo upgrades.

@@ -3777,7 +3777,66 @@ fn graphics_element_multi_day_motion_timing_snapshot() {
         panic!("motion must use the native input");
     };
     insta::assert_snapshot!(format!("filters={:?} enable={:?}", input.filter_steps, overlay.enable),
-        @r#"filters=["setpts=PTS+172800.125/TB"] enable=Some("between(t,172800.125,349200.875)")"#);
+        @r#"filters=["setpts=PTS+172800.125/TB"] enable=Some("gte(t,172800.125)*lt(t,349200.875)")"#);
+}
+
+#[test]
+fn pipeline_with_seeked_motion_and_script_graphics_snapshot() {
+    // ADRs 0005/0105: native preview sources and frame filters share programme time.
+    let output = tempfile::tempdir().unwrap();
+    let context =
+        GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1920, 1080))
+            .with_stream_offset(Duration::from_secs(3))
+            .with_stream_duration(Duration::from_secs(3))
+            .with_motion_source_duration(21, 2.0);
+    let elements = [
+        GraphicsElement {
+            id: 21,
+            name: "motion".into(),
+            z_index: 2,
+            kind: ersatzrs_domain::GraphicsElementKind::Motion,
+            config: GraphicsElementConfig::Motion(MotionGraphicsConfig {
+                video_path: Some("/media/motion.mkv".into()),
+                start_seconds: Some(1.0),
+                hold_seconds: Some(2.0),
+                end_behavior: MotionEndBehavior::Hold,
+            }),
+            ..GraphicsElement::default()
+        },
+        GraphicsElement {
+            id: 22,
+            name: "timed-script".into(),
+            z_index: 3,
+            kind: ersatzrs_domain::GraphicsElementKind::Script,
+            config: GraphicsElementConfig::Script(ScriptGraphicsConfig {
+                command: Some("return 'setcolor lime\\nrect 64 0 20 20 fill\\n'".into()),
+                start_seconds: Some(2.0),
+                duration_seconds: Some(2.0),
+                ..ScriptGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        },
+    ];
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.state.start = Some(Duration::from_secs(3));
+    request.state.duration = Some(Duration::from_secs(3));
+    request.graphics_overlays = GraphicsTemplateRenderer::new(output.path())
+        .render_graphics_elements(&elements, &BTreeMap::new(), &context)
+        .unwrap()
+        .into_iter()
+        .map(|element| {
+            element
+                .into_pipeline_overlay()
+                .with_programme_offset(Duration::from_secs(3))
+        })
+        .collect();
+    let command = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs);
+    insta::assert_snapshot!(normalize_temp_paths(
+        &command.arguments.join("\n"),
+        output.path()
+    ));
 }
 
 #[test]

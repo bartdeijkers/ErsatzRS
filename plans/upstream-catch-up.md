@@ -25,7 +25,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **150**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **154**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Continue at row 154. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Continue at row 155. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,49 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 154 source map — motion timing and preview graphics anchors (Adapt)
+
+Upstream `908fa961782618aed2621ca8fa6d02d9b658102f` changes MotionElement,
+its decoded-frame tests and troubleshooting preparation. Adapt under
+accepted ADRs 0005/0105: retain native FFmpeg overlays and the shared canvas;
+no Skia renderer, runtime rebuild or new dependency is required.
+
+| Upstream requirement | ErsatzRS target | Required evidence |
+| --- | --- | --- |
+| Recover the last decoded Hold frame near/after EOF; reject inclusive expiry, including zero hold | FFmpeg graphics motion renderer and canvas timing tests | Published v2.0.3 decoded red/blue/alpha boundary checks |
+| Preserve complete subsequent loops after a partial initial loop | Motion source phase preparation | Decode multiple loop cycles after seeks; preserve fractional-first-frame coverage |
+| Stop at the finite stream finish and skip starts at/after that finish | Graphics render context and bounded canvas/native output | Exact frame count and no motion input when start is outside the stream |
+| Anchor media troubleshooting at now minus seek and expose numeric MediaItem_SeekSeconds | Native troubleshooting, Next selection/configuration, graphics template variables | Template/anchor regressions and both-engine playback proof |
+| Ignore seek for live previews; preserve finite-source seeking | Shared preview seek selection and existing liveness read model | Live/finite regression and remote/prepared/producer Next playback |
+| Keep subtitles, alternate audio, credits, owned artifacts and schedule isolation | Existing native/Next preparation and credits adapter | Existing regressions plus actual seeked playback/archives |
+
+Confirmed source gaps: Hold uses a strict greater-than expiry test and seeks
+near EOF without frame recovery; Next media preview puts seek only in source
+in_point while its canvas starts at zero. Native preview content_start equals
+now. The numeric MediaItem_SeekSeconds alias is absent. Multi-cycle decoded testing passes unchanged with the published FFmpeg 9
+input loop/seek behavior; preserve that existing path. All validation uses
+the already published exact runtime and official Next engine.
+
+Acceptance: 75 focused checks pass (Nextest
+`46b12aef-2f24-4fb2-be86-30cdffd8d4c7`), including NTSC first-frame accuracy,
+EOF/expiry/loop boundaries, actual official Next canvas playback, Dutch audio,
+subtitles/credits and artifact/session cleanup. The reviewed complete native
+argv snapshot passes (`bb7f86f8-1263-4299-a163-3286b7f2fac2`): media seek,
+bounded last-frame recovery, exclusive Hold expiry, programme-clock frame
+filters and finite output are wired together without local paths.
+Matched Leptos SSR/WASM and all 18 Chromium/Firefox cases pass in
+`test-results/ucu09-row154-browser/`: both engines decode the expected held
+blue motion and timed green script, then black after expiry, while retaining
+existing playback/credits/archive/no-JS checks. Strict affected all-target
+Clippy, architecture/hydration lint, formatting and progress validation pass.
+Native and Next smoke pass, including Dutch audio/subtitles, preview,
+IPTV/HLS, private callback isolation, wrapper restart and idle cleanup.
+Row146's 87 TSDuck checks remain valid transport evidence because transport
+and mux arguments are unchanged; final UCU-09 pipeline-wide TSDuck remains
+required. Existing reviewed UI geometry is unchanged. Published v2.0.3 and
+Next e7997fa checksums are reverified. No new runtime build, dependency or
+publication. Pin advances to `908fa961`; continue row155 without push or CI.
 
 ## Row 153 source map — .NET dependencies and AAC surround notes (N/A)
 
@@ -4310,7 +4353,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | Port | support-pages | `feat(web): troubleshoot music-video credits` | ucu-09; optional music-only template, both-engine seek/audio/subtitle precedence and archived ASS/template; 762 web checks, strict lint, 14 browser cases, no-JS/mobile review and native/Next smoke pass. |
 | 152 | `495e3799` | chore: update changelog for new next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream Next AMF release notes` | ucu-09; one upstream changelog line only; no source/protocol/build change. Existing runtime integration and approved unverified AMF hardware debt remain. |
 | 153 | `0e1b355f` | chore: update dependencies (#3018) | N/A | upstream-baseline-catch-up | `test(parity): reconcile upstream dependency and AAC notes` | ucu-09; NuGet bumps only; announced AAC surround behavior already covered by native and exact Next. Reviewed six-channel argv, stereo/AC3 guards, strict lint and published-runtime decode pass. |
-| 154 | `908fa961` | fix: graphics engine motion (#3019) | | | | ucu-09; provisional: Adapt (ADR 0005). Claude 2026-09-23 triage: graphics motion timing and hold, and seek seconds reaching templates. |
+| 154 | `908fa961` | fix: graphics engine motion (#3019) | Adapt | drawvg-graphics-engine | `fix(parity): reconcile motion boundaries and preview clocks` | ucu-09; accepted ADRs 0005/0105; EOF recovery, exclusive Hold expiry, full loops and preview programme clocks. 75 focused checks, native argv, 18 browser cases, strict lint and native/Next smoke pass; published v2.0.3/Next artifacts reused. |
 | 155 | `d1c2ab3a` | chore: updates for new next, ffmpeg builds | | | | ucu-09; provisional: N/A (ADR 0063). Claude 2026-09-23 triage: their custom FFmpeg build and Next config; check native AMF capability coverage as separate debt. |
 | 156 | `a4642d95` | fix: api response codes (#3020) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: correct API status codes for validation errors on the same endpoints. |
 | 157 | `2bbfbd10` | fix: playback troubleshooting (#3021) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: troubleshooter lock release and reliability. |

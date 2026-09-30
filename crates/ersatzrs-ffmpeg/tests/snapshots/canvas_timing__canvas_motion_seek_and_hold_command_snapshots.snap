@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/canvas_timing.rs
-assertion_line: 98
+assertion_line: 118
 expression: "commands.join(\"\\n\\n\")"
 ---
 loop:
@@ -59,7 +59,44 @@ color=c=black@0.0:s=64x64:r=4/1,format=bgra
 -i
 motion.nut
 -filter_complex
-[1:0]reverse,trim=end_frame=1,setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=0:y=0:format=rgb:enable='between((t+3.25),1,5)'[vge0];[vge0]format=bgra[vpf]
+[1:0]reverse,trim=end_frame=1,setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=0:y=0:format=rgb:enable='gte((t+3.25),1)*lt((t+3.25),5)'[vge0];[vge0]format=bgra[vpf]
+-map
+[vpf]
+-t
+00:00:01.0000000
+-an
+-c:v
+ffv1
+-level
+3
+-slices
+16
+-slicecrc
+0
+-pix_fmt
+bgra
+-f
+nut
+pipe:1
+
+near-eof:
+-nostdin
+-hide_banner
+-nostats
+-loglevel
+error
+-f
+lavfi
+-readrate
+1
+-i
+color=c=black@0.0:s=64x64:r=4/1,format=bgra
+-ss
+1
+-i
+motion.nut
+-filter_complex
+[1:0]tpad=stop_mode=clone:stop_duration=1,trim=start=0.95,setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=0:y=0:format=rgb:enable='gte((t+2.95),1)*lt((t+2.95),5)'[vge0];[vge0]format=bgra[vpf]
 -map
 [vpf]
 -t

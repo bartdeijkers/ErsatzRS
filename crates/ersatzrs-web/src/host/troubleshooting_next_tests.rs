@@ -147,12 +147,64 @@ async fn media_preview_retains_custom_selector_and_defaults_to_subtitle_off_with
 }
 
 #[tokio::test]
+async fn live_media_preview_ignores_seek_while_finite_media_retains_it() {
+    let fixture = Fixture::new().await;
+    for sql in [
+        r#"INSERT INTO "RemoteStream" ("Id","IsLive","Liveness","Duration") VALUES (10,1,2,'00:01:00')"#,
+        r#"INSERT INTO "RemoteStreamMetadata" ("Id","RemoteStreamId","MetadataKind","Title","DateAdded","DateUpdated") VALUES (30,10,0,'Synthetic','2026-09-30','2026-09-30')"#,
+    ] {
+        sqlx::query(sql).execute(&fixture.state.pool).await.unwrap();
+    }
+    let media = PreviewMediaItem {
+        media_item_id: 10,
+        media_version_id: 100,
+        kind: "RemoteStream".into(),
+        path: "synthetic.mkv".into(),
+        duration_seconds: 60.0,
+    };
+    assert_eq!(
+        preview_media_seek_seconds(&fixture.state, &media, Some(15))
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query(r#"UPDATE "RemoteStream" SET "IsLive"=0,"Liveness"=1 WHERE "Id"=10"#)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        preview_media_seek_seconds(&fixture.state, &media, Some(15))
+            .await
+            .unwrap(),
+        15
+    );
+}
+
+#[test]
+fn media_preview_seek_anchors_programme_time_instead_of_only_seeking_tracks() {
+    let now = DateTime::from_timestamp(1_000, 0).unwrap();
+    let mut item = PlayoutItem {
+        start: now,
+        ..PlayoutItem::default()
+    };
+    seek_media_item(&mut item, Some(15), 60.0).unwrap();
+    assert_eq!(item.start, now - TimeDelta::seconds(15));
+    assert_eq!(item.finish, now + TimeDelta::seconds(30));
+    assert_eq!(item.in_point, TimeDelta::zero());
+    assert_eq!(item.out_point, TimeDelta::seconds(45));
+}
+
+#[tokio::test]
 async fn media_preview_preserves_selected_profile_audio_seek_and_whole_second_start() {
     let fixture = Fixture::new().await;
     let selected = select(&fixture.state, &Fixture::query()).await.unwrap();
     assert_eq!(selected.profile.profile.id, 2);
     assert_eq!(selected.media.media_version_id, 100);
-    assert_eq!(selected.media.item.in_point, TimeDelta::seconds(15));
+    assert_eq!(selected.media.item.in_point, TimeDelta::zero());
+    assert_eq!(
+        selected.playback_start - selected.media.item.start,
+        TimeDelta::seconds(15)
+    );
     assert_eq!(selected.media.item.out_point, TimeDelta::seconds(45));
     assert_eq!(selected.media.item.start.timestamp_subsec_nanos(), 0);
     assert_eq!(
@@ -214,7 +266,10 @@ async fn preparation_writes_one_isolated_item_with_matching_virtual_start() {
     let playout: protocol::Playout =
         serde_json::from_slice(&tokio::fs::read(entry.path()).await.unwrap()).unwrap();
     assert_eq!(playout.items.len(), 1);
-    assert_eq!(config.playout.virtual_start, Some(playout.items[0].start));
+    assert_eq!(
+        config.playout.virtual_start,
+        Some(playout.items[0].start + TimeDelta::seconds(15))
+    );
     assert_eq!(number, ".troubleshooting");
     assert_eq!(
         config.ffmpeg.reports_folder.as_deref(),
@@ -544,7 +599,11 @@ async fn media_preview_uses_the_bound_versions_duration_when_an_earlier_file_is_
     query.seek_seconds = Some(70);
     let selected = select(&fixture.state, &query).await.unwrap();
     assert_eq!(selected.media.media_version_id, 101);
-    assert_eq!(selected.media.item.in_point, TimeDelta::seconds(70));
+    assert_eq!(selected.media.item.in_point, TimeDelta::zero());
+    assert_eq!(
+        selected.playback_start - selected.media.item.start,
+        TimeDelta::seconds(70)
+    );
     assert_eq!(selected.media.item.out_point, TimeDelta::seconds(90));
 }
 
@@ -647,7 +706,11 @@ async fn music_video_credits_preview_preserves_audio_seek_archive_and_persisted_
     query.subtitle_id = Some(999); // Generated credits take precedence over a persisted track.
     let selected = select(&fixture.state, &query).await.unwrap();
     assert_eq!(selected.subtitle_id, Some(0));
-    assert_eq!(selected.media.item.in_point, TimeDelta::seconds(35));
+    assert_eq!(selected.media.item.in_point, TimeDelta::zero());
+    assert_eq!(
+        selected.playback_start - selected.media.item.start,
+        TimeDelta::seconds(35)
+    );
     let paths = fixture.paths();
     let mut session = None;
     let (manifest, _, _, _) = prepare(
@@ -671,7 +734,7 @@ async fn music_video_credits_preview_preserves_audio_seek_archive_and_persisted_
     assert_eq!(json["items"][0]["tracks"]["audio"]["stream_index"], 2);
     assert_eq!(
         json["items"][0]["tracks"]["video"]["source"]["in_point_ms"],
-        35000
+        0
     );
     assert_eq!(
         json["items"][0]["tracks"]["subtitle"]["source"]["in_point_ms"],
@@ -681,7 +744,7 @@ async fn music_video_credits_preview_preserves_audio_seek_archive_and_persisted_
         .await
         .unwrap();
     assert!(ass.contains("Synthetic Credit Song"));
-    assert!(ass.contains("0:00:09.00")); // Closing credits at source 44s, viewed from 35s.
+    assert!(ass.contains("0:00:44.00")); // Next applies the 35s programme offset to the original cues.
     assert!(
         tokio::fs::read_to_string(paths.output.join("music-video-credits.ass"))
             .await

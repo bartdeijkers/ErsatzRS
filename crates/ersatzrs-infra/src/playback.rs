@@ -2435,6 +2435,36 @@ pub async fn render_playback_graphics_overlays(
     .await
 }
 
+/// Render a media troubleshooting preview after joining its programme clock.
+/// Sources carry their own phase; frame filters retain zero-based output PTS.
+///
+/// # Errors
+/// Returns invalid timing, database/template or rendering errors.
+pub async fn render_playback_preview_graphics_overlays(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid preview offset"))?;
+    let mut artifacts = render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        None,
+        offset,
+    )
+    .await?;
+    artifacts.overlays = artifacts
+        .overlays
+        .into_iter()
+        .map(|overlay| overlay.with_programme_offset(offset))
+        .collect();
+    Ok(artifacts)
+}
+
 /// Render overlays within the caller's shared playback startup deadline.
 ///
 /// Signal cancellation and await this future before releasing the graphics
@@ -2698,7 +2728,11 @@ async fn graphics_render_context_with_motion_probe(
 ) -> Result<GraphicsRenderContext> {
     let render_context =
         GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size)
-            .with_stream_offset(stream_offset);
+            .with_stream_offset(stream_offset)
+            .with_stream_duration(
+                Duration::try_from_secs_f64(context.duration_seconds)
+                    .map_err(|_| graphics_startup_error("invalid graphics duration"))?,
+            );
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return Ok(render_context);
     };

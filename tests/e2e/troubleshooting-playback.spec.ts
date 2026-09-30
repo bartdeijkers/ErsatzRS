@@ -50,6 +50,12 @@ test.describe('playback troubleshooting engines', () => {
         '-f', 'lavfi', '-i', `color=${color}:s=40x20`, '-frames:v', '1',
         '-threads', '1', path.join(root, `${color}.png`)]);
     }
+    const motion = path.join(root, 'timed-motion.mkv');
+    execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'color=red:s=40x20:r=25:d=1',
+      '-f', 'lavfi', '-i', 'color=blue:s=40x20:r=25:d=1',
+      '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]',
+      '-map', '[v]', '-c:v', 'ffv1', motion]);
     profile = `${id}`;
     sql(`
 INSERT INTO "Resolution" ("Id","Name","Width","Height") VALUES (${id},'Preview fixture',320,180);
@@ -99,12 +105,16 @@ VALUES (${id},'Preview watermark A',15,15,5,0,'${quote(path.join(root, 'red.png'
 (${id + 1},'Preview watermark B',15,15,5,0,'${quote(path.join(root, 'lime.png'))}',2,1,100,0,1,5,15,1);
 INSERT INTO "GraphicsElement" ("Id","Name","Kind","ZIndex","Location","Scale","PlaceWithinSourceContent","EpgEntries","Config","HorizontalMarginPercent","VerticalMarginPercent","OpacityPercent")
 VALUES (${id},'Preview image with programme information and broadcast branding',0,2,4,0,0,0,'${quote(JSON.stringify({ kind: 'image', image: path.join(root, 'blue.png') }))}',0,5,100);
+INSERT INTO "GraphicsElement" ("Id","Name","Kind","ZIndex","Location","Scale","PlaceWithinSourceContent","EpgEntries","Config","HorizontalMarginPercent","VerticalMarginPercent","OpacityPercent")
+VALUES (${id + 20},'Timed motion hold',3,2,3,0,0,0,'${quote(JSON.stringify({ kind: 'motion', video_path: motion, start_seconds: 1, hold_seconds: 2, end_behavior: 'Hold' }))}',0,0,100);
+INSERT INTO "GraphicsElement" ("Id","Name","Kind","ZIndex","Location","Scale","PlaceWithinSourceContent","EpgEntries","Config","HorizontalMarginPercent","VerticalMarginPercent","OpacityPercent")
+VALUES (${id + 21},'Timed drawvg script',4,3,3,0,0,0,'${quote(JSON.stringify({ kind: 'script', command: "return 'setcolor lime\\nrect 64 0 20 20 fill\\n'", start_seconds: 2, duration_seconds: 2 }))}',0,0,100);
 `);
   });
 
   test.afterAll(() => {
     if (db) sql(`DELETE FROM "MediaSource" WHERE "Id"=${id};
-DELETE FROM "GraphicsElement" WHERE "Id"=${id};
+DELETE FROM "GraphicsElement" WHERE "Id" IN (${id},${id + 20},${id + 21});
 DELETE FROM "ChannelWatermark" WHERE "Id" IN (${id},${id + 1});
 DELETE FROM "FFmpegProfile" WHERE "Id"=${id};
 DELETE FROM "Resolution" WHERE "Id"=${id};`);
@@ -247,6 +257,45 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         fullPage: true,
       });
       expect(errors).toEqual([]);
+    });
+  }
+
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} motion holds the sought final frame and expires on programme time`, async ({ page, baseURL }) => {
+      test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,
+        'Official Next runtime acceptance requires ETV_NEXT_FOLDER.');
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${id}&preferredAudioTitle=Dutch&subtitleId=${id}`);
+      await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption(engine);
+      await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+      await page.locator('input[name="seekSeconds"]').fill('3');
+      await page.locator('select[name="graphicsElement"]').selectOption([`${id + 20}`, `${id + 21}`]);
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      const playlist = engine === 'Next' ? 'ffmpeg.m3u8' : 'live.m3u8';
+      const url = `${baseURL}/iptv/session/.troubleshooting/${playlist}`;
+      await expect.poll(async () => (await (await page.request.get(url)).text()).includes('#EXT-X-ENDLIST')).toBe(true);
+      const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
+        ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+      for (const [seek, blue] of [['0', true], ['2.25', false]] as const) {
+        const frame = execFileSync(ffmpeg, ['-nostdin', '-v', 'error', '-i', url,
+          '-ss', seek, '-map', '0:v:0', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+        expect(frame.length).toBe(320 * 180 * 3);
+        const pixel = [...frame.subarray((8 * 320 + 8) * 3, (8 * 320 + 8) * 3 + 3)];
+        const script = [...frame.subarray((8 * 320 + 72) * 3, (8 * 320 + 72) * 3 + 3)];
+        if (blue) {
+          expect(pixel[2]).toBeGreaterThan(180);
+          expect(pixel[0]).toBeLessThan(40);
+          expect(pixel[1]).toBeLessThan(40);
+          expect(script[1]).toBeGreaterThan(180);
+          expect(script[0]).toBeLessThan(40);
+          expect(script[2]).toBeLessThan(40);
+        } else {
+          expect(pixel.every(component => component < 40)).toBe(true);
+          expect(script.every(component => component < 40)).toBe(true);
+        }
+      }
+      const archive = await page.request.get('/api/troubleshoot/playback/archive');
+      expect(archive.status()).toBe(200);
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
     });
   }
 

@@ -28,12 +28,12 @@ use ersatzrs_infra::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
         load_playback_profile, load_playback_subtitle_candidates, load_source_audio_streams,
         load_source_video_stream, render_playback_graphics_overlays,
-        resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
-        select_custom_playback_streams, select_playback_audio_stream_index,
-        select_playback_graphics, select_playback_subtitle, select_playback_watermarks,
-        subtitle_input_for_stream, watermark_overlay_for_stream, CustomStreamSelection,
-        PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile,
-        PlaybackSubtitle,
+        render_playback_preview_graphics_overlays, resolve_playback_graphics_by_ids,
+        resolve_playback_watermarks_by_ids, select_custom_playback_streams,
+        select_playback_audio_stream_index, select_playback_graphics, select_playback_subtitle,
+        select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
+        CustomStreamSelection, PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext,
+        PlaybackProfile, PlaybackSubtitle,
     },
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
@@ -299,7 +299,7 @@ async fn start_playback_preview(
         &media_path,
     )
     .await;
-    let seek_seconds = preview_seek_seconds(query.seek_seconds, media.duration_seconds);
+    let seek_seconds = preview_media_seek_seconds(state, &media, query.seek_seconds).await?;
     let program_duration = Duration::from_secs_f64(preview_duration_seconds(
         media.duration_seconds,
         seek_seconds,
@@ -1004,6 +1004,26 @@ fn preview_output_format(streaming_mode: Option<&str>) -> OutputFormat {
     }
 }
 
+async fn preview_media_seek_seconds(
+    state: &NativeAdminTroubleshootingRuntime,
+    media: &PreviewMediaItem,
+    requested: Option<i64>,
+) -> ApiResult<i64> {
+    use ersatzrs_core::repositories::AdminMediaRepository as _;
+    if media.kind == "RemoteStream" {
+        let detail = state
+            .repositories
+            .admin_media
+            .get_remote_stream_detail_admin(media.media_item_id)
+            .await?
+            .ok_or(PreviewNotFound("remote stream does not exist"))?;
+        if detail.liveness == ersatzrs_domain::RemoteStreamLiveness::Live {
+            return Ok(0);
+        }
+    }
+    Ok(preview_seek_seconds(requested, media.duration_seconds))
+}
+
 fn preview_seek_seconds(requested: Option<i64>, duration_seconds: f64) -> i64 {
     let seek = requested.unwrap_or_default().max(0);
     if duration_seconds <= 0.0 {
@@ -1403,6 +1423,11 @@ async fn preview_graphics_overlays(
         .and_then(|stream| stream.square_pixel_frame_size(frame_size))
         .unwrap_or(frame_size);
     let now = Utc::now();
+    let Some(content_start) =
+        chrono::Duration::try_seconds(seek_seconds).and_then(|seek| now.checked_sub_signed(seek))
+    else {
+        return PlaybackGraphicsArtifacts::default();
+    };
     let graphics = match resolve_playback_graphics_by_ids(pool, graphics_element_ids).await {
         Ok(graphics) => graphics,
         Err(error) => {
@@ -1410,7 +1435,7 @@ async fn preview_graphics_overlays(
             return PlaybackGraphicsArtifacts::default();
         }
     };
-    match render_playback_graphics_overlays(
+    match render_playback_preview_graphics_overlays(
         pool,
         &graphics,
         &PlaybackGraphicsRenderContext {
@@ -1419,7 +1444,7 @@ async fn preview_graphics_overlays(
             media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(media.media_item_id),
             media_path: media_path.to_owned(),
             channel_start_time: now,
-            content_start_time: now,
+            content_start_time: content_start,
             content_finish_time: chrono::Duration::from_std(program_duration)
                 .ok()
                 .and_then(|duration| now.checked_add_signed(duration)),

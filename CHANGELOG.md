@@ -55,6 +55,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Recover the last motion-graphics frame when seeking near EOF and stop Hold
+  at its exact expiry, including zero hold time. Anchor media troubleshooting
+  graphics at the selected seek in both engines and expose the numeric
+  `MediaItem_SeekSeconds` template variable while preserving subtitle and audio
+  timing.
+
 - Restore Plex Other Video folder tags across Windows, UNC and Unix server
   paths. Refresh existing items on their next scan while preserving subtitles,
   labels and independently owned collection tags.

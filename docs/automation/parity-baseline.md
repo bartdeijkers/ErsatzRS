@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0e1b355f78d12c014682db23ddbaba682c6540be` |
-| **Commit subject** | `chore: update dependencies (#3018)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0e1b355f78d12c014682db23ddbaba682c6540be |
+| **Pinned commit** | `908fa961782618aed2621ca8fa6d02d9b658102f` |
+| **Commit subject** | `fix: graphics engine motion (#3019)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/908fa961782618aed2621ca8fa6d02d9b658102f |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

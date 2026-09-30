@@ -305,6 +305,20 @@ impl GraphicsPipelineOverlay {
         }
     }
 
+    /// Evaluate frame filters on the programme clock while retaining zero-based
+    /// output timestamps. Native image inputs prepare their own source phases.
+    #[must_use]
+    pub fn with_programme_offset(mut self, offset: std::time::Duration) -> Self {
+        if !offset.is_zero() {
+            if let Self::Drawvg { filter, .. } | Self::Drawtext { filter, .. } = &mut self {
+                let offset = offset.as_secs_f64();
+                *filter =
+                    format!("settb=AVTB,setpts=PTS+{offset}/TB,{filter},setpts=PTS-{offset}/TB");
+            }
+        }
+        self
+    }
+
     pub(crate) const fn z_index(&self) -> i32 {
         match self {
             Self::Drawvg { z_index, .. }

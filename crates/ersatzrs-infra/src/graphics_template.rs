@@ -160,6 +160,10 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
         Value::String(context.channel_start_time.to_rfc3339()),
     );
     root.insert(
+        "MediaItem_SeekSeconds".to_owned(),
+        number_value(context.stream_seek_seconds),
+    );
+    root.insert(
         "MediaItem_StreamSeek".to_owned(),
         duration_value(context.stream_seek_seconds),
     );

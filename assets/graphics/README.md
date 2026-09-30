@@ -14,3 +14,9 @@ EPG fields such as `Guide_Start`, `Guide_Stop`, and per-item variables from
 schedule YAML/scripted graphics joins. VGS templates are rendered without XML
 escaping because drawvg expects script tokens. ASS templates are also rendered
 raw so libass override tags and dialogue text remain intact.
+
+`MediaItem_SeekSeconds` is the numeric elapsed programme time at rendering or
+preview join. `MediaItem_StreamSeek.TotalSeconds` retains the duration-shaped
+version of the same value. A troubleshooting media seek also moves
+`MediaItem_Start` backwards, while `MediaItem_Stop` remains the bounded preview
+finish; graphics therefore keep their programme anchor after a seek.

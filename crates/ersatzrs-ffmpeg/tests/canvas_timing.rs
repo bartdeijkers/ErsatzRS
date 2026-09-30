@@ -10,10 +10,20 @@ use ersatzrs_ffmpeg::{
 };
 
 fn request(root: &Path, element: GraphicsElement, offset_ms: u64) -> CanvasRenderRequest {
+    request_with_source_duration(root, element, offset_ms, 2.0)
+}
+
+fn request_with_source_duration(
+    root: &Path,
+    element: GraphicsElement,
+    offset_ms: u64,
+    source_duration: f64,
+) -> CanvasRenderRequest {
     let frame = FrameSize::new(64, 64);
     let context = GraphicsRenderContext::new(frame, frame)
         .with_stream_offset(Duration::from_millis(offset_ms))
-        .with_motion_source_duration(element.id, 2.0);
+        .with_stream_duration(Duration::from_secs(1))
+        .with_motion_source_duration(element.id, source_duration);
     let overlays = GraphicsTemplateRenderer::new(root)
         .render_graphics_elements(&[element], &BTreeMap::new(), &context)
         .unwrap()
@@ -69,6 +79,24 @@ fn motion(path: &Path, behavior: MotionEndBehavior) -> GraphicsElement {
 }
 
 #[test]
+fn canvas_motion_start_at_or_after_stream_finish_skips_the_input() {
+    let frame = FrameSize::new(64, 64);
+    let context = GraphicsRenderContext::new(frame, frame)
+        .with_stream_offset(Duration::from_mins(10))
+        .with_stream_duration(Duration::from_secs(1));
+    for start in [601.0, 602.0] {
+        let mut element = motion(Path::new("motion.nut"), MotionEndBehavior::Loop);
+        if let GraphicsElementConfig::Motion(config) = &mut element.config {
+            config.start_seconds = Some(start);
+        }
+        assert!(GraphicsTemplateRenderer::new("graphics")
+            .render_graphics_elements(&[element], &BTreeMap::new(), &context)
+            .unwrap()
+            .is_empty());
+    }
+}
+
+#[test]
 fn canvas_programme_clock_command_snapshot() {
     let root = tempfile::tempdir().unwrap();
     let command = build_canvas_command(request(root.path(), script(), 2250)).unwrap();
@@ -85,6 +113,7 @@ fn canvas_motion_seek_and_hold_command_snapshots() {
     for (name, behavior, offset) in [
         ("loop", MotionEndBehavior::Loop, 4250),
         ("hold", MotionEndBehavior::Hold, 3250),
+        ("near-eof", MotionEndBehavior::Hold, 2950),
         ("disappear", MotionEndBehavior::Disappear, 3250),
     ] {
         let command = build_canvas_command(request(
@@ -107,6 +136,7 @@ fn runtime() -> std::ffi::OsString {
 }
 
 fn decode(root: &Path, request: CanvasRenderRequest) -> Vec<u8> {
+    let expected_frames = request.duration.as_secs_f64() * request.frame_rate.parsed();
     let encoded = Command::new(runtime())
         .args(build_canvas_command(request).unwrap().arguments)
         .output()
@@ -129,7 +159,9 @@ fn decode(root: &Path, request: CanvasRenderRequest) -> Vec<u8> {
         "{}",
         String::from_utf8_lossy(&decoded.stderr)
     );
-    assert_eq!(decoded.stdout.len(), 64 * 64 * 4 * 4);
+    assert_eq!(decoded.stdout.len() % (64 * 64 * 4), 0);
+    let count = u32::try_from(decoded.stdout.len() / (64 * 64 * 4)).unwrap();
+    assert!((f64::from(count) - expected_frames).abs() < f64::EPSILON);
     decoded.stdout
 }
 
@@ -208,6 +240,131 @@ fn canvas_motion_continues_loop_hold_and_disappear_after_seek() {
             }
         }
     }
+}
+
+#[test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+fn canvas_motion_hold_recovers_near_eof_and_stops_at_exact_expiry() {
+    let root = tempfile::tempdir().unwrap();
+    let source = motion_source(root.path());
+    for (offset, alpha) in [(2950, 255), (2990, 255), (3000, 255), (5000, 0)] {
+        let frames = decode(
+            root.path(),
+            request(
+                root.path(),
+                motion(&source, MotionEndBehavior::Hold),
+                offset,
+            ),
+        );
+        for frame in frames.chunks_exact(64 * 64 * 4) {
+            let pixel = &frame[(4 * 64 + 4) * 4..(4 * 64 + 4) * 4 + 4];
+            assert_eq!(pixel[3], alpha, "Hold at {offset}: {pixel:?}");
+            if alpha > 0 {
+                assert!(
+                    pixel[0] > 240 && pixel[2] < 10,
+                    "Hold at {offset}: {pixel:?}"
+                );
+            }
+        }
+    }
+    for behavior in [MotionEndBehavior::Hold, MotionEndBehavior::Disappear] {
+        let mut element = motion(&source, behavior);
+        if let GraphicsElementConfig::Motion(config) = &mut element.config {
+            config.hold_seconds = Some(0.0);
+        }
+        let frames = decode(root.path(), request(root.path(), element, 2250));
+        let alphas: Vec<_> = frames
+            .chunks_exact(64 * 64 * 4)
+            .map(|f| f[(4 * 64 + 4) * 4 + 3])
+            .collect();
+        assert_eq!(
+            alphas,
+            [255, 255, 255, 0],
+            "{behavior:?} must stop at source EOF"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+fn canvas_motion_hold_preserves_phase_when_clamped_seek_falls_between_source_frames() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("fractional-clamp.nut");
+    let generated = Command::new(runtime())
+        .args([
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=red:s=16x16:r=30000/1001,format=bgra",
+            "-vf",
+            "drawbox=color=blue:t=fill:enable='gte(n,46)'",
+            "-frames:v",
+            "60",
+            "-c:v",
+            "ffv1",
+            "-f",
+            "nut",
+        ])
+        .arg(&source)
+        .output()
+        .unwrap();
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    // A 2.002s NTSC source clamps input seek to 1.002s. Its first decoded
+    // timestamp is positive; keep that timestamp until the 1.5s phase trim.
+    let frames = decode(
+        root.path(),
+        request_with_source_duration(
+            root.path(),
+            motion(&source, MotionEndBehavior::Hold),
+            2500,
+            2.002,
+        ),
+    );
+    let first = &frames[(4 * 64 + 4) * 4..(4 * 64 + 4) * 4 + 4];
+    assert_eq!(
+        first,
+        [0, 0, 255, 255],
+        "phase 1.5 must retain source frame45, before the blue frame46"
+    );
+    let later = &frames[64 * 64 * 4 + (4 * 64 + 4) * 4..64 * 64 * 4 + (4 * 64 + 4) * 4 + 4];
+    assert_eq!(later, [255, 0, 0, 255]);
+}
+
+#[test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+fn canvas_motion_loop_keeps_full_cycles_after_a_partial_first_cycle() {
+    let root = tempfile::tempdir().unwrap();
+    let source = motion_source(root.path());
+    let mut request = request(root.path(), motion(&source, MotionEndBehavior::Loop), 4250);
+    request.duration = Duration::from_secs(3);
+    let frames = decode(root.path(), request);
+    let colors: Vec<_> = frames
+        .chunks_exact(64 * 64 * 4)
+        .map(|f| {
+            let pixel = &f[(4 * 64 + 4) * 4..(4 * 64 + 4) * 4 + 4];
+            assert_eq!(pixel[3], 255);
+            if pixel[0] > 240 {
+                "blue"
+            } else {
+                assert!(pixel[2] > 240);
+                "red"
+            }
+        })
+        .collect();
+    assert_eq!(
+        colors,
+        [
+            "blue", "blue", "blue", "red", "red", "red", "red", "blue", "blue", "blue", "blue",
+            "red"
+        ]
+    );
 }
 
 #[test]

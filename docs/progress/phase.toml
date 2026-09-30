@@ -96,10 +96,12 @@ Row151 ports music-video credits troubleshooting: both-engine seek/archive,
 audio/subtitle precedence, 762 web checks, strict lint, Chromium/Firefox/no-JS
 geometry and native/Next smoke pass. Row152 is N/A: upstream AMF release notes,
 with approved hardware debt unchanged. Row153 is N/A: NuGet dependency bumps;
-AAC surround is already covered, with native argv/runtime proof. Continue at
-row154; UCU-09 window gates,
+AAC surround is already covered, with native argv/runtime proof. Row154 adapts
+motion EOF/expiry/loop boundaries and preview clocks under ADRs 0005/0105;
+75 focused checks, native argv, 18 browser cases, lint and both smoke paths pass.
+Continue at row155; UCU-09 window gates,
 push and exact-SHA CI remain.
-The current 181-row ledger has 28 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 27 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

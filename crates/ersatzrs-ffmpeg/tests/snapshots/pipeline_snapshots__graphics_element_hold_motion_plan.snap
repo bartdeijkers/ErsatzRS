@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 1327
+assertion_line: 3746
 expression: plan
 ---
-input=/media/hold-bug.webm options=[] filters=["setpts=PTS+5/TB"] enable=Some("between(t,5,10.75)") eof_pass=false
+input=/media/hold-bug.webm options=[] filters=["setpts=PTS+5/TB"] enable=Some("gte(t,5)*lt(t,10.75)") eof_pass=false

@@ -53,6 +53,12 @@ Focused tests include private admission rejection and public route isolation;
 packaged FFmpeg decoding proves selected Lua/drawvg output and transparent
 frames after selection removal through the session-owned renderer.
 
+Row154 further proves EOF frame recovery, exclusive Hold expiry, complete loops
+and source-frame accuracy at NTSC rates. Native and Next media previews share
+the seeked programme clock; live previews retain zero seek. Numeric template
+seek, subtitle/credits timing and owned cleanup pass published-runtime and
+both-browser checks recorded in UCU-09.
+
 ## Context
 
 Upstream row146 (`28b2e00c`, graphics canvas) replaces Next's limited image
