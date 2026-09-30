@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restore Plex Other Video folder tags across Windows, UNC and Unix server
+  paths. Refresh existing items on their next scan while preserving subtitles,
+  labels and independently owned collection tags.
+
 - Omit unavailable automatic Next sidecars while preserving errors for exact
   selections. Validate prepared-media sidecars against the materialized file,
   retain valid remote sources, normalize HTTP(S) schemes for FFmpeg and preserve

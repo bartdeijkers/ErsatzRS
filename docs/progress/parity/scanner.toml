@@ -156,3 +156,10 @@ description = 'Plex metadata decoding expected only lowercase media/part/stream,
 discovered = '2026-09-29'
 evidence = 'Serde now accepts canonical Media/Part/Stream plus lowercase aliases. The external-programme HTTP fixture proves video/audio/subtitle metadata survives canonical casing; existing Plex movie/show/collection scanner fixtures retain their snapshots. UCU-09 owns evidence and integrated acceptance.'
 resolved = true
+
+[[debt]]
+id = 'ucu09-row149'
+description = 'Plex Other Video scans previously discarded server library locations and omitted folder-derived tags. Row149 restores portable server-path parsing and scoped refresh of existing items without replacing other tag owners.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 records the upstream 4fffa955 source map, failing regression, 54 passing scoped checks and final six-test folder-tag acceptance. Native migration/restart, tag ownership and stable IDs, subtitles, search visibility, pagination, root changes and rollback pass, as does strict infra/scanner/web lint. The provider metadata correction adds no platform or runtime requirement.'

@@ -1,4 +1,6 @@
 mod common;
+#[path = "plex_service/folder_tags.rs"]
+mod folder_tags;
 #[path = "plex_service/networks.rs"]
 mod networks;
 
@@ -291,6 +293,7 @@ async fn plex_other_video_sync_maps_uniform_metadata_and_playback_rows() {
         "/media/other/concert.mkv",
         800,
     );
+    mock_other_video_roots(&server).await;
     item["title"] = json!("Concert Film");
     item["originalTitle"] = json!("Original Concert");
     item["year"] = json!(2024);
@@ -332,6 +335,13 @@ async fn plex_other_video_sync_maps_uniform_metadata_and_playback_rows() {
             .unwrap(),
         1
     );
+    let folder_tags: Vec<String> = sqlx::query_scalar(
+        r#"SELECT "Name" FROM "Tag" WHERE "ExternalTypeId" = 'plex/folder' ORDER BY "Name""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(folder_tags, ["other"]);
     assert_eq!(count(&pool, "PlexOtherVideo").await, 1);
     assert_eq!(count(&pool, "OtherVideoMetadata").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
@@ -582,8 +592,10 @@ async fn plex_title_only_change_refreshes_movie_and_other_video_metadata() {
         ),
     ] {
         let original_server = MockServer::start_async().await;
+        mock_other_video_roots(&original_server).await;
         mock_plex_title_page(&original_server, library_id, "Original Plex Title").await;
         let renamed_server = MockServer::start_async().await;
+        mock_other_video_roots(&renamed_server).await;
         mock_plex_title_page(&renamed_server, library_id, "Renamed Plex Title").await;
         let pool = common::test_db().await;
         let service = PlexService::new();
@@ -1842,4 +1854,17 @@ async fn mock_plex_collection_pages(
         .await;
 
     (collections, members)
+}
+
+async fn mock_other_video_roots(server: &MockServer) {
+    server
+        .mock_async(|when, then| {
+            when.method(GET).path("/library/sections");
+            then.status(200)
+                .json_body(json!({ "MediaContainer": { "Directory": [{
+            "Key": "8", "Title": "Other Videos", "type": "other",
+            "Location": [{ "path": "/media/other" }]
+        }] } }));
+        })
+        .await;
 }

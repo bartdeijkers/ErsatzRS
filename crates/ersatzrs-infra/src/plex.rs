@@ -25,6 +25,7 @@ const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token
 
 mod authentication;
 pub(crate) mod external;
+mod folder_tags;
 mod networks;
 mod tag_ownership;
 pub use networks::sync_plex_networks;
@@ -54,6 +55,8 @@ pub struct PlexServerResource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexLibrarySummary {
+    /// Ordered server-side roots, independent of the ErsatzRS host platform.
+    pub paths: Vec<String>,
     pub key: String,
     pub name: String,
     pub media_kind: LibraryMediaKind,
@@ -61,6 +64,8 @@ pub struct PlexLibrarySummary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlexMediaItem {
+    /// Folder-derived tags populated only by Other Video scans.
+    pub folder_tags: Vec<String>,
     pub key: String,
     pub etag: Option<String>,
     pub title: String,
@@ -1080,6 +1085,20 @@ pub async fn sync_plex_other_video_library_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    // Resolve once before publication; failure must not erase existing tags.
+    let libraries = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        service.list_libraries(config),
+    )
+    .await
+    .map_err(|_| RepositoryError::unavailable("Plex library locations", "request timed out"))??;
+    let roots = libraries
+        .into_iter()
+        .find(|library| library.key == library_key)
+        .ok_or_else(|| {
+            RepositoryError::unavailable("Plex library locations", "library is missing")
+        })?
+        .paths;
     let mut synced = 0;
     let mut start_index = 0;
     let mut present_item_ids = std::collections::HashSet::new();
@@ -1092,7 +1111,19 @@ pub async fn sync_plex_other_video_library_with_progress(
         sink.report(0.0);
     }
     while start_index < total_size {
-        for item in &page.items {
+        for item in &mut page.items {
+            item.folder_tags = folder_tags::from_path(&item.path, &roots);
+            // Location/path changes can affect tags without changing updatedAt.
+            let fingerprint =
+                serde_json::to_string(&item.folder_tags).map_err(|_| RepositoryError::Decode {
+                    kind: "Plex folder tags",
+                    value: "could not encode folder tags".into(),
+                })?;
+            item.etag = Some(format!(
+                "{}:folders-v1:{}",
+                item.etag.as_deref().unwrap_or_default(),
+                sha256_hex(&fingerprint)
+            ));
             present_item_ids.insert(item.key.clone());
             let item_id = if !deep_scan
                 && item_etag_matches(
@@ -1609,6 +1640,7 @@ async fn upsert_plex_other_video(
     .await?;
     let metadata_id =
         upsert_plex_other_video_metadata(&mut tx, item_id, media_source_id, item).await?;
+    folder_tags::replace(&mut tx, metadata_id, &item.folder_tags).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::OtherVideo(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
     let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
@@ -1720,6 +1752,11 @@ fn project_library(response: PlexLibraryResponse) -> Option<PlexLibrarySummary> 
         _ => return None,
     };
     Some(PlexLibrarySummary {
+        paths: response
+            .location
+            .into_iter()
+            .map(|location| location.path)
+            .collect(),
         key: response.key,
         name: response.title,
         media_kind,
@@ -1806,6 +1843,7 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         .and_then(|stream| stream.height)
         .unwrap_or(media.height);
     Some(PlexMediaItem {
+        folder_tags: Vec::new(),
         key: item.key.or(item.rating_key)?,
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
@@ -3556,6 +3594,8 @@ struct PlexLibraryContainerResponse {
 
 #[derive(Debug, Deserialize)]
 struct PlexLibraryResponse {
+    #[serde(rename = "Location", default)]
+    location: Vec<PlexLibraryLocationResponse>,
     #[serde(rename = "Key")]
     key: String,
     #[serde(rename = "Title")]
@@ -3566,6 +3606,11 @@ struct PlexLibraryResponse {
     agent: String,
     #[serde(default)]
     scanner: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexLibraryLocationResponse {
+    path: String,
 }
 
 #[derive(Debug, Deserialize)]

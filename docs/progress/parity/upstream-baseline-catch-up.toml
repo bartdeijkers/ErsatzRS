@@ -1,10 +1,10 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..8bda4411 (fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..76884783 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-148/180; 32 pending.
+149/181; 32 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: v2.0.2 published, hashes verified, default adopted.
 109 N/A: release notes. UCU-06 Complete: local gates and
@@ -14,15 +14,16 @@ UCU-07 Complete: CI 36321494841, b4d659eb.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: v2.0.3 and smoke pass; approved hardware debt remains.
 141-142 N/A: release/build bookkeeping.
-143 Port: HDR refresh/Media Info; runtime/browser proof passes.
-144 N/A: release notes.
-145 Port: external JSON native playback/guide, diagnostics and marathon fallback;
-focused runtime, strict lint, smoke and TSDuck acceptance pass.
-146 Adapt (0105): all-kind private canvas and official Next proof, stable session
-clocks, cleanup, lint, smoke and 87 TSDuck checks pass.
+143 Port: HDR/Media Info; runtime/browser proof passes.
+144 N/A: notes.
+145 Port: external JSON playback/guide, diagnostics, marathon fallback;
+runtime, lint, smoke and TSDuck pass.
+146 Adapt (0105): private canvas/Next proof, session clocks, cleanup, lint, smoke
+and 87 TSDuck checks pass.
 147 Port: YAML roll/graphics persistence and SQL references; restart proof passes.
 148 Port: subtitle ownership/eligibility, availability, prepared pins and seek;
 runtime proof passes.
+149 Port: Plex folder tags; migration/restart, ownership, search and rollback pass.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 

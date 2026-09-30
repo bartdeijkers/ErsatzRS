@@ -86,9 +86,12 @@ checks, SQLite midnight/restart proof, lint and smoke pass. Row148 is Port:
 provider ownership/caption eligibility, automatic sidecar availability, exact
 pins, prepared-media resolution, music-video metadata and seek handling pass
 focused checks, decoded native/Next proof, strict lint and native smoke.
-Valid HTTP(S) schemes are normalized for FFmpeg. Continue at row149; UCU-09
-window gates, push and exact-SHA CI remain.
-The current 180-row ledger has 32 pending rows. Preserve accepted architecture,
+Valid HTTP(S) schemes are normalized for FFmpeg. Row149 ports Plex Other Video
+folder tags with portable server paths, scoped migration, repeat/restart identity,
+independent tag ownership, subtitle retention, search visibility and rollback
+proof. Focused checks and strict lint pass. Continue at row150; UCU-09 window
+gates, push and exact-SHA CI remain.
+The current 181-row ledger has 32 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

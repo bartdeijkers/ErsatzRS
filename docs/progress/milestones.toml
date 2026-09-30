@@ -11392,7 +11392,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 8bda4411 (latest fetched tip) in order,
+Process every ledger row in this release window through 76884783 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
@@ -11416,6 +11416,35 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row149 is Port: upstream 4fffa955's Plex Other Video folder tags now use current
+server library locations, loaded once with a bounded request before publication
+and reused across all pages. Portable parsing preserves the first matching root,
+folder boundaries, mixed separators, drive/UNC/POSIX roots and case/accent
+semantics. Derived tags use their own plex/folder owner under ADR 0104; labels,
+collections, networks and other providers retain their rows. An item fingerprint
+includes derived tags so root changes refresh even when updatedAt is unchanged.
+The native SQLite migration invalidates PlexOtherVideo ETags and only Plex Other
+Video library scan cursors, preserving media, tags, subtitles and playout state.
+Existing schema/dirty-migration health checks remain authoritative; the upgrade
+fixture verifies schema readiness and that restart does not repeat the reset.
+The provider regression fails before implementation: missing derived library tag
+(5ca001a2-030d-4a37-8cb5-f026b9d2e69b). An earlier sandbox socket denial is excluded
+from product evidence. The full scoped Plex/parser/database suite passes 54
+checks (30be6175-42f3-47de-82f8-c83c4782a508). Final consumer/health checks pass
+seven tests (76cf3443-32f0-423a-a2f6-427d990295e1). After strengthening identity
+assertions, all six folder-tag checks pass again
+(ba4bbf42-613a-4683-8ee1-936c9ba3d780): migration/restart, labels and independent
+owners, subtitle retention, same-timestamp root changes, search addition/removal,
+duplicate convergence, one location request across paged scans, request failure
+preservation and complete item/tag rollback on write failure. Strict all-target
+Clippy for infra/scanner/web passes on the final source and tests. The substantive
+review confirms no host path interpretation, credentials in queries, new worker,
+media identity changes or playback/FFmpeg changes. Browser and transport gates
+are not repeated for this provider metadata slice; UCU-09 window gates remain.
+The 2026-09-30 upstream fetch appends 76884783 as pending row181. All 181 ledger
+SHAs remain in exact upstream order. Row149 advances the baseline to 4fffa955;
+149/181 reconciled, 32 pending. Continue at row150; no intermediate push or CI.
+
 Row148 is Port. Final acceptance below completes the earlier checkpoints. Upstream c673082e changes Next subtitle source
 conversion, shared MusicVideo metadata loading, Plex Other Video subtitle owner
 resolution and native/troubleshooting provider eligibility. It checks local and
