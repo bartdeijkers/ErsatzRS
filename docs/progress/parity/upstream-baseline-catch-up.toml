@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-152/181; 29 pending.
+153/181; 28 pending.
 99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
@@ -26,7 +26,7 @@ runtime proof passes.
 150 Port: Next error cards; decoded matrix, smoke/lint pass.
 151 Port: music-video credits preview; 762 web checks, both browsers/no-JS/mobile,
 seek/audio/archive/persistence, strict lint and native/Next smoke pass.
-152 N/A: upstream Next AMF release notes; hardware debt unchanged.
+152-153 N/A: AMF/NuGet notes; AAC argv/decode pass; hardware debt unchanged.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 

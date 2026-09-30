@@ -11416,6 +11416,25 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row153 is N/A: the full upstream 0e1b355f audit updates twelve NuGet project
+manifests and one Next AAC release note; no handler/repository/schema/builder
+or runtime pin changes. The .NET package versions do not map to Cargo upgrades.
+Native emit_audio_channels already keeps -ac for AAC/AAC-LATM above two channels
+when the source count matches; exact Next e7997fa's optimizer has the same AAC
+exception. Reuse row150's unchanged profile-wire proof mapping six channels.
+The existing native six-channel regression now includes a reviewed complete argv
+snapshot. Three AAC surround, stereo omission and AC3 downmix checks pass
+(e9353b71-dd2e-4631-9f7e-23dc7f98e681), plus strict FFmpeg all-target Clippy,
+formatting and allow/diff checks. Published v2.0.3 executes the snapshot argv
+against owned synthetic media: 90 H.264 frames, 142 AAC audio frames, six channels
+with 5.1 layout, and strict decoding with zero error output. The first standalone
+harness omitted the finite programme boundary required by apad; adding the
+three-second capture boundary fixes the harness without changing codec/filter
+arguments or raising timeouts. No production code, Cargo dependency, new runtime
+package or ADR change. Row151's browser/host/transport evidence remains valid.
+Pin advances to 0e1b355f; 153/181 reconciled, 28 pending. Continue at row154.
+No intermediate push or CI.
+
 Row152 is N/A: the complete upstream 495e3799 diff adds one CHANGELOG line
 announcing Next AMF detection and optional scaling on Windows. No source,
 protocol, dependency or build pin changes. The accepted row140 runtime and

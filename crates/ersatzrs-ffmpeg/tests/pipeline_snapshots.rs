@@ -980,6 +980,7 @@ fn software_pipeline_emits_aac_audio_channels_for_surround_output() {
         .arguments
         .windows(2)
         .any(|args| args == ["-ac", "6"]));
+    insta::assert_snapshot!(command.arguments.join(" "));
 }
 
 #[test]

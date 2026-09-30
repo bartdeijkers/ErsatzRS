@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-30): `76884783996ac3aa11a232622939b8bd03ed0d86`
   — build: bump ffmpeg to 8.1.2-2 (#3046).
-- Ledger: **181 commits**, **29 pending**. The original plan covered 152 through
+- Ledger: **181 commits**, **28 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Continue at row 153. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Continue at row 154. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,28 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 153 source map — .NET dependencies and AAC surround notes (N/A)
+
+- Full `0e1b355f` audit: twelve .csproj files update Microsoft framework/test,
+  NCalc, SkiaSharp, System.CommandLine, Dapper, Jint, NUnit analyzers, MudBlazor
+  and Scalar packages. These NuGet versions have no Rust-manifest counterpart;
+  no ErsatzTV handler, repository, schema, FFmpeg builder or runtime pin changes.
+- One CHANGELOG line announces the Next AAC-above-stereo fix. Native
+  `emit_audio_channels` already retains `-ac` for AAC/AAC-LATM above two channels,
+  even when the input and output counts match. Exact Next e7997fa's optimizer
+  likewise retains AudioChannels for AAC surround. Existing profile-wire proof
+  maps six channels without truncation; reuse unchanged row150 configuration proof.
+- The existing native six-channel regression now snapshots the complete final
+  argv. Six-channel AAC, unchanged stereo omission and AC3 downmix tests all pass
+  (`e9353b71-dd2e-4631-9f7e-23dc7f98e681`); strict FFmpeg all-target Clippy passes.
+  Published v2.0.3 executes that argv with an owned three-second source/boundary:
+  output is H.264 plus six-channel AAC 5.1; strict decode emits no error bytes.
+  The initial standalone harness omitted the programme boundary required by apad;
+  the corrected finite capture keeps codec/filter arguments unchanged.
+- Verdict N/A for upstream dependency/release bookkeeping; the announced AAC
+  behavior is already covered. No production code, Cargo dependency, runtime
+  package or ADR changes. Preserve row151 browser/host and existing transport proof.
 
 ## Row 152 source map — upstream Next AMF release notes (N/A)
 
@@ -4287,7 +4309,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 150 | `599dc5ea` | feat: show errors over next fallback by default (#3016) | Port | mpeg-ts-channel-streaming | `feat(infra): show Next fallback error reasons` | ucu-09; optional wire contract and enabled default; eight decoded gap/failed-media Burn/Convert/off cases, normal HLS audio/subtitles, host smoke and strict lint pass. |
 | 151 | `0840e0fb` | feat: troubleshoot music video credits (#3017) | Port | support-pages | `feat(web): troubleshoot music-video credits` | ucu-09; optional music-only template, both-engine seek/audio/subtitle precedence and archived ASS/template; 762 web checks, strict lint, 14 browser cases, no-JS/mobile review and native/Next smoke pass. |
 | 152 | `495e3799` | chore: update changelog for new next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile upstream Next AMF release notes` | ucu-09; one upstream changelog line only; no source/protocol/build change. Existing runtime integration and approved unverified AMF hardware debt remain. |
-| 153 | `0e1b355f` | chore: update dependencies (#3018) | | | | ucu-09; provisional: N/A (upstream tooling). Claude 2026-09-23 triage: dependency bumps; verify AAC above two channels in a native argv snapshot instead. |
+| 153 | `0e1b355f` | chore: update dependencies (#3018) | N/A | upstream-baseline-catch-up | `test(parity): reconcile upstream dependency and AAC notes` | ucu-09; NuGet bumps only; announced AAC surround behavior already covered by native and exact Next. Reviewed six-channel argv, stereo/AC3 guards, strict lint and published-runtime decode pass. |
 | 154 | `908fa961` | fix: graphics engine motion (#3019) | | | | ucu-09; provisional: Adapt (ADR 0005). Claude 2026-09-23 triage: graphics motion timing and hold, and seek seconds reaching templates. |
 | 155 | `d1c2ab3a` | chore: updates for new next, ffmpeg builds | | | | ucu-09; provisional: N/A (ADR 0063). Claude 2026-09-23 triage: their custom FFmpeg build and Next config; check native AMF capability coverage as separate debt. |
 | 156 | `a4642d95` | fix: api response codes (#3020) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: correct API status codes for validation errors on the same endpoints. |
