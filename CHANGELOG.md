@@ -55,6 +55,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Continue independent scheduler maintenance after a job fails, while reporting
+  the failure and retaining its cadence for retry. Stop before starting another
+  maintenance job when shutdown is requested.
+
 - Return typed errors from authenticated FFmpeg-profile, smart-collection and
   empty-trash machine APIs: invalid requests use 400, missing records 404,
   profile and smart-collection conflicts 409 and operational failures 500.

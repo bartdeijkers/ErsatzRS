@@ -49,7 +49,7 @@
   Row 119 is N/A (upstream Next release note); row 120 is Port (persisted YAML
   shuffle order). Row 121 is Covered (subtitle query/seek separation).
   Rows 122-124 and 126-127 are Port; row 125 is Adapt (ADR 0103).
-  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Continue at row 159. Existing debt
+  Row 128 is N/A (upstream NUnit fixture deadline); row 129 is Adapt (accepted ADR 0104); row 130 is Port (startup ownership/deadlines); row 131 is Port (multi-day timing and bounded interlace sampling); row 132 is Port (identity-safe concurrent startup); row 133 is Port (retry failed local folders); row 134 is Port (provider season repair and artwork fallback); row 135 is N/A (upstream release bookkeeping). UCU-08 is Complete: all local gates and terminal green exact-SHA CI [36453480304](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36453480304) at `dfeaf6d0` pass. UCU-09 row 136 is Port (shared bounded health runs and cached/explicit refresh). Row 137 is Port (artwork-cache pruning and healing). Row 138 is Covered (call-local hashing). Row 139 is Adapt (native/Next sessions API under ADRs 0095/0103). Row 140 is Port (published v2.0.3 and approved hardware debt). Row 141 is N/A (release notes). Row 142 is N/A (empty build trigger). Row 143 is Port (HDR refresh and Media Info). Row 144 is N/A (Next optimization release notes). Row 145 is Port (external JSON playback and validation). Row 146 is Adapt (accepted ADR 0105 graphics canvas). Row 147 is Port (persisted YAML roll/graphics state). Row 148 is Port (provider subtitles and Next source availability). Row 149 is Port (Plex Other Video folder tags). Row 150 is Port (Next fallback error cards). Row 151 is Port (both-engine music-video credits troubleshooting). Row 152 is N/A (upstream Next AMF release notes). Row 153 is N/A (.NET dependency bumps; AAC surround already covered). Row 154 is Adapt (ADRs 0005/0105; motion boundaries and preview clocks). Row 155 is Port (optional Next AMF adapter protocol; verified runtime reused). Row 156 is Port (typed machine CRUD and safe profile deletion; localized island callbacks). Row 157 is Port (native completion, bounded sample cleanup, URI redaction and smart conflicts). Row 158 is Covered (atomic operation admission, fenced Plex identity and retired Trakt). Row 159 is Port (isolated maintenance failures and cancellation). Continue at row 160. Existing debt
   and platform limitations remain unchanged.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
@@ -116,6 +116,51 @@ also reports limited unsupported-GPU validation; preserve fail-safe capability
 selection and test actual MPEG-2 output before acceptance. The earlier 30-60
 minute estimate covered package compilation/basic checks using cached
 dependencies, not adapting this complete set or GPU acceptance.
+
+## Row 159 source map — scheduler failure isolation (Port)
+
+Upstream `94c8c0149cdfb8f9d823c4e0fc917acc305c6695` changes only
+SchedulerService. All dispatch methods now catch operational failures separately
+from cancellation, so one failed job no longer skips the rest of DoWork.
+Startup Next synchronization and capability refresh also log their own failures.
+
+Rust already owns build/scan jobs, guards, provider connectivity timeouts,
+per-playout failure status, and the repeating scheduler tick. However, the
+maintenance pass propagates loop-level errors before later loops run. Correct
+that demonstrated gap using the existing sequential pass: isolate each loop's
+due check, work and successful timestamp; retain its first operational error for
+the caller after independent jobs and health have run. Failed loops remain due
+for retry. Cancellation must stop before another loop starts and must not be
+treated as an ordinary retryable failure.
+
+Required evidence: injected SQLite failures in early cleanup and cadence
+persistence do not block later work; fixing the fault permits immediate retry;
+successful later jobs retain their cadence; cancellation skips subsequent jobs.
+Reuse existing Classic continuation, owned scan admission, Next mirror, cached
+health and playback proof where unchanged. Native Trakt remains deliberately
+retired. Script/graphics loading and memory ownership remain process-local;
+there is no new queue, dependency, schema, runtime package or UI change.
+
+Source counterparts: scheduled library requests use the existing owned
+application queue; rejected requests do not stop other library admissions.
+Provider poll failures retain Plex inventory. Add-on history/revision/admission/
+matching maintenance already isolates errors. Next mirrors are per-channel,
+with atomic publication and session-owned refresh; there is no global startup
+queue whose failure can starve native maintenance. MPEG-TS scripts are read at
+stream creation and SQL-backed graphics references at build/projection, so no
+stale scheduler-owned script/graphics cache needs a refresh job. Rust owns
+memory lifetimes without the upstream release-memory queue.
+
+The causal regression fails before the fix: subtitle cleanup skips artwork.
+The final 24 maintenance checks pass, including SQLite trigger failures,
+independent later cleanup/search/health, first-error retention, immediate retry,
+cadence preservation, cancellation, Classic state, dependent Next notification,
+and guard release. Strict infra/scheduler Clippy, architecture and formatting
+pass. Boxing the large playout future keeps the async state within the lint
+contract; no suppression is added. UCU-09 owns detailed evidence. No generated
+FFmpeg/transport or browser change: reuse prior runtime/browser proof and run
+required window gates at closeout. Pin advances to `94c8c014`; 159/181 accepted,
+22 pending. Continue row160; no intermediate push or CI.
 
 ## Row 158 source map — atomic operation admission (Covered)
 
@@ -4508,7 +4553,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 156 | `a4642d95` | fix: api response codes (#3020) | Port | upstream-baseline-catch-up | `fix(parity): reconcile machine API errors and safe profile deletion` | ucu-09; typed CRUD/trash/concat status, transactional duplicate/update/delete guards and preserved profile/collection operations; 33 focused checks, strict lint, 15 browser passes and native smoke. Localized island callbacks corrected; no FFmpeg rebuild. |
 | 157 | `2bbfbd10` | fix: playback troubleshooting (#3021) | Port | upstream-baseline-catch-up | `fix(parity): retain troubleshooting completion and sample ownership` | ucu-09; immediate native completion, bounded owned capture/archive cleanup, URI credential redaction and smart conflicts 409 with mixed known errors 400. All 53 focused checks, 24 Chromium/Firefox cases and strict lint pass; real sample audio/subtitle preservation. No FFmpeg rebuild. |
 | 158 | `f6bd089f` | fix: entity locker concurrency (#3022) | Covered | upstream-baseline-catch-up | `test(parity): verify atomic provider operation admission` | ucu-09; existing mutex/owned admission and transactional Plex generation checks cover atomic flag replacement; Trakt remains deliberately retired. Eight contenders per provider admit one owner; 22 focused checks and strict lint pass. No production or FFmpeg change. |
-| 159 | `94c8c014` | fix: scheduler service reliability (#3023) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: scheduler reliability; read for the real failure modes rather than copying the C# design. |
+| 159 | `94c8c014` | fix: scheduler service reliability (#3023) | Port | upstream-baseline-catch-up | `fix(scheduler): isolate maintenance failures without starving jobs` | ucu-09; loop failures preserve independent cleanup/search/health and remain due for retry; cancellation stops the pass and first error remains visible. All 24 maintenance checks, strict lint and architecture pass; see source map and milestone. |
 | 160 | `b403012f` | fix: movie custom order ui (#3024) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: manual collection custom order plus a data reset migration. |
 | 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; provisional: Covered. Claude 2026-09-23 triage: no font cache to race in the native drawtext and graphics path. |
 | 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | | | | ucu-09; provisional: Port. Claude 2026-09-23 triage: MPEG-TS script reliability. |

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use ersatzrs_core::hls::HlsSessionRegistry;
@@ -22,7 +22,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::cache_cleanup::{
     clean_caches, CacheCleanupConfig, CacheCleanupError, CacheCleanupReport,
@@ -184,9 +184,11 @@ pub type Result<T> = std::result::Result<T, MaintenanceError>;
 ///
 /// # Errors
 ///
-/// Returns an error when database access, cache cleanup, or health persistence
-/// fails. Individual playout build failures are recorded in
-/// `PlayoutBuildStatus` and counted in the returned report.
+/// Returns the first operational error after independent tasks have run. Failed
+/// tasks keep their previous cadence timestamp and are retried on the next pass.
+/// Cancellation stops the pass before another task starts. Individual playout
+/// build failures are recorded in `PlayoutBuildStatus` and counted in the
+/// returned report.
 pub async fn run_maintenance_once(
     pool: Pool<Db>,
     cache_config: &CacheCleanupConfig,
@@ -233,82 +235,191 @@ pub async fn run_maintenance_once_cancellable(
         health,
         artwork,
     } = execution;
-    if cancelled.is_some_and(|check| check()) {
-        return Err(SchedulingError::Cancelled.into());
-    }
     let now = Utc::now();
-    let library_refresh_interval = load_library_refresh_interval(&pool).await?;
     let mut report = MaintenancePassReport::default();
+    let mut tasks = MaintenanceTasks {
+        cancelled,
+        first_error: None,
+    };
 
-    if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
-        let playout_report =
-            build_due_playouts(&pool, locker, now, hls_sessions.as_deref(), cancelled).await?;
-        report.playouts_built = playout_report.built;
-        report.playouts_skipped_locked = playout_report.skipped_locked;
-        report.playouts_failed = playout_report.failed;
-        report.playouts_reset = playout_report.reset_queued;
-        report.loops_ran.set(MaintenanceLoopFlags::PLAYOUT);
-        record_loop_run(&pool, "playout", now).await?;
-    }
-
-    if cancelled.is_some_and(|check| check()) {
-        return Err(SchedulingError::Cancelled.into());
-    }
-
-    if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
-        let library_report =
-            dispatch_due_library_refreshes(&pool, library_refresh_interval, library_scans, now)
+    tasks
+        .run("playout", async {
+            if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
+                let playout_report = Box::pin(build_due_playouts(
+                    &pool,
+                    locker,
+                    now,
+                    hls_sessions.as_deref(),
+                    cancelled,
+                ))
                 .await?;
-        report.libraries_dispatched = library_report.completed;
-        report.libraries_failed = library_report.failed;
-        report.loops_ran.set(MaintenanceLoopFlags::LIBRARY_REFRESH);
-        record_loop_run(&pool, "library_refresh", now).await?;
+                report.playouts_built = playout_report.built;
+                report.playouts_skipped_locked = playout_report.skipped_locked;
+                report.playouts_failed = playout_report.failed;
+                report.playouts_reset = playout_report.reset_queued;
+                record_loop_run(&pool, "playout", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::PLAYOUT);
+            }
+            Ok(())
+        })
+        .await?;
+
+    tasks
+        .run("library_refresh", async {
+            let library_refresh_interval = load_library_refresh_interval(&pool).await?;
+            if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
+                let library_report = dispatch_due_library_refreshes(
+                    &pool,
+                    library_refresh_interval,
+                    library_scans,
+                    now,
+                )
+                .await?;
+                report.libraries_dispatched = library_report.completed;
+                report.libraries_failed = library_report.failed;
+                record_loop_run(&pool, "library_refresh", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::LIBRARY_REFRESH);
+            }
+            Ok(())
+        })
+        .await?;
+
+    tasks
+        .run("provider_poll", async {
+            if loop_due(&pool, "provider_poll", PROVIDER_POLL_INTERVAL, now).await? {
+                let provider_report = poll_provider_connectivity(&pool).await?;
+                report.providers_polled = provider_report.polled;
+                report.providers_reachable = provider_report.reachable;
+                record_loop_run(&pool, "provider_poll", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
+            }
+            Ok(())
+        })
+        .await?;
+
+    run_cleanup_loops(&pool, cache_config, now, artwork, &mut report, &mut tasks).await?;
+    tasks
+        .run(
+            "health",
+            run_automatic_health(pool.clone(), schema_status, health, &mut report),
+        )
+        .await?;
+    match tasks.first_error {
+        Some(error) => Err(error),
+        None => Ok(report),
+    }
+}
+
+// A failure in one sequential maintenance task must not starve unrelated work.
+// Keep the first failure for the caller; cancellation remains an immediate exit.
+struct MaintenanceTasks<'a> {
+    cancelled: Option<&'a PlayoutBuildCancellation>,
+    first_error: Option<MaintenanceError>,
+}
+
+impl MaintenanceTasks<'_> {
+    async fn run(
+        &mut self,
+        name: &'static str,
+        work: impl Future<Output = Result<()>>,
+    ) -> Result<()> {
+        self.check_cancelled()?;
+        let result = work.await;
+        self.check_cancelled()?;
+        match result {
+            Err(error @ MaintenanceError::Scheduling(SchedulingError::Cancelled)) => {
+                return Err(error)
+            }
+            Err(error) => {
+                error!(task = name, %error, "scheduler maintenance task failed");
+                self.first_error.get_or_insert(error);
+            }
+            Ok(()) => {}
+        }
+        Ok(())
     }
 
-    if loop_due(&pool, "provider_poll", PROVIDER_POLL_INTERVAL, now).await? {
-        let provider_report = poll_provider_connectivity(&pool).await?;
-        report.providers_polled = provider_report.polled;
-        report.providers_reachable = provider_report.reachable;
-        report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
-        record_loop_run(&pool, "provider_poll", now).await?;
+    fn check_cancelled(&self) -> Result<()> {
+        if self.cancelled.is_some_and(|check| check()) {
+            return Err(SchedulingError::Cancelled.into());
+        }
+        Ok(())
     }
+}
 
-    if loop_due(&pool, "subtitle_cleanup", SUBTITLE_CLEANUP_INTERVAL, now).await? {
-        report.subtitles_deleted =
-            crate::subtitle_cleanup::clean_orphaned_subtitles(&pool, 100_000).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::SUBTITLE_CLEANUP);
-        record_loop_run(&pool, "subtitle_cleanup", now).await?;
-    }
+async fn run_cleanup_loops(
+    pool: &Pool<Db>,
+    cache_config: &CacheCleanupConfig,
+    now: DateTime<Utc>,
+    artwork: Option<&crate::artwork_cache_maintenance::ArtworkCacheMaintenance>,
+    report: &mut MaintenancePassReport,
+    tasks: &mut MaintenanceTasks<'_>,
+) -> Result<()> {
+    tasks
+        .run("subtitle_cleanup", async {
+            if loop_due(pool, "subtitle_cleanup", SUBTITLE_CLEANUP_INTERVAL, now).await? {
+                report.subtitles_deleted =
+                    crate::subtitle_cleanup::clean_orphaned_subtitles(pool, 100_000).await?;
+                record_loop_run(pool, "subtitle_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::SUBTITLE_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
-        report.artwork_cleanup = if let Some(artwork) = artwork {
-            artwork.run(100_000).await?.database
-        } else {
-            crate::artwork_cleanup::clean_orphaned_artwork(&pool, 100_000).await?
-        };
-        report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
-        record_loop_run(&pool, "artwork_cleanup", now).await?;
-    }
+    tasks
+        .run("artwork_cleanup", async {
+            if loop_due(pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
+                report.artwork_cleanup = if let Some(artwork) = artwork {
+                    artwork.run(100_000).await?.database
+                } else {
+                    crate::artwork_cleanup::clean_orphaned_artwork(pool, 100_000).await?
+                };
+                record_loop_run(pool, "artwork_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {
-        report.cache_cleanup =
-            clean_caches(cache_config, &channel_guide_keepers(&pool).await?).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::CACHE_CLEANUP);
-        record_loop_run(&pool, "cache_cleanup", now).await?;
-    }
+    tasks
+        .run("cache_cleanup", async {
+            if loop_due(pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {
+                report.cache_cleanup =
+                    clean_caches(cache_config, &channel_guide_keepers(pool).await?).await?;
+                record_loop_run(pool, "cache_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::CACHE_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "search_index", SEARCH_INDEX_REBUILD_INTERVAL, now).await? {
-        report.search_index_dispatched = dispatch_search_index_rebuild(&pool, now).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::SEARCH_INDEX);
-        record_loop_run(&pool, "search_index", now).await?;
-    }
+    tasks
+        .run("search_index", async {
+            if loop_due(pool, "search_index", SEARCH_INDEX_REBUILD_INTERVAL, now).await? {
+                report.search_index_dispatched = dispatch_search_index_rebuild(pool, now).await?;
+                record_loop_run(pool, "search_index", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::SEARCH_INDEX);
+            }
+            Ok(())
+        })
+        .await?;
 
+    Ok(())
+}
+
+async fn run_automatic_health(
+    pool: Pool<Db>,
+    schema_status: DatabaseSchemaStatus,
+    health: Option<&crate::health::HealthCheckCoordinator>,
+    report: &mut MaintenancePassReport,
+) -> Result<()> {
     if let Some(health) = health {
         match health.run(false).await {
             Ok(run) => report.health_summary = Some(run.summary),
             Err(error) => warn!(%error, "automatic health run did not complete"),
         }
-        return Ok(report);
+        return Ok(());
     }
 
     let ffmpeg_check_config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(
@@ -325,7 +436,7 @@ pub async fn run_maintenance_once_cancellable(
         }
     }
 
-    Ok(report)
+    Ok(())
 }
 
 /// Load the last successful loop timestamp from `ConfigElement`.

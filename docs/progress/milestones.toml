@@ -11416,6 +11416,38 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row159 is Port after the complete 94c8c014 SchedulerService audit. Upstream
+adds per-dispatch operational error isolation and separate cancellation handling,
+including startup capability/Next sync, reset/build, provider scans, cleanup,
+scripts, graphics, memory and retired Trakt dispatch. Rust's sequential
+maintenance pass formerly propagated loop errors before later work could run.
+The regression reproduces subtitle failure skipping artwork
+(77c85742-39a7-453f-9196-2998dc8a8331, intentionally failing before the fix).
+Each maintenance task now isolates cadence lookup, work and successful timestamp
+persistence. All task failures log their stage; the first operational error is
+returned after independent tasks and health have run, preserving run-once failure
+visibility and the periodic runner's next-tick retry. Failed loops retain their
+previous timestamp. Cancellation exits before another task starts; no new
+concurrency, queue, dependency, schema, framework or generated FFmpeg contract.
+The final 24 maintenance checks pass (b00df7ed-f9b5-4476-a04e-6612c1eeb142):
+real SQLite cleanup and cadence failures, later work/health despite multiple
+failures, first-error retention, immediate retry, successful cadence preservation,
+mid-pass cancellation, existing Classic Continue/Refresh/Reset timeline and seed
+safety, startup repair, lock release, dependent Next notifications and cached
+health. Strict infra/scheduler all-target Clippy, architecture lint and formatting
+pass. Initial lint flagged enlarged async state; box only the large playout future,
+with no lint allowance or behavior change. Final focused checks run after that fix.
+Substantive review confirms existing per-library application admission, provider
+poll/inventory retention, independent add-on maintenance, per-channel atomic Next
+publication, freshly loaded script/graphics resources and owned Rust lifetimes
+cover the other dispatch surfaces. Trakt stays retired under accepted ADRs
+0066/0067/0069. No health capability or persisted scheduling readiness contract
+changes. Reuse unchanged prior browser, native/Next and transport proof; required
+window smoke/TSDuck and full gates remain. Pin, accepted ledger and reference
+HEAD advance to 94c8c014: 159/181 accepted, 22 pending. Continue row160; final
+upstream refresh, window closeout, authorized push and exact-SHA CI remain.
+No intermediate push/CI; approved hardware debt remains unverified.
+
 Row158 is Covered after auditing the full f6bd089f EntityLocker diff and
 all changed flag callers, including Razor admission paths. Upstream replaces
 six plain bool flags with CompareExchange acquisition/release and Volatile

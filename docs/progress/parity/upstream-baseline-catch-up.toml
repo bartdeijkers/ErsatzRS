@@ -4,15 +4,14 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-158/181; 23 pending.
-99/102/105-107 Port; 100-101/103 N/A; 104 Covered.
+159/181; 22 pending.
 108 Port: verified v2.0.2 published/adopted.
 109 N/A: notes. UCU-06 Complete: CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
 UCU-07 Complete: CI 36321494841, b4d659eb.
 116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130-134 Port; 135 N/A. UCU-08 Complete: CI 36453480304 at dfeaf6d0.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: v2.0.3 and smoke pass; approved hardware debt remains.
-141-142 N/A: release/build bookkeeping.
+141-142 N/A.
 143 Port: HDR/Media Info; runtime/browser pass.
 144 N/A: notes.
 145 Port: external JSON playback/guide, diagnostics, marathon fallback;
@@ -25,7 +24,7 @@ runtime proof passes.
 149 Port: Plex folder tags; upgrade/restart, owners, search, rollback pass.
 150 Port: Next error cards; decoded matrix, smoke/lint pass.
 151 Port: credits preview; full web/browser/runtime/lint/smoke pass.
-152-153 N/A: notes; AAC argv/decode pass; hardware debt unchanged.
+152-153 N/A; AAC decode passes; hardware debt unchanged.
 154 Adapt (0005/0105): motion/preview timing; 75 focused, 18 browser, argv,
 lint and both smoke paths pass.
 155 Port: optional Next AMF index/default; 14 checks, lint and checksums pass;
@@ -35,7 +34,9 @@ and native smoke pass.
 157 Port: native completion/sample ownership, URI redaction and smart 409;
 53 focused checks, 24 browser cases and lint pass.
 158 Covered: atomic admission, Plex fencing; Trakt retired.
-22 focused checks and lint pass. Window gates remain.
+22 checks and lint pass.
+159 Port: maintenance failure isolation/retry, health and cancellation;
+24 checks and lint pass. Window gates remain.
 
 UCU-02 Complete; platform acceptance open; credentials isolated.
 

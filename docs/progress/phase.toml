@@ -107,9 +107,10 @@ checks, strict lint, 15 browser cases and native smoke pass. Row157 ports
 immediate native completion, owned sample cleanup, URI redaction and smart
 conflicts: 53 focused checks, 24 browser cases and strict lint pass. Row158 is
 Covered: atomic provider admission and fenced Plex identity; 22 checks and lint
-pass, with native Trakt deliberately retired. Continue row159;
+pass, with native Trakt deliberately retired. Row159 ports maintenance failure
+isolation: 24 SQLite/continuity checks and strict lint pass. Continue row160;
 UCU-09 window gates, push and exact-SHA CI remain.
-The current 181-row ledger has 23 pending rows. Preserve accepted architecture,
+The current 181-row ledger has 22 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

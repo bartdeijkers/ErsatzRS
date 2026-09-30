@@ -1515,3 +1515,218 @@ async fn orphan_subtitle_maintenance_runs_on_startup_hourly_and_retries_failure(
     assert!(retry.loops_ran.subtitle_cleanup());
     assert_eq!(retry.subtitles_deleted, 1);
 }
+
+#[tokio::test]
+async fn maintenance_failure_preserves_later_jobs_and_retries_without_repeating_success() {
+    use ersatzrs_infra::maintenance::load_loop_last_run;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "Subtitle" ("SubtitleKind","StreamIndex","Default","Forced","DateAdded","DateUpdated")
+        VALUES (0,0,0,0,'2026-09-30','2026-09-30');
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');
+        CREATE TRIGGER "FailSubtitleCleanup" BEFORE DELETE ON "Subtitle"
+        BEGIN SELECT RAISE(ABORT, 'synthetic cleanup failure'); END;"#,
+    )
+    .await
+    .unwrap();
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+        )
+    };
+    assert!(
+        run().await.is_err(),
+        "the caller must still observe failure"
+    );
+    assert!(load_loop_last_run(&pool, "subtitle_cleanup")
+        .await
+        .unwrap()
+        .is_none());
+    let artwork_run = load_loop_last_run(&pool, "artwork_cleanup").await.unwrap();
+    assert!(
+        artwork_run.is_some(),
+        "an early failure must not skip artwork cleanup"
+    );
+    assert!(load_loop_last_run(&pool, "search_index")
+        .await
+        .unwrap()
+        .is_some());
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 0);
+    pool.execute(
+        r#"DROP TRIGGER "FailSubtitleCleanup";
+        INSERT INTO "Actor" ("Name") VALUES ('later synthetic orphan');"#,
+    )
+    .await
+    .unwrap();
+    let retry = run().await.unwrap();
+    assert_eq!(retry.subtitles_deleted, 1);
+    assert!(
+        !retry.loops_ran.artwork_cleanup(),
+        "successful jobs retain their cadence"
+    );
+    assert_eq!(
+        load_loop_last_run(&pool, "artwork_cleanup").await.unwrap(),
+        artwork_run
+    );
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 1);
+}
+
+#[tokio::test]
+async fn maintenance_cadence_failure_keeps_first_error_and_runs_health() {
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::health::HealthCheckCoordinator;
+    use ersatzrs_infra::maintenance::{
+        load_loop_last_run, run_maintenance_once_cancellable, MaintenanceExecution,
+    };
+    use tokio::sync::RwLock;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"CREATE TRIGGER "FailPlayoutCadence" BEFORE INSERT ON "ConfigElement"
+        WHEN NEW."Key" = 'maintenance.loop.playout.last_run'
+        BEGIN SELECT RAISE(ABORT, 'synthetic cadence failure'); END;
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');
+        CREATE TRIGGER "FailActorCleanup" BEFORE DELETE ON "Actor"
+        BEGIN SELECT RAISE(ABORT, 'synthetic later failure'); END;"#,
+    )
+    .await
+    .unwrap();
+    let health = HealthCheckCoordinator::new(
+        pool.clone(),
+        Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
+        DatabaseSchemaStatus::default(),
+    );
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once_cancellable(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+            MaintenanceExecution {
+                health: Some(&health),
+                ..Default::default()
+            },
+        )
+    };
+    let error = run().await.unwrap_err().to_string();
+    assert!(
+        error.contains("synthetic cadence failure"),
+        "retain the first error: {error}"
+    );
+    assert!(load_loop_last_run(&pool, "playout")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(load_loop_last_run(&pool, "artwork_cleanup")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(load_loop_last_run(&pool, "search_index")
+        .await
+        .unwrap()
+        .is_some());
+    let summary: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = 'health.summary'"#)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+    assert!(
+        summary.is_some(),
+        "health must run after failed maintenance jobs"
+    );
+    pool.execute(r#"DROP TRIGGER "FailPlayoutCadence"; DROP TRIGGER "FailActorCleanup";"#)
+        .await
+        .unwrap();
+    let retry = run().await.unwrap();
+    assert!(retry.loops_ran.playout());
+    assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
+    assert!(!retry.loops_ran.search_index());
+    health.shutdown().await;
+}
+
+#[tokio::test]
+async fn maintenance_cancellation_stops_before_independent_later_jobs() {
+    use ersatzrs_core::scheduling::SchedulingError;
+    use ersatzrs_infra::maintenance::{
+        load_loop_last_run, run_maintenance_once_cancellable, MaintenanceError,
+        MaintenanceExecution, PlayoutBuildCancellation,
+    };
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct CancellingRequester(Arc<AtomicBool>);
+    #[async_trait]
+    impl ScheduledLibraryScanRequester for CancellingRequester {
+        async fn request_scheduled_library_scan(&self, _: i64) -> ScheduledScanRequestOutcome {
+            self.0.store(true, Ordering::SeqCst);
+            ScheduledScanRequestOutcome::Accepted
+        }
+    }
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('scanner.library_refresh_interval', '1');
+        INSERT INTO "MediaSource" ("Id") VALUES (3159);
+        INSERT INTO "Library" ("Id", "MediaSourceId", "MediaKind", "Name")
+        VALUES (3159, 3159, 0, 'Synthetic cancellation');
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');"#,
+    )
+    .await
+    .unwrap();
+    let requester = CancellingRequester(Arc::default());
+    let signal = requester.0.clone();
+    let cancelled: PlayoutBuildCancellation = Arc::new(move || signal.load(Ordering::SeqCst));
+    let result = run_maintenance_once_cancellable(
+        pool.clone(),
+        &CacheCleanupConfig::default(),
+        Some(&requester),
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: Some(&cancelled),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(MaintenanceError::Scheduling(SchedulingError::Cancelled))
+    ));
+    for name in [
+        "provider_poll",
+        "subtitle_cleanup",
+        "artwork_cleanup",
+        "cache_cleanup",
+        "search_index",
+    ] {
+        assert!(
+            load_loop_last_run(&pool, name).await.unwrap().is_none(),
+            "cancelled before {name}"
+        );
+    }
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 1);
+}
