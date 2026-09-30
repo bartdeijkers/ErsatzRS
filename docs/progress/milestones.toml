@@ -11416,6 +11416,23 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row171 is Covered under accepted ADRs 0005/0105 after the full 62b7a5e9
+two-file audit. Upstream optimizes Skia subtitle bitmap alpha/cropping and Pipe
+buffering/reader advancement. Native libass filters and the shared Next FFmpeg
+canvas have no managed pixel-compositing loop to patch. Next receives a full
+encoded FFV1/BGRA/NUT canvas; the provisional claim that no full canvas crosses
+the boundary is corrected. Rust transfers encoded bytes with bounded prefix
+reads and existing session/process ownership. The subtitle-inclusive production
+canvas publication regression passes (501c8c95-d4ae-41da-a449-1f2ec230c671),
+including dimensions, codec/pixel format, nonprobing hints and scoped sources.
+Substantive review covers shared subtitle rendering, canvas command generation,
+encoded transfer and the accepted ADRs. Existing rows146/154 decoded subtitle,
+alpha/timing and cleanup evidence remains valid, as do row170 strict infra lint
+and row146 transport evidence. No Rust/runtime change, new performance claim or
+new deferral. Audit/check logs: tmp/ucu09-row171/. Pin advances to 62b7a5e9;
+171/181 accepted, 10 pending. Continue row172; final window gates, upstream
+refresh, push and exact-SHA CI remain.
+
 Row170 is Port after the complete e8b7bb63 three-file audit. Default VAAPI now
 omits the optional Next driver instead of forcing Intel iHD; explicit supported
 drivers and device selection remain intact. All 14 config/protocol regressions
