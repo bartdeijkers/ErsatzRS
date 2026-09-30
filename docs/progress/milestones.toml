@@ -11416,6 +11416,20 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row166 is Covered after the full 3d31bfdd scanner/changelog audit. Native
+collect_remote_stream_files already accepts yml/yaml case-insensitively and
+preserves recursive discovery and manifest-first ordering. The existing discovery
+regression now includes mixed-case extensions and excludes backup/resource-fork
+and non-YAML files. All three focused scanner checks pass
+(786b7e93-e3f0-42f1-8e3f-8d8b00d47f81): discovery, actual SQLite metadata persistence
+while continuing after invalid YAML, and stable subtitle-sidecar reconciliation
+after removal/restoration. Strict scanner all-target Clippy, formatting and
+progress checks pass; logs are in tmp/ucu09-row166/. Review confirms no production
+change is needed, no parser/metadata bypass is introduced, and existing subtitle
+identity remains protected. No UI, FFmpeg/runtime, schema or health change; prior
+browser/transport evidence remains applicable. Pin advances to 3d31bfdd;
+166/181 accepted, 15 pending. Continue row167; final window gates remain.
+
 Row165 is Covered after the full 3054e5d0 seven-file audit. The source map in
 plans/upstream-catch-up.md traces both credits handlers to the shared native/Next/
 troubleshooting renderer: names are trimmed and checked before extension handling.

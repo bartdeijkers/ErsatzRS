@@ -4629,7 +4629,15 @@ mod tests {
             temp.path().join("Zulu.playlist.yml"),
             nested.join("Alpha.playlist.yaml"),
         ];
-        let mut definitions = vec![temp.path().join("000.yml"), nested.join("Beta.yaml")];
+        let mut definitions = vec![
+            temp.path().join("000.yml"),
+            nested.join("Beta.yaml"),
+            nested.join("Upper.YAML"),
+            temp.path().join("Mixed.YmL"),
+        ];
+        for name in ["ignored.txt", "ignored.yaml.bak", "._resource.yaml"] {
+            std::fs::write(temp.path().join(name), b"fixture").expect("excluded fixture");
+        }
         for path in manifests.iter().chain(&definitions) {
             std::fs::write(path, b"fixture").expect("remote stream fixture");
         }

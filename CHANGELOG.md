@@ -655,7 +655,8 @@ release section when tagging a release.
   Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
   prerequisite for the first upstream step.
   Verify existing blank credits-template fallback and streaming graphics/process
-  cleanup against the later upstream reliability fixes.
+  cleanup against the later upstream reliability fixes. Confirm case-insensitive
+  `.yml`/`.yaml` Remote Stream discovery with metadata and subtitle preservation.
 
 - Keep detailed future work in `plans/`, completion history and evidence in
   progress TOMLs, and reusable design artifacts under documentation. Milestones
