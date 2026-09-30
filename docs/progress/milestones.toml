@@ -11416,6 +11416,23 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row177 is Adapt under accepted ADRs 0008/0063 after all nine b1ed47db files
+were reviewed. Upstream's ARMv7 removal is not adopted: the six-target release
+matrix and Docker arm/v7 remain. ErsatzRS images acquire FFmpeg separately;
+managed v2.0.3 replaces upstream's bundled 8.1.2-1/digest policy and version
+string rules. Existing major/capability checks and acquisition health remain
+appropriate for the accepted runtime contract. The earlier approved expanded
+package audit covers the adopted twelve-patch set; row140 owns exact published
+runtime and decoded acceptance evidence. Both Linux/Windows archive hashes
+were reverified against that candidate manifest. All 13 managed-runtime tests
+pass (60aa5f5c-1bb6-4815-875c-fbfc2220f936), including default v2.0.3 selection,
+explicit release pinning, checksum rejection, promotion and update recovery.
+Approved QSV, AMF and native Linux NVIDIA hardware debt remains unverified.
+No runtime rebuild, Docker publication or new platform exclusion. Source map
+in the plan; audit and current checks in tmp/ucu09-row177/. Pin advances to
+b1ed47db; 177/181 accepted, 4 pending. Continue row178; final window gates,
+fresh upstream audit, push and exact-SHA CI remain.
+
 Row176 is Port after the complete 6f0449c2 workflow audit. Windows Next staging
 requires libvpl.dll and libvpl-LICENSE.txt from the same checksum-verified archive;
 both release branches move them beside the channel executable. Seven offline

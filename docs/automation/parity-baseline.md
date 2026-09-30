@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff` |
-| **Commit subject** | `build: package libvpl (from next) on windows (#3042)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6f0449c2f1b8f3078b678c6400d5c2a4c5b3e2ff |
+| **Pinned commit** | `b1ed47db7b17ece980fc48eb07c21bcdf4e9e18e` |
+| **Commit subject** | `feat!: drop arm32v7 support; bump ffmpeg (#3043)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b1ed47db7b17ece980fc48eb07c21bcdf4e9e18e |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

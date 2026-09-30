@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
 summary    = """
-176/181; 5 pending.
+177/181; 4 pending.
 UCU-06/07/08 Complete; exact-SHA CI and rows108-135 evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
