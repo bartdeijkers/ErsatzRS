@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `c0184f000095c9801dcf9c238010d9f13ed0c104` |
-| **Commit subject** | `perf: watermark improvements (#3039)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c0184f000095c9801dcf9c238010d9f13ed0c104 |
+| **Pinned commit** | `d7b265e07cbcfcf67dca69724f69349491b67ea9` |
+| **Commit subject** | `fix: next engine subtitles (#3040)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/d7b265e07cbcfcf67dca69724f69349491b67ea9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

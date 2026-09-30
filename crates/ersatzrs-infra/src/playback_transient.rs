@@ -126,7 +126,7 @@ impl TransientPlaybackTracks {
     }
 
     /// Use built-in language and subtitle-mode preferences on transient tracks.
-    /// The only database read is the global native embedded-subtitle setting.
+    /// The only database read is the global embedded-subtitle setting.
     ///
     /// # Errors
     /// Returns errors reading that global setting.
@@ -141,8 +141,7 @@ impl TransientPlaybackTracks {
             return Ok(None);
         }
         let mut subtitles = self.subtitles.clone();
-        if policy.engine == SubtitleSelectionEngine::Native && !use_embedded_subtitles(pool).await?
-        {
+        if !use_embedded_subtitles(pool).await? {
             subtitles.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
         }
         if !(policy.prepare_embedded_text && policy.engine == SubtitleSelectionEngine::Native) {
@@ -168,7 +167,7 @@ pub(super) fn retain_playable_subtitles(
     media_server: bool,
 ) {
     subtitles.retain(|subtitle| provider_subtitle_supported(subtitle, media_server));
-    if engine == SubtitleSelectionEngine::Native && mode != StreamingMode::HttpLiveStreamingDirect {
+    if mode != StreamingMode::HttpLiveStreamingDirect {
         subtitles.retain(|subtitle| {
             subtitle.subtitle_kind != subtitle_kind::EMBEDDED
                 || subtitle.is_image()
@@ -252,7 +251,9 @@ mod tests {
 
     #[test]
     fn transient_custom_rules_preserve_flags_languages_and_original_codecs() {
-        let tracks = tracks();
+        let mut tracks = tracks();
+        tracks.subtitles[0].is_extracted = true;
+        tracks.subtitles[0].path = Some("fixture.en.srt".into());
         assert_eq!(tracks.audio.len(), 2);
         assert_eq!(tracks.subtitles.len(), 3);
         let yaml = "items:\n- audio_language: [nld, eng]\n  audio_condition: \"codec = 'truehd' and channels = 6 and forced = true\"\n  subtitle_language: [eng]\n  subtitle_condition: 'forced = false and default = true'\n";
@@ -295,6 +296,78 @@ mod tests {
             selected.path.is_none(),
             "selection must not pretend extraction already happened"
         );
+    }
+
+    #[tokio::test]
+    async fn both_engines_filter_embedded_candidates_before_sidecar_preference() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE ConfigElement (Key TEXT PRIMARY KEY, Value TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for engine in [
+            SubtitleSelectionEngine::Native,
+            SubtitleSelectionEngine::Next,
+        ] {
+            for enabled in [false, true] {
+                sqlx::query("INSERT OR REPLACE INTO ConfigElement (Key, Value) VALUES (?, ?)")
+                    .bind(crate::ffmpeg_config::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES)
+                    .bind(enabled.to_string())
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+                for (extracted, path) in [
+                    (false, None),
+                    (true, None),
+                    (true, Some(" ")),
+                    (true, Some("fixture.en.srt")),
+                ] {
+                    let mut tracks = tracks();
+                    tracks.subtitles.retain(|track| track.stream_index != 4);
+                    tracks.subtitles[0].is_extracted = extracted;
+                    tracks.subtitles[0].path = path.map(str::to_owned);
+                    tracks.subtitles[1].language = Some("eng".into());
+                    for mode in [
+                        StreamingMode::HttpLiveStreamingSegmenter,
+                        StreamingMode::HttpLiveStreamingDirect,
+                    ] {
+                        let selected = tracks
+                            .select_subtitle(
+                                &pool,
+                                &["eng".into()],
+                                ChannelSubtitleMode::Any,
+                                TrackSelectionPolicy {
+                                    mode,
+                                    ..policy(engine)
+                                },
+                            )
+                            .await
+                            .unwrap()
+                            .unwrap();
+                        let embedded = enabled
+                            && (mode == StreamingMode::HttpLiveStreamingDirect
+                                || (extracted && path.is_some_and(|path| !path.trim().is_empty())));
+                        assert_eq!(selected.stream_index, if embedded { 3 } else { 5 });
+                    }
+                    tracks.subtitles[0].codec = Some("hdmv_pgs_subtitle".into());
+                    let selected = tracks
+                        .select_subtitle(
+                            &pool,
+                            &["eng".into()],
+                            ChannelSubtitleMode::Any,
+                            policy(engine),
+                        )
+                        .await
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(selected.stream_index, if enabled { 3 } else { 5 });
+                }
+            }
+        }
     }
 
     #[test]

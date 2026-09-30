@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Respect Use Embedded Subtitles for Next automatic selection and skip embedded
+  text without a usable extracted path before choosing subtitle preferences.
+
 - Publish plain Next watermarks as direct media layers, avoiding a graphics
   canvas when no graphics elements or opacity expressions require it. The pinned
   Next runtime now also applies configured opacity correctly to RGB images.

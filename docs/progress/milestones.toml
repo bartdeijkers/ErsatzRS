@@ -11416,6 +11416,33 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+Row174 is Port after the full d7b265e0 three-file audit. Both engines now
+respect Use Embedded Subtitles during automatic selection. Embedded text needs
+extracted metadata and a nonblank path before preference ranking except in HLS
+Direct; bitmap eligibility remains. Existing explicit pins and caller-owned
+native preparation preserve their separate accepted contracts. The two-engine
+matrix and all 33 focused tests pass (6a32c330-94fc-4371-b46f-4565e88b2858).
+The broader 308-test selection is covered by 306 passes in
+3e6276a4-80bc-42e2-ae54-cfbb1e757e24 and five corrected dynamic/cache passes in
+eb119135-0d34-4a03-aca4-e26e3c5e945d. Old fixtures that intentionally exercise
+demand-time extraction now use explicit pins; the published audio pin stays 1.
+Two real Next cases pass after the final fixture refactor
+(b36f9a7d-4cee-4027-8175-5654be5425e1): usable sidecars outrank competing
+unextracted defaults in decoded Burn/Convert, and explicit embedded preparation,
+seek beyond cues, selected audio and off remain correct. Authenticated provider
+embedded text passes in 7675ecd6-20b4-4ff4-ab26-cac9b1b48dba. Direct HTTP explicit
+text/off and provider sidecar Burn/Convert/seek pass in
+434295bb-4b63-4dd6-b798-874ae98dc874. A demonstrated callback fixture disconnect
+panic is corrected by accepting only BrokenPipe/ConnectionReset while writing a
+response; other failures remain fatal. Strict infra all-target Clippy passes in
+22.86s; architecture/progress/diff checks and substantive source review pass.
+Next HTTP smoke passes (ersatzrs-smoke-294499-1790798401): private callbacks stay
+private, HLS/TS/preview play, Dutch 880-Hz audio and subtitle pixels decode,
+wrapper restart and idle cleanup succeed. No new runtime build, schema or health
+capability change. Logs and source: tmp/ucu09-row174/. Pin advances to d7b265e0;
+174/181 accepted, 7 pending. Continue row175; final window gates, fresh upstream
+audit, push and exact-SHA CI remain.
+
 Row173 is Port after complete c0184f00 source/test/changelog audit.
 Shared graphics projection now selects ordered explicit Media layers for plain
 permanent/intermittent watermarks across all five production callers; mixed and

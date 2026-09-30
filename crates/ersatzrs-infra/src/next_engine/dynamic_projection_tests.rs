@@ -26,6 +26,9 @@ async fn fixture() -> (
         .execute(&pool)
         .await
         .unwrap();
+    // These identity tests exercise preparation of an explicitly selected track.
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=1,"SubtitleStreamIndex"=4"#)
+        .execute(&pool).await.unwrap();
     channel.streaming_engine = StreamingEngine::Next;
     channel.subtitle_mode = ChannelSubtitleMode::Default;
     channel.preferred_subtitle_language_code = Some("eng".into());

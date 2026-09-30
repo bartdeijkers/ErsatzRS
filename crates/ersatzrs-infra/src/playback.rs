@@ -1881,7 +1881,7 @@ async fn select_playback_subtitle_inner(
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
     };
-    if engine == SubtitleSelectionEngine::Native && !use_embedded_subtitles(pool).await? {
+    if !use_embedded_subtitles(pool).await? {
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
 

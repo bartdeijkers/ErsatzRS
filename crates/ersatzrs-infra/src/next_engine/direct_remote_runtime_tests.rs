@@ -73,13 +73,17 @@ async fn fixture_child_direct_embedded_text() {
     }
 }
 
-async fn configure_embedded(pool: &crate::db::DbPool) {
+async fn configure_embedded(pool: &crate::db::DbPool, enabled: bool) {
     sqlx::raw_sql(r#"
         UPDATE "Subtitle" SET "SubtitleKind"=0,"StreamIndex"=3,"Path"=NULL,"IsExtracted"=0;
         DELETE FROM "MediaStream" WHERE "MediaStreamKind"=3;
         INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId")
             VALUES (3,'subrip',3,'nld',0,'Dutch',1,0,100);
     "#).execute(pool).await.unwrap();
+    if enabled {
+        sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=2,"SubtitleStreamIndex"=3"#)
+            .execute(pool).await.unwrap();
+    }
 }
 
 #[tokio::test]
@@ -234,7 +238,7 @@ async fn run_case(
         ordinary_callback_runtime::configure_sidecar(&pool, &root, case.subtitles, false).await;
     }
     if case.source == CaptionSource::EmbeddedText {
-        configure_embedded(&pool).await;
+        configure_embedded(&pool, case.subtitles.is_some()).await;
     }
     let host = Arc::new(host::NextHost::new(pool, locker, root.join("playout")));
     let mut callback = callback_listener(host.clone()).await;
