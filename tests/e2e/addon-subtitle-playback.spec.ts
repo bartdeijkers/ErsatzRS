@@ -95,7 +95,7 @@ function schedule(itemId: number, fallback: boolean): { number: string; started:
     "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode","IdleBehavior","PreferredSubtitleLanguageCode",
     "MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg")
     VALUES (${quote(randomUUID())},'${number}',${Number(number)},'M02 subtitles','E2E',${profile},5,0,0,0,0,0,${fallback ? "'nld'" : 'NULL'},0,0,3,1,1);
-    INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES(last_insert_rowid(),20,1);
+    INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES(last_insert_rowid(),0,1);
     INSERT INTO "PlayoutItem" ("DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","MediaItemId","OutPoint","PlayoutId","Start")
     VALUES(1,0,strftime('%Y-%m-%d %H:%M:%f','now','+81 seconds'),0,'00:00:05',${itemId},'00:01:26',last_insert_rowid(),strftime('%Y-%m-%d %H:%M:%f','now'));
     COMMIT;`);

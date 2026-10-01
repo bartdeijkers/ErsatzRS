@@ -134,7 +134,7 @@ INSERT INTO "Channel" ("UniqueId","Number","SortNumber","Name","Group","FFmpegPr
  "MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg")
 VALUES ('80000000-0000-0000-0000-${listId.toString().padStart(12, '0')}','${channelNumber}',${Number(channelNumber)},
  'prepared playback','E2E',${profileId},5,0,0,0,0,0,0,0,0,1,1);
-INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES (last_insert_rowid(),20,1);
+INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES (last_insert_rowid(),0,1);
 INSERT INTO "PlayoutItem" ("DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint",
  "MediaItemId","OutPoint","PlayoutId","Start")
 VALUES (1,0,strftime('%Y-%m-%d %H:%M:%f','now','+55 seconds'),0,'00:00:00',

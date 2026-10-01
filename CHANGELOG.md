@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restore shared browser-test language and theme after localization checks, and
+  keep manually seeded playback fixtures independent of the external JSON engine.
+
 - Run Next CI against the validated FFmpeg v2.0.4 package and supply the
   packaged executable to the graphics-canvas runtime test. Keep fallback and
   on-demand subtitle fixtures eligible under the extracted-text selection

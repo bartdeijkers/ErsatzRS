@@ -1,8 +1,26 @@
-import { expect, test } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+
+test.afterEach(async ({ request }) => {
+  // Restore the wrapper baseline even when a localized assertion fails.
+  const response = await request.post('/admin-api/settings/ui/save', {
+    form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
+  });
+  expect(response.status()).toBe(303);
+});
+
+async function settled(page: Page, javaScriptEnabled: boolean): Promise<void> {
+  if (javaScriptEnabled) {
+    await page.waitForFunction(
+      () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+      undefined,
+      { timeout: 15_000 },
+    );
+  }
+}
 
 function sqlite(sql: string): string {
   const database = process.env.E2E_DB_PATH;
@@ -29,6 +47,7 @@ for (const javaScriptEnabled of [true, false]) {
           form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
         });
         await page.goto('/media/sources/local/add');
+        await settled(page, javaScriptEnabled);
         await page.locator('#local-library-name').fill(name);
         await page.locator('#local-library-paths').fill('.');
         await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -40,17 +59,21 @@ for (const javaScriptEnabled of [true, false]) {
         await page.locator('#local-library-paths').fill(literal);
         await page.getByRole('button', { name: 'Add', exact: true }).click();
         await expect(page).toHaveURL(/\/media\/sources\/local$/);
+        await settled(page, javaScriptEnabled);
         const id = sqlite(`SELECT Id FROM Library WHERE Name='${name}';`);
         expect(id).toMatch(/^\d+$/);
         const pathId = sqlite(`SELECT Id FROM LibraryPath WHERE LibraryId=${id};`);
         expect(sqlite(`SELECT Path FROM LibraryPath WHERE Id=${pathId};`)).toBe(literal);
         const mediaId = Number(sqlite(`INSERT INTO MediaItem (LibraryPathId, State) VALUES (${pathId}, 0); SELECT last_insert_rowid();`));
         await page.goto(`/media/sources/local/${id}/edit`);
+        await settled(page, javaScriptEnabled);
         await page.locator('#local-library-name').fill(`${name} edited`);
         await page.getByRole('button', { name: 'Save', exact: true }).click();
         await expect(page).toHaveURL(/\/media\/sources\/local$/);
+        await settled(page, javaScriptEnabled);
         expect(sqlite(`SELECT LibraryPathId FROM MediaItem WHERE Id=${mediaId};`)).toBe(pathId);
         await page.goto('/media/sources/local/add');
+        await settled(page, javaScriptEnabled);
         await page.locator('#local-library-name').fill(`${name} conflict`);
         await page.locator('#local-library-paths').fill(child);
         await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -67,6 +90,7 @@ for (const javaScriptEnabled of [true, false]) {
         form: { is_dark_mode: 'false', language: 'nl' }, maxRedirects: 0,
       });
       await page.goto('/media/sources/local/add');
+      await settled(page, javaScriptEnabled);
       await page.locator('#local-library-name').fill('Synthetic Dutch draft');
       const unsafePath = '</textarea><script data-path-probe>invalid</script>';
       await page.locator('#local-library-paths').fill(unsafePath);

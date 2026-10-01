@@ -115,6 +115,11 @@ async function waitForHydration(page: Page): Promise<void> {
 test.describe('collection detail parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed collection detail');
 
+  test.afterEach(async ({ page }) => {
+    // Language is persisted in the shared host, not scoped to this browser.
+    await forceEnglish(page);
+  });
+
   test('hydrates, persists custom ordering, and removes selected items', async ({ page }, testInfo) => {
     const seed = seedForProject(testInfo);
     const runtimeErrors: string[] = [];

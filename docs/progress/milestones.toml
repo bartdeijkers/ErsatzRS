@@ -11420,6 +11420,25 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 browser CI diagnosis: Chromium completed with 268 passes, nine
+conditional skips and 14 failures. Twelve collection failures and the logs
+failure were English locators encountering Dutch state left by localization
+fixtures. The prepared-playback fixture used ScheduleKind=20, now the real
+ExternalJson engine, without an external schedule. Fixture teardown restores
+the shared English/dark baseline; manually seeded add-on playback uses None=0.
+The same stale schedule constant is corrected in the opt-in subtitle and
+SponsorBlock fixtures; those external-service checks were not rerun.
+The affected 44-case sequence passes 42 cases with one existing Firefox shared-
+database skip, exposing one Firefox navigation abort. Traces locate cancellation
+when leaving the list/edit pages before hydration completes. Bounded readiness
+waits on hydrated pages preserve the page-error assertion; plain validation
+responses intentionally do not hydrate. Final library/logs verification passes
+10/10 in 28.4 seconds across both browsers and JS/no-JS modes
+(test-results/ucu09-ci-navigation-final/playwright-results.json). Prior passing
+prepared-playback and collection cases remain valid because their files did not
+change after that run. No production UI, assertion, retry or deadline is weakened.
+Firefox full CI remains running; both corrections require a new exact-SHA run.
+
 2026-10-01: pushed checkpoint 34fd22b63427e8eefe022af68407975c6473f3ef to main.
 Exact-SHA CI 36840768718 has passed Format, Documentation links, Test, Clippy
 and Cargo deny; its Next engine job failed and browser jobs are still pending.

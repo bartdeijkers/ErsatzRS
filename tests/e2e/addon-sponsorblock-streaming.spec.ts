@@ -110,7 +110,7 @@ INSERT INTO "Channel" ("UniqueId","Number","SortNumber","Name","Group","FFmpegPr
  "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode","IdleBehavior",
  "MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg")
 VALUES (${quote(randomUUID())},'${number}',${Number(number)},'Manual SponsorBlock','E2E',${profileId},5,0,0,0,0,0,0,0,0,1,1);
-INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES (last_insert_rowid(),20,1);
+INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES (last_insert_rowid(),0,1);
 INSERT INTO "PlayoutItem" ("DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint",
  "MediaItemId","OutPoint","PlayoutId","Start")
 VALUES (1,0,strftime('%Y-%m-%d %H:%M:%f','now','+${remaining} seconds'),0,${quote(timeSpan(joinMilliseconds))},
