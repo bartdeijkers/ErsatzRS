@@ -1,7 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 
 const databasePath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+
+async function hydrated(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+    undefined,
+    { timeout: 15_000 },
+  );
+}
 
 // These fixtures belong only to the disposable E2E database. Browser projects
 // run serially because the health snapshot is intentionally shared by the host.
@@ -37,7 +45,7 @@ test.describe('shared health results', () => {
         await expect(row).toBeVisible();
         await expect(row).not.toContainText(`MediaItem ${id}`);
         if (javaScriptEnabled) {
-          await page.waitForFunction(() => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+          await hydrated(page);
           expect(errors).toEqual([]);
           // Establish the revision baseline before changing the synthetic item.
           await page.waitForResponse(response => response.url().includes('/admin-api/media_state_revision') && response.ok());
@@ -66,7 +74,9 @@ test.describe('shared health results', () => {
           await expect(row).not.toContainText(`MediaItem ${id}`);
           await page.getByRole('button', { name: 'Refresh', exact: true }).click();
           await page.goto('/system/logs');
+          await hydrated(page);
           await page.goto('/system/health');
+          await hydrated(page);
           await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
         }
         await page.request.post('/admin-api/settings/ui/save', {

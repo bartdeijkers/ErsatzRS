@@ -11437,7 +11437,15 @@ responses intentionally do not hydrate. Final library/logs verification passes
 (test-results/ucu09-ci-navigation-final/playwright-results.json). Prior passing
 prepared-playback and collection cases remain valid because their files did not
 change after that run. No production UI, assertion, retry or deadline is weakened.
-Firefox full CI remains running; both corrections require a new exact-SHA run.
+Firefox CI subsequently finished with 243 passes, 33 conditional skips and 15
+failures: the same locale contamination, the corrected local-library navigation,
+and one health-page navigation abort. Its trace shows the test leaving the logs
+page before hydration. The health test now waits for readiness on those newly
+loaded pages while preserving navigation during refresh and all error assertions.
+Focused health/AV1 checks pass 8/8 in 28.4 seconds in both browsers and JS/no-JS
+modes (test-results/ucu09-ci-health-navigation/playwright-results.json).
+Run 36840768718 is terminal failed; all observed failures now have focused
+passing corrections. Green CI on the corrected exact SHA remains required.
 
 2026-10-01: pushed checkpoint 34fd22b63427e8eefe022af68407975c6473f3ef to main.
 Exact-SHA CI 36840768718 has passed Format, Documentation links, Test, Clippy

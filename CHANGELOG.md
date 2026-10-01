@@ -57,6 +57,8 @@ release section when tagging a release.
 
 - Restore shared browser-test language and theme after localization checks, and
   keep manually seeded playback fixtures independent of the external JSON engine.
+  Wait for hydrated pages before subsequent test navigation, preserving Firefox
+  page-error checks.
 
 - Run Next CI against the validated FFmpeg v2.0.4 package and supply the
   packaged executable to the graphics-canvas runtime test. Keep fallback and
