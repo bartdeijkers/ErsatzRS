@@ -164,3 +164,20 @@ GitHub-hosted minutes.
 
 A local Windows fallback can restore only the Windows archive; it does not
 produce the Linux archives.
+
+### Recover a Docker build recipe failure
+
+If the archive source has passed CI but the Docker build recipe fails, preserve
+the release tag and successful archives. Correct and verify the Dockerfile on
+main, push the correction, and wait for its CI. Once the original release run
+has completed, dispatch `release-docker-recovery.yml` with the existing stable
+`tag`, its full `source_sha`, and the original release `assets_run` ID.
+
+The recovery workflow checks out the immutable application tag and replaces only
+`Dockerfile.release` with the corrected recipe. It requires an unpublished stable
+draft, successful CI for the application source, and a successful web-assets job
+from the matching release run. It reuses that web bundle, records the recipe diff,
+and labels the image with both source and recipe revisions. It publishes and
+verifies the three-platform image and matching `latest` manifest. Include the
+recovery run and recipe revision in release acceptance evidence; the failed
+original Docker job is not a successful build.

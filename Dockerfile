@@ -71,6 +71,7 @@ WORKDIR /workspace
 # without letting ordinary source edits invalidate this layer.
 COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 COPY .cargo .cargo
+COPY crates/ersatzrs-addon-contract/Cargo.toml crates/ersatzrs-addon-contract/Cargo.toml
 COPY crates/ersatzrs-app/Cargo.toml crates/ersatzrs-app/Cargo.toml
 COPY crates/ersatzrs-core/Cargo.toml crates/ersatzrs-core/Cargo.toml
 COPY crates/ersatzrs-domain/Cargo.toml crates/ersatzrs-domain/Cargo.toml
@@ -79,18 +80,21 @@ COPY crates/ersatzrs-healthcheck/Cargo.toml crates/ersatzrs-healthcheck/Cargo.to
 COPY crates/ersatzrs-hwprobe/Cargo.toml crates/ersatzrs-hwprobe/Cargo.toml
 COPY crates/ersatzrs-infra/Cargo.toml crates/ersatzrs-infra/Cargo.toml
 COPY crates/ersatzrs-launcher/Cargo.toml crates/ersatzrs-launcher/Cargo.toml
+COPY crates/ersatzrs-platform/Cargo.toml crates/ersatzrs-platform/Cargo.toml
 COPY crates/ersatzrs-scanner/Cargo.toml crates/ersatzrs-scanner/Cargo.toml
 COPY crates/ersatzrs-scheduler/Cargo.toml crates/ersatzrs-scheduler/Cargo.toml
 COPY crates/ersatzrs-web/Cargo.toml crates/ersatzrs-web/Cargo.toml
 COPY xtask/Cargo.toml xtask/Cargo.toml
 RUN set -eux; \
     for crate in \
+        crates/ersatzrs-addon-contract \
         crates/ersatzrs-app \
         crates/ersatzrs-core \
         crates/ersatzrs-domain \
         crates/ersatzrs-ffmpeg \
         crates/ersatzrs-hwprobe \
         crates/ersatzrs-infra \
+        crates/ersatzrs-platform \
         crates/ersatzrs-scheduler \
         xtask; \
     do \

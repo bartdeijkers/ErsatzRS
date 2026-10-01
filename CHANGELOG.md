@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Include the add-on contract and platform crates in Docker dependency-cache
+  stages so release images can build the complete workspace. Add Docker-only
+  recovery that preserves the accepted application tag and web bundle while
+  recording the corrected build recipe.
+
 ## [1.1.0] - 2026-10-01
 
 ### Security
