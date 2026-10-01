@@ -61,21 +61,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-01: prepare stable 1.1.0 application version metadata and yt-dlp 0.11.6
-host compatibility. The installed-candidate source refresh check passes;
-add-on commit 92ccdff is pushed and CI 36864420271 is running. Update the
-installed add-on before upgrading the host. Application CI 36860667159 at
-a3641579 has passed Next, Chromium and Rust; Firefox remains running. Later
-version metadata needs its own complete CI before release tagging.
-
-2026-10-01: the ARM FFmpeg candidates pass emulated software acceptance and
-are staged with unchanged v2.0.4 x64/Windows archives in an unpublished v2.0.5
-draft. Its source is pushed; archive hashes and uploaded asset digests match.
-Application CI at a08773bf is terminal green. Subsequent release corrections
-need their own exact-SHA CI. ADR 0100's official-artifact requirement leaves
+2026-10-01: checkpoint a3641579 has terminal green CI 36860667159, including
+both browsers, Rust and Next runtime gates. FFmpeg v2.0.5 is public with verified
+public archive hashes, reusing the exact v2.0.4 x64/Windows bytes and adding the
+accepted ARM packages. Official add-ons v0.11.6 is public at cb8fcd9 after green
+Windows/Linux CI; its public ZIP matches the CI artifact. Check release
+attachment workflow 36866594938 and the final archive after it completes.
+Application version 1.1.0 and runtime v2.0.5 integration are committed locally;
+push them for new exact-SHA CI before tagging. Update installed yt-dlp to 0.11.6
+before upgrading the host. ADR 0100's official-artifact requirement still leaves
 ARMv7 Next packaging blocked pending the maintainer's answer to the unmodified,
-pinned upstream source-build exception. Keep v1.1.0 unpublished until the final
-candidate and release gates pass; native ARM/macOS acceptance debt is unchanged.
+pinned upstream source-build exception. Keep application v1.1.0 unpublished
+until the final candidate and release gates pass. Native ARM/macOS acceptance
+debt remains unchanged.
 
 2026-09-28: UCU-08 is Complete. Rows116-135, all local window gates and
 terminal green CI 36453480304 at dfeaf6d0 satisfy acceptance. Browser reports

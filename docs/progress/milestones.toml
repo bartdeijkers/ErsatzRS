@@ -11466,6 +11466,31 @@ approval for an unmodified source-build packaging exception to ADR 0100 is
 pending; the existing ARM application acceptance debt does not conceal this
 missing delivery prerequisite. Application v1.1.0 remains unpublished.
 
+2026-10-01 supporting releases are published after terminal green checkpoint
+CI 36860667159 at a3641579b48ece6f1488a6bcaa59db3fac4e4449. Every required job
+passed: Rust nextest 3376 tests (7844d0cd-6fc7-4167-9802-752bb42fbffa), Next 311
+and both HTTP smoke gates, Chromium 282/9 skipped and Firefox 258/33 skipped;
+both browser reports have zero unexpected or flaky results. Evidence is retained
+under tmp/release-v1.1.0/ci-a364-*.
+ErsatzRS-ffmpeg v2.0.5 at bf3db00 is public and stable. Re-downloaded public
+archives and sidecars exactly match all eight verified draft files. Linux x64
+and Windows remain byte-identical v2.0.4 archives; the added ARMv7/ARM64 archives
+have the previously recorded hashes and emulated acceptance. No runtime build
+or Docker workflow was started for publication. The application default and
+Next CI now select v2.0.5; 14 runtime-manager tests (Nextest
+08b87f38-5e55-4617-883b-42ef8844165d), strict all-target FFmpeg Clippy and
+formatting pass. End-to-end public provisioning is owned by the next exact-SHA CI.
+Official add-ons v0.11.6 is public at cb8fcd98bb610c820d71ca2b9cf25be05d73897a,
+following terminal green Windows/Linux CI 36865117625. The downloaded public
+ZIP matches the final CI archive SHA-256
+b8ca9bb2221ff0c14c00985f6151889bf0675e5e347ccc6b2d513d77ee8a2c11.
+Its release-triggered attachment workflow 36866594938 remains running; verify
+the final attached archive after that workflow completes. Update installed
+yt-dlp before upgrading the host. Application v1.1.0 remains unpublished;
+its version/runtime integration needs fresh exact-SHA CI, and the ARMv7 Next
+source-build exception still awaits maintainer approval. Native hardware and
+ARM/macOS application acceptance debt is unchanged.
+
 2026-10-01 stable version integration: application workspace packages now
 report 1.1.0, with consistent internal dependency constraints and lockfile;
 the independently versioned add-on contract remains 0.4.0. The official yt-dlp
