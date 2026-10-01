@@ -23,7 +23,7 @@ use crate::version::{
 /// First-party `FFmpeg` build repository used by ADR 0008 runtime acquisition.
 pub const ERSATZRS_FFMPEG_REPOSITORY: &str = "bartdeijkers/ErsatzRS-ffmpeg";
 /// Known-good `ErsatzRS-ffmpeg` release tag used when no runtime is available.
-pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "v2.0.4";
+pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "v2.0.5";
 /// Optional operator pin for the managed `FFmpeg` release tag.
 pub const MANAGED_FFMPEG_TAG_ENV_VAR: &str = "ERSATZRS_FFMPEG_RELEASE_TAG";
 /// Set to `0`, `false`, or `no` to forbid startup downloads.
@@ -1379,7 +1379,7 @@ mod tests {
     fn default_manager_uses_ffmpeg_nine_package_line() {
         let config = FfmpegRuntimeManagerConfig::new("/tmp/ersatzrs-ffmpeg-test");
 
-        assert_eq!(config.release_tag, "v2.0.4");
+        assert_eq!(config.release_tag, "v2.0.5");
         assert!(!config.release_tag_pinned);
     }
 

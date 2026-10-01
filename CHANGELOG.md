@@ -63,7 +63,7 @@ release section when tagging a release.
   Wait for hydrated pages before subsequent test navigation, preserving Firefox
   page-error checks.
 
-- Run Next CI against the validated FFmpeg v2.0.4 package and supply the
+- Run Next CI against the validated FFmpeg v2.0.5 release and supply the
   packaged executable to the graphics-canvas runtime test. Keep fallback and
   on-demand subtitle fixtures eligible under the extracted-text selection
   contract, without bypassing the playback assertions.
@@ -653,7 +653,10 @@ release section when tagging a release.
   Check FFV1 encoding/decoding, NUT input/output support and canvas timing
   filters at startup and report missing support through FFmpeg health checks.
 
-- Use the checksum-verified ErsatzRS-ffmpeg v2.0.4 packages by default, adding
+- Use the checksum-verified ErsatzRS-ffmpeg v2.0.5 release by default. It adds
+  Linux ARMv7 and ARM64 packages and retains the exact v2.0.4 Linux x64 and
+  Windows packages. ARMv7 requires GLIBC 2.36 (Debian Bookworm or newer).
+  The runtime includes
   SVG decoding with correct translucent overlays and the upstream QSV/AMF
   runtime patches, including legacy Intel decoder-pool retention, D3D11 frame
   transfers and oneVPL device discovery. Preserve existing codecs and subtitle/audio playback;

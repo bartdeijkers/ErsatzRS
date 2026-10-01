@@ -317,7 +317,7 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: "8"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.4
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.5
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
