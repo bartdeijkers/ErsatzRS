@@ -11387,7 +11387,7 @@ row136 after refreshing upstream. No new release is implied.
 id         = 'ucu-09'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through the latest fetched tip'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
@@ -11420,6 +11420,33 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 UCU-09 acceptance closeout: published candidate
+b76d11c65339cd31540ef4d36d016b7e75663c58 has terminal green CI 36900396649.
+Every required job executed successfully: Format, Documentation links, Cargo
+deny, workspace Clippy, Test, Next engine, Chromium and Firefox. Rust nextest
+reports 3376 tests with zero failures/errors (129ef273-eaad-4c6c-9dc9-8773b636390b).
+Chromium's downloaded report confirms 282 passes, nine skips and zero unexpected
+or flaky results. Firefox's downloaded report confirms 258 passes, 33 skips
+and zero unexpected/flaky results or report errors.
+Next's downloaded origin matches source 4ad282f and accepted official archive
+010306bfd8bac43c88d88f4a4117255ea5f22db60660c546921ee4fad1680bc8; decoded
+regressions and both HTTP smoke modes pass. Evidence: tmp/release-v1.1.0/ci-b76d-*.
+The unchanged row183 local workspace, matched Leptos, parity and both-engine
+smoke evidence remains valid; TSDuck records 87 checks and zero failures.
+Runtime-manager/version/package corrections have focused proofs and full
+integrated CI above. Native Windows Next/JavaScript/chapter application
+evidence remains valid; no relevant production behavior changed.
+A fresh upstream API check and clean reference checkout both identify
+960421e8a3cb832864fe096d5f0cfa833dbb1837, matching the pin and final ledger row.
+All 183 ordered rows have justified verdicts; accepted ADR 0095 retains an
+accurate Partial implementation record for the explicitly approved debt.
+Progress gaps retain the accepted Next text, hardware and ARM/macOS limitations;
+none is silently marked verified. Published FFmpeg v2.0.5, add-ons v0.11.6 and
+the approved Next snapshot satisfy runtime delivery. UCU-00 through UCU-09 are
+Complete. Application release acceptance remains separate: final documentation
+needs exact-SHA pre-tag CI, followed by draft archive/Docker build and exact
+package/publication gates. These are not claimed complete by UCU closeout.
+
 2026-10-01 ARM runtime release preparation: both ARM packages pass clean
 emulated Bookworm startup, the complete application capability inventory,
 decoded SVG/alpha/text, drawvg/drawtext, rav1e/SVT-AV1 encoding and decoding,

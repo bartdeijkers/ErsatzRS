@@ -13,7 +13,7 @@ its original native-only wording is superseded by this decision.
 Partial — the optional engine is integrated through persisted selection,
 managed package discovery, supervised processes, authenticated provider/remote
 inputs, selected tracks, fallback, graphics, troubleshooting and health. The
-UCU-09 final window gates and outstanding platform acceptance remain open; the
+UCU-09 final window gates pass; approved platform acceptance debt remains open. The
 owning [catch-up milestone](../progress/milestones.toml) records current proof.
 Linux and native Windows application playback tests pass
 with Next `6b49dae` and published ErsatzRS-ffmpeg v2.0.4, including selected

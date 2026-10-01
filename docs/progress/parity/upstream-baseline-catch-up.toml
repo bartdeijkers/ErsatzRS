@@ -4,13 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106']
 summary    = """
-183/183 accepted; native AV1 follows implemented ADR 0106.
-Final window local gates pass; push and exact-SHA CI remain.
+183/183 accepted; feature remains In progress for approved acceptance debt.
+UCU-00 through UCU-09 are Complete. Final window local gates and terminal
+green exact-SHA CI 36900396649 at b76d11c6 pass. Stable v1.1.0 package acceptance remains separate.
 UCU-09 now has native Windows application proof for Next, JavaScript selection
 and chapter expressions, including all four chapter-profile language environments.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
 (2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
-UCU-06/07/08 Complete; evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
 141-142/144/152-153 N/A; AAC surround decoding is proven.
@@ -39,7 +39,6 @@ and native smoke pass.
 164 Port: dependent choices and template hydration; four browser cases pass.
 165 Covered: credits fallback and worker/graphics ownership; 18 checks pass.
 166 Covered: case-insensitive YAML discovery; three scanner checks pass.
-Final CI remains.
 
 UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
 chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
