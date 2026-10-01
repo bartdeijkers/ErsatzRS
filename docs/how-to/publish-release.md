@@ -57,9 +57,10 @@ git push origin "$tag"
 ```
 
 For non-beta tags, the tag push is the release command. It starts `.github/workflows/release.yml`,
-which creates the GitHub release, builds the web assets once, builds each active
-platform archive, uploads the archives, and publishes the multi-arch Docker
-image to GHCR.
+which creates an unpublished GitHub draft, builds the web assets once, builds
+each active platform archive, uploads the archives, and publishes the multi-arch
+Docker image to GHCR. Publishing the application draft is a separate final step
+after archive acceptance; a green build alone does not publish it.
 
 For a beta, push a new immutable annotated beta tag only after exact-SHA CI is
 green. The tag is visible before manual package acceptance; the release remains
@@ -114,6 +115,27 @@ gh release edit "$tag" --draft=false
 Do not rebuild or upload an archive during publication. Re-download the public
 asset and require the same digest; verify the release is a prerelease and no
 longer a draft. The beta workflow refuses to overwrite published release assets.
+
+## Accept and publish a non-beta draft
+
+After all release jobs succeed, confirm the tag resolves to the exact source
+that passed candidate CI. Download all four draft archives into a fresh directory,
+record their SHA-256 hashes, and verify the [bundle contents](../reference/release-bundle.md).
+Run the web-bundle consistency gate and the current milestone's package/runtime
+acceptance against those extracted files. Preserve explicitly approved platform
+acceptance debt without describing it as verified.
+
+Confirm no release job or rerun is active, then download the draft archives again
+and require their hashes to match the tested files. Publish those existing bytes:
+
+```bash
+gh release edit "$tag" --draft=false --prerelease=false --latest
+```
+
+Re-download the published archives and compare the hashes again. Do not rebuild
+or replace assets during publication. Verify the release is neither a draft nor
+a prerelease. The Docker image and channel tag are published by the workflow;
+verify their manifest and supported platforms separately.
 
 ## Verify the published non-beta release
 

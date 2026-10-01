@@ -633,6 +633,8 @@ release section when tagging a release.
 - Preserve the accepted Next dependency in a checksum-pinned snapshot, so
   upstream replacement of its develop release cannot change or break packaging.
   Reuse the tested ARMv7 executable across archives and Docker images.
+- Stage stable application archives in an unpublished draft until package
+  acceptance is complete, then publish the verified bytes.
 
 - Build the missing ARMv7 Next executable from pinned, unmodified upstream
   source for release archives and Docker images, with checksum-verified source

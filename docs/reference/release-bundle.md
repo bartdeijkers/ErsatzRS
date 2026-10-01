@@ -20,6 +20,9 @@ matching top-level directory.
 | `ersatzrs-web.exe` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner.exe` | One-shot scanner binary |
 | `ersatzrs-healthcheck.exe` | Readiness probe for `/healthz` |
+| `ersatztv-channel.exe` | Pinned optional Next engine |
+| `libvpl.dll`, `libvpl-LICENSE.txt` | Next Windows companion and license |
+| `next/` | Next license and artifact provenance |
 | `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
 | `assets/` | Graphics and template assets |
 | `LICENSE` | Project license |
@@ -41,6 +44,8 @@ top-level directory.
 | `ersatzrs-web` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner` | One-shot scanner binary |
 | `ersatzrs-healthcheck` | Readiness probe for `/healthz` |
+| `ersatztv-channel` | Pinned optional Next engine |
+| `next/` | Next license and artifact provenance |
 | `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
 | `assets/` | Graphics and template assets |
 | `LICENSE` | Project license |
@@ -95,7 +100,9 @@ separate from the default SQLite state directory on native installations.
 The Docker image runs `/usr/local/bin/ersatzrs-web` as a non-root service user,
 publishes port `8409`, and declares `/data` as persistent storage. It includes
 the web assets and `ersatzrs-healthcheck`, but acquires FFmpeg through the same
-managed runtime path as native archives.
+managed runtime path as native archives. The pinned Next executable is installed
+at `/usr/local/bin/ersatztv-channel`, with its license and provenance under
+`/usr/local/bin/next`.
 
 The image defaults to:
 
