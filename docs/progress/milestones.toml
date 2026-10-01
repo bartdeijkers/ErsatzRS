@@ -11420,6 +11420,24 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01: pushed checkpoint 34fd22b63427e8eefe022af68407975c6473f3ef to main.
+Exact-SHA CI 36840768718 has passed Format, Documentation links, Test, Clippy
+and Cargo deny; its Next engine job failed and browser jobs are still pending.
+The failure was reproduced locally: the canvas test lacked its runtime path,
+and seven subtitle fixtures lost explicit playout pins while still declaring
+embedded text unextracted. CI also pinned the superseded v2.0.2 package.
+The correction pins verified v2.0.4, exports the canvas executable path, and
+extracts real Dutch subtitle artifacts for automatic fallback/on-demand selection.
+The selection guard and decoded assertions are unchanged. All eight previously
+failing cases now pass (Nextest 3de1b029-5d75-4f3a-9697-62a78d21493f,
+84.149 seconds; tmp/ucu09-ci-fix/next-fixtures-v204.log). Strict all-target
+infra/ffmpeg Clippy, formatting, new-allow policy and progress checks pass.
+Remaining browser results and green CI on the corrected SHA remain due.
+The maintainer authorized commit, push, CI and a stable ErsatzRS v1.1.0 release
+after all required CI checks pass, plus add-on/runtime publication if needed. Release preflight
+found v2.0.4 has no ARM package assets; stable ARM startup delivery remains
+unproven. Existing x64/Windows runtime packages must be reused unchanged.
+
 2026-10-01 row183 acceptance and local window closeout pass. ADR 0106 is
 Accepted and Implemented; row183 is Adapt. All 183 ordered SHA/subject pairs
 match refreshed upstream history; latest fetched tip remains 960421e8. The

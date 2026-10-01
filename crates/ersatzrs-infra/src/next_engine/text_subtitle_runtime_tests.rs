@@ -83,6 +83,33 @@ async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert
         .unwrap();
 }
 
+// Automatic selection needs the same extracted source artifact a completed
+// scan supplies; an explicit playout pin does not carry into fallback items.
+async fn prepare_automatic_text_tracks(
+    pool: &crate::db::DbPool,
+    ffmpeg: &Path,
+    clip: &Path,
+    root: &Path,
+) {
+    let extracted = root.join("extracted.nl.srt");
+    let mut command = Command::new(ffmpeg);
+    command
+        .args(["-v", "error", "-nostdin", "-y", "-i"])
+        .arg(clip)
+        .args(["-map", "0:3", "-c:s", "srt"])
+        .arg(&extracted);
+    tool(command).await;
+    let updated = sqlx::query(
+        r#"UPDATE "Subtitle" SET "IsExtracted"=1,"Path"=?
+           WHERE "SubtitleKind"=0 AND "StreamIndex"=3"#,
+    )
+    .bind(extracted.to_str().unwrap())
+    .execute(pool)
+    .await
+    .unwrap();
+    assert_eq!(updated.rows_affected(), 1);
+}
+
 async fn assert_text_video_and_audio(ffmpeg: &Path, segment: &Path, burned: bool) {
     let mut video = Command::new(ffmpeg);
     video

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-09: all 183 rows accepted; authorized push and exact-SHA CI'
+current_focus = 'UCU-09: correct Next CI fixtures, finish exact-SHA CI, prepare stable v1.1.0'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on

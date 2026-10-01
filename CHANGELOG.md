@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Run Next CI against the validated FFmpeg v2.0.4 package and supply the
+  packaged executable to the graphics-canvas runtime test. Keep fallback and
+  on-demand subtitle fixtures eligible under the extracted-text selection
+  contract, without bypassing the playback assertions.
+
 - Preserve AV1 profiles and use fMP4 for native AV1 HLS output. Reject AV1
   MPEG-TS output before startup and report incompatible channel settings in
   health checks; Next continues to reject AV1 (ADR 0106). Software SVT-AV1
