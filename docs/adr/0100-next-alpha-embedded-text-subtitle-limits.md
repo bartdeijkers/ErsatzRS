@@ -104,12 +104,23 @@ Verify the source archive and lockfile checksums before building with Rust
 to remain compatible with GLIBC 2.36. Retain its license, source revision,
 compiler identity, build command and payload hashes in `origin.json`.
 
-The same recipe supplies release archives and ARMv7 Docker images. Packaging
+The recipe produces the accepted ARMv7 artifact; release archives and Docker
+images reuse that checksum-pinned binary. Packaging
 must identify this as a source build rather than an official downloaded asset.
 Other platforms continue using their verified official artifacts. A new source
 revision requires the existing source review, runtime acceptance and CI gates.
 Emulated startup and decoded playback checks are distinct from the approved,
 still-unverified native ARM application and hardware acceptance.
+
+### Preserving accepted dependency artifacts
+
+The maintainer approved the immutable `next-4ad282f` dependency snapshot on
+2026-10-01 after upstream deleted the accepted `develop` downloads. Preserve
+all five official archives byte-for-byte from upstream CI 36832767332, alongside
+the accepted ARMv7 build, checksums, license and provenance. Pin archive and
+license hashes in the staging code. Private-repository access uses the existing
+host GitHub CLI login or CI token; Docker consumes host-staged files without
+credentials. Do not replace this snapshot when upstream advances.
 
 ## Consequences
 

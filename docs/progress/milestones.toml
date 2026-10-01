@@ -11495,6 +11495,20 @@ at 8dc0a3fb62359738b176df663a0f7feeac724f10. The maintainer subsequently
 approved the ARMv7 Next source-build exception. Native hardware and
 ARM/macOS application acceptance debt is unchanged.
 
+2026-10-01 approved immutable Next publication: next-4ad282f is published
+from packaging commit ee86711e. All nine uploaded and downloaded assets match
+SHA256SUMS, including the five unchanged upstream CI archives. The ARMv7
+archive hash is 725e87e352ce72cf21349e0d0b77801375c9fc80bb303720f1b80c4a854c26ac.
+Packaging pins all archive and license hashes independently of release API
+metadata. Sixteen offline regressions pass. Authenticated host provisioning
+passes for x64 and ARMv7; both Docker staging branches consume verified files
+without credentials or another source build. Private repository access uses
+host gh or the CI job token. Evidence: tmp/release-v1.1.0/next-dependency-public/,
+next-public-staged/, next-public-docker.log and next-snapshot-tests.log.
+Application 1.1.0 remains unpublished; the final integration commit needs
+terminal green CI and exact draft-package acceptance. Native hardware and
+ARM/macOS application debt is unchanged.
+
 2026-10-01 approved ARMv7 Next packaging: ADR 0100 permits an unmodified
 source build at 4ad282fae7f49d488aa40e5b6bb092dbe9c4018f. The shared
 Bookworm Docker export recipe checks the source archive and Cargo.lock hashes,

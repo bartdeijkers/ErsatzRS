@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-01
+
 ### Security
 
 - Add expiring, source-bound media-part tickets on the private callback listener
@@ -627,6 +629,10 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Preserve the accepted Next dependency in a checksum-pinned snapshot, so
+  upstream replacement of its develop release cannot change or break packaging.
+  Reuse the tested ARMv7 executable across archives and Docker images.
 
 - Build the missing ARMv7 Next executable from pinned, unmodified upstream
   source for release archives and Docker images, with checksum-verified source
@@ -3865,7 +3871,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
 [1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta
 [1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta
 [1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta

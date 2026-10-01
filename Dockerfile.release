@@ -18,11 +18,12 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
 ARG TARGETARCH
 ARG TARGETVARIANT
-# Change per release to refresh the mutable upstream develop artifact.
+# Optional cache refresh; downloaded bytes remain checksum-pinned.
 ARG NEXT_RELEASE_REFRESH=dev
 COPY scripts/release/stage-next.py /stage-next.py
+COPY .next-snapshot/ /next-snapshot/
 RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
-    --docker-variant "$TARGETVARIANT" --output /next
+    --docker-variant "$TARGETVARIANT" --snapshot-dir /next-snapshot --output /next
 
 FROM rust:1.97.1-slim-bookworm AS builder
 

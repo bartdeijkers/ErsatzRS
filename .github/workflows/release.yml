@@ -74,6 +74,8 @@ jobs:
         run: python scripts/release/test-stage-next.py
       - name: Stage archive
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = $env:GITHUB_REF_NAME
@@ -150,6 +152,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          draft: true
 
   web-assets:
     name: Build web assets
@@ -372,12 +375,10 @@ jobs:
           python-version: '3.12'
       - name: Verify Next staging (offline)
         run: python scripts/release/test-stage-next.py
-      - name: Build pinned upstream Next for ARMv7
-        if: ${{ matrix.rid == 'linux-arm' }}
-        run: docker buildx build --platform linux/arm/v7 --file Dockerfile --target next-artifacts-export --output type=local,dest=release-next-armv7 .
       - name: Stage archive
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           RID: ${{ matrix.rid }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ github.ref_name }}
@@ -409,11 +410,7 @@ jobs:
             echo "Windows release archive must contain a non-empty ErsatzRS.exe startup launcher" >&2
             exit 1
           fi
-          next_options=()
-          if [ "$RID" = "linux-arm" ]; then
-            next_options=(--source-build release-next-armv7)
-          fi
-          python scripts/release/stage-next.py --rid "$RID" --output "$stage/next" "${next_options[@]}"
+          python scripts/release/stage-next.py --rid "$RID" --output "$stage/next"
           next_binary="ersatztv-channel"
           if [ "$RID" = "win-x64" ]; then next_binary="${next_binary}.exe"; fi
           mv "$stage/next/$next_binary" "$stage/$next_binary"
@@ -482,6 +479,11 @@ jobs:
         with:
           name: web-assets
           path: release-web-assets
+
+      - name: Stage pinned Next snapshot for Docker
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download next-4ad282f --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
 
       - name: Build and push multi-arch image
         uses: docker/bake-action@v7

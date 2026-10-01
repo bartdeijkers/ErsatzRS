@@ -99,3 +99,6 @@ Thumbs.db
 
 # Calibration test clips (generated)
 /calibration-clips/
+
+# Verified dependency assets staged locally for Docker builds.
+.next-snapshot/

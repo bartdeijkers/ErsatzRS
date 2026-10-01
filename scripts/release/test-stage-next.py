@@ -50,13 +50,19 @@ def fixture(rid, missing=False, link=False):
         suffix = ".tar.gz"
     data = buffer.getvalue()
     name = root + suffix
+    module.PINNED_HASHES[name] = hashlib.sha256(data).hexdigest()
     asset = {"name": name, "id": 2, "size": len(data),
              "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
-             "browser_download_url": f"https://github.com/ErsatzTV/next/releases/download/develop/{name}"}
+             "browser_download_url": f"{module.DOWNLOAD_BASE}/{name}"}
     return {"id": 1, "assets": [asset]}, data
 
 
 class StageNextTests(unittest.TestCase):
+    def setUp(self):
+        original = module.PINNED_HASHES.copy()
+        self.addCleanup(lambda: (module.PINNED_HASHES.clear(), module.PINNED_HASHES.update(original)))
+        module.PINNED_HASHES["LICENSE"] = hashlib.sha256(b"MIT License\nSynthetic copyright notice\n").hexdigest()
+
     def stage(self, folder, rid="linux-x64", metadata=None, data=None, fail_license=False):
         if metadata is None:
             metadata, data = fixture(rid)
@@ -119,6 +125,7 @@ class StageNextTests(unittest.TestCase):
                                 archive.writestr(info, content)
                     data = buffer.getvalue()
                     metadata["assets"][0].update(size=len(data), digest="sha256:" + hashlib.sha256(data).hexdigest())
+                    module.PINNED_HASHES[metadata["assets"][0]["name"]] = hashlib.sha256(data).hexdigest()
                     folder = Path(temp)
                     with self.assertRaises(ValueError):
                         self.stage(folder, "win-x64", metadata, data)
@@ -154,7 +161,7 @@ class StageNextTests(unittest.TestCase):
                 self.stage(folder, fail_license=True)
             self.assertFalse((folder / "next").exists())
 
-    def test_changed_develop_revision_is_rejected_before_download(self):
+    def test_changed_snapshot_revision_is_rejected_before_download(self):
         metadata, _ = fixture("linux-x64")
         asset = metadata["assets"][0]
         for field in ("name", "browser_download_url"):
@@ -166,6 +173,33 @@ class StageNextTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "differs from accepted pin"):
                 module.stage(metadata, "linux-x64", output, fetch=unexpected_download)
             self.assertFalse(output.exists())
+
+    def test_replaced_asset_and_matching_metadata_are_rejected(self):
+        metadata, data = fixture("linux-x64")
+        metadata["assets"][0]["digest"] = "sha256:" + hashlib.sha256(data + b"replacement").hexdigest()
+        with self.assertRaisesRegex(ValueError, "pinned archive"):
+            module.select_asset(metadata, "linux-x64")
+
+    def test_arm_snapshot_rejects_tampering_before_extraction(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "next"
+            with self.assertRaisesRegex(ValueError, "snapshot SHA-256"):
+                module.stage_arm_snapshot(output, fetch=lambda url, limit: b"tampered")
+            self.assertFalse(output.exists())
+
+    def test_arm_snapshot_preserves_source_build_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            source, origin = self.source_fixture(folder)
+            buffer = io.BytesIO()
+            name = "ersatzrs-next-4ad282f-linux-arm.tar.gz"
+            with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+                for path in source.iterdir():
+                    archive.add(path, arcname=name[:-7] + "/" + path.name)
+            payload = buffer.getvalue()
+            module.PINNED_HASHES[name] = hashlib.sha256(payload).hexdigest()
+            module.stage_arm_snapshot(folder / "next", fetch=lambda url, limit: payload)
+            self.assertEqual(json.loads((folder / "next/origin.json").read_text()), origin)
 
     def test_existing_destination_is_preserved(self):
         with tempfile.TemporaryDirectory() as temp:

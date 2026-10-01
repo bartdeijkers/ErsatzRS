@@ -15,11 +15,12 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-official
 ARG TARGETARCH
 ARG TARGETVARIANT
-# Change per release to refresh the mutable upstream develop artifact.
+# Optional cache refresh; downloaded bytes remain checksum-pinned.
 ARG NEXT_RELEASE_REFRESH=dev
 COPY scripts/release/stage-next.py /stage-next.py
+COPY .next-snapshot/ /next-snapshot/
 RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
-    --docker-variant "$TARGETVARIANT" --output /next
+    --docker-variant "$TARGETVARIANT" --snapshot-dir /next-snapshot --output /next
 
 # Upstream has no ARMv7 artifact. Build its pinned, unmodified source using
 # the runtime's Bookworm baseline (ADR 0100); never use the host Docker socket.
@@ -35,13 +36,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/next-source/target \
     python3 /build-tools/build-next-armv7.py --work-dir /build --output /next
 
-FROM next-official AS next-artifacts-amd64
-FROM next-official AS next-artifacts-arm64
-FROM next-armv7-builder AS next-artifacts-arm
-ARG TARGETVARIANT
-RUN test "$TARGETVARIANT" = v7
-FROM next-artifacts-${TARGETARCH} AS next-artifacts
+FROM scratch AS next-armv7-source-export
+COPY --from=next-armv7-builder /next/ /
 
+FROM next-official AS next-artifacts
 FROM scratch AS next-artifacts-export
 COPY --from=next-artifacts /next/ /
 

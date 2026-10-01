@@ -72,10 +72,12 @@ public archive still matches the accepted hash. Application version 1.1.0 and
 runtime v2.0.5 integration at 8dc0a3fb has terminal green CI 36866880141. Update installed yt-dlp to 0.11.6
 before upgrading the host. The maintainer accepted ADR 0100's ARMv7 source-build exception. The pinned,
 unmodified source builds with Rust 1.97.1 on Bookworm and passes emulated
-video/audio decoding with the published ARMv7 FFmpeg runtime. Upstream has
-replaced its mutable Next develop assets; recover the accepted official CI
-archives and obtain approval for immutable dependency publication before
-continuing release packaging. Keep application v1.1.0 unpublished
+video/audio decoding with the published ARMv7 FFmpeg runtime. The approved dependency snapshot next-4ad282f is published with verified
+unchanged official archives and the accepted ARMv7 executable. All downloaded
+hashes match; host provisioning and x64/ARMv7 Docker staging pass. The private
+repository uses host GitHub authentication; no credentials enter Docker.
+Finish exact-candidate CI and draft package acceptance before publication.
+Keep application v1.1.0 unpublished
 until the final candidate and release gates pass. Native ARM/macOS acceptance
 debt remains unchanged.
 
