@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-09: correct Next CI fixtures, finish exact-SHA CI, prepare stable v1.1.0'
+current_focus = 'UCU-09: resolve ARMv7 Next packaging and finish stable v1.1.0 release gates'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-01: the ARM FFmpeg candidates pass emulated software acceptance and
+are staged with unchanged v2.0.4 x64/Windows archives in an unpublished v2.0.5
+draft. Its source is pushed; archive hashes and uploaded asset digests match.
+Application CI at a08773bf is terminal green. Subsequent release corrections
+need their own exact-SHA CI. ADR 0100's official-artifact requirement leaves
+ARMv7 Next packaging blocked pending the maintainer's answer to the unmodified,
+pinned upstream source-build exception. Keep v1.1.0 unpublished until the final
+candidate and release gates pass; native ARM/macOS acceptance debt is unchanged.
+
 2026-09-28: UCU-08 is Complete. Rows116-135, all local window gates and
 terminal green CI 36453480304 at dfeaf6d0 satisfy acceptance. Browser reports
 confirm Chromium257/Firefox233 passes with no unexpected or flaky results.

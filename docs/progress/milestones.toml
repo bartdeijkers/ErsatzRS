@@ -11420,6 +11420,36 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 ARM runtime release preparation: both ARM packages pass clean
+emulated Bookworm startup, the complete application capability inventory,
+decoded SVG/alpha/text, drawvg/drawtext, rav1e/SVT-AV1 encoding and decoding,
+and sparse PGS subtitles with selected alternate audio. ARMv7 pacing yields
+400 frames in 15.788 seconds, 879.94 Hz selected audio, maximum media lead
+0.228 seconds and maximum progress gap 0.201 seconds. ARMv7 requires GLIBC
+2.36 and the system GCC runtime; codec libraries remain static. Native ARM
+hardware and application acceptance remain explicitly unverified.
+The ARM64 dependency image baabcc5e87f0f1e5bc7ee8bdeb6e1548e46734810621603fc411fabc2f5a3975
+is tied to upstream build 36797641674 and source e88e49f; the FFmpeg build
+script source is separately pinned to d04d552. The final ARM64 archive SHA-256
+is e66ca4429e45537e10836c5cab9d8fee802474a0934737e7c4ce28214e7b2d7a;
+ARMv7 is c126111a4f0d5b46857f034f289c44c15d4481b98f5c734ce1beb578f6e1fc92.
+All four package archives and checksum sidecars verify, including unchanged
+v2.0.4 Linux x64/Windows bytes. Evidence and provenance are retained under
+tmp/release-v1.1.0/arm-runtime and runtime-packages; the uploaded draft's eight
+asset digests match those local files (ffmpeg-draft-release.json).
+Runtime source 7766aad and release preparation bf3db00 are pushed to main.
+The v2.0.5 release is an unpublished stable draft; no tag or public package
+release exists yet. The package-only commits intentionally skip the unrelated
+Docker workflow under the instruction not to rebuild existing FFmpeg images.
+This is local/emulated package proof, not a claim of new runtime CI or native
+ARM acceptance. The ARMv7 Next source-build exception remains pending.
+Application CI 36848055158 is terminal green at exact commit
+a08773bf5219455e097f5942e5b23fe3fc101ecb. Chromium reports 282 passes and nine
+conditional skips; Firefox reports 258 passes and 33 conditional skips.
+Both reports have zero unexpected or flaky results. Reports and the terminal
+job manifest are retained under tmp/release-v1.1.0/ci-a087-*. Later local release
+corrections still need their own terminal green exact-SHA CI before tagging.
+
 2026-10-01 Next release preflight: official develop now publishes 4ad282f.
 The two commits after 6b49dae are a test-only macro consolidation (091e174)
 and the HLS playlist version declaration correction from 7 to 6 (4ad282f).

@@ -327,9 +327,6 @@ release section when tagging a release.
   valid NVENC frame dimensions, and download Vulkan frames in their actual
   pixel format before conversion.
   Remove the obsolete MySQL feature from the alternate Docker build command.
-- Use ErsatzRS-ffmpeg v2.0.2 for fresh managed runtime installs and Next CI, including the
-  Windows Vulkan/CUDA external-memory export correction and smooth audio/video
-  pacing across sparse subtitle gaps.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,
   avoiding false capability failures from an unsupported direct mapping.
   Recheck cached results from the old probe when the server starts.
@@ -470,6 +467,61 @@ release section when tagging a release.
 - Match configured MPEG-TS script IDs without regard to case, including Unicode
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
+- Preserve clean EOF for Next's one-shot producer HTTP streams by retaining
+  FFmpeg's chunked-reader state, while keeping reconnection disabled. The
+  separate Next CI check now covers full-frame decoding through the production
+  HTTP response.
+
+- Initialize rawvideo pixel-format metadata while probing a retained producer's
+  bounded NUT prefix, so Next can consume that same producer without reopening it
+  or rejecting otherwise valid media as incomplete.
+
+- Bind Next playback callbacks to their originating normal or preview session,
+  preserving each session's tools and path replacements and rejecting callbacks
+  from stopped or replaced instances. Retained-source preflight also observes
+  cancellation and deadlines while waiting for database or sidecar preparation.
+- Make the synthetic add-on option test provider consume runtime requests before
+  replying on Unix and Windows, preventing a process-input race in browser tests.
+
+- Clean orphaned actor and artwork database records at startup and hourly, with
+  a bounded manual cleanup API, while retaining referenced images and artwork
+  files (upstream PR #2885).
+
+- Preserve merged deco watermarks when combining them with item, channel or
+  global watermarks, including a merged watermark with no fallback selection.
+
+- Repair empty or whitespace-only embedded-subtitle cache references while
+  reusing completed cached tracks (upstream PR #2873). Partial extraction retains
+  each subtitle's absolute stream index, preserving the selected language.
+
+- Select Next embedded subtitles from the resolved media version before applying
+  language, forced/default or custom-selector preferences, so stale metadata
+  cannot hide a valid image track (upstream PR #2868).
+
+- Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
+  final clip instead of stretching one item. Preserve subsecond source positions
+  when saving clips, so a short final fallback cannot collapse to zero length.
+  Honor chapter-as-media filler
+  offsets and titles (upstream PR #2867). Place mid-roll filler between source
+  chapters, keep post-roll after the final chapter, and align padding to clock
+  boundaries. Preserve chapter identity and track preferences across filler
+  membership changes and database restarts; honor exact media-version pins.
+  Keep pre/post-roll padding expressions effective when mid-roll selects no
+  chapter points. Refuse destructive Refresh when older filler checkpoints
+  cannot establish identity. Evaluate chapter expressions consistently across host
+  languages with ICU Unicode comparison, invariant numbers and explicit date/time
+  formats. Reject invalid literals and expressions above 64 KiB or 32 nesting
+  levels without replacing the existing playout (ADRs 0097 and 0098).
+
+- Preserve negative mirror playout offsets through channel repository upsert,
+  keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
+
+- Render channel add/edit forms in order so they remain usable with JavaScript
+  disabled, including engine selection and server-side mode normalization.
+
+- Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
+  following the repository-link correction in ErsatzTV PR #2848.
+
 ### Added
 
 - Support MPEG-2 video output with the Next engine, using 8-bit output and an
@@ -568,8 +620,6 @@ release section when tagging a release.
 - Display one permanent or intermittent watermark with the optional Next engine,
   preserving selected placement, actual or scaled size and margins, and forwarding configured
   opacity (upstream PR #2878), including demand-time embedded subtitle Burn.
-  Next currently renders RGB images without an alpha channel fully opaque;
-  this accepted upstream limitation awaits a future Next fix.
   Intermittent overlays follow wall-clock cycles with the configured visible
   duration and Next's default one-second fades (upstream PR #2879); invalid
   timing is rejected instead of becoming a permanent overlay.
@@ -674,13 +724,13 @@ release section when tagging a release.
   capability-protected internal media route when Next opens remote media,
   retaining byte-range responses without buffering whole media files.
   Verify Plex identity before failover and preserve media redirects without
-  forwarding credentials across origins. Graphics projection and full platform
-  playback acceptance remain open. Add bounded JavaScript movie/episode audio
+  forwarding credentials across origins. Add bounded JavaScript movie/episode audio
   selectors shared by native playback and Next, with upstream callback metadata,
   authoritative stream pins, YAML precedence, safe fallback and redacted health
   reporting. CLR interop is unavailable; execution uses time, heap and stack
-  limits under accepted ADR 0096 (upstream PR #2866). All-platform acceptance
-  remains open.
+  limits under accepted ADR 0096 (upstream PR #2866). ARM and macOS application
+  acceptance remains explicit maintainer-approved debt; these platforms have
+  not been marked verified.
   Publish continued schedules to active Next channels and mirrors while preserving
   native playback continuity (upstream PR #2854). Verify existing mirror offsets,
   channel-update propagation and bundled runtime discovery against upstream PR #2855.
@@ -700,90 +750,15 @@ release section when tagging a release.
   markers distinguish retained changes from saved data.
 - Accept editable numbering reviews: Apply saves the current Items task,
   including edits made after the proposal; Cancel restores the pre-proposal draft.
-- Align Windows beta acceptance with ADR 0066's installed add-on entrypoints;
-  retain midpoint seeking, output, failure diagnostics and package identity gates.
-- Verify the yt-dlp 0.11.4 Windows batch-error correction in the installed
-  provider, preserving settings and enabled state. Complete AMM-N-03 with the
-  accepted Windows v1.0.37-beta archive and identical verified public download.
-- Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
-  upstream commit each run (162 commits at bootstrap) and milestone gates before
-  teletext. Keep the current parity pin unchanged during
-  bootstrap. Revise ADR 0095 after rejection of its native-only proposal;
-  accept Next as an optional second engine alongside the native pipeline.
-  Engine integration and playback acceptance remain open. Defer the first
-  consolidated upstream catch-up CI checkpoint until after UCU-03 smoke,
-  retaining local acceptance gates for UCU-01 and UCU-02.
-  Complete UCU-00 bootstrap acceptance after AMM-N-03, then reconcile the
-  upstream Legacy rename (ErsatzTV PR #2842) with source evidence and advance
-  the parity pin through reviewed steps, including the .NET-only dependency
-  maintenance in ErsatzTV PR #2849.
-  Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
-  prerequisite for the first upstream step.
-  Verify existing blank credits-template fallback and streaming graphics/process
-  cleanup against the later upstream reliability fixes. Confirm case-insensitive
-  `.yml`/`.yaml` Remote Stream discovery with metadata and subtitle preservation.
+- Reconcile 183 upstream commits through `960421e8`, with accepted architectural
+  decisions for the optional Next engine, graphics canvas, management boundaries
+  and retained AV1 support. Preserve case-insensitive `.yml`/`.yaml` Remote Stream
+  discovery, blank credits-template fallback and streaming process cleanup.
 
 - Keep detailed future work in `plans/`, completion history and evidence in
   progress TOMLs, and reusable design artifacts under documentation. Milestones
   may omit a standalone plan; supplied plan links are still validated. The
   generated Clippy ledger now lives under `docs/reference/`.
-
-### Fixed
-
-- Preserve clean EOF for Next's one-shot producer HTTP streams by retaining
-  FFmpeg's chunked-reader state, while keeping reconnection disabled. The
-  separate Next CI check now covers full-frame decoding through the production
-  HTTP response.
-
-- Initialize rawvideo pixel-format metadata while probing a retained producer's
-  bounded NUT prefix, so Next can consume that same producer without reopening it
-  or rejecting otherwise valid media as incomplete.
-
-- Bind Next playback callbacks to their originating normal or preview session,
-  preserving each session's tools and path replacements and rejecting callbacks
-  from stopped or replaced instances. Retained-source preflight also observes
-  cancellation and deadlines while waiting for database or sidecar preparation.
-- Make the synthetic add-on option test provider consume runtime requests before
-  replying on Unix and Windows, preventing a process-input race in browser tests.
-
-- Clean orphaned actor and artwork database records at startup and hourly, with
-  a bounded manual cleanup API, while retaining referenced images and artwork
-  files (upstream PR #2885).
-
-- Preserve merged deco watermarks when combining them with item, channel or
-  global watermarks, including a merged watermark with no fallback selection.
-
-- Repair empty or whitespace-only embedded-subtitle cache references while
-  reusing completed cached tracks (upstream PR #2873). Partial extraction retains
-  each subtitle's absolute stream index, preserving the selected language.
-
-- Select Next embedded subtitles from the resolved media version before applying
-  language, forced/default or custom-selector preferences, so stale metadata
-  cannot hide a valid image track (upstream PR #2868).
-
-- Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
-  final clip instead of stretching one item. Preserve subsecond source positions
-  when saving clips, so a short final fallback cannot collapse to zero length.
-  Honor chapter-as-media filler
-  offsets and titles (upstream PR #2867). Place mid-roll filler between source
-  chapters, keep post-roll after the final chapter, and align padding to clock
-  boundaries. Preserve chapter identity and track preferences across filler
-  membership changes and database restarts; honor exact media-version pins.
-  Keep pre/post-roll padding expressions effective when mid-roll selects no
-  chapter points. Refuse destructive Refresh when older filler checkpoints
-  cannot establish identity. Evaluate chapter expressions consistently across host
-  languages with ICU Unicode comparison, invariant numbers and explicit date/time
-  formats. Reject invalid literals and expressions above 64 KiB or 32 nesting
-  levels without replacing the existing playout (ADRs 0097 and 0098).
-
-- Preserve negative mirror playout offsets through channel repository upsert,
-  keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
-
-- Render channel add/edit forms in order so they remain usable with JavaScript
-  disabled, including engine selection and server-side mode normalization.
-
-- Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
-  following the repository-link correction in ErsatzTV PR #2848.
 
 ## [1.0.37-beta] - 2026-09-22
 
