@@ -19,6 +19,8 @@ release section when tagging a release.
   stages so release images can build the complete workspace. Add Docker-only
   recovery that preserves the accepted application tag and web bundle while
   recording the corrected build recipe.
+- Allow Docker recovery to inspect unpublished drafts and validate release
+  evidence with Python on runners without `jq`.
 
 ## [1.1.0] - 2026-10-01
 

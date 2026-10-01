@@ -17,7 +17,8 @@ on:
         type: string
 
 permissions:
-  contents: read
+  # GitHub only exposes draft releases to callers with repository push access.
+  contents: write
   actions: read
   packages: write
 
@@ -51,17 +52,23 @@ jobs:
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ASSETS_RUN" =~ ^[0-9]+$ ]]
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          gh release view "$TAG" --json isDraft,isPrerelease | jq -e '.isDraft and (.isPrerelease | not)'
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ASSETS_RUN" > "$RUNNER_TEMP/recovery-run.json"
-          jq -e --arg sha "$SOURCE_SHA" --arg tag "$TAG" \
-            '.head_sha == $sha and .head_branch == $tag and .status == "completed" and .path == ".github/workflows/release.yml"' \
-            "$RUNNER_TEMP/recovery-run.json"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ASSETS_RUN/jobs?per_page=100" \
-            | jq -e 'any(.jobs[]; .name == "Build web assets" and .conclusion == "success")'
           python3 - <<'PY'
           import json, os, subprocess
           def gh(*args):
               return json.loads(subprocess.check_output(['gh', *args], text=True))
+          release = gh('release', 'view', os.environ['TAG'], '--json', 'isDraft,isPrerelease')
+          if not release['isDraft'] or release['isPrerelease']:
+              raise SystemExit('Recovery requires an unpublished stable draft')
+          endpoint = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['ASSETS_RUN']}"
+          asset_run = gh('api', endpoint)
+          expected = {'head_sha': os.environ['SOURCE_SHA'], 'head_branch': os.environ['TAG'],
+                      'status': 'completed', 'path': '.github/workflows/release.yml'}
+          if any(asset_run.get(key) != value for key, value in expected.items()):
+              raise SystemExit('Web-assets run does not match the completed tagged release')
+          asset_jobs = gh('api', endpoint + '/jobs?per_page=100')['jobs']
+          if not any(job['name'] == 'Build web assets' and job['conclusion'] == 'success'
+                     for job in asset_jobs):
+              raise SystemExit('Matching web-assets job did not succeed')
           required = {'Format', 'Clippy', 'Test', 'Playwright E2E (chromium)',
                       'Playwright E2E (firefox)', 'Cargo deny', 'Documentation links',
                       'Commit lint', 'Next engine'}
