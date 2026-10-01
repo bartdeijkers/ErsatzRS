@@ -70,8 +70,8 @@ class StageNextTests(unittest.TestCase):
         module.stage(metadata, rid, output, fetch=fetch)
         return output
 
-    def test_six_platforms_stage_exact_binaries_and_provenance(self):
-        for rid in module.PLATFORMS:
+    def test_official_platforms_stage_exact_binaries_and_provenance(self):
+        for rid in (rid for rid in module.PLATFORMS if rid != "linux-arm"):
             with self.subTest(rid=rid), tempfile.TemporaryDirectory() as temp:
                 folder = Path(temp)
                 output = self.stage(folder, rid)
@@ -175,6 +175,74 @@ class StageNextTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "already exists"):
                 self.stage(folder)
             self.assertEqual((folder / "next" / "keep").read_text(), "existing")
+
+    def source_fixture(self, folder):
+        source = folder / "source"
+        source.mkdir()
+        binary = b"\x7fELF\x01\x01" + bytes(12) + b"\x28\x00" + b"synthetic executable"
+        license_data = b"MIT fixture\n"
+        (source / "ersatztv-channel").write_bytes(binary)
+        (source / "LICENSE").write_bytes(license_data)
+        origin = {
+            "kind": "source-build", "repository": module.REPOSITORY,
+            "source_revision": module.PINNED_REVISION, "rid": "linux-arm",
+            "target": "armv7-unknown-linux-gnueabihf",
+            "source_archive_sha256": module.SOURCE_ARCHIVE_SHA256,
+            "cargo_lock_sha256": module.SOURCE_LOCK_SHA256,
+            "binary_sha256": hashlib.sha256(binary).hexdigest(),
+            "license_sha256": hashlib.sha256(license_data).hexdigest(),
+        }
+        (source / "origin.json").write_text(json.dumps(origin))
+        return source, origin
+
+    def test_source_build_keeps_provenance_and_executable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            source, _ = self.source_fixture(folder)
+            module.stage_source_build(source, "linux-arm", folder / "next")
+            for name in ("ersatztv-channel", "LICENSE", "origin.json"):
+                self.assertEqual((source / name).read_bytes(), (folder / "next" / name).read_bytes())
+            self.assertTrue((folder / "next/ersatztv-channel").stat().st_mode & 0o111)
+
+    def test_source_build_rejects_changed_origin_or_payload_atomically(self):
+        for changed in ("source_revision", "source_archive_sha256", "cargo_lock_sha256",
+                        "binary_sha256", "license_sha256", "target"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temp:
+                folder = Path(temp)
+                source, origin = self.source_fixture(folder)
+                origin[changed] = "unaccepted"
+                (source / "origin.json").write_text(json.dumps(origin))
+                with self.assertRaises(ValueError):
+                    module.stage_source_build(source, "linux-arm", folder / "next")
+                self.assertFalse((folder / "next").exists())
+
+    def test_source_build_rejects_wrong_elf_even_with_matching_checksum(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            source, origin = self.source_fixture(folder)
+            wrong = b"MZ" + bytes(30)
+            (source / "ersatztv-channel").write_bytes(wrong)
+            origin["binary_sha256"] = hashlib.sha256(wrong).hexdigest()
+            (source / "origin.json").write_text(json.dumps(origin))
+            with self.assertRaisesRegex(ValueError, "ARM ELF32"):
+                module.stage_source_build(source, "linux-arm", folder / "next")
+
+    def test_source_build_cannot_replace_official_platforms_or_existing_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            source, _ = self.source_fixture(folder)
+            with self.assertRaises(ValueError):
+                module.stage_source_build(source, "linux-x64", folder / "next")
+            (folder / "next").mkdir()
+            (folder / "next/keep").write_text("existing")
+            with self.assertRaises(ValueError):
+                module.stage_source_build(source, "linux-arm", folder / "next")
+            self.assertEqual((folder / "next/keep").read_text(), "existing")
+
+    def test_armv7_does_not_claim_an_official_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "accepted source build"):
+                self.stage(Path(temp), rid="linux-arm")
 
 
 if __name__ == "__main__":

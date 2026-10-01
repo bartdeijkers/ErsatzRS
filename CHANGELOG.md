@@ -628,6 +628,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Build the missing ARMv7 Next executable from pinned, unmodified upstream
+  source for release archives and Docker images, with checksum-verified source
+  and retained compiler provenance. Keep the Bookworm GLIBC 2.36 baseline and
+  distinguish this build from official upstream binary downloads (ADR 0100).
+
 - Report the stable application version as 1.1.0 in diagnostics, provider
   requests and add-on compatibility checks. Update the official yt-dlp add-on
   to 0.11.6 before upgrading the host; older packages only declare support for

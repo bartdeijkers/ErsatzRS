@@ -12,7 +12,7 @@ RUN if [ "$TARGETARCH" = amd64 ]; then \
 
 # Stage the optional Next runtime on the build host for the target platform.
 # Keep Python and download tooling out of the runtime image.
-FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-official
 ARG TARGETARCH
 ARG TARGETVARIANT
 # Change per release to refresh the mutable upstream develop artifact.
@@ -20,6 +20,30 @@ ARG NEXT_RELEASE_REFRESH=dev
 COPY scripts/release/stage-next.py /stage-next.py
 RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
     --docker-variant "$TARGETVARIANT" --output /next
+
+# Upstream has no ARMv7 artifact. Build its pinned, unmodified source using
+# the runtime's Bookworm baseline (ADR 0100); never use the host Docker socket.
+FROM --platform=$BUILDPLATFORM rust:1.97.1-slim-bookworm@sha256:2775a09d208ff0d7c1f50490c45b62db929e87ba1dcbc3f2132ac71a704bcdd3 AS next-armv7-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc-arm-linux-gnueabihf libc6-dev-armhf-cross cmake make perl python3 \
+    && rm -rf /var/lib/apt/lists/*
+RUN rustup target add armv7-unknown-linux-gnueabihf
+ENV CARGO_BUILD_JOBS=4
+COPY scripts/release/stage-next.py scripts/release/build-next-armv7.py /build-tools/
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/build/next-source/target \
+    python3 /build-tools/build-next-armv7.py --work-dir /build --output /next
+
+FROM next-official AS next-artifacts-amd64
+FROM next-official AS next-artifacts-arm64
+FROM next-armv7-builder AS next-artifacts-arm
+ARG TARGETVARIANT
+RUN test "$TARGETVARIANT" = v7
+FROM next-artifacts-${TARGETARCH} AS next-artifacts
+
+FROM scratch AS next-artifacts-export
+COPY --from=next-artifacts /next/ /
 
 # ─── Stage 1: builder ────────────────────────────────────────────────────────
 # Match the exact Rust toolchain required by the workspace, CI, and releases.

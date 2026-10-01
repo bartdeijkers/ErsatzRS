@@ -11484,12 +11484,36 @@ Official add-ons v0.11.6 is public at cb8fcd98bb610c820d71ca2b9cf25be05d73897a,
 following terminal green Windows/Linux CI 36865117625. The downloaded public
 ZIP matches the final CI archive SHA-256
 b8ca9bb2221ff0c14c00985f6151889bf0675e5e347ccc6b2d513d77ee8a2c11.
-Its release-triggered attachment workflow 36866594938 remains running; verify
-the final attached archive after that workflow completes. Update installed
+Its release-triggered attachment workflow 36866594938 failed only at upload:
+the checkout-free job omitted the repository argument. Repair 968e088 passes
+actionlint and adds existing-tag recovery without moving the published tag.
+Recovery workflow 36867295964 is terminal green for Windows, Linux and upload;
+the final public archive and checksum still match the accepted hash above. Update installed
 yt-dlp before upgrading the host. Application v1.1.0 remains unpublished;
-its version/runtime integration needs fresh exact-SHA CI, and the ARMv7 Next
-source-build exception still awaits maintainer approval. Native hardware and
+its version/runtime integration has terminal green exact-SHA CI 36866880141
+at 8dc0a3fb62359738b176df663a0f7feeac724f10. The maintainer subsequently
+approved the ARMv7 Next source-build exception. Native hardware and
 ARM/macOS application acceptance debt is unchanged.
+
+2026-10-01 approved ARMv7 Next packaging: ADR 0100 permits an unmodified
+source build at 4ad282fae7f49d488aa40e5b6bb092dbe9c4018f. The shared
+Bookworm Docker export recipe checks the source archive and Cargo.lock hashes,
+uses Rust 1.97.1 with locked dependencies, and records build provenance.
+Binary SHA-256 is a83e12ed8501afbd34237527b68dd059ce3219145ab4c2a657cd4ecafdf21baa;
+its GLIBC requirement is 2.34, within the 2.36 runtime baseline. Emulated
+ARMv7 Next plus the published FFmpeg candidate produces HLS with decoded
+video and audio. The minimal test fixture needed standard CA certificates;
+the production Docker runtime already installs them. Thirteen staging tests
+pass, including wrong provenance, tampering and platform rejection. Workflow
+lint passes with existing custom runner labels and the pre-existing SC2129
+style warning excluded. Evidence: tmp/release-v1.1.0/next-armv7-bookworm/,
+next-armv7-bookworm-build-final.log and next-armv7-playback/.
+This is software packaging proof, not native ARM application acceptance.
+The x64 Docker export check correctly rejects upstream's newly replaced
+0ec1ac0 develop assets. Original 4ad282f release URLs now return 404; original
+successful upstream CI 36832767332 retains the official archives. Immutable
+preservation publication awaits maintainer approval; no newer runtime pin is
+silently adopted and application v1.1.0 remains unpublished.
 
 2026-10-01 stable version integration: application workspace packages now
 report 1.1.0, with consistent internal dependency constraints and lockfile;

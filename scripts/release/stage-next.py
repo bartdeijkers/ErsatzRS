@@ -16,6 +16,8 @@ REPOSITORY = "ErsatzTV/next"
 RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/tags/develop"
 # Update only after source review and runtime acceptance, then rerun candidate CI.
 PINNED_REVISION = "4ad282fae7f49d488aa40e5b6bb092dbe9c4018f"
+SOURCE_ARCHIVE_SHA256 = "c956e3ced52aeb113e31fd81c723c646f1e3c5cedd4aef2a87f4f4b50db81115"
+SOURCE_LOCK_SHA256 = "6b95c68db4cc615426ca20d7b0cec909bfa2d0169a37109eb428c152ad7f6901"
 PLATFORMS = {
     "linux-x64": "linux-x64", "linux-arm64": "linux-arm64",
     "linux-arm": "linux-arm", "win-x64": "windows-x64",
@@ -85,6 +87,8 @@ def read_binaries(payload, rid, root):
 
 
 def stage(metadata, rid, output, archive_path=None, fetch=download):
+    if rid == "linux-arm":
+        raise ValueError("ARMv7 requires the accepted source build, not an official artifact")
     output = Path(output)
     if output.exists():
         raise ValueError("Next staging destination already exists")
@@ -129,15 +133,61 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--release-metadata", type=Path)
     parser.add_argument("--archive", type=Path)
+    parser.add_argument("--source-build", type=Path,
+                        help="Verified first-party ARMv7 build directory (ADR 0100)")
     args = parser.parse_args()
     rid = args.rid
     if args.docker_arch:
         if args.docker_arch == "arm" and args.docker_variant != "v7":
             parser.error("Only Docker arm/v7 is supported")
         rid = {"amd64": "linux-x64", "arm64": "linux-arm64", "arm": "linux-arm"}[args.docker_arch]
+    if args.source_build:
+        if args.release_metadata or args.archive:
+            parser.error("Source builds cannot be combined with official archive inputs")
+        stage_source_build(args.source_build, rid, args.output)
+        return
+    if rid == "linux-arm":
+        parser.error("ARMv7 requires --source-build; upstream publishes no official ARMv7 artifact")
     metadata = json.loads(args.release_metadata.read_text(encoding="utf-8") if args.release_metadata
                           else download(RELEASE_URL, 2 * 1024 * 1024))
     stage(metadata, rid, args.output, args.archive)
+
+
+def stage_source_build(source, rid, output):
+    """Keep the accepted ARMv7 exception explicit and preserve its provenance."""
+    source, output = Path(source), Path(output)
+    if rid != "linux-arm" or output.exists():
+        raise ValueError("Source builds require ARMv7 and a new staging destination")
+    origin = json.loads((source / "origin.json").read_text(encoding="utf-8"))
+    expected = {
+        "kind": "source-build", "repository": REPOSITORY,
+        "source_revision": PINNED_REVISION, "rid": "linux-arm",
+        "target": "armv7-unknown-linux-gnueabihf",
+        "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        "cargo_lock_sha256": SOURCE_LOCK_SHA256,
+    }
+    if any(origin.get(key) != value for key, value in expected.items()):
+        raise ValueError("ARMv7 source provenance differs from the accepted build")
+    for name, key in (("ersatztv-channel", "binary_sha256"), ("LICENSE", "license_sha256")):
+        path = source / name
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= MAX_ARCHIVE:
+            raise ValueError("Missing or invalid ARMv7 build file")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != origin.get(key):
+            raise ValueError("ARMv7 build file SHA-256 mismatch")
+    header = (source / "ersatztv-channel").read_bytes()[:20]
+    if len(header) != 20 or header[:6] != b"\x7fELF\x01\x01" or header[18:20] != b"\x28\x00":
+        raise ValueError("Next source build is not a little-endian ARM ELF32 executable")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=".next-", dir=output.parent))
+    try:
+        for name in ("ersatztv-channel", "LICENSE", "origin.json"):
+            shutil.copyfile(source / name, temporary / name)
+        (temporary / "ersatztv-channel").chmod(0o755)
+        temporary.rename(output)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    print(f"Staged source-built Next {PINNED_REVISION} for ARMv7")
 
 
 if __name__ == "__main__":
