@@ -11420,6 +11420,17 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 stable-release preflight found a managed runtime RID collision:
+substring matching selects linux-arm64 for linux-arm when both assets exist.
+A platform-neutral regression reproduces the incorrect executable selection.
+The correction requires the complete RID before the supported archive suffix;
+all 14 runtime-manager tests pass, including both ARM asset orders and an
+absent ARM32 package (Nextest e275e71a-3b5a-46b7-88ba-6347470095f8;
+tmp/release-v1.1.0/runtime-selection-green.log). Focused all-target Clippy,
+formatting and progress validation pass.
+This release-delivery correction is additional to the accepted upstream rows;
+its exact-SHA CI remains required before tagging v1.1.0.
+
 2026-10-01 browser CI diagnosis: Chromium completed with 268 passes, nine
 conditional skips and 14 failures. Twelve collection failures and the logs
 failure were English locators encountering Dutch state left by localization

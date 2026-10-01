@@ -55,6 +55,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Select managed FFmpeg packages by the complete platform suffix so 32-bit ARM
+  installations cannot download the ARM64 executable from a mixed release.
+
 - Restore shared browser-test language and theme after localization checks, and
   keep manually seeded playback fixtures independent of the external JSON engine.
   Wait for hydrated pages before subsequent test navigation, preserving Firefox
