@@ -628,6 +628,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Report the stable application version as 1.1.0 in diagnostics, provider
+  requests and add-on compatibility checks. Update the official yt-dlp add-on
+  to 0.11.6 before upgrading the host; older packages only declare support for
+  the development host version.
+
 - Pin the accepted Next source revision during archive and Docker staging,
   rejecting upstream development-release drift after candidate CI has passed.
 

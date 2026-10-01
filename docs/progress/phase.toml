@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-01: prepare stable 1.1.0 application version metadata and yt-dlp 0.11.6
+host compatibility. The installed-candidate source refresh check passes;
+add-on commit 92ccdff is pushed and CI 36864420271 is running. Update the
+installed add-on before upgrading the host. Application CI 36860667159 at
+a3641579 has passed Next, Chromium and Rust; Firefox remains running. Later
+version metadata needs its own complete CI before release tagging.
+
 2026-10-01: the ARM FFmpeg candidates pass emulated software acceptance and
 are staged with unchanged v2.0.4 x64/Windows archives in an unpublished v2.0.5
 draft. Its source is pushed; archive hashes and uploaded asset digests match.

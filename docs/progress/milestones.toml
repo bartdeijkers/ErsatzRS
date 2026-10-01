@@ -11466,6 +11466,23 @@ approval for an unmodified source-build packaging exception to ADR 0100 is
 pending; the existing ARM application acceptance debt does not conceal this
 missing delivery prerequisite. Application v1.1.0 remains unpublished.
 
+2026-10-01 stable version integration: application workspace packages now
+report 1.1.0, with consistent internal dependency constraints and lockfile;
+the independently versioned add-on contract remains 0.4.0. The official yt-dlp
+0.11.5 manifest only accepted development hosts below 0.2.0. Its 0.11.6
+compatibility update retains the prior minimum and accepts stable 1.1 hosts.
+The installed-candidate Adaptive refresh test passes against host 1.1.0 in
+isolated state (Nextest 88de3e99-622b-4a53-9641-b9cadb4ff77e).
+Manifest/ZIP validation and repository tests pass; the caption preparation
+case passes with verified FFmpeg v2.0.4 after the initial local invocation
+selected an unusable legacy FFmpeg path. Add-on source 92ccdff is pushed;
+Windows/Linux CI 36864420271 and publication remain pending. Operators must
+update the installed add-on before upgrading the host. This adds no capability
+or provider behavior change. Application checkpoint CI 36860667159 has passed
+Next (311 tests and both HTTP smoke gates), Chromium (282 passed, nine skipped,
+zero unexpected/flaky) and Rust tests; Firefox is still running. These results
+belong to a3641579 and do not cover the subsequent version metadata changes.
+
 2026-10-01 stable-release preflight found a managed runtime RID collision:
 substring matching selects linux-arm64 for linux-arm when both assets exist.
 A platform-neutral regression reproduces the incorrect executable selection.
