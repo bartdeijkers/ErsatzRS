@@ -14,6 +14,8 @@ import zipfile
 
 REPOSITORY = "ErsatzTV/next"
 RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/tags/develop"
+# Update only after source review and runtime acceptance, then rerun candidate CI.
+PINNED_REVISION = "4ad282fae7f49d488aa40e5b6bb092dbe9c4018f"
 PLATFORMS = {
     "linux-x64": "linux-x64", "linux-arm64": "linux-arm64",
     "linux-arm": "linux-arm", "win-x64": "windows-x64",
@@ -43,6 +45,8 @@ def select_asset(metadata, rid):
     if len(matches) != 1:
         raise ValueError(f"Expected exactly one Next artifact for {rid}")
     asset, match = matches[0]
+    if not PINNED_REVISION.startswith(match[2]):
+        raise ValueError(f"Next artifact revision differs from accepted pin {PINNED_REVISION}")
     digest = asset.get("digest", "")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         raise ValueError("Next artifact requires a SHA-256 digest")
@@ -90,7 +94,7 @@ def stage(metadata, rid, output, archive_path=None, fetch=download):
     if len(payload) != asset["size"] or "sha256:" + digest != asset["digest"]:
         raise ValueError("Next artifact size or SHA-256 mismatch")
     binaries = read_binaries(payload, rid, root)
-    license_url = f"https://raw.githubusercontent.com/{REPOSITORY}/{revision}/LICENSE"
+    license_url = f"https://raw.githubusercontent.com/{REPOSITORY}/{PINNED_REVISION}/LICENSE"
     license_data = fetch(license_url, 128 * 1024)
     if not license_data.strip():
         raise ValueError("Next license is empty")
@@ -105,6 +109,7 @@ def stage(metadata, rid, output, archive_path=None, fetch=download):
         (temporary / "origin.json").write_text(json.dumps({
             "repository": REPOSITORY, "release_id": metadata["id"],
             "asset_id": asset["id"], "asset": asset["name"], "revision": revision,
+            "source_revision": PINNED_REVISION,
             "rid": rid, "sha256": digest, "license_url": license_url,
             "license_sha256": hashlib.sha256(license_data).hexdigest(),
         }, indent=2) + "\n", encoding="utf-8")

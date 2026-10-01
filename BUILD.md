@@ -654,8 +654,12 @@ Windows packages also require `libvpl.dll` and `libvpl-LICENSE.txt` from the
 same verified Next archive beside `ersatztv-channel.exe` at the package root.
 Missing or invalid companions fail staging before the destination is published.
 It requires the release API's SHA-256 digest and records
-the selected asset, revision and license hash. Missing artifacts, invalid
-checksums or missing licenses fail packaging; no GitHub credential is needed.
+the selected asset, full pinned source revision and license hash. Staging rejects
+an artifact whose revision differs from `PINNED_REVISION` in the script, even
+when upstream replaces the mutable develop release. Review upstream changes,
+validate the selected runtime, update the pin and obtain green exact-SHA CI
+before releasing a new pin. Missing artifacts, invalid checksums or missing
+licenses fail packaging; no GitHub credential is needed.
 All six supported RIDs are mapped, including the currently unpublished macOS
 archive targets. Run `python3 scripts/release/test-stage-next.py` for offline
 archive, provenance and failure-path regressions.
@@ -668,9 +672,11 @@ release on each product release. For repeated manual builds of the same
 version, use `--no-cache-filter next-artifacts` with buildx, or change
 `--build-arg NEXT_RELEASE_REFRESH=<build-id>`.
 
-This is packaging support only. Native playback remains unchanged; engine
-selection, process supervision and Next playback acceptance remain open under
+Engine selection and process supervision follow
 [ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md).
+Current playback acceptance and approved platform debt are recorded in the
+[structured progress records](docs/progress/README.md); a successful artifact
+staging test does not prove playback acceptance.
 
 ## Intel container userspace verification
 

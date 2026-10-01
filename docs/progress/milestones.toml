@@ -11420,6 +11420,22 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 Next release preflight: official develop now publishes 4ad282f.
+The two commits after 6b49dae are a test-only macro consolidation (091e174)
+and the HLS playlist version declaration correction from 7 to 6 (4ad282f).
+CI 36848055158's Next job passes against official Linux x64 archive SHA-256
+010306bfd8bac43c88d88f4a4117255ea5f22db60660c546921ee4fad1680bc8;
+its complete decoded tests and both HTTP smoke modes are retained under
+tmp/release-v1.1.0/ci-a087-next. Staging now rejects source revision drift
+from 4ad282fae7f49d488aa40e5b6bb092dbe9c4018f and records the full source pin.
+Eight offline archive/provenance tests pass. Official ARM64 and Windows
+packages pass checksum/license staging and report 0.1.0-4ad282f on emulated
+Bookworm and native Windows respectively; these are startup checks, not full
+application acceptance. Upstream publishes no ARMv7 Next artifact. Maintainer
+approval for an unmodified source-build packaging exception to ADR 0100 is
+pending; the existing ARM application acceptance debt does not conceal this
+missing delivery prerequisite. Application v1.1.0 remains unpublished.
+
 2026-10-01 stable-release preflight found a managed runtime RID collision:
 substring matching selects linux-arm64 for linux-arm when both assets exist.
 A platform-neutral regression reproduces the incorrect executable selection.

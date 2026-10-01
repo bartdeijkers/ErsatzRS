@@ -578,6 +578,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Pin the accepted Next source revision during archive and Docker staging,
+  rejecting upstream development-release drift after candidate CI has passed.
+
 - Match Next's optional AMF adapter-index protocol, validating its unsigned
   range while retaining automatic device selection in generated profiles.
   AMD hardware playback remains explicitly unverified.

@@ -18,7 +18,7 @@ spec.loader.exec_module(module)
 
 
 def fixture(rid, missing=False, link=False):
-    root = f"ersatztv-next-v0.1.0-abcdef1-{module.PLATFORMS[rid]}"
+    root = f"ersatztv-next-v0.1.0-{module.PINNED_REVISION[:7]}-{module.PLATFORMS[rid]}"
     buffer = io.BytesIO()
     names = ["ersatztv", "ersatztv-channel", "ersatztv-playout-generator"]
     if missing:
@@ -83,6 +83,8 @@ class StageNextTests(unittest.TestCase):
                     self.assertEqual((output / "libvpl.dll").read_bytes(), b"MZ-oneVPL-fixture")
                     self.assertEqual((output / "libvpl-LICENSE.txt").read_bytes(), b"oneVPL license fixture\n")
                 self.assertEqual(json.loads((output / "origin.json").read_text())["rid"], rid)
+                self.assertEqual(json.loads((output / "origin.json").read_text())["source_revision"],
+                                 module.PINNED_REVISION)
                 self.assertFalse((folder / "outside").exists())
                 self.assertTrue((output / ("ersatztv-channel" + suffix)).stat().st_mode & 0o100)
 
@@ -151,6 +153,19 @@ class StageNextTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.stage(folder, fail_license=True)
             self.assertFalse((folder / "next").exists())
+
+    def test_changed_develop_revision_is_rejected_before_download(self):
+        metadata, _ = fixture("linux-x64")
+        asset = metadata["assets"][0]
+        for field in ("name", "browser_download_url"):
+            asset[field] = asset[field].replace(module.PINNED_REVISION[:7], "abcdef1")
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "next"
+            def unexpected_download(url, limit):
+                self.fail("Unreviewed Next artifacts must not be downloaded")
+            with self.assertRaisesRegex(ValueError, "differs from accepted pin"):
+                module.stage(metadata, "linux-x64", output, fetch=unexpected_download)
+            self.assertFalse(output.exists())
 
     def test_existing_destination_is_preserved(self):
         with tempfile.TemporaryDirectory() as temp:
