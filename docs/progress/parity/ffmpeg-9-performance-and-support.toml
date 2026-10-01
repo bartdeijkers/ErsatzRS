@@ -4,6 +4,10 @@ rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra`, `crates/ersatzr
 status     = 'Deferred'
 adr        = ['0003', '0014', '0063', '0064']
 summary    = '''
+UCU-09 closeout corrected hardware graph probe child cleanup on timeout and
+cancellation. A regression failed before the fix and passes with child-exit
+verification; all 19 hardware graph tests pass. UCU-09 owns the evidence.
+
 UCU-09 row169 adds provider rotation and Next schema 0.0.5, with decoded four-angle/audio and HTTP smoke proof. Native autorotation is unchanged; the orientation health query now uses the correct video kind. The milestone owns evidence; existing hardware debt is unchanged.
 
 Deferred after Phase 8 and explicitly non-blocking for Phase 9. The FFmpeg 9
@@ -654,6 +658,13 @@ detection mistake fatal.
 resolved    = true
 
 [[debt]]
+id = 'hardware-graph-probe-timeout-child-cleanup'
+description = 'Hardware graph timeout returns a denial without terminating the spawned FFmpeg process. Repeated startup or settings probes can leave hung children running.'
+discovered = '2026-10-01'
+resolved = true
+evidence = 'UCU-09 closeout observed orphaned timeout fixtures and stopped the owned groups. The probe now sets kill_on_drop for its directly spawned FFmpeg child. The strengthened test uses exec to avoid a shell-owned grandchild and verifies PID disappearance after timeout. It failed on the original implementation and passes with the correction; all 19 hardware graph tests pass. UCU-09 owns exact evidence and the remaining closeout gates. This resolves the demonstrated process leak without waiving hardware acceptance.'
+
+[[debt]]
 id = 'row-140-qsv-hardware-padding'
 description = 'UCU-09 row140 adds Next QSV hardware padding via custom vpp_qsv pad_w/pad_h/pad_x/pad_y/pad_color options. Published ErsatzRS-ffmpeg v2.0.3 includes them; actual Intel hardware output remains unverified.'
 discovered = '2026-09-28'
@@ -665,7 +676,7 @@ id = 'ucu09-runtime-tail-patch-inventory'
 description = 'Requested UCU-09 look-ahead identifies additional FFmpeg runtime gaps beyond QSV padding: AMF MPEG-2 decoder registration, hardware frame-size handling, and Windows D3D11/QSV texture/pool fixes. Audit Linux Vulkan export coverage and distinguish optional SVG/dependency changes from required patches.'
 discovered = '2026-09-28'
 resolved = false
-evidence = 'The catch-up plan FFmpeg runtime look-ahead source map records row155/177 and the exact 8.1.2-1 patch comparison against FFmpeg9 plus v2.0.2 patches. Native hardware acceptance remains unproven. The maintainer subsequently approved the expanded patch and librsvg build. Linux/Windows v2.0.3 candidates now pass local package, SVG, subtitle/audio and available NVIDIA/software-Vulkan checks; exact evidence is owned by UCU-09. Linux export code coverage is corrected too. The exact packages are now published as v2.0.3. On 2026-09-28 the maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA interop acceptance debt; all three remain unverified. Row155 passes ordered protocol/config and exact package checksum acceptance while keeping this approved hardware debt unresolved. Exact Next excludes VC-1 hardware selection for timestamp correctness; automatic adapter selection is retained. Later rows still require their own ordered acceptance.'
+evidence = 'Current integration pins published v2.0.4 with verified Linux/Windows archive and payload hashes; UCU-09 row181 owns the final QSV/oneVPL runtime corrections and passing available software/NVIDIA tests. Intel QSV, AMD AMF and native Linux NVIDIA interop remain explicitly approved unverified hardware debt. Historical build audit: The catch-up plan FFmpeg runtime look-ahead source map records row155/177 and the exact 8.1.2-1 patch comparison against FFmpeg9 plus v2.0.2 patches. Native hardware acceptance remains unproven. The maintainer subsequently approved the expanded patch and librsvg build. Linux/Windows v2.0.3 candidates now pass local package, SVG, subtitle/audio and available NVIDIA/software-Vulkan checks; exact evidence is owned by UCU-09. Linux export code coverage is corrected too. The exact packages are now published as v2.0.3. On 2026-09-28 the maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA interop acceptance debt; all three remain unverified. Row155 passes ordered protocol/config and exact package checksum acceptance while keeping this approved hardware debt unresolved. Exact Next excludes VC-1 hardware selection for timestamp correctness; automatic adapter selection is retained. Subsequent ordered runtime acceptance is recorded by UCU-09.'
 
 [[debt]]
 id = 'ucu09-row143-hdr-refresh-and-media-info'

@@ -130,6 +130,19 @@ pub async fn serve_transport_stream(
         return StatusCode::NOT_FOUND.into_response();
     };
 
+    if !matches!(mode, TransportStreamMode::RedirectToHls) {
+        if let Err(response) = super::validate_profile_output(
+            state,
+            channel.id,
+            OutputFormat::MpegTs,
+            tokio::time::Instant::now() + Duration::from_secs(20),
+        )
+        .await
+        {
+            return response;
+        }
+    }
+
     match mode {
         TransportStreamMode::RedirectToHls => {
             let access_token = AccessToken::new(query.access_token.clone());
@@ -266,6 +279,14 @@ async fn serve_channel_stream_with_channel(
 ) -> Response {
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
         return StatusCode::NOT_FOUND.into_response();
+    }
+
+    if effective_streaming_mode != StreamingMode::HttpLiveStreamingDirect {
+        if let Err(response) =
+            super::validate_profile_output(state, channel.id, output_format, deadline).await
+        {
+            return response;
+        }
     }
 
     serve_channel_stream_admitted(

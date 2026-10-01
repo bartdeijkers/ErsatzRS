@@ -284,7 +284,8 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
             source == FallbackSource::OrdinaryLive,
         )
         .await;
-        ordinary_callback_runtime::configure_sidecar(&pool, root.path(), Some(convert), true).await;
+        remote_subtitle_runtime_helpers::configure_sidecar(&pool, root.path(), Some(convert), true)
+            .await;
     }
     #[cfg(unix)]
     if source == FallbackSource::Retained {

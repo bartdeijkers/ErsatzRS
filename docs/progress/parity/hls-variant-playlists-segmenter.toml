@@ -2,13 +2,14 @@ feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
-adr        = ['0015', '0016', '0061', '0084']
+adr        = ['0015', '0016', '0061', '0084', '0106']
 summary    = '''
-Rows 130/132 startup ownership and readiness verified.
-HLS exposes mode-aware channel URLs,
-multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
-playlists with per-channel media-sequence / `#EXT-X-DISCONTINUITY` tracking and
-`ffmpeg.hls_direct.output_format` targets (copy audio/video, realtime pacing).
+ADR 0106 retains native AV1 with automatic fMP4 HLS selection and explicit
+MPEG-TS rejection. UCU-09 row183 owns passing runtime evidence.
+Rows 130/132 startup ownership/readiness verified.
+HLS exposes mode-aware URLs, multivariant segmenter playlists, TS redirects,
+and HLS-direct playlists with per-channel sequences/discontinuities and
+`ffmpeg.hls_direct.output_format` targets (copied audio/video, realtime pacing).
 
 The segmenter worker spawns bounded FFmpeg generations into temp-backed output,
 mirrors MPEG-TS provider path replacement, trims without emptying stale-only
@@ -20,12 +21,11 @@ and error-ASS fallback.
 Finite add-on inputs keep one producer for the complete remaining play item:
 an initial 44-second read-rate burst fills the buffer, then the same FFmpeg
 process continues in realtime and releases its work-ahead reservation after 30
-seconds of newly generated segments. This avoids content replay when a
-stream-copy producer seeks to the keyframe before an internal chunk boundary.
+seconds of newly generated segments. This prevents replay from keyframe seeks before internal chunk boundaries.
 MPEG-TS HLS output keeps ErsatzTV-style segment options (`+latm` for AAC-LATM)
 while ADR 0015 synthesizes program-date-time values and normalizes MPEG-TS
-continuity/PCR in media-sequence order. The segmenter now shares the
-profile-derived mux-rate and 20 ms PCR-period helper used by direct `.ts`,
+continuity/PCR in media-sequence order. The segmenter shares the
+profile-derived mux-rate and 20 ms PCR-period helper with direct `.ts`,
 legacy concat, and hybrid wrapper outputs, and preserves adaptation-only PCR
 packet continuity-counter semantics when CBR muxing inserts PCR-only packets.
 
@@ -40,8 +40,7 @@ StopOnDisconnect is implemented for segmenter and MPEG-TS hybrid wrapper paths,
 direct `.ts` response-body disposal is guarded, and sub-second seek offsets are
 preserved end-to-end instead of flooring to seconds.
 
-Generated and delayed mirror channels share the same source playout selection
-in HLS-direct and segmenter modes. Source item times are projected onto the
+Generated/delayed mirrors share source playout selection in both HLS modes. Source item times are projected onto the
 target timeline while channel-specific profiles, branding, selectors, and
 subtitle/audio preferences remain target-owned; source rebuilds invalidate all
 dependent mirror sessions.
@@ -64,7 +63,7 @@ cross-player freeze as 4 HLS Segmenter PTS leaps before the fix; after switching
 MPEG-TS HLS appends to a monotonic worker-owned output timestamp offset, the
 same gate passed 64 checks with zero continuity-counter/PTS/DTS/PCR-leap faults
 and audio pip cadence max gap deviation 30 ms.
-Slice history lives in `sessions.ndjson`/git.
+History: `sessions.ndjson`/git.
 '''
 
 [[debt]]

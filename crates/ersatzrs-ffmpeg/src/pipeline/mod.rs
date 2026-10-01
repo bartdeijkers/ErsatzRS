@@ -81,6 +81,21 @@ pub enum OutputFormat {
     Nut,
 }
 
+/// Whether a profile requests AV1 encoding (rather than source video copy).
+#[must_use]
+pub fn profile_encodes_av1(profile: &FFmpegProfile) -> bool {
+    profile.transcode_video && profile.video_format == FFmpegProfileVideoFormat::Av1
+}
+
+/// Reject AV1 in MPEG-TS, including MPEG-TS HLS segments (ADR 0106).
+/// Native fragmented MP4 HLS remains available; no codec substitution is made.
+#[must_use]
+pub fn av1_output_error(format: OutputFormat) -> Option<&'static str> {
+    matches!(format, OutputFormat::MpegTs | OutputFormat::Hls).then_some(
+        "AV1 output requires native fMP4 HLS, MP4 or Matroska; MPEG-TS is unsupported. Use native HLS or select H.264/HEVC in the FFmpeg profile.",
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlsOutput {
     pub segment_template: String,
@@ -2161,7 +2176,8 @@ pub struct UnsupportedSource {
 /// # Errors
 ///
 /// Returns [`UnsupportedSource`] when the selected source carries a Dolby
-/// Vision configuration with no characterized conversion.
+/// Vision configuration with no characterized conversion, or AV1 output is
+/// requested in an unsupported MPEG-TS container (ADR 0106).
 pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
@@ -2193,6 +2209,17 @@ fn unsupported_source_reason_for_acceleration(
     acceleration: Option<HardwareAccelerationKind>,
     request: &PipelineRequest,
 ) -> Option<String> {
+    let output_is_av1 = request.desired.video_format == FFmpegProfileVideoFormat::Av1
+        || (request.desired.video_format == FFmpegProfileVideoFormat::Copy
+            && request
+                .source_video_stream
+                .as_ref()
+                .is_some_and(|source| source.codec == SourceVideoCodec::Av1));
+    if output_is_av1 {
+        if let Some(reason) = av1_output_error(request.state.output_format) {
+            return Some(reason.to_owned());
+        }
+    }
     if let Some(incomplete) = request
         .source_video_stream
         .as_ref()
@@ -4153,7 +4180,19 @@ fn add_output_options(
             ));
         }
         if let Some(bitrate) = desired.video_bitrate {
-            steps.push(video_bitrate_option(bitrate));
+            if acceleration == HardwareAccelerationKind::None
+                && desired.video_format == FFmpegProfileVideoFormat::Av1
+            {
+                // FFmpeg 9 libsvtav1 selects unsupported random-access CBR when
+                // maxrate equals bitrate. Target-bitrate VBR omits maxrate;
+                // SVT only accepts a maximum bitrate in its CRF mode (ADR 0106).
+                steps.push(PipelineStep::generic(
+                    "video_bitrate",
+                    ["-b:v".to_owned(), format!("{bitrate}k")],
+                ));
+            } else {
+                steps.push(video_bitrate_option(bitrate));
+            }
         }
         if let Some(buffer_size) = desired.video_buffer_size {
             steps.push(PipelineStep::generic(

@@ -110,9 +110,10 @@ fn effective_bandwidth(spec: &ChannelStreamingSpec) -> i64 {
 
 fn codec_inf(spec: &ChannelStreamingSpec) -> String {
     let video_codec = match spec.video_format {
-        FFmpegProfileVideoFormat::Av1 => "av01.0.01M.08",
         FFmpegProfileVideoFormat::Hevc => "hvc1.1.6.L93.B0",
         FFmpegProfileVideoFormat::H264 => "avc1.4D4028",
+        // AV1 level, tier and bit depth cannot be inferred from this projection.
+        // Omit CODECS rather than advertising a guessed stream (ADR 0106).
         _ => "",
     };
     let audio_codec = match spec.audio_format {
@@ -187,6 +188,21 @@ mod tests {
             with_next_subtitles(master.clone(), &channel, false, &token),
             master
         );
+    }
+
+    #[test]
+    fn av1_variant_omits_unproven_level_and_bit_depth() {
+        let mut spec = h264_aac_1080p();
+        spec.video_format = FFmpegProfileVideoFormat::Av1;
+        let playlist = build_multi_variant_playlist(
+            "http",
+            "example.test",
+            "1",
+            Some(&spec),
+            &AccessToken::default(),
+        );
+        assert!(!playlist.contains("CODECS="));
+        assert!(playlist.contains("RESOLUTION=1920x1080"));
     }
 
     fn h264_aac_1080p() -> ChannelStreamingSpec {

@@ -92,3 +92,46 @@ test.describe('shared health results', () => {
     });
   }
 });
+
+// ADR 0106: incompatible AV1 channel settings need actionable, localized guidance.
+for (const javaScriptEnabled of [true, false]) {
+  test(`AV1 output health guidance (JavaScript ${javaScriptEnabled})`, async ({ browser, baseURL }) => {
+    test.skip(!databasePath, 'Requires the disposable E2E database.');
+    const database = new DatabaseSync(databasePath!);
+    database.exec('PRAGMA busy_timeout=10000;');
+    const original = database.prepare(`SELECT c."Id", c."FFmpegProfileId", c."StreamingMode",
+      c."StreamingEngine", c."IsEnabled", p."VideoFormat", p."TranscodeVideo"
+      FROM "Channel" c JOIN "FFmpegProfile" p ON p."Id"=c."FFmpegProfileId"
+      ORDER BY c."Id" LIMIT 1`).get() as Record<string, number>;
+    expect(original).toBeTruthy();
+    const context = await browser.newContext({ baseURL, javaScriptEnabled });
+    try {
+      database.prepare('UPDATE "FFmpegProfile" SET "VideoFormat"=4,"TranscodeVideo"=1 WHERE "Id"=?').run(original.FFmpegProfileId);
+      database.prepare('UPDATE "Channel" SET "StreamingEngine"=0,"StreamingMode"=1,"IsEnabled"=1 WHERE "Id"=?').run(original.Id);
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      expect((await page.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 })).status()).toBe(303);
+      for (const [language, message] of [
+        ['en-us', 'AV1 output requires native HLS. Change the channel engine/mode or select H.264/HEVC in its FFmpeg profile.'],
+        ['nl', 'AV1-uitvoer vereist native HLS. Wijzig de engine/modus van het kanaal of kies H.264/HEVC in het FFmpeg-profiel.'],
+      ]) {
+        await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language }, maxRedirects: 0 });
+        await page.goto('/system/health');
+        await expect(page.getByText(message, { exact: true })).toBeVisible();
+        if (javaScriptEnabled) {
+          await page.waitForFunction(() => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+        }
+        expect(errors).toEqual([]);
+      }
+      expect(database.prepare('SELECT "VideoFormat" FROM "FFmpegProfile" WHERE "Id"=?').get(original.FFmpegProfileId)).toEqual({ VideoFormat: 4 });
+    } finally {
+      database.prepare('UPDATE "FFmpegProfile" SET "VideoFormat"=?,"TranscodeVideo"=? WHERE "Id"=?').run(original.VideoFormat, original.TranscodeVideo, original.FFmpegProfileId);
+      database.prepare('UPDATE "Channel" SET "StreamingMode"=?,"StreamingEngine"=?,"IsEnabled"=? WHERE "Id"=?').run(original.StreamingMode, original.StreamingEngine, original.IsEnabled, original.Id);
+      await context.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      database.close();
+      await context.close();
+    }
+  });
+}

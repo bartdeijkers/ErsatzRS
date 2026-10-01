@@ -11392,13 +11392,17 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through b6666882 (latest fetched tip) in order,
+Process every ledger row in this release window through 960421e8 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
 AMD AMF and native Linux NVIDIA interop hardware validation may remain explicit
 unverified acceptance debt after the exact runtime is published and integrated.
 This does not waive software/runtime checks available on the current machine.
+Maintainer-approved exception (2026-10-01): outstanding ARMv7, ARM64, Intel
+macOS and Apple Silicon macOS application acceptance under ADRs 0095/0096/0098
+may remain explicit unverified debt at UCU-09 closeout. Linux x64 and Windows
+x64 application checks remain required; supported platforms are unchanged.
 Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
@@ -11416,6 +11420,71 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-01 row183 acceptance and local window closeout pass. ADR 0106 is
+Accepted and Implemented; row183 is Adapt. All 183 ordered SHA/subject pairs
+match refreshed upstream history; latest fetched tip remains 960421e8. The
+baseline and clean reference checkout advance to that exact commit.
+Final parity-check --leptos-build passes: 795 web tests passed, 27 skipped,
+strict web lint, architecture/hydration/progress checks and matched SSR/WASM.
+Final decoded AV1 playback retains subtitles (47 pixels), selected Dutch audio
+(880.50 Hz), fMP4 maps and profile value 4; unsupported TS and Next return 415.
+Four Chromium/Firefox JS/no-JS cases pass in 8.2 seconds. The independent bundle
+gate confirms both emitted JS/WASM URLs resolve. Logs:
+tmp/ucu09-row183/{parity-final.log,runtime-final.log,web-bundle-final.log};
+tested-bundle-sha256.json records the exact tested binary and assets.
+Earlier workspace Clippy/test-closeout and native/Next smoke/TSDuck results
+below remain valid; dependency manifests are unchanged, so the passing cargo
+deny result in tmp/ucu09-closeout/deny-final.log is reused. Approved platform
+and hardware debt remains explicitly unverified. Push and exact-SHA CI remain;
+UCU-09 is not yet Complete. The following checkpoints retain their history.
+
+2026-10-01 final fetch appends pending row183, 960421e8 (AV1 removal).
+Earlier 182 rows remain accepted; baseline/reference HEAD stay b6666882.
+The maintainer accepted ADR 0106 on 2026-10-01: retain compatible native AV1
+profiles, reject unsupported transports and Next, and prove decoded native
+fMP4 playback before accepting row183. Implementation and decoded proof now pass. Native AV1 HLS selects fMP4;
+guards refuse configured AV1 and known copied AV1 in MPEG-TS. Next AV1 requests return
+HTTP 415 before startup. The AV1 profile value stays 4. Native Linux playback
+captures 12.021 seconds across adjacent eight-second playout items at 320x180,
+with 879.34 Hz selected Dutch audio and 47 subtitle pixels. Served playlists
+contain fMP4 maps, media fragments and discontinuities. Native Windows v2.0.4
+software SVT output decodes all 240 frames with 885 Hz audio and 54 subtitle
+pixels; executable hashes match the published packages. This Windows check is
+runtime evidence, separate from the application acceptance recorded below.
+The initial real encode exposed incompatible generic target/max-rate flags;
+software SVT now uses target-bitrate VBR without maxrate, confirmed against the
+FFmpeg 9 adapter and actual published encoders. Hardware flags are unchanged.
+Six focused AV1 guard/decoder/snapshot tests pass; health rejects enabled
+Next/TS AV1 channels and permits native HLS. AV1 CODECS is omitted because the
+profile projection cannot prove its level/tier/bit depth. Four Chromium/Firefox
+health cases pass (8.0 seconds), checking English/Dutch guidance with and
+without JavaScript. All supported cultures have the new health translation.
+Evidence: tmp/ucu09-row183/{runtime-boundary.log,browser.log,windows-av1.log,
+ffmpeg-vbr-tests-green.log,leptos-vbr.log}; runtime.py and windows-av1.ps1 retain
+the disposable proof recipe. Matched Leptos build passes. The 60 GiB target
+threshold was crossed and cargo clean completed before rebuilding. Final
+workspace test-closeout passes: 3,625 passed, 148 skipped, then all doctests
+(17c8b306-ecf0-4cec-93c0-9f152e8693e3; 70.774-second nextest execution after
+8m38s compilation; tmp/ucu09-row183/test-closeout.log). Strict workspace all-target Clippy passes after extracting two small routing/
+message helpers and removing a redundant match arm (1m59s;
+tmp/ucu09-row183/clippy-final.log). No lint exemption was added. Native and Next HTTP smoke pass with the published v2.0.4 runtime. Next
+proves selected Dutch 880 Hz audio, visible subtitles, preview playback,
+wrapper restart and idle cleanup (tmp/ucu09-row183/smoke-{native,next}.log).
+TSDuck passes all 87 checks with zero failures across legacy/hybrid MPEG-TS
+and segmenter/direct HLS (tmp/ucu09-row183/tsduck.log). Web parity and the
+final matched bundle remain before row183/baseline acceptance.
+Codex source review confirms that the admission guard applies only to AV1
+output or copied AV1, not AV1 input decoded to another codec; stored profiles
+are not migrated or coerced. SVT VBR changes only software AV1 rate control.
+The public/private routing checks and final command guard complement each
+other; the existing Next config rejection remains in force.
+Final local gates for the 182-row candidate passed: parity-check --leptos-build
+including 794 web tests (27 skipped), matched SSR/WASM bundle HTTP verification,
+and cargo deny (advisories, bans, licenses and sources). Logs are
+tmp/ucu09-closeout/parity-final.log, web-bundle-final.log and deny-final.log.
+Earlier workspace, native/Next smoke, Windows and TSDuck evidence below remains
+valid for unchanged behavior. Final push and exact-SHA CI have not started.
+
 Row182 is Port after the complete b6666882 source audit. Next config maps
 MPEG-2 to mpeg2video and forces eight-bit output without changing H.264/HEVC
 bit depth. A positive MPEG-2 bitrate is required before startup, matching the
@@ -11432,13 +11501,76 @@ Strict workspace all-target Clippy passes in 3m09s. Evidence: tmp/ucu09-row182/
 and tmp/ucu09-closeout/clippy.log. Pin advances to b6666882, matching the refreshed
 upstream tip; 182/182 rows accepted. No hardware proof or exception is inferred.
 
-Final UCU-09 closeout is in progress. Full test-closeout is running; matched
-Leptos, parity, native/Next smoke, TSDuck, final refresh, push and green exact-SHA
-CI remain. The final audit found existing six-platform application acceptance
+Final UCU-09 closeout is in progress. Full test-closeout passes: 3,621 tests,
+148 skipped, followed by successful workspace doctests. The final rerun after
+the probe cleanup and portable-helper corrections passes in 68.824 seconds
+(c8caddb4-a05f-4971-9b29-ea3aacdb342b), with evidence in
+tmp/ucu09-closeout/test-closeout-final.log. The initial run found
+one stale external Plex metadata assertion predating row174 automatic subtitle
+eligibility. Its corrected regression checks rejection of unextracted embedded
+text for transcoded HLS and preserved forced-track selection for HLS Direct;
+all eight external JSON tests pass (ae55d343-0d0f-4829-8ab1-f3316b2ba321).
+Evidence: tmp/ucu09-closeout/test-closeout-corrected.log and
+tmp/ucu09-closeout/external-json-tests.log. Production behavior is unchanged.
+Shutdown preparation found a separate child-cleanup defect: each full test run
+left its synthetic hanging-ffmpeg probe and sleep child alive after the timeout
+test passed. Both owned groups were stopped. On resumption, a strengthened
+child-exit regression failed against the original implementation. The probe now
+sets kill_on_drop for the directly spawned FFmpeg process; timeout and caller
+cancellation therefore terminate it. All 19 hardware graph tests pass
+(e0dde03e-d7d0-4ad8-8d9b-60bbac8aa2ad), including PID disappearance after timeout.
+Evidence: tmp/ucu09-probe-cleanup/red.log and green.log. The owning cleanup debt
+is resolved. Strict infrastructure all-target Clippy passes in 1m37s
+(tmp/ucu09-probe-cleanup/clippy.log); the original process survived a daemon
+restart, and its queued duplicate was stopped. Final closeout verification follows.
+Final strict workspace all-target Clippy also passes in 3m35s after the helper
+move (tmp/ucu09-closeout/clippy-final.log). The full origin/main-to-candidate
+new-exemption policy check found two missing machine-API DTO explanations;
+item-local comments now document their upstream boolean wire contract, and the
+policy check passes. These comments change no behavior.
+Native Windows application acceptance passes: 33 chapter-expression, audio-script
+and decoded production-adapter Next tests (eb572545-2615-4af7-b3f0-83b00a327a17),
+plus the SQL chapter-expression rejection/preservation regression
+(9771262b-158c-4cbb-8c2e-e7d3a27fa13c). Playback includes selected JavaScript audio,
+retained subtitles, normal/preview isolation and MPEG-2 eight-bit output.
+Copied Next 6b49dae and FFmpeg/ffprobe v2.0.4 executable hashes match the tested
+artifacts. The native build found shared caption helpers incorrectly located
+inside a Unix-only module; moving those unchanged helpers into a portable test
+module restores compilation without changing production behavior or excluding
+tests. Evidence: tmp/ucu09-native-windows/acceptance.log and its preserved
+acceptance-before-portable-helpers.log. Linux verification of the helper move
+passes in the full test-closeout above.
+All eight chapter-profile regressions also pass in each separate native Windows
+language environment (C, en_US.UTF-8, nl_NL.UTF-8, tr_TR.UTF-8): 32 passes in
+tmp/ucu09-native-windows/cultures.log. This complements the existing Linux
+four-environment proof; the approved ARM/macOS debt stays unverified.
+Native smoke passes with published FFmpeg v2.0.4: legacy/hybrid MPEG-TS and
+segmenter HLS return playable endpoints; public internal callbacks remain 404.
+Evidence: tmp/ucu09-closeout/smoke-native.log. The configured target cache was
+cleaned after crossing 60 GiB, then the host was rebuilt for this gate.
+Next smoke also passes with official Next 6b49dae and published FFmpeg v2.0.4:
+HLS and hybrid TS, selected Dutch 880 Hz audio, burned subtitles, isolated
+preview, wrapper restart and all idle session cleanup. Evidence:
+tmp/ucu09-closeout/smoke-next.log.
+TSDuck passes all 87 transport checks with zero failures on the corrected host
+and published FFmpeg v2.0.4 (tmp/ucu09-closeout/tsduck-final.log). A fresh upstream
+fetch still points to b6666882 with no new tail rows.
+Matched Leptos, parity, final refresh, push and green
+exact-SHA CI remain. The final audit found existing six-platform application acceptance
 debt in ADRs 0095/0096/0098. It is separate from the three approved GPU-validation
-exceptions. Maintainer clarification has been requested; no platform acceptance
-has been waived or claimed. ADR 0095 remains Accepted with a current Partial
+exceptions. On 2026-10-01 the maintainer explicitly approved ARM/macOS
+application acceptance debt. Those four targets remain unverified, with Linux
+and Windows application proof still required. The maintainer offered a Dell XPS 15, a
+SteamOS machine, a Raspberry Pi 3 and the current Windows NVIDIA PC. The laptop
+has an i7 (exact model and OS pending); a Pi SD card still needs preparation.
+The inventory is not acceptance evidence; no macOS test device has been identified.
+ADR 0095 remains Accepted with a current Partial
 Implementation statement and clearly separated historical checkpoints.
+The maintainer requested a pause immediately before 00:10 Europe/Amsterdam on
+2026-10-01 because of expected thunderstorms. Current tests are terminal and
+the timeout fixture leftovers were stopped. The maintainer subsequently resumed
+work and the cleanup correction above is now tested. Final gates and platform
+acceptance remain. No final UCU-09 push or CI was started.
 
 Row181 is Adapt after the full 76884783 runtime/bundling/changelog audit,
 preserving ADRs 0008/0063 managed FFmpeg 9 delivery. Published v2.0.4 at runtime

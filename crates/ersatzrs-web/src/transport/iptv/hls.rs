@@ -749,23 +749,13 @@ pub async fn serve_channel_m3u8(
 
     let access_token = AccessToken::new(query.access_token.clone());
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-        if channel.streaming_mode == StreamingMode::TransportStreamHybrid
-            && query
-                .mode
-                .as_deref()
-                .is_none_or(|mode| mode.trim().is_empty() || mode.trim() == "mixed")
-        {
-            let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
-            return axum::response::Redirect::temporary(&target).into_response();
-        }
-        return serve_hls_segmenter_playlist(
+        return serve_next_channel_m3u8(
             state,
             channel_number,
             headers,
             &channel,
             &access_token,
-            OutputFormat::Hls,
-            MIN_STABLE_INITIAL_SEGMENT_COUNT,
+            query,
             deadline,
         )
         .await;
@@ -834,6 +824,42 @@ pub async fn serve_channel_m3u8(
     }
 }
 
+async fn serve_next_channel_m3u8(
+    state: &AppState,
+    channel_number: &str,
+    headers: &HeaderMap,
+    channel: &Channel,
+    access_token: &AccessToken,
+    query: &HlsQuery,
+    deadline: std::time::Instant,
+) -> Response {
+    if let Err(response) =
+        super::validate_profile_output(state, channel.id, OutputFormat::Hls, deadline.into()).await
+    {
+        return response;
+    }
+    if channel.streaming_mode == StreamingMode::TransportStreamHybrid
+        && query
+            .mode
+            .as_deref()
+            .is_none_or(|mode| mode.trim().is_empty() || mode.trim() == "mixed")
+    {
+        let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
+        return axum::response::Redirect::temporary(&target).into_response();
+    }
+    return serve_hls_segmenter_playlist(
+        state,
+        channel_number,
+        headers,
+        channel,
+        access_token,
+        OutputFormat::Hls,
+        MIN_STABLE_INITIAL_SEGMENT_COUNT,
+        deadline,
+    )
+    .await;
+}
+
 // Keep admission and its single request deadline visible in one route owner.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn serve_hls_segmenter_playlist(
@@ -846,6 +872,24 @@ async fn serve_hls_segmenter_playlist(
     min_initial_segment_count: usize,
     deadline: std::time::Instant,
 ) -> Response {
+    // ADR 0106: retain AV1 through native fMP4, never MPEG-TS segments.
+    let output_format = if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Legacy {
+        match tokio::time::timeout_at(
+            deadline.into(),
+            ersatzrs_infra::playback::load_channel_playback_profile(&state.pool, channel.id),
+        )
+        .await
+        {
+            Ok(Ok(Some(profile))) if ersatzrs_ffmpeg::profile_encodes_av1(&profile.profile) => {
+                OutputFormat::HlsMp4
+            }
+            Ok(Ok(Some(_))) => output_format,
+            Ok(Ok(None) | Err(_)) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        }
+    } else {
+        output_format
+    };
     let scheme = request_scheme(headers);
     let host = request_host(headers);
     let spec = match startup_read(deadline, async {

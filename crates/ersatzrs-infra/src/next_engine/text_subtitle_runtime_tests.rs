@@ -517,6 +517,9 @@ mod retained_callback_runtime;
 #[path = "ordinary_callback_runtime_tests.rs"]
 mod ordinary_callback_runtime;
 
+#[path = "remote_subtitle_runtime_helpers.rs"]
+mod remote_subtitle_runtime_helpers;
+
 #[path = "direct_remote_runtime_tests.rs"]
 mod direct_remote_runtime;
 

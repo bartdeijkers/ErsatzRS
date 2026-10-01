@@ -817,6 +817,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn av1_health_distinguishes_native_hls_next_and_mpegts() {
+        let pool = test_pool().await;
+        seed_hdr10_profile_and_channel(&pool, 71, "AV1 output", 4, 0, 1).await;
+        let check =
+            FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool.clone());
+        for (engine, mode, status) in [
+            (0, 1, HealthCheckStatus::Fail),
+            (0, 5, HealthCheckStatus::Fail),
+            (0, 4, HealthCheckStatus::NotApplicable),
+            (0, 2, HealthCheckStatus::NotApplicable),
+            (1, 4, HealthCheckStatus::Fail),
+        ] {
+            sqlx::query(
+                r#"UPDATE "Channel" SET "StreamingEngine"=?, "StreamingMode"=? WHERE "Id"=71"#,
+            )
+            .bind(engine)
+            .bind(mode)
+            .execute(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                check.check().await.unwrap().status,
+                status,
+                "engine={engine} mode={mode}"
+            );
+        }
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "TranscodeVideo"=0 WHERE "Id"=71"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::NotApplicable
+        );
+    }
+
+    #[tokio::test]
     async fn interlace_probe_requires_idet_only_when_enabled() {
         let pool = test_pool().await;
         let mut report = FfmpegRuntimeReport::for_tests();

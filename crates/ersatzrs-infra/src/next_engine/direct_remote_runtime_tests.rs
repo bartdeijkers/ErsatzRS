@@ -235,7 +235,8 @@ async fn run_case(
     if case.source == CaptionSource::EmbeddedImage {
         images::configure(&pool, case.subtitles).await;
     } else {
-        ordinary_callback_runtime::configure_sidecar(&pool, &root, case.subtitles, false).await;
+        remote_subtitle_runtime_helpers::configure_sidecar(&pool, &root, case.subtitles, false)
+            .await;
     }
     if case.source == CaptionSource::EmbeddedText {
         configure_embedded(&pool, case.subtitles.is_some()).await;
@@ -272,7 +273,7 @@ async fn run_case(
         && case.subtitles == Some(true)
         && captured.is_ok()
     {
-        Some(ordinary_callback_runtime::capture_vtt(handle.as_ref(), &output).await)
+        Some(remote_subtitle_runtime_helpers::capture_vtt(handle.as_ref(), &output).await)
     } else {
         None
     };

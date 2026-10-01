@@ -21,6 +21,26 @@ impl HealthCheck for FFmpegCapabilitiesHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
+        // ADR 0106: AV1 needs the native fMP4 HLS route, not MPEG-TS wrappers.
+        // Persisted streaming modes: legacy TS=1, HLS Direct=2, HLS=4, Hybrid=5.
+        let incompatible: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "Channel" c
+               JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
+               WHERE c."IsEnabled" = 1 AND p."TranscodeVideo" = 1
+                 AND p."VideoFormat" = 4
+                 AND (c."StreamingEngine" = 1 OR c."StreamingMode" IN (1, 5))"#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(super::super::sqlx_error)?;
+        if incompatible > 0 {
+            return Ok(HealthCheckResult::new(
+                self.title(), HealthCheckStatus::Fail,
+                "AV1 output requires native HLS. Change the channel engine/mode or select H.264/HEVC in its FFmpeg profile.",
+                "AV1 output requires native HLS",
+            ).with_link("/channels"));
+        }
+
         let mut missing: Vec<String> = self
             .runtime
             .issues

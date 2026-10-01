@@ -23,6 +23,11 @@ publication replace the active paths, report, graph state, and denial state.
 Failures leave the prior runtime intact, and feedback from a child built under
 an older generation cannot mutate the replacement runtime.
 
+Hardware graph probes terminate their directly spawned FFmpeg process when the
+output future is dropped on timeout or caller cancellation. The UCU-09 closeout
+regression verifies child exit as well as bounded return and a persisted denial;
+the strengthened test failed before the correction (2026-10-01).
+
 The native NVIDIA probe and every generated NVIDIA graph are explicitly bound
 to CUDA device index zero. The report records that adapter's UUID, model, and
 driver version instead of unioning capabilities across adapters. The two

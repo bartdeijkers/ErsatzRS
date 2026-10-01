@@ -15,13 +15,18 @@ managed package discovery, supervised processes, authenticated provider/remote
 inputs, selected tracks, fallback, graphics, troubleshooting and health. The
 UCU-09 final window gates and outstanding platform acceptance remain open; the
 owning [catch-up milestone](../progress/milestones.toml) records current proof.
-Linux application playback and native Windows official-engine playback pass
+Linux and native Windows application playback tests pass
 with Next `6b49dae` and published ErsatzRS-ffmpeg v2.0.4, including selected
 subtitles/audio and graphics. Direct RGB image opacity is now proven; the
 older limitation described below is superseded. Accepted live embedded-text
 limitations and approved QSV/AMF/native-Linux-NVIDIA hardware debt remain
 explicit in [catch-up parity](../progress/parity/upstream-baseline-catch-up.toml).
 These results do not establish full application acceptance on all six targets.
+On 2026-10-01 the maintainer approved retaining Linux ARMv7/ARM64 and both macOS
+targets as explicit unverified application acceptance debt at UCU-09 closeout.
+Windows proof includes production-adapter Next HLS, JavaScript-selected audio,
+subtitle retention, normal/preview isolation and MPEG-2 output. The owning debt
+is `ucu-arm-macos-application-acceptance`; declared platform support is unchanged.
 
 ### Historical implementation checkpoints
 

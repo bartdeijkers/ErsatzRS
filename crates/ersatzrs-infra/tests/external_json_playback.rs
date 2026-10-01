@@ -362,24 +362,35 @@ async fn external_json_plex_metadata_preserves_streams_without_library_writes() 
         .any(|stream| stream.kind == MediaStreamKind::Subtitle
             && stream.forced
             && stream.language.as_deref() == Some("eng")));
-    let selected = media
-        .tracks()
-        .select_subtitle(
-            &pool,
-            &["en".into()],
-            ersatzrs_domain::ChannelSubtitleMode::Forced,
-            ersatzrs_infra::playback::transient::TrackSelectionPolicy {
-                mode: ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter,
-                engine: ersatzrs_infra::playback::SubtitleSelectionEngine::Next,
-                media_server: true,
-                prepare_embedded_text: false,
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(selected.stream_index, 2);
-    assert!(selected.forced);
+    for mode in [
+        ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter,
+        ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect,
+    ] {
+        let selected = media
+            .tracks()
+            .select_subtitle(
+                &pool,
+                &["en".into()],
+                ersatzrs_domain::ChannelSubtitleMode::Forced,
+                ersatzrs_infra::playback::transient::TrackSelectionPolicy {
+                    mode,
+                    engine: ersatzrs_infra::playback::SubtitleSelectionEngine::Next,
+                    media_server: true,
+                    prepare_embedded_text: false,
+                },
+            )
+            .await
+            .unwrap();
+        // Automatic transcoding selection excludes unextracted embedded text;
+        // HLS Direct retains its source tracks.
+        if mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect {
+            let selected = selected.unwrap();
+            assert_eq!(selected.stream_index, 2);
+            assert!(selected.forced);
+        } else {
+            assert!(selected.is_none());
+        }
+    }
     assert!(matches!(
         media.audio_metadata(),
         ersatzrs_infra::audio_script::transient::AudioMetadata::Movie {

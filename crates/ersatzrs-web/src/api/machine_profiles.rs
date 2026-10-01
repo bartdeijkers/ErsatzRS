@@ -47,7 +47,7 @@ enum_code!(tonemap, ["linear"=>0,"clip"=>1,"gamma"=>2,"reinhard"=>3,"mobius"=>4,
 enum_code!(audio, ["none"=>0,"aac"=>1,"ac3"=>2,"aaclatm"=>3,"copy"=>99]);
 enum_code!(loudness, ["off"=>0,"loudnorm"=>1]);
 
-#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::struct_excessive_bools)] // Preserve independent boolean fields in the upstream machine API request.
 #[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ProfileMutation {
@@ -209,7 +209,7 @@ pub async fn delete(
     Ok(Json(json!({})))
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::struct_excessive_bools)] // Preserve independent boolean fields in the upstream machine API response.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileResponse {

@@ -55,6 +55,17 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve AV1 profiles and use fMP4 for native AV1 HLS output. Reject AV1
+  MPEG-TS output before startup and report incompatible channel settings in
+  health checks; Next continues to reject AV1 (ADR 0106). Software SVT-AV1
+  uses compatible target-bitrate rate control instead of unsupported CBR flags.
+
+- Stop FFmpeg hardware-capability probe processes when the check times out or
+  is cancelled, preventing abandoned probes from accumulating.
+
+- Restore Windows compilation of Next subtitle runtime tests by sharing the
+  portable caption helpers outside the Unix-only producer fixtures.
+
 - Show this build's unreleased changelog on development home and health pages;
   tagged releases continue to show their exact version's notes.
 

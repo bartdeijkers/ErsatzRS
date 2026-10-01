@@ -5992,3 +5992,56 @@ fn a_default_vulkan_device_cannot_stand_in_for_the_playback_gpu() {
         "a standalone default Vulkan device must not be used: {probe}"
     );
 }
+
+#[test]
+fn av1_output_transport_guard_preserves_codec_and_source_decoding() {
+    for output in [
+        OutputFormat::MpegTs,
+        OutputFormat::Hls,
+        OutputFormat::HlsMp4,
+        OutputFormat::Mp4,
+        OutputFormat::Mkv,
+        OutputFormat::Nut,
+    ] {
+        let mut request = h264_request(DesiredVideoState::h264_1080p());
+        request.desired.video_format = FFmpegProfileVideoFormat::Av1;
+        request.state.output_format = output;
+        let refused = matches!(output, OutputFormat::MpegTs | OutputFormat::Hls);
+        assert_eq!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_some(),
+            refused
+        );
+        request.desired.video_format = FFmpegProfileVideoFormat::Copy;
+        request.source_video_stream = Some(SourceVideoStream::new(SourceVideoCodec::Av1));
+        assert_eq!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_some(),
+            refused
+        );
+        request.desired.video_format = FFmpegProfileVideoFormat::H264;
+        assert!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_none(),
+            "AV1 source decoding remains supported"
+        );
+    }
+}
+
+#[test]
+fn av1_native_fmp4_output_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.desired.video_format = FFmpegProfileVideoFormat::Av1;
+    request.desired.video_profile = None;
+    request.desired.video_preset = None;
+    request.state.output_format = OutputFormat::HlsMp4;
+    request.state.hls = Some(HlsOutput {
+        segment_template: "live_%05d.m4s".into(),
+        init_template: Some("init.mp4".into()),
+        playlist_path: "live.m3u8".into(),
+        segment_options: None,
+        is_first_transcode: true,
+        discontinuity: false,
+        troubleshooting: false,
+    });
+    let command =
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).unwrap();
+    insta::assert_snapshot!(command.arguments.join(" "));
+}

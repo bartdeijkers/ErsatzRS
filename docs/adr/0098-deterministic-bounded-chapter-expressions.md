@@ -38,8 +38,13 @@ suite passes in separate processes under invariant, en-US, nl-NL and tr-TR
 language environments. Dependency advisory, license, source and ban checks pass.
 Native MPEG-TS/HLS smoke and decoded production-builder playback also pass for
 Unicode-selected chapter breaks and persisted fractional fallback source offsets.
-Build/execution evidence across all six supported platforms remains open; these
-local results do not complete acceptance or close UCU-02.
+UCU-09 also verifies native Windows chapter fixtures and oracle outcomes, plus
+persisted SQL atomic failure with redacted input. ARM/macOS application proof
+remains unverified under the explicit maintainer-approved debt below.
+
+On 2026-10-01 the maintainer approved explicit unverified ARM/macOS application
+acceptance debt for UCU-09. Linux x64 and Windows x64 application checks remain
+required; see `ucu-arm-macos-application-acceptance` in the catch-up parity record.
 
 ## Context
 

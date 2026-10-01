@@ -1,10 +1,15 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..b6666882 (fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..960421e8 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106']
 summary    = """
-182/182; no pending ledger rows. Final window/platform acceptance and CI remain.
+183/183 accepted; native AV1 follows implemented ADR 0106.
+Final window local gates pass; push and exact-SHA CI remain.
+UCU-09 now has native Windows application proof for Next, JavaScript selection
+and chapter expressions, including all four chapter-profile language environments.
+ARM/macOS application proof is explicit maintainer-approved unverified debt
+(2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
 UCU-06/07/08 Complete; evidence in milestones.
 136-137 Port; 138 Covered; 139 Adapt (0095/0103).
 140 Port: published v2.0.3; approved hardware debt remains unverified.
@@ -34,19 +39,11 @@ and native smoke pass.
 164 Port: dependent choices and template hydration; four browser cases pass.
 165 Covered: credits fallback and worker/graphics ownership; 18 checks pass.
 166 Covered: case-insensitive YAML discovery; three scanner checks pass.
-Window gates remain.
+Final CI remains.
 
-UCU-02 Complete; platform acceptance open; credentials isolated.
-
-21 Adapt (0096): bounded JavaScript selection feeds native/preview/Next;
-metadata, fallback, cancellation and decoded alternate audio pass. Windows
-MSVC/ARMv7 probes pass; full six-platform acceptance remains open. ADR 0096
-stays Partial. Native/Next smoke and 64 applicable TSDuck checks pass; that
-run's HLS Direct branch had no segments and remains unproven.
-22 Adapt (0098/0097): fallback intervals, version/chapter identity, persisted
-filler continuity, bounded expressions and subsecond offsets pass focused and
-decoded playback proof. All-platform expression acceptance remains open;
-ADR 0098 stays Partial and Classic scheduling owns the debt.
+UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
+chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
+the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
 
 Row 23 is Port: version-bound image selection preserves Dutch subtitles,
 explicit off and alternate audio in decoded two-track PGS playback.
@@ -225,12 +222,19 @@ evidence    = 'Row 24 is Port. Source map is in plans/upstream-catch-up.md; UCU-
 resolved    = true
 
 [[debt]]
+id          = 'ucu-arm-macos-application-acceptance'
+description = 'Native application acceptance for Next playback, JavaScript audio selectors and deterministic chapter expressions remains unverified on Linux ARMv7, Linux ARM64, Intel macOS and Apple Silicon macOS.'
+discovered  = '2026-10-01'
+resolved    = false
+evidence    = 'The maintainer explicitly approved ARM/macOS acceptance debt on 2026-10-01 so UCU-09 may close after its remaining gates. This applies to ADRs 0095/0096/0098 and does not claim those targets passed, alter supported platforms, waive Linux x64 or Windows x64 application checks, or replace the separate approved GPU-validation debt. UCU-09 owns current platform evidence.'
+
+[[debt]]
 id          = 'ucu-optional-next-engine-integration'
 description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. The following earlier checkpoints describe the integration sequence, not additional current blockers: ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
 
 [[debt]]
 id          = 'ucu-javascript-audio-selector-parity'
@@ -238,7 +242,7 @@ description = 'ADR 0096 implements bounded movie.js and episode.js audio selecti
 discovered  = '2026-09-23'
 resolved    = false
 adr         = '0096'
-evidence    = 'Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. Earlier checkpoints: Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
 
 [[debt]]
 id          = 'row-22-classic-fallback-padding'
@@ -327,3 +331,11 @@ description = 'Row162: FFmpeg settings exposes only the built-in Default script 
 discovered = '2026-09-30'
 resolved = true
 evidence = 'Complete six-file upstream source map is in plans/upstream-catch-up.md. Shared fresh discovery and form-only selection recovery are implemented. All 19 focused checks pass (23c48831-fd3c-4f48-8b34-58d356944af8), with strict affected all-target Clippy, architecture and hydration lint. Published v2.0.3 executable checksums match the accepted release. The first browser run exposed forced Default labels and a no-JS Loading fallback; narrow label/in-order SSR corrections pass final strict lint and all six matched Chromium/Firefox cases. Bounded hydration readiness prevents Firefox navigation aborts without filtering errors or increasing deadlines. Native MPEG-TS/HLS smoke passes with public callback isolation. UCU-09 owns full acceptance; window gates and exact-SHA CI remain.'
+
+[[debt]]
+id = 'ucu09-row183-av1-output-policy'
+description = 'Retain native AV1 profiles with compatible-transport validation and decoded application proof under accepted ADR 0106.'
+discovered = '2026-10-01'
+adr = '0106'
+resolved = true
+evidence = 'UCU-09 owns passing Linux application playback across item boundaries, selected audio/subtitles, unchanged profile state, fMP4 playlists and HTTP 415 transport/Next refusal. Native Windows encoding, six AV1 regressions, four localized browser cases, strict workspace lint, test-closeout, web parity, both-engine smoke and 87 TSDuck checks pass. Row183 is Adapt; pin/reference advance to 960421e8. Hardware and ARM/macOS debt is unchanged.'

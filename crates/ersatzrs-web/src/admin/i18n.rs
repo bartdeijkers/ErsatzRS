@@ -2029,6 +2029,7 @@ pub enum TextKey {
     ArtworkOrphansBrief,
     ArtworkCardinality,
     HlsLiveDelivery,
+    Av1OutputCompatibility,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -4019,6 +4020,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ArtworkOrphansBrief,
     TextKey::ArtworkCardinality,
     TextKey::HlsLiveDelivery,
+    TextKey::Av1OutputCompatibility,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -4757,6 +4759,29 @@ fn javascript_audio_health_message(language: UiLanguage, message: &str, brief: &
         )
 }
 
+fn runtime_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+    brief: &str,
+) -> Option<&'static str> {
+    let key = match (title, message, brief) {
+        ("FFmpeg Capabilities", _, "AV1 output requires native HLS") => {
+            TextKey::Av1OutputCompatibility
+        }
+        (
+            "Next Runtime Availability",
+            "Next configuration overlay is unavailable or invalid",
+            _,
+        ) => TextKey::NextOverlayInvalid,
+        ("Next Runtime Availability", "Next configuration overlay validation is incomplete", _) => {
+            TextKey::NextOverlayIncomplete
+        }
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -4768,19 +4793,10 @@ pub fn health_check_message_text(
     } else {
         message
     };
-    if title == "Next Runtime Availability" {
-        let key = match displayed_message {
-            "Next configuration overlay is unavailable or invalid" => {
-                Some(TextKey::NextOverlayInvalid)
-            }
-            "Next configuration overlay validation is incomplete" => {
-                Some(TextKey::NextOverlayIncomplete)
-            }
-            _ => None,
-        };
-        if let Some(key) = key {
-            return text(language, key).to_owned();
-        }
+    if let Some(localized) =
+        runtime_health_message(language, title, displayed_message, brief_message)
+    {
+        return localized.to_owned();
     }
     if title == "JavaScript Audio Selection" {
         return javascript_audio_health_message(language, displayed_message, brief_message);
