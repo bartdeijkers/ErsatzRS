@@ -70,8 +70,16 @@ document.addEventListener("submit", async event => {
     const response = await fetch(url, { signal });
     if (!form.isConnected) return;
     if (!response.ok) {
-      status(form, response.status === 401 || response.status === 403
-        ? "authorization" : "unavailable");
+      if (response.status === 401 || response.status === 403) {
+        status(form, "authorization");
+      } else {
+        const failure = await response.json().catch(() => ({}));
+        const code = ["busy", "cleanup", "configuration"].includes(failure.code)
+          ? failure.code : "startup";
+        status(form, code);
+        form.querySelector("textarea").value =
+          form.querySelector("[data-preview-status]").textContent;
+      }
       return;
     }
     await response.body?.cancel();

@@ -187,6 +187,71 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     expect(errors).toEqual([]);
   });
 
+  test('channel preview supports every persisted delivery mode without changing its timeline', async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    const start = '2026-10-02T12:00:00Z';
+    sql(`INSERT INTO "Channel" (
+      "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
+      "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
+      "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
+    ) VALUES (${id},'00000000-0000-0000-0000-000000935001','935001',935001,'Diagnostic fixture',
+      'ErsatzRS',${id},4,0,0,0,0,0,0,0,0,1,1);
+    INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed") VALUES (${id},${id},1,0);
+    INSERT INTO "PlayoutItem" ("Id","DisableWatermarks","FillerKind","Finish","GuideGroup",
+      "InPoint","MediaItemId","OutPoint","PlayoutId","Start")
+    VALUES (${id},0,0,'2026-10-02 12:00:06',0,'00:00:00',${id},'00:00:06',${id},'2026-10-02 12:00:00');`);
+    try {
+      const timeline = sql(`SELECT * FROM "PlayoutItem" WHERE "PlayoutId"=${id};`);
+      for (const mode of [1, 2, 4, 5]) {
+        sql(`UPDATE "Channel" SET "StreamingMode"=${mode} WHERE "Id"=${id};`);
+        const channel = sql(`SELECT * FROM "Channel" WHERE "Id"=${id};`);
+        await page.goto(`/system/troubleshooting/playback?channel=${id}`);
+        await page.waitForFunction(() =>
+          (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+        await page.locator('input[name="start"]').fill('2026-10-02T12:00');
+        // Explicit offset is independent of the browser/server timezone.
+        await page.locator('input[name="start"]').evaluate((input: HTMLInputElement, value) => {
+          input.type = 'text'; input.value = value;
+        }, start);
+        await page.getByRole('button', { name: 'Play', exact: true }).click();
+        await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+        await expect(page.locator('textarea')).toHaveValue(/exit status: (?:exit status|exit code): 0/);
+        expect(sql(`SELECT * FROM "Channel" WHERE "Id"=${id};`)).toBe(channel);
+        expect(sql(`SELECT * FROM "PlayoutItem" WHERE "PlayoutId"=${id};`)).toBe(timeline);
+      }
+      expect(errors).toEqual([]);
+      sql(`UPDATE "Channel" SET "StreamingMode"=99 WHERE "Id"=${id};`);
+      const response = await page.request.get(`/api/troubleshoot/playback.m3u8?channel=${id}&start=${start}`);
+      expect(response.status()).toBe(500);
+      expect(await response.json()).toEqual({ code: 'configuration' });
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-preview-status]')).toContainText('channel streaming mode is invalid');
+      await expect(page.locator('textarea')).toHaveValue(/Save a supported mode/);
+    } finally {
+      sql(`DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${id};
+        DELETE FROM "Playout" WHERE "Id"=${id}; DELETE FROM "Channel" WHERE "Id"=${id};`);
+    }
+  });
+
+  test('startup failures show actionable status before a producer starts', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
+    await page.waitForFunction(() =>
+      (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+    await page.locator('select[name="ffmpegProfile"]').evaluate((select: HTMLSelectElement) => {
+      select.value = '';
+    });
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(page.locator('[data-preview-status]')).toContainText('preview could not start');
+    await expect(page.locator('textarea')).toHaveValue(/Check the server log/);
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+    expect(errors).toEqual([]);
+  });
+
   test('failed native playback completes promptly and leaves diagnostics for the next request', async ({ page }) => {
     const invalid = path.join(root, 'invalid-preview.mkv');
     writeFileSync(invalid, 'synthetic invalid media');

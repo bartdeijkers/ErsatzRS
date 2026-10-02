@@ -112,13 +112,33 @@ pub async fn playback_preview(
         Ok(()) => Redirect::temporary(playlist).into_response(),
         Err(AdminTroubleshootingRuntimeError::NotFound(error)) => {
             tracing::warn!(%error, "playback troubleshooting preview cannot be started");
-            StatusCode::NOT_FOUND.into_response()
+            preview_startup_failure(StatusCode::NOT_FOUND, &error)
         }
         Err(AdminTroubleshootingRuntimeError::Unavailable(error)) => {
             tracing::warn!(%error, "failed to start playback troubleshooting preview");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            preview_startup_failure(StatusCode::INTERNAL_SERVER_ERROR, &error)
         }
     }
+}
+
+// Return only a stable diagnostic code. Runtime errors may contain provider
+// credentials or private paths; keep their details in the host diagnostic log.
+fn preview_startup_failure(status: StatusCode, error: &str) -> Response {
+    let code = if error.contains("troubleshooting playback is already running") {
+        "busy"
+    } else if error.contains("cleanup is unconfirmed") {
+        "cleanup"
+    } else if error.starts_with("failed to decode channel streaming_mode:") {
+        "configuration"
+    } else {
+        "startup"
+    };
+    (
+        status,
+        [(header::CACHE_CONTROL, "no-store")],
+        axum::Json(serde_json::json!({"code": code})),
+    )
+        .into_response()
 }
 
 pub async fn playback_log(State(state): State<AppState>) -> Response {
@@ -191,6 +211,34 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn preview_startup_failure_exposes_only_safe_action_codes() {
+        for (error, code) in [
+            (
+                "failed to decode channel streaming_mode: unknown enum value 99",
+                "configuration",
+            ),
+            ("troubleshooting playback is already running", "busy"),
+            (
+                "troubleshooting process cleanup is unconfirmed; restart is required",
+                "cleanup",
+            ),
+            (
+                "provider URL https://user:private@example.invalid/?token=private",
+                "startup",
+            ),
+        ] {
+            let response = preview_startup_failure(StatusCode::INTERNAL_SERVER_ERROR, error);
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            let body = axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value, serde_json::json!({"code": code}));
+        }
+    }
 
     #[test]
     fn preview_query_preserves_optional_unicode_credits_and_rejects_duplicates() {

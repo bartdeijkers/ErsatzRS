@@ -13376,3 +13376,193 @@ All 173 ordered SHA/subject pairs match upstream history, preserving the prior
 All previous 173 SHA/subject pairs remain an exact prefix; the new row is
 pending in UCU-09 and the processed pin stays at row 90 (35b5a259).
 """
+
+[[milestone]]
+id = 'v111-findings-01'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Selective add-on list ingestion'
+status = 'Not started'
+feature = 'addon-metadata-management'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Per-list rolling age, newest-N, duration and include/exclude title filters;
+manual pins/exclusions; pre-publication accepted/rejected preview with reasons;
+archived versus active selection without implicit file deletion or changing
+other lists. Saved settings and effective cutoff survive upgrades and appear
+on detail pages. Reuse the durable import worker for adaptive polling, source
+watermarks, bounded acquisition/enrichment, retry and scan-to-playout dependency
+invalidation. Expose successful/next poll, selection, rejection reasons and
+pause/resume. Prove upgrade defaults, selection boundaries, failure preservation,
+worker restart/retry behavior and localized hydrated/no-JS admin flows.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-02'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Full graphics authoring and actual-engine preview'
+status = 'Not started'
+feature = 'drawvg-graphics-engine'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Expose Image, Text, Subtitle, Motion and Script authoring with shared placement,
+timing, scale, layering, opacity and EPG controls; validated YAML import/export.
+Preview using the existing actual graphics engine/troubleshooting renderer with
+channel/programme context, seek and resolution. Detect missing variables, fonts
+and media before saving. Reuse the domain and parser; no second renderer.
+Prove kind-specific persistence/import/export, invalid input, actual rendered
+preview and all supported cultures with hydrated/no-JS admin behavior.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-03'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Television discovery and bounded folder diagnostics'
+status = 'Not started'
+feature = 'scanner'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Align television extensions with supported FFmpeg inputs, including MPEG/MPG
+and justified transport-stream forms. Report ignored extensions, unsupported
+nesting, empty shows and scan counts; offer a bounded folder preview before
+saving. Preserve original files, embedded/sidecar tracks and identity. Do not
+silently recurse into extras or duplicate seasons. Prove extension discovery,
+nesting diagnostics, preview bounds, rescan stability and localized admin UI.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-04'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Programme-aware graphics context'
+status = 'Not started'
+feature = 'drawvg-graphics-engine'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Native CurrentProgramme, NextProgramme and later-today objects use XMLTV guide
+grouping. Provide filler-aware helpers and bounded default syntax in editor
+preview. Prove transitions, pre/post-roll, boundary promos, absent future items
+and historical previews using actual render context. Preserve raw Epg compatibility.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-05'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Windows drawvg paths and truthful slate status'
+status = 'Not started'
+feature = 'drawvg-graphics-engine'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Reuse common FFmpeg filter-option escaping for generated VGS paths. Snapshot
+drive letters, backslashes, spaces and quotes, and run an actual Windows FFmpeg
+render test. Channel-watch status distinguishes programme playback from an
+intentional error slate and surfaces the underlying transcode error. Preserve
+native dynamic text and supported platforms; prove browser slate status.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-06'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Continuity-safe scripted adaptation'
+status = 'Not started'
+feature = 'playout-rebuild-on-impacting-changes'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Explicit validated rebuild modes for every scheduler include preserve-current-
+programme. Derive scheduler identity from stored playout state. Scripted source
+dependencies on selected library/tag memberships enqueue bounded durable Refresh
+after relevant successful scans. Show source revision, successful build, pending
+refresh and failures. Prove current programme and series history preservation,
+no-change/irrelevant scans, changed source handover, restart/retry and localized UI.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''
+
+[[milestone]]
+id = 'v111-findings-07'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Troubleshooting all persisted channel delivery modes'
+status = 'Complete'
+feature = 'support-pages'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Live and troubleshooting use the same persisted streaming-mode decoder.
+Roundtrip every current enum value; reject unknown values consistently. Preview
+output is independent of channel delivery mode. Display actionable startup
+failures before FFmpeg starts. Prove actual channel previews for all four modes,
+unchanged channel/timeline rows and localized browser startup failures.
+'''
+evidence = '''
+Hydration source map: /system/troubleshooting/playback is the SSR
+PlaybackTroubleshootingPage wrapper with ordinary HTML GET forms, no new island
+or shared primitive. load_playback_troubleshooting_context supplies the data;
+/api/troubleshoot/playback.m3u8 uses the application/runtime port.
+troubleshooting-preview.js delegates enhanced submissions to the same endpoint;
+the native no-JS form retains its GET/playlist fallback. Browser proof targets
+actual channel playback and pre-producer failures in Chromium and Firefox.
+The shared decoder replaces the obsolete map. Migrated SQLite roundtrips all
+four modes through live and troubleshooting reads and rejects unknown values.
+Hydration lint and formatting pass. The matched Leptos build completed.
+Chromium/Firefox pass four focused cases, including eight actual FFmpeg channel
+previews (all modes in both browsers), zero browser/hydration errors, successful
+process exit, identical channel/timeline rows and actionable startup failures.
+Evidence: tests/e2e/troubleshooting-playback.spec.ts cases "channel preview
+supports every persisted delivery mode without changing its timeline" and
+"startup failures show actionable status before a producer starts";
+test-results/playwright-results.json. Nine focused web tests pass: API query and
+safe startup-code handling, independent output format and every-culture i18n.
+Strict cargo clippy -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings,
+formatting, hydration lint, JavaScript syntax and new-Clippy-allow policy pass.
+The reviewed finding-07 code changes neither channel delivery nor timeline
+persistence; milestone 08 owns the separate pending lifecycle correction.
+This is solution acceptance, not integrated v1.1.1 release acceptance.
+'''
+
+[[milestone]]
+id = 'v111-findings-08'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Owned cancellable diagnostic preview lifecycle'
+status = 'Not started'
+feature = 'support-pages'
+depends_on = []
+acceptance = '''
+Authorized by the maintainer on 2026-10-02. Implement this solution in its own
+commit with an Unreleased changelog entry. No publication is included.
+Owned preview IDs expose queued/running/completed/failed/cancelling states.
+Stop cancels and reaps the child and releases controllers and reservation.
+Programme-relative seek and visible timezone-aware timestamps support repeated
+previews. Preserve bounded deadlines and isolation from live producers. Prove
+cancel during startup/running, failure/completion, replacement requests, child
+cleanup, capacity release, and localized admin actions.
+'''
+evidence = '''
+Implementation and acceptance evidence pending.
+'''

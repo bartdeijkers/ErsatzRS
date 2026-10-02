@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU catch-up complete; finish stable v1.1.0 package acceptance and publication'
+current_focus = 'Implement the eight channel setup findings for v1.1.1 with one verified commit per solution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-02: The maintainer authorized all eight channel setup solutions for
+v1.1.1, each in a separate commit with a changelog entry. Milestones
+v111-findings-01 through -08 retain the complete requirements and exclusions.
+Finding 07 is locally accepted with shared-decoder, unit and real browser proof;
+selection, authoring/preview, discovery,
+programme metadata, Windows drawvg/slate status, scripted adaptation and owned
+preview cancellation remain open. Existing release/publication gates are
+separate; this corrective scope does not publish a release.
+
 2026-10-02: Native Windows local-TV folder aliases were repaired transactionally;
 headed browser health remains Pass after a repeated full scan. The preventive
 scanner correction is verified locally and scheduled for v1.1.1; matched native

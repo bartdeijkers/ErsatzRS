@@ -6,9 +6,7 @@ use ersatzrs_core::repositories::{
     TroubleshootingChannelSummaryAdmin, TroubleshootingFfmpegProfileSummaryAdmin,
     TroubleshootingOptionAdmin, TroubleshootingPreviewMediaAdmin, TroubleshootingRepository,
 };
-use ersatzrs_domain::{
-    Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, EntityId, StreamingMode,
-};
+use ersatzrs_domain::{Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, EntityId};
 use serde_json::Value;
 use sqlx::{Pool, Row};
 
@@ -16,19 +14,6 @@ use crate::repositories::SqlxResultExt as _;
 
 #[derive(Clone)]
 pub struct SqliteTroubleshootingRepository(pub Pool<crate::db::Db>);
-
-fn decode_streaming_mode(value: i64) -> Result<StreamingMode> {
-    match value {
-        0 => Ok(StreamingMode::TransportStream),
-        1 => Ok(StreamingMode::HttpLiveStreamingDirect),
-        2 => Ok(StreamingMode::HttpLiveStreamingSegmenter),
-        3 => Ok(StreamingMode::TransportStreamHybrid),
-        _ => Err(RepositoryError::Decode {
-            kind: "channel streaming mode",
-            value: value.to_string(),
-        }),
-    }
-}
 
 fn decode_channel_subtitle_mode(value: i64) -> Result<ChannelSubtitleMode> {
     match value {
@@ -556,7 +541,11 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                 name: row.try_get("Name").repository()?,
                 ffmpeg_profile_id: row.try_get("FFmpegProfileId").repository()?,
                 watermark_id: row.try_get("WatermarkId").repository()?,
-                streaming_mode: decode_streaming_mode(row.try_get("StreamingMode").repository()?)?,
+                streaming_mode: super::common::decode_enum_column(
+                    "channel streaming_mode",
+                    &row,
+                    "StreamingMode",
+                )?,
                 stream_selector: row.try_get("StreamSelector").repository()?,
                 preferred_audio_language_code: row
                     .try_get("PreferredAudioLanguageCode")

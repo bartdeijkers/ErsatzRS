@@ -1,7 +1,7 @@
 feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0013', '0076', '0089', '0095']
 summary    = '''
 Upstream catch-up row 1 (1e5c0b12, PR #2842) was Covered when upstream removed
@@ -87,3 +87,17 @@ description = 'Playback troubleshooting does not yet have accepted music-video c
 discovered = '2026-09-30'
 resolved = true
 evidence = 'Resolved by UCU-09 row151: 762 web checks, generated/native argv, seek/audio/subtitle precedence, archives and persisted-state guards pass; strict lint and web parity pass. All 14 Chromium/Firefox cases and two final no-JS 320px screenshot cases pass, with both engines decoding credits after seek. Native/official Next smoke passes. The owning milestone records exact runs, source review and artifact checksums.'
+
+[[debt]]
+id = 'troubleshooting-persisted-streaming-modes'
+description = 'Diagnostic channel playback used a zero-based decoder instead of the shared persisted StreamingMode contract, rejecting HLS Segmenter value 4 and Hybrid value 5 before FFmpeg started and misinterpreting other values. Startup failures had no actionable form status.'
+discovered = '2026-10-02'
+resolved = true
+evidence = 'Resolved under v111-findings-07, which owns exact commands and acceptance evidence. One shared persisted decoder serves live and preview reads. Migrated SQLite roundtrips all four modes and rejects invalid values; nine focused web tests and four matched Chromium/Firefox cases pass, including successful actual FFmpeg playback in all modes, unchanged channel/timeline rows and safe localized startup failures. Strict affected-crate Clippy, hydration lint, formatting and lint-allow policy pass. Owned cancellation remains open under v111-findings-08.'
+
+[[debt]]
+id = 'owned-cancellable-troubleshooting-previews'
+description = 'Diagnostic playback has no owned preview ID, explicit lifecycle status or server-side Stop action; destroying the browser player leaves the producer running until its deadline. Add programme-relative seek and timezone-aware timestamps while retaining live-producer isolation and cleanup guarantees.'
+discovered = '2026-10-02'
+resolved = false
+evidence = 'Maintainer-authorized v1.1.1 finding 08; v111-findings-08 owns the complete implementation and acceptance. No cancellation or lifecycle completion is claimed by the finding 07 decoder correction.'

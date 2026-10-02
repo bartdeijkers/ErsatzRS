@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Support diagnostic playback for all channel delivery modes, including HLS
+  Segmenter, through the shared persisted-mode decoder. Show localized,
+  actionable startup failures without exposing private runtime details.
+
 - Identify ErsatzRS correctly in unavailable-media health warnings and localize
   known disk/provider diagnostics, including cached messages using the old name.
 - Reconcile Windows local-TV folder aliases after case-only directory changes,
