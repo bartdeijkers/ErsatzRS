@@ -64,8 +64,10 @@ next_steps = '''
 2026-10-02: Native Windows local-TV folder aliases were repaired transactionally;
 headed browser health remains Pass after a repeated full scan. The preventive
 scanner correction is verified locally and scheduled for v1.1.1; matched native
-package deployment remains pending. Preserve existing episode IDs and references;
-remaining legacy duplicate cleanup belongs to scanner debt
+package deployment remains pending. The subsequent authorized offline repair
+removed eight unreferenced duplicate episodes after backup and rollback validation;
+original IDs, stream selections and all scheduling/checkpoint rows are preserved.
+Remaining preventive deployment belongs to scanner debt
 windows-local-tv-case-alias-identity.
 
 2026-10-01: UCU-00 through UCU-09 are Complete at accepted candidate b76d11c6

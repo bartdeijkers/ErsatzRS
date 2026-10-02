@@ -7,8 +7,10 @@ Accepted (2026-08-02)
 ## Implementation
 
 Partial (2026-10-02). The Windows case-alias correction is implemented locally
-and scheduled for v1.1.1; native package deployment and legacy episode-duplicate
-cleanup remain tracked in the [scanner parity record](../progress/parity/scanner.toml).
+and scheduled for v1.1.1; native package deployment remains pending. The
+authorized offline repair removed the affected unreferenced legacy episode
+duplicates while preserving original identities and scheduling/checkpoint rows.
+Evidence is tracked in the [scanner parity record](../progress/parity/scanner.toml).
 Full local-TV scans resolve shows within one
 `LibraryPath` by exclusive top-level-folder provenance, normalized NFO provider
 GUID, then exact title plus non-null year. A pre-scan transaction repairs
