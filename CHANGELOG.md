@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reconcile Windows local-TV folder aliases after case-only directory changes,
+  clearing false `Local television identity` warnings while preserving media IDs,
+  stream selections and scheduling references. Reuse the existing episode
+  when a changed path spelling still identifies the same file.
 - Include the add-on contract and platform crates in Docker dependency-cache
   stages so release images can build the complete workspace. Add Docker-only
   recovery that preserves the accepted application tag and web bundle while

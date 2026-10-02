@@ -5,11 +5,9 @@
 //! (`GetParentFolderId`, `GetOrAddFolder`, `SetEtag`, `UpdateLibraryFolderId`,
 //! `CleanEtagsForLibraryPath`) into scanner-local SQL.
 //!
-//! These are kept scanner-local, not in an infra repository, until another
-//! scanner slice needs them. The SQL uses quoted EF-style identifiers and
-//! `?` placeholders so it stays neutral across the SQLite/MySQL backends the
-//! workspace already abstracts; it adds no `ON CONFLICT` or other
-//! SQLite-only syntax.
+//! These remain scanner-local until another scanner slice needs them. SQL
+//! uses quoted EF-style identifiers and `?` placeholders against `SQLite`,
+//! the supported database backend.
 //!
 //! Parity notes versus the C# repository:
 //!
@@ -27,12 +25,142 @@
 //!   only when no `MediaFile` references them and no child folder points at
 //!   them.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use ersatzrs_infra::db::{last_insert_id, Db, DbPool};
 use sqlx::{Row, Transaction};
 
 use crate::Result;
+
+#[cfg(windows)]
+pub(crate) fn case_insensitive_paths() -> bool {
+    true
+}
+
+// Unix directories may differ only by case; preserve their separate identities.
+#[cfg(not(windows))]
+pub(crate) fn case_insensitive_paths() -> bool {
+    false
+}
+
+pub(crate) fn same_local_path(left: &str, right: &str) -> bool {
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+/// Repair Windows folder aliases before inspecting local television provenance.
+/// Keep media IDs, versions, stream pins and scheduling references intact.
+pub(crate) async fn reconcile_television_folder_aliases(
+    pool: &DbPool,
+    library_path_id: i64,
+) -> Result<u64> {
+    reconcile_folder_aliases(pool, library_path_id, case_insensitive_paths()).await
+}
+
+async fn reconcile_folder_aliases(
+    pool: &DbPool,
+    library_path_id: i64,
+    case_insensitive: bool,
+) -> Result<u64> {
+    if !case_insensitive {
+        return Ok(0);
+    }
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    let folders = sqlx::query(
+        r#"SELECT "Id", "Path" FROM "LibraryFolder"
+           WHERE "LibraryPathId" = ? ORDER BY "Id" DESC"#,
+    )
+    .bind(library_path_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut canonical = BTreeMap::<String, (i64, String)>::new();
+    let mut repaired = 0;
+    for folder in folders {
+        let Some(path) = folder.get::<Option<String>, _>("Path") else {
+            continue;
+        };
+        let key = path.replace('\\', "/").trim_end_matches('/').to_lowercase();
+        let id: i64 = folder.get("Id");
+        let Some((retained, retained_path)) = canonical.get(&key) else {
+            canonical.insert(key, (id, path));
+            continue;
+        };
+        // Windows can also host case-sensitive directories. Require physical
+        // directory agreement, and leave missing/unreadable aliases untouched.
+        if !same_local_path(retained_path, &path) {
+            continue;
+        }
+        // Image duration settings belong to the image scanner; deleting their
+        // folder would cascade away operator-owned configuration.
+        let image_settings: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "ImageFolderDuration" WHERE "LibraryFolderId" IN (?, ?)"#,
+        )
+        .bind(retained)
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if image_settings != 0 {
+            continue;
+        }
+        sqlx::query(r#"UPDATE "MediaFile" SET "LibraryFolderId" = ? WHERE "LibraryFolderId" = ?"#)
+            .bind(retained)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            r#"UPDATE "LibraryFolder" SET "ParentId" = ?, "Etag" = NULL WHERE "ParentId" = ?"#,
+        )
+        .bind(retained)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(r#"UPDATE "LibraryFolder" SET "Etag" = NULL WHERE "Id" = ?"#)
+            .bind(retained)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(r#"DELETE FROM "LibraryFolder" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        repaired += 1;
+    }
+    tx.commit().await?;
+    Ok(repaired)
+}
+
+async fn find_library_folder(
+    pool: &DbPool,
+    library_path_id: i64,
+    path: &str,
+    case_insensitive: bool,
+) -> Result<Option<sqlx::sqlite::SqliteRow>> {
+    let exact = sqlx::query(
+        r#"SELECT "Id", "Path", "ParentId", "Etag" FROM "LibraryFolder"
+           WHERE "LibraryPathId" = ? AND "Path" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(library_path_id)
+    .bind(path)
+    .fetch_optional(pool)
+    .await?;
+    if exact.is_some() || !case_insensitive {
+        return Ok(exact);
+    }
+    let aliases = sqlx::query(
+        r#"SELECT "Id", "Path", "ParentId", "Etag" FROM "LibraryFolder"
+           WHERE "LibraryPathId" = ? AND "Path" = ? COLLATE NOCASE ORDER BY "Id""#,
+    )
+    .bind(library_path_id)
+    .bind(path)
+    .fetch_all(pool)
+    .await?;
+    Ok(aliases.into_iter().find(|row| {
+        row.get::<Option<String>, _>("Path")
+            .is_some_and(|stored| same_local_path(&stored, path))
+    }))
+}
 
 /// One `LibraryFolder` row, mirroring the columns ErsatzTV's
 /// `GetOrAddFolder` returns to the scanner.
@@ -63,38 +191,47 @@ pub(crate) async fn get_parent_folder_id(
     }
     let parent_text = parent.to_string_lossy();
 
-    let id: Option<i64> = sqlx::query_scalar(
-        r#"SELECT "Id" FROM "LibraryFolder"
-           WHERE "LibraryPathId" = ? AND "Path" = ?"#,
+    Ok(find_library_folder(
+        pool,
+        library_path_id,
+        &parent_text,
+        case_insensitive_paths(),
     )
-    .bind(library_path_id)
-    .bind(parent_text.as_ref())
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(id)
+    .await?
+    .map(|row| row.get("Id")))
 }
 
 /// Port of `LibraryRepository.GetOrAddFolder`: select the row for
 /// `(library_path_id, folder)`; insert it (with `Etag = NULL`) when missing;
-/// repair `ParentId` when a parent is known and differs. Returns the
-/// persisted row.
+/// reuse physically verified Windows case aliases and repair `ParentId` when
+/// a parent is known and differs. Returns the folder ID, `ETag` and current path.
 pub(crate) async fn get_or_add_library_folder(
     pool: &DbPool,
     library_path_id: i64,
     parent_id: Option<i64>,
     folder: &Path,
 ) -> Result<LibraryFolderRow> {
+    get_or_add_library_folder_with_case_mode(
+        pool,
+        library_path_id,
+        parent_id,
+        folder,
+        case_insensitive_paths(),
+    )
+    .await
+}
+
+async fn get_or_add_library_folder_with_case_mode(
+    pool: &DbPool,
+    library_path_id: i64,
+    parent_id: Option<i64>,
+    folder: &Path,
+    case_insensitive: bool,
+) -> Result<LibraryFolderRow> {
     let folder_text = folder.to_string_lossy().into_owned();
 
-    let existing = sqlx::query(
-        r#"SELECT "Id", "ParentId", "Etag" FROM "LibraryFolder"
-           WHERE "LibraryPathId" = ? AND "Path" = ?"#,
-    )
-    .bind(library_path_id)
-    .bind(&folder_text)
-    .fetch_optional(pool)
-    .await?;
+    let existing =
+        find_library_folder(pool, library_path_id, &folder_text, case_insensitive).await?;
 
     let mut row = if let Some(found) = existing {
         LibraryFolderRow {
@@ -216,7 +353,7 @@ pub(crate) async fn clean_library_folders_for_path(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor;
 
@@ -321,6 +458,175 @@ mod tests {
             parent_id: row.get("ParentId"),
             etag: row.get("Etag"),
         }
+    }
+
+    // Unix uses a symlink to exercise the Windows alias policy against two
+    // spellings of one physical directory. Windows resolves the case alias
+    // directly, without requiring symlink privileges.
+    pub(crate) fn case_alias_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf)
+    {
+        let root = tempfile::tempdir().unwrap();
+        let lower = root.path().join("show");
+        let upper = root.path().join("Show");
+        std::fs::create_dir_all(lower.join("Season 01")).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&lower, &upper).unwrap();
+        #[cfg(windows)]
+        assert!(upper.is_dir());
+        (root, lower, upper)
+    }
+
+    async fn seed_folder_aliases(pool: &DbPool, lower: &Path, upper: &Path) {
+        let lp = seed_library_path(pool).await;
+        for (id, parent, path) in [
+            (10, None, lower.to_path_buf()),
+            (20, None, upper.to_path_buf()),
+            (11, Some(10), lower.join("Season 01")),
+            (21, Some(20), upper.join("Season 01")),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "ParentId", "Path", "Etag")
+                   VALUES (?, ?, ?, ?, 'cached')"#,
+            )
+            .bind(id)
+            .bind(lp)
+            .bind(parent)
+            .bind(path.to_string_lossy().as_ref())
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        seed_media_file(pool, lp, 100, 10, Some(11), "fixture-a.mkv").await;
+        seed_media_file(pool, lp, 200, 20, Some(21), "fixture-b.mkv").await;
+        pool.execute(r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (1, 'Fixture', 0)"#).await.unwrap();
+        pool.execute(r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "PreferredAudioLanguageCode", "PreferredSubtitleLanguageCode") VALUES (1, 100, 'eng', 'nld'), (1, 200, 'nld', 'eng')"#).await.unwrap();
+        pool.execute(r#"INSERT INTO "PlaylistGroup" ("Id", "Name") VALUES (1, 'Fixture')"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "Playlist" ("Id", "Name", "IsSystem", "PlaylistGroupId") VALUES (1, 'Fixture', 0, 1)"#).await.unwrap();
+        pool.execute(r#"INSERT INTO "PlaylistItem" ("Id", "Index", "PlaylistId", "CollectionType", "MediaItemId", "MediaVersionId", "AudioStreamIndex", "SubtitleStreamIndex") VALUES (1, 0, 1, 0, 200, 20, 1, 2)"#).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn case_alias_repair_preserves_media_references_and_is_idempotent() {
+        let pool = test_db().await;
+        let (_root, lower, upper) = case_alias_fixture();
+        seed_folder_aliases(&pool, &lower, &upper).await;
+        assert_eq!(reconcile_folder_aliases(&pool, 1, true).await.unwrap(), 2);
+        assert_eq!(reconcile_folder_aliases(&pool, 1, true).await.unwrap(), 0);
+        let folders: Vec<i64> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "LibraryFolder" ORDER BY "Id""#)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(folders, [20, 21]);
+        assert_eq!(folder_row(&pool, 21).await.parent_id, Some(20));
+        assert_eq!(folder_row(&pool, 21).await.etag, None);
+        let files: Vec<(i64, i64, i64)> = sqlx::query_as(
+            r#"SELECT "Id", "MediaVersionId", "LibraryFolderId" FROM "MediaFile" ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(files, [(100, 10, 21), (200, 20, 21)]);
+        let collection: Vec<(i64, String, String)> = sqlx::query_as(r#"SELECT "MediaItemId", "PreferredAudioLanguageCode", "PreferredSubtitleLanguageCode" FROM "CollectionItem" ORDER BY "MediaItemId""#).fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            collection,
+            [
+                (100, "eng".into(), "nld".into()),
+                (200, "nld".into(), "eng".into())
+            ]
+        );
+        let pin: (i64, i64, i64, i64) = sqlx::query_as(r#"SELECT "MediaItemId", "MediaVersionId", "AudioStreamIndex", "SubtitleStreamIndex" FROM "PlaylistItem" WHERE "Id" = 1"#).fetch_one(&pool).await.unwrap();
+        assert_eq!(pin, (200, 20, 1, 2));
+        let repeated = get_or_add_library_folder_with_case_mode(
+            &pool,
+            1,
+            Some(20),
+            &lower.join("Season 01"),
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(repeated.id, 21);
+    }
+
+    #[tokio::test]
+    async fn case_alias_repair_rolls_back_all_links_on_failure() {
+        let pool = test_db().await;
+        let (_root, lower, upper) = case_alias_fixture();
+        seed_folder_aliases(&pool, &lower, &upper).await;
+        pool.execute(r#"CREATE TRIGGER "RejectAliasDeletion" BEFORE DELETE ON "LibraryFolder" BEGIN SELECT RAISE(ABORT, 'injected failure'); END"#).await.unwrap();
+        assert!(reconcile_folder_aliases(&pool, 1, true).await.is_err());
+        assert_eq!(folder_row(&pool, 21).await.parent_id, Some(20));
+        assert_eq!(folder_row(&pool, 21).await.etag.as_deref(), Some("cached"));
+        let linked: i64 =
+            sqlx::query_scalar(r#"SELECT "LibraryFolderId" FROM "MediaFile" WHERE "Id" = 100"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(linked, 11);
+    }
+
+    #[tokio::test]
+    async fn case_alias_repair_preserves_image_duration_settings() {
+        let pool = test_db().await;
+        let (_root, lower, upper) = case_alias_fixture();
+        seed_folder_aliases(&pool, &lower, &upper).await;
+        pool.execute(r#"INSERT INTO "ImageFolderDuration" ("Id", "LibraryFolderId", "DurationSeconds") VALUES (1, 11, 7.5)"#).await.unwrap();
+        assert_eq!(reconcile_folder_aliases(&pool, 1, true).await.unwrap(), 1);
+        let setting: (i64, f64) = sqlx::query_as(r#"SELECT "LibraryFolderId", "DurationSeconds" FROM "ImageFolderDuration" WHERE "Id" = 1"#).fetch_one(&pool).await.unwrap();
+        assert_eq!(setting, (11, 7.5));
+        assert_eq!(folder_row(&pool, 11).await.parent_id, Some(20));
+    }
+
+    #[tokio::test]
+    async fn case_alias_repair_preserves_case_sensitive_and_missing_paths() {
+        let pool = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        let lower = root.path().join("missing");
+        let upper = root.path().join("Missing");
+        seed_folder_aliases(&pool, &lower, &upper).await;
+        assert_eq!(reconcile_folder_aliases(&pool, 1, true).await.unwrap(), 0);
+        let (_alias_root, lower, upper) = case_alias_fixture();
+        sqlx::query(r#"UPDATE "LibraryFolder" SET "Path" = ? WHERE "Id" = 10"#)
+            .bind(lower.to_string_lossy().as_ref())
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE "LibraryFolder" SET "Path" = ? WHERE "Id" = 20"#)
+            .bind(upper.to_string_lossy().as_ref())
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(reconcile_folder_aliases(&pool, 1, false).await.unwrap(), 0);
+        let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "LibraryFolder""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 4);
+    }
+
+    // Unix can create two genuinely distinct directories differing only by
+    // case. They must survive even when exercising the Windows matching mode.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn case_alias_repair_never_merges_distinct_physical_directories() {
+        let pool = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        let lower = root.path().join("show");
+        let upper = root.path().join("Show");
+        std::fs::create_dir_all(lower.join("Season 01")).unwrap();
+        std::fs::create_dir_all(upper.join("Season 01")).unwrap();
+        seed_folder_aliases(&pool, &lower, &upper).await;
+        assert_eq!(reconcile_folder_aliases(&pool, 1, true).await.unwrap(), 0);
+        let first = get_or_add_library_folder_with_case_mode(&pool, 1, None, &lower, true)
+            .await
+            .unwrap();
+        let second = get_or_add_library_folder_with_case_mode(&pool, 1, None, &upper, true)
+            .await
+            .unwrap();
+        assert_ne!(first.id, second.id);
     }
 
     #[tokio::test]

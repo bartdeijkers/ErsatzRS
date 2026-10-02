@@ -1396,6 +1396,14 @@ pub(crate) async fn sync_local_show_library(
     extractor: &FfprobeExtractor,
     mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
+    let repaired_aliases =
+        library_folder::reconcile_television_folder_aliases(pool, library_path.id).await?;
+    if repaired_aliases != 0 {
+        info!(
+            library_path_id = library_path.id,
+            repaired_aliases, "reconciled case-only local television folder aliases"
+        );
+    }
     let shows = collect_show_work(&library_path.path)
         .into_iter()
         .map(|show| {
@@ -2122,6 +2130,46 @@ async fn probe_local_episode(
     })
 }
 
+async fn find_existing_local_episode(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    path: &str,
+    hash: &str,
+    case_insensitive: bool,
+) -> Result<Option<sqlx::sqlite::SqliteRow>> {
+    let exact = sqlx::query(
+        r#"SELECT mf."Id" AS "MediaFileId", mf."MediaVersionId", mv."EpisodeId" AS "MediaItemId"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           JOIN "MediaItem" mi ON mi."Id" = mv."EpisodeId"
+           WHERE mf."PathHash" = ? AND mi."LibraryPathId" = ?
+           ORDER BY mf."Id" LIMIT 1"#,
+    )
+    .bind(hash)
+    .bind(library_path_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if exact.is_some() || !case_insensitive {
+        return Ok(exact);
+    }
+    let aliases = sqlx::query(
+        r#"SELECT mf."Id" AS "MediaFileId", mf."MediaVersionId", mv."EpisodeId" AS "MediaItemId", mf."Path"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           JOIN "MediaItem" mi ON mi."Id" = mv."EpisodeId"
+           WHERE mi."LibraryPathId" = ? AND mf."Path" = ? COLLATE NOCASE
+           ORDER BY mf."Id""#,
+    )
+    .bind(library_path_id)
+    .bind(path)
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(aliases.into_iter().find(|row| {
+        row.get::<Option<String>, _>("Path")
+            .is_some_and(|stored| library_folder::same_local_path(&stored, path))
+    }))
+}
+
 #[allow(clippy::too_many_lines)]
 async fn sync_local_episode_once(
     pool: &DbPool,
@@ -2135,15 +2183,13 @@ async fn sync_local_episode_once(
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let now = encode_datetime(Utc::now());
 
-    let existing = sqlx::query(
-        r#"SELECT "mf"."MediaVersionId",
-                  "mv"."EpisodeId" AS "MediaItemId"
-           FROM "MediaFile" AS "mf"
-           JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
-           WHERE "mf"."PathHash" = ?"#,
+    let existing = find_existing_local_episode(
+        &mut tx,
+        library_path.id,
+        &scan.path_text,
+        &scan.hash,
+        library_folder::case_insensitive_paths(),
     )
-    .bind(&scan.hash)
-    .fetch_optional(&mut *tx)
     .await?;
 
     let (episode_id, version_id) = if let Some(row) = existing {
@@ -2151,6 +2197,12 @@ async fn sync_local_episode_once(
             .get::<Option<i64>, _>("MediaItemId")
             .ok_or_else(|| ScannerError::Sqlx(sqlx::Error::RowNotFound))?;
         let version_id: i64 = row.get("MediaVersionId");
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ?, "PathHash" = ? WHERE "Id" = ?"#)
+            .bind(&scan.path_text)
+            .bind(&scan.hash)
+            .bind(row.get::<i64, _>("MediaFileId"))
+            .execute(&mut *tx)
+            .await?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
             .bind(episode_id)
@@ -2529,6 +2581,60 @@ mod tests {
             .await
             .expect("run migrations");
         pool
+    }
+
+    #[tokio::test]
+    async fn case_alias_episode_lookup_preserves_identity_and_library_scope() {
+        let pool = reconciliation_test_db().await;
+        seed_merged_kids_in_the_hall(&pool).await;
+        let (_root, lower, upper) = library_folder::tests::case_alias_fixture();
+        let lower_file = lower.join("Season 01").join("e01.mkv");
+        let upper_file = upper.join("Season 01").join("e01.mkv");
+        std::fs::write(&lower_file, b"synthetic fixture").unwrap();
+        let lower_text = lower_file.to_string_lossy();
+        let upper_text = upper_file.to_string_lossy();
+        sqlx::query(
+            r#"UPDATE "MediaFile" SET "Path" = ?, "PathHash" = ? WHERE "MediaVersionId" = 11000"#,
+        )
+        .bind(lower_text.as_ref())
+        .bind(path_hash(&lower_text))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let matched =
+            find_existing_local_episode(&mut tx, 1, &upper_text, &path_hash(&upper_text), true)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(matched.get::<i64, _>("MediaItemId"), 1000);
+        assert_eq!(matched.get::<i64, _>("MediaVersionId"), 11000);
+        assert!(find_existing_local_episode(
+            &mut tx,
+            1,
+            &upper_text,
+            &path_hash(&upper_text),
+            false
+        )
+        .await
+        .unwrap()
+        .is_none());
+        assert!(find_existing_local_episode(
+            &mut tx,
+            2,
+            &upper_text,
+            &path_hash(&upper_text),
+            true
+        )
+        .await
+        .unwrap()
+        .is_none());
+        let exact =
+            find_existing_local_episode(&mut tx, 1, &lower_text, &path_hash(&lower_text), false)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(exact.get::<i64, _>("MediaItemId"), 1000);
     }
 
     #[allow(clippy::too_many_lines)]
