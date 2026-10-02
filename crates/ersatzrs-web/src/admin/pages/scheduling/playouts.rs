@@ -16,6 +16,7 @@ use crate::admin::server_fns::playouts::{
     PlayoutDetailItem, PlayoutListRow, KIND_BLOCK, KIND_CLASSIC, KIND_EXTERNAL_JSON, KIND_SCRIPTED,
     KIND_SEQUENTIAL,
 };
+use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::form::TextField;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -98,6 +99,19 @@ fn PlayoutsIsland(
     // -- selection / detail state --
     let selected_id: RwSignal<Option<i64>> = RwSignal::new(None);
     let build_message = RwSignal::new(String::new());
+    Effect::new(move |_| {
+        if let Some(row) = current_list_rows
+            .get()
+            .iter()
+            .find(|row| Some(row.id) == selected_id.get())
+        {
+            build_message.set(if row.build_success == Some(false) {
+                row.build_message.clone().unwrap_or_default()
+            } else {
+                String::new()
+            });
+        }
+    });
     let show_filler = RwSignal::new(initial_show_filler);
     let detail_page = RwSignal::new(0u32);
 
@@ -161,6 +175,7 @@ fn PlayoutsIsland(
             leptos::task::spawn_local(async move {
                 let mut previous: Vec<i64> = Vec::new();
                 let mut reported_failure = false;
+                let mut status_polls = 0_u8;
                 loop {
                     match playout_build_activity().await {
                         Ok(activity) => {
@@ -172,7 +187,11 @@ fn PlayoutsIsland(
                             // When accepted work reaches a terminal state, refetch
                             // the persisted result and failure status.
                             let just_unlocked = previous.iter().any(|id| !ids.contains(id));
-                            if just_unlocked {
+                            // Automatic or very short builds can finish between
+                            // activity samples. Refresh persisted outcomes at least
+                            // every 30 seconds as well as on observed completion.
+                            status_polls = (status_polls + 1) % 20;
+                            if just_unlocked || status_polls == 0 {
                                 list_rows.refetch();
                                 list_count.refetch();
                                 detail_rows.refetch();
@@ -367,6 +386,24 @@ fn PlayoutsIsland(
                 <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
                 <div class=style::divider/>
 
+                <section data-playout-failures style:display=move || if current_list_rows.with(|rows| rows.iter().any(|row| row.build_success == Some(false))) { "" } else { "none" }>
+                    <h2 class=style::detail_title>{tr(TextKey::PublicationActivity)}</h2>
+                    <For
+                        each=move || { current_list_rows.get().into_iter().filter(|row| row.build_success == Some(false)).collect::<Vec<_>>() }
+                        key=|row| (row.id, row.build_message.clone())
+                        children=move |row| {
+                            let label = format!("{} - {}", row.channel_number, row.channel_name);
+                            let message = row.build_message.clone().unwrap_or_default();
+                            view! {
+                                <div class=style::build_alert>
+                                    <button type="button" class=btn_class(ButtonVariant::Secondary) on:click=move |_| select_row(&row)>{label}</button>
+                                    <p>{message}</p>
+                                </div>
+                            }
+                        }
+                    />
+                </section>
+
                 <div class=style::table_toolbar>
                     <span
                         class=style::search_icon
@@ -437,21 +474,18 @@ fn PlayoutsIsland(
                     <h2 class=style::detail_title>{tr(TextKey::PlayoutDetail)}</h2>
                     <div class=style::divider/>
 
-                    // Build-failure alert (shown instead of the table).
+                    // A rejected candidate leaves the published timeline available.
                     <div
                         class=style::build_alert
                         style:display=move || {
                             if build_message.with(|m| !m.trim().is_empty()) { "" } else { "none" }
                         }
                     >
-                        {move || build_message.get()}
+                        <p style:display=move || if build_message.with(|message| message.contains("Scripted timeline rejected:")) { "" } else { "none" }>{tr(TextKey::ScriptedTimelineRejected)}</p>
+                        <p>{move || build_message.get()}</p>
                     </div>
 
-                    <div
-                        style:display=move || {
-                            if build_message.with(|m| m.trim().is_empty()) { "" } else { "none" }
-                        }
-                    >
+                    <div>
                         <label class=style::switch_label>
                             <input
                                 type="checkbox"

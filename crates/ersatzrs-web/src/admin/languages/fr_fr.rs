@@ -393,6 +393,8 @@ impl LanguageStrings for FrenchStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "État de la diffusion par script",
+        TextKey::ScriptedTimelineRejected => "La chronologie a été rejetée. Les programmes publiés restent inchangés. Corrigez le script et réessayez.",
         TextKey::ItemDetailsNotRequested => "Détails non récupérés",
         TextKey::ItemDetailsFailed => "Échec de récupération des détails",
         TextKey::ItemDetailsRetry => "Détails en attente d’une nouvelle tentative",

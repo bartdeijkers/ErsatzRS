@@ -1132,6 +1132,8 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Stan emisji sterowanej skryptem",
+        TextKey::ScriptedTimelineRejected => "Odrzucono oś czasu. Opublikowane programy pozostają bez zmian. Popraw skrypt i spróbuj ponownie.",
         TextKey::ItemDetailsNotRequested => "Nie pobrano szczegółów",
         TextKey::ItemDetailsFailed => "Pobieranie szczegółów nie powiodło się",
         TextKey::ItemDetailsRetry => "Szczegóły oczekują na ponowną próbę",

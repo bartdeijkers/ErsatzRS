@@ -401,6 +401,8 @@ impl LanguageStrings for ItalianStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Stato della programmazione tramite script",
+        TextKey::ScriptedTimelineRejected => "La sequenza temporale è stata rifiutata. I programmi pubblicati restano invariati. Correggi lo script e riprova.",
         TextKey::ItemDetailsNotRequested => "Dettagli non recuperati",
         TextKey::ItemDetailsFailed => "Recupero dei dettagli non riuscito",
         TextKey::ItemDetailsRetry => "Dettagli in attesa di un nuovo tentativo",

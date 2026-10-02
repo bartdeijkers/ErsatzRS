@@ -30,6 +30,11 @@ impl PlayoutSchedulingEngine for ScriptedSchedulingEngine {
     }
 }
 
+#[cfg(test)]
+mod continuation_tests;
+mod timeline;
+pub use timeline::validate_scripted_timeline;
+
 impl ScriptedSchedulingEngine {
     /// Run a script with optional storage-backed source resolution.
     ///
@@ -73,6 +78,7 @@ impl ScriptedSchedulingEngine {
         resolver: Option<Arc<dyn ScriptedContentResolver>>,
         command: Option<&ScriptedScheduleCommand>,
     ) -> Result<SchedulingResult, SchedulingError> {
+        let start = timeline::continuation_start(&request)?;
         let (item_policies, legacy_policy) = Self::smart_shuffle_policies_from_script(script)?;
         request
             .reference_data
@@ -87,7 +93,9 @@ impl ScriptedSchedulingEngine {
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
-                .and_then(|context| serde_json::from_str::<ScriptedAnchorContext>(context).ok())
+                .filter(|context| !context.trim().is_empty())
+                .map(restore_anchor_context)
+                .transpose()?
                 .map(|context| context.smart_shuffle)
                 .unwrap_or_default()
         } else {
@@ -95,7 +103,7 @@ impl ScriptedSchedulingEngine {
         };
         let state = Rc::new(RefCell::new(ScriptState::new(
             request.playout.id,
-            request.start,
+            start,
             request.finish,
             request.mode,
             request.reference_data,
@@ -115,6 +123,13 @@ impl ScriptedSchedulingEngine {
         run_lua_script(&lua, script).map_err(lua_error)?;
 
         let mut state = state.borrow().clone();
+        validate_scripted_timeline(
+            state
+                .added_items
+                .iter()
+                .map(|item| (item.start, item.finish)),
+            Some(start),
+        )?;
         let anchor_time = state
             .added_items
             .iter()
@@ -376,6 +391,21 @@ struct ScriptedAnchorContext {
 
 fn scripted_anchor_context_version() -> u32 {
     1
+}
+
+fn restore_anchor_context(context: &str) -> Result<ScriptedAnchorContext, SchedulingError> {
+    let state: ScriptedAnchorContext = serde_json::from_str(context).map_err(|_| {
+        SchedulingError::InvalidScriptedTimeline(
+            "persisted continuation context is malformed; restore a valid anchor".to_owned(),
+        )
+    })?;
+    if state.version != scripted_anchor_context_version() {
+        return Err(SchedulingError::InvalidScriptedTimeline(format!(
+            "persisted continuation context version {} is unsupported; restore a compatible anchor",
+            state.version
+        )));
+    }
+    Ok(state)
 }
 
 fn run_lua_script(lua: &Lua, script: &str) -> Result<(), mlua::Error> {

@@ -177,7 +177,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=GraphicsElementEditorPage
             />
 
-            <Route path=StaticSegment("playouts") view=PlayoutsPage/>
+            <Route path=StaticSegment("playouts") view=PlayoutsPage ssr=SsrMode::InOrder/>
             <Route
                 path=(StaticSegment("playouts"), StaticSegment("add"))
                 view=PlayoutEditorPage

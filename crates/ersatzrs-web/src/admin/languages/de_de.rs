@@ -403,6 +403,8 @@ impl LanguageStrings for GermanStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Zustand der skriptgesteuerten Ausstrahlung",
+        TextKey::ScriptedTimelineRejected => "Die Zeitleiste wurde abgelehnt. Veröffentlichte Programme bleiben unverändert. Korrigieren Sie das Skript und versuchen Sie es erneut.",
         TextKey::ItemDetailsNotRequested => "Details nicht abgerufen",
         TextKey::ItemDetailsFailed => "Detailabruf fehlgeschlagen",
         TextKey::ItemDetailsRetry => "Details warten auf erneuten Versuch",

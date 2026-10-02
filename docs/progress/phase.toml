@@ -64,13 +64,14 @@ next_steps = '''
 2026-10-02: The maintainer authorized all channel setup solutions for
 v1.1.1, each in a separate commit with a changelog entry. Milestones
 v111-findings-01 through -10 and -09b retain the complete requirements and exclusions.
-Findings 03, 07 and 08 are locally accepted. Finding 03 adds shared television
+Findings 03, 07, 08 and 10 are locally accepted. Finding 10 adds persisted-tail
+Scripted continuation, atomic timeline validation and observable rejection, with
+SQL restart/automatic-build, Health, browser and native playback proof. Finding 03 adds shared television
 discovery, MPEG/TS recognition and bounded localized folder preview with native
 rescan/identity and JS/no-JS browser proof. Findings 07/08 retain shared-decoder
 and owned preview lifecycle proof, including native/Next playback and cleanup.
 Selection, authoring/preview, programme metadata, Windows drawvg/slate
-status, scripted adaptation, animated JPEG XL and safe Scripted Continue remain
-open. Finding 09 also includes separate Motion YAML/alpha/location and native
+status, scripted adaptation and animated JPEG XL remain open. Finding 09 also includes separate Motion YAML/alpha/location and native
 text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
 selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are
 separate; this corrective scope does not publish a release.

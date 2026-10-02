@@ -333,4 +333,51 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await page.getByRole('button', { name: 'Reset All Playouts' }).click();
     await expect(page.getByText(/\d+ playout rebuilds queued/, { exact: true })).toBeVisible();
   });
+
+  test('shows rejected scripted builds in Activity and preserves the published preview', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    const seed = seedDetailedPlayoutWorkflow(testInfo);
+    const diagnostic = 'Scripted timeline rejected: item 2 starts before the preceding finish/cursor. The published timeline was not changed';
+    sqlite(`UPDATE "Playout" SET "ScheduleKind" = 4 WHERE "Id" = ${seed.classicPlayoutId};
+      INSERT OR REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
+      VALUES (${seed.classicPlayoutId}, datetime('now', '+1 hour'), 0, '${diagnostic}');`);
+    const before = sqlite(`SELECT group_concat("Id" || ':' || "Start" || ':' || "Finish") FROM "PlayoutItem" WHERE "PlayoutId" = ${seed.classicPlayoutId};`);
+    await forceEnglish(page);
+    const noJs = await browser.newContext({ javaScriptEnabled: false, baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409' });
+    try {
+      const fallback = await noJs.newPage();
+      await fallback.goto('/playouts');
+      await expect(fallback.locator('[data-playout-failures]')).toContainText(diagnostic);
+    } finally { await noJs.close(); }
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('/playouts');
+    await waitForHydration(page);
+    await page.getByPlaceholder('Search for playouts').fill(seed.classicChannelName);
+    const activity = page.locator('[data-playout-failures]');
+    await expect(activity).toContainText(diagnostic);
+    await activity.getByRole('button', { name: new RegExp(seed.classicChannelName) }).click();
+    await expect(page.getByText('The timeline was rejected. Published programmes remain unchanged. Correct the script and try again.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await page.getByRole('heading', { name: 'Playout Detail', exact: true }).locator('..').scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('rejected-timeline-mobile.png'), fullPage: true });
+    await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'false', language: 'nl' }, maxRedirects: 0 });
+    await page.reload();
+    await waitForHydration(page);
+    await activity.getByRole('button', { name: new RegExp(seed.classicChannelName) }).click();
+    await expect(page.getByText('De tijdlijn is afgewezen. Gepubliceerde programma’s blijven ongewijzigd. Corrigeer het script en probeer opnieuw.', { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('heading', { name: 'Uitzenddetails', exact: true }).locator('..').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath('rejected-timeline-dutch-desktop.png'), fullPage: true });
+    sqlite(`UPDATE "PlayoutBuildStatus" SET "Success" = 1, "Message" = NULL WHERE "PlayoutId" = ${seed.classicPlayoutId};`);
+    await expect(page.getByText('De tijdlijn is afgewezen. Gepubliceerde programma’s blijven ongewijzigd. Corrigeer het script en probeer opnieuw.', { exact: true })).toBeHidden({ timeout: 40_000 });
+    await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
+    expect(sqlite(`SELECT group_concat("Id" || ':' || "Start" || ':' || "Finish") FROM "PlayoutItem" WHERE "PlayoutId" = ${seed.classicPlayoutId};`)).toBe(before);
+    expect(errors).toEqual([]);
+    await forceEnglish(page);
+  });
 });

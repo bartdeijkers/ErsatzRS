@@ -18,6 +18,7 @@ supported combinations. Procedures and background are indexed from the
 
 - [Media source support](media-source-support.md)
 - [Classic chapter expressions](classic-chapter-expressions.md)
+- [Scripted build context](scripted-build-context.md)
 - [Remote Stream playlist manifests](remote-stream-playlist-manifests.md)
 
 ## Add-on contracts

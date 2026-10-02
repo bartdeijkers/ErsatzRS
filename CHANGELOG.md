@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Continue Scripted playouts from the persisted future timeline and restore
+  series history at that cursor. Expose Lua build context, reject backward or
+  overlapping candidates before atomic publication, and show failures in
+  Activity, Health and the retained timeline preview.
+
 - Discover MPEG, transport-stream and other supported video-container candidates
   in local television libraries. Preview folder counts, ignored extensions,
   unsupported nesting and empty shows before saving, with bounded read-only

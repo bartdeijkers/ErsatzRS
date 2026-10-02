@@ -401,6 +401,8 @@ impl LanguageStrings for SpanishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Estado de la programación por script",
+        TextKey::ScriptedTimelineRejected => "Se rechazó la línea temporal. Los programas publicados no cambian. Corrige el script e inténtalo de nuevo.",
         TextKey::ItemDetailsNotRequested => "Detalles sin obtener",
         TextKey::ItemDetailsFailed => "Error al obtener detalles",
         TextKey::ItemDetailsRetry => "Detalles pendientes de reintento",

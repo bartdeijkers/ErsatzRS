@@ -19,6 +19,7 @@ use ersatzrs_domain::{
 use sqlx::{Pool, Row, Transaction};
 
 use super::common::upsert_sql;
+mod scripted_timeline;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
@@ -245,6 +246,15 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
 
         // ── items ─────────────────────────────────────────────────────────────
+        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Scripted {
+            scripted_timeline::validate_publication(
+                &mut tx,
+                playout.id,
+                result,
+                max_playout_offset,
+            )
+            .await?;
+        }
         if result.clear_items {
             if let Some(seam) = result.retain_through {
                 let cutoff = result.remove_before.unwrap_or(seam)

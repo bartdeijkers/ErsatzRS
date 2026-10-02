@@ -2047,6 +2047,8 @@ pub enum TextKey {
     UnsupportedPlayoutKind,
     ClassicPlayout,
     ClassicPlayoutState,
+    ScriptedPlayoutState,
+    ScriptedTimelineRejected,
     ScanRefreshState,
     SubtitleCleanup,
     SubtitleCleanupMessage,
@@ -4063,6 +4065,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::UnsupportedPlayoutKind,
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
+    TextKey::ScriptedPlayoutState,
+    TextKey::ScriptedTimelineRejected,
     TextKey::ScanRefreshState,
     TextKey::SubtitleCleanup,
     TextKey::SubtitleCleanupMessage,
@@ -4634,6 +4638,7 @@ pub fn health_check_title(title: &str) -> String {
 pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
+        "Scripted Playout State" => text(language, TextKey::ScriptedPlayoutState).to_owned(),
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
         "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
@@ -4872,6 +4877,10 @@ pub fn health_check_message_text(
     message: &str,
     brief_message: &str,
 ) -> String {
+    if title == "Scripted Playout State" && message.contains("Scripted timeline rejected:") {
+        let guidance = text(language, TextKey::ScriptedTimelineRejected);
+        return format!("{guidance}\n{message}");
+    }
     let displayed_message = if message.is_empty() {
         brief_message
     } else {

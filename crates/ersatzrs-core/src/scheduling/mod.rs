@@ -32,7 +32,10 @@ pub use classic::{
     ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
     ClassicSchedulingEngine,
 };
-pub use scripted::{ScriptedContentResolver, ScriptedScheduleCommand, ScriptedSchedulingEngine};
+pub use scripted::{
+    validate_scripted_timeline, ScriptedContentResolver, ScriptedScheduleCommand,
+    ScriptedSchedulingEngine,
+};
 pub use smart_shuffle::{
     block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
     legacy_program_schedule_cooldown_config_key, program_schedule_item_smart_shuffle_config_key,
@@ -827,6 +830,8 @@ pub enum SchedulingError {
     InvalidTime(String),
     #[error("script error: {0}")]
     Script(String),
+    #[error("Scripted timeline rejected: {0}. The published timeline was not changed")]
+    InvalidScriptedTimeline(String),
     #[error("{0}")]
     UnsafeClassicRefresh(String),
     #[error("invalid chapter filler expression for Classic schedule item {0}")]

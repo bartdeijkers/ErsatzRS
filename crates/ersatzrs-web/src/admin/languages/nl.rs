@@ -1123,6 +1123,8 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Status scriptgestuurde uitzending",
+        TextKey::ScriptedTimelineRejected => "De tijdlijn is afgewezen. Gepubliceerde programma’s blijven ongewijzigd. Corrigeer het script en probeer opnieuw.",
         TextKey::ItemDetailsNotRequested => "Details niet opgehaald",
         TextKey::ItemDetailsFailed => "Details ophalen mislukt",
         TextKey::ItemDetailsRetry => "Details wachten op nieuwe poging",

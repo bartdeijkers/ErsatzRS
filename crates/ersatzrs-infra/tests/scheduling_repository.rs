@@ -1,4 +1,6 @@
 mod common;
+#[path = "scheduling_repository/scripted_continuation.rs"]
+mod scripted_continuation;
 #[path = "scheduling_repository/scripted_sources.rs"]
 mod scripted_sources;
 

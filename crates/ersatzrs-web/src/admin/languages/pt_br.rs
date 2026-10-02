@@ -1146,6 +1146,8 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Estado da programação por script",
+        TextKey::ScriptedTimelineRejected => "A linha do tempo foi rejeitada. Os programas publicados permanecem inalterados. Corrija o script e tente novamente.",
         TextKey::ItemDetailsNotRequested => "Detalhes não obtidos",
         TextKey::ItemDetailsFailed => "Falha ao obter detalhes",
         TextKey::ItemDetailsRetry => "Detalhes aguardando nova tentativa",

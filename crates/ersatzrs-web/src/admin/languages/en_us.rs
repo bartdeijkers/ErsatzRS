@@ -397,6 +397,8 @@ impl LanguageStrings for EnglishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::ScriptedPlayoutState => "Scripted Playout State",
+        TextKey::ScriptedTimelineRejected => "The timeline was rejected. Published programmes remain unchanged. Correct the script and try again.",
         TextKey::ItemDetailsNotRequested => "Details not fetched",
         TextKey::ItemDetailsFailed => "Detail fetch failed",
         TextKey::ItemDetailsRetry => "Details waiting to retry",

@@ -13677,7 +13677,7 @@ Implementation and acceptance pending; preserve the complete requested scope.
 id = 'v111-findings-10'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Scripted continuation from the persisted timeline tail'
-status = 'Not started'
+status = 'Complete'
 feature = 'scripted-scheduling'
 depends_on = []
 acceptance = '''
@@ -13693,8 +13693,42 @@ Continue against an already-published future horizon without overlaps, gaps or
 series restart; failed validation leaves persisted rows/history unchanged.
 '''
 evidence = '''
-The current findings document includes this separate automatic Continue defect.
-Implementation and acceptance pending; preserve the complete requested scope.
+Source map: ErsatzTV SchedulingEngine.RestoreOrReset and ScriptedPlayoutBuilder
+restore NextStart and expose lowercase mode; ErsatzRS scripted/mod.rs ignored
+that cursor. SQL reference data already loads persisted rows and history.
+The corrected restart regression first failed at 10:01 versus tail 11:30
+(Nextest 2cf7b6a9-1cb0-4a07-ae0a-f93b84ca6021). Initial 46 focused tests pass
+(8e993d77-ee4f-40a1-941f-6d1c5b56b23c), including actual automatic maintenance
+against a 48-hour horizon, fractional/day seams, SQL restart rotation and
+atomic rejection preserving other channels and overlays. Final 47 focused checks
+pass (9ef9ef08-5288-4260-afa9-c9587baa5c40), including malformed/versioned state,
+persisted failure projections and Health failure/recovery. Strict all-target
+Clippy passes for core, infra and web. Three supplementary checks pass
+(5aeff291-2efb-456b-ad17-f9add4d917b5): chronological/Shuffle/Random cursor
+restoration, automatic maintenance plus failure/recovery, and the registered
+Health check set. Lua RandomRotation is not exposed by the existing API.
+Hydration/visual map: /playouts, PlayoutsPage SSR wrapper -> PlayoutsIsland;
+list_playouts/list_playout_detail_items and existing application repository ports;
+shared existing alert/button/table CSS and toast/activity polling. Upstream
+Pages/Playouts.razor hides details after build failure; ADR 0109 deliberately keeps
+the published timeline visible. The /playouts route now uses in-order SSR after the no-JS regression exposed
+a permanent Loading fallback. New Activity is SSR-visible without JS;
+selection and live status refresh use the existing island. Browser targets:
+Chromium/Firefox, no-JS failure visibility, mobile English and desktop Dutch,
+retained programme rows and terminal recovery. No new shared primitive.
+Acceptance: test-results/finding10-final/playwright-results.json records two
+Chromium/Firefox cases, zero skipped/flaky/failed. Each includes a no-JS context,
+English/mobile and Dutch/desktop screenshots, retained programme rows and live
+failure recovery without reload. Screenshots were visually reviewed. Formatting,
+architecture, hydration (zero new findings), progress and strict affected lint
+pass. Playback smoke passes in test-results/finding10-smoke-resume.log; the first
+attempt was terminated during compilation and supplied no runtime evidence.
+TSDuck passes 87 checks across four native delivery pipelines in
+test-results/finding10-tsduck.log; the bundle gate passes in
+test-results/finding10-bundle.log. Review confirms validation precedes all writes,
+clock-relative cleanup remains separate, and publication does not touch other
+channels. Finding 06 retains explicit Refresh continuity and generation fencing;
+integrated v1.1.1 workspace/release closeout remains a separate program gate.
 '''
 
 [[milestone]]

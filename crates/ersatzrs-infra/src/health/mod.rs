@@ -33,10 +33,10 @@ use checks::{
     PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
-    ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck, TsduckAvailabilityHealthCheck,
-    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
-    ZeroDurationHealthCheck,
+    ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
+    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -60,7 +60,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 44] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 45] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -96,6 +96,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 44] = [
     "Unavailable",
     "Empty Schedule",
     "Classic Playout State",
+    "Scripted Playout State",
     "Scan Refresh State",
     "Mirror Channels",
     "Output Dynamic Range",
@@ -286,6 +287,7 @@ fn registered_health_checks(
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(ScriptedPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(ScanRefreshStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),

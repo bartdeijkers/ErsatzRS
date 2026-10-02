@@ -4,7 +4,7 @@ use ersatzrs_core::{
     scheduling::{PlayoutBuildMode, SchedulingResult},
 };
 
-async fn build(
+pub(super) async fn build(
     pool: &SqlitePool,
     playout: Playout,
     start: chrono::DateTime<Utc>,
@@ -38,13 +38,13 @@ async fn build(
     .unwrap()
 }
 
-async fn database(url: &str, script_path: &std::path::Path) -> SqlitePool {
+pub(super) async fn database(url: &str, script_path: &std::path::Path) -> SqlitePool {
     let pool = ersatzrs_infra::db::init(url).await.unwrap();
     pool.execute(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#).await.unwrap();
     seed_scheduling_fixture(&pool).await;
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 903).await;
-    sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed", "ScheduleFile") VALUES (903, 903, 'Scripted', 42, ?)"#)
+    sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed", "ScheduleFile") VALUES (903, 903, 4, 42, ?)"#)
         .bind(script_path.to_str().unwrap()).execute(&pool).await.unwrap();
     pool.execute(r#"UPDATE "CollectionItem" SET "PreferredAudioLanguageCode" = 'nld', "PreferredSubtitleLanguageCode" = 'eng', "SubtitleMode" = 2"#).await.unwrap();
     pool.execute(r#"UPDATE "PlaylistItem" SET "PreferredAudioLanguageCode" = 'nld', "PreferredSubtitleLanguageCode" = 'eng', "SubtitleMode" = 2"#).await.unwrap();
@@ -78,7 +78,10 @@ async fn sql_scripted_sources_continue_after_restart_without_injected_membership
         let pool = ersatzrs_infra::db::init(&url).await.unwrap();
         let repos = make_repositories(pool.clone());
         let playout = repos.playout.get_with_anchor(903).await.unwrap();
-        let continued = build(&pool, playout.clone(), split, finish, PlayoutBuildMode::Continue).await;
+        // The hourly worker asks from now, inside the already-published horizon.
+        // It must derive the continuation cursor from persisted state after restart.
+        let continued = build(&pool, playout.clone(), start + Duration::minutes(1), finish, PlayoutBuildMode::Continue).await;
+        assert_eq!(continued.added_items.first().unwrap().start, split);
         let expected = &full.added_items[first.added_items.len()..];
         assert_eq!(continued.added_items.len(), expected.len());
         for (actual, expected) in continued.added_items.iter().zip(expected) {

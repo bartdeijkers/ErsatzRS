@@ -10,7 +10,9 @@ pub(in crate::scheduling::scripted) mod timing;
 pub(in crate::scheduling::scripted) mod watermark;
 
 #[cfg(test)]
-pub(super) const REGISTERED_GLOBALS: [&str; 37] = [
+pub(super) const REGISTERED_GLOBALS: [&str; 39] = [
+    "build_mode",
+    "start_time",
     "set_smart_shuffle_policy",
     "set_cooldown_policy",
     "schedule_count",
