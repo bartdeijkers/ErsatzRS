@@ -39,7 +39,7 @@ impl HealthCheck for UnavailableHealthCheck {
             return Ok(HealthCheckResult::pass(self.title()));
         }
 
-        // ErsatzTV's wording is kept for local and media-server items. A
+        // Local and media-server items use the ErsatzRS product name. A
         // Remote Stream is unavailable because its provider says so; its
         // definition file is present, so "cannot find them on disk" would be
         // false for it.
@@ -47,7 +47,7 @@ impl HealthCheck for UnavailableHealthCheck {
         let mut briefs = Vec::new();
         if local_count > 0 {
             messages.push(format!(
-                "There are {local_count} items that are unavailable because ErsatzTV cannot find them on disk, including the following: {}",
+                "There are {local_count} items that are unavailable because ErsatzRS cannot find them on disk, including the following: {}",
                 local_items.join(", ")
             ));
             briefs.push(format!("{local_count} items"));
@@ -200,7 +200,7 @@ mod tests {
             "There are 1 items and 1 Remote Streams that are unavailable"
         );
         assert!(result.message.starts_with(
-            "There are 1 items that are unavailable because ErsatzTV cannot find them on disk, including the following: /media/Movie.mkv"
+            "There are 1 items that are unavailable because ErsatzRS cannot find them on disk, including the following: /media/Movie.mkv"
         ));
     }
 }

@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Identify ErsatzRS correctly in unavailable-media health warnings and localize
+  known disk/provider diagnostics, including cached messages using the old name.
 - Reconcile Windows local-TV folder aliases after case-only directory changes,
   clearing false `Local television identity` warnings while preserving media IDs,
   stream selections and scheduling references. Reuse the existing episode

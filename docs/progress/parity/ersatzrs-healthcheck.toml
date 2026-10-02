@@ -4,6 +4,13 @@ rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`,
 status     = 'Ported'
 adr        = ['0064']
 summary    = '''
+2026-10-02: Unavailable-media diagnostics identify ErsatzRS rather than the
+upstream product. Admin translation accepts both legacy cached and current
+messages in every supported culture, preserves sample names, and keeps provider
+availability distinct from missing disk files. All 23 focused health/i18n tests,
+strict infra/web Clippy, formatting and hydration-lint pass. Native deployment
+is scheduled for v1.1.1.
+
 UCU-09 row136: admin and maintenance share bounded, independently owned health
 runs with five-minute caching and explicit refresh. Results and summary publish
 atomically; localized hydrated and no-JS refresh pass in both browsers.

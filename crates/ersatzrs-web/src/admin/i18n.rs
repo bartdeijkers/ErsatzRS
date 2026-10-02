@@ -1414,6 +1414,8 @@ pub enum TextKey {
     TvShows,
     Ui,
     Unavailable,
+    UnavailableLocalMediaMessage,
+    UnavailableRemoteStreamsMessage,
     UseActualTimes,
     UseCustomPlaybackOrder,
     UseChaptersAsMediaItems,
@@ -4782,6 +4784,38 @@ fn runtime_health_message(
     Some(text(language, key))
 }
 
+// Accept legacy cached results as well as newly generated ErsatzRS messages.
+// Match only the known health clauses; preserve sample paths and unknown prose.
+fn unavailable_health_message(language: UiLanguage, message: &str) -> Option<String> {
+    fn clause(language: UiLanguage, message: &str) -> Option<String> {
+        let (count, rest) = message.strip_prefix("There are ")?.split_once(' ')?;
+        count.parse::<u64>().ok()?;
+        let (key, items) = if let Some(items) = rest
+            .strip_prefix("items that are unavailable because ErsatzRS cannot find them on disk, including the following: ")
+            .or_else(|| rest.strip_prefix("items that are unavailable because ErsatzTV cannot find them on disk, including the following: "))
+        {
+            (TextKey::UnavailableLocalMediaMessage, items)
+        } else {
+            (TextKey::UnavailableRemoteStreamsMessage, rest.strip_prefix(
+                "Remote Streams that are unavailable because their provider reports them as not playable, including the following: ",
+            )?)
+        };
+        Some(
+            text(language, key)
+                .replace("{count}", count)
+                .replace("{items}", items),
+        )
+    }
+
+    if let Some((local, remote)) = message.rsplit_once(" There are ") {
+        let remote = format!("There are {remote}");
+        if let (Some(local), Some(remote)) = (clause(language, local), clause(language, &remote)) {
+            return Some(format!("{local} {remote}"));
+        }
+    }
+    clause(language, message)
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -4797,6 +4831,11 @@ pub fn health_check_message_text(
         runtime_health_message(language, title, displayed_message, brief_message)
     {
         return localized.to_owned();
+    }
+    if title == "Unavailable" {
+        if let Some(localized) = unavailable_health_message(language, displayed_message) {
+            return localized;
+        }
     }
     if title == "JavaScript Audio Selection" {
         return javascript_audio_health_message(language, displayed_message, brief_message);
@@ -5301,6 +5340,41 @@ mod tests {
                     definition.code
                 );
             }
+        }
+    }
+
+    #[test]
+    fn unavailable_health_localizes_legacy_branding_without_rewriting_samples() {
+        let legacy = "There are 2 items that are unavailable because ErsatzTV cannot find them on disk, including the following: /media/ErsatzTV.mkv";
+        let current = "There are 2 items that are unavailable because ErsatzRS cannot find them on disk, including the following: /media/ErsatzTV.mkv";
+        let remote = "There are 1 Remote Streams that are unavailable because their provider reports them as not playable, including the following: streams/fixture.yml";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let translated = health_check_message_text(language, "Unavailable", current, "");
+            assert_eq!(
+                translated,
+                health_check_message_text(language, "Unavailable", legacy, "")
+            );
+            assert!(translated.contains("ErsatzRS"));
+            assert!(translated.ends_with("/media/ErsatzTV.mkv"));
+            assert!(!translated.contains("because ErsatzTV"));
+            let provider = health_check_message_text(language, "Unavailable", remote, "");
+            assert!(provider.ends_with("streams/fixture.yml"));
+            assert!(!provider.contains("ErsatzRS"));
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    "Unavailable",
+                    &format!("{legacy} {remote}"),
+                    ""
+                ),
+                format!("{translated} {provider}")
+            );
+            let unknown = "ErsatzTV is part of an unrecognized provider diagnostic";
+            assert_eq!(
+                health_check_message_text(language, "Unavailable", unknown, ""),
+                unknown
+            );
         }
     }
 
