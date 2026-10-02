@@ -13550,7 +13550,7 @@ This is solution acceptance, not integrated v1.1.1 release acceptance.
 id = 'v111-findings-08'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Owned cancellable diagnostic preview lifecycle'
-status = 'Not started'
+status = 'Complete'
 feature = 'support-pages'
 depends_on = []
 acceptance = '''
@@ -13564,5 +13564,116 @@ cancel during startup/running, failure/completion, replacement requests, child
 cleanup, capacity release, and localized admin actions.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
+ADR 0107 records the owned ephemeral API, isolated process-tree cancellation,
+cleanup quarantine, bounded history/output reads and the SSR/enhanced controls.
+Hydration source map: /system/troubleshooting/playback remains a component with
+ordinary POST start/Stop forms and an SSR status refresh link. Its data resource
+loads the existing troubleshooting context plus the owned operation by ID.
+The narrow public troubleshooting-preview.js enhancement queues and polls that
+same runtime port. No shared primitive or new island is introduced. Browser
+proof targets Stop during queued/running work, repeated preview admission,
+owned IDs, stale-ID isolation, programme seek/UTC timestamps, and no-JS forms
+in Chromium and Firefox.
+Accepted locally 2026-10-02. The owned registry is bounded to 16 transient IDs;
+only the current ready ID can read bounded HLS files. Native and Next keep the
+exclusive owner through tree reaping, controller/session cleanup, log capture
+and capacity release. Unconfirmed cleanup retains quarantine and its reservation.
+The old diagnostic GET/archive endpoints remain compatible; enhanced and SSR
+controls use owned POST admission/Stop. Lost admission responses allow bounded
+retry without cancelling an unknown producer. Invalid timestamps are rejected.
+Thirty-four focused context/API/seek tests pass. The final six-test lifecycle/
+all-cultures selection passes after lint corrections, including actual Unix
+leader/descendant cleanup, no further dynamic-text writes, queued cancellation,
+late readiness, stale IDs, capacity quarantine and all nine language registries.
+Strict cargo clippy -p ersatzrs-infra -p ersatzrs-app -p ersatzrs-web
+--all-targets -- -D warnings passes. Formatting, hydration lint and the staged
+new-Clippy-allow policy pass. No new allow attributes are added.
+Ten final Chromium/Firefox controls/render checks pass with actual FFmpeg and
+Next, including replacement IDs, stale-ID Stop/file isolation and no-JS forms:
+test-results/preview-owned-controls.json. Native troubleshooting benchmarks can
+finish faster than wall time; cancellation fixtures use a deliberately costly
+synthetic profile, while completed-versus-Stop races remain legitimate terminal
+outcomes with confirmed cleanup. After extracting the unchanged seek-field
+view for lint, a fresh matched Leptos SSR/WASM build and four channel/no-JS
+checks pass: test-results/preview-owned-matched-bundle.json. All four persisted
+channel modes render real frames at programme seek 2 with +02:00 input normalized
+to UTC; channel and timeline rows remain identical. Two final lost-response
+checks pass: test-results/playwright-results.json.
+Native cargo xtask smoke --hls-lifecycle passes ordinary live MPEG-TS/HLS and
+confirms both session kinds disappear after idle, preserving live isolation.
+The 34 earlier focused results remain valid: final Rust edits only extract an
+identical view, qualify imports and correct lint syntax. Integrated v1.1.1
+closeout/publication remains separate from this solution acceptance.
+'''
+
+[[milestone]]
+id = 'v111-findings-09'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Typed animated JPEG XL playback'
+status = 'Not started'
+feature = 'drawvg-graphics-engine'
+depends_on = []
+acceptance = '''
+Implement the full solution from the current maintainer findings document in a
+separate commit with an Unreleased changelog entry. No publication is included.
+Detect animated JPEG XL and derive missing duration from decoded frame timing.
+Preserve monotonic timestamps across repeats and use decoded trim for phase
+seeking rather than unsupported demuxer input seek. Expose typed semantics in
+Image/Motion authoring and actual-engine preview. Prove alpha preservation,
+repeat boundaries, fractional live joins and programme-relative timing with
+argv snapshots and native FFmpeg encoding/decoding. Generic decoder capability
+alone is not animated-input acceptance.
+'''
+evidence = '''
+The current findings document includes this additional measured runtime gap.
+Implementation and acceptance pending; preserve the complete requested scope.
+'''
+
+[[milestone]]
+id = 'v111-findings-10'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Scripted continuation from the persisted timeline tail'
+status = 'Not started'
+feature = 'scripted-scheduling'
+depends_on = []
+acceptance = '''
+Implement the full solution from the current maintainer findings document in a
+separate commit with an Unreleased changelog entry. No publication is included.
+Initialize Scripted Continue from the persisted last-finish/anchor and apply
+history at that future cursor. Expose explicit build-mode context to scripts.
+Validate candidate timeline monotonicity and overlap before atomic publication;
+show rejected timelines in Activity/Health/admin preview. Preserve series
+rotation and other channels. Keep append-only continuation distinct from
+continuity-safe explicit Refresh and generation fencing. Prove an automatic
+Continue against an already-published future horizon without overlaps, gaps or
+series restart; failed validation leaves persisted rows/history unchanged.
+'''
+evidence = '''
+The current findings document includes this separate automatic Continue defect.
+Implementation and acceptance pending; preserve the complete requested scope.
+'''
+
+[[milestone]]
+id = 'v111-findings-09b'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Motion authoring roundtrips and truthful native text fit'
+status = 'Not started'
+feature = 'drawvg-graphics-engine'
+depends_on = []
+acceptance = '''
+The post-milestone findings reread adds a separate proposed editor correction.
+Implement it in its own commit with an Unreleased changelog entry, preserving
+the original animated JPEG XL solution under v111-findings-09.
+Make Motion alpha/opacity expressions, timing and exact pixel location editable
+and faithfully round-trip them through YAML. Implement or accurately label the
+native text-fit behavior; preview actual font metrics over long programme
+titles. Preserve decoded alpha and independent heading/title nodes. Reuse the
+existing graphics engine, font/media validation and typed editor. Prove YAML
+roundtrips, actual alpha/timing/location and long-title font rendering; localized
+controls must explain any intentionally fixed-size renderer behavior.
+'''
+evidence = '''
+Recorded from the required post-milestone reread on 2026-10-02. Implementation
+and acceptance pending; current findings contain ten numbered entries and this
+additional separate proposed solution within finding 09.
 '''

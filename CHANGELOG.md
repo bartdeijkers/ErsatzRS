@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Own diagnostic previews with separate IDs and visible lifecycle states. Stop
+  cancels and reaps the process tree and graphics controllers before releasing
+  capacity; stale preview links cannot play a replacement. Preserve the finite
+  deadline and live-channel isolation, and support programme-relative seeking
+  with explicit UTC timestamps and server-rendered Play/Stop forms.
+
 - Support diagnostic playback for all channel delivery modes, including HLS
   Segmenter, through the shared persisted-mode decoder. Show localized,
   actionable startup failures without exposing private runtime details.

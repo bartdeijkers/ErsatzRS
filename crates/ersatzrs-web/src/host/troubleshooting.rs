@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use ersatzrs_app::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, PlaybackPreviewLog,
-    PlaybackPreviewRequest,
+    PlaybackPreviewRequest, PlaybackPreviewStatus,
 };
 use ersatzrs_core::{
     path_replacement::{replace_path, PathPlatform, PathReplacement},
@@ -46,6 +46,7 @@ use tokio::process::Command;
 use tokio::sync::{oneshot, Mutex, OwnedMutexGuard, RwLock};
 
 use crate::transport::iptv::stream;
+use ersatzrs_infra::managed_process::ManagedProcess;
 
 #[path = "troubleshooting_next.rs"]
 mod next;
@@ -56,10 +57,14 @@ mod credits;
 #[path = "troubleshooting_progress.rs"]
 mod progress;
 
+#[path = "troubleshooting_lifecycle.rs"]
+mod lifecycle;
+
 #[derive(Default)]
 enum PreviewAvailability {
     #[default]
     Available,
+    Active(Arc<lifecycle::Job>),
     CleanupUnconfirmed {
         _reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
     },
@@ -77,6 +82,7 @@ pub struct NativeAdminTroubleshootingRuntime {
     next_version: Arc<OnceLock<String>>,
     preview_lock: Arc<Mutex<PreviewAvailability>>,
     next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
+    previews: Arc<RwLock<lifecycle::Registry>>,
 }
 
 impl NativeAdminTroubleshootingRuntime {
@@ -94,6 +100,7 @@ impl NativeAdminTroubleshootingRuntime {
             next_version,
             preview_lock: Arc::default(),
             next_engine,
+            previews: Arc::default(),
         }
     }
 }
@@ -187,24 +194,40 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
         &self,
         request: PlaybackPreviewRequest,
     ) -> Result<(), AdminTroubleshootingRuntimeError> {
-        let ownership = Arc::clone(&self.preview_lock)
-            .try_lock_owned()
-            .map_err(|_| {
-                AdminTroubleshootingRuntimeError::NotFound(
-                    "troubleshooting playback is already running".to_owned(),
-                )
-            })?;
-        if matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
-            return Err(AdminTroubleshootingRuntimeError::unavailable(
-                "troubleshooting process cleanup is unconfirmed; restart is required",
-            ));
-        }
-        if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-            return next::start(self.clone(), request.into(), ownership).await;
-        }
-        start_playback_preview(self, &request.into(), ownership)
-            .await
-            .map_err(map_runtime_error)
+        self.admit_preview(request).await?.wait_ready().await
+    }
+
+    async fn queue_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> Result<PlaybackPreviewStatus, AdminTroubleshootingRuntimeError> {
+        Ok(self.admit_preview(request).await?.read())
+    }
+
+    async fn playback_preview_status(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        Ok(self.find_preview(&id).await.map(|job| job.read()))
+    }
+
+    async fn stop_playback_preview(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        let Some(job) = self.find_preview(&id).await else {
+            return Ok(None);
+        };
+        job.cancel();
+        Ok(Some(job.read()))
+    }
+
+    async fn playback_preview_file(
+        &self,
+        id: String,
+        filename: String,
+    ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.read_owned_file(&id, &filename).await
     }
 
     async fn build_troubleshooting_archive(
@@ -279,6 +302,9 @@ async fn start_playback_preview(
         .await?
         .ok_or(PreviewNotFound("ffmpeg profile does not exist"))?;
 
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let working_dir = troubleshooting_folder();
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
@@ -377,6 +403,9 @@ async fn start_playback_preview(
     });
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let PlaybackGraphicsArtifacts {
         overlays: graphics_overlays,
         dynamic_text_controllers,
@@ -430,13 +459,17 @@ async fn start_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    )?;
+    );
 
-    write_ffmpeg_arguments(&working_dir, &command).await?;
-    let completion =
-        spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format, completion).await?;
-    Ok(())
+    start_native_command(
+        state,
+        &working_dir,
+        command,
+        dynamic_text_controllers,
+        ownership,
+        output_format,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_lines)]
@@ -457,10 +490,21 @@ async fn start_channel_playback_preview(
     if !channel.is_enabled {
         return Err(PreviewNotFound("channel is disabled").into());
     }
-    let start_time = parse_preview_start(query.start.as_deref()).unwrap_or_else(Utc::now);
+    let start_time = requested_preview_start(query.start.as_deref())?;
     let active = stream::load_active_media_path(&state.pool, channel.id, start_time)
         .await?
         .ok_or(PreviewNotFound("channel has no active playout item"))?;
+    let start_time = programme_preview_time(
+        query,
+        parse_sqlite_utc_timestamp(&active.playout_start)
+            .ok_or(PreviewNotFound("invalid preview programme start"))?,
+        parse_sqlite_utc_timestamp(&active.playout_finish)
+            .ok_or(PreviewNotFound("invalid preview programme finish"))?,
+        start_time,
+    )?;
+    if let Some(job) = lifecycle::job(&ownership) {
+        job.selected_at(start_time);
+    }
     let ffmpeg_profile_id = query
         .ffmpeg_profile
         .filter(|id| *id > 0)
@@ -475,6 +519,9 @@ async fn start_channel_playback_preview(
         .load_preview_media_admin(active.media_item_id, Some(active.media_version_id))
         .await?
         .ok_or(PreviewNotFound("active media item does not exist"))?;
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let working_dir = troubleshooting_folder();
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
@@ -646,23 +693,6 @@ async fn start_channel_playback_preview(
         program_duration,
     )
     .await;
-    let PlaybackGraphicsArtifacts {
-        overlays: graphics_overlays,
-        dynamic_text_controllers,
-    } = preview_channel_graphics_overlays(PreviewChannelGraphicsRequest {
-        pool: &state.pool,
-        channel: &channel,
-        active: &active,
-        media_path: &media_path,
-        playback_profile: &playback_profile,
-        target_frame_rate,
-        source_stream: source_stream.clone(),
-        start_position,
-        program_duration,
-        start_time,
-        working_dir: &working_dir,
-    })
-    .await;
     let subtitle_input = if let Some(subtitle) = credits::prepare(
         &state.pool,
         &media,
@@ -682,6 +712,26 @@ async fn start_channel_playback_preview(
     } else {
         subtitle_input
     };
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
+    let PlaybackGraphicsArtifacts {
+        overlays: graphics_overlays,
+        dynamic_text_controllers,
+    } = preview_channel_graphics_overlays(PreviewChannelGraphicsRequest {
+        pool: &state.pool,
+        channel: &channel,
+        active: &active,
+        media_path: &media_path,
+        playback_profile: &playback_profile,
+        target_frame_rate,
+        source_stream: source_stream.clone(),
+        start_position,
+        program_duration,
+        start_time,
+        working_dir: &working_dir,
+    })
+    .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let no_subtitle = Option::<PlaybackSubtitle>::None;
     let metadata = stream::playback_output_metadata(
@@ -719,13 +769,42 @@ async fn start_channel_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    )?;
+    );
 
-    write_ffmpeg_arguments(&working_dir, &command).await?;
-    let completion =
-        spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format, completion).await?;
-    Ok(())
+    start_native_command(
+        state,
+        &working_dir,
+        command,
+        dynamic_text_controllers,
+        ownership,
+        output_format,
+    )
+    .await
+}
+
+fn programme_preview_time(
+    query: &PlaybackPreviewQuery,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    at: DateTime<Utc>,
+) -> ApiResult<DateTime<Utc>> {
+    let Some(seek) = query.seek_seconds else {
+        return Ok(at);
+    };
+    let last_second = (finish - start).num_seconds().saturating_sub(1).max(0);
+    let seconds = seek.clamp(0, last_second);
+    start
+        .checked_add_signed(chrono::Duration::seconds(seconds))
+        .ok_or_else(|| "invalid preview programme seek".into())
+}
+
+fn requested_preview_start(value: Option<&str>) -> ApiResult<DateTime<Utc>> {
+    match value.filter(|value| !value.trim().is_empty()) {
+        Some(value) => {
+            parse_preview_start(Some(value)).ok_or_else(|| "invalid preview UTC timestamp".into())
+        }
+        None => Ok(Utc::now()),
+    }
 }
 
 fn parse_preview_start(value: Option<&str>) -> Option<DateTime<Utc>> {
@@ -1580,7 +1659,67 @@ fn preview_command_arguments(command: &FfmpegCommand) -> Vec<String> {
     arguments
 }
 
-fn spawn_preview_ffmpeg(
+async fn start_native_command(
+    state: &NativeAdminTroubleshootingRuntime,
+    working: &FsPath,
+    command: Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource>,
+    controllers: Vec<DynamicTextController>,
+    ownership: PreviewOwnership,
+    output_format: OutputFormat,
+) -> ApiResult<()> {
+    use ersatzrs_infra::transcode_capacity::{
+        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
+        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    };
+    let job = lifecycle::job(&ownership);
+    let command = match command {
+        Ok(command) => command,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(controllers).await;
+            return Err(error.into());
+        }
+    };
+    if job.as_ref().is_some_and(|job| job.cancel.is_cancelled()) {
+        shutdown_dynamic_text_controllers(controllers).await;
+        return Err("troubleshooting playback cancelled".into());
+    }
+    if let Err(error) = write_ffmpeg_arguments(working, &command).await {
+        shutdown_dynamic_text_controllers(controllers).await;
+        return Err(error);
+    }
+    let admission = async {
+        let limit = load_active_transcode_limit(&state.pool)
+            .await?
+            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+        try_reserve_active_transcode(
+            limit,
+            ActiveTranscodeSlot::new_next_hls_with_capacity_key(
+                TRANSCODE_TROUBLESHOOTING_CHANNEL,
+                "troubleshooting",
+            ),
+        )
+        .ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from(
+                "troubleshooting capacity is unavailable",
+            )
+        })
+    }
+    .await;
+    let reservation = match admission {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(controllers).await;
+            return Err(error);
+        }
+    };
+    if let Some(job) = job {
+        job.retain_reservation(reservation);
+    }
+    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership).await?;
+    wait_for_preview_output(&working.to_path_buf(), output_format, completion).await
+}
+
+async fn spawn_preview_ffmpeg(
     working_dir: &FsPath,
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
@@ -1603,9 +1742,21 @@ fn spawn_preview_ffmpeg(
         process.env(variable.name, variable.value);
     }
 
-    let mut child = process.spawn()?;
-    let stderr = child.stderr.take();
-    let stdout = child.stdout.take();
+    let mut child = match ManagedProcess::spawn(process) {
+        Ok(child) => child,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+            if let Some(job) = lifecycle::job(&ownership) {
+                drop(job.take_reservation());
+            }
+            return Err(error.into());
+        }
+    };
+    if let Some(job) = lifecycle::job(&ownership) {
+        job.running();
+    }
+    let stderr = child.take_stderr();
+    let stdout = child.take_stdout();
     let (finished, completion) = oneshot::channel();
     let log_path = working_dir.join("logs.txt");
     tokio::spawn(async move {
@@ -1629,29 +1780,43 @@ async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
     stdout: Option<tokio::process::ChildStdout>,
-    mut child: tokio::process::Child,
+    mut child: ManagedProcess,
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
 ) -> bool {
     let mut logs = Vec::new();
     let mut progress_output = Vec::new();
-    let result = tokio::time::timeout_at(deadline, async {
-        tokio::join!(
-            read_preview_pipe(stderr, &mut logs),
-            read_preview_pipe(stdout, &mut progress_output)
-        );
-        child.wait().await
-    })
-    .await;
-    let succeeded = matches!(&result, Ok(Ok(status)) if status.success());
-    let needs_cleanup = !matches!(&result, Ok(Ok(_)));
+    let job = lifecycle::job(&ownership);
+    let cancellation = job
+        .as_ref()
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let result = tokio::select! {
+        result = tokio::time::timeout_at(deadline, async {
+            let ((), (), status) = tokio::join!(
+                read_preview_pipe(stderr, &mut logs),
+                read_preview_pipe(stdout, &mut progress_output),
+                child.wait()
+            );
+            status
+        }) => result.ok(),
+        () = cancellation.cancelled() => {
+            logs.extend_from_slice(b"\ntroubleshooting playback cancelled\n");
+            None
+        }
+    };
+    let succeeded = matches!(&result, Some(Ok(status)) if status.success());
+    let needs_cleanup = !matches!(&result, Some(Ok(_)));
     match result {
-        Ok(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
-        Ok(Err(error)) => {
+        Some(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
+        Some(Err(error)) => {
             logs.extend_from_slice(format!("\nwait error: {:?}\n", error.kind()).as_bytes());
         }
-        Err(_) => logs.extend_from_slice(b"\ntroubleshooting deadline expired\n"),
+        None if !cancellation.is_cancelled() => {
+            logs.extend_from_slice(b"\ntroubleshooting deadline expired\n");
+        }
+        None => {}
     }
     if needs_cleanup
         && !matches!(
@@ -1665,8 +1830,32 @@ async fn write_preview_logs(
     if let Some(speed) = progress::parse_speed(&String::from_utf8_lossy(&progress_output)) {
         logs.extend_from_slice(progress::speed_diagnostic(speed).as_bytes());
     }
-    let _ = tokio::fs::write(log_path, logs).await;
-    succeeded
+    let folder = log_path.parent().unwrap_or_else(|| FsPath::new("."));
+    let written = tokio::fs::write(&log_path, logs).await.is_ok();
+    if !succeeded && !cancellation.is_cancelled() {
+        if let Some(job) = &job {
+            job.fail("startup");
+        }
+    }
+    // Preserve the ID when availability is replaced by the quarantine state.
+    if let Some(job) = &job {
+        let confirmed = !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. });
+        let log = if confirmed && written {
+            read_completed_preview_log(folder).await.ok().flatten()
+        } else {
+            None
+        };
+        let reservation = job.take_reservation();
+        if confirmed {
+            drop(reservation);
+            *ownership = PreviewAvailability::Available;
+        } else if let PreviewAvailability::CleanupUnconfirmed { _reservation } = &mut *ownership {
+            *_reservation = reservation;
+        }
+        drop(ownership);
+        job.finish(succeeded && written, confirmed, log);
+    }
+    succeeded && written
 }
 
 async fn read_preview_pipe(
@@ -1760,13 +1949,16 @@ async fn read_preview_log_from(
     folder: &FsPath,
     ownership: &Arc<Mutex<PreviewAvailability>>,
 ) -> ApiResult<Option<PlaybackPreviewLog>> {
-    use tokio::io::AsyncReadExt as _;
-
     // Keep completed diagnostics stable during the read. Active owners are still
     // writing them; a new preview must not clear the directory midway through.
     let Ok(_ownership) = ownership.try_lock() else {
         return Ok(None);
     };
+    read_completed_preview_log(folder).await
+}
+
+async fn read_completed_preview_log(folder: &FsPath) -> ApiResult<Option<PlaybackPreviewLog>> {
+    use tokio::io::AsyncReadExt as _;
     let file = match tokio::fs::File::open(folder.join("logs.txt")).await {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -2170,7 +2362,9 @@ mod tests {
         let log = root.path().join("logs.txt");
         let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
         let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
-        let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 0"]);
+        let mut child = ManagedProcess::spawn(command).unwrap();
         child.wait().await.unwrap();
         let completion = write_preview_logs(
             log.clone(),
@@ -2198,10 +2392,9 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
             let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
-            let child = Command::new("sh")
-                .args(["-c", &format!("exit {exit}")])
-                .spawn()
-                .unwrap();
+            let mut command = Command::new("sh");
+            command.args(["-c", &format!("exit {exit}")]);
+            let child = ManagedProcess::spawn(command).unwrap();
             let log_path = root.path().join("logs.txt");
             let (finished, completion) = oneshot::channel();
             tokio::spawn(async move {
@@ -2273,11 +2466,9 @@ mod tests {
         let log = root.path().join("logs.txt");
         let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
         let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
-        let child = Command::new("sh")
-            .args(["-c", "exec sleep 30"])
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
+        let mut command = Command::new("sh");
+        command.args(["-c", "exec sleep 30"]);
+        let child = ManagedProcess::spawn(command).unwrap();
         write_preview_logs(
             log.clone(),
             None,
@@ -2574,6 +2765,25 @@ mod tests {
     }
 
     #[test]
+    fn programme_preview_seek_stays_in_the_selected_row() {
+        let start = parse_preview_start(Some("2026-10-02T12:00:00Z")).unwrap();
+        let finish = start + chrono::Duration::seconds(60);
+        let at = start + chrono::Duration::seconds(20);
+        let mut query: PlaybackPreviewQuery = PlaybackPreviewRequest::default().into();
+        assert_eq!(
+            programme_preview_time(&query, start, finish, at).unwrap(),
+            at
+        );
+        for (requested, expected) in [(-4, 0), (0, 0), (30, 30), (60, 59), (i64::MAX, 59)] {
+            query.seek_seconds = Some(requested);
+            assert_eq!(
+                (programme_preview_time(&query, start, finish, at).unwrap() - start).num_seconds(),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn preview_start_accepts_browser_datetime_local_and_rfc3339() {
         assert_eq!(
             parse_preview_start(Some("2026-06-04T21:15"))
@@ -2588,5 +2798,7 @@ mod tests {
             "2026-06-04T19:15:30+00:00"
         );
         assert!(parse_preview_start(Some("")).is_none());
+        assert!(requested_preview_start(Some("invalid-date")).is_err());
+        assert!(requested_preview_start(Some("")).is_ok());
     }
 }

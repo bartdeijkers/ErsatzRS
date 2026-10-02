@@ -531,6 +531,30 @@ pub fn build_app(app_state: AppState) -> Router {
                 get(api::media_actions::media_info),
             )
             .route(
+                "/api/troubleshoot/playback/previews",
+                post(api::troubleshooting::queue_preview),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}",
+                get(api::troubleshooting::owned_preview_status),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}/stop",
+                post(api::troubleshooting::stop_owned_preview),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}/files/{filename}",
+                get(api::troubleshooting::owned_preview_file),
+            )
+            .route(
+                "/admin-api/troubleshoot/playback/start",
+                post(api::troubleshooting::start_preview_form),
+            )
+            .route(
+                "/admin-api/troubleshoot/playback/{id}/stop",
+                post(api::troubleshooting::stop_preview_form),
+            )
+            .route(
                 "/api/troubleshoot/playback/archive",
                 get(api::troubleshooting::playback_archive),
             )

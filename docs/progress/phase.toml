@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Implement the eight channel setup findings for v1.1.1 with one verified commit per solution'
+current_focus = 'Implement all ten channel setup findings for v1.1.1 with one verified commit per solution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,13 +61,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-02: The maintainer authorized all eight channel setup solutions for
+2026-10-02: The maintainer authorized all channel setup solutions for
 v1.1.1, each in a separate commit with a changelog entry. Milestones
-v111-findings-01 through -08 retain the complete requirements and exclusions.
-Finding 07 is locally accepted with shared-decoder, unit and real browser proof;
-selection, authoring/preview, discovery,
-programme metadata, Windows drawvg/slate status, scripted adaptation and owned
-preview cancellation remain open. Existing release/publication gates are
+v111-findings-01 through -10 and -09b retain the complete requirements and exclusions.
+Findings 07 and 08 are locally accepted with shared-decoder and owned preview
+lifecycle proof, including real native/Next browser playback and cleanup.
+Selection, authoring/preview, discovery, programme metadata, Windows drawvg/slate
+status, scripted adaptation, animated JPEG XL and safe Scripted Continue remain
+open. Finding 09 also includes separate Motion YAML/alpha/location and native
+text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
+selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are
 separate; this corrective scope does not publish a release.
 
 2026-10-02: Native Windows local-TV folder aliases were repaired transactionally;

@@ -219,6 +219,7 @@ async fn channel_preview_rebases_pinned_version_and_keeps_persisted_schedule() {
     let fixture = Fixture::new().await;
     let mut query = Fixture::query();
     query.channel = Some(1);
+    query.seek_seconds = None;
     query.start = Some(fixture.at.to_rfc3339());
     let before: Vec<(i64, String, String)> =
         sqlx::query_as(r#"SELECT "Id","Start","Finish" FROM "PlayoutItem""#)
@@ -914,4 +915,26 @@ async fn native_channel_preview_retains_music_video_credits_configuration() {
         .load_preview_channel_admin(1)
         .await
         .is_err());
+}
+
+#[tokio::test]
+async fn channel_programme_seek_preserves_inpoint_and_clamps_before_the_next_row() {
+    let fixture = Fixture::new().await;
+    let mut query = Fixture::query();
+    query.channel = Some(1);
+    query.start = Some(fixture.at.to_rfc3339());
+    for (seek, elapsed) in [(0, 0), (15, 15), (60, 59), (i64::MAX, 59)] {
+        query.seek_seconds = Some(seek);
+        let selected = select(&fixture.state, &query).await.unwrap();
+        assert_eq!(
+            selected.selected_at.unwrap(),
+            fixture.at - TimeDelta::seconds(20) + TimeDelta::seconds(elapsed)
+        );
+        assert_eq!(selected.media.item.media_item_id, 10);
+        assert_eq!(
+            selected.media.item.in_point,
+            TimeDelta::seconds(10 + elapsed)
+        );
+        assert!(selected.media.item.out_point <= TimeDelta::seconds(70));
+    }
 }

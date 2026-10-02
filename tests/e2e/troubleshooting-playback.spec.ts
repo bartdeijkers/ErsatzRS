@@ -122,10 +122,23 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     if (selectorFile) rmSync(selectorFile, { force: true });
   });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, info) => {
+    if (info.title.includes('Stop') || info.title.includes('admission')) {
+      // Native troubleshooting deliberately benchmarks faster than real time.
+      // A costly synthetic output keeps the producer active through UI actions.
+      sql(`UPDATE "Resolution" SET "Width"=1920,"Height"=1080 WHERE "Id"=${id};
+        UPDATE "FFmpegProfile" SET "VideoPreset"='veryslow' WHERE "Id"=${id};`);
+    }
     await page.request.post('/admin-api/settings/ui/save', {
       form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
     });
+  });
+
+  test.afterEach(async ({}, info) => {
+    if (info.title.includes('Stop') || info.title.includes('admission')) {
+      sql(`UPDATE "Resolution" SET "Width"=320,"Height"=180 WHERE "Id"=${id};
+        UPDATE "FFmpegProfile" SET "VideoPreset"='ultrafast' WHERE "Id"=${id};`);
+    }
   });
 
   test('switches engine controls, preserves watermarks and graphics and fits narrow screens', async ({ page }, info) => {
@@ -192,7 +205,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-    const start = '2026-10-02T12:00:00Z';
+    const start = '2026-10-02T14:00:00+02:00';
     sql(`INSERT INTO "Channel" (
       "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
       "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
@@ -216,15 +229,18 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         await page.locator('input[name="start"]').evaluate((input: HTMLInputElement, value) => {
           input.type = 'text'; input.value = value;
         }, start);
+        await page.locator('input[name="seekSeconds"]').fill('2');
         await page.getByRole('button', { name: 'Play', exact: true }).click();
-        await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+        await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime),
+        { timeout: 15_000 }).toBeGreaterThan(0);
         await expect(page.locator('textarea')).toHaveValue(/exit status: (?:exit status|exit code): 0/);
+        await expect(page.locator('[data-preview-timestamp] time')).toHaveText('2026-10-02T12:00:02+00:00');
         expect(sql(`SELECT * FROM "Channel" WHERE "Id"=${id};`)).toBe(channel);
         expect(sql(`SELECT * FROM "PlayoutItem" WHERE "PlayoutId"=${id};`)).toBe(timeline);
       }
       expect(errors).toEqual([]);
       sql(`UPDATE "Channel" SET "StreamingMode"=99 WHERE "Id"=${id};`);
-      const response = await page.request.get(`/api/troubleshoot/playback.m3u8?channel=${id}&start=${start}`);
+      const response = await page.request.get(`/api/troubleshoot/playback.m3u8?channel=${id}&start=${encodeURIComponent(start)}`);
       expect(response.status()).toBe(500);
       expect(await response.json()).toEqual({ code: 'configuration' });
       await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -278,13 +294,96 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption('Legacy');
     await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
     await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+    await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime),
+        { timeout: 15_000 }).toBeGreaterThan(0);
     await page.goto('/ffmpeg');
     await expect.poll(async () => {
       const response = await page.request.get('/api/troubleshoot/playback/log');
       return (await response.json())?.text ?? '';
-    }, { timeout: 15_000 }).toMatch(/exit status:/);
+    }, { timeout: 15_000 }).toMatch(/cancelled|exit status:/);
     expect(errors).toEqual([]);
+  });
+
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} Stop reaps its owned preview and allows a replacement`, async ({ page }) => {
+      test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,
+        'Official Next runtime acceptance requires ETV_NEXT_FOLDER.');
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+      await page.locator('select[name="streamingEngine"]').selectOption(engine);
+      await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+      await page.locator('input[name="seekSeconds"]').fill('0');
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'running');
+      const oldId = await page.locator('form[data-playback-troubleshooting]').getAttribute('data-preview-id');
+      expect(oldId).toMatch(/^[a-f0-9-]{36}$/);
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeDisabled();
+      await page.locator('[data-preview-stop]').click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'cancelled');
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      const old = await (await page.request.get(`/api/troubleshoot/playback/previews/${oldId}`)).json();
+      expect(old.cleanup_confirmed).toBe(true);
+      expect(old.ready).toBe(false);
+      expect((await page.request.get(old.playlist_url)).status()).toBe(404);
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'running');
+      const replacement = await page.locator('form[data-playback-troubleshooting]').getAttribute('data-preview-id');
+      expect(replacement).not.toBe(oldId);
+      await page.request.post(`/api/troubleshoot/playback/previews/${oldId}/stop`);
+      expect((await page.request.get(old.playlist_url)).status()).toBe(404);
+      expect((await (await page.request.get(`/api/troubleshoot/playback/previews/${replacement}`)).json()).state).toBe('running');
+      await page.locator('[data-preview-stop]').click();
+      // A short native benchmark may complete between the status read and
+      // Stop. Both terminal outcomes must confirm cleanup, without changing IDs.
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', /^(cancelled|completed)$/);
+      expect((await (await page.request.get(`/api/troubleshoot/playback/previews/${replacement}`)).json()).cleanup_confirmed).toBe(true);
+    });
+  }
+
+  test('lost admission response allows retry without cancelling an unknown producer', async ({ page }) => {
+    await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+    await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+    await page.locator('input[name="seekSeconds"]').fill('0');
+    let owned: string | undefined;
+    await page.route('**/api/troubleshoot/playback/previews?**', async route => {
+      const response = await route.fetch();
+      owned = (await response.json()).id;
+      await route.abort('connectionfailed');
+    }, { times: 1 });
+    try {
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-preview-state', 'network');
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      expect(owned).toBeTruthy();
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-preview-status]')).toContainText('already running');
+      await expect(page.locator('[data-preview-stop]')).toBeDisabled();
+      const active = await (await page.request.get(`/api/troubleshoot/playback/previews/${owned}`)).json();
+      expect(['queued', 'running']).toContain(active.state);
+    } finally {
+      if (owned) {
+        await page.request.post(`/api/troubleshoot/playback/previews/${owned}/stop`);
+        await expect.poll(async () => (await (await page.request.get(`/api/troubleshoot/playback/previews/${owned}`)).json()).cleanup_confirmed).toBe(true);
+      }
+    }
+  });
+
+  test('server-rendered Play and Stop work without JavaScript', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+    try {
+      const page = await context.newPage();
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+      await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+      await page.locator('input[name="seekSeconds"]').fill('0');
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page).toHaveURL(/previewId=[a-f0-9-]{36}/);
+      const owned = new URL(page.url()).searchParams.get('previewId');
+      await page.locator('[data-preview-stop]').click();
+      await expect(page).toHaveURL(new RegExp(`previewId=${owned}`));
+      await expect.poll(async () => (await (await page.request.get(`/api/troubleshoot/playback/previews/${owned}`)).json()).state).toBe('cancelled');
+      await page.locator('[data-preview-refresh]').click();
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-operation-state', 'cancelled');
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+    } finally { await context.close(); }
   });
 
   test('media sample ZIP preserves alternate audio and embedded subtitles', async ({ page }) => {
@@ -341,10 +440,11 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
       const requests: string[] = [];
       page.on('request', request => {
-        if (new URL(request.url()).pathname === '/api/troubleshoot/playback.m3u8') requests.push(request.url());
+        if (new URL(request.url()).pathname === '/api/troubleshoot/playback/previews') requests.push(request.url());
       });
       await page.getByRole('button', { name: 'Play', exact: true }).click();
-      await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+      await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.currentTime),
+        { timeout: 15_000 }).toBeGreaterThan(0);
       await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-preview-engine', 'hlsjs');
       expect(requests).toHaveLength(1);
       const query = new URL(requests[0]).searchParams;
@@ -455,7 +555,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
       await page.locator('input[name="seekSeconds"]').fill('9');
       const request = page.waitForRequest(request =>
-        new URL(request.url()).pathname === '/api/troubleshoot/playback.m3u8');
+        new URL(request.url()).pathname === '/api/troubleshoot/playback/previews');
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       expect(new URL((await request).url()).searchParams.get('musicVideoCreditsTemplate'))
         .toBe('_default.ass');
@@ -491,8 +591,10 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     try {
       const page = await context.newPage();
       let submitted: URL | undefined;
-      await page.route('**/api/troubleshoot/playback.m3u8?**', route => {
+      await page.route('**/admin-api/troubleshoot/playback/start', route => {
+        expect(route.request().method()).toBe('POST');
         submitted = new URL(route.request().url());
+        submitted.search = route.request().postData() ?? '';
         return route.fulfill({ contentType: 'text/plain', body: 'Captured credits submission' });
       });
       await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
@@ -518,10 +620,12 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     try {
       const page = await context.newPage();
       let submitted: URL | undefined;
-      // Capture the native browser's GET serialization; runtime execution is
+      // Capture the native browser's POST serialization; runtime execution is
       // covered above without interception.
-      await page.route('**/api/troubleshoot/playback.m3u8?**', route => {
+      await page.route('**/admin-api/troubleshoot/playback/start', route => {
+        expect(route.request().method()).toBe('POST');
         submitted = new URL(route.request().url());
+        submitted.search = route.request().postData() ?? '';
         return route.fulfill({ contentType: 'text/plain', body: 'Captured preview submission' });
       });
       await page.goto(`/system/troubleshooting/playback?mediaItem=${id}&subtitleId=${id}`);

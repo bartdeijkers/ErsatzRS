@@ -47,7 +47,7 @@ ersatzrs-platform = { path = "../ersatzrs-platform", version = "1.1.0" }
 ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "1.1.0" }
 ersatzrs-scheduler = { path = "../ersatzrs-scheduler", version = "1.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "signal", "sync", "time"] }
-tokio-util = { version = "0.7", features = ["io"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
 # Keep axum aligned with leptos_axum and enable Multipart extraction for image upload routes.
 axum = { version = "0.8", features = ["multipart"] }
 tower = { version = "0.5", features = ["util"] }

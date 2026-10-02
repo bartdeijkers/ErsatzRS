@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
+    Form,
 };
 use ersatzrs_app::{AdminTroubleshootingRuntimeError, PlaybackPreviewRequest};
 use ersatzrs_domain::StreamingEngine;
@@ -118,6 +119,83 @@ pub async fn playback_preview(
             tracing::warn!(%error, "failed to start playback troubleshooting preview");
             preview_startup_failure(StatusCode::INTERNAL_SERVER_ERROR, &error)
         }
+    }
+}
+
+pub async fn queue_preview(
+    State(state): State<AppState>,
+    Query(query): Query<PlaybackPreviewQuery>,
+) -> Response {
+    match state.application.queue_playback_preview(query.into()).await {
+        Ok(status) => (
+            StatusCode::ACCEPTED,
+            [(header::CACHE_CONTROL, "no-store")],
+            axum::Json(status),
+        )
+            .into_response(),
+        Err(error) => preview_startup_failure(StatusCode::CONFLICT, &error.to_string()),
+    }
+}
+
+pub async fn owned_preview_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Response {
+    match state.application.playback_preview_status(id).await {
+        Ok(Some(status)) => {
+            ([(header::CACHE_CONTROL, "no-store")], axum::Json(status)).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn stop_owned_preview(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    match state.application.stop_playback_preview(id).await {
+        Ok(Some(status)) => {
+            ([(header::CACHE_CONTROL, "no-store")], axum::Json(status)).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn owned_preview_file(
+    State(state): State<AppState>,
+    Path((id, filename)): Path<(String, String)>,
+) -> Response {
+    match state
+        .application
+        .playback_preview_file(id, filename.clone())
+        .await
+    {
+        Ok(Some(bytes)) => {
+            let mut response = crate::transport::iptv::hls::hls_file_response(&filename, bytes);
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn start_preview_form(
+    State(state): State<AppState>,
+    Form(query): Form<PlaybackPreviewQuery>,
+) -> Response {
+    match state.application.queue_playback_preview(query.into()).await {
+        Ok(status) => Redirect::to(&status.return_url).into_response(),
+        Err(error) => preview_startup_failure(StatusCode::CONFLICT, &error.to_string()),
+    }
+}
+
+pub async fn stop_preview_form(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    match state.application.stop_playback_preview(id).await {
+        Ok(Some(status)) => Redirect::to(&status.return_url).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

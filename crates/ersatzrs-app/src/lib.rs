@@ -24,12 +24,12 @@ pub use ports::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
     AvailableAddonRead, BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError,
     InstalledAddonRead, MediaSourceRuntime, MediaSourceRuntimeError, PlaybackPreviewLog,
-    PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError, PlexPinFlow,
-    RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
-    RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
-    RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
-    ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
-    SourceAddonRouting, WindowsStartupStatus,
+    PlaybackPreviewRequest, PlaybackPreviewState, PlaybackPreviewStatus, PlayoutBuildQueue,
+    PlayoutBuildQueueError, PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit,
+    RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime,
+    RemoteStreamPlaylistRuntimeError, RemoteStreamPlaylistTroubleshootingRead, ScanRuntime,
+    ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths,
+    SettingsRuntime, SettingsRuntimeError, SourceAddonRouting, WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -2271,6 +2271,51 @@ impl ApplicationServices {
         self.ports
             .troubleshooting_runtime()
             .start_playback_preview(request)
+            .await
+    }
+
+    /// Queue a bounded ephemeral diagnostic preview without holding the request.
+    pub async fn queue_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> std::result::Result<PlaybackPreviewStatus, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .queue_playback_preview(request)
+            .await
+    }
+
+    /// Read the lifecycle and diagnostics belonging to one preview ID.
+    pub async fn playback_preview_status(
+        &self,
+        id: String,
+    ) -> std::result::Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .playback_preview_status(id)
+            .await
+    }
+
+    /// Cancel one owned preview without touching live channel producers.
+    pub async fn stop_playback_preview(
+        &self,
+        id: String,
+    ) -> std::result::Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .stop_playback_preview(id)
+            .await
+    }
+
+    /// Read a safe HLS member under the current preview generation fence.
+    pub async fn playback_preview_file(
+        &self,
+        id: String,
+        filename: String,
+    ) -> std::result::Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .playback_preview_file(id, filename)
             .await
     }
 

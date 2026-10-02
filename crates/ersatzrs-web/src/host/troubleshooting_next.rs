@@ -33,12 +33,19 @@ pub(super) async fn start(
     let (sender, receiver) = oneshot::channel();
     tokio::spawn(async move {
         let mut ready = Some(sender);
-        if Box::pin(run(&state, &query, &mut ownership, &mut ready))
-            .await
-            .is_err()
-        {
-            // Underlying provider/runtime errors may contain private inputs.
+        let job = lifecycle::job(&ownership);
+        let result = Box::pin(run(&state, &query, &mut ownership, &mut ready)).await;
+        if let Err(error) = &result {
             tracing::warn!("Next troubleshooting preview failed");
+            if let Some(job) = &job {
+                if !job.cancel.is_cancelled() {
+                    job.fail(lifecycle::startup_code(&error.to_string()));
+                }
+            }
+        }
+        lifecycle::complete_ownership(ownership, job, result.is_ok(), &troubleshooting_folder())
+            .await;
+        if result.is_err() {
             notify(
                 &mut ready,
                 Err("Next troubleshooting preview could not start"),
@@ -73,12 +80,13 @@ async fn select(
         if !channel.is_enabled {
             return Err(PreviewNotFound("channel is disabled").into());
         }
-        let at = parse_preview_start(query.start.as_deref()).unwrap_or_else(Utc::now);
+        let at = requested_preview_start(query.start.as_deref())?;
         let mut media = state
             .next_engine
             .troubleshooting_channel_media(&channel, at)
             .await?
             .ok_or(PreviewNotFound("channel has no active playout item"))?;
+        let at = programme_preview_time(query, media.item.start, media.item.finish, at)?;
         join_channel_item(&mut media.item, at, start)?;
         (channel, media, Some(at))
     } else {
@@ -236,6 +244,9 @@ async fn prepare_inner(
     SelectionLog,
 )> {
     let selected = select(state, query).await?;
+    state
+        .record_preview_selection(selected.selected_at.unwrap_or(selected.playback_start))
+        .await;
     let runtime = state.ffmpeg_runtime.read().await.clone();
     let replacements = stream::load_path_replacements(&state.repositories.media_source).await?;
     let diagnostics = SelectionLog::default();
@@ -418,10 +429,15 @@ async fn run_admitted(
     session: &mut Option<uuid::Uuid>,
 ) -> ApiResult<()> {
     let deadline = Instant::now() + Duration::from_secs(30);
-    let (manifest, configuration, number, diagnostics) =
-        timeout_at(deadline, prepare(state, query, paths, deadline, session))
-            .await
-            .map_err(|_| "Next troubleshooting preparation timed out")??;
+    let cancellation = lifecycle::job(ownership)
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let (manifest, configuration, number, diagnostics) = tokio::select! {
+        prepared = timeout_at(deadline, prepare(state, query, paths, deadline, session)) => {
+            prepared.map_err(|_| "Next troubleshooting preparation timed out")??
+        }
+        () = cancellation.cancelled() => return Err("Next troubleshooting cancelled".into()),
+    };
     let mut process = match NextProcess::start_troubleshooting_with_session(
         &paths.executable,
         &number,
@@ -449,6 +465,9 @@ async fn run_admitted(
             return Err(error.into());
         }
     };
+    if let Some(job) = lifecycle::job(ownership) {
+        job.running();
+    }
     let result = supervise(&mut process, &paths.output, ownership, ready, &diagnostics).await;
     if matches!(**ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
         let _ = manifest.keep();
@@ -463,28 +482,38 @@ async fn supervise(
     ready: &mut Readiness,
     diagnostics: &SelectionLog,
 ) -> ApiResult<()> {
-    let result = timeout_at(Instant::now() + Duration::from_mins(2), async {
+    let cancellation = lifecycle::job(ownership)
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let result = tokio::select! {
+        result = timeout_at(Instant::now() + Duration::from_mins(2), async {
         tokio::select! {
             status = process.wait() => {
                 let status = status?;
                 if status.success() && output_ready(working).await? {
+                    if let Some(job) = lifecycle::job(ownership) { job.ready(); }
                     notify(ready, Ok(()));
                 }
                 Ok::<_, Box<dyn std::error::Error + Send + Sync>>(status)
             }
             result = wait_output(working) => {
                 result?;
-                notify(ready, Ok(()));
+                if let Some(job) = lifecycle::job(ownership) { job.ready(); }
+                    notify(ready, Ok(()));
                 Ok(process.wait().await?)
             }
         }
     })
-    .await;
+        => result,
+        () = cancellation.cancelled() => Ok(Err("Next troubleshooting cancelled".into())),
+    };
     let success = matches!(&result, Ok(Ok(status)) if status.success());
     if !success && process.stop().await.is_err() {
         **ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
     }
-    let outcome = if success {
+    let outcome = if cancellation.is_cancelled() {
+        "Next troubleshooting cancelled"
+    } else if success {
         "Next troubleshooting completed"
     } else {
         "Next troubleshooting failed or timed out"

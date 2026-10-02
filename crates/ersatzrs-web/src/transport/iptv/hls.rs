@@ -1358,7 +1358,7 @@ async fn serve_troubleshooting_hls_file(filename: &str) -> Response {
     }
 }
 
-fn hls_file_response(filename: &str, body: Vec<u8>) -> Response {
+pub(crate) fn hls_file_response(filename: &str, body: Vec<u8>) -> Response {
     let mut response = body.into_response();
     match std::path::Path::new(filename)
         .extension()

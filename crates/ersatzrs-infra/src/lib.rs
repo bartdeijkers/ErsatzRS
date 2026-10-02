@@ -67,6 +67,7 @@ pub mod hls_worker;
 pub mod jellyfin;
 pub mod logging;
 pub mod maintenance;
+pub mod managed_process;
 pub mod media_server;
 pub mod metadata;
 pub(crate) mod metadata_query;

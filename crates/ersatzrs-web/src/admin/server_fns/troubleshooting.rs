@@ -302,6 +302,48 @@ pub async fn list_block_playout_history(
         .collect()
 }
 
+/// Shared SSR/WASM view of an owned ephemeral preview; no native runtime types cross the island boundary.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct OwnedPreviewView {
+    pub id: String,
+    pub state: String,
+    pub ready: bool,
+    pub cleanup_confirmed: bool,
+    pub playlist_url: String,
+    pub selected_at: String,
+    pub error_code: String,
+    pub return_url: String,
+    pub log: String,
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn load_owned_preview_status(
+    id: String,
+) -> Result<Option<OwnedPreviewView>, ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    let status = state.application.playback_preview_status(id).await?;
+    Ok(status.map(|status| OwnedPreviewView {
+        id: status.id,
+        state: match status.state {
+            ersatzrs_app::PlaybackPreviewState::Queued => "queued",
+            ersatzrs_app::PlaybackPreviewState::Running => "running",
+            ersatzrs_app::PlaybackPreviewState::Completed => "completed",
+            ersatzrs_app::PlaybackPreviewState::Failed => "failed",
+            ersatzrs_app::PlaybackPreviewState::Cancelling => "cancelling",
+            ersatzrs_app::PlaybackPreviewState::Cancelled => "cancelled",
+        }
+        .into(),
+        ready: status.ready,
+        cleanup_confirmed: status.cleanup_confirmed,
+        playlist_url: status.playlist_url,
+        selected_at: status.selected_at.unwrap_or(status.created_at),
+        error_code: status.error_code.unwrap_or_default(),
+        return_url: status.return_url,
+        log: status.log.map(|log| log.text).unwrap_or_default(),
+    }))
+}
+
 #[server(prefix = "/admin-api")]
 pub async fn load_playback_troubleshooting_context(
     media_item_id: i64,

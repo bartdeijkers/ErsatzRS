@@ -4,13 +4,14 @@ use leptos_router::hooks::use_query_map;
 use crate::admin::i18n::{tr, unable_to_load_playback_troubleshooting, TextKey};
 use crate::admin::server_fns::troubleshooting::{
     list_block_playout_history, list_block_playout_options, list_blocks_for_playout,
-    load_mpeg_troubleshooting_context, load_playback_troubleshooting_context,
-    load_troubleshooting_report, validate_sequential_schedule_file, BlockPlayoutHistoryRow,
-    BlockPlayoutOption, MpegTroubleshootingContext, MpegTroubleshootingReport,
-    MpegTroubleshootingStatus, MpegTsduckAnalysis, MpegTsduckStabilityLevel,
-    MpegTsduckStabilitySample, PlaybackTroubleshootingContext, PlaybackTroubleshootingMode,
-    TroubleshootingBlockRow, TroubleshootingReport, YamlValidationResult,
-    MPEG_DEFAULT_SAMPLE_DURATION_SECONDS, MPEG_MAX_SAMPLE_DURATION_SECONDS,
+    load_mpeg_troubleshooting_context, load_owned_preview_status,
+    load_playback_troubleshooting_context, load_troubleshooting_report,
+    validate_sequential_schedule_file, BlockPlayoutHistoryRow, BlockPlayoutOption,
+    MpegTroubleshootingContext, MpegTroubleshootingReport, MpegTroubleshootingStatus,
+    MpegTsduckAnalysis, MpegTsduckStabilityLevel, MpegTsduckStabilitySample, OwnedPreviewView,
+    PlaybackTroubleshootingContext, PlaybackTroubleshootingMode, TroubleshootingBlockRow,
+    TroubleshootingReport, YamlValidationResult, MPEG_DEFAULT_SAMPLE_DURATION_SECONDS,
+    MPEG_MAX_SAMPLE_DURATION_SECONDS,
 };
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
@@ -525,32 +526,41 @@ pub fn PlaybackTroubleshootingPage() -> impl IntoView {
             .unwrap_or_default()
     });
 
-    let context: Resource<Result<PlaybackTroubleshootingContext, ServerFnError>> =
-        Resource::new_blocking(
-            move || {
-                (
-                    media_item_id,
-                    channel_id,
-                    preferred_audio_title.clone(),
-                    selected_subtitle_id,
-                )
-            },
-            |(media_item, channel, preferred_audio, subtitle_id)| async move {
-                load_playback_troubleshooting_context(
-                    media_item,
-                    channel,
-                    preferred_audio,
-                    subtitle_id,
-                )
-                .await
-            },
-        );
+    let preview_id = query.with_untracked(|params| params.get("previewId").unwrap_or_default());
+    let context: Resource<
+        Result<(PlaybackTroubleshootingContext, Option<OwnedPreviewView>), ServerFnError>,
+    > = Resource::new_blocking(
+        move || {
+            (
+                media_item_id,
+                channel_id,
+                preferred_audio_title.clone(),
+                selected_subtitle_id,
+                preview_id.clone(),
+            )
+        },
+        |(media_item, channel, preferred_audio, subtitle_id, preview)| async move {
+            let context = load_playback_troubleshooting_context(
+                media_item,
+                channel,
+                preferred_audio,
+                subtitle_id,
+            )
+            .await?;
+            let preview = if preview.is_empty() {
+                None
+            } else {
+                load_owned_preview_status(preview).await?
+            };
+            Ok((context, preview))
+        },
+    );
 
     view! {
         <SystemPageLayout>
             <Suspense fallback=move || view! { <p>{tr(TextKey::LoadingMediaInfo)}</p> }>
                 {move || match context.get() {
-                    Some(Ok(context)) => render_playback_troubleshooting(context),
+                    Some(Ok((context, preview))) => render_playback_troubleshooting(context, preview),
                     Some(Err(error)) => view! {
                         <div class=style::page>
                             <p style="margin:0;color:var(--color-error,#f87171)">
@@ -565,7 +575,10 @@ pub fn PlaybackTroubleshootingPage() -> impl IntoView {
     }
 }
 
-fn render_playback_troubleshooting(context: PlaybackTroubleshootingContext) -> AnyView {
+fn render_playback_troubleshooting(
+    context: PlaybackTroubleshootingContext,
+    preview: Option<OwnedPreviewView>,
+) -> AnyView {
     let is_media_item = context.mode == PlaybackTroubleshootingMode::MediaItem;
     let is_channel = context.mode == PlaybackTroubleshootingMode::Channel;
     let title = if context.title.trim().is_empty() {
@@ -611,7 +624,7 @@ fn render_playback_troubleshooting(context: PlaybackTroubleshootingContext) -> A
                         </section>
                     }.into_any()
                 } else {
-                    render_playback_form(context, default_seek)
+                    render_playback_form(context, default_seek, preview)
                 }}
             </div>
         </div>
@@ -619,15 +632,26 @@ fn render_playback_troubleshooting(context: PlaybackTroubleshootingContext) -> A
     .into_any()
 }
 
-fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: String) -> AnyView {
+fn render_playback_form(
+    context: PlaybackTroubleshootingContext,
+    default_seek: String,
+    preview: Option<OwnedPreviewView>,
+) -> AnyView {
     let is_media_item = context.mode == PlaybackTroubleshootingMode::MediaItem;
     let stream_selectors_disabled = context.stream_selectors.is_empty();
     let preferred_audio_title = context.preferred_audio_title.clone();
     let selected_subtitle_id = context.selected_subtitle_id;
     let is_music_video = context.kind == "Music Video";
 
+    let preview = preview.unwrap_or_default();
+    let log = if preview.log.is_empty() && !preview.error_code.is_empty() {
+        preview_failure_label(&preview.error_code).to_owned()
+    } else {
+        preview.log.clone()
+    };
+    let preview_id = preview.id.clone();
     view! {
-        <form method="get" action="/api/troubleshoot/playback.m3u8" class=style::playbackForm data-playback-troubleshooting>
+        <form method="post" action="/admin-api/troubleshoot/playback/start" class=style::playbackForm data-playback-troubleshooting data-preview-id=preview_id>
             <input type="hidden" name="mediaItem" value=context.media_item_id.to_string()/>
             <input type="hidden" name="channel" value=context.channel_id.to_string()/>
             <input type="hidden" name="streamingMode" value="1"/>
@@ -694,15 +718,10 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                     </label>
                 }.into_any()
             } else {
-                view! {
-                    <label class=style::playbackField>
-                        <span>{tr(TextKey::DateAndTime)}</span>
-                        <input class=style::input type="datetime-local" name="start"/>
-                    </label>
-                }.into_any()
+                playback_channel_seek_fields().into_any()
             }}
 
-            {playback_preview_player()}
+            {playback_preview_player(preview)}
 
             <section class=style::wideSection>
                 <h2 class=style::subheading>{tr(TextKey::Logs)}</h2>
@@ -710,7 +729,7 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
                     {tr(TextKey::PlaybackSpeed)}": "<output></output>"x"
                 </p>
                 <div class=style::divider></div>
-                <textarea class=style::logs readonly rows="20"></textarea>
+                <textarea class=style::logs readonly rows="20">{log}</textarea>
             </section>
 
             {is_media_item.then(|| view! {
@@ -722,6 +741,20 @@ fn render_playback_form(context: PlaybackTroubleshootingContext, default_seek: S
         </form>
     }
     .into_any()
+}
+
+fn playback_channel_seek_fields() -> impl IntoView {
+    view! {
+        <label class=style::playbackField>
+            <span>{tr(TextKey::DateAndTime)}" (UTC)"</span>
+            <input class=style::input type="datetime-local" name="start" value=chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()/>
+        </label>
+        <label class=style::playbackField>
+            <span>{tr(TextKey::PreviewProgrammeSeek)}</span>
+            <input class=style::input type="number" min="0" name="seekSeconds" value=""/>
+            <small>{tr(TextKey::PreviewProgrammeSeekHelp)}</small>
+        </label>
+    }
 }
 
 fn playback_credits_field(templates: Vec<String>) -> impl IntoView {
@@ -756,9 +789,47 @@ fn playback_watermark_field(
     }
 }
 
-fn playback_preview_player() -> impl IntoView {
+fn preview_operation_label(state: &str) -> &'static str {
+    tr(match state {
+        "queued" => TextKey::PreviewQueued,
+        "running" => TextKey::PreviewRunning,
+        "completed" => TextKey::PreviewCompleted,
+        "failed" => TextKey::Failed,
+        "cancelling" => TextKey::PreviewCancelling,
+        "cancelled" => TextKey::PreviewStopped,
+        _ => TextKey::PreviewIdle,
+    })
+}
+
+fn preview_failure_label(code: &str) -> &'static str {
+    tr(match code {
+        "configuration" => TextKey::PreviewConfigurationInvalid,
+        "capacity" => TextKey::PreviewCapacityReached,
+        "cleanup" => TextKey::PreviewCleanupUnconfirmed,
+        _ => TextKey::PreviewStartupFailed,
+    })
+}
+
+fn playback_preview_player(preview: OwnedPreviewView) -> impl IntoView {
+    let active = matches!(preview.state.as_str(), "queued" | "running" | "cancelling");
+    let blocked = preview.state == "failed" && !preview.cleanup_confirmed;
+    let stop = format!("/admin-api/troubleshoot/playback/{}/stop", preview.id);
+    let timestamp = preview.selected_at.clone();
+    let label = preview_operation_label(&preview.state);
+    let player_label = if preview.error_code.is_empty() {
+        tr(TextKey::PreviewIdle)
+    } else {
+        preview_failure_label(&preview.error_code)
+    };
     view! {
         <section class=style::wideSection data-channel-preview data-preview-state="idle"
+            data-operation-state=preview.state
+            data-message-queued=tr(TextKey::PreviewQueued)
+            data-message-running=tr(TextKey::PreviewRunning)
+            data-message-completed=tr(TextKey::PreviewCompleted)
+            data-message-failed=tr(TextKey::Failed)
+            data-message-cancelling=tr(TextKey::PreviewCancelling)
+            data-message-cancelled=tr(TextKey::PreviewStopped)
             data-message-idle=tr(TextKey::PreviewIdle)
             data-message-connecting=tr(TextKey::PreviewConnecting)
             data-message-live=tr(TextKey::PreviewLive)
@@ -778,12 +849,18 @@ fn playback_preview_player() -> impl IntoView {
         >
             <h2 class=style::subheading>{tr(TextKey::Preview)}</h2>
             <div class=style::divider></div>
-            <button class=style::primaryButton type="submit">{tr(TextKey::Play)}</button>
+            <button class=style::primaryButton type="submit" data-preview-play disabled=active || blocked>{tr(TextKey::Play)}</button>
+            <button class=style::secondaryButton type="submit" data-preview-stop formaction=stop formmethod="post" formnovalidate disabled=!active || preview.state == "cancelling">{tr(TextKey::StopPreview)}</button>
+            <a class=style::secondaryButton data-preview-refresh href=preview.return_url hidden=preview.id.is_empty()>{tr(TextKey::Refresh)}</a>
+            <p data-preview-operation-status aria-live="polite">{label}</p>
+            <p data-preview-timestamp hidden=timestamp.is_empty()>
+                {tr(TextKey::PreviewTimestamp)}" "<time datetime=timestamp.clone()>{timestamp.clone()}</time>
+            </p>
             <div class=style::previewFrame>
-                <video controls playsinline preload="none"></video>
+                <video controls playsinline preload="none" src=if preview.ready { preview.playlist_url } else { String::new() }></video>
                 <div class=style::previewSpacer></div>
             </div>
-            <p data-preview-status aria-live="polite">{tr(TextKey::PreviewIdle)}</p>
+            <p data-preview-status aria-live="polite">{player_label}</p>
         </section>
     }
 }
