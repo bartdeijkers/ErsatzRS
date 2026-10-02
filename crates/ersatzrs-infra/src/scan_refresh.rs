@@ -1,6 +1,7 @@
 //! Restart-safe scan-to-playout refresh intent persistence.
 
 use chrono::Utc;
+use ersatzrs_core::scheduling::{PlayoutPublicationGuard, PlayoutSourceRevision};
 use ersatzrs_domain::{EntityId, ScanPlayoutRefreshReason};
 use sqlx::{Row, Transaction};
 
@@ -42,6 +43,51 @@ const SQLITE_REFRESH_INTENT_UPSERT_SQL: &str = r#"INSERT INTO "ScanPlayoutRefres
        "Reason" = excluded."Reason",
        "Diagnostic" = NULL,
        "UpdatedAt" = excluded."UpdatedAt""#;
+
+/// Capture source work before reading any scheduling inputs.
+///
+/// # Errors
+/// Returns a storage error if the revision cannot be loaded.
+pub async fn publication_guard(
+    pool: &DbPool,
+    playout_id: EntityId,
+) -> Result<PlayoutPublicationGuard, sqlx::Error> {
+    let revision: Option<(String, i64)> = sqlx::query_as(
+        r#"SELECT "CreatedAt", "Generation" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(PlayoutPublicationGuard {
+        playout_id,
+        source_revision: revision.map(|(identity, generation)| PlayoutSourceRevision {
+            identity,
+            generation,
+        }),
+    })
+}
+
+pub(crate) async fn publication_guard_matches(
+    tx: &mut Transaction<'_, Db>,
+    playout_id: EntityId,
+    guard: &PlayoutPublicationGuard,
+) -> Result<bool, sqlx::Error> {
+    if guard.playout_id != playout_id {
+        return Ok(false);
+    }
+    let revision: Option<(String, i64)> = sqlx::query_as(
+        r#"SELECT "CreatedAt", "Generation" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(
+        revision.map(|(identity, generation)| PlayoutSourceRevision {
+            identity,
+            generation,
+        }) == guard.source_revision,
+    )
+}
 
 /// One durable refresh recovered after a process restart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -326,11 +372,12 @@ pub async fn recoverable_refreshes(
     let rows = sqlx::query(
         r#"SELECT "PlayoutId", "Reason"
            FROM "ScanPlayoutRefreshIntent"
-           WHERE "State" IN (?, ?)
+           WHERE "State" IN (?, ?) AND ("NextAttempt" IS NULL OR "NextAttempt" <= ?)
            ORDER BY "PlayoutId""#,
     )
     .bind(INTENT_STATE_PENDING)
     .bind(INTENT_STATE_BUILDING)
+    .bind(crate::repositories::common::encode_datetime(Utc::now()))
     .fetch_all(pool)
     .await?;
     rows.into_iter()
@@ -357,10 +404,11 @@ pub async fn pending_refreshes(
     let rows = sqlx::query(
         r#"SELECT "PlayoutId", "Reason"
            FROM "ScanPlayoutRefreshIntent"
-           WHERE "State" = ?
+           WHERE "State" = ? AND ("NextAttempt" IS NULL OR "NextAttempt" <= ?)
            ORDER BY "PlayoutId""#,
     )
     .bind(INTENT_STATE_PENDING)
+    .bind(crate::repositories::common::encode_datetime(Utc::now()))
     .fetch_all(pool)
     .await?;
     rows.into_iter()
@@ -455,6 +503,43 @@ pub async fn fail_refresh(
     Ok(())
 }
 
+/// Retry an unchanged intent generation after a transient publication race.
+/// New observations preserve this cooldown; stale builders cannot defer them.
+///
+/// # Errors
+/// Returns a storage error if retry eligibility cannot be persisted.
+pub async fn defer_refresh(
+    pool: &DbPool,
+    playout_id: EntityId,
+    generation: i64,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    let mut tx = begin_write(pool).await?;
+    let attempts: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "Attempts" FROM "ScanPlayoutRefreshIntent"
+        WHERE "PlayoutId" = ? AND "Generation" = ? AND "State" = ?"#,
+    )
+    .bind(playout_id)
+    .bind(generation)
+    .bind(INTENT_STATE_BUILDING)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(attempts) = attempts {
+        let delay = 30_i64
+            .saturating_mul(1_i64 << attempts.clamp(0, 4))
+            .min(300);
+        sqlx::query(r#"UPDATE "ScanPlayoutRefreshIntent" SET "State" = ?, "Attempts" = "Attempts" + 1,
+            "NextAttempt" = ?, "Diagnostic" = 'scripted-source-publication-deferred', "UpdatedAt" = ?
+            WHERE "PlayoutId" = ? AND "Generation" = ?"#)
+            .bind(INTENT_STATE_PENDING)
+            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::seconds(delay)))
+            .bind(now.to_rfc3339()).bind(playout_id).bind(generation)
+            .execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{sync::Arc, time::Duration};
@@ -479,6 +564,54 @@ mod tests {
             .await
             .expect("disable fixture foreign keys");
         pool
+    }
+
+    #[tokio::test]
+    async fn publication_retry_preserves_backoff_and_newer_generations() {
+        let pool = pool().await;
+        let mut tx = begin_write(&pool).await.unwrap();
+        persist_unowned_refresh_intents(
+            &mut tx,
+            ScanPlayoutRefreshReason::ScriptedSourceChanged,
+            &[1],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let now = chrono::DateTime::from_timestamp(Utc::now().timestamp(), 0).unwrap();
+        for delay in [30, 60, 120, 240, 300, 300] {
+            let generation = mark_refresh_building(&pool, 1).await.unwrap().unwrap();
+            defer_refresh(&pool, 1, generation, now).await.unwrap();
+            let next: String = sqlx::query_scalar(
+                r#"SELECT "NextAttempt" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = 1"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                crate::repositories::common::decode_datetime("retry", &next).unwrap(),
+                now + chrono::Duration::seconds(delay)
+            );
+            assert!(pending_refreshes(&pool).await.unwrap().is_empty());
+        }
+        let before: (i64, String) = sqlx::query_as(r#"SELECT "Attempts", "NextAttempt" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = 1"#).fetch_one(&pool).await.unwrap();
+        let mut tx = begin_write(&pool).await.unwrap();
+        persist_unowned_refresh_intents(
+            &mut tx,
+            ScanPlayoutRefreshReason::ScriptedSourceChanged,
+            &[1],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        defer_refresh(&pool, 1, 1, now + chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        let after: (i64, String) = sqlx::query_as(r#"SELECT "Attempts", "NextAttempt" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = 1"#).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            before, after,
+            "new observations keep cooldown; a stale worker cannot extend it"
+        );
     }
 
     async fn concurrent_pool(max_connections: u32) -> (tempfile::TempDir, DbPool) {

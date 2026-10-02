@@ -477,9 +477,17 @@ async fn run_addon_media_list_maintenance(
     shutdown: CancellationToken,
 ) {
     let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
+    let mut refresh_interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    refresh_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             () = shutdown.cancelled() => break,
+            _ = refresh_interval.tick() => {
+                if let Err(error) = application.retry_pending_scan_playout_refreshes().await {
+                    tracing::warn!(%error, "failed to admit pending scan-triggered refreshes");
+                }
+                continue;
+            }
             _ = interval.tick() => {}
         }
 

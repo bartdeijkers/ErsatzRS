@@ -2,7 +2,7 @@ use super::*;
 use crate::scheduling::SchedulingMediaItem;
 use ersatzrs_domain::Playout;
 
-fn request() -> SchedulingRequest {
+pub(super) fn request() -> SchedulingRequest {
     let start = DateTime::parse_from_rfc3339("2026-04-15T23:59:00.1234567Z")
         .unwrap()
         .with_timezone(&Utc);
@@ -77,7 +77,7 @@ fn scripted_future_cursor_restores_rotation_across_day_and_fractional_seams() {
 }
 
 #[test]
-fn scripted_context_exposes_mode_and_fixed_start_without_changing_refresh_or_reset() {
+fn scripted_context_exposes_mode_and_effective_build_start() {
     let original = request();
     let first = ScriptedSchedulingEngine
         .schedule_script(
@@ -95,10 +95,11 @@ fn scripted_context_exposes_mode_and_fixed_start_without_changing_refresh_or_res
         next.playout.anchor = first.anchor.clone();
         next.reference_data.existing_items = first.added_items.clone();
         next.reference_data.existing_history = first.added_history.clone();
-        let expected_start = if mode == PlayoutBuildMode::Continue {
-            first.added_items[0].finish
-        } else {
+        next.reference_data.existing_scripted_checkpoints = first.scripted_checkpoints.clone();
+        let expected_start = if mode == PlayoutBuildMode::Reset {
             original.start
+        } else {
+            first.added_items[0].finish
         };
         let script = format!("assert(build_mode() == '{name}')\nassert(start_time() == '{}')\nassert(current_time() == start_time())\nadd_collection('a', 'series')\nadd_count('a', 1)\nassert(start_time() ~= current_time())", expected_start.to_rfc3339());
         let result = ScriptedSchedulingEngine

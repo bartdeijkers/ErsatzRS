@@ -524,10 +524,20 @@ struct ClassicCheckpointSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct ClassicMediaCheckpoint {
+pub(super) struct ClassicMediaCheckpoint {
     playback_order: PlaybackOrder,
     current_index: usize,
     ordered_items: Vec<ClassicMediaIdentity>,
+}
+
+impl ClassicMediaCheckpoint {
+    pub(super) fn is_valid(&self) -> bool {
+        self.current_index < self.ordered_items.len().max(1)
+    }
+
+    pub(super) fn matches_order(&self, order: PlaybackOrder) -> bool {
+        self.playback_order == order
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -540,6 +550,25 @@ pub(super) struct ClassicPlaylistCheckpoint {
     #[serde(default)]
     remaining_media_ids: Option<BTreeSet<EntityId>>,
     children: Vec<ClassicPlaylistChildCheckpoint>,
+}
+
+impl ClassicPlaylistCheckpoint {
+    pub(super) fn is_valid(&self) -> bool {
+        let ids = self
+            .children
+            .iter()
+            .flat_map(|child| child.ordered_items.iter().map(|item| item.media_item_id))
+            .collect::<BTreeSet<_>>();
+        self.child_index < self.children.len().max(1)
+            && self
+                .children
+                .iter()
+                .all(|child| child.current_index < child.ordered_items.len().max(1))
+            && self
+                .remaining_media_ids
+                .as_ref()
+                .is_some_and(|remaining| remaining.is_subset(&ids))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3041,7 +3070,7 @@ fn take_matching_media_item(
 /// scan added or removed members, keep every unconsumed surviving item ahead
 /// of newly-added items and already-consumed items so a shifted raw index can
 /// never replay a different shuffled row.
-fn restore_media_checkpoint(
+pub(super) fn restore_media_checkpoint(
     enumerator: &mut MediaEnumerator,
     checkpoint: &ClassicMediaCheckpoint,
 ) -> bool {
@@ -3092,6 +3121,14 @@ fn restore_media_checkpoint(
     enumerator.items = remaining;
     enumerator.set_index(0);
     true
+}
+
+pub(super) fn media_checkpoint(enumerator: &MediaEnumerator) -> ClassicMediaCheckpoint {
+    ClassicMediaCheckpoint {
+        playback_order: enumerator.playback_order,
+        current_index: enumerator.current_index(),
+        ordered_items: enumerator.items.iter().map(media_identity).collect(),
+    }
 }
 
 pub(super) fn playlist_checkpoint(playlist: &PlaylistEnumerator) -> ClassicPlaylistCheckpoint {

@@ -14,7 +14,7 @@ use ersatzrs_domain::{
     ChannelPlayoutMode, CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior,
     MarathonGroupBy, PlaybackOrder, Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap,
     PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    PlayoutScheduleKind, ProgramScheduleItem,
+    PlayoutScheduleKind, PlayoutScriptedCheckpoint, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,8 +33,8 @@ pub use classic::{
     ClassicSchedulingEngine,
 };
 pub use scripted::{
-    validate_scripted_timeline, ScriptedContentResolver, ScriptedScheduleCommand,
-    ScriptedSchedulingEngine,
+    validate_scripted_checkpoint, validate_scripted_timeline, ScriptedContentResolver,
+    ScriptedScheduleCommand, ScriptedSchedulingEngine,
 };
 pub use smart_shuffle::{
     block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
@@ -222,6 +222,24 @@ pub enum SchedulingContentSource {
     MediaItem(EntityId),
 }
 
+/// The source lookup actually performed by the Scripted engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScriptedSourceResolution {
+    Media,
+    Playlist,
+}
+
+/// Semantic source state captured with a successful Scripted build.
+/// Per-library projections let successful scans affect only their own changes,
+/// including additions to a previously empty selection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptedSourceDependency {
+    pub source: SchedulingContentSource,
+    pub resolution: ScriptedSourceResolution,
+    pub fingerprint: String,
+    pub library_fingerprints: BTreeMap<EntityId, String>,
+}
+
 impl SchedulingContentSource {
     /// Group already-resolved Marathon media using the shared playlist rules.
     #[must_use]
@@ -337,6 +355,7 @@ pub struct SchedulingReferenceData {
     pub classic_fixed_start_time_behavior: FixedStartTimeBehavior,
     pub existing_program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
     pub existing_classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
+    pub existing_scripted_checkpoints: Vec<PlayoutScriptedCheckpoint>,
     pub existing_fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
@@ -733,6 +752,9 @@ pub struct SchedulingRequest {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingResult {
+    /// Storage revision captured before loading build inputs. Production hosts
+    /// attach this guard; publication checks it before any persisted mutation.
+    pub publication_guard: Option<PlayoutPublicationGuard>,
     pub clear_items: bool,
     /// Classic Refresh keeps the already-built prefix through this checkpoint.
     pub retain_through: Option<DateTime<Utc>>,
@@ -749,9 +771,34 @@ pub struct SchedulingResult {
     /// Complete Classic state at each dated rebuild seam. Other engines leave
     /// this empty.
     pub classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
+    /// Scripted source state at every retained and generated item boundary.
+    pub scripted_checkpoints: Vec<PlayoutScriptedCheckpoint>,
+    /// Runtime-resolved SQL sources, published atomically with their timeline.
+    pub scripted_sources: Vec<ScriptedSourceDependency>,
     /// Fill-group enumerator state produced by Classic scheduling.
     pub fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub warnings: Vec<String>,
+}
+
+/// Source revision observed before a playout build reads its inputs.
+/// An absent revision also participates in the check: a newly queued source
+/// change invalidates a candidate built when no refresh was pending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlayoutPublicationGuard {
+    /// Playout whose inputs were observed.
+    pub playout_id: EntityId,
+    /// Identity and generation of pending source work, if any.
+    pub source_revision: Option<PlayoutSourceRevision>,
+}
+
+/// A generation together with the identity of its durable refresh lifecycle.
+/// Identity prevents a deleted and recreated generation from comparing equal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlayoutSourceRevision {
+    /// Stable identity of this refresh lifecycle, supplied by storage.
+    pub identity: String,
+    /// Monotonically increasing generation within that lifecycle.
+    pub generation: i64,
 }
 
 pub trait PlayoutSchedulingEngine {

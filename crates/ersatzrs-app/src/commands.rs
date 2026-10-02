@@ -5980,6 +5980,35 @@ pub struct PlayoutBuildBatchOutcome {
     pub coalesced: u32,
 }
 
+/// Queue the legacy per-playout action using the stored scheduler identity.
+/// Classic keeps its Refresh mapping; other schedulers retain explicit Reset.
+/// Invalid, missing and unscheduled playouts never acquire queued activity.
+pub async fn reset_playout(
+    id: EntityId,
+    repository: &dyn PlayoutRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<RequestPlayoutBuildOutcome> {
+    use ersatzrs_domain::PlayoutScheduleKind;
+
+    validate_positive_id(id, "playout_id")?;
+    let mode = match repository.schedule_kind_admin(id).await? {
+        PlayoutScheduleKind::Classic => PlayoutBuildMode::Refresh,
+        PlayoutScheduleKind::Block
+        | PlayoutScheduleKind::Sequential
+        | PlayoutScheduleKind::Scripted
+        | PlayoutScheduleKind::ExternalJson => PlayoutBuildMode::Reset,
+        PlayoutScheduleKind::None => {
+            return validation_error("playout_id", "Playout has no buildable scheduler");
+        }
+    };
+    Ok(request_playout_build(
+        RequestPlayoutBuild::new(id, mode),
+        queue,
+        operations,
+    ))
+}
+
 pub async fn reset_all_playouts(
     repository: &dyn PlayoutRepository,
     queue: &dyn PlayoutBuildQueue,

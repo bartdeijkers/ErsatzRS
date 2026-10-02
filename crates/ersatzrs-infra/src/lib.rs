@@ -85,6 +85,7 @@ pub mod remote_stream;
 pub mod repositories;
 pub(crate) mod runtime_identity;
 pub mod scan_refresh;
+pub mod scripted_dependencies;
 pub mod scripted_scheduling;
 pub mod startup_config;
 pub mod subtitle_cleanup;

@@ -15,6 +15,24 @@ release section when tagging a release.
 
 ### Fixed
 
+- Select per-playout rebuild behavior from the stored scheduler kind, preventing
+  stale or altered admin requests from choosing the wrong destructive action.
+  Reject candidates superseded by a newer durable source-refresh revision before
+  publication, preserving the existing timeline and pending work.
+  Persist Scripted programme-boundary checkpoints with the timeline, retain the
+  current programme group during Refresh and restore its source rotation before
+  replacing the future. Reject unsafe legacy or incompatible checkpoints and
+  expose restore-readiness failures through Health.
+  Retain actual runtime-resolved Scripted source dependencies, including empty
+  dynamic library/tag selections, with per-library change signatures. Continue
+  preserves the dependency baselines of its retained future. Successful local,
+  Plex, Jellyfin and Emby scans compare these selections through bounded durable
+  work, coalescing changed selections into Refresh while ignoring unchanged or
+  unrelated libraries. Comparison failures retain the timeline, retry with
+  backoff and appear in Health. Revalidate candidate selections before
+  publication and defer builds overlapping active library work, retaining
+  Refresh intent and retry eligibility across restarts.
+
 - Continue Scripted playouts from the persisted future timeline and restore
   series history at that cursor. Expose Lua build context, reject backward or
   overlapping candidates before atomic publication, and show failures in

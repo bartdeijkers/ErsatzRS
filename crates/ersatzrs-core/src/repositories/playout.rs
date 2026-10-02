@@ -161,6 +161,14 @@ pub struct SequentialPlayoutAdmin {
 #[async_trait]
 pub trait PlayoutRepository: Send + Sync {
     async fn get_with_anchor(&self, id: EntityId) -> Result<Playout>;
+    /// Load the authoritative scheduler kind for a bounded admin action.
+    /// Storage adapters should avoid loading the entire published timeline.
+    async fn schedule_kind_admin(
+        &self,
+        id: EntityId,
+    ) -> Result<ersatzrs_domain::PlayoutScheduleKind> {
+        Ok(self.get_with_anchor(id).await?.schedule_kind)
+    }
     async fn items_in_range(
         &self,
         playout_id: EntityId,

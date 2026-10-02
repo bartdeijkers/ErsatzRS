@@ -2,10 +2,10 @@ feature    = 'Scripted scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/ScriptedScheduling/`'
 rs_target  = '`crates/ersatzrs-core`'
 status     = 'Ported'
-adr        = ['0109']
+adr        = ['0109', '0110']
 summary    = '''
 Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`. Lua resolves database sources and overlays through the awaited scheduling worker; playlist continuation restores persisted parent and every child position.
-Continue starts at the persisted future tail and restores history at that cursor; Lua exposes build_mode() and immutable start_time(). Invalid intervals, ordering, overlaps and conflicting continuation state are rejected before atomic publication, with Activity, Health and retained-timeline feedback. Explicit continuity-safe Refresh remains owned by v111-findings-06.
+Continue starts at the persisted future tail and restores history at that cursor; Lua exposes build_mode() and immutable start_time(). Invalid intervals, ordering, overlaps and conflicting continuation state are rejected before atomic publication, with Activity, Health and retained-timeline feedback. Versioned boundary checkpoints support preserved-programme Refresh and Health readiness locally; runtime source dependencies and bounded successful-scan admission also pass local checks. Candidate source revalidation and managed-library guards retain deferred Refresh work with durable backoff. Explicit controls and live handover acceptance remain owned by v111-findings-06 and the scripted-continuity-safe-adaptation debt in playout-rebuild-on-impacting-changes.
 Continuous scripted builds remove played items older than the build start minus four hours, preserving the existing mirror-offset retention window. On-demand scripted builds defer played-item cleanup to the checkpoint-based time shifter.
 '''
 

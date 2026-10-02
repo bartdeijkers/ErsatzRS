@@ -3032,6 +3032,17 @@ impl ApplicationServices {
         commands::delete_playout(command, self.ports.playouts()).await
     }
 
+    /// Queue the existing reset action after loading the stored scheduler kind.
+    pub async fn reset_playout(&self, id: i64) -> Result<commands::RequestPlayoutBuildOutcome> {
+        commands::reset_playout(
+            id,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
     pub async fn reset_all_playouts(&self) -> Result<commands::PlayoutBuildBatchOutcome> {
         commands::reset_all_playouts(
             self.ports.playouts(),

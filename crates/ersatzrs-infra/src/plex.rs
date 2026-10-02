@@ -3194,7 +3194,7 @@ pub async fn sync_library_by_id_with_progress(
             })?;
 
     let service = PlexService::new();
-    match kind {
+    let synced = match kind {
         2 => {
             let synced = sync_plex_show_library_with_progress(
                 pool,
@@ -3247,7 +3247,9 @@ pub async fn sync_library_by_id_with_progress(
             )
             .await
         }
-    }
+    }?;
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
+    Ok(synced)
 }
 
 /// Synchronize one Plex show by the local `Show.Id`.
@@ -3335,6 +3337,7 @@ pub async fn sync_plex_show_by_id(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
     Ok(synced)
 }
 

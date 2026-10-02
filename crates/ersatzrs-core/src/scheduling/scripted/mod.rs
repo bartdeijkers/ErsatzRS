@@ -30,8 +30,12 @@ impl PlayoutSchedulingEngine for ScriptedSchedulingEngine {
     }
 }
 
+mod checkpoints;
+pub use checkpoints::validate_scripted_checkpoint;
 #[cfg(test)]
 mod continuation_tests;
+#[cfg(test)]
+mod refresh_tests;
 mod timeline;
 pub use timeline::validate_scripted_timeline;
 
@@ -78,7 +82,11 @@ impl ScriptedSchedulingEngine {
         resolver: Option<Arc<dyn ScriptedContentResolver>>,
         command: Option<&ScriptedScheduleCommand>,
     ) -> Result<SchedulingResult, SchedulingError> {
-        let start = timeline::continuation_start(&request)?;
+        let checkpoints::PreparedBuild {
+            start,
+            retain_through,
+            checkpoint,
+        } = checkpoints::prepare(&request)?;
         let (item_policies, legacy_policy) = Self::smart_shuffle_policies_from_script(script)?;
         request
             .reference_data
@@ -101,6 +109,9 @@ impl ScriptedSchedulingEngine {
         } else {
             super::SchedulingSmartShuffleState::default()
         };
+        let smart_shuffle_state = checkpoint
+            .as_ref()
+            .map_or(smart_shuffle_state, |context| context.smart_shuffle.clone());
         let state = Rc::new(RefCell::new(ScriptState::new(
             request.playout.id,
             start,
@@ -111,6 +122,10 @@ impl ScriptedSchedulingEngine {
         )));
         state.borrow_mut().resolver = resolver;
         state.borrow_mut().seed = request.playout.seed;
+        if let Some(context) = checkpoint {
+            state.borrow_mut().guide_group = context.guide_group;
+            state.borrow_mut().restore_checkpoint = Some(context);
+        }
         let lua = Lua::new();
         if let Some(command) = command {
             let arguments = lua
@@ -123,45 +138,7 @@ impl ScriptedSchedulingEngine {
         run_lua_script(&lua, script).map_err(lua_error)?;
 
         let mut state = state.borrow().clone();
-        validate_scripted_timeline(
-            state
-                .added_items
-                .iter()
-                .map(|item| (item.start, item.finish)),
-            Some(start),
-        )?;
-        let anchor_time = state
-            .added_items
-            .iter()
-            .map(|item| item.finish)
-            .max()
-            .unwrap_or(state.current_time);
-        let remove_before = (state.reference_data.channel_playout_mode
-            != ChannelPlayoutMode::OnDemand)
-            .then_some(request.start - Duration::hours(4));
-        Ok(SchedulingResult {
-            clear_items: matches!(
-                state.mode,
-                PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
-            ),
-            remove_before,
-            anchor: Some(PlayoutAnchor {
-                next_start: anchor_time,
-                context: state.reference_data.has_active_smart_shuffle().then(|| {
-                    serde_json::to_string(&ScriptedAnchorContext {
-                        version: scripted_anchor_context_version(),
-                        smart_shuffle: state.smart_shuffle_state.clone(),
-                    })
-                    .unwrap_or_default()
-                }),
-                ..PlayoutAnchor::default()
-            }),
-            added_items: std::mem::take(&mut state.added_items),
-            added_history: std::mem::take(&mut state.added_history),
-            history_to_remove: std::mem::take(&mut state.history_to_remove),
-            warnings: std::mem::take(&mut state.warnings),
-            ..SchedulingResult::default()
-        })
+        state.finish_result(request.start, retain_through)
     }
 
     /// Read native `set_smart_shuffle_policy(content_key, [[...json...]])`
@@ -544,9 +521,71 @@ struct ScriptState {
     last_progress_time: Option<DateTime<Utc>>,
     no_progress_counter: u32,
     smart_shuffle_state: super::SchedulingSmartShuffleState,
+    restore_checkpoint: Option<checkpoints::CheckpointContext>,
+    checkpoints: BTreeMap<DateTime<Utc>, checkpoints::CheckpointContext>,
 }
 
 impl ScriptState {
+    fn finish_result(
+        &mut self,
+        request_start: DateTime<Utc>,
+        retain_through: Option<DateTime<Utc>>,
+    ) -> Result<SchedulingResult, SchedulingError> {
+        self.validate_restored_sources()?;
+        if self.mode == PlayoutBuildMode::Refresh
+            && retain_through.is_some()
+            && self.start < self.finish
+            && self.added_items.is_empty()
+        {
+            return Err(SchedulingError::InvalidScriptedTimeline(
+                "Refresh produced no replacement programmes; correct the script or use explicit Reset".to_owned(),
+            ));
+        }
+        validate_scripted_timeline(
+            self.added_items
+                .iter()
+                .map(|item| (item.start, item.finish)),
+            Some(self.start),
+        )?;
+        let anchor_time = self
+            .added_items
+            .iter()
+            .map(|item| item.finish)
+            .max()
+            .unwrap_or(self.current_time);
+        if !self.added_items.is_empty() {
+            self.capture_checkpoint_at(anchor_time);
+        }
+        let remove_before = (self.reference_data.channel_playout_mode
+            != ChannelPlayoutMode::OnDemand)
+            .then_some(request_start - Duration::hours(4));
+        Ok(SchedulingResult {
+            clear_items: matches!(
+                self.mode,
+                PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
+            ),
+            retain_through,
+            scripted_checkpoints: self.persisted_checkpoints(remove_before)?,
+            remove_before,
+            anchor: Some(PlayoutAnchor {
+                next_start: anchor_time,
+                context: self.reference_data.has_active_smart_shuffle().then(|| {
+                    serde_json::to_string(&ScriptedAnchorContext {
+                        version: scripted_anchor_context_version(),
+                        smart_shuffle: self.smart_shuffle_state.clone(),
+                    })
+                    .unwrap_or_default()
+                }),
+                ..PlayoutAnchor::default()
+            }),
+            added_items: std::mem::take(&mut self.added_items),
+            added_history: std::mem::take(&mut self.added_history),
+            history_to_remove: std::mem::take(&mut self.history_to_remove),
+            warnings: std::mem::take(&mut self.warnings),
+            ..SchedulingResult::default()
+        })
+    }
+
     fn new(
         playout_id: EntityId,
         start: DateTime<Utc>,
@@ -582,6 +621,8 @@ impl ScriptState {
             last_progress_time: None,
             no_progress_counter: 0,
             smart_shuffle_state,
+            restore_checkpoint: None,
+            checkpoints: BTreeMap::new(),
         };
         if mode == PlayoutBuildMode::Reset {
             st.history_to_remove = st
@@ -818,6 +859,7 @@ impl ScriptState {
     }
 
     fn enumerator(&mut self, key: &str) -> &mut MediaEnumerator {
+        let checkpoint = &self.restore_checkpoint;
         self.enumerators.entry(key.to_owned()).or_insert_with(|| {
             let items = self
                 .reference_data
@@ -825,11 +867,18 @@ impl ScriptState {
                 .get(key)
                 .cloned()
                 .unwrap_or_default();
-            MediaEnumerator::new(key, items)
+            let mut enumerator = MediaEnumerator::new(key, items);
+            if let Some(context) = checkpoint {
+                context.restore_media_source(key, &mut enumerator);
+            }
+            enumerator
         })
     }
 
     fn apply_history(&self, key: &str, e: &mut MediaEnumerator, po: PlaybackOrder) {
+        if self.restore_media_source(key, e) {
+            return;
+        }
         let history_key = history_key_for_content(key, po);
         let cutoff = self.start;
         let mut candidates: Vec<_> = self
@@ -884,6 +933,7 @@ impl ScriptState {
         self.added_items.push(item);
         self.advance_guide_group();
         self.advance_key(key);
+        self.capture_checkpoint();
     }
 
     fn add_item_with_opts(&mut self, key: &str, duration: Option<Duration>, opts: &AddOptions) {
@@ -925,6 +975,7 @@ impl ScriptState {
         self.added_items.push(item);
         self.advance_guide_group();
         self.advance_key(key);
+        self.capture_checkpoint();
     }
 
     fn add_pre_roll_item(&mut self, key: &str, target: DateTime<Utc>) {
@@ -954,6 +1005,7 @@ impl ScriptState {
         self.added_items.push(item);
         self.advance_guide_group();
         self.enumerator(key).advance();
+        self.capture_checkpoint();
     }
 
     fn maybe_add_pre_roll(&mut self, target: DateTime<Utc>) {

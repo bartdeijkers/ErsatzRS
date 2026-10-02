@@ -189,6 +189,14 @@ pub struct PlayoutClassicCheckpoint {
     pub context: String,
 }
 
+/// Versioned Scripted source and Smart Shuffle state at a published boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlayoutScriptedCheckpoint {
+    pub playout_id: EntityId,
+    pub checkpoint_date: DateTime<Utc>,
+    pub context: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PlayoutScheduleItemFillGroupIndex {
     pub id: EntityId,

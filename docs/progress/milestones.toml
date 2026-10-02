@@ -13531,7 +13531,7 @@ Implementation and acceptance evidence pending.
 id = 'v111-findings-06'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Continuity-safe scripted adaptation'
-status = 'Not started'
+status = 'In progress'
 feature = 'playout-rebuild-on-impacting-changes'
 depends_on = []
 acceptance = '''
@@ -13545,7 +13545,141 @@ refresh and failures. Prove current programme and series history preservation,
 no-change/irrelevant scans, changed source handover, restart/retry and localized UI.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
+Source map: ErsatzTV Pages/Playouts.razor ResetPlayout maps Classic to Refresh
+and other local schedulers to Reset; Engine/SchedulingEngine.RestoreOrReset
+restores the anchor only outside Reset. ErsatzRS web server_fns/playouts.rs
+previously trusted a supplied kind; initial Scripted Refresh cleared all rows.
+Application commands, core scheduling/scripted, infra maintenance/playout
+publication, scan_refresh and scanner scan completion own this correction.
+Reuse the existing durable intent generation and retained-prefix transaction;
+Boundary restore state, runtime dependency capture and bounded successful-scan
+admission are implemented locally. Candidate revalidation fences unprocessed
+receipts and active managed-library work with durable deferred retries.
+Visual/hydration map: /playouts -> PlayoutsPage -> PlayoutsIsland; existing
+row actions and confirmation dialog, Activity alerts and retained detail table.
+Upstream uses a MudTable with per-row actions. Reuse shared button, dialog,
+form and table primitives; preserve desktop/mobile geometry and no-JS Activity.
+No DOM changes in the initial stored-kind validation correction. Browser proof
+for explicit modes, preservation and revision feedback remains pending.
+ADR 0110 records the accepted safety contract. Initial audit found that ScanPlayoutRefreshIntent generation was checked only
+by complete_refresh after apply_build_result. Publication now also checks the
+captured intent lifecycle and generation inside the write transaction.
+The initial Scripted anchor contained only tail Smart Shuffle state. Versioned
+programme-boundary checkpoints now reuse Classic ordered-membership and playlist
+reconciliation instead of restoring shifted raw history indexes.
+Next: implement explicit rebuild modes and feedback, and prove
+running-producer handover without interruption.
+Initial admission correction: reset_playout now loads the authoritative stored
+kind through a bounded repository query and application command; the old wire
+field remains compatible but cannot choose destructive behavior. The production
+server-function regression covers all five schedulers with spoofed caller kinds,
+plus invalid ids, absent rows, None and corrupt kinds. Four focused admission/
+coalescing/failure-cleanup checks pass (Nextest
+9d3b009a-5f5f-4525-9477-feecab85360b). Strict all-target Clippy passes for core,
+infra, app and web; formatting, architecture, hydration and progress checks pass.
+Refresh-intent publication fence: maintenance captures the per-playout revision
+before input reads; apply_build_result checks it under the write lock before
+any item/history/anchor/seed mutation. Absence and intent recreation participate;
+claim-state changes and another channel's intents do not invalidate it. Two
+new SQL regressions pass (8f88de0d-eb65-4758-be88-cc5b4846c4ee), including a
+synchronized refresh-intent change during the actual requested build, refusal, unchanged
+protected state, pending-newer-generation preservation and successful retry.
+The final 57 Scripted/scan-refresh checks pass
+(4d169cc0-4786-4070-88a6-30ab656312b9), including SQLite restart and intent
+recreation. Strict all-target core/infra Clippy and formatting pass for this
+fence. Source dependency capture and successful-scan admission are still
+required; this fence does not claim that unregistered source mutations enqueue
+refreshes. These are partial checks, not programme-continuity acceptance.
+Boundary checkpoint implementation: additive PlayoutScriptedCheckpoint storage
+records versioned ordered media/playlist positions, cycle seeds, guide counter
+and Smart Shuffle state at published item boundaries. Refresh retains the active
+programme group and uses its boundary state, reconciling membership through the
+existing Classic helpers. Missing, malformed, incompatible or incomplete state
+is refused; the complete candidate checkpoint set is validated under the write
+lock before any timeline mutation. Health reports unsafe published checkpoints.
+The 99 focused Scripted, migration and scan-refresh tests pass (Nextest
+cfdb5e1e-1f19-4d58-acf9-469350703488). They cover unchanged chronological,
+Shuffle and Random oracles, group retention, added/removed members, fractional
+day-seam Smart Shuffle, SQLite restart with track/overlay/row preservation,
+atomic corrupt/incomplete-state refusal and Health failure/recovery. The
+existing localhost migration fixture passes with socket access enabled.
+Strict all-target core/infra Clippy, formatting and architecture checks pass.
+Running-producer acceptance still needs publication-deadline and prefetch
+handling when generation crosses the preserved boundary, plus native/Next
+playback proof. Source dependency capture, explicit modes and revision feedback
+remain open. No live playback continuity is claimed by these database tests.
+Runtime dependency capture: SQL-backed Lua lookups now record their actual
+resolved descriptors (including dynamic and empty searches), full semantic
+signatures and per-library projections. Duplicate lookups coalesce, inconsistent
+repeat reads refuse the build, and dependency publication shares the timeline
+transaction. Continue retains the existing future's baselines and adds new
+sources; replacing builds own the replacement set. Three real Lua/SQLite
+regressions cover empty selections becoming populated after restart, library
+isolation, failed-publication preservation, unchanged inputs and both empty and
+extending Continue. The 94 Scripted/migration tests pass (Nextest
+a735656e-9be6-4883-a309-4ecc5600c6ed). Successful-scan receipts, bounded durable
+dependency comparison/admission and operator revision feedback are not wired
+yet; these tests do not claim automatic adaptation.
+Review preserved the resolver's existing cached configuration by sharing its
+repository during dependency capture. All 15 SQL-backed Scripted checks pass
+after that correction (8a4f24a4-387e-41ec-82db-40e365c08e1c). Strict all-target
+core/infra Clippy, formatting, architecture and progress checks pass.
+Successful-scan admission: local scans and the Plex/Jellyfin/Emby library and
+single-show wrappers now persist successful library revisions and coalesced
+comparison work. An additive migration separates published dependency baselines
+from observed library signatures. The existing refresh sweep resolves at most
+sixteen pairs in thirty seconds; unchanged/irrelevant selections do not create
+intents. Changed observations, intent generation and work acknowledgement commit
+atomically. Failures keep bounded diagnostics and 30-to-300-second backoff;
+new scans do not shorten it. Health exposes failed comparisons. The existing
+host maintenance task has a separate thirty-second Refresh interval while
+retaining the hourly add-on interval.
+Three SQL regressions pass (7cfa86c9-e5c2-4361-9b30-4df50d81f91f), covering
+restart, concurrent sweeps, unchanged/irrelevant
+scans, reverse membership changes, independent failure recovery, persisted
+backoff, Health recovery, the batch bound and changed scheduler ownership.
+All 48 existing provider-service regressions pass
+(de8620d9-5127-462d-adcf-6b2f93c7ff15), preserving metadata, subtitles,
+collections and targeted-show scan behavior. The native Local/NFO test uses
+actual FFprobe 9 and the production requested
+builder: a newly tagged file enters the selected future source, the current row
+survives Refresh, repeated scans do not advance the intent and a failed scan
+does not record success (Nextest 9fc249db-faba-45b2-91fe-132c6a3faa23).
+Source publication correction: a causal SQL regression first demonstrated that
+an old candidate could publish before successful-scan comparison. Publication
+now re-resolves its actual descriptors and validates semantic signatures, then
+checks successful-library receipts and durable managed-library attempt counters
+under the write lock. Active or replaying managed-library work defers publication;
+a scan starting and failing during validation cannot disappear from that fence.
+Source comparison uses the same fence. This deliberately defers Scripted
+publication conservatively during any active managed-library operation because
+empty/dynamic selections cannot prove that another library is irrelevant yet.
+It preserves existing timelines and does not trigger unrelated rebuilds.
+Transient source-publication errors now preserve intent with 30-to-300-second
+backoff. The additive retry migration preserves eligibility across restart and
+new source observations; stale workers cannot defer a newer generation.
+Seventy-two Scripted/scan-refresh/migration checks pass
+(e4280df1-9615-44f4-be2e-1138dde0d024). After extending the guard to parent
+publication/recovery work, all 36 focused Scripted/scan-refresh checks pass
+(0ba60906-264f-4a2b-8386-519c48b58c85). The native FFprobe 9 scan/Refresh
+regression passes again with the final source fence
+(2c408a79-e89a-45c5-b724-d27907e14d9c).
+Coverage includes real production requested-build deferral, SQLite restart,
+unchanged-source acceptance, stale-source refusal and cooldown generation safety.
+Final queue/Health review distinguishes ordinary waiting on a scan from a source
+comparison failure. All six queue/publication regressions pass
+(4f30b0b5-7326-4297-86f0-9ddd694cbdc7), including successful production
+requested Refresh after the scan completes and acknowledgement of deferred intent.
+Final strict all-target core/infra/scanner/web Clippy, formatting, architecture
+and progress validation pass. The full maintainer findings document was reread
+after resumption; the recorded solution scope is unchanged.
+Live producer deadline/prefetch handover, explicit modes and localized revision
+feedback remain open. This fence observes the production web/standalone
+managed-operation ownership; it does not make individual scanner writes
+transactional.
+The maintainer authorized an engineering checkpoint commit on 2026-10-02.
+Implementation and feature acceptance remain in progress; this checkpoint does
+not complete v111-findings-06 or authorize publication.
 '''
 
 [[milestone]]

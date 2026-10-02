@@ -589,7 +589,6 @@ pub async fn delete_playout(id: i64) -> Result<(), ServerFnError> {
 
 /// Enqueues a build for one playout. Mirrors `Playouts.razor.ResetPlayout`:
 /// Classic playouts refresh, every other kind resets.
-#[allow(clippy::unused_async)]
 #[server(prefix = "/admin-api")]
 pub async fn reset_playout(
     id: i64,
@@ -598,7 +597,15 @@ pub async fn reset_playout(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    enqueue_build(&state, id, reset_playout_mode(schedule_kind))
+    // Retain the wire field for existing forms; stored state selects the mode.
+    let _ = schedule_kind;
+    map_build_outcome(
+        state
+            .application
+            .reset_playout(id)
+            .await
+            .map_err(ServerFnError::new)?,
+    )
 }
 
 /// Enqueues builds for every eligible playout. Mirrors `ResetAllPlayoutsHandler`:
@@ -1015,15 +1022,6 @@ pub async fn validate_yaml_playout(content: String) -> Result<(), ServerFnError>
 // SSR-only helpers
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "ssr")]
-fn reset_playout_mode(schedule_kind: i32) -> ersatzrs_core::scheduling::PlayoutBuildMode {
-    if schedule_kind == KIND_CLASSIC {
-        ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
-    } else {
-        ersatzrs_core::scheduling::PlayoutBuildMode::Reset
-    }
-}
-
 #[cfg(all(test, feature = "ssr"))]
 fn reset_all_playout_mode(
     schedule_kind: i32,
@@ -1038,20 +1036,28 @@ fn reset_all_playout_mode(
     }
 }
 
-#[cfg(feature = "ssr")]
+#[cfg(all(test, feature = "ssr"))]
 fn enqueue_build(
     state: &crate::host::state::AppState,
     playout_id: i64,
     mode: ersatzrs_core::scheduling::PlayoutBuildMode,
 ) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
-    use ersatzrs_app::commands::{
-        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
-    };
+    use ersatzrs_app::commands::RequestPlayoutBuild;
 
-    match state
-        .application
-        .request_playout_build(RequestPlayoutBuild::new(playout_id, mode))
-    {
+    map_build_outcome(
+        state
+            .application
+            .request_playout_build(RequestPlayoutBuild::new(playout_id, mode)),
+    )
+}
+
+#[cfg(feature = "ssr")]
+fn map_build_outcome(
+    outcome: ersatzrs_app::commands::RequestPlayoutBuildOutcome,
+) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
+    use ersatzrs_app::commands::{RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection};
+
+    match outcome {
         RequestPlayoutBuildOutcome::Accepted => Ok(PlayoutBuildEnqueueResult {
             accepted: 1,
             coalesced: 0,
@@ -2893,18 +2899,69 @@ mod legacy_sql_regressions {
             assert_eq!(filler_mode_name(3), "Pad");
         }
 
-        #[test]
-        fn reset_playout_mode_matches_ersatztv_classic_refresh_mapping() {
+        #[tokio::test]
+        async fn reset_playout_uses_stored_kind_and_rejects_missing_or_invalid_targets() {
             use ersatzrs_core::scheduling::PlayoutBuildMode;
 
-            assert_eq!(reset_playout_mode(KIND_CLASSIC), PlayoutBuildMode::Refresh);
-            assert_eq!(reset_playout_mode(KIND_BLOCK), PlayoutBuildMode::Reset);
-            assert_eq!(reset_playout_mode(KIND_SEQUENTIAL), PlayoutBuildMode::Reset);
-            assert_eq!(reset_playout_mode(KIND_SCRIPTED), PlayoutBuildMode::Reset);
-            assert_eq!(
-                reset_playout_mode(KIND_EXTERNAL_JSON),
-                PlayoutBuildMode::Reset
-            );
+            let (state, mut receiver) = playout_queue_state();
+            sqlx::query(r#"CREATE TABLE "Playout" ("Id" INTEGER PRIMARY KEY, "ScheduleKind" INTEGER NOT NULL)"#)
+                .execute(&state.pool).await.unwrap();
+            for kind in [
+                0,
+                KIND_CLASSIC,
+                KIND_BLOCK,
+                KIND_SEQUENTIAL,
+                KIND_SCRIPTED,
+                KIND_EXTERNAL_JSON,
+                999,
+            ] {
+                sqlx::query(r#"INSERT INTO "Playout" ("Id", "ScheduleKind") VALUES (?, ?)"#)
+                    .bind(i64::from(kind) + 1)
+                    .bind(kind)
+                    .execute(&state.pool)
+                    .await
+                    .unwrap();
+            }
+            let owner = Owner::new();
+            owner.with(|| provide_context(state.clone()));
+            owner.set();
+            for kind in [
+                KIND_CLASSIC,
+                KIND_BLOCK,
+                KIND_SEQUENTIAL,
+                KIND_SCRIPTED,
+                KIND_EXTERNAL_JSON,
+            ] {
+                let id = i64::from(kind) + 1;
+                // Spoof the opposite kind: the request must still follow storage.
+                let supplied = if kind == KIND_CLASSIC {
+                    KIND_SCRIPTED
+                } else {
+                    KIND_CLASSIC
+                };
+                assert_eq!(reset_playout(id, supplied).await.unwrap().accepted, 1);
+                let token = receiver.try_recv().unwrap();
+                let (request, guard) = state
+                    .application
+                    .operations()
+                    .playout_activity()
+                    .start_guard(token);
+                assert_eq!(request.playout_id, id);
+                assert_eq!(
+                    request.mode,
+                    if kind == KIND_CLASSIC {
+                        PlayoutBuildMode::Refresh
+                    } else {
+                        PlayoutBuildMode::Reset
+                    }
+                );
+                drop(guard);
+            }
+            // Invalid id, absent row, None kind and corrupt kind never queue work.
+            for id in [0, -1, 800, 1, 1000] {
+                assert!(reset_playout(id, KIND_CLASSIC).await.is_err());
+                assert!(receiver.try_recv().is_err());
+            }
         }
 
         #[test]

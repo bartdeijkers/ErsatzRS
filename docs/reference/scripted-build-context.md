@@ -31,11 +31,27 @@ history, anchors, overlays and other playouts.
 
 The playout page's Activity section lists the latest failed builds on the current
 page. Select a failure to inspect its diagnostic and retained published timeline.
-The `Scripted Playout State` Health check reports failed Scripted builds. A later
-successful build clears the current failure; this is not an audit-history log.
+The `Scripted Playout State` Health check reports failed Scripted builds and
+published boundaries with missing or incompatible resume checkpoints. A later
+successful build clears the current build failure; this is not an audit-history log.
 Activity refreshes on observed build completion and at least every 30 seconds;
 without JavaScript, reload the page to refresh the failure list.
 
-Refresh and Reset retain their separate replacement semantics. Continue does not
-request a source-generation refresh or provide a preserve-current-programme
-Refresh mode.
+Scripted Refresh retains the programme currently published at the request clock,
+including a contiguous locked guide group and its attachments. Its effective
+start is the preserved programme's end. It restores source positions, shuffled
+ordering and Smart Shuffle state from that boundary, then replaces the future.
+Membership reconciliation keeps surviving unconsumed media ahead of new and
+already consumed members. Empty replacement futures, missing checkpoints and
+incompatible state reject the candidate. An explicit Reset creates fresh state
+for legacy timelines without checkpoints. Continue can still resume legacy
+history when no checkpoint exists.
+
+Checkpoints and the actual SQL-backed source lookups are stored atomically with
+items, history and the anchor. Dependency capture includes empty dynamic searches
+and library-scoped semantic signatures. Continue keeps existing dependency
+baselines while adding sources used by its extension; replacing builds publish
+the new set. A changed durable refresh-intent revision invalidates a candidate
+before publication.
+Automatic source dependency admission, explicit rebuild controls and running-
+producer handover acceptance remain open under `v111-findings-06`.

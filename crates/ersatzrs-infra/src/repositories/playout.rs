@@ -19,6 +19,7 @@ use ersatzrs_domain::{
 use sqlx::{Pool, Row, Transaction};
 
 use super::common::upsert_sql;
+mod scripted_checkpoints;
 mod scripted_timeline;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
@@ -33,6 +34,18 @@ pub struct SqlitePlayoutRepository(pub Pool<crate::db::Db>);
 #[allow(clippy::too_many_lines)]
 #[async_trait]
 impl PlayoutRepository for SqlitePlayoutRepository {
+    async fn schedule_kind_admin(
+        &self,
+        id: EntityId,
+    ) -> Result<ersatzrs_domain::PlayoutScheduleKind> {
+        let row = sqlx::query(r#"SELECT "ScheduleKind" FROM "Playout" WHERE "Id" = ?"#)
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("playout", id, error))?;
+        decode_enum_column("playout schedule_kind", &row, "ScheduleKind")
+    }
+
     async fn get_with_anchor(&self, id: EntityId) -> Result<Playout> {
         let row = sqlx::query(r#"SELECT * FROM "Playout" WHERE "Id" = ?"#)
             .bind(id)
@@ -243,9 +256,37 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         playout: &Playout,
         max_playout_offset: chrono::Duration,
     ) -> Result<()> {
+        let source_fence = if playout.schedule_kind
+            == ersatzrs_domain::PlayoutScheduleKind::Scripted
+            && !result.scripted_sources.is_empty()
+        {
+            Some(
+                crate::scripted_dependencies::PublicationFence::prepare(
+                    &self.0,
+                    &result.scripted_sources,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
 
+        if let Some(fence) = source_fence {
+            fence.validate(&mut tx).await?;
+        }
+
         // ── items ─────────────────────────────────────────────────────────────
+        if let Some(guard) = &result.publication_guard {
+            if !crate::scan_refresh::publication_guard_matches(&mut tx, playout.id, guard)
+                .await
+                .repository()?
+            {
+                return Err(RepositoryError::Conflict(
+                    "Playout build superseded by a changed source revision; the published timeline was not changed. Retry the refresh using current sources".to_owned(),
+                ));
+            }
+        }
         if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Scripted {
             scripted_timeline::validate_publication(
                 &mut tx,
@@ -435,6 +476,17 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         replace_program_schedule_anchors(&mut tx, playout.id, &result.program_schedule_anchors)
             .await?;
         replace_classic_checkpoints(&mut tx, playout.id, &result.classic_checkpoints).await?;
+        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Scripted {
+            scripted_checkpoints::replace(&mut tx, playout.id, &result.scripted_checkpoints)
+                .await?;
+            crate::scripted_dependencies::publish(
+                &mut tx,
+                playout.id,
+                &result.scripted_sources,
+                result.clear_items,
+            )
+            .await?;
+        }
         replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
         replace_playout_templates(&mut tx, playout).await?;
 

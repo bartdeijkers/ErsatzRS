@@ -556,8 +556,29 @@ pub async fn run_requested_playout_build_cancellable(
         Err(error) => {
             let message = error.to_string();
             if let Some(generation) = refresh_generation {
-                crate::scan_refresh::fail_refresh(pool, request.playout_id, generation, &message)
+                if matches!(
+                    &error,
+                    MaintenanceError::Repository(RepositoryError::Unavailable {
+                        operation: crate::scripted_dependencies::PUBLICATION_OPERATION,
+                        ..
+                    })
+                ) {
+                    crate::scan_refresh::defer_refresh(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        Utc::now(),
+                    )
                     .await?;
+                } else {
+                    crate::scan_refresh::fail_refresh(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        &message,
+                    )
+                    .await?;
+                }
             }
             let repository = SqlitePlayoutRepository(pool.clone());
             repository
@@ -861,6 +882,9 @@ async fn build_playout(
         return Err(SchedulingError::Cancelled.into());
     }
     let repository = SqlitePlayoutRepository(pool.clone());
+    // Capture before reading scheduling inputs, including the absence of work.
+    // The write transaction rejects changes that arrive while Lua/engines run.
+    let publication_guard = crate::scan_refresh::publication_guard(pool, playout_id).await?;
     let mut playout = repository.get_with_anchor(playout_id).await?;
     if playout.schedule_kind == PlayoutScheduleKind::None {
         return Ok(());
@@ -900,7 +924,8 @@ async fn build_playout(
         mode,
         reference_data,
     };
-    let result = generate_playout(pool, request, cancelled).await?;
+    let mut result = generate_playout(pool, request, cancelled).await?;
+    result.publication_guard = Some(publication_guard);
     log_build_warnings(playout_id, &result);
     let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
         || (mode != PlayoutBuildMode::Continue
@@ -930,7 +955,9 @@ async fn build_playout(
         notify_playout_channels(
             pool,
             playout.channel_id,
-            mode == PlayoutBuildMode::Continue,
+            mode == PlayoutBuildMode::Continue
+                || (playout.schedule_kind == PlayoutScheduleKind::Scripted
+                    && result.retain_through.is_some_and(|boundary| boundary > now)),
             hls_sessions,
         )
         .await?;

@@ -1,6 +1,12 @@
 mod common;
 #[path = "scheduling_repository/scripted_continuation.rs"]
 mod scripted_continuation;
+#[path = "scheduling_repository/scripted_dependencies.rs"]
+mod scripted_dependencies;
+#[path = "scheduling_repository/scripted_refresh.rs"]
+mod scripted_refresh;
+#[path = "scheduling_repository/scripted_scan_refresh.rs"]
+mod scripted_scan_refresh;
 #[path = "scheduling_repository/scripted_sources.rs"]
 mod scripted_sources;
 

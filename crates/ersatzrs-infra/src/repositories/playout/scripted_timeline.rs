@@ -74,6 +74,15 @@ pub(super) async fn validate_publication(
     retained.extend(appended);
     validate_scripted_timeline(retained.iter().copied(), None)
         .map_err(|error| RepositoryError::Conflict(error.to_string()))?;
+    super::scripted_checkpoints::validate(
+        playout_id,
+        &result.scripted_checkpoints,
+        &retained.iter().map(|(_, finish)| *finish).collect(),
+        result
+            .added_items
+            .iter()
+            .map(|item| truncate_to_persisted_precision(item.finish)),
+    )?;
     if let Some((_, tail)) = retained.last() {
         if result
             .anchor

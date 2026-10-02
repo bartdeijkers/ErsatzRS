@@ -559,6 +559,10 @@ async fn scan_local_library_with_progress_once(
 
     retry_sqlite_busy(|| async { update_library_scan(pool, config.library_id, Utc::now()).await })
         .await?;
+    if report.failed_files == 0 {
+        ersatzrs_infra::scripted_dependencies::record_successful_scan(pool, config.library_id)
+            .await?;
+    }
     if let Some(sink) = progress {
         sink.report(1.0);
     }

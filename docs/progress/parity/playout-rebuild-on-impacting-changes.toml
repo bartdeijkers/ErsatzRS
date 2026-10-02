@@ -2,7 +2,7 @@ feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
 status     = 'In progress'
-adr        = ['0020']
+adr        = ['0020', '0110']
 summary    = '''
 Proposed by ADR 0020: rebuild the impacted playouts whenever a change can alter
 what a playout's items should contain, so already-scheduled `PlayoutItem` rows
@@ -55,3 +55,12 @@ description = 'Clicking "Reset Playout" rewrites all items in the build window, 
 discovered  = '2026-07-01'
 evidence    = 'Source review against pinned `Playouts.razor`: ErsatzTV maps classic Reset Playout to `PlayoutBuildMode.Refresh` and all other per-row resets to `Reset`; ErsatzRS now centralizes and tests the same mapping, and Reset All skips ExternalJson/None while mapping classic to `Refresh` and block/sequential/scripted to `Reset`. The maintenance regression `requested_classic_refresh_rewrites_near_term_playout_items` proves the queued classic Refresh clears stale near-term rows and rebuilds them with updated item-level playback data. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
 resolved    = true
+
+
+[[debt]]
+id = 'scripted-continuity-safe-adaptation'
+description = 'Finding 06 requires explicit validated rebuild modes with preserve-current-programme, Scripted source dependencies, durable scan-triggered refresh, generation fencing and operator revision/build feedback.'
+discovered = '2026-10-02'
+evidence = 'v111-findings-06 owns implementation and acceptance. Stored-kind admission, refresh-intent publication fencing, versioned boundary restoration, atomic checkpoints/Health readiness and runtime source capture pass focused regressions. Successful-scan dependency admission now passes restart, concurrent sweep, no-change/library isolation, bounded retry and real local FFprobe scan checks. Candidate revalidation now fences unprocessed receipts and active managed-library work, with durable retry for transient publication races. Explicit UI modes, revision feedback and live producer handover acceptance remain open.'
+adr = '0110'
+resolved = false

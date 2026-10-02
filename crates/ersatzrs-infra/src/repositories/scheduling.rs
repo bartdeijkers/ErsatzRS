@@ -983,6 +983,8 @@ impl SqliteSchedulingContentRepository {
         let mut reference_data = self.configured_playout_options().await?;
         reference_data.existing_items = self.playout_items(playout_id).await?;
         reference_data.existing_history = self.playout_history(playout_id).await?;
+        reference_data.existing_scripted_checkpoints =
+            self.scripted_checkpoints(playout_id).await?;
         let legacy_policy = if let Some(policy) = definition_legacy_policy {
             policy
         } else {
@@ -3718,6 +3720,32 @@ impl SqliteSchedulingContentRepository {
                             .repository()?
                             .unwrap_or_default(),
                     },
+                })
+            })
+            .collect()
+    }
+
+    async fn scripted_checkpoints(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<ersatzrs_domain::PlayoutScriptedCheckpoint>> {
+        let rows = sqlx::query(
+            r#"SELECT "PlayoutId", "CheckpointDate", "Context" FROM "PlayoutScriptedCheckpoint"
+               WHERE "PlayoutId" = ? ORDER BY "CheckpointDate""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ersatzrs_domain::PlayoutScriptedCheckpoint {
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    checkpoint_date: decode_datetime(
+                        "scripted checkpoint date",
+                        row.try_get("CheckpointDate").repository()?,
+                    )?,
+                    context: row.try_get("Context").repository()?,
                 })
             })
             .collect()

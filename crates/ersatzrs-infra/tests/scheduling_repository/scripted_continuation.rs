@@ -11,7 +11,7 @@ use ersatzrs_infra::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-async fn snapshot(pool: &SqlitePool, id: i64) -> serde_json::Value {
+pub(super) async fn snapshot(pool: &SqlitePool, id: i64) -> serde_json::Value {
     let repos = make_repositories(pool.clone());
     let reference = repos
         .scheduling
@@ -24,6 +24,8 @@ async fn snapshot(pool: &SqlitePool, id: i64) -> serde_json::Value {
     serde_json::json!({
         "items": reference.existing_items,
         "history": reference.existing_history,
+        "checkpoints": reference.existing_scripted_checkpoints,
+        "sources": ersatzrs_infra::scripted_dependencies::load(pool, id).await.unwrap(),
         "playout": playout,
     })
 }
