@@ -398,6 +398,86 @@ mod tests {
         assert!(html.contains("action=\"/admin-api/media-sources/local/save\""));
     }
 
+    #[tokio::test]
+    async fn television_discovery_preview_retains_draft_without_saving_or_scanning() {
+        let state = fixture().await;
+        let root = tempfile::tempdir().unwrap();
+        let season = root.path().join("Synthetic show/Season 1");
+        std::fs::create_dir_all(&season).unwrap();
+        let video = season.join("episode.MPEG");
+        std::fs::write(&video, b"not decoded by discovery").unwrap();
+        std::fs::write(season.join("episode.unknown"), b"ignored").unwrap();
+        let input = serde_json::from_value(serde_json::json!({
+            "id": 0, "name": "Draft & library", "media_kind": 2,
+            "paths_text": root.path().display().to_string(), "intent": "preview"
+        }))
+        .unwrap();
+        let response = crate::api::media_sources::save_local_library_form(
+            axum::extract::State(state.clone()),
+            axum::Form(input),
+        )
+        .await;
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 100_000)
+            .await
+            .unwrap();
+        let html = std::str::from_utf8(&body).unwrap();
+        assert!(html.contains("Draft &amp; library"));
+        assert!(html.contains("episode.unknown"));
+        assert!(html.contains("Ignored file extension"));
+        assert!(html.contains("data-folder-discovery"));
+        let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Library""#)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(std::fs::read(video).unwrap(), b"not decoded by discovery");
+    }
+
+    #[tokio::test]
+    async fn television_discovery_preview_rejects_invalid_drafts() {
+        let state = fixture().await;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().display().to_string();
+        for draft in [
+            form(0, 1, std::slice::from_ref(&path)),
+            form(0, 2, &[]),
+            form(0, 2, &["relative".into()]),
+            form(0, 2, &vec![path.clone(); 9]),
+            form(0, 2, &[format!("{path}/{}", "x".repeat(4096))]),
+        ] {
+            assert!(state
+                .application
+                .preview_television_library(&draft)
+                .await
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn television_discovery_feedback_is_localized_for_every_culture() {
+        use crate::admin::i18n::{text, TextKey, UiLanguage};
+        for key in [
+            TextKey::FolderPreview,
+            TextKey::FolderPreviewHelp,
+            TextKey::FolderPreviewPartial,
+            TextKey::FolderIgnoredExtension,
+            TextKey::FolderUnsupportedNesting,
+            TextKey::FolderEmptyShow,
+            TextKey::FolderPreviewUnavailable,
+        ] {
+            for code in [
+                "de-de", "es-419", "es-es", "fr-fr", "it-it", "nl", "pl", "pt-br",
+            ] {
+                assert_ne!(
+                    text(UiLanguage::from_config(code), key),
+                    text(UiLanguage::English, key),
+                    "{code}: {key:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn local_library_paths_feedback_is_localized_for_every_culture() {
         use crate::admin::{i18n::UiLanguage, server_fns::media_sources::local_library_error_text};

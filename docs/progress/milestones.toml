@@ -13427,7 +13427,7 @@ Implementation and acceptance evidence pending.
 id = 'v111-findings-03'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Television discovery and bounded folder diagnostics'
-status = 'Not started'
+status = 'Complete'
 feature = 'scanner'
 depends_on = []
 acceptance = '''
@@ -13441,7 +13441,51 @@ silently recurse into extras or duplicate seasons. Prove extension discovery,
 nesting diagnostics, preview bounds, rescan stability and localized admin UI.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
+Source map (2026-10-02): ErsatzTV LocalLibraryEditor.razor and
+LocalLibraryEditViewModel/LocalLibraryPathEditViewModel feed CreateLocalLibraryHandler/
+UpdateLocalLibraryHandler (name, absolute/existing/non-overlapping path validation,
+transactional library changes and queued scan); preview bypasses persistence;
+LocalFolderScanner.VideoFileExtensions and TelevisionFolderScanner.ScanSeasons/
+ScanEpisodes define candidate extensions and root/show/season hierarchy.
+Rust targets: scanner local_television discovery, existing ScanRuntime adapter,
+local library SSR editor and POST transport. Existing persistence, ffprobe,
+subtitle and identity paths remain responsible for scan side effects.
+Visual source map: upstream 64px full-width action bar, ExtraLarge content,
+responsive label/input rows and path table; reuse ErsatzRS local editor toolbar,
+form_row/form_section and SSR save/correction document. Add a read-only preview
+beside existing actions with returned counts/reasons before Save.
+ADR 0108 records diagnostic preview and supported candidate policy.
+Accepted locally 2026-10-02. One shared traversal powers scan and pre-save
+preview. All 18 upstream video suffixes plus 20 supported container aliases
+are candidates; ffprobe retains decoder validation. Diagnostics count ignored
+extensions, unsupported nesting, empty shows, unreadable/repeated directories,
+episodes/extras and hidden entries. Preview has one 10,000-entry/two-second
+budget across at most eight roots, depth 32, forty bounded samples per root,
+a three-second response deadline and two worker slots retained until actual
+worker exit. Limits produce an explicitly partial report. Source files and
+library data are unchanged by preview. The discovery cache revision admits
+previously omitted media once without discarding the normal no-change fast path.
+Final six scanner tests pass, including native FFmpeg 9 synthetic MPEG/MPG/TS/
+M2TS generation and scanning: four stable episode/file identities, eight audio
+streams, four Dutch sidecars, byte-equal originals, old-cache adoption and
+return to no-change scanning. Unit coverage proves nesting/extra separation,
+preview/scan agreement, missing roots, cycles and entry/depth/time/sample bounds.
+Final three web/API tests pass for no-write preview, invalid drafts and
+all-culture feedback. Four final matched-bundle Chromium/Firefox JS/no-JS cases
+pass in `test-results/finding03-final/playwright-results.json` (zero skipped or
+flaky): unsaved draft retention, accepted/rejected layout, original bytes,
+English/Dutch feedback and successful subsequent Save. Reviewed 390x844 dark
+mobile and 1440x900 light Dutch desktop screenshots: controls, counts and paths
+are readable without horizontal overflow, using existing local-editor geometry.
+Strict core/scanner/app/web all-target Clippy passed; final scanner/web repeats
+also pass after review corrections. Formatting, architecture lint, progress
+check and staged new-Clippy-allow policy pass. Hydration lint adds no findings
+(31 existing baseline suppressions). Review corrected pre-advance entry-budget
+checks and reused the existing logged settings fallback instead of silent
+loader defaults. No runtime requirement or persisted media-state shape changed;
+existing probe/identity health checks remain applicable. ADR 0108 records the
+intentional preview and discovery-cache behavior; Unreleased notes are updated.
+Integrated v1.1.1 closeout remains separate from this milestone.
 '''
 
 [[milestone]]

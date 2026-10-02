@@ -16,4 +16,5 @@ pub mod playout_builder;
 pub mod repositories;
 pub mod scheduling;
 pub mod search;
+pub mod television_discovery;
 pub mod xmltv;

@@ -2,7 +2,7 @@ feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
 status     = 'In progress'
-adr        = ['0057', '0060', '0062']
+adr        = ['0057', '0060', '0062', '0108']
 
 summary    = '''
 Local filesystem scanning dispatches by `Library.MediaKind` for movies, other
@@ -172,3 +172,11 @@ description = 'Plex Other Video scans previously discarded server library locati
 discovered = '2026-09-30'
 resolved = true
 evidence = 'UCU-09 records the upstream 4fffa955 source map, failing regression, 54 passing scoped checks and final six-test folder-tag acceptance. Native migration/restart, tag ownership and stable IDs, subtitles, search visibility, pagination, root changes and rollback pass, as does strict infra/scanner/web lint. The provider metadata correction adds no platform or runtime requirement.'
+
+[[debt]]
+id = 'v111-television-discovery-preview'
+description = 'Finding 03 requires broader television container candidates, discovery diagnostics and a bounded pre-save folder preview without changing source files or confusing extras with programmes.'
+discovered = '2026-10-02'
+adr = '0108'
+resolved = true
+evidence = 'Milestone v111-findings-03 owns completed local acceptance: shared expanded discovery, explicit diagnostics, bounded read-only nine-language SSR preview, native MPEG/TS upgrade/rescan and identity/track preservation, API and Chromium/Firefox JS/no-JS proof, plus strict lint and structural checks.'

@@ -233,6 +233,16 @@ pub struct ScanRuntimeReport {
 /// Native scanner execution supplied by the composition root.
 #[async_trait]
 pub trait ScanRuntime: Send + Sync {
+    /// Read-only, bounded folder discovery before a local television library is
+    /// saved. The native adapter must retain capacity for timed-out workers.
+    async fn preview_television_folders(
+        &self,
+        _paths: Vec<String>,
+    ) -> Result<Vec<ersatzrs_core::television_discovery::TelevisionFolderPreview>, ScanRuntimeError>
+    {
+        Err(ScanRuntimeError::new("Folder preview is unavailable"))
+    }
+
     /// Return Local libraries whose interrupted scan markers need replay.
     async fn interrupted_scan_library_ids(&self) -> Result<Vec<EntityId>, ScanRuntimeError> {
         Ok(Vec::new())

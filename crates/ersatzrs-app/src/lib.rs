@@ -2434,6 +2434,41 @@ impl ApplicationServices {
             .map_err(Into::into)
     }
 
+    /// Preview a draft television library without saving it or starting a scan.
+    /// Limits apply before the native filesystem worker is admitted.
+    ///
+    /// # Errors
+    /// Rejects other media kinds, missing/oversized paths, and worker saturation
+    /// or timeouts. A partial inventory is returned explicitly as truncated.
+    pub async fn preview_television_library(
+        &self,
+        library: &ersatzrs_core::repositories::LocalLibraryAdmin,
+    ) -> std::result::Result<
+        Vec<ersatzrs_core::television_discovery::TelevisionFolderPreview>,
+        ScanRuntimeError,
+    > {
+        if library.media_kind != 2 || library.paths.is_empty() || library.paths.len() > 8 {
+            return Err(ScanRuntimeError::new(
+                "Preview requires a television library with one to eight paths",
+            ));
+        }
+        let mut paths = Vec::with_capacity(library.paths.len());
+        for path in &library.paths {
+            if path.path.len() > 4096
+                || !ersatzrs_core::local_library_paths::is_fully_qualified(&path.path)
+            {
+                return Err(ScanRuntimeError::new(
+                    "Preview requires absolute filesystem paths",
+                ));
+            }
+            paths.push(path.path.clone());
+        }
+        self.ports
+            .scan_runtime()
+            .preview_television_folders(paths)
+            .await
+    }
+
     pub async fn save_local_library(
         &self,
         mut library: ersatzrs_core::repositories::LocalLibraryAdmin,

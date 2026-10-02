@@ -906,6 +906,168 @@ async fn stale_library_folders_cleaned_after_scan() {
     );
 }
 
+#[tokio::test]
+#[ignore = "requires the FFmpeg 9 and ffprobe runtime; generates its own media"]
+async fn television_discovery_mpeg_transport_rescan_preserves_tracks_and_identity() {
+    let ffprobe = ffprobe_binary().expect("ffprobe is required");
+    let temp = tempfile::tempdir().unwrap();
+    let season = temp.path().join("Synthetic Show/Season 1");
+    std::fs::create_dir_all(&season).unwrap();
+    let originals = television_discovery_fixture(&season).await;
+    let report =
+        ersatzrs_scanner::local_television::discovery::preview_television_folder(temp.path());
+    assert_eq!(report.episodes, 4);
+    let pool = test_db().await;
+    seed_local_library(&pool, temp.path(), 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        4
+    );
+    assert_eq!(count(&pool, "Episode").await, 4);
+    assert_eq!(count(&pool, "Subtitle").await, 4);
+    let streams: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaStream" WHERE "Codec" = 'mp2'"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        streams, 8,
+        "both audio tracks survive discovery and probing"
+    );
+    let before: Vec<(i64, i64, String)> = sqlx::query_as(
+        r#"SELECT "mf"."Id", "mv"."EpisodeId", "mf"."Path" FROM "MediaFile" "mf"
+            JOIN "MediaVersion" "mv" ON "mv"."Id" = "mf"."MediaVersionId" ORDER BY "mf"."Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    let after: Vec<(i64, i64, String)> = sqlx::query_as(
+        r#"SELECT "mf"."Id", "mv"."EpisodeId", "mf"."Path" FROM "MediaFile" "mf"
+            JOIN "MediaVersion" "mv" ON "mv"."Id" = "mf"."MediaVersionId" ORDER BY "mf"."Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(before, after);
+    assert_eq!(count(&pool, "Episode").await, 4);
+    assert_eq!(count(&pool, "Subtitle").await, 4);
+    // Model an old scanner cache that omitted an already-present MPEG file.
+    // Keep every file and mtime unchanged; the discovery revision must force
+    // one rescan, after which the normal no-change fast path returns.
+    pool.execute(
+        r#"DELETE FROM "MediaItem" WHERE "Id" = (SELECT MIN("Id") FROM "Episode");
+        UPDATE "LibraryFolder" SET "Etag" = REPLACE("Etag", 'tv-discovery-v2:', '')"#,
+    )
+    .await
+    .unwrap();
+    assert_eq!(count(&pool, "Episode").await, 3);
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        4
+    );
+    assert_eq!(count(&pool, "Episode").await, 4);
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    for (path, bytes) in originals {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+}
+
+async fn television_discovery_fixture(season: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut originals = Vec::new();
+    for (index, (extension, container)) in [
+        ("mpeg", "mpeg"),
+        ("mpg", "mpeg"),
+        ("ts", "mpegts"),
+        ("m2ts", "mpegts"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let video = season.join(format!("Synthetic.S01E{:02}.{extension}", index + 1));
+        let mut command = tokio::process::Command::new(ersatzrs_ffmpeg::ffmpeg_path());
+        command
+            .kill_on_drop(true)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=s=160x90:r=25",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=48000",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=880:sample_rate=48000",
+                "-t",
+                "1",
+                "-map",
+                "0:v",
+                "-map",
+                "1:a",
+                "-map",
+                "2:a",
+                "-c:v",
+                "mpeg2video",
+                "-c:a",
+                "mp2",
+                "-metadata:s:a:0",
+                "language=eng",
+                "-metadata:s:a:1",
+                "language=nld",
+                "-f",
+                container,
+            ])
+            .arg(&video);
+        let output = tokio::time::timeout(std::time::Duration::from_secs(30), command.output())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let sidecar = season.join(format!("Synthetic.S01E{:02}.nl.srt", index + 1));
+        std::fs::write(
+            &sidecar,
+            "1\n00:00:00,000 --> 00:00:01,000\nSynthetic subtitle\n",
+        )
+        .unwrap();
+        originals.push((video.clone(), std::fs::read(&video).unwrap()));
+        originals.push((sidecar.clone(), std::fs::read(&sidecar).unwrap()));
+    }
+    originals
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

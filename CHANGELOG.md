@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Discover MPEG, transport-stream and other supported video-container candidates
+  in local television libraries. Preview folder counts, ignored extensions,
+  unsupported nesting and empty shows before saving, with bounded read-only
+  inspection and localized diagnostics; retain episode/extra separation.
+
 - Own diagnostic previews with separate IDs and visible lifecycle states. Stop
   cancels and reaps the process tree and graphics controllers before releasing
   capacity; stale preview links cannot play a replacement. Preserve the finite
