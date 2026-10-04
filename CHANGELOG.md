@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Let Classic schedule items save compatible filler, graphics, guide and track
+  changes for the next automatic extension without replacing published programmes
+  or resetting rotation. Show the retained horizon and persisted application/build
+  status; reject incompatible source/order edits and concurrent builds safely.
+
 - Reject overlapping, backward or non-positive Classic programme timelines
   before publication, including unsafe Continue boundaries and anchors. Report
   existing overlaps in Health and show localized rejection guidance. Allow a

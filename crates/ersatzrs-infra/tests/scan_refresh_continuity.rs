@@ -7,6 +7,8 @@ mod provider_collections;
 mod classic_midnight;
 #[path = "scan_refresh_continuity/collection_identity.rs"]
 mod collection_identity;
+#[path = "scan_refresh_continuity/deferred_save.rs"]
+mod deferred_save;
 #[path = "scan_refresh_continuity/fixed_start_clock.rs"]
 mod fixed_start_clock;
 

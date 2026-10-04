@@ -871,6 +871,8 @@ pub struct PlayoutPublicationGuard {
     pub playout_id: EntityId,
     /// Identity and generation of pending source work, if any.
     pub source_revision: Option<PlayoutSourceRevision>,
+    /// Deferred Classic edits observed before loading schedule configuration.
+    pub deferred_schedule_revision: Option<String>,
 }
 
 /// A generation together with the identity of its durable refresh lifecycle.

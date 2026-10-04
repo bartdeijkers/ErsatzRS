@@ -100,6 +100,19 @@ pub struct ScheduleLanguageOption {
     pub name: String,
 }
 
+/// One schedule edit waiting for, or consumed by, a later Classic build.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ScheduleDeferredChange {
+    pub playout_id: EntityId,
+    pub channel_name: String,
+    pub saved_at: chrono::DateTime<chrono::Utc>,
+    pub effective_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub applied_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_build: Option<chrono::DateTime<chrono::Utc>>,
+    pub build_succeeded: Option<bool>,
+    pub build_message: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScheduleItemOptions {
     pub collections: Vec<ScheduleItemOption>,
@@ -149,6 +162,19 @@ pub trait ProgramScheduleRepository: Send + Sync {
         schedule_id: EntityId,
         items: &[ScheduleItemAdmin],
     ) -> Result<()>;
+    /// Save compatible edits without rebuilding or replacing item identities.
+    /// The caller holds each listed playout's build lock; storage rechecks the
+    /// complete affected set and publishes settings/receipts atomically.
+    async fn defer_items_admin(
+        &self,
+        schedule_id: EntityId,
+        items: &[ScheduleItemAdmin],
+        locked_playouts: &[EntityId],
+    ) -> Result<Vec<ScheduleDeferredChange>>;
+    async fn deferred_changes_admin(
+        &self,
+        schedule_id: EntityId,
+    ) -> Result<Vec<ScheduleDeferredChange>>;
     async fn append_one_item_admin(
         &self,
         schedule_id: EntityId,

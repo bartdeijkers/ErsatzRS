@@ -348,6 +348,12 @@ hydration-asset rebuilds happen once at commit time, not on every iteration.
 
 ## Admin UI E2E
 
+Run `schedule-deferred-save.spec.ts` for Classic deferred item saves through
+hydrated and no-JavaScript editors, retained horizons, pending/build status,
+incompatible-edit rejection and preservation of unsaved fields during polling.
+The infrastructure natural-maintenance restart regression supplies the actual
+future-application proof; the browser fixture deliberately retains a distant horizon.
+
 Run `local-library-paths.spec.ts` for local-library validation feedback, draft
 correction, localized errors, literal percent paths and unchanged scanned-media
 identity. It exercises Chromium and Firefox with JavaScript enabled and disabled.

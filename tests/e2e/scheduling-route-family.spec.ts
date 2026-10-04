@@ -266,7 +266,7 @@ test.describe('scheduling route-family parity', () => {
     await scheduleItemControl(page, 'Collection Type', 'select').selectOption('9');
     await scheduleItemControl(page, 'Search Title', 'input').fill('Bumpers');
     await scheduleItemControl(page, 'Search Query', 'input').fill('library_id:2');
-    await page.getByRole('button', { name: /save schedule items/i }).click();
+    await page.getByRole('button', { name: /save and refresh/i }).click();
 
     await expect(page.locator('tbody tr')).toHaveCount(2);
     await expect(page.locator('tbody tr').nth(0)).toContainText('Primary Videos');

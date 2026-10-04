@@ -338,7 +338,19 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     }
 
     async fn delete_admin(&self, id: EntityId) -> Result<()> {
-        checked_delete(&self.0, "Playout", id).await
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let deleted = sqlx::query(r#"DELETE FROM "Playout" WHERE "Id"=?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        checked_update(deleted, "Playout", id)?;
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+            .bind(crate::classic_deferred::key(id))
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        tx.commit().await.repository()
     }
 
     async fn list_id_kinds_admin(&self) -> Result<Vec<(EntityId, i32)>> {
@@ -865,17 +877,6 @@ async fn get_sequential_admin(
             })
         })
         .transpose()
-}
-
-async fn checked_delete(pool: &crate::db::DbPool, table: &'static str, id: EntityId) -> Result<()> {
-    let result = sqlx::query(crate::db::assert_sql_safe(format!(
-        r#"DELETE FROM "{table}" WHERE "Id" = ?"#
-    )))
-    .bind(id)
-    .execute(pool)
-    .await
-    .repository()?;
-    checked_update(result, table, id)
 }
 
 #[allow(clippy::needless_pass_by_value)]

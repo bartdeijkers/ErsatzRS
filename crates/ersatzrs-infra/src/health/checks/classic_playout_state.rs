@@ -85,10 +85,14 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
                 .collect::<Vec<_>>();
             intervals.sort_unstable();
             let timeline_ready = validate_classic_timeline(intervals, None).is_ok();
+            let deferred_ready = crate::classic_deferred::state_is_valid(&self.pool, playout_id)
+                .await
+                .map_err(|error| HealthCheckError::Database(error.to_string()))?;
             if runtime_complete
                 && refresh_audit.is_complete()
                 && preservation_ready
                 && timeline_ready
+                && deferred_ready
             {
                 continue;
             }

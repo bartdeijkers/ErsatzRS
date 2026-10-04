@@ -3466,11 +3466,54 @@ pub async fn replace_schedule_items(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
-    validate_positive_id(command.schedule_id, "schedule_id")?;
-    if repository.get_admin(command.schedule_id).await?.is_none() {
+    let items = validated_schedule_items(command.schedule_id, command.items, repository).await?;
+    repository
+        .replace_items_admin(command.schedule_id, &items)
+        .await?;
+    refresh_schedule_playouts(command.schedule_id, repository, queue, operations).await
+}
+
+/// Save a compatible Classic edit for later continuation without queueing a build.
+pub async fn defer_schedule_items(
+    command: ReplaceScheduleItems,
+    repository: &dyn ProgramScheduleRepository,
+    operations: &OperationCoordinator,
+) -> crate::Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+    let items = validated_schedule_items(command.schedule_id, command.items, repository).await?;
+    let mut ids = repository
+        .playout_ids_using_admin(command.schedule_id)
+        .await?;
+    ids.sort_unstable();
+    ids.dedup();
+    let mut guards = Vec::with_capacity(ids.len());
+    for id in &ids {
+        let guard = operations
+            .begin(BeginOperation::new(OperationKey::PlayoutBuild(*id)))
+            .into_guard()
+            .ok_or_else(|| {
+                ApplicationError::Conflict(
+                    "Classic deferred save is busy; wait for the active playout build and retry"
+                        .into(),
+                )
+            })?;
+        guards.push(guard);
+    }
+    repository
+        .defer_items_admin(command.schedule_id, &items, &ids)
+        .await
+        .map_err(Into::into)
+}
+
+async fn validated_schedule_items(
+    schedule_id: EntityId,
+    items: Vec<ScheduleItemAdmin>,
+    repository: &dyn ProgramScheduleRepository,
+) -> crate::Result<Vec<ScheduleItemAdmin>> {
+    validate_positive_id(schedule_id, "schedule_id")?;
+    if repository.get_admin(schedule_id).await?.is_none() {
         return Err(ApplicationError::NotFound {
             kind: "program schedule",
-            id: command.schedule_id,
+            id: schedule_id,
         });
     }
 
@@ -3481,16 +3524,13 @@ pub async fn replace_schedule_items(
         .filter(|filler| filler.pad_to_nearest_minute)
         .map(|filler| filler.id)
         .collect::<std::collections::BTreeSet<_>>();
-    let mut items = command.items;
+    let mut items = items;
     for item in &mut items {
         normalize_schedule_item(item);
     }
     validate_schedule_items(&items, &padded_filler_ids)?;
     items.sort_by_key(|item| (item.index, item.id));
-    repository
-        .replace_items_admin(command.schedule_id, &items)
-        .await?;
-    refresh_schedule_playouts(command.schedule_id, repository, queue, operations).await
+    Ok(items)
 }
 
 pub async fn append_schedule_media_item(

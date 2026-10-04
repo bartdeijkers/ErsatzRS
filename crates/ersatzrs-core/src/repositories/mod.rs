@@ -154,9 +154,9 @@ pub use playout::{
     SequentialPlayoutAdmin,
 };
 pub use program_schedule::{
-    ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleFillerOption,
-    ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions, ScheduleLanguageOption,
-    SchedulePlaylistOption,
+    ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleDeferredChange,
+    ScheduleFillerOption, ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions,
+    ScheduleLanguageOption, SchedulePlaylistOption,
 };
 pub use saved_search::{SavedSearchAdminRow, SavedSearchRepository};
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};

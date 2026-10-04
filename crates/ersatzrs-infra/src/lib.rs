@@ -45,6 +45,7 @@ pub mod audio_script;
 pub mod cache_cleanup;
 pub mod channel_logo;
 pub mod channel_playout;
+mod classic_deferred;
 pub(crate) mod collection_tags;
 pub(crate) mod condition;
 pub mod db;

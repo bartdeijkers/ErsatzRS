@@ -276,18 +276,40 @@ pub async fn save_schedule_items_form(State(state): State<AppState>, body: Bytes
     }
 
     normalize_indexes(&mut items);
-    match state
-        .application
-        .replace_schedule_items(ersatzrs_app::commands::ReplaceScheduleItems {
-            schedule_id,
-            items: items.into_iter().map(schedule_item_into_admin).collect(),
-        })
-        .await
-    {
+    let command = ersatzrs_app::commands::ReplaceScheduleItems {
+        schedule_id,
+        items: items.into_iter().map(schedule_item_into_admin).collect(),
+    };
+    let result = if action == "save-deferred" {
+        state
+            .application
+            .defer_schedule_items(command)
+            .await
+            .map(|_| ())
+    } else {
+        state.application.replace_schedule_items(command).await
+    };
+    match result {
         Ok(()) => Redirect::to(&format!("/schedules/{schedule_id}/items")),
         Err(error) => {
             tracing::error!(%error, schedule_id, "failed to save schedule items from HTML form");
-            Redirect::to(&format!("/schedules/{schedule_id}/items?error=save-items"))
+            let code = if action == "save-deferred" {
+                let message = error.to_string();
+                if message.contains("Classic deferred save cannot change") {
+                    "defer-incompatible"
+                } else if message.contains("Classic deferred save is busy") {
+                    "defer-busy"
+                } else if message
+                    .contains("Classic deferred save requires a valid published timeline")
+                {
+                    "defer-timeline"
+                } else {
+                    "defer-items"
+                }
+            } else {
+                "save-items"
+            };
+            Redirect::to(&format!("/schedules/{schedule_id}/items?error={code}"))
         }
     }
 }

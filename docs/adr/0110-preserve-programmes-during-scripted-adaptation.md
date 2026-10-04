@@ -6,10 +6,10 @@ Accepted (2026-10-02) — implements the maintainer-approved finding 06 solution
 
 ## Implementation
 
-Partial — findings 06 and 12 have local feature acceptance in
-`v111-findings-06` and `v111-findings-12`. The linked Classic deferred-save debt
-remains owned by finding 11; this ADR cannot claim complete implementation
-until that work is accepted. Stored-kind admission, transactional refresh-intent publication
+Implemented — findings 06, 11 and 12 have local feature acceptance in `v111-findings-06`,
+`v111-findings-11` and `v111-findings-12`, including Classic deferred-save receipts
+and natural continuation. Native Windows package and release acceptance remain
+separate gates. Stored-kind admission, transactional refresh-intent publication
 fencing, versioned Scripted boundary checkpoints, runtime source capture and
 bounded successful-scan comparison/admission are implemented locally. Candidate
 source revalidation fences unprocessed receipts and concurrent managed-library
@@ -127,6 +127,21 @@ acknowledging a generation after publication does not prevent an older build
 from publishing after a newer source change.
 
 ## Decision
+
+- Classic deferred saves update compatible filler, graphics, guide and track
+  settings in place, retaining item IDs and every published programme, anchor,
+  history and enumerator. Source, ordering and item-structure edits require the
+  explicit preserving Refresh path. Acquire the same playout build locks used
+  by maintenance, including alternate schedules, and recheck affected identities
+  under the SQLite writer. Do not queue a build from this action.
+  Versioned per-playout receipts in ConfigElement record each schedule's saved
+  horizon and eventual application boundary. Their complete revision participates
+  in candidate publication fencing. The first successfully published matching
+  schedule item acknowledges application in the same transaction; mere config
+  loading does not. Expose pending/applied status and actual build results in
+  hydrated and no-JavaScript editors. Full replacement supersedes receipts;
+  explicit full Reset can recover corrupt bookkeeping, while preserving builds
+  refuse it and Health reports it.
 
 - Classic publication validates the exact retained and candidate intervals
   under the SQLite writer before changing rows, history or continuation state.

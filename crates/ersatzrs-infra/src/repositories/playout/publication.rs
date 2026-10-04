@@ -338,6 +338,9 @@ impl SqlitePlayoutRepository {
         }
         replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
         replace_playout_templates(&mut tx, playout).await?;
+        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Classic {
+            crate::classic_deferred::mark_applied(&mut tx, playout.id, result).await?;
+        }
 
         validate_deadline(result.publication_deadline)?;
         Ok(PendingPlayoutBuild {

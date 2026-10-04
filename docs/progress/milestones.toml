@@ -14695,7 +14695,7 @@ additional separate proposed solution within finding 09.
 id = 'v111-findings-11'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Defer Classic schedule changes until the next continuation'
-status = 'Not started'
+status = 'Complete'
 feature = 'classic-scheduling'
 depends_on = []
 acceptance = """
@@ -14708,14 +14708,34 @@ next-programme adaptation remains separately owned by v111-findings-06.
 No live configuration mutation or release publication is included.
 """
 evidence = """
-The findings describe a released Classic editor that unconditionally requests
-Refresh on save, while a guarded external deferred update preserved existing
-state. Future filler appearance remains unobserved. Product implementation and
-localized UI, persistence and natural-Continue acceptance remain pending.
-A later October 4 snapshot comparison confirms that ordinary maintenance
-loaded the deferred filler preset into anchor context while preserving all film
-rows and the continuation horizon. It still emitted no filler rows. Reuse this
-as source evidence of configuration consumption, not deferred-junction acceptance.
+Locally accepted on 2026-10-04. Upstream 960421e8 replaces item identities and
+queues Refresh; deferred saving instead preserves item identities, attachments,
+published rows, history, anchors and enumerators. Compatible filler, branding,
+guide and track changes use shared build locks and durable ConfigElement receipts.
+Source/order edits and concurrent builds are rejected before mutation. Publication
+fences stale candidates and acknowledges applied changes in the timeline transaction.
+Health reports invalid receipts; explicit full Reset can recover them.
+Ten infrastructure regressions pass (ec176fe0-5a7c-41d9-bdbf-806c7ac4032c),
+including actual natural maintenance in a fresh process emitting the new pre-roll
+after the retained horizon with unchanged prefix and uninterrupted rotation.
+Application lock/no-Refresh regression passes (99fa9bb6-2e1a-4dc4-bac5-fcb6b8fa0f6b).
+Application-receipt/timeline rollback and successful retry pass
+(4a12bd96-8a15-4355-9fa2-ad482d423a01). All 24 localization tests pass.
+Full test-closeout passes 3811 tests and all doctests
+(3389f48d-ee0a-4a9e-83cc-61b662ecd0dd). Strict affected all-target Clippy,
+architecture and hydration lint pass. Native smoke passes legacy/hybrid MPEG-TS,
+HLS playlists and segments. Existing transport evidence is reused from finding 06.
+Matched Leptos build and Chromium/Firefox JS/no-JS acceptance pass, covering
+pending/applied boundaries, build status, incompatible edits, polling without
+losing unsaved input and localized mobile controls. Mobile screenshots were
+visually reviewed. The existing Chromium scheduling workflow also passes.
+A normal server build during smoke exposed hydration drift in the final repeat;
+restoring the matched Leptos build fixes it. Both browsers then pass again without
+page/hydration errors; the final bundle gate passes. Canonical browser evidence:
+schedule-deferred-save.spec.ts, scheduling-route-family.spec.ts and temporary
+finding11-browser-restored-results/playwright-results.json. Final closeout logs
+use the finding11 prefix in the system temporary directory.
+No live changes, native Windows package acceptance, CI or release are claimed.
 """
 
 [[milestone]]

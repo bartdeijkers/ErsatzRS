@@ -209,4 +209,77 @@ mod tests {
             assert_eq!(result.anchor.unwrap().next_start, start);
         }
     }
+    #[tokio::test]
+    async fn deferred_schedule_save_uses_build_lock_and_never_queues_refresh() {
+        use ersatzrs_app::commands::{BeginOperation, ReplaceScheduleItems};
+        use ersatzrs_app::operations::OperationKey;
+        use sqlx::Executor as _;
+        let (state, mut builds) = fixture().await;
+        state.pool.execute(r#"
+            INSERT INTO "ProgramSchedule" ("Id", "Name", "FixedStartTimeBehavior",
+                "KeepMultiPartEpisodesTogether", "RandomStartPoint", "ShuffleScheduleItems", "TreatCollectionsAsShows")
+                VALUES (163, 'Deferred schedule', 0, 0, 0, 0, 0);
+            INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "ProgramScheduleId", "Seed")
+                VALUES (163, 163, 1, 163, 1);
+            INSERT INTO "ProgramScheduleItem" ("Id", "ProgramScheduleId", "Index", "CollectionType",
+                "SearchQuery", "SearchTitle", "FillWithGroupMode", "GuideMode", "MarathonGroupBy",
+                "MarathonShuffleGroups", "MarathonShuffleItems", "PlaybackOrder")
+                VALUES (163, 163, 0, 9, 'type:movie', 'Movies', 0, 0, 0, 0, 0, 1);
+            INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (163);
+        "#).await.unwrap();
+        let mut items = state.application.list_schedule_items(163).await.unwrap();
+        items[0].custom_title = "Deferred title".into();
+        let command = ReplaceScheduleItems {
+            schedule_id: 163,
+            items,
+        };
+        let guard = state
+            .application
+            .operations()
+            .begin(BeginOperation::new(OperationKey::PlayoutBuild(163)))
+            .into_guard()
+            .unwrap();
+        let error = state
+            .application
+            .defer_schedule_items(command.clone())
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("Classic deferred save is busy"),
+            "{error}"
+        );
+        assert_ne!(
+            state.application.list_schedule_items(163).await.unwrap()[0].custom_title,
+            "Deferred title"
+        );
+        assert!(state
+            .application
+            .schedule_deferred_changes(163)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(builds.try_recv().is_err());
+        drop(guard);
+        let receipt = state
+            .application
+            .defer_schedule_items(command)
+            .await
+            .unwrap();
+        assert_eq!(receipt.len(), 1);
+        assert_eq!(receipt[0].effective_after, None);
+        assert_eq!(receipt[0].applied_from, None);
+        let saved = state.application.list_schedule_items(163).await.unwrap();
+        assert_eq!(saved[0].id, 163);
+        assert_eq!(saved[0].custom_title, "Deferred title");
+        assert!(builds.try_recv().is_err());
+        assert!(
+            state
+                .application
+                .operations()
+                .begin(BeginOperation::new(OperationKey::PlayoutBuild(163)))
+                .into_guard()
+                .is_some(),
+            "deferred save must release its lock"
+        );
+    }
 }

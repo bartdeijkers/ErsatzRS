@@ -1900,6 +1900,26 @@ impl ApplicationServices {
         .await
     }
 
+    /// Persist compatible schedule edits for the next continuation, without a rebuild.
+    pub async fn defer_schedule_items(
+        &self,
+        command: commands::ReplaceScheduleItems,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        commands::defer_schedule_items(command, self.ports.program_schedules(), &self.operations)
+            .await
+    }
+
+    pub async fn schedule_deferred_changes(
+        &self,
+        schedule_id: ersatzrs_domain::EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        self.ports
+            .program_schedules()
+            .deferred_changes_admin(schedule_id)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn append_schedule_media_item(
         &self,
         command: commands::AppendScheduleMediaItem,

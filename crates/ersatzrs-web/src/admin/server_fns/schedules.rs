@@ -517,8 +517,38 @@ pub(crate) fn schedule_options_from_admin(
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduleDeferredChange {
+    pub playout_id: i64,
+    pub channel_name: String,
+    pub saved_at: chrono::DateTime<chrono::Utc>,
+    pub effective_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub applied_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_build: Option<chrono::DateTime<chrono::Utc>>,
+    pub build_succeeded: Option<bool>,
+    pub build_message: Option<String>,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_core::repositories::ScheduleDeferredChange> for ScheduleDeferredChange {
+    fn from(value: ersatzrs_core::repositories::ScheduleDeferredChange) -> Self {
+        Self {
+            playout_id: value.playout_id,
+            channel_name: value.channel_name,
+            saved_at: value.saved_at,
+            effective_after: value.effective_after,
+            applied_from: value.applied_from,
+            last_build: value.last_build,
+            build_succeeded: value.build_succeeded,
+            build_message: value.build_message,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScheduleItemsPageData {
+    #[serde(default)]
+    pub deferred_changes: Vec<ScheduleDeferredChange>,
     pub schedule: ScheduleForm,
     pub items: Vec<ScheduleItemForm>,
     pub options: ScheduleItemsEditorOptions,
@@ -662,6 +692,14 @@ pub async fn get_schedule_items_page(
         .map(schedule_options_from_admin)
         .map_err(ServerFnError::new)?;
     Ok(Some(ScheduleItemsPageData {
+        deferred_changes: state
+            .application
+            .schedule_deferred_changes(id)
+            .await
+            .map_err(ServerFnError::new)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         schedule,
         items,
         options,
@@ -684,6 +722,36 @@ pub async fn replace_schedule_items(
             items: items.into_iter().map(schedule_item_into_admin).collect(),
         })
         .await
+        .map_err(ServerFnError::new)
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn defer_schedule_items(
+    schedule_id: i64,
+    items: Vec<ScheduleItemForm>,
+) -> Result<Vec<ScheduleDeferredChange>, ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    state
+        .application
+        .defer_schedule_items(ersatzrs_app::commands::ReplaceScheduleItems {
+            schedule_id,
+            items: items.into_iter().map(schedule_item_into_admin).collect(),
+        })
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
+        .map_err(ServerFnError::new)
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn get_schedule_deferred_changes(
+    schedule_id: i64,
+) -> Result<Vec<ScheduleDeferredChange>, ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    state
+        .application
+        .schedule_deferred_changes(schedule_id)
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
         .map_err(ServerFnError::new)
 }
 

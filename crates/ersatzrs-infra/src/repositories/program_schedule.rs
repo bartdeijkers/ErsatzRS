@@ -1,3 +1,5 @@
+mod deferred;
+
 use crate::repositories::SqlxResultExt as _;
 use std::collections::BTreeSet;
 
@@ -371,6 +373,22 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
             .execute(&mut *tx)
             .await
             .repository()?;
+        crate::classic_deferred::clear_schedule(&mut tx, id).await?;
+        // Deleting the primary schedule cascades its playouts, including any
+        // receipts belonging to their alternate schedules.
+        let deleted_playouts: Vec<EntityId> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" WHERE "ProgramScheduleId"=?"#)
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await
+                .repository()?;
+        for playout_id in deleted_playouts {
+            sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+                .bind(crate::classic_deferred::key(playout_id))
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
         sqlx::query(r#"DELETE FROM "ProgramSchedule" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut *tx)
@@ -384,13 +402,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn playout_ids_using_admin(&self, id: EntityId) -> Result<Vec<EntityId>> {
-        sqlx::query_scalar(
-            r#"SELECT "Id" FROM "Playout" WHERE "ProgramScheduleId" = ? ORDER BY "Id""#,
-        )
-        .bind(id)
-        .fetch_all(&self.0)
-        .await
-        .repository()
+        crate::classic_deferred::playout_ids(&self.0, id).await
     }
 
     async fn list_items_admin(&self, id: EntityId) -> Result<Vec<ScheduleItemAdmin>> {
@@ -407,6 +419,22 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         items: &[ScheduleItemAdmin],
     ) -> Result<()> {
         replace_schedule_items_admin(&self.0, schedule_id, items).await
+    }
+
+    async fn defer_items_admin(
+        &self,
+        schedule_id: EntityId,
+        items: &[ScheduleItemAdmin],
+        locked_playouts: &[EntityId],
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        deferred::save(&self.0, schedule_id, items, locked_playouts).await
+    }
+
+    async fn deferred_changes_admin(
+        &self,
+        schedule_id: EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        crate::classic_deferred::list(&self.0, schedule_id).await
     }
 
     async fn append_one_item_admin(
@@ -582,9 +610,17 @@ async fn copy_schedule_item_relations(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 async fn list_schedule_items_admin(
     pool: &Pool<Db>,
+    schedule_id: EntityId,
+) -> Result<Vec<ScheduleItemAdmin>> {
+    let mut connection = pool.acquire().await.repository()?;
+    list_schedule_items_admin_on_connection(&mut connection, schedule_id).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn list_schedule_items_admin_on_connection(
+    connection: &mut sqlx::SqliteConnection,
     schedule_id: EntityId,
 ) -> Result<Vec<ScheduleItemAdmin>> {
     let rows = sqlx::query(
@@ -641,19 +677,22 @@ async fn list_schedule_items_admin(
            ORDER BY "psi"."Index", "psi"."Id""#,
     )
     .bind(schedule_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await
     .repository()?;
     let legacy_policy = load_schedule_policy(
-        pool,
+        &mut *connection,
         &legacy_program_schedule_cooldown_config_key(schedule_id),
     )
     .await?;
     let mut items = Vec::with_capacity(rows.len());
     for row in &rows {
         let id: EntityId = row.try_get("Id").repository()?;
-        let explicit_policy =
-            load_schedule_policy(pool, &program_schedule_item_smart_shuffle_config_key(id)).await?;
+        let explicit_policy = load_schedule_policy(
+            &mut *connection,
+            &program_schedule_item_smart_shuffle_config_key(id),
+        )
+        .await?;
         let inherited_legacy_smart_shuffle = explicit_policy.is_none() && legacy_policy.is_some();
         let smart_shuffle = explicit_policy
             .or_else(|| legacy_policy.clone())
@@ -799,8 +838,8 @@ fn decode_schedule_pinned_stream_selection(
     }
 }
 
-async fn load_schedule_policy(
-    pool: &Pool<Db>,
+async fn load_schedule_policy<'e>(
+    pool: impl sqlx::Executor<'e, Database = Db>,
     key: &str,
 ) -> Result<Option<SchedulingSmartShufflePolicy>> {
     sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
@@ -1235,6 +1274,7 @@ async fn replace_schedule_items_admin(
         .execute(&mut *tx)
         .await
         .repository()?;
+    crate::classic_deferred::clear_schedule(&mut tx, schedule_id).await?;
     tx.commit().await.repository()
 }
 

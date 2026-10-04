@@ -60,6 +60,7 @@ pub async fn publication_guard(
     .await?;
     Ok(PlayoutPublicationGuard {
         playout_id,
+        deferred_schedule_revision: crate::classic_deferred::revision(pool, playout_id).await?,
         source_revision: revision.map(|(identity, generation)| PlayoutSourceRevision {
             identity,
             generation,
@@ -73,6 +74,11 @@ pub(crate) async fn publication_guard_matches(
     guard: &PlayoutPublicationGuard,
 ) -> Result<bool, sqlx::Error> {
     if guard.playout_id != playout_id {
+        return Ok(false);
+    }
+    if crate::classic_deferred::revision(&mut **tx, playout_id).await?
+        != guard.deferred_schedule_revision
+    {
         return Ok(false);
     }
     let revision: Option<(String, i64)> = sqlx::query_as(
