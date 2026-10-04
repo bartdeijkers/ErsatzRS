@@ -82,7 +82,7 @@ const PLAYLIST_DELETE_INTERVAL_MS: i64 = 30_000;
 const PLAYLIST_FILTER_BEFORE_SECONDS: i64 = 30;
 const SEGMENT_CLEANUP_INTERVAL: Duration = Duration::from_secs(5);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
-const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
+use ersatzrs_core::hls::HLS_WORK_AHEAD_BUFFER_SECONDS;
 const HLS_REALTIME_BUFFER_SECONDS: i64 = 30;
 const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
 const HLS_REMOTE_INITIAL_BURST_SECONDS: u64 = HLS_WORK_AHEAD_TRANSCODE_SECONDS;
@@ -592,6 +592,12 @@ impl HlsSessionWorker {
     ) -> RepositoryResult<T> {
         tokio::select! {
             biased;
+            () = self.cancel.notified() => {
+                // Reads can repeatedly fail before a transcode process exists.
+                // Consume cancellation here and stop the retry loop as well.
+                self.set_startup_readiness(HlsStartupReadiness::Failed);
+                Err(RepositoryError::Conflict("HLS startup cancelled".into()))
+            },
             () = self.wait_startup_deadline() => Err(RepositoryError::Conflict("HLS startup deadline expired".into())),
             result = read => result,
         }
@@ -7306,6 +7312,41 @@ mod tests {
         timeout(Duration::from_millis(250), worker.cancel.notified())
             .await
             .expect("worker run loop observes the cancellation signal");
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_startup_reads_before_a_process_exists() {
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-cancel-read"),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        let read = worker.startup_read(std::future::pending::<RepositoryResult<()>>());
+        tokio::pin!(read);
+        assert!(timeout(Duration::from_millis(10), &mut read).await.is_err());
+        worker.cancel().await;
+        assert!(timeout(Duration::from_millis(250), read)
+            .await
+            .expect("cancel interrupts the pending source lookup")
+            .is_err());
+        assert!(matches!(
+            worker.startup_readiness(),
+            HlsStartupReadiness::Failed
+        ));
+
+        // A stored cancel permit must also beat an immediately failing source
+        // read; otherwise the surrounding error/retry loop can continue forever.
+        worker.cancel().await;
+        let error = worker
+            .startup_read(async {
+                Err::<(), _>(RepositoryError::Conflict("source unavailable".into()))
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("HLS startup cancelled"));
     }
 
     #[tokio::test]

@@ -1,5 +1,8 @@
 import { expect, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -221,7 +224,11 @@ test.describe('playout rebuild feedback', () => {
     await waitForHydration(page);
     const row = page.getByRole('row').filter({ hasText: channelName });
     await expect(row).toBeVisible();
-    await row.getByRole('button', { name: 'Refresh Playout' }).click();
+    await row.getByRole('button', { name: 'Update Playout' }).click();
+    const rebuildDialog = page.getByRole('dialog', { name: 'Update Playout', exact: true });
+    await expect(rebuildDialog.getByLabel('Action', { exact: true })).toHaveValue('refresh');
+    await expect(rebuildDialog.getByRole('checkbox', { name: 'Keep the current programme' })).toBeChecked();
+    await rebuildDialog.getByRole('button', { name: 'Queue update' }).click();
 
     const feedback = page.getByText('Playout rebuild queued', { exact: true });
     await expect(feedback).toBeVisible();
@@ -236,6 +243,190 @@ test.describe('playout rebuild feedback', () => {
         };
       }))
       .toEqual({ inToast: true, containerPosition: 'fixed' });
+  });
+
+  test('explicit rebuild choices survive the dialog and server round trip', async ({ page }, testInfo) => {
+    test.setTimeout(60_000);
+    const channelName = seedPlayout(testInfo);
+    await forceEnglish(page);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && /hydration|failed_to_cast_marker_node/i.test(message.text())) {
+        errors.push(message.text());
+      }
+    });
+    await page.goto('/playouts');
+    await waitForHydration(page);
+    const row = page.getByRole('row').filter({ hasText: channelName });
+    const open = row.getByRole('button', { name: 'Update Playout', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Update Playout', exact: true });
+    let requests = 0;
+    page.on('request', request => { if (request.url().includes('/admin-api/rebuild_playout')) requests += 1; });
+    await open.click();
+    await dialog.getByLabel('Action', { exact: true }).selectOption('reset');
+    await dialog.getByRole('checkbox', { name: 'Keep the current programme' }).uncheck();
+    await expect(dialog.getByText('The current programme may be interrupted.', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect(requests).toBe(0);
+
+    for (const [mode, keep] of [['continue', true], ['refresh', true], ['reset', false]] as const) {
+      await expect(open).toBeEnabled();
+      await open.click();
+      await expect(dialog.getByLabel('Action', { exact: true })).toHaveValue('refresh');
+      const preserve = dialog.getByRole('checkbox', { name: 'Keep the current programme' });
+      await expect(preserve).toBeChecked();
+      await dialog.getByLabel('Action', { exact: true }).selectOption(mode);
+      if (mode === 'continue') {
+        await expect(preserve).toBeDisabled();
+      } else {
+        await preserve.setChecked(keep);
+      }
+      const response = page.waitForResponse(result => result.url().includes('/admin-api/rebuild_playout'));
+      await dialog.getByRole('button', { name: 'Queue update' }).click();
+      const result = await response;
+      expect(result.ok()).toBe(true);
+      const body = new URLSearchParams(result.request().postData() ?? '');
+      expect(body.get('mode')).toBe(mode);
+      expect(body.get('preserve_current')).toBe(String(keep));
+      await expect(dialog).toBeHidden();
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+    // The responsive listener closes the drawer after the viewport changes.
+    // Wait for it instead of racing that listener with a toggle click.
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(
+      element => element.getBoundingClientRect().right,
+    )).toBeLessThanOrEqual(0);
+    await expect(open).toBeEnabled();
+    await open.click();
+    await expect(dialog).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('explicit-rebuild-mobile.png'), fullPage: true });
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.request.post('/admin-api/settings/ui/save', {
+      form: { is_dark_mode: 'false', language: 'nl' }, maxRedirects: 0,
+    });
+    await page.reload();
+    await waitForHydration(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await row.getByRole('button', { name: 'Uitzending bijwerken', exact: true }).click();
+    const dutch = page.getByRole('dialog', { name: 'Uitzending bijwerken', exact: true });
+    await expect(dutch.getByLabel('Actie', { exact: true })).toHaveValue('refresh');
+    await expect(dutch.getByRole('checkbox', { name: 'Lopend programma behouden' })).toBeChecked();
+    await expect(dutch).toContainText('Wijzigingen gaan daarna in.');
+    await page.screenshot({ path: testInfo.outputPath('explicit-rebuild-dutch-desktop.png'), fullPage: true });
+    await dutch.getByRole('button', { name: 'Annuleren', exact: true }).click();
+    await page.waitForTimeout(2_000);
+    expect(errors).toEqual([]);
+    expect(requests).toBe(3);
+    await forceEnglish(page);
+  });
+
+  test('external JSON adoption, preserved refresh and Health recovery use the real worker', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    const name = seedPlayout(testInfo);
+    const id = Number(sqlite(`SELECT p."Id" FROM "Playout" p JOIN "Channel" c ON c."Id"=p."ChannelId" WHERE c."Name"='${name}';`));
+    const folder = mkdtempSync(join(tmpdir(), 'external-json-admin-'));
+    const source = join(folder, 'source.json');
+    const content = {
+      startTime: new Date(Date.now() - 60_000).toISOString(),
+      guideMinimumDurationSeconds: 5,
+      programs: ['Current', 'Future', 'Later'].map(title => ({ title, duration: 300_000, file: `synthetic/${title}.mp4`, type: 'movie' })),
+    };
+    const write = () => writeFileSync(source, JSON.stringify(content));
+    const revision = () => Number(sqlite(`SELECT COALESCE(MAX("Revision"),0) FROM "PlayoutExternalJsonSnapshot" WHERE "PlayoutId"=${id};`));
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error' && /hydration|failed_to_cast_marker_node/i.test(message.text())) errors.push(message.text());
+    });
+    write();
+    sqlite(`UPDATE "Playout" SET "ScheduleKind"=20,"ScheduleFile"='${source.replace(/'/g, "''")}' WHERE "Id"=${id};`);
+    try {
+      await forceEnglish(page);
+      await page.goto('/playouts');
+      await waitForHydration(page);
+      const row = page.getByRole('row').filter({ hasText: name });
+      const open = row.getByRole('button', { name: 'Update Playout', exact: true });
+      const dialog = page.getByRole('dialog', { name: 'Update Playout', exact: true });
+      await expect(row.locator('[data-external-json-mode]')).toHaveText('Direct file updates');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.getByRole('button', { name: 'Toggle navigation' })).toHaveAttribute('aria-expanded', 'false');
+      await open.click();
+      await expect(dialog.locator('[data-external-json-help]')).toContainText('turn off programme preservation once');
+      await expect(dialog.getByRole('button', { name: 'Queue update' })).toBeDisabled();
+      await expect(dialog.locator('option[value="continue"]')).toBeDisabled();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath('external-json-adoption-mobile.png'), fullPage: true });
+      await dialog.getByRole('checkbox', { name: 'Keep the current programme' }).uncheck();
+      await dialog.getByRole('button', { name: 'Queue update' }).click();
+      await expect.poll(revision).toBe(1);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.reload();
+      await waitForHydration(page);
+      await expect(row.locator('[data-external-json-mode]')).toHaveText('Controlled updates');
+      await expect(row.locator('[data-playout-source-revision]')).toHaveText('1');
+      const noScript = await browser.newContext({ javaScriptEnabled: false, baseURL: new URL(page.url()).origin });
+      try {
+        const readOnly = await noScript.newPage();
+        await readOnly.goto('/playouts');
+        const retained = readOnly.getByRole('row').filter({ hasText: name });
+        await expect(retained.locator('[data-external-json-mode]')).toHaveText('Controlled updates');
+        await expect(retained.locator('[data-playout-source-revision]')).toHaveText('1');
+      } finally {
+        await noScript.close();
+      }
+      content.programs[0].title = 'Changed current';
+      content.programs[1].title = 'New future';
+      write();
+      await open.click();
+      await expect(dialog.getByRole('checkbox', { name: 'Keep the current programme' })).toBeChecked();
+      const response = page.waitForResponse(result => result.url().includes('/admin-api/rebuild_playout'));
+      await dialog.getByRole('button', { name: 'Queue update' }).click();
+      const accepted = await response;
+      expect(accepted.ok()).toBe(true);
+      expect(new URLSearchParams(accepted.request().postData() ?? '').get('preserve_current')).toBe('true');
+      await expect.poll(revision).toBe(2);
+      const saved = JSON.parse(sqlite(`SELECT "Document" FROM "PlayoutExternalJsonSnapshot" WHERE "PlayoutId"=${id};`));
+      expect(saved.programs.map((item: { title: string }) => item.title)).toEqual(['Current', 'New future', 'Later']);
+      expect(new Date(saved.startTime).getTime()).toBe(new Date(content.startTime).getTime());
+
+      // An actual corrupt accepted version must be diagnosed and recoverable
+      // only by the explicit non-preserving action.
+      sqlite(`UPDATE "PlayoutExternalJsonSnapshot" SET "SchemaVersion"=999 WHERE "PlayoutId"=${id};`);
+      expect((await page.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 })).status()).toBe(303);
+      await page.goto('/system/health');
+      const health = page.getByRole('row').filter({ hasText: 'External JSON Playout State' });
+      await expect(health).toContainText('invalid or unsupported');
+      await expect(health.getByRole('link')).toHaveAttribute('href', '/playouts');
+      await health.getByRole('link').click();
+      await waitForHydration(page);
+      await open.click();
+      await dialog.getByLabel('Action', { exact: true }).selectOption('reset');
+      await expect(dialog).toContainText("cannot reset the external author's rotation");
+      await dialog.getByRole('checkbox', { name: 'Keep the current programme' }).uncheck();
+      await dialog.getByRole('button', { name: 'Queue update' }).click();
+      await expect.poll(revision).toBe(3);
+      expect(sqlite(`SELECT "SchemaVersion" FROM "PlayoutExternalJsonSnapshot" WHERE "PlayoutId"=${id};`)).toBe('1');
+
+      await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'false', language: 'nl' }, maxRedirects: 0 });
+      await page.reload();
+      await waitForHydration(page);
+      await expect(row.locator('[data-external-json-mode]')).toHaveText('Gecontroleerde updates');
+      await row.getByRole('button', { name: 'Uitzending bijwerken', exact: true }).click();
+      const dutch = page.getByRole('dialog', { name: 'Uitzending bijwerken', exact: true });
+      await expect(dutch).toContainText('Uitzending verlengen voegt alleen toe');
+      await expect(dutch).toContainText('externe tijden');
+      await page.screenshot({ path: testInfo.outputPath('external-json-controlled-dutch.png'), fullPage: true });
+      await dutch.getByRole('button', { name: 'Annuleren', exact: true }).click();
+      expect(errors).toEqual([]);
+    } finally {
+      sqlite(`DELETE FROM "Playout" WHERE "Id"=${id};`);
+      rmSync(folder, { recursive: true, force: true });
+      await forceEnglish(page);
+    }
   });
 
   test('covers list, detail, preference, and dialog workflows', async ({ page }, testInfo) => {
@@ -377,6 +568,79 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await expect(page.getByText('De tijdlijn is afgewezen. Gepubliceerde programma’s blijven ongewijzigd. Corrigeer het script en probeer opnieuw.', { exact: true })).toBeHidden({ timeout: 40_000 });
     await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
     expect(sqlite(`SELECT group_concat("Id" || ':' || "Start" || ':' || "Finish") FROM "PlayoutItem" WHERE "PlayoutId" = ${seed.classicPlayoutId};`)).toBe(before);
+    expect(errors).toEqual([]);
+    await forceEnglish(page);
+  });
+
+  test('shows durable adaptation status without JavaScript and updates it while open', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    const seed = seedDetailedPlayoutWorkflow(testInfo);
+    const id = seed.classicPlayoutId;
+    const library = id + 101;
+    sqlite(`
+      UPDATE "Playout" SET "ScheduleKind" = 4, "ScriptedSourceRevision" = 3 WHERE "Id" = ${id};
+      INSERT OR REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message", "LastSuccessfulBuild")
+      VALUES (${id}, '2099-01-01 00:00:00', 1, NULL, '2026-10-02 12:34:56');
+      INSERT INTO "ScriptedSourceRefreshWork" ("LibraryId", "PlayoutId", "Revision", "NextAttempt", "Diagnostic")
+      VALUES (${library}, ${id}, 7, '2099-01-01 00:00:00', 'scripted-source-comparison-failed');
+    `);
+    await forceEnglish(page);
+    const noJs = await browser.newContext({ javaScriptEnabled: false, baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409' });
+    try {
+      const fallback = await noJs.newPage();
+      await fallback.goto('/playouts');
+      const status = fallback.locator(`[data-playout-adaptation="${id}"]`);
+      await expect(status.locator('[data-playout-last-success]')).toHaveText('2026-10-02 12:34:56 UTC');
+      await expect(status.locator('[data-playout-source-revision]')).toHaveText('3');
+      await expect(fallback.locator('[data-playout-failures]')).toContainText('Source comparison failed; a retry is pending.');
+    } finally { await noJs.close(); }
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (/failed_to_cast_marker_node|hydration.*mismatch/i.test(message.text())) errors.push(message.text());
+    });
+    await page.goto('/playouts');
+    await waitForHydration(page);
+    await page.getByPlaceholder('Search for playouts').fill(seed.classicChannelName);
+    const status = page.locator(`[data-playout-adaptation="${id}"]`);
+    await expect(status.locator('[data-playout-source-revision]')).toHaveText('3');
+    await page.locator('[data-playout-failures]').getByRole('button', { name: new RegExp(seed.classicChannelName) }).click();
+    await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
+    // A successful comparison advances the durable revision and leaves Refresh
+    // queued. Keep this fixture ineligible so the real worker cannot race the UI proof.
+    sqlite(`
+      DELETE FROM "ScriptedSourceRefreshWork" WHERE "PlayoutId" = ${id};
+      UPDATE "Playout" SET "ScriptedSourceRevision" = 4 WHERE "Id" = ${id};
+      INSERT INTO "ScanPlayoutRefreshIntent" ("PlayoutId", "Generation", "State", "Reason", "CreatedAt", "UpdatedAt", "NextAttempt")
+      VALUES (${id}, 1, 0, 'scripted-source-changed', '2026-10-02T12:35:00Z', '2026-10-02T12:35:00Z', '2099-01-01 00:00:00');
+    `);
+    await expect(status.locator('[data-playout-source-revision]')).toHaveText('4', { timeout: 40_000 });
+    await expect(status.locator('[data-playout-refresh-pending]')).toBeVisible();
+    await expect(page.locator('[data-playout-failures]')).toBeHidden();
+    await expect(status.locator('[data-playout-last-success]')).toHaveText('2026-10-02 12:34:56 UTC');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+      if (width === 390) {
+        await expect(navigation).toHaveAttribute('aria-expanded', 'false');
+        await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(
+          element => element.getBoundingClientRect().right,
+        )).toBeLessThanOrEqual(0);
+      }
+      await status.scrollIntoViewIfNeeded();
+      const bounds = await status.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`adaptation-status-${width}.png`), fullPage: true });
+    }
+    await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'false', language: 'nl' }, maxRedirects: 0 });
+    await page.reload();
+    await waitForHydration(page);
+    await expect(status).toContainText('Laatste geslaagde opbouw');
+    await expect(status).toContainText('Bronrevisie');
+    await expect(status).toContainText('Vernieuwing staat klaar');
     expect(errors).toEqual([]);
     await forceEnglish(page);
   });

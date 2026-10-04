@@ -245,6 +245,7 @@ pub fn spawn_background_tasks(
             maintenance.playout_build_rx,
             maintenance.application.clone(),
             maintenance.hls_sessions,
+            maintenance.next,
             maintenance.health,
             artwork,
             shutdown.clone(),
@@ -441,6 +442,7 @@ pub struct MaintenanceTaskInputs {
     pub scan_work_rx: mpsc::UnboundedReceiver<ersatzrs_app::commands::ScanWorkRequest>,
     pub application: Arc<ersatzrs_app::ApplicationServices>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
+    pub next: Arc<ersatzrs_infra::next_engine::host::NextHost>,
     pub health: ersatzrs_infra::health::HealthCheckCoordinator,
 }
 
@@ -448,6 +450,7 @@ async fn run_maintenance_scheduler(
     playout_build_rx: mpsc::UnboundedReceiver<PlayoutBuildRequest>,
     application: Arc<ersatzrs_app::ApplicationServices>,
     hls_sessions: Arc<dyn HlsSessionRegistry>,
+    next: Arc<ersatzrs_infra::next_engine::host::NextHost>,
     health: ersatzrs_infra::health::HealthCheckCoordinator,
     artwork: ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance,
     shutdown: CancellationToken,
@@ -459,6 +462,7 @@ async fn run_maintenance_scheduler(
         application: Some(application.clone()),
         build_activity: Some(operations.playout_activity()),
         hls_sessions: Some(hls_sessions),
+        next: Some(next),
         health: Some(health),
         artwork: Some(artwork),
         locker: Some(operations.entity_locker()),

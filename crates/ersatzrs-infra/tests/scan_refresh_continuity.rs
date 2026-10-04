@@ -364,7 +364,7 @@ async fn run_classic_build(
         run_requested_playout_build(
             pool,
             &EntityLocker::new(),
-            PlayoutBuildRequest { playout_id, mode },
+            PlayoutBuildRequest::new(playout_id, mode),
             now,
             None,
         )
@@ -947,10 +947,7 @@ async fn assert_legacy_playlist_refusal(mode: PlayoutBuildMode) {
     let error = run_requested_playout_build(
         &pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, mode),
         start,
         None,
     )
@@ -1792,10 +1789,7 @@ async fn assert_yaml_legacy_history_refusal(pool: &SqlitePool, start: DateTime<U
     let error = run_requested_playout_build(
         pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, PlayoutBuildMode::Refresh),
         start,
         None,
     )
@@ -1819,10 +1813,7 @@ async fn assert_yaml_legacy_history_refusal(pool: &SqlitePool, start: DateTime<U
     run_requested_playout_build(
         pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset),
         start,
         None,
     )

@@ -368,6 +368,19 @@
 .page-btn:disabled { opacity: 0.35; cursor: default; }
 
 /* ---- dialog bodies ---- */
+.rebuild-preservation {
+    border: 0;
+    padding: 0;
+    margin: 1rem 0 0.5rem;
+}
+.rebuild-help {
+    color: var(--color-muted);
+    margin: 0.5rem 0;
+}
+.rebuild-warning {
+    color: var(--color-warning);
+    margin: 0.5rem 0;
+}
 .dialog-prompt {
     margin: 0 0 1rem;
     color: var(--color-text-primary);
@@ -467,6 +480,22 @@
     cursor: pointer;
 }
 .ctx-close:hover { background-color: var(--color-table-hover); }
+
+.adaptation-status {
+    color: var(--color-text-secondary);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+.adaptation-status dl,
+.adaptation-status dd,
+.adaptation-status p {
+    margin: 0;
+}
+.adaptation-status dl > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.5rem;
+}
 
 /* ---- responsive (hide secondary columns under md, like ErsatzTV) ---- */
 @media (max-width: 767px) {

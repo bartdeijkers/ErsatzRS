@@ -2,6 +2,21 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+/// Maximum buffered duration at which a native worker may select another item.
+/// Next's supported producer uses the same sixty-second work-ahead contract.
+pub const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
+
+/// Redacted acknowledgement failure for a session-owned schedule snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum HlsPublicationError {
+    #[error("schedule publication timed out")]
+    TimedOut,
+    #[error("schedule publication failed; the last complete snapshot was retained")]
+    Failed,
+    #[error("the playback session ended before acknowledging schedule publication")]
+    SessionEnded,
+}
+
 /// Public worker report matching upstream `HlsSessionModel`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,6 +117,21 @@ pub trait HlsSessionHandle: Send + Sync {
     ///
     /// [`IHlsSessionWorker.PlayoutUpdated`]: $ERSATZTV_SRC/ErsatzTV.Core/Interfaces/Streaming/IHlsSessionWorker.cs
     fn playout_updated(&self);
+
+    /// Notify a rebuild and wait for a session-owned snapshot to be published.
+    /// Native readers consume committed database rows directly; their default
+    /// only sends the ordinary update notification. Snapshot owners must override
+    /// this and acknowledge a read started after this request, by `deadline`.
+    ///
+    /// # Errors
+    /// Returns a redacted failure, expired deadline or ended-session outcome.
+    async fn publish_playout_update(
+        &self,
+        _deadline: std::time::Instant,
+    ) -> Result<(), HlsPublicationError> {
+        self.playout_updated();
+        Ok(())
+    }
 }
 
 /// Tracks the set of running HLS sessions keyed by channel number.
@@ -192,6 +222,25 @@ pub trait HlsSessionRegistry: Send + Sync {
             true
         } else {
             false
+        }
+    }
+
+    /// Wait for publication by active snapshot owners, without starting a viewer.
+    /// Registries forwarding to previews or tracking direct responses must notify
+    /// those owners too. New sessions read the current database during startup.
+    ///
+    /// # Errors
+    /// Returns an acknowledgement failure from any active owner.
+    async fn publish_playout_update(
+        &self,
+        channel_number: &str,
+        deadline: std::time::Instant,
+    ) -> Result<bool, HlsPublicationError> {
+        if let Some(handle) = self.try_get(channel_number).await {
+            handle.publish_playout_update(deadline).await?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }

@@ -3,6 +3,127 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 
 #[tokio::test]
+async fn stalled_refresh_times_out_and_recovers_but_retired_channel_stops() {
+    let root = tempfile::tempdir().unwrap();
+    let process = super::super::process::fixture_process(root.path(), "ready")
+        .await
+        .unwrap();
+    let session = Arc::new(NextSession::new(
+        "1".into(),
+        root.path().into(),
+        Instant::now() + Duration::from_secs(30),
+    ));
+    let (attempts, mut observed) = tokio::sync::mpsc::unbounded_channel();
+    let (stalled, timed_out) = oneshot::channel::<()>();
+    let running = session.clone();
+    let task = tokio::spawn(async move {
+        let mut attempt = 0;
+        let mut stalled = Some(stalled);
+        running
+            .run(async { Ok(process) }, None, move |_| {
+                attempt += 1;
+                attempts.send(attempt).unwrap();
+                let stalled = stalled.take();
+                async move {
+                    if let Some(_stalled) = stalled {
+                        std::future::pending::<()>().await;
+                    }
+                    if attempt == 2 {
+                        Ok(())
+                    } else {
+                        Err(RefreshError::Retired)
+                    }
+                }
+            })
+            .await
+    });
+    session.playout_updated();
+    assert_eq!(observed.recv().await, Some(1));
+    tokio::time::pause();
+    tokio::time::advance(REFRESH_TIMEOUT).await;
+    assert!(
+        timed_out.await.is_err(),
+        "the stalled attempt must be dropped"
+    );
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Ready);
+    assert!(
+        observed.try_recv().is_err(),
+        "timeout must also respect cooldown"
+    );
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert_eq!(observed.recv().await, Some(2));
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Ready);
+    tokio::time::resume();
+    session.playout_updated();
+    assert_eq!(observed.recv().await, Some(3));
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(SessionError::Refresh(RefreshError::Retired))
+    ));
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Failed);
+}
+
+#[tokio::test]
+async fn failed_refresh_keeps_playing_and_retries_without_notification_storms() {
+    let root = tempfile::tempdir().unwrap();
+    let process = super::super::process::fixture_process(root.path(), "ready")
+        .await
+        .unwrap();
+    let playlist = "#EXTM3U\nretained.ts\n";
+    std::fs::write(root.path().join("live.m3u8"), playlist).unwrap();
+    let session = Arc::new(NextSession::new(
+        "1".into(),
+        root.path().into(),
+        Instant::now() + Duration::from_secs(30),
+    ));
+    let (attempts, mut observed) = tokio::sync::mpsc::unbounded_channel();
+    let running = session.clone();
+    let task = tokio::spawn(async move {
+        let mut attempt = 0;
+        running
+            .run(async { Ok(process) }, None, move |_| {
+                attempt += 1;
+                attempts.send(attempt).unwrap();
+                let result = match attempt {
+                    1 => Err(RefreshError::Read),
+                    2 => Err(RefreshError::Projection),
+                    _ => Ok(()),
+                };
+                async { result }
+            })
+            .await
+    });
+    session.playout_updated();
+    assert_eq!(observed.recv().await, Some(1));
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Ready);
+    assert_eq!(session.trim_playlist().await.as_deref(), Some(playlist));
+
+    tokio::time::pause();
+    for _ in 0..100 {
+        session.playout_updated();
+    }
+    tokio::task::yield_now().await;
+    assert!(observed.try_recv().is_err());
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert_eq!(observed.recv().await, Some(2));
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert!(observed.try_recv().is_err(), "retry backoff must increase");
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert_eq!(observed.recv().await, Some(3));
+    tokio::task::yield_now().await;
+    assert!(
+        observed.try_recv().is_err(),
+        "the retry consumes coalesced work"
+    );
+    assert_eq!(session.startup_readiness(), HlsStartupReadiness::Ready);
+    session.playout_updated();
+    assert_eq!(observed.recv().await, Some(4));
+    tokio::time::resume();
+    session.cancel().await;
+    assert_eq!(task.await.unwrap().unwrap(), SessionExit::Cancelled);
+}
+
+#[tokio::test]
 async fn cancellation_before_start_does_not_poll_startup_or_expose_stale_playlist() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("live.m3u8"), "#EXTM3U\nstale.ts\n").unwrap();
@@ -18,7 +139,7 @@ async fn cancellation_before_start_does_not_poll_startup_or_expose_stale_playlis
             .run(
                 async { panic!("cancelled startup must not run") },
                 None,
-                || async { Ok(()) }
+                |_| async { Ok(()) }
             )
             .await
             .unwrap(),
@@ -27,7 +148,7 @@ async fn cancellation_before_start_does_not_poll_startup_or_expose_stale_playlis
     assert_eq!(session.startup_readiness(), HlsStartupReadiness::Failed);
     assert!(matches!(
         session
-            .run(std::future::pending(), None, || async { Ok(()) })
+            .run(std::future::pending(), None, |_| async { Ok(()) })
             .await,
         Err(SessionError::AlreadyStarted)
     ));
@@ -49,7 +170,7 @@ async fn refresh_does_not_block_heartbeat_or_cancellation() {
     let running = session.clone();
     let task = tokio::spawn(async move {
         running
-            .run(async { Ok(process) }, None, move || {
+            .run(async { Ok(process) }, None, move |_| {
                 entered_tx.take().unwrap().send(()).unwrap();
                 std::future::pending()
             })
@@ -97,7 +218,7 @@ async fn idle_deadline_tracks_recent_demand() {
             .run(
                 async { Ok(process) },
                 Some(Duration::from_secs(10)),
-                move || {
+                move |_| {
                     if let Some(tx) = entered_tx.take() {
                         tx.send(()).unwrap();
                     }
@@ -145,7 +266,7 @@ async fn playlist_is_bounded_and_hidden_after_aborting_a_running_session() {
     let running = session.clone();
     let task = tokio::spawn(async move {
         running
-            .run(async { Ok(process) }, None, move || {
+            .run(async { Ok(process) }, None, move |_| {
                 tx.take().unwrap().send(()).unwrap();
                 async { Ok(()) }
             })
@@ -174,7 +295,7 @@ async fn startup_deadline_is_terminal() {
         Instant::now() + Duration::from_secs(10),
     );
     let result = session
-        .run(std::future::pending(), None, || async { Ok(()) })
+        .run(std::future::pending(), None, |_| async { Ok(()) })
         .await;
     assert!(matches!(
         result,
@@ -197,7 +318,7 @@ async fn unexpected_exit_is_terminal_and_keeps_the_exit_code() {
     let running = session.clone();
     let task = tokio::spawn(async move {
         running
-            .run(async { Ok(process) }, None, || async { Ok(()) })
+            .run(async { Ok(process) }, None, |_| async { Ok(()) })
             .await
     });
     std::fs::write(root.path().join("exit-request"), b"").unwrap();

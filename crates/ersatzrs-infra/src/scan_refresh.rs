@@ -514,6 +514,55 @@ pub async fn defer_refresh(
     generation: i64,
     now: chrono::DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
+    defer_refresh_with_diagnostic(
+        pool,
+        playout_id,
+        generation,
+        now,
+        "scripted-source-publication-deferred",
+    )
+    .await
+}
+
+pub(crate) async fn defer_boundary_refresh(
+    pool: &DbPool,
+    playout_id: EntityId,
+    generation: i64,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    defer_refresh_with_diagnostic(
+        pool,
+        playout_id,
+        generation,
+        now,
+        "playout-programme-boundary-elapsed",
+    )
+    .await
+}
+
+pub(crate) async fn defer_session_publication(
+    pool: &DbPool,
+    playout_id: EntityId,
+    generation: i64,
+    now: chrono::DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    defer_refresh_with_diagnostic(
+        pool,
+        playout_id,
+        generation,
+        now,
+        "playout-session-publication-pending",
+    )
+    .await
+}
+
+async fn defer_refresh_with_diagnostic(
+    pool: &DbPool,
+    playout_id: EntityId,
+    generation: i64,
+    now: chrono::DateTime<Utc>,
+    diagnostic: &'static str,
+) -> Result<(), sqlx::Error> {
     let mut tx = begin_write(pool).await?;
     let attempts: Option<i64> = sqlx::query_scalar(
         r#"SELECT "Attempts" FROM "ScanPlayoutRefreshIntent"
@@ -528,13 +577,21 @@ pub async fn defer_refresh(
         let delay = 30_i64
             .saturating_mul(1_i64 << attempts.clamp(0, 4))
             .min(300);
-        sqlx::query(r#"UPDATE "ScanPlayoutRefreshIntent" SET "State" = ?, "Attempts" = "Attempts" + 1,
-            "NextAttempt" = ?, "Diagnostic" = 'scripted-source-publication-deferred', "UpdatedAt" = ?
-            WHERE "PlayoutId" = ? AND "Generation" = ?"#)
-            .bind(INTENT_STATE_PENDING)
-            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::seconds(delay)))
-            .bind(now.to_rfc3339()).bind(playout_id).bind(generation)
-            .execute(&mut *tx).await?;
+        sqlx::query(
+            r#"UPDATE "ScanPlayoutRefreshIntent" SET "State" = ?, "Attempts" = "Attempts" + 1,
+            "NextAttempt" = ?, "Diagnostic" = ?, "UpdatedAt" = ?
+            WHERE "PlayoutId" = ? AND "Generation" = ?"#,
+        )
+        .bind(INTENT_STATE_PENDING)
+        .bind(crate::repositories::common::encode_datetime(
+            now + chrono::Duration::seconds(delay),
+        ))
+        .bind(diagnostic)
+        .bind(now.to_rfc3339())
+        .bind(playout_id)
+        .bind(generation)
+        .execute(&mut *tx)
+        .await?;
     }
     tx.commit().await?;
     Ok(())

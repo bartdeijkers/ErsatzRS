@@ -309,6 +309,11 @@ pub enum TextKey {
     SourceUnsupported,
     SourceTestFailed,
     SourceRevision,
+    LastSuccessfulPlayoutBuild,
+    PlayoutRefreshPending,
+    PlayoutRefreshFailed,
+    PlayoutSourceCheckPending,
+    PlayoutSourceCheckFailed,
     FirstPageComplete,
     ProviderIdentity,
     ReturnedFirstPageItems,
@@ -2029,6 +2034,18 @@ pub enum TextKey {
     EditPlayout,
     RefreshPlayout,
     ResetPlayout,
+    RebuildPlayout,
+    PlayoutRebuildMode,
+    ContinuePlayout,
+    PlayoutContinueHelp,
+    PlayoutRefreshHelp,
+    PlayoutResetHelp,
+    KeepCurrentProgramme,
+    KeepCurrentProgrammeHelp,
+    ReplaceCurrentProgrammeHelp,
+    QueuePlayoutBuild,
+    InvalidPlayoutBuildMode,
+    PlayoutContinueStateIncomplete,
     ScheduleReset,
     SchedulePlayoutReset,
     EditExternalJsonFile,
@@ -2048,6 +2065,21 @@ pub enum TextKey {
     ClassicPlayout,
     ClassicPlayoutState,
     ScriptedPlayoutState,
+    BlockPlayoutState,
+    YamlPlayoutState,
+    ExternalJsonPlayoutState,
+    ExternalJsonDirectHelp,
+    ExternalJsonAcceptedHelp,
+    ExternalJsonSourceHelp,
+    ExternalJsonInvalidHelp,
+    ExternalJsonSourceChangedHelp,
+    ExternalJsonNextHelp,
+    ExternalJsonExpiredHelp,
+    ExternalJsonBuildFailedHelp,
+    ExternalJsonDirect,
+    ExternalJsonControlled,
+    AcceptedRevision,
+    PlayoutContinuityUnavailable,
     ScriptedTimelineRejected,
     ScanRefreshState,
     SubtitleCleanup,
@@ -2357,6 +2389,11 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SourceUnsupported,
     TextKey::SourceTestFailed,
     TextKey::SourceRevision,
+    TextKey::LastSuccessfulPlayoutBuild,
+    TextKey::PlayoutRefreshPending,
+    TextKey::PlayoutRefreshFailed,
+    TextKey::PlayoutSourceCheckPending,
+    TextKey::PlayoutSourceCheckFailed,
     TextKey::FirstPageComplete,
     TextKey::ProviderIdentity,
     TextKey::ReturnedFirstPageItems,
@@ -4047,6 +4084,18 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::EditPlayout,
     TextKey::RefreshPlayout,
     TextKey::ResetPlayout,
+    TextKey::RebuildPlayout,
+    TextKey::PlayoutRebuildMode,
+    TextKey::ContinuePlayout,
+    TextKey::PlayoutContinueHelp,
+    TextKey::PlayoutRefreshHelp,
+    TextKey::PlayoutResetHelp,
+    TextKey::KeepCurrentProgramme,
+    TextKey::KeepCurrentProgrammeHelp,
+    TextKey::ReplaceCurrentProgrammeHelp,
+    TextKey::QueuePlayoutBuild,
+    TextKey::InvalidPlayoutBuildMode,
+    TextKey::PlayoutContinueStateIncomplete,
     TextKey::ScheduleReset,
     TextKey::SchedulePlayoutReset,
     TextKey::EditExternalJsonFile,
@@ -4066,6 +4115,21 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
     TextKey::ScriptedPlayoutState,
+    TextKey::BlockPlayoutState,
+    TextKey::YamlPlayoutState,
+    TextKey::ExternalJsonPlayoutState,
+    TextKey::ExternalJsonDirectHelp,
+    TextKey::ExternalJsonAcceptedHelp,
+    TextKey::ExternalJsonSourceHelp,
+    TextKey::ExternalJsonInvalidHelp,
+    TextKey::ExternalJsonSourceChangedHelp,
+    TextKey::ExternalJsonNextHelp,
+    TextKey::ExternalJsonExpiredHelp,
+    TextKey::ExternalJsonBuildFailedHelp,
+    TextKey::ExternalJsonDirect,
+    TextKey::ExternalJsonControlled,
+    TextKey::AcceptedRevision,
+    TextKey::PlayoutContinuityUnavailable,
     TextKey::ScriptedTimelineRejected,
     TextKey::ScanRefreshState,
     TextKey::SubtitleCleanup,
@@ -4639,6 +4703,11 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
         "Scripted Playout State" => text(language, TextKey::ScriptedPlayoutState).to_owned(),
+        "Block Playout State" => text(language, TextKey::BlockPlayoutState).to_owned(),
+        "YAML Playout State" => text(language, TextKey::YamlPlayoutState).to_owned(),
+        "External JSON Playout State" => {
+            text(language, TextKey::ExternalJsonPlayoutState).to_owned()
+        }
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
         "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
@@ -4871,15 +4940,87 @@ fn unavailable_health_message(language: UiLanguage, message: &str) -> Option<Str
     clause(language, message)
 }
 
+pub fn external_json_help(key: TextKey) -> String {
+    external_json_help_text(use_i18n(), key)
+}
+
+fn external_json_help_text(language: UiLanguage, key: TextKey) -> String {
+    text(language, key)
+        .replace("{continue}", text(language, TextKey::ContinuePlayout))
+        .replace("{refresh}", text(language, TextKey::RefreshPlayout))
+        .replace("{reset}", text(language, TextKey::ResetPlayout))
+}
+
+fn playout_health_message(language: UiLanguage, title: &str, message: &str) -> Option<String> {
+    if title == "External JSON Playout State" {
+        return Some(
+            message
+                .lines()
+                .map(|line| {
+                    let Some((channel, reason)) = line.rsplit_once(": ") else {
+                        return line.to_owned();
+                    };
+                    let key = match reason {
+                        "Direct file updates; no accepted planning baseline." => {
+                            TextKey::ExternalJsonDirectHelp
+                        }
+                        "The source path differs from the accepted planning." => {
+                            TextKey::ExternalJsonSourceChangedHelp
+                        }
+                        "The accepted planning has no future programmes." => {
+                            TextKey::ExternalJsonExpiredHelp
+                        }
+                        "The accepted planning is invalid or unsupported." => {
+                            TextKey::ExternalJsonInvalidHelp
+                        }
+                        "Next does not consume external planning." => TextKey::ExternalJsonNextHelp,
+                        _ => return line.to_owned(),
+                    };
+                    format!("{channel}: {}", external_json_help_text(language, key))
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+    if title == "Scripted Playout State" && message.contains("Scripted timeline rejected:") {
+        let guidance = text(language, TextKey::ScriptedTimelineRejected);
+        return Some(format!("{guidance}\n{message}"));
+    }
+    let marker = match title {
+        "YAML Playout State" => ": missing or incompatible YAML boundary checkpoint;",
+        "Block Playout State" => ": missing or incompatible Block boundary checkpoint;",
+        _ => return None,
+    };
+    if !message.contains(marker) {
+        return None;
+    }
+    Some(
+        message
+            .lines()
+            .map(|line| {
+                line.split_once(marker).map_or_else(
+                    || line.to_owned(),
+                    |(channel, _)| {
+                        format!(
+                            "{channel}: {}",
+                            text(language, TextKey::PlayoutContinuityUnavailable)
+                        )
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
     message: &str,
     brief_message: &str,
 ) -> String {
-    if title == "Scripted Playout State" && message.contains("Scripted timeline rejected:") {
-        let guidance = text(language, TextKey::ScriptedTimelineRejected);
-        return format!("{guidance}\n{message}");
+    if let Some(localized) = playout_health_message(language, title, message) {
+        return localized;
     }
     let displayed_message = if message.is_empty() {
         brief_message
@@ -5539,6 +5680,58 @@ mod tests {
                 assert!(!localized.contains(ADDON_OPERATION_ERROR_MARKER));
                 assert!(!localized.starts_with(code));
             }
+        }
+    }
+
+    #[test]
+    fn programme_checkpoint_health_text_is_localized_for_every_language() {
+        for engine in ["YAML", "Block"] {
+            let title = format!("{engine} Playout State");
+            let message = format!("50 - Health (playout 88): missing or incompatible {engine} boundary checkpoint; Refresh is unsafe. Use an explicit Reset to create compatible state.");
+            for definition in crate::admin::languages::LANGUAGES {
+                let language = UiLanguage::from_config(definition.code);
+                let localized_title = health_check_title_text(language, &title);
+                let localized =
+                    health_check_message_text(language, &title, &message, "1 state error(s)");
+                assert!(localized.contains("50 - Health (playout 88)"));
+                assert!(localized.contains(text(language, TextKey::PlayoutContinuityUnavailable)));
+                if definition.code != UiLanguage::English.code() {
+                    assert_ne!(localized_title, title);
+                    assert_ne!(localized, message);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn external_json_health_guidance_uses_translated_actions_in_every_culture() {
+        let reasons = [
+            "Direct file updates; no accepted planning baseline.",
+            "The source path differs from the accepted planning.",
+            "The accepted planning has no future programmes.",
+            "The accepted planning is invalid or unsupported.",
+            "Next does not consume external planning.",
+        ];
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for reason in reasons {
+                let message = format!("50 - External: {reason}");
+                let localized = health_check_message_text(
+                    language,
+                    "External JSON Playout State",
+                    &message,
+                    "",
+                );
+                assert!(localized.starts_with("50 - External: "));
+                assert_ne!(localized, message);
+                assert!(!localized.contains('{'));
+            }
+            let help = external_json_help_text(language, TextKey::ExternalJsonDirectHelp);
+            assert!(help.contains(text(language, TextKey::RefreshPlayout)));
+            assert!(help.contains(text(language, TextKey::ResetPlayout)));
+            let accepted = external_json_help_text(language, TextKey::ExternalJsonAcceptedHelp);
+            assert!(accepted.contains(text(language, TextKey::ContinuePlayout)));
+            assert!(!accepted.contains('{'));
         }
     }
 

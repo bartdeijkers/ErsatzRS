@@ -15,7 +15,8 @@ use ersatzrs_core::repositories::{
     WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
-    next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, SchedulingSmartShufflePreset,
+    next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, PlayoutPreservation,
+    SchedulingSmartShufflePreset,
 };
 use ersatzrs_domain::{
     BlockStopScheduling, ChannelWatermark, ChannelWatermarkImageSource, ChannelWatermarkMode,
@@ -5980,6 +5981,31 @@ pub struct PlayoutBuildBatchOutcome {
     pub coalesced: u32,
 }
 
+/// Validate an explicit rebuild against stored scheduler identity before queueing.
+/// Rejected policies cannot claim or fail an unrelated durable scan intent.
+pub async fn rebuild_playout(
+    command: RequestPlayoutBuild,
+    repository: &dyn PlayoutRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<RequestPlayoutBuildOutcome> {
+    validate_positive_id(command.playout_id, "playout_id")?;
+    if command.preservation == PlayoutPreservation::EngineDefault {
+        return validation_error(
+            "preserve_current_programme",
+            "Choose whether to preserve the current programme",
+        );
+    }
+    let kind = repository.schedule_kind_admin(command.playout_id).await?;
+    if let Err(error) = PlayoutBuildRequest::new(command.playout_id, command.mode)
+        .with_preservation(command.preservation)
+        .validate_preservation(kind)
+    {
+        return validation_error("rebuild_mode", error.to_string());
+    }
+    Ok(request_playout_build(command, queue, operations))
+}
+
 /// Queue the legacy per-playout action using the stored scheduler identity.
 /// Classic keeps its Refresh mapping; other schedulers retain explicit Reset.
 /// Invalid, missing and unscheduled playouts never acquire queued activity.
@@ -6339,13 +6365,26 @@ pub struct RequestPlayoutBuild {
     pub playout_id: EntityId,
     /// Existing Refresh, Reset, or Continue build semantics.
     pub mode: PlayoutBuildMode,
+    /// Preserve the automatic contract or carry an explicit operator choice.
+    pub preservation: PlayoutPreservation,
 }
 
 impl RequestPlayoutBuild {
     /// Create a playout-build application command.
     #[must_use]
     pub const fn new(playout_id: EntityId, mode: PlayoutBuildMode) -> Self {
-        Self { playout_id, mode }
+        Self {
+            playout_id,
+            mode,
+            preservation: PlayoutPreservation::EngineDefault,
+        }
+    }
+
+    /// Carry an explicit current-programme choice through queue coalescing.
+    #[must_use]
+    pub const fn with_preservation(mut self, preservation: PlayoutPreservation) -> Self {
+        self.preservation = preservation;
+        self
     }
 }
 
@@ -6569,10 +6608,8 @@ pub(crate) fn request_playout_build(
         );
     }
 
-    let request = PlayoutBuildRequest {
-        playout_id: command.playout_id,
-        mode: command.mode,
-    };
+    let request = PlayoutBuildRequest::new(command.playout_id, command.mode)
+        .with_preservation(command.preservation);
     match operations
         .playout_activity()
         .admit(request, |request| queue.enqueue(request))
@@ -9551,14 +9588,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 4,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 9,
-                    mode: PlayoutBuildMode::Refresh,
-                }
+                PlayoutBuildRequest::new(4, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(9, PlayoutBuildMode::Refresh)
             ]
         );
     }
@@ -9648,14 +9679,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 5,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 6,
-                    mode: PlayoutBuildMode::Refresh,
-                }
+                PlayoutBuildRequest::new(5, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(6, PlayoutBuildMode::Refresh)
             ]
         );
     }
@@ -9708,10 +9733,7 @@ mod tests {
         assert!(!saves[0].1[0].use_custom_playback_order);
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
-            [PlayoutBuildRequest {
-                playout_id: 12,
-                mode: PlayoutBuildMode::Refresh,
-            }]
+            [PlayoutBuildRequest::new(12, PlayoutBuildMode::Refresh)]
         );
     }
 
@@ -9759,10 +9781,7 @@ mod tests {
         );
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
-            [PlayoutBuildRequest {
-                playout_id: 15,
-                mode: PlayoutBuildMode::Refresh,
-            }]
+            [PlayoutBuildRequest::new(15, PlayoutBuildMode::Refresh)]
         );
     }
 
@@ -9901,14 +9920,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 7,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 7,
-                    mode: PlayoutBuildMode::Reset,
-                },
+                PlayoutBuildRequest::new(7, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(7, PlayoutBuildMode::Reset),
             ]
         );
     }

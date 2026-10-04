@@ -121,6 +121,8 @@ async fn publish_observation(
             .execute(&mut *tx).await.repository()?;
     }
     if changed {
+        sqlx::query(r#"UPDATE "Playout" SET "ScriptedSourceRevision" = "ScriptedSourceRevision" + 1 WHERE "Id" = ?"#)
+            .bind(work.playout_id).execute(&mut *tx).await.repository()?;
         crate::scan_refresh::persist_refresh_intents(
             &mut tx,
             work.library_id,

@@ -102,6 +102,9 @@ impl PlayoutBuilder {
         if cancelled() {
             return Err(SchedulingError::Cancelled);
         }
+        crate::scheduling::PlayoutBuildRequest::new(request.playout.id, request.mode)
+            .with_preservation(request.reference_data.preservation)
+            .validate_preservation(request.playout.schedule_kind)?;
         let populated_classic_sources = populated_classic_source_ids(&request.reference_data);
         let dropped = drop_unschedulable_remote_streams(&mut request.reference_data);
         validate_populated_classic_sources(&request.reference_data, &populated_classic_sources)?;
@@ -530,6 +533,48 @@ mod tests {
             .expect("external json build should succeed");
 
         assert_eq!(result, SchedulingResult::default());
+    }
+
+    #[test]
+    fn explicit_external_json_admission_requires_the_publication_worker() {
+        use crate::scheduling::{PlayoutBuildRequest, PlayoutPreservation};
+        let start = Utc::now();
+        for mode in [
+            PlayoutBuildMode::Continue,
+            PlayoutBuildMode::Refresh,
+            PlayoutBuildMode::Reset,
+        ] {
+            for preservation in [
+                PlayoutPreservation::KeepCurrent,
+                PlayoutPreservation::ReplaceCurrent,
+            ] {
+                let admission = PlayoutBuildRequest::new(1, mode)
+                    .with_preservation(preservation)
+                    .validate_preservation(PlayoutScheduleKind::ExternalJson);
+                assert_eq!(
+                    admission.is_ok(),
+                    mode != PlayoutBuildMode::Continue
+                        || preservation == PlayoutPreservation::KeepCurrent
+                );
+                let result = PlayoutBuilder::default().build(SchedulingRequest {
+                    playout: Playout {
+                        schedule_kind: PlayoutScheduleKind::ExternalJson,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode,
+                    reference_data: SchedulingReferenceData {
+                        preservation,
+                        ..SchedulingReferenceData::default()
+                    },
+                });
+                assert!(
+                    matches!(result, Err(SchedulingError::InvalidRebuild(_))),
+                    "a no-op engine must not report an explicit adaptation as successful"
+                );
+            }
+        }
     }
 
     #[derive(Debug)]

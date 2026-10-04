@@ -66,6 +66,43 @@ fn build(
 }
 
 #[test]
+fn classic_playlist_preserving_refresh_restores_child_batches() {
+    let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 48, 0).unwrap();
+    for shuffle in [false, true] {
+        let (_, data) = fixture(shuffle);
+        let original = SchedulingRequest {
+            playout: Playout {
+                id: 50,
+                seed: 12345,
+                schedule_kind: ersatzrs_domain::PlayoutScheduleKind::Classic,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(4),
+            mode: PlayoutBuildMode::Reset,
+            reference_data: data,
+        };
+        let full = ClassicSchedulingEngine.schedule(original.clone()).unwrap();
+        let mut refresh = preservation_tests::published_request(&original, &full);
+        for minutes in [1, 11, 21, 41, 71] {
+            refresh.start = start + Duration::minutes(minutes);
+            let result = ClassicSchedulingEngine.schedule(refresh.clone()).unwrap();
+            let seam = result.retain_through.unwrap();
+            assert_eq!(
+                result.added_items,
+                full.added_items
+                    .iter()
+                    .filter(|item| item.start >= seam)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                "{shuffle}, {minutes}"
+            );
+            assert_eq!(result.anchor, full.anchor);
+        }
+    }
+}
+
+#[test]
 fn classic_playlist_continue_matches_uninterrupted_across_cycles() {
     let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
     for (shuffle, shuffle_children) in [(false, false), (true, false), (false, true), (true, true)]

@@ -224,10 +224,8 @@ async fn assert_scripted_failure_and_recovery(
     let repos = make_repositories(pool.clone());
     let published = snapshot(pool, 903).await;
     std::fs::write(path, "add_marathon('pl', {tvdb='show-guid'}, {}, 'show')\nadd_count('pl', 1)\nwait_until('00:00')\nadd_count('pl', 1)").unwrap();
-    let request = ersatzrs_core::scheduling::PlayoutBuildRequest {
-        playout_id: 903,
-        mode: PlayoutBuildMode::Continue,
-    };
+    let request =
+        ersatzrs_core::scheduling::PlayoutBuildRequest::new(903, PlayoutBuildMode::Continue);
     let error = ersatzrs_infra::maintenance::run_requested_playout_build(
         pool,
         &EntityLocker::new(),

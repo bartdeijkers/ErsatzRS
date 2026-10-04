@@ -4,15 +4,17 @@
 use std::{path::Path, time::Duration as StdDuration};
 
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt as _;
 
 const MAX_SCHEDULE_BYTES: u64 = 32 * 1024 * 1024;
 const READ_TIMEOUT: StdDuration = StdDuration::from_secs(5);
 
+pub mod adaptation;
 pub(crate) mod guide;
 pub mod native;
 pub mod playback;
+pub mod snapshot;
 pub mod subtitles;
 
 /// Failure categories deliberately exclude input values, paths and provider URLs.
@@ -28,6 +30,10 @@ pub enum ExternalJsonError {
     StartTime,
     #[error("external JSON schedule time exceeds the supported range")]
     TimeRange,
+    #[error("external JSON programmes must have a positive duration")]
+    Duration,
+    #[error("external JSON accepted planning could not be loaded")]
+    Snapshot,
 }
 
 #[derive(Deserialize)]
@@ -40,7 +46,7 @@ struct ChannelDocument {
 }
 
 /// Upstream wire fields. No `Debug`: paths and Plex keys may be private.
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ExternalJsonProgram {
     pub title: Option<String>,
@@ -61,6 +67,7 @@ pub struct ExternalJsonProgram {
 }
 
 /// One ephemeral programme and its absolute timeline interval.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ExternalJsonItem {
     pub start: DateTime<Utc>,
     pub finish: DateTime<Utc>,
@@ -68,6 +75,7 @@ pub struct ExternalJsonItem {
 }
 
 /// A finite external timeline; there is no implicit repeating cycle.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ExternalJsonSchedule {
     pub guide_minimum_duration_seconds: i32,
     pub items: Vec<ExternalJsonItem>,
@@ -136,6 +144,9 @@ fn parse(bytes: &[u8]) -> Result<Option<ExternalJsonSchedule>, ExternalJsonError
         .map_err(|_| ExternalJsonError::StartTime)?;
     let mut items = Vec::with_capacity(document.programs.len());
     for program in document.programs {
+        if program.duration <= 0 {
+            return Err(ExternalJsonError::Duration);
+        }
         let finish = start
             .checked_add_signed(Duration::milliseconds(i64::from(program.duration)))
             .ok_or(ExternalJsonError::TimeRange)?;

@@ -32,7 +32,7 @@ async fn changed_source_for(pool: &SqlitePool, playout_id: i64) {
     tx.commit().await.unwrap();
 }
 
-async fn published_fixture(
+pub(super) async fn published_fixture(
     url: &str,
     path: &std::path::Path,
 ) -> (SqlitePool, Playout, SchedulingResult) {
@@ -61,6 +61,175 @@ async fn published_fixture(
     other_item.playout_id = 904;
     repos.playout.upsert_item(&other_item).await.unwrap();
     (pool, playout, result)
+}
+
+fn reset_future_window(
+    data: &SchedulingReferenceData,
+    boundary: chrono::DateTime<Utc>,
+) -> Vec<ersatzrs_domain::PlayoutItem> {
+    data.existing_items
+        .iter()
+        .filter(|item| item.start >= boundary && item.finish <= boundary + Duration::hours(2))
+        .cloned()
+        .map(|mut item| {
+            item.id = 0;
+            for graphics in &mut item.graphics_elements {
+                graphics.playout_item_id = 0;
+            }
+            item
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn scripted_preserved_reset_keeps_programme_and_restarts_playlist_after_sqlite_restart() {
+    use ersatzrs_core::scheduling::PlayoutPreservation;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("schedule.lua");
+    let url = format!("sqlite://{}", directory.path().join("reset.db").display());
+    let (pool, _, generated) = published_fixture(&url, &path).await;
+    let now = generated.added_items[1].start + Duration::seconds(1);
+    let boundary = generated.added_items[1].finish;
+    let repos = make_repositories(pool.clone());
+    let before = repos
+        .scheduling
+        .scripted_reference_data(903, BTreeMap::new(), None)
+        .await
+        .unwrap();
+    let other = snapshot(&pool, 904).await;
+    let reset = PlayoutBuildRequest::new(903, PlayoutBuildMode::Reset)
+        .with_preservation(PlayoutPreservation::KeepCurrent);
+    run_requested_playout_build_cancellable(
+        &pool,
+        &EntityLocker::default(),
+        reset,
+        now,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let after = repos
+        .scheduling
+        .scripted_reference_data(903, BTreeMap::new(), None)
+        .await
+        .unwrap();
+    let prefix = |data: &SchedulingReferenceData| {
+        data.existing_items
+            .iter()
+            .filter(|item| item.finish <= boundary)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let history = |data: &SchedulingReferenceData| {
+        data.existing_history
+            .iter()
+            .filter(|entry| entry.when < boundary)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(prefix(&before), prefix(&after));
+    assert_eq!(history(&before), history(&after));
+    let first = after
+        .existing_items
+        .iter()
+        .find(|item| item.start == boundary)
+        .unwrap();
+    assert_eq!(
+        first.media_item_id, generated.added_items[0].media_item_id,
+        "Reset starts the playlist at its first item after the retained programme"
+    );
+    let expected = reset_future_window(&after, boundary);
+    drop(repos);
+    pool.close().await;
+
+    let pool = ersatzrs_infra::db::init(&url).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    let refresh = PlayoutBuildRequest::new(903, PlayoutBuildMode::Refresh)
+        .with_preservation(PlayoutPreservation::KeepCurrent);
+    for clock in [now + Duration::seconds(1), boundary + Duration::seconds(1)] {
+        run_requested_playout_build_cancellable(
+            &pool,
+            &EntityLocker::default(),
+            refresh,
+            clock,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let refreshed = repos
+            .scheduling
+            .scripted_reference_data(903, BTreeMap::new(), None)
+            .await
+            .unwrap();
+        assert_eq!(prefix(&before), prefix(&refreshed));
+        assert_eq!(history(&before), history(&refreshed));
+        assert_eq!(reset_future_window(&refreshed, boundary), expected);
+        assert_eq!(snapshot(&pool, 904).await, other);
+    }
+    assert_eq!(
+        scripted_health_status(&pool).await,
+        ersatzrs_core::health::HealthCheckStatus::Pass
+    );
+}
+
+#[tokio::test]
+async fn scripted_requested_preservation_choice_reaches_publication() {
+    use ersatzrs_core::scheduling::PlayoutPreservation;
+    for policy in [
+        PlayoutPreservation::KeepCurrent,
+        PlayoutPreservation::ReplaceCurrent,
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("schedule.lua");
+        let (pool, playout, generated) = published_fixture("sqlite::memory:", &path).await;
+        let now = generated.added_items[1].start + Duration::seconds(1);
+        let repos = make_repositories(pool.clone());
+        let current = repos
+            .playout
+            .items_in_range(903, now, now + Duration::milliseconds(1))
+            .await
+            .unwrap()
+            .remove(0);
+        let other = snapshot(&pool, 904).await;
+        let request =
+            PlayoutBuildRequest::new(903, PlayoutBuildMode::Refresh).with_preservation(policy);
+        assert!(run_requested_playout_build_cancellable(
+            &pool,
+            &EntityLocker::default(),
+            request,
+            now,
+            None,
+            None,
+        )
+        .await
+        .unwrap());
+        let after = repos
+            .playout
+            .items_in_range(903, now, now + Duration::milliseconds(1))
+            .await
+            .unwrap()
+            .remove(0);
+        if policy == PlayoutPreservation::KeepCurrent {
+            assert_eq!(
+                after, current,
+                "preservation includes row identity and attachments"
+            );
+        } else {
+            assert_eq!(after.start, now);
+            assert_ne!(after.id, current.id);
+            assert_eq!(
+                after.media_item_id, current.media_item_id,
+                "Refresh restores the active series position rather than resetting it"
+            );
+        }
+        assert_eq!(
+            repos.playout.get_with_anchor(903).await.unwrap().seed,
+            playout.seed
+        );
+        assert_eq!(snapshot(&pool, 904).await, other);
+    }
 }
 
 #[tokio::test]
@@ -152,10 +321,7 @@ async fn scripted_requested_build_rejects_a_scan_arriving_during_generation_then
         false
     });
     let worker_pool = pool.clone();
-    let request = PlayoutBuildRequest {
-        playout_id: 903,
-        mode: PlayoutBuildMode::Reset,
-    };
+    let request = PlayoutBuildRequest::new(903, PlayoutBuildMode::Reset);
     let worker = tokio::spawn(async move {
         run_requested_playout_build_cancellable(
             &worker_pool,
@@ -309,10 +475,7 @@ async fn scripted_refresh_restores_published_boundary_after_sqlite_restart() {
         .await
         .unwrap();
     let legacy = snapshot(&pool, 903).await;
-    let request = PlayoutBuildRequest {
-        playout_id: 903,
-        mode: PlayoutBuildMode::Refresh,
-    };
+    let request = PlayoutBuildRequest::new(903, PlayoutBuildMode::Refresh);
     let error = run_requested_playout_build_cancellable(
         &pool,
         &EntityLocker::default(),

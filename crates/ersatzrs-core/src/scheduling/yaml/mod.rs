@@ -302,12 +302,15 @@ impl YamlRepeat {
     }
 }
 
+mod checkpoints;
 mod expressions;
 mod instructions;
 mod playlist_history;
 mod schedules;
 mod sequence_state;
 mod sequences;
+
+pub use checkpoints::validate_yaml_checkpoint;
 
 #[cfg(test)]
 #[path = "tests.rs"]
@@ -445,6 +448,17 @@ impl YamlPlayoutEngine {
         mut definition: YamlPlayoutDefinition,
         mut request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
+        super::PlayoutBuildRequest::new(request.playout.id, request.mode)
+            .with_preservation(request.reference_data.preservation)
+            .validate_preservation(request.playout.schedule_kind)?;
+        let requested_start = request.start;
+        let explicit_reset = request.mode == PlayoutBuildMode::Reset
+            && request.reference_data.preservation != super::PlayoutPreservation::EngineDefault;
+        let keep_current = request.mode != PlayoutBuildMode::Continue
+            && request.reference_data.preservation == super::PlayoutPreservation::KeepCurrent;
+        if keep_current {
+            request.start = checkpoints::preservation_boundary(&request)?;
+        }
         detect_cycle(&definition)?;
         flatten_sequences(&mut definition)?;
         request.reference_data.smart_shuffle_policy = definition.legacy_smart_shuffle.clone();
@@ -461,7 +475,12 @@ impl YamlPlayoutEngine {
         }
 
         let mut result = SchedulingResult {
-            remove_before: Some(request.start),
+            remove_before: Some(if keep_current {
+                requested_start - Duration::hours(4)
+            } else {
+                requested_start
+            }),
+            retain_through: keep_current.then_some(request.start),
             clear_items: matches!(
                 request.mode,
                 PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
@@ -478,41 +497,22 @@ impl YamlPlayoutEngine {
             }
         }
         if request.mode == PlayoutBuildMode::Reset {
-            result.history_to_remove.extend(
-                request
-                    .reference_data
-                    .existing_history
-                    .iter()
-                    .filter(|history| {
-                        history.when > request.start
-                            || history.finish.is_some_and(|finish| finish >= request.start)
-                    })
-                    .map(|history| history.id),
-            );
+            result.history_to_remove = reset_history_to_remove(&request, keep_current);
         }
 
-        let mut context = YamlContext::new(
-            request.playout.clone(),
-            request.reference_data.clone(),
-            request.start,
-            content_sources(&definition),
-        );
-        if request.mode == PlayoutBuildMode::Continue {
-            if let Some(anchor) = &request.playout.anchor {
-                context.restore(anchor)?;
-            }
-        }
-        context.restore_sequence_orders(&mut definition)?;
-        context.apply_history(&definition, &result.history_to_remove, request.mode)?;
+        let mut context = YamlContext::for_build(
+            &mut definition,
+            &request,
+            &result.history_to_remove,
+            explicit_reset,
+            keep_current,
+        )?;
 
-        if request.mode == PlayoutBuildMode::Reset {
-            for instruction in &definition.reset {
-                dispatch_instruction(&mut context, instruction, request.mode, &definition)?;
-            }
-            apply_pending_shuffles(&mut context, &mut definition);
+        if request.mode != PlayoutBuildMode::Continue {
+            context.capture_checkpoint(&definition, context.pending_instruction)?;
         }
-
         run_playout(&mut context, &mut definition, request.finish, request.mode)?;
+        checkpoints::validate_rebuilt_timeline(&context, &request)?;
 
         let max_time = context
             .added_items
@@ -522,6 +522,7 @@ impl YamlPlayoutEngine {
             .unwrap_or(context.current_time);
 
         context.sequence_state.capture_orders(&definition)?;
+        result.yaml_checkpoints = context.published_checkpoints(&request, result.remove_before);
         result.anchor = Some(PlayoutAnchor {
             next_start: max_time,
             next_instruction_index: i32::try_from(context.instruction_index).unwrap_or_default(),
@@ -535,13 +536,31 @@ impl YamlPlayoutEngine {
             .history_to_remove
             .extend(playlist_history::cleanup_with_playlist_snapshots(
                 &request.reference_data.existing_history,
-                request.start,
+                requested_start,
                 request.reference_data.max_playout_offset,
             ));
         result.history_to_remove.sort_unstable();
         result.history_to_remove.dedup();
         Ok(result)
     }
+}
+
+fn reset_history_to_remove(request: &SchedulingRequest, keep_current: bool) -> Vec<EntityId> {
+    request
+        .reference_data
+        .existing_history
+        .iter()
+        .filter(|history| {
+            if keep_current {
+                history.when >= request.start
+                    || history.finish.is_some_and(|finish| finish > request.start)
+            } else {
+                history.when > request.start
+                    || history.finish.is_some_and(|finish| finish >= request.start)
+            }
+        })
+        .map(|history| history.id)
+        .collect()
 }
 
 fn run_playout(
@@ -554,7 +573,7 @@ fn run_playout(
     while context.current_time < finish {
         let selected_schedule = select_schedule(&definition.schedules, context.current_time)
             .map(|schedule| schedule.name.clone());
-        if selected_schedule != context.active_schedule {
+        if context.pending_instruction.is_none() && selected_schedule != context.active_schedule {
             context.switch_to_schedule(selected_schedule);
             context.advance_guide_group();
             repeat_guard = 0;
@@ -567,7 +586,11 @@ fn run_playout(
         let instruction = instructions[context.instruction_index].clone();
         let changes_index = instruction.repeat.is_some_and(YamlRepeat::is_control);
 
-        dispatch_instruction(context, &instruction, mode, definition)?;
+        if let Some(pending) = context.pending_instruction.take() {
+            instructions::resume_instruction(context, &instruction, definition, pending)?;
+        } else {
+            dispatch_instruction(context, &instruction, mode, definition)?;
+        }
         apply_pending_shuffles(context, definition);
         if context.added_items.len() > before_items {
             repeat_guard = 0;
@@ -586,6 +609,9 @@ fn run_playout(
                     "YAML repeat loop did not add items".to_owned(),
                 ));
             }
+        }
+        if context.added_items.len() > before_items {
+            context.capture_checkpoint(definition, None)?;
         }
     }
     Ok(())
@@ -626,8 +652,10 @@ fn apply_pending_shuffles(context: &mut YamlContext, definition: &mut YamlPlayou
             let last_original_index = positions.last().copied().unwrap_or_default();
             shuffle_with_seed(
                 &mut members,
-                super::next_playout_seed().cast_unsigned().into(),
+                u64::from(context.playout.seed.cast_unsigned())
+                    .wrapping_add(context.sequence_shuffle_count),
             );
+            context.sequence_shuffle_count = context.sequence_shuffle_count.wrapping_add(1);
             if members.len() > 1 && members[0].0 == last_original_index {
                 members.rotate_left(1);
             }
@@ -668,6 +696,11 @@ impl PlayoutSchedulingEngine for YamlPlayoutEngine {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SerializedYamlContext {
+    #[serde(default)]
+    sequence_shuffle_count: u64,
+    /// Retained pre-Reset history is archival, not future rotation state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    history_start: Option<DateTime<Utc>>,
     #[serde(
         default,
         alias = "SequenceOrders",
@@ -735,6 +768,10 @@ struct SerializedMidRoll {
 
 #[derive(Debug, Clone)]
 struct YamlContext {
+    sequence_shuffle_count: u64,
+    checkpoints: BTreeMap<DateTime<Utc>, ersatzrs_domain::PlayoutYamlCheckpoint>,
+    pending_instruction: Option<checkpoints::PendingInstruction>,
+    history_start: Option<DateTime<Utc>>,
     sequence_state: SequenceState,
     playout: Playout,
     reference_data: SchedulingReferenceData,
@@ -763,7 +800,7 @@ struct YamlContext {
     smart_shuffle_state: super::SchedulingSmartShuffleState,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct YamlListState {
     instruction_index: usize,
     visited_instructions: BTreeSet<usize>,
@@ -798,6 +835,68 @@ struct ResolvedYamlContent {
 }
 
 impl YamlContext {
+    fn for_build(
+        definition: &mut YamlPlayoutDefinition,
+        request: &SchedulingRequest,
+        history_to_remove: &[EntityId],
+        explicit_reset: bool,
+        keep_current: bool,
+    ) -> Result<Self, SchedulingError> {
+        let mut context = Self::new(
+            request.playout.clone(),
+            request.reference_data.clone(),
+            request.start,
+            content_sources(definition),
+        );
+        if explicit_reset {
+            context.history_start = Some(super::truncate_to_persisted_precision(request.start));
+        }
+        if keep_current {
+            context.guide_group = request
+                .reference_data
+                .existing_items
+                .iter()
+                .filter(|item| item.finish <= request.start)
+                .max_by_key(|item| item.finish)
+                .map_or(1, |item| item.guide_group.max(1));
+            // A reset EPG lock with advance:false must still begin a new
+            // programme rather than join the retained group.
+            context.advance_guide_group();
+        }
+        if request.mode == PlayoutBuildMode::Continue {
+            if let Some(anchor) = &request.playout.anchor {
+                if let Some(checkpoint) = request
+                    .reference_data
+                    .existing_yaml_checkpoints
+                    .iter()
+                    .find(|checkpoint| checkpoint.checkpoint_date == anchor.next_start)
+                {
+                    context.restore_checkpoint(definition, checkpoint)?;
+                    return Ok(context);
+                }
+                context.restore(anchor)?;
+            }
+        }
+        if request.mode == PlayoutBuildMode::Refresh
+            && request.reference_data.preservation != super::PlayoutPreservation::EngineDefault
+            && !request.reference_data.existing_items.is_empty()
+        {
+            context.restore_refresh_checkpoint(definition, request)?;
+            return Ok(context);
+        }
+        context.restore_sequence_orders(definition)?;
+        context.apply_history(definition, history_to_remove, request.mode)?;
+
+        if request.mode == PlayoutBuildMode::Reset {
+            for instruction in &definition.reset {
+                dispatch_instruction(&mut context, instruction, request.mode, definition)?;
+            }
+            apply_pending_shuffles(&mut context, definition);
+        }
+
+        Ok(context)
+    }
+
     fn new(
         playout: Playout,
         reference_data: SchedulingReferenceData,
@@ -805,6 +904,10 @@ impl YamlContext {
         content_sources: BTreeMap<String, ResolvedYamlContent>,
     ) -> Self {
         Self {
+            sequence_shuffle_count: 0,
+            checkpoints: BTreeMap::new(),
+            pending_instruction: None,
+            history_start: None,
             sequence_state: SequenceState::default(),
             playout,
             reference_data,
@@ -853,6 +956,8 @@ impl YamlContext {
             }),
         );
         let state = SerializedYamlContext {
+            sequence_shuffle_count: self.sequence_shuffle_count,
+            history_start: self.history_start,
             sequence_orders: self.sequence_state.orders.clone(),
             list_fingerprints: self.sequence_state.fingerprints.clone(),
             instruction_index: self.instruction_index,
@@ -885,6 +990,16 @@ impl YamlContext {
             if !context.trim().is_empty() {
                 let state: SerializedYamlContext = serde_json::from_str(context)
                     .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?;
+                if state
+                    .history_start
+                    .is_some_and(|start| start > anchor.next_start)
+                {
+                    return Err(SchedulingError::InvalidYaml(
+                        "YAML history cutoff is later than the continuation anchor".into(),
+                    ));
+                }
+                self.history_start = state.history_start;
+                self.sequence_shuffle_count = state.sequence_shuffle_count;
                 self.instruction_index = state.instruction_index;
                 self.sequence_state.orders = state.sequence_orders;
                 self.sequence_state.fingerprints = state.list_fingerprints;
@@ -970,7 +1085,14 @@ impl YamlContext {
         self.enumerators
             .entry(content.to_owned())
             .or_insert_with(|| {
-                lookup_media_source(&self.reference_data, content, &resolved.source)
+                // SQL reference loading resolves every source under its YAML
+                // key. Retain direct source resolution for in-memory callers.
+                let source = if self.reference_data.media_by_key.contains_key(content) {
+                    SchedulingContentSource::direct(content)
+                } else {
+                    resolved.source
+                };
+                lookup_media_source(&self.reference_data, content, &source)
                     .with_playback_order(resolved.playback_order)
             })
     }
@@ -1030,6 +1152,9 @@ impl YamlContext {
         history_to_remove: &[EntityId],
         mode: PlayoutBuildMode,
     ) -> Result<(), SchedulingError> {
+        if mode == PlayoutBuildMode::Reset && self.history_start.is_some() {
+            return Ok(());
+        }
         let ignored = history_to_remove.iter().copied().collect::<BTreeSet<_>>();
         for content in &definition.content {
             let history_key = content.history_key();
@@ -1049,6 +1174,7 @@ impl YamlContext {
                 .filter(|history| !ignored.contains(&history.id))
                 .filter(|history| history.key == history_key)
                 .filter(|history| history.when < self.current_time)
+                .filter(|history| self.history_start.is_none_or(|start| history.when >= start))
                 .max_by_key(|history| history.when)
                 .cloned()
             else {

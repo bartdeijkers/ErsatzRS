@@ -1,5 +1,6 @@
 use super::scripted_sources::{build, database};
 use super::*;
+use ersatzrs_core::repositories::PlayoutPendingWork;
 use ersatzrs_core::{repositories::PlayoutRepository, scheduling::PlayoutBuildMode};
 use ersatzrs_infra::{
     scan_refresh,
@@ -48,6 +49,17 @@ async fn intent_generation(pool: &SqlitePool) -> Option<i64> {
     .unwrap()
 }
 
+async fn adaptation_status(pool: &SqlitePool) -> ersatzrs_core::repositories::PlayoutListAdminRow {
+    make_repositories(pool.clone())
+        .playout
+        .list_admin("", 0, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.id == 903)
+        .unwrap()
+}
+
 async fn requested_refresh(
     pool: &SqlitePool,
     start: chrono::DateTime<Utc>,
@@ -55,10 +67,7 @@ async fn requested_refresh(
     ersatzrs_infra::maintenance::run_requested_playout_build_cancellable(
         pool,
         &ersatzrs_core::locking::EntityLocker::default(),
-        ersatzrs_core::scheduling::PlayoutBuildRequest {
-            playout_id: 903,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        ersatzrs_core::scheduling::PlayoutBuildRequest::new(903, PlayoutBuildMode::Refresh),
         start,
         None,
         None,
@@ -278,8 +287,15 @@ async fn scripted_successful_scan_coalesces_changed_library_after_restart() {
     let pool = fixture(&url, &path).await;
     let now = Utc::now() + Duration::seconds(2);
     record_successful_scan(&pool, 1).await.unwrap();
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.source_revision, Some(0));
+    assert_eq!(status.source_work, PlayoutPendingWork::Pending);
+    assert_eq!(status.refresh_work, PlayoutPendingWork::None);
     assert_eq!(resolve_pending(&pool, now).await.unwrap(), 1);
     assert_eq!(intent_generation(&pool).await, None);
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.source_revision, Some(0));
+    assert_eq!(status.source_work, PlayoutPendingWork::None);
     tag_selected(&pool).await;
     record_successful_scan(&pool, 2).await.unwrap();
     resolve_pending(&pool, now).await.unwrap();
@@ -295,6 +311,10 @@ async fn scripted_successful_scan_coalesces_changed_library_after_restart() {
     let (a, b) = tokio::join!(resolve_pending(&pool, now), resolve_pending(&pool, now));
     assert_eq!(a.unwrap() + b.unwrap(), 1);
     assert_eq!(intent_generation(&pool).await, Some(1));
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.source_revision, Some(1));
+    assert_eq!(status.refresh_work, PlayoutPendingWork::Pending);
+    assert_eq!(status.source_work, PlayoutPendingWork::None);
     let pending = scan_refresh::pending_refreshes(&pool).await.unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(
@@ -312,6 +332,7 @@ async fn scripted_successful_scan_coalesces_changed_library_after_restart() {
         Some(1),
         "unchanged scans do not create a new source generation"
     );
+    assert_eq!(adaptation_status(&pool).await.source_revision, Some(1));
     pool.execute(r#"DELETE FROM "Tag" WHERE "Name" = 'Selected'"#)
         .await
         .unwrap();
@@ -322,6 +343,16 @@ async fn scripted_successful_scan_coalesces_changed_library_after_restart() {
         Some(2),
         "returning to an earlier membership is still a new change"
     );
+    assert_eq!(adaptation_status(&pool).await.source_revision, Some(2));
+    scan_refresh::fail_refresh(&pool, 903, 2, "rejected")
+        .await
+        .unwrap();
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.refresh_work, PlayoutPendingWork::Failed);
+    scan_refresh::complete_refresh(&pool, 903, 2).await.unwrap();
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.source_revision, Some(2));
+    assert_eq!(status.refresh_work, PlayoutPendingWork::None);
 }
 
 #[tokio::test]
@@ -353,6 +384,9 @@ async fn scripted_comparison_failure_backs_off_without_blocking_other_playouts()
     );
     let failed: (i64, String) = sqlx::query_as(r#"SELECT "Attempts", "Diagnostic" FROM "ScriptedSourceRefreshWork" WHERE "PlayoutId" = 903"#).fetch_one(&pool).await.unwrap();
     assert_eq!(failed, (1, "scripted-source-comparison-failed".to_owned()));
+    let status = adaptation_status(&pool).await;
+    assert_eq!(status.source_work, PlayoutPendingWork::Failed);
+    assert_eq!(status.source_revision, Some(0));
     assert_eq!(
         super::scripted_refresh::scripted_health_status(&pool).await,
         ersatzrs_core::health::HealthCheckStatus::Fail
@@ -390,6 +424,10 @@ async fn scripted_comparison_failure_backs_off_without_blocking_other_playouts()
         1
     );
     assert_eq!(intent_generation(&pool).await, Some(1));
+    assert_eq!(
+        adaptation_status(&pool).await.source_work,
+        PlayoutPendingWork::None
+    );
     assert_eq!(
         super::scripted_refresh::scripted_health_status(&pool).await,
         ersatzrs_core::health::HealthCheckStatus::Pass

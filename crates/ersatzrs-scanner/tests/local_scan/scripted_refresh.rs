@@ -43,10 +43,7 @@ async fn rebuild(pool: &SqlitePool, mode: PlayoutBuildMode, now: chrono::DateTim
     run_requested_playout_build(
         pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: 10,
-            mode,
-        },
+        PlayoutBuildRequest::new(10, mode),
         now,
         None,
     )

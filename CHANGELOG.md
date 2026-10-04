@@ -15,23 +15,32 @@ release section when tagging a release.
 
 ### Fixed
 
-- Select per-playout rebuild behavior from the stored scheduler kind, preventing
-  stale or altered admin requests from choosing the wrong destructive action.
-  Reject candidates superseded by a newer durable source-refresh revision before
-  publication, preserving the existing timeline and pending work.
-  Persist Scripted programme-boundary checkpoints with the timeline, retain the
-  current programme group during Refresh and restore its source rotation before
-  replacing the future. Reject unsafe legacy or incompatible checkpoints and
-  expose restore-readiness failures through Health.
-  Retain actual runtime-resolved Scripted source dependencies, including empty
-  dynamic library/tag selections, with per-library change signatures. Continue
-  preserves the dependency baselines of its retained future. Successful local,
-  Plex, Jellyfin and Emby scans compare these selections through bounded durable
-  work, coalescing changed selections into Refresh while ignoring unchanged or
-  unrelated libraries. Comparison failures retain the timeline, retry with
-  backoff and appear in Health. Revalidate candidate selections before
-  publication and defer builds overlapping active library work, retaining
-  Refresh intent and retry eligibility across restarts.
+- Offer explicit Extend, Refresh and Reset playout actions with programme
+  preservation enabled by default. Validate the stored scheduler kind, retain
+  complete programmes beyond producer buffering and leading mirrors, and restore
+  Classic, Scripted, YAML and Block source rotation after refresh or restart.
+  Reset can start a fresh future rotation without changing retained programmes;
+  incomplete or incompatible continuation state fails safely with localized
+  Health guidance. Correct Block source repetition and Classic midnight rewinds.
+- Automatically adapt Scripted playouts after successful scans change their
+  actual library/tag selections, including previously empty selections. Ignore
+  unchanged or unrelated sources; coalesce work, reject stale candidates and
+  retain bounded retries across failures, cancellation and restart. Show source
+  revision, pending work, failures and the last successful build in the admin UI.
+- Preserve accepted Next playback during rebuild preparation and recoverable
+  publication failures. Stage complete audio/subtitle/graphics projections for
+  active channels, mirrors and previews before committing a preserving build;
+  restore previous files when finalization fails or is cancelled. Enforce the
+  safe publication deadline, retry transient file contention and report failed
+  recovery without acknowledging success. Persistent storage failure can still
+  require recovery; database/file publication is not a single atomic operation.
+  Fix leading-mirror schedule reads and cancellation before HLS playback starts.
+- Add explicit External JSON adoption controls and retain accepted planning
+  across restart or source-file loss. Playback and guide use the same revision;
+  Extend only appends, preserving actions retain prefetched programmes and
+  reject invalid, stale or expired candidates without changing authored clocks.
+  Show adoption status and localized recovery guidance. Existing direct-file
+  readers remain compatible until explicit adoption.
 
 - Continue Scripted playouts from the persisted future timeline and restore
   series history at that cursor. Expose Lua build context, reject backward or

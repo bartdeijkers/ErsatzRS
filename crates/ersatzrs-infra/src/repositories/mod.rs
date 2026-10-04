@@ -48,7 +48,7 @@ pub use managed_library_operation::SqliteManagedLibraryOperationRepository;
 pub use media_item::SqliteMediaItemRepository;
 pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;
-pub use playout::SqlitePlayoutRepository;
+pub use playout::{PendingPlayoutBuild, SqlitePlayoutRepository};
 pub use program_schedule::SqliteProgramScheduleRepository;
 pub use saved_search::SqliteSavedSearchRepository;
 pub use scheduling::{ClassicMediaDependencies, SqliteSchedulingContentRepository};

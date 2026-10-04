@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Implement all ten channel setup findings for v1.1.1 with one verified commit per solution'
+current_focus = 'Implement all current channel setup findings for v1.1.1 with one verified commit per solution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -65,24 +65,32 @@ next_steps = '''
 v1.1.1, each in a separate commit with a changelog entry. After each completed
 milestone, reread the entire maintainer findings.md before starting the next
 milestone and reconcile any additions or changes. Milestones
-v111-findings-01 through -10 and -09b retain the complete requirements and exclusions.
-Finding 06 is in progress: stored-kind rebuild admission and refresh-intent
-publication fencing and Scripted programme-boundary restoration are verified
-locally, including checkpoint publication and Health readiness. Runtime source
-capture persists actual lookups and library-scoped signatures. Successful local
-and provider scans now persist bounded comparison work with coalesced Refresh,
-retry and Health feedback; real FFprobe scan adaptation passes. Source
-revalidation now fences unprocessed receipts and active managed-library work;
-transient publication races preserve durable retry eligibility. Explicit
-modes, revision feedback and live producer handover
-acceptance remain open under ADR 0110. Findings 03, 07, 08 and 10 are locally accepted. Finding 10 adds persisted-tail
+v111-findings-01 through -12 and -09b retain the complete requirements and exclusions.
+Finding 06 is locally accepted: explicit stored-kind actions preserve complete
+programmes and source rotation for every scheduler; relevant successful scans
+adapt Scripted futures through bounded durable work with localized status.
+Native/Next decoded handovers cover all four internal schedulers; External JSON
+has native decoded adoption proof. Next cancellation/retry preserves SQL/files
+and running playback. Full workspace closeout, strict lint, HTTP smokes,
+TSDuck, dependency audit and final matched Leptos bundle checks pass.
+Canonical acceptance and platform limits live in v111-findings-06 and ADR 0110.
+Native Windows held-handle testing and packaged/platform release acceptance are
+not claimed. After the separate solution commit and findings reread, address
+finding 12 midnight-overlap validation and Continue/restart/filler proof before
+finding 11 deferred Classic save; retain all other authorized findings.
+The full findings document was reread on 2026-10-04;
+its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
+variable refresh semantics, Motion phase and native alpha throughput. New
+Findings 11 (deferred Classic save) and 12 (midnight overlap) have separate
+milestones; reuse the existing finding 06 day-seam correction where applicable.
+Findings 03, 06, 07, 08 and 10 are locally accepted. Finding 10 adds persisted-tail
 Scripted continuation, atomic timeline validation and observable rejection, with
 SQL restart/automatic-build, Health, browser and native playback proof. Finding 03 adds shared television
 discovery, MPEG/TS recognition and bounded localized folder preview with native
 rescan/identity and JS/no-JS browser proof. Findings 07/08 retain shared-decoder
 and owned preview lifecycle proof, including native/Next playback and cleanup.
 Selection, authoring/preview, programme metadata, Windows drawvg/slate
-status, scripted adaptation and animated JPEG XL remain open. Finding 09 also includes separate Motion YAML/alpha/location and native
+status and animated JPEG XL remain open. Finding 09 also includes separate Motion YAML/alpha/location and native
 text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
 selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are
 separate; this corrective scope does not publish a release.

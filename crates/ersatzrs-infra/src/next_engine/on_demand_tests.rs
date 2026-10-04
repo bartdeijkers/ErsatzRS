@@ -191,7 +191,7 @@ async fn periodic_and_final_checkpoints_use_last_viewer_touch_not_heartbeat_time
     let running = session.clone();
     let task = tokio::spawn(async move {
         running
-            .run(async { Ok(process) }, None, move || {
+            .run(async { Ok(process) }, None, move |_| {
                 if let Some(tx) = tx.take() {
                     tx.send(()).unwrap();
                 }

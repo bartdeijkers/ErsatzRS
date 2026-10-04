@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "preservation_tests.rs"]
+mod preservation_tests;
+
 #[test]
 fn sequence_shuffle_preserves_nested_instruction_slots() {
     let member = |content: &str| YamlInstruction {

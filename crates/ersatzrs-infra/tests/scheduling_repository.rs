@@ -1,4 +1,14 @@
+#[path = "scheduling_repository/block_continuation.rs"]
+mod block_continuation;
+#[path = "scheduling_repository/candidate_overlay_preparation.rs"]
+mod candidate_overlay_preparation;
 mod common;
+#[path = "scheduling_repository/host_preparation.rs"]
+mod host_preparation;
+#[path = "scheduling_repository/next_preparation.rs"]
+mod next_preparation;
+#[path = "scheduling_repository/prepared_publication.rs"]
+mod prepared_publication;
 #[path = "scheduling_repository/scripted_continuation.rs"]
 mod scripted_continuation;
 #[path = "scheduling_repository/scripted_dependencies.rs"]
@@ -2673,7 +2683,9 @@ async fn sql_block_reference_data_feeds_block_change_detection() {
             .iter()
             .map(|item| item.media_item_id)
             .collect::<Vec<_>>(),
-        vec![12]
+        // The movie predates the episodes; Chronological must use its release
+        // date rather than the source loader's media-ID order.
+        vec![20]
     );
     assert_eq!(
         result

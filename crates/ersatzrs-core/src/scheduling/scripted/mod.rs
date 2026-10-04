@@ -124,7 +124,26 @@ impl ScriptedSchedulingEngine {
         state.borrow_mut().seed = request.playout.seed;
         if let Some(context) = checkpoint {
             state.borrow_mut().guide_group = context.guide_group;
+            state.borrow_mut().history_start = context.history_start;
             state.borrow_mut().restore_checkpoint = Some(context);
+        }
+        if request.mode == PlayoutBuildMode::Reset && retain_through.is_some() {
+            let mut state = state.borrow_mut();
+            if let Some((finish, group)) = state
+                .reference_data
+                .existing_items
+                .iter()
+                .filter(|item| item.finish <= start)
+                .max_by_key(|item| item.finish)
+                .map(|item| (item.finish, item.guide_group))
+            {
+                state.guide_group = group;
+                if finish == start {
+                    // Publish the new Reset state at the retained boundary too:
+                    // a Refresh before that boundary must not restore old rotation.
+                    state.capture_checkpoint();
+                }
+            }
         }
         let lua = Lua::new();
         if let Some(command) = command {
@@ -522,6 +541,7 @@ struct ScriptState {
     no_progress_counter: u32,
     smart_shuffle_state: super::SchedulingSmartShuffleState,
     restore_checkpoint: Option<checkpoints::CheckpointContext>,
+    history_start: Option<DateTime<Utc>>,
     checkpoints: BTreeMap<DateTime<Utc>, checkpoints::CheckpointContext>,
 }
 
@@ -594,6 +614,9 @@ impl ScriptState {
         reference_data: SchedulingReferenceData,
         smart_shuffle_state: super::SchedulingSmartShuffleState,
     ) -> Self {
+        let history_start = (mode == PlayoutBuildMode::Reset
+            && reference_data.preservation != super::PlayoutPreservation::EngineDefault)
+            .then_some(super::truncate_to_persisted_precision(start));
         let mut st = Self {
             seed: 0,
             resolver: None,
@@ -622,6 +645,7 @@ impl ScriptState {
             no_progress_counter: 0,
             smart_shuffle_state,
             restore_checkpoint: None,
+            history_start,
             checkpoints: BTreeMap::new(),
         };
         if mode == PlayoutBuildMode::Reset {
@@ -629,7 +653,13 @@ impl ScriptState {
                 .reference_data
                 .existing_history
                 .iter()
-                .filter(|h| h.when > start || h.finish.is_some_and(|f| f >= start))
+                .filter(|h| {
+                    if st.reference_data.preservation == super::PlayoutPreservation::KeepCurrent {
+                        h.when >= start || h.finish.is_some_and(|finish| finish > start)
+                    } else {
+                        h.when > start || h.finish.is_some_and(|finish| finish >= start)
+                    }
+                })
                 .map(|h| h.id)
                 .collect();
         }
@@ -803,7 +833,11 @@ impl ScriptState {
             .reference_data
             .existing_history
             .iter()
-            .filter(|h| h.key == history_key && h.when < cutoff)
+            .filter(|h| {
+                h.key == history_key
+                    && h.when < cutoff
+                    && self.history_start.is_none_or(|start| h.when >= start)
+            })
             .map(|h| h.when)
             .max()
         else {
@@ -885,7 +919,11 @@ impl ScriptState {
             .reference_data
             .existing_history
             .iter()
-            .filter(|h| h.key == history_key && h.when < cutoff)
+            .filter(|h| {
+                h.key == history_key
+                    && h.when < cutoff
+                    && self.history_start.is_none_or(|start| h.when >= start)
+            })
             .collect();
         candidates.sort_by_key(|h| h.when);
         if let Some(h) = candidates.last() {

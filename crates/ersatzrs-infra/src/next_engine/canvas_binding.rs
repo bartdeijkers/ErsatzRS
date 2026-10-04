@@ -136,6 +136,7 @@ mod tests {
             media_file_id: 11,
             path: "synthetic.mp4".into(),
             remote_stream_id: None,
+            candidate_overlays: None,
         }
     }
 

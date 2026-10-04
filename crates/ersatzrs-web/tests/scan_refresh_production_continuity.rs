@@ -891,7 +891,7 @@ async fn run_classic_build(
         run_requested_playout_build(
             pool,
             &EntityLocker::new(),
-            PlayoutBuildRequest { playout_id, mode },
+            PlayoutBuildRequest::new(playout_id, mode),
             now,
             None,
         )

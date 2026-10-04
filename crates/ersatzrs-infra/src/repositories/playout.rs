@@ -7,8 +7,8 @@ use ersatzrs_core::repositories::{
     PlayoutCreateChannelAdmin, PlayoutCreateScheduleAdmin, PlayoutDateFilterAdmin,
     PlayoutDecoAdmin, PlayoutDecoGroupAdmin, PlayoutDetailAdminItem, PlayoutKindEditorAdmin,
     PlayoutListAdminRow, PlayoutNestedChildOptionAdmin, PlayoutNestedOptionAdmin,
-    PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin, RepositoryError, Result,
-    SequentialPlayoutAdmin,
+    PlayoutPendingWork, PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin,
+    RepositoryError, Result, SequentialPlayoutAdmin,
 };
 use ersatzrs_core::scheduling::{next_playout_seed, SchedulingResult};
 use ersatzrs_domain::{
@@ -19,8 +19,11 @@ use ersatzrs_domain::{
 use sqlx::{Pool, Row, Transaction};
 
 use super::common::upsert_sql;
+mod publication;
+pub use publication::PendingPlayoutBuild;
 mod scripted_checkpoints;
 mod scripted_timeline;
+mod yaml_checkpoints;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
@@ -30,6 +33,11 @@ use super::common::{
 
 #[derive(Clone)]
 pub struct SqlitePlayoutRepository(pub Pool<crate::db::Db>);
+
+impl SqlitePlayoutRepository {
+    pub(crate) const PRESERVATION_PUBLICATION_OPERATION: &'static str =
+        "playout programme-boundary publication";
+}
 
 #[allow(clippy::too_many_lines)]
 #[async_trait]
@@ -128,38 +136,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         start: DateTime<Utc>,
         finish: DateTime<Utc>,
     ) -> Result<Vec<PlayoutItem>> {
-        let rows = sqlx::query(
-            r#"SELECT *
-             FROM "PlayoutItem"
-             WHERE "PlayoutId" = ? AND "Start" < ? AND "Finish" > ?
-             ORDER BY "Start", "Id""#,
-        )
-        .bind(playout_id)
-        .bind(encode_datetime(finish))
-        .bind(encode_datetime(start))
-        .fetch_all(&self.0)
-        .await
-        .repository()?;
-        let mut items = Vec::with_capacity(rows.len());
-        for row in &rows {
-            let item_id: EntityId = row.try_get("Id").repository()?;
-            let mut item = map_playout_item(row)?;
-            item.watermark_ids = load_ids(
-                &self.0,
-                r#"SELECT "WatermarkId" FROM "PlayoutItemWatermark" WHERE "PlayoutItemId" = ? ORDER BY "WatermarkId""#,
-                item_id,
-            )
-            .await?;
-            item.graphics_element_ids = load_ids(
-                &self.0,
-                r#"SELECT "GraphicsElementId" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ? ORDER BY "GraphicsElementId""#,
-                item_id,
-            )
-            .await?;
-            item.graphics_elements = load_playout_item_graphics_elements(&self.0, item_id).await?;
-            items.push(item);
-        }
-        Ok(items)
+        let mut connection = self.0.acquire().await.repository()?;
+        read_items(&mut connection, playout_id, start, finish).await
     }
 
     async fn replace_runtime_state(
@@ -256,253 +234,26 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         playout: &Playout,
         max_playout_offset: chrono::Duration,
     ) -> Result<()> {
-        let source_fence = if playout.schedule_kind
-            == ersatzrs_domain::PlayoutScheduleKind::Scripted
-            && !result.scripted_sources.is_empty()
-        {
-            Some(
-                crate::scripted_dependencies::PublicationFence::prepare(
-                    &self.0,
-                    &result.scripted_sources,
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-
-        if let Some(fence) = source_fence {
-            fence.validate(&mut tx).await?;
-        }
-
-        // ── items ─────────────────────────────────────────────────────────────
-        if let Some(guard) = &result.publication_guard {
-            if !crate::scan_refresh::publication_guard_matches(&mut tx, playout.id, guard)
-                .await
-                .repository()?
-            {
-                return Err(RepositoryError::Conflict(
-                    "Playout build superseded by a changed source revision; the published timeline was not changed. Retry the refresh using current sources".to_owned(),
-                ));
-            }
-        }
-        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Scripted {
-            scripted_timeline::validate_publication(
-                &mut tx,
-                playout.id,
-                result,
-                max_playout_offset,
-            )
-            .await?;
-        }
-        if result.clear_items {
-            if let Some(seam) = result.retain_through {
-                let cutoff = result.remove_before.unwrap_or(seam)
-                    - max_playout_offset.max(chrono::Duration::zero());
-                sqlx::query(
-                    r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?
-                       AND ("Finish" > ? OR "Finish" < ?)"#,
-                )
-                .bind(playout.id)
-                .bind(encode_datetime(seam))
-                .bind(encode_datetime(cutoff))
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-            } else {
-                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
-                    .bind(playout.id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-        } else {
-            for &item_id in &result.items_to_remove {
-                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "Id" = ?"#)
-                    .bind(item_id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-            if let Some(cutoff) = result.remove_before {
-                let cutoff = cutoff - max_playout_offset.max(chrono::Duration::zero());
-                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
-                    .bind(playout.id)
-                    .bind(encode_datetime(cutoff))
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-        }
-
-        for item in &result.added_items {
-            // Insert without an explicit Id so SQLite auto-assigns one.
-            let inserted = sqlx::query(
-                r#"INSERT INTO "PlayoutItem" (
-                    "PlayoutId", "MediaItemId", "Start", "Finish",
-                    "GuideStart", "GuideFinish", "CustomTitle", "GuideGroup",
-                    "FillerKind", "InPoint", "OutPoint", "ChapterTitle",
-                    "DisableWatermarks", "PreferredAudioLanguageCode",
-                    "PreferredAudioTitle", "PreferredSubtitleLanguageCode",
-                    "SubtitleMode", "MediaVersionId", "VideoStreamIndex",
-                    "AudioStreamIndex", "SubtitleStreamIndex", "BlockKey", "CollectionKey",
-                    "CollectionEtag", "SchedulingContext"
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(item.playout_id)
-            .bind(item.media_item_id)
-            .bind(encode_datetime(item.start))
-            .bind(encode_datetime(item.finish))
-            .bind(encode_optional_datetime(item.guide_start))
-            .bind(encode_optional_datetime(item.guide_finish))
-            .bind(&item.custom_title)
-            .bind(item.guide_group)
-            .bind(encode_enum(item.filler_kind))
-            .bind(encode_source_duration(item.in_point))
-            .bind(encode_source_duration(item.out_point))
-            .bind(&item.chapter_title)
-            .bind(item.disable_watermarks)
-            .bind(&item.preferred_audio_language_code)
-            .bind(&item.preferred_audio_title)
-            .bind(&item.preferred_subtitle_language_code)
-            .bind(item.subtitle_mode.map(encode_enum))
-            .bind(item.pinned_stream_selection.map(|selection| selection.media_version_id))
-            .bind(item.pinned_stream_selection.map(|selection| selection.video_stream_index))
-            .bind(item.pinned_stream_selection.and_then(|selection| selection.audio_stream_index))
-            .bind(item.pinned_stream_selection.and_then(|selection| selection.subtitle_stream_index))
-            .bind(&item.block_key)
-            .bind(&item.collection_key)
-            .bind(&item.collection_etag)
-            .bind(&item.scheduling_context)
-            .execute(&mut *tx)
+        self.prepare_build_result(result, playout, max_playout_offset)
+            .await?
+            .commit()
             .await
-            .repository()?;
-            let inserted_id = crate::db::last_insert_id(inserted);
-
-            for &wm_id in &item.watermark_ids {
-                sqlx::query(
-                    r#"REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
-                )
-                .bind(inserted_id)
-                .bind(wm_id)
-                .execute(&mut *tx)
-                .await.repository()?;
-            }
-            replace_playout_item_graphics_elements(&mut tx, inserted_id, item).await?;
-        }
-
-        // Publish gaps from the final retained/appended item set in the same
-        // transaction. Scheduler hints may precede fallback filling or omit
-        // gaps entirely, and cannot be used as the persisted UI projection.
-        rebuild_playout_gaps(&mut tx, playout.id).await?;
-
-        // ── history ───────────────────────────────────────────────────────────
-        if result.clear_items {
-            if let Some(seam) = result.retain_through {
-                let cutoff = result.remove_before.unwrap_or(seam)
-                    - max_playout_offset.max(chrono::Duration::zero());
-                sqlx::query(
-                    r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?
-                       AND ("When" >= ? OR "Finish" > ? OR "Finish" < ?)"#,
-                )
-                .bind(playout.id)
-                .bind(encode_datetime(seam))
-                .bind(encode_datetime(seam))
-                .bind(encode_datetime(cutoff))
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-            } else {
-                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
-                    .bind(playout.id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-        } else {
-            for &history_id in &result.history_to_remove {
-                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)
-                    .bind(history_id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
-        }
-        for entry in &result.added_history {
-            sqlx::query(
-                r#"INSERT INTO "PlayoutHistory" (
-                    "BlockId", "Details", "Index", "Key", "PlaybackOrder",
-                    "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild", "Seed"
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(entry.block_id)
-            .bind(&entry.details)
-            .bind(entry.index)
-            .bind(&entry.key)
-            .bind(encode_enum(entry.playback_order))
-            .bind(entry.playout_id)
-            .bind(encode_datetime(entry.when))
-            .bind(encode_optional_datetime(entry.finish))
-            .bind(&entry.child_key)
-            .bind(entry.is_current_child)
-            .bind(entry.seed)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
-
-        // Persist `playout.seed` unconditionally. It only actually changes on a
-        // Reset build (see `build_playout` in `maintenance.rs`, which mirrors
-        // ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`), but
-        // writing it every time keeps this function mode-agnostic and is a
-        // no-op for Continue/Refresh, where `playout.seed` is unchanged.
-        sqlx::query(r#"UPDATE "Playout" SET "Seed" = ? WHERE "Id" = ?"#)
-            .bind(playout.seed)
-            .bind(playout.id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-
-        // ── anchor, program-schedule anchors, fill-group indices, templates ───
-        // Persist the anchor produced by *this* build (`result.anchor`), not the
-        // stale anchor carried on the input `playout`. The input anchor is the
-        // pre-build state; for a fresh playout it is `None`, and writing it back
-        // would delete the row and force every Continue build to restart from
-        // `now` — producing overlapping, stacked playout items. ErsatzTV's
-        // `PlayoutBuilder` mutates `playout.Anchor` in place before saving; the
-        // result anchor is our equivalent of that post-build value.
-        replace_anchor_state(&mut tx, playout.id, result.anchor.as_ref()).await?;
-        replace_program_schedule_anchors(&mut tx, playout.id, &result.program_schedule_anchors)
-            .await?;
-        replace_classic_checkpoints(&mut tx, playout.id, &result.classic_checkpoints).await?;
-        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Scripted {
-            scripted_checkpoints::replace(&mut tx, playout.id, &result.scripted_checkpoints)
-                .await?;
-            crate::scripted_dependencies::publish(
-                &mut tx,
-                playout.id,
-                &result.scripted_sources,
-                result.clear_items,
-            )
-            .await?;
-        }
-        replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
-        replace_playout_templates(&mut tx, playout).await?;
-
-        tx.commit().await.repository()?;
-        Ok(())
     }
 
     async fn upsert_build_status(&self, status: &PlayoutBuildStatus) -> Result<()> {
         sqlx::query(
-            r#"REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
-             VALUES (?, ?, ?, ?)"#,
+            r#"INSERT INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message", "LastSuccessfulBuild")
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT("PlayoutId") DO UPDATE SET
+               "LastBuild" = excluded."LastBuild", "Success" = excluded."Success",
+               "Message" = excluded."Message",
+               "LastSuccessfulBuild" = COALESCE(excluded."LastSuccessfulBuild", "PlayoutBuildStatus"."LastSuccessfulBuild")"#,
         )
         .bind(status.playout_id)
         .bind(encode_datetime(status.last_build))
         .bind(status.success)
         .bind(&status.message)
+        .bind(status.success.then(|| encode_datetime(status.last_build)))
         .execute(&self.0)
         .await
         .repository()?;
@@ -744,7 +495,16 @@ async fn list_admin(
                          COALESCE(p."ScheduleFile", '') AS "ScheduleFile",
                          p."DailyRebuildTime",
                          pbs."Success" AS "BuildSuccess",
-                         pbs."Message" AS "BuildMessage"
+                         pbs."Message" AS "BuildMessage",
+                         pbs."LastSuccessfulBuild",
+                         CASE WHEN p."ScheduleKind" IN (4, 'Scripted') THEN p."ScriptedSourceRevision"
+                              WHEN p."ScheduleKind" IN (20, 'ExternalJson') THEN
+                                  (SELECT s."Revision" FROM "PlayoutExternalJsonSnapshot" s WHERE s."PlayoutId"=p."Id")
+                         END AS "SourceRevision",
+                         EXISTS(SELECT 1 FROM "ScanPlayoutRefreshIntent" r WHERE r."PlayoutId" = p."Id") AS "RefreshPending",
+                         EXISTS(SELECT 1 FROM "ScanPlayoutRefreshIntent" r WHERE r."PlayoutId" = p."Id" AND r."State" = 2) AS "RefreshFailed",
+                         EXISTS(SELECT 1 FROM "ScriptedSourceRefreshWork" w WHERE w."PlayoutId" = p."Id") AS "SourceCheckPending",
+                         EXISTS(SELECT 1 FROM "ScriptedSourceRefreshWork" w WHERE w."PlayoutId" = p."Id" AND w."Diagnostic" IS NOT NULL) AS "SourceCheckFailed"
                   FROM "Playout" p
                   JOIN "Channel" c ON c."Id" = p."ChannelId"
                   LEFT JOIN "ProgramSchedule" ps ON ps."Id" = p."ProgramScheduleId"
@@ -790,9 +550,28 @@ async fn list_admin(
                     .repository()?
                     .map(|value| value != 0),
                 build_message: row.try_get("BuildMessage").repository()?,
+                last_successful_build: row
+                    .try_get::<Option<String>, _>("LastSuccessfulBuild")
+                    .repository()?
+                    .as_deref()
+                    .map(|value| decode_datetime("LastSuccessfulBuild", value))
+                    .transpose()?,
+                source_revision: row.try_get("SourceRevision").repository()?,
+                refresh_work: pending_work(row, "RefreshPending", "RefreshFailed")?,
+                source_work: pending_work(row, "SourceCheckPending", "SourceCheckFailed")?,
             })
         })
         .collect()
+}
+
+fn pending_work(row: &DbRow, pending: &str, failed: &str) -> Result<PlayoutPendingWork> {
+    if row.try_get::<bool, _>(failed).repository()? {
+        Ok(PlayoutPendingWork::Failed)
+    } else if row.try_get::<bool, _>(pending).repository()? {
+        Ok(PlayoutPendingWork::Pending)
+    } else {
+        Ok(PlayoutPendingWork::None)
+    }
 }
 
 async fn rebuild_playout_gaps(
@@ -2220,7 +1999,7 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
 }
 
 async fn load_playout_item_graphics_elements(
-    pool: &Pool<crate::db::Db>,
+    connection: &mut sqlx::SqliteConnection,
     playout_item_id: EntityId,
 ) -> Result<Vec<PlayoutItemGraphicsElement>> {
     let rows = sqlx::query(
@@ -2230,7 +2009,7 @@ async fn load_playout_item_graphics_elements(
            ORDER BY "GraphicsElementId""#,
     )
     .bind(playout_item_id)
-    .fetch_all(pool)
+    .fetch_all(connection)
     .await
     .repository()?;
 
@@ -2719,4 +2498,56 @@ async fn replace_playout_templates(
         .repository()?;
     }
     Ok(())
+}
+
+async fn read_item_ids(
+    connection: &mut sqlx::SqliteConnection,
+    query: &'static str,
+    item_id: EntityId,
+) -> Result<Vec<EntityId>> {
+    sqlx::query_scalar(query)
+        .bind(item_id)
+        .fetch_all(connection)
+        .await
+        .repository()
+}
+
+async fn read_items(
+    connection: &mut sqlx::SqliteConnection,
+    playout_id: EntityId,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<PlayoutItem>> {
+    let rows = sqlx::query(
+        r#"SELECT *
+             FROM "PlayoutItem"
+             WHERE "PlayoutId" = ? AND "Start" < ? AND "Finish" > ?
+             ORDER BY "Start", "Id""#,
+    )
+    .bind(playout_id)
+    .bind(encode_datetime(finish))
+    .bind(encode_datetime(start))
+    .fetch_all(&mut *connection)
+    .await
+    .repository()?;
+    let mut items = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let item_id: EntityId = row.try_get("Id").repository()?;
+        let mut item = map_playout_item(row)?;
+        item.watermark_ids = read_item_ids(
+                connection,
+                r#"SELECT "WatermarkId" FROM "PlayoutItemWatermark" WHERE "PlayoutItemId" = ? ORDER BY "WatermarkId""#,
+                item_id,
+            )
+            .await?;
+        item.graphics_element_ids = read_item_ids(
+                connection,
+                r#"SELECT "GraphicsElementId" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ? ORDER BY "GraphicsElementId""#,
+                item_id,
+            )
+            .await?;
+        item.graphics_elements = load_playout_item_graphics_elements(connection, item_id).await?;
+        items.push(item);
+    }
+    Ok(items)
 }

@@ -5,7 +5,10 @@ use super::{
     process::{NextProcess, ProcessError},
 };
 use async_trait::async_trait;
-use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsStartupReadiness};
+use ersatzrs_core::hls::{
+    HlsAdmissionStatus, HlsPublicationError, HlsSessionHandle, HlsStartupReadiness,
+};
+use futures_util::FutureExt;
 use std::{
     future::Future,
     path::PathBuf,
@@ -15,7 +18,14 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{io::AsyncReadExt, sync::Notify, time::Instant};
+use tokio::{
+    io::AsyncReadExt,
+    sync::{watch, Notify},
+    time::Instant,
+};
+
+const REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_REFRESH_BACKOFF: Duration = Duration::from_secs(30);
 
 pub struct NextSession {
     pub(super) started_at: chrono::DateTime<chrono::Utc>,
@@ -30,6 +40,27 @@ pub struct NextSession {
     started: AtomicBool,
     cancel: Notify,
     refresh: Notify,
+    refresh_request: Mutex<PendingRefresh>,
+    publication: watch::Sender<PublicationProgress>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct RefreshRequest {
+    generation: u64,
+    deadline: Option<std::time::Instant>,
+}
+
+#[derive(Default)]
+struct PendingRefresh {
+    request: RefreshRequest,
+    pending: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+struct PublicationProgress {
+    published: u64,
+    failed: u64,
+    ended: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +105,8 @@ impl NextSession {
             started: AtomicBool::new(false),
             cancel: Notify::new(),
             refresh: Notify::new(),
+            refresh_request: Mutex::new(PendingRefresh::default()),
+            publication: watch::channel(PublicationProgress::default()).0,
         }
     }
 
@@ -82,9 +115,13 @@ impl NextSession {
     /// abort it when normal reaping/registry cleanup is required. Refresh work
     /// runs concurrently with heartbeat and cancellation and must use the shared
     /// channel publisher. Notifications coalesce while one refresh is in flight.
+    /// Failed refreshes retain playback and retry with capped backoff; each
+    /// attempt receives its publication deadline independently of startup.
+    /// Coalesced scheduler requests keep the earliest safe deadline; expiration
+    /// requires a fresh request rather than extending the old handover window.
     ///
     /// # Errors
-    /// Returns redacted startup, publication, process or cleanup failures.
+    /// Returns redacted startup, retired-channel, process or cleanup failures.
     pub async fn run<S, F, R>(
         &self,
         startup: S,
@@ -93,13 +130,13 @@ impl NextSession {
     ) -> Result<SessionExit, SessionError>
     where
         S: Future<Output = Result<NextProcess, ProcessError>>,
-        F: FnMut() -> R,
+        F: FnMut(std::time::Instant) -> R,
         R: Future<Output = Result<(), RefreshError>>,
     {
         if self.started.swap(true, Ordering::AcqRel) {
             return Err(SessionError::AlreadyStarted);
         }
-        let _terminal = TerminalState(&self.state);
+        let _terminal = TerminalState(self);
         let result = async {
             let mut process = tokio::select! {
                 biased;
@@ -112,17 +149,9 @@ impl NextSession {
             }
             self.state.store(1, Ordering::Release);
             self.touch();
-            let refreshes = async {
-                loop {
-                    self.refresh.notified().await;
-                    if let Err(error) = refresh().await {
-                        return Err::<SessionExit, SessionError>(error.into());
-                    }
-                }
-            };
             let outcome = tokio::select! {
                 result = self.monitor(&mut process, idle_timeout) => result,
-                result = refreshes => result,
+                result = self.run_refreshes(&mut refresh) => result,
             };
             // Block playlist access before stopping the process that owns it.
             self.state.store(2, Ordering::Release);
@@ -131,6 +160,134 @@ impl NextSession {
         }.await;
         self.state.store(2, Ordering::Release);
         result
+    }
+
+    async fn run_refreshes<F, R>(&self, refresh: &mut F) -> Result<SessionExit, SessionError>
+    where
+        F: FnMut(std::time::Instant) -> R,
+        R: Future<Output = Result<(), RefreshError>>,
+    {
+        loop {
+            self.refresh.notified().await;
+            let Some(mut request) = self.take_refresh() else {
+                continue;
+            };
+            let mut backoff = Duration::from_secs(1);
+            loop {
+                let generation = request.generation;
+                let deadline = request
+                    .deadline
+                    .map_or(Instant::now() + REFRESH_TIMEOUT, |limit| {
+                        Instant::from_std(limit).min(Instant::now() + REFRESH_TIMEOUT)
+                    });
+                if Instant::now() >= deadline {
+                    self.publication
+                        .send_modify(|state| state.failed = generation);
+                    break;
+                }
+                match tokio::time::timeout_at(deadline, refresh(deadline.into_std())).await {
+                    Ok(Ok(())) => {
+                        self.publication
+                            .send_modify(|state| state.published = generation);
+                        break;
+                    }
+                    Ok(Err(error @ RefreshError::Retired)) => return Err(error.into()),
+                    Ok(Err(error)) => tracing::warn!(
+                        channel_number = %self.number,
+                        %error,
+                        retry_seconds = backoff.as_secs(),
+                        "Next refresh failed; retaining playback and retrying publication"
+                    ),
+                    Err(_) => tracing::warn!(
+                        channel_number = %self.number,
+                        retry_seconds = backoff.as_secs(),
+                        "Next refresh timed out; retaining playback and retrying publication"
+                    ),
+                }
+                self.publication
+                    .send_modify(|state| state.failed = generation);
+                // Retrying cannot extend a scheduler's safe handover window.
+                // Wait for a new request after it expires, retaining playback.
+                if request
+                    .deadline
+                    .is_some_and(|limit| Instant::now() >= limit.into())
+                {
+                    break;
+                }
+                // The monitor still owns cancellation, idle expiry and heartbeat.
+                // An already-started blocking publication retains its publisher
+                // gate, so a timeout cannot let this retry overtake that writer.
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_REFRESH_BACKOFF);
+                // A new request after failure may carry a newly prepared
+                // boundary. It cannot bypass the failed attempt's cooldown.
+                let _ = self.refresh.notified().now_or_never();
+                if let Some(pending) = self.take_refresh() {
+                    request = pending;
+                }
+            }
+        }
+    }
+
+    fn request_refresh(&self, deadline: Option<std::time::Instant>) -> u64 {
+        let mut pending = self
+            .refresh_request
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        pending.request.generation += 1;
+        pending.request.deadline = if pending.pending {
+            // Coalescing an unconstrained notification cannot erase a queued
+            // scheduler deadline; multiple waiters keep the earliest one.
+            pending.request.deadline.into_iter().chain(deadline).min()
+        } else {
+            deadline
+        };
+        pending.pending = true;
+        let generation = pending.request.generation;
+        self.refresh.notify_one();
+        generation
+    }
+
+    fn take_refresh(&self) -> Option<RefreshRequest> {
+        let mut pending = self
+            .refresh_request
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !std::mem::take(&mut pending.pending) {
+            return None;
+        }
+        Some(pending.request)
+    }
+
+    async fn await_publication(
+        &self,
+        deadline: std::time::Instant,
+    ) -> Result<(), HlsPublicationError> {
+        let mut progress = self.publication.subscribe();
+        let required = self.request_refresh(Some(deadline));
+        tokio::time::timeout_at(deadline.into(), async {
+            loop {
+                let state = *progress.borrow_and_update();
+                if state.ended {
+                    return Err(HlsPublicationError::SessionEnded);
+                }
+                if state.published >= required {
+                    return Ok(());
+                }
+                if Instant::now() >= deadline.into() {
+                    return Err(HlsPublicationError::TimedOut);
+                }
+                if state.failed >= required {
+                    return Err(HlsPublicationError::Failed);
+                }
+                progress
+                    .changed()
+                    .await
+                    .map_err(|_| HlsPublicationError::SessionEnded)?;
+            }
+        })
+        .await
+        .map_err(|_| HlsPublicationError::TimedOut)?
     }
 
     async fn monitor(
@@ -176,11 +333,12 @@ impl NextSession {
     }
 }
 
-struct TerminalState<'a>(&'a AtomicU8);
+struct TerminalState<'a>(&'a NextSession);
 
 impl Drop for TerminalState<'_> {
     fn drop(&mut self) {
-        self.0.store(2, Ordering::Release);
+        self.0.state.store(2, Ordering::Release);
+        self.0.publication.send_modify(|state| state.ended = true);
     }
 }
 
@@ -256,10 +414,21 @@ impl HlsSessionHandle for NextSession {
         self.cancel.notify_one();
     }
     fn playout_updated(&self) {
-        self.refresh.notify_one();
+        self.request_refresh(None);
+    }
+
+    async fn publish_playout_update(
+        &self,
+        deadline: std::time::Instant,
+    ) -> Result<(), HlsPublicationError> {
+        self.await_publication(deadline).await
     }
 }
 
 #[cfg(test)]
 #[path = "session_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "session_publication_tests.rs"]
+mod publication_tests;

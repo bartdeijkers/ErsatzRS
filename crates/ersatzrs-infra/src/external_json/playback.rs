@@ -154,9 +154,8 @@ pub async fn select(
     let path = row
         .try_get::<Option<String>, _>("ScheduleFile")
         .map_err(|_| ExternalPlaybackError::Database)?
-        .filter(|path| !path.trim().is_empty())
-        .ok_or(ExternalPlaybackError::MissingSchedule)?;
-    let schedule = super::load(std::path::Path::new(&path))
+        .unwrap_or_default();
+    let schedule = super::snapshot::load_playout(pool, playout_id, std::path::Path::new(&path))
         .await?
         .ok_or(ExternalPlaybackError::MissingSchedule)?;
     let source_now = context

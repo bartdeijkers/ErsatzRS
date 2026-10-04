@@ -16,6 +16,9 @@ use sqlx::{Pool, Row};
 use crate::db::{DatabaseSchemaStatus, Db};
 use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
+use checks::{
+    BlockPlayoutStateHealthCheck, ExternalJsonPlayoutStateHealthCheck, YamlPlayoutStateHealthCheck,
+};
 mod coordinator;
 
 pub use coordinator::{HealthCheckCoordinator, HealthRunError};
@@ -60,7 +63,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 45] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 48] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -97,6 +100,9 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 45] = [
     "Empty Schedule",
     "Classic Playout State",
     "Scripted Playout State",
+    "Block Playout State",
+    "YAML Playout State",
+    "External JSON Playout State",
     "Scan Refresh State",
     "Mirror Channels",
     "Output Dynamic Range",
@@ -288,6 +294,9 @@ fn registered_health_checks(
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(ScriptedPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(BlockPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(YamlPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(ExternalJsonPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(ScanRefreshStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
@@ -1081,10 +1090,7 @@ mod tests {
         crate::maintenance::run_requested_playout_build(
             &pool,
             &EntityLocker::new(),
-            PlayoutBuildRequest {
-                playout_id: 10,
-                mode: PlayoutBuildMode::Reset,
-            },
+            PlayoutBuildRequest::new(10, PlayoutBuildMode::Reset),
             now,
             None,
         )
@@ -1121,6 +1127,17 @@ mod tests {
             pool.execute(r#"UPDATE "PlayoutProgramScheduleAnchor" SET "RerunCollectionId"=NULL"#)
                 .await
                 .unwrap();
+            assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Fail);
+        } else {
+            // Leave the daily checkpoint intact: preserving the active
+            // programme specifically requires its own complete boundary.
+            pool.execute(
+                r#"DELETE FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 10
+                AND "CheckpointDate" = (SELECT "Finish" FROM "PlayoutItem"
+                    WHERE "PlayoutId" = 10 ORDER BY "Start" LIMIT 1)"#,
+            )
+            .await
+            .unwrap();
             assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Fail);
         }
     }

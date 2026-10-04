@@ -1,9 +1,12 @@
 //! Shared helpers for building `FFmpeg` playback pipelines from persisted and
 //! transient media metadata, used by the MPEG-TS, HLS and Next paths.
 
+#[path = "playback_candidate.rs"]
+mod candidate;
 #[path = "playback_transient.rs"]
 pub mod transient;
 use crate::repositories::SqlxResultExt as _;
+pub(crate) use candidate::CandidateOverlayContext;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -2265,7 +2268,7 @@ pub async fn select_playback_watermarks(
     }
 
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
-    select_context_watermarks(pool, channel, context, Some(playout_item_id), now).await
+    select_context_watermarks(pool, channel, context, Some(playout_item_id), now, None).await
 }
 
 /// Select decoration and channel watermarks for an ephemeral item.
@@ -2293,7 +2296,7 @@ pub async fn select_fallback_watermarks(
         filler_kind: item.filler_kind,
         playout_deco_id,
     };
-    select_context_watermarks(pool, channel, context, None, now).await
+    select_context_watermarks(pool, channel, context, None, now, None).await
 }
 
 async fn select_context_watermarks(
@@ -2302,10 +2305,18 @@ async fn select_context_watermarks(
     context: PlaybackWatermarkContext,
     playout_item_id: Option<i64>,
     now: DateTime<Utc>,
+    candidate: Option<&CandidateOverlayContext>,
 ) -> Result<Vec<ResolvedPlaybackWatermark>> {
     let mut watermark_ids = Vec::new();
 
-    if let Some(template_deco) = load_active_template_deco(pool, context.playout_id, now).await? {
+    let template_deco = match candidate {
+        Some(inputs) => match inputs.template_deco_id {
+            Some(id) => Some(load_playback_deco(pool, id).await?),
+            None => None,
+        },
+        None => load_active_template_deco(pool, context.playout_id, now).await?,
+    };
+    if let Some(template_deco) = template_deco {
         if apply_deco_watermarks(&template_deco, context.filler_kind, &mut watermark_ids) {
             return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
         }
@@ -2318,9 +2329,10 @@ async fn select_context_watermarks(
         }
     }
 
-    let item_ids = match playout_item_id {
-        Some(id) => load_playout_item_watermark_ids(pool, id).await?,
-        None => Vec::new(),
+    let item_ids = match (candidate, playout_item_id) {
+        (Some(inputs), _) => inputs.watermark_ids.clone(),
+        (None, Some(id)) => load_playout_item_watermark_ids(pool, id).await?,
+        (None, None) => Vec::new(),
     };
     if !item_ids.is_empty() {
         watermark_ids.extend(item_ids);
@@ -2348,7 +2360,7 @@ pub async fn select_playback_graphics(
     now: DateTime<Utc>,
 ) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
-    select_context_graphics(pool, context, Some(playout_item_id), now).await
+    select_context_graphics(pool, context, Some(playout_item_id), now, None).await
 }
 
 /// Select graphics for an ephemeral item without looking up an item row.
@@ -2376,6 +2388,7 @@ pub async fn select_fallback_graphics(
         },
         None,
         now,
+        None,
     )
     .await
 }
@@ -2385,12 +2398,18 @@ async fn select_context_graphics(
     context: PlaybackWatermarkContext,
     playout_item_id: Option<i64>,
     now: DateTime<Utc>,
+    candidate: Option<&CandidateOverlayContext>,
 ) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let mut graphics = Vec::new();
 
-    if let Some(template_deco) =
-        load_active_template_graphics_deco(pool, context.playout_id, now).await?
-    {
+    let template_deco = match candidate {
+        Some(inputs) => match inputs.template_deco_id {
+            Some(id) => Some(load_playback_graphics_deco(pool, id).await?),
+            None => None,
+        },
+        None => load_active_template_graphics_deco(pool, context.playout_id, now).await?,
+    };
+    if let Some(template_deco) = template_deco {
         if apply_deco_graphics(&template_deco, context.filler_kind, &mut graphics) {
             return resolve_playback_graphics(pool, graphics).await;
         }
@@ -2403,8 +2422,10 @@ async fn select_context_graphics(
         }
     }
 
-    if let Some(id) = playout_item_id {
-        graphics.extend(load_playout_item_graphics(pool, id).await?);
+    match (candidate, playout_item_id) {
+        (Some(inputs), _) => graphics.extend(inputs.graphics.clone()),
+        (None, Some(id)) => graphics.extend(load_playout_item_graphics(pool, id).await?),
+        (None, None) => {}
     }
     resolve_playback_graphics(pool, graphics).await
 }
@@ -3238,7 +3259,10 @@ pub fn watermark_fade_points_for_program(
     points
 }
 
-async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) -> Result<Vec<i64>> {
+async fn load_playout_item_watermark_ids<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
+    playout_item_id: i64,
+) -> Result<Vec<i64>> {
     let rows = sqlx::query(
         r#"SELECT "WatermarkId"
            FROM "PlayoutItemWatermark"
@@ -3246,7 +3270,7 @@ async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) ->
            ORDER BY "WatermarkId""#,
     )
     .bind(playout_item_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 
@@ -3255,8 +3279,8 @@ async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) ->
         .collect()
 }
 
-async fn load_playback_watermark_context(
-    pool: &DbPool,
+async fn load_playback_watermark_context<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_item_id: i64,
 ) -> Result<PlaybackWatermarkContext> {
     let row = sqlx::query(
@@ -3266,7 +3290,7 @@ async fn load_playback_watermark_context(
            WHERE "pi"."Id" = ?"#,
     )
     .bind(playout_item_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
     .repository()?;
     Ok(PlaybackWatermarkContext {
@@ -3358,7 +3382,17 @@ pub(crate) async fn active_template_deco_id(
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<i64>> {
-    let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
+    let mut connection = pool.acquire().await.repository()?;
+    active_template_deco_id_from_connection(&mut connection, playout_id, now).await
+}
+
+async fn active_template_deco_id_from_connection(
+    connection: &mut sqlx::SqliteConnection,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<i64>> {
+    let Some(deco_template_id) =
+        active_playout_template_deco_id(&mut *connection, playout_id, now).await?
     else {
         return Ok(None);
     };
@@ -3371,7 +3405,7 @@ pub(crate) async fn active_template_deco_id(
            ORDER BY "dti"."StartTime", "dti"."Id""#,
     )
     .bind(deco_template_id)
-    .fetch_all(pool)
+    .fetch_all(connection)
     .await
     .repository()?;
 
@@ -3397,8 +3431,8 @@ async fn load_active_template_graphics_deco(
     }
 }
 
-async fn active_playout_template_deco_id(
-    pool: &DbPool,
+async fn active_playout_template_deco_id<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<i64>> {
@@ -3411,7 +3445,7 @@ async fn active_playout_template_deco_id(
            ORDER BY "Index", "TemplateId""#,
     )
     .bind(playout_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 
@@ -3423,8 +3457,8 @@ async fn active_playout_template_deco_id(
     Ok(None)
 }
 
-async fn load_playout_item_graphics(
-    pool: &DbPool,
+async fn load_playout_item_graphics<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_item_id: i64,
 ) -> Result<Vec<(i64, Option<String>)>> {
     let rows = sqlx::query(
@@ -3434,7 +3468,7 @@ async fn load_playout_item_graphics(
            ORDER BY "GraphicsElementId""#,
     )
     .bind(playout_item_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 

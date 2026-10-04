@@ -1,4 +1,12 @@
+#[path = "maintenance/classic_preservation.rs"]
+mod classic_preservation;
 mod common;
+#[path = "maintenance/next_publication.rs"]
+mod next_publication;
+#[path = "maintenance/producer_handover.rs"]
+mod producer_handover;
+#[path = "maintenance/yaml_preservation.rs"]
+mod yaml_preservation;
 
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +37,14 @@ struct FakeHlsRegistry {
 
 #[async_trait]
 impl HlsSessionRegistry for FakeHlsRegistry {
+    async fn publish_playout_update(
+        &self,
+        channel_number: &str,
+        _deadline: std::time::Instant,
+    ) -> Result<bool, ersatzrs_core::hls::HlsPublicationError> {
+        Ok(self.playout_updated(channel_number).await)
+    }
+
     async fn try_get(&self, _channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
         None
     }
@@ -123,6 +139,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
             cancelled: None,
             health: Some(&health),
             artwork: None,
+            next: None,
         },
     )
     .await
@@ -154,6 +171,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
             cancelled: None,
             health: Some(&health),
             artwork: None,
+            next: None,
         },
     )
     .await
@@ -390,10 +408,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let skipped = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 78,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(78, PlayoutBuildMode::Refresh),
         Utc::now(),
         None,
     )
@@ -414,10 +429,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 78,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(78, PlayoutBuildMode::Reset),
         Utc::now(),
         Some(hls_registry.as_ref()),
     )
@@ -472,10 +484,7 @@ async fn reset_build_regenerates_playout_seed() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 79,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(79, PlayoutBuildMode::Reset),
         Utc::now(),
         None,
     )
@@ -507,10 +516,7 @@ async fn refresh_and_continue_builds_preserve_playout_seed() {
         run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 80,
-                mode,
-            },
+            PlayoutBuildRequest::new(80, mode),
             Utc::now(),
             None,
         )
@@ -553,10 +559,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -579,10 +582,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
         assert!(run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode: PlayoutBuildMode::Continue,
-            },
+            PlayoutBuildRequest::new(88, PlayoutBuildMode::Continue),
             continuation,
             Some(&registry)
         )
@@ -633,10 +633,7 @@ async fn cancelled_build_worker_preserves_timeline_and_releases_lock() {
     seed_refresh_rebuild_fixture(&pool, &repos).await;
     let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
     let locker = EntityLocker::new();
-    let request = PlayoutBuildRequest {
-        playout_id: 88,
-        mode: PlayoutBuildMode::Reset,
-    };
+    let request = PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset);
     run_requested_playout_build(&pool, &locker, request, now, None)
         .await
         .unwrap();
@@ -736,10 +733,7 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -759,10 +753,7 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let refreshed = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Refresh),
         now,
         None,
     )
@@ -796,10 +787,7 @@ async fn reset_and_refresh_preserve_timeline_when_filter_empties_required_source
         run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode: PlayoutBuildMode::Reset,
-            },
+            PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
             start,
             None,
         )
@@ -826,10 +814,7 @@ async fn reset_and_refresh_preserve_timeline_when_filter_empties_required_source
         let error = run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode,
-            },
+            PlayoutBuildRequest::new(88, mode),
             start + Duration::minutes(1),
             None,
         )
@@ -872,10 +857,7 @@ async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         start,
         None,
     )
@@ -889,10 +871,7 @@ async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Refresh),
         start + Duration::minutes(1),
         None,
     )
@@ -934,10 +913,7 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -993,10 +969,7 @@ async fn startup_repair_refuses_legacy_state_without_clearing_the_window() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -1069,10 +1042,7 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -1098,10 +1068,7 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Continue,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Continue),
         now + Duration::minutes(1),
         Some(hls_registry.as_ref()),
     )

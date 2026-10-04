@@ -1,9 +1,9 @@
 use super::{
-    timeline, validate_scripted_timeline, BTreeMap, DateTime, Deserialize, Duration, EntityId,
-    MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode, SchedulingError, SchedulingRequest,
-    ScriptState, Serialize, Utc,
+    timeline, BTreeMap, DateTime, Deserialize, Duration, EntityId, MediaEnumerator,
+    PlaylistEnumerator, PlayoutBuildMode, SchedulingError, SchedulingRequest, ScriptState,
+    Serialize, Utc,
 };
-use crate::scheduling::{classic, truncate_to_persisted_precision};
+use crate::scheduling::{classic, truncate_to_persisted_precision, PlayoutPreservation};
 use ersatzrs_domain::PlayoutScriptedCheckpoint;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,6 +11,9 @@ pub(super) struct CheckpointContext {
     version: u32,
     next_start: DateTime<Utc>,
     pub(super) guide_group: i32,
+    /// An explicit Reset starts a new rotation without deleting retained history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) history_start: Option<DateTime<Utc>>,
     pub(super) smart_shuffle: super::super::SchedulingSmartShuffleState,
     sources: BTreeMap<String, SourceCheckpoint>,
 }
@@ -61,6 +64,9 @@ fn decode_checkpoint(
         || context.smart_shuffle.version
             != super::super::SchedulingSmartShuffleState::default().version
         || context.next_start != checkpoint.checkpoint_date
+        || context
+            .history_start
+            .is_some_and(|start| start > context.next_start)
         || context.sources.values().any(|source| match source {
             SourceCheckpoint::Media { state, .. } => !state.is_valid(),
             SourceCheckpoint::Playlist { state, .. } => !state.is_valid(),
@@ -72,18 +78,34 @@ fn decode_checkpoint(
 }
 
 pub(super) fn prepare(request: &SchedulingRequest) -> Result<PreparedBuild, SchedulingError> {
-    let start = if request.mode == PlayoutBuildMode::Refresh {
-        refresh_start(request)?
+    crate::scheduling::PlayoutBuildRequest::new(request.playout.id, request.mode)
+        .with_preservation(request.reference_data.preservation)
+        .validate_preservation(request.playout.schedule_kind)?;
+    let keep_reset = request.mode == PlayoutBuildMode::Reset
+        && request.reference_data.preservation == PlayoutPreservation::KeepCurrent;
+    let start = if request.mode == PlayoutBuildMode::Refresh || keep_reset {
+        let boundary = crate::scheduling::programme::preserved_programme_finish(
+            &request.reference_data.existing_items,
+            crate::scheduling::programme::preservation_clock(
+                &request.reference_data,
+                request.start,
+            ),
+        )?;
+        if request.reference_data.preservation == PlayoutPreservation::ReplaceCurrent {
+            request.start
+        } else {
+            boundary
+        }
     } else {
         timeline::continuation_start(request)?
     };
-    let retain = (request.mode == PlayoutBuildMode::Refresh
+    let retain = ((request.mode == PlayoutBuildMode::Refresh || keep_reset)
         && !request.reference_data.existing_items.is_empty())
     .then_some(start);
     if request.mode == PlayoutBuildMode::Reset {
         return Ok(PreparedBuild {
             start,
-            retain_through: None,
+            retain_through: retain,
             checkpoint: None,
         });
     }
@@ -126,42 +148,6 @@ pub(super) fn prepare(request: &SchedulingRequest) -> Result<PreparedBuild, Sche
         retain_through: retain,
         checkpoint: Some(context),
     })
-}
-
-fn refresh_start(request: &SchedulingRequest) -> Result<DateTime<Utc>, SchedulingError> {
-    let mut items = request
-        .reference_data
-        .existing_items
-        .iter()
-        .collect::<Vec<_>>();
-    items.sort_by_key(|item| (item.start, item.finish));
-    validate_scripted_timeline(items.iter().map(|item| (item.start, item.finish)), None)?;
-    let Some(index) = items
-        .iter()
-        .position(|item| item.start <= request.start && item.finish > request.start)
-    else {
-        return Ok(request.start);
-    };
-    let current = items[index];
-    let mut finish = current
-        .finish
-        .max(current.guide_finish.unwrap_or(current.finish));
-    // A locked guide group can contain a split programme and its rolls. Keep
-    // the contiguous published group, not merely the physical row on air.
-    for item in &items[index + 1..] {
-        if item.start < finish
-            || (item.start == finish
-                && current.guide_group > 0
-                && item.guide_group == current.guide_group)
-        {
-            finish = finish
-                .max(item.finish)
-                .max(item.guide_finish.unwrap_or(item.finish));
-        } else {
-            break;
-        }
-    }
-    Ok(finish)
 }
 
 impl ScriptState {
@@ -223,6 +209,7 @@ impl ScriptState {
                 version: 1,
                 next_start,
                 guide_group: self.guide_group,
+                history_start: self.history_start,
                 smart_shuffle,
                 sources,
             },
@@ -263,8 +250,10 @@ impl ScriptState {
             .existing_scripted_checkpoints
             .iter()
             .filter(|checkpoint| {
-                self.mode != PlayoutBuildMode::Reset
-                    && (self.mode != PlayoutBuildMode::Refresh
+                (self.mode != PlayoutBuildMode::Reset
+                    || (self.reference_data.preservation == PlayoutPreservation::KeepCurrent
+                        && checkpoint.checkpoint_date < self.start))
+                    && (self.mode == PlayoutBuildMode::Continue
                         || checkpoint.checkpoint_date <= self.start)
                     && published.contains(&checkpoint.checkpoint_date)
                     && cutoff.is_none_or(|cutoff| checkpoint.checkpoint_date >= cutoff)

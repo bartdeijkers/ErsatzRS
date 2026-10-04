@@ -261,6 +261,13 @@ mod tests {
         pool.execute(r#"CREATE TABLE "Channel" ("Id" INTEGER, "PlayoutSource" INTEGER, "MirrorSourceChannelId" INTEGER, "PlayoutOffset" TEXT);
             CREATE TABLE "Playout" ("Id" INTEGER, "ChannelId" INTEGER, "ScheduleKind" INTEGER, "ScheduleFile" TEXT);
             INSERT INTO "Channel" VALUES (1, 0, NULL, NULL);"#).await.unwrap();
+        // Timeline admission also consults accepted planning; this remains a
+        // scheduling-only fixture without any provider or media tables.
+        pool.execute(include_str!(
+            "../../../migrations/202610041537_external_json_accepted_snapshot.sql"
+        ))
+        .await
+        .unwrap();
         sqlx::query(r#"INSERT INTO "Playout" VALUES (1, 1, 20, ?)"#)
             .bind(path.to_str().unwrap())
             .execute(&pool)

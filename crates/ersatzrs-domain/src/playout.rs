@@ -197,6 +197,14 @@ pub struct PlayoutScriptedCheckpoint {
     pub context: String,
 }
 
+/// Complete YAML instruction and source state at a published programme boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlayoutYamlCheckpoint {
+    pub playout_id: EntityId,
+    pub checkpoint_date: DateTime<Utc>,
+    pub context: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PlayoutScheduleItemFillGroupIndex {
     pub id: EntityId,

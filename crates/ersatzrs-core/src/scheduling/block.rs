@@ -1,3 +1,10 @@
+#[cfg(test)]
+#[path = "block_preservation_tests.rs"]
+mod preservation_tests;
+
+#[path = "block_preservation.rs"]
+mod preservation;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
@@ -320,12 +327,24 @@ pub struct BlockDefinition {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BlockSchedulingEngine;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct BlockAnchorContext {
     #[serde(default = "block_anchor_context_version")]
     version: u32,
     #[serde(default, alias = "cooldown")]
     smart_shuffle: super::SchedulingSmartShuffleState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    history_start: Option<DateTime<Utc>>,
+}
+
+impl Default for BlockAnchorContext {
+    fn default() -> Self {
+        Self {
+            version: block_anchor_context_version(),
+            smart_shuffle: super::SchedulingSmartShuffleState::default(),
+            history_start: None,
+        }
+    }
 }
 
 fn block_anchor_context_version() -> u32 {
@@ -339,25 +358,18 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
 
     fn schedule_cancellable(
         &self,
-        request: SchedulingRequest,
+        mut request: SchedulingRequest,
         cancelled: &(dyn Fn() -> bool + Sync),
     ) -> Result<SchedulingResult, SchedulingError> {
         if cancelled() {
             return Err(SchedulingError::Cancelled);
         }
+        super::PlayoutBuildRequest::new(request.playout.id, request.mode)
+            .with_preservation(request.reference_data.preservation)
+            .validate_preservation(request.playout.schedule_kind)?;
+        let preservation = preservation::Preservation::prepare(&mut request)?;
         let mut result = SchedulingResult::default();
-        let mut smart_shuffle_state = if request.mode == super::PlayoutBuildMode::Continue {
-            request
-                .playout
-                .anchor
-                .as_ref()
-                .and_then(|anchor| anchor.context.as_deref())
-                .and_then(|context| serde_json::from_str::<BlockAnchorContext>(context).ok())
-                .map(|context| context.smart_shuffle)
-                .unwrap_or_default()
-        } else {
-            super::SchedulingSmartShuffleState::default()
-        };
+        let mut smart_shuffle_state = preservation.smart_shuffle.clone();
 
         let mut blocks = request.reference_data.effective_blocks.clone();
         blocks.sort_by_key(|block| block.start);
@@ -367,9 +379,16 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             .or(Some(request.start));
 
         let collection_etags = collection_etags(&request.reference_data, &blocks);
-        let change_set = block_changes(&request, &blocks, &collection_etags);
+        let change_set = if preservation.rebuild {
+            BlockChangeSet {
+                blocks_to_update: blocks.clone(),
+                items_to_remove: Vec::new(),
+            }
+        } else {
+            block_changes(&request, &blocks, &collection_etags)
+        };
         result.items_to_remove.extend(change_set.items_to_remove);
-        if request.mode == super::PlayoutBuildMode::Reset {
+        if request.mode == super::PlayoutBuildMode::Reset && !preservation.rebuild {
             // Rebuild filler from the current deco while retaining primary and
             // guide-hidden content. Mirror-retained filler before the rebuild
             // boundary remains available to delayed channels.
@@ -401,7 +420,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             &collection_etags,
             &mut smart_shuffle_state,
             &mut result,
-        );
+        )?;
 
         apply_block_deco_filler(
             request.playout.id,
@@ -410,40 +429,13 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             &request.reference_data,
             &mut result,
             cancelled,
-            request.mode,
+            if preservation.rebuild {
+                super::PlayoutBuildMode::Reset
+            } else {
+                request.mode
+            },
         )?;
-
-        result.history_to_remove.extend(cleanup_history(
-            &request.reference_data.existing_history,
-            request.start,
-            request.reference_data.max_playout_offset,
-        ));
-        if request.reference_data.has_active_smart_shuffle() {
-            let next_start = result
-                .added_items
-                .iter()
-                .map(|item| item.finish)
-                .max()
-                .or_else(|| {
-                    request
-                        .playout
-                        .anchor
-                        .as_ref()
-                        .map(|anchor| anchor.next_start)
-                })
-                .unwrap_or(request.start);
-            result.anchor = Some(ersatzrs_domain::PlayoutAnchor {
-                next_start,
-                context: Some(
-                    serde_json::to_string(&BlockAnchorContext {
-                        version: block_anchor_context_version(),
-                        smart_shuffle: smart_shuffle_state,
-                    })
-                    .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?,
-                ),
-                ..ersatzrs_domain::PlayoutAnchor::default()
-            });
-        }
+        preservation.finish(&request, &mut result, smart_shuffle_state)?;
         Ok(result)
     }
 }
@@ -455,7 +447,7 @@ fn schedule_updated_blocks(
     collection_etags: &BTreeMap<String, String>,
     smart_shuffle_state: &mut super::SchedulingSmartShuffleState,
     result: &mut SchedulingResult,
-) {
+) -> Result<(), SchedulingError> {
     for block in blocks {
         if !block_starts_to_update.contains(&block.start) || block.start >= request.finish {
             continue;
@@ -466,8 +458,9 @@ fn schedule_updated_blocks(
             collection_etags,
             smart_shuffle_state,
             result,
-        );
+        )?;
     }
+    Ok(())
 }
 
 fn schedule_block_items(
@@ -476,18 +469,27 @@ fn schedule_block_items(
     collection_etags: &BTreeMap<String, String>,
     smart_shuffle_state: &mut super::SchedulingSmartShuffleState,
     result: &mut SchedulingResult,
-) {
+) -> Result<(), SchedulingError> {
     let block_finish = block.start + block.duration;
-    let mut current_time = block.start;
+    let mut current_time = request
+        .reference_data
+        .existing_items
+        .iter()
+        .filter(|item| item.start < block.start && !result.items_to_remove.contains(&item.id))
+        .chain(result.added_items.iter())
+        .map(|item| item.finish)
+        .max()
+        .unwrap_or(block.start)
+        .max(block.start);
 
     for block_item in &block.items {
         if current_time >= block_finish {
             break;
         }
 
-        let mut enumerator = lookup_media(&request.reference_data, &block_item.content)
-            .with_playback_order(block_item.playback_order);
-        if enumerator.is_empty() {
+        let mut source =
+            super::block_sources::BlockSource::restore(request, block_item, current_time, result)?;
+        if source.enumerator.is_empty() {
             result.warnings.push(format!(
                 "block item {} skipped empty content {}",
                 block_item.id, block_item.content
@@ -507,14 +509,14 @@ fn schedule_block_items(
             Some(block_item.id),
             Some(&block_item.content),
         );
-        enumerator.select_with_smart_shuffle(
+        source.enumerator.select_with_smart_shuffle(
             policy,
             smart_shuffle_state,
             &scope_key,
             current_time,
             tags_by_media_id,
         );
-        let Some(media_item) = enumerator.current().cloned() else {
+        let Some(media_item) = source.enumerator.current().cloned() else {
             break;
         };
         let item_finish = current_time + media_item.duration;
@@ -531,17 +533,9 @@ fn schedule_block_items(
             &media_item,
             current_time,
             collection_etags,
-            &enumerator,
+            &source,
         );
-        result.added_history.push(history(
-            request.playout.id,
-            history_key_for_block_item(block_item),
-            &item,
-            None,
-            enumerator.current_index(),
-            super::history_details_for_media_item(&media_item),
-            false,
-        ));
+        let selected_index = source.enumerator.current_index();
         current_time = item.finish;
         smart_shuffle_state.record_unit(
             policy,
@@ -561,9 +555,18 @@ fn schedule_block_items(
                 false,
             ),
         );
+        result.added_history.push(history(
+            request.playout.id,
+            history_key_for_block_item(block_item),
+            &item,
+            None,
+            selected_index,
+            source.history_details(&media_item, smart_shuffle_state)?,
+            false,
+        ));
         result.added_items.push(item);
-        enumerator.advance();
     }
+    Ok(())
 }
 
 fn effective_block_playout_item(
@@ -573,8 +576,9 @@ fn effective_block_playout_item(
     media_item: &SchedulingMediaItem,
     current_time: DateTime<Utc>,
     collection_etags: &BTreeMap<String, String>,
-    enumerator: &super::MediaEnumerator,
+    source: &super::block_sources::BlockSource,
 ) -> PlayoutItem {
+    let enumerator = &source.enumerator;
     let block_finish = block.start + block.duration;
     let collection_key = collection_key_json(&block_item.collection_key);
     let collection_etag = collection_etags
@@ -605,7 +609,11 @@ fn effective_block_playout_item(
             block.block_id,
             block_item.id,
             enumerator.scheduling_context_name(),
-            context_seed(request.playout.seed, block_item, enumerator),
+            if super::is_randomized_playback_order(block_item.playback_order) {
+                source.seed
+            } else {
+                0
+            },
             enumerator.index
         )),
     );
@@ -615,19 +623,6 @@ fn effective_block_playout_item(
     item.collection_key = Some(collection_key);
     item.collection_etag = Some(collection_etag);
     item
-}
-
-fn context_seed(
-    playout_seed: i32,
-    block_item: &EffectiveBlockItem,
-    enumerator: &super::MediaEnumerator,
-) -> i32 {
-    match enumerator.playback_order {
-        PlaybackOrder::Shuffle | PlaybackOrder::RandomRotation => {
-            playout_seed.saturating_add(i32::try_from(block_item.block_id).unwrap_or_default())
-        }
-        _ => 0,
-    }
 }
 
 fn normalize_guide_mode(mut items: Vec<EffectiveBlockItem>) -> Vec<EffectiveBlockItem> {
@@ -1395,7 +1390,7 @@ fn restored_break_playlist(
     Some(playlist)
 }
 
-fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
+pub(super) fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
     #[derive(Serialize)]
     #[serde(rename_all = "PascalCase")]
     struct Key<'a> {
@@ -1465,6 +1460,242 @@ mod tests {
     use crate::scheduling::{
         PlayoutBuildMode, SchedulingMediaItem, SchedulingReferenceData, SchedulingRequest,
     };
+
+    pub(super) fn randomized_reference(
+        start: DateTime<Utc>,
+        order: PlaybackOrder,
+    ) -> SchedulingReferenceData {
+        let mut reference = SchedulingReferenceData::default();
+        reference.media_by_key.insert(
+            "series".into(),
+            (1..=6)
+                .map(|id| {
+                    let mut media = SchedulingMediaItem::new(id, Duration::minutes(20));
+                    media.show_id = Some((id - 1) % 3);
+                    media
+                })
+                .collect(),
+        );
+        reference.effective_blocks = (0..18)
+            .map(|index| {
+                let mut block =
+                    effective_block(10, 20, "series", start + Duration::minutes(index * 20));
+                block.items[0].playback_order = order;
+                block
+            })
+            .collect();
+        reference
+    }
+
+    #[test]
+    fn block_randomized_sources_resume_mid_cycle_and_at_wrap() {
+        let start = utc("2026-04-15T23:40:00Z");
+        for order in [
+            PlaybackOrder::Shuffle,
+            PlaybackOrder::Random,
+            PlaybackOrder::RandomRotation,
+        ] {
+            let reference = randomized_reference(start, order);
+            let uninterrupted = schedule(reference.clone(), start, Duration::hours(6), 100, 127);
+            let ids = uninterrupted
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>();
+            assert!(
+                ids.iter().collect::<BTreeSet<_>>().len() > 1,
+                "{order:?}: {ids:?}"
+            );
+            if order == PlaybackOrder::Shuffle {
+                for cycle in ids.chunks(6) {
+                    assert_eq!(cycle.iter().collect::<BTreeSet<_>>().len(), 6);
+                }
+                assert_ne!(ids[5], ids[6]);
+            }
+            if order == PlaybackOrder::RandomRotation {
+                assert!(
+                    ids.windows(2)
+                        .all(|pair| (pair[0] - 1) % 3 != (pair[1] - 1) % 3),
+                    "{ids:?}"
+                );
+            }
+            for retained in [5, 6] {
+                let mut first_reference = reference.clone();
+                first_reference.effective_blocks.truncate(retained);
+                let split = start + Duration::minutes(i64::try_from(retained).unwrap() * 20);
+                let first = schedule(first_reference, start, split - start, 100, 127);
+                let mut after = reference.clone();
+                after.existing_items = first.added_items;
+                after.existing_history = first.added_history;
+                for (index, item) in after.existing_items.iter_mut().enumerate() {
+                    item.id = i64::try_from(index + 1).unwrap();
+                }
+                for (index, entry) in after.existing_history.iter_mut().enumerate() {
+                    entry.id = i64::try_from(index + 1).unwrap();
+                }
+                let continued = BlockSchedulingEngine
+                    .schedule(SchedulingRequest {
+                        playout: Playout {
+                            id: 100,
+                            seed: 127,
+                            ..Playout::default()
+                        },
+                        start: split,
+                        finish: start + Duration::hours(6),
+                        mode: PlayoutBuildMode::Continue,
+                        reference_data: after,
+                    })
+                    .unwrap();
+                assert_eq!(
+                    continued.added_items,
+                    uninterrupted.added_items[retained..],
+                    "{order:?}, split {retained}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn block_randomized_source_respects_a_new_reset_seed_with_archived_history() {
+        let start = utc("2026-04-15T23:40:00Z");
+        let split = start + Duration::minutes(40);
+        for order in [
+            PlaybackOrder::Shuffle,
+            PlaybackOrder::Random,
+            PlaybackOrder::RandomRotation,
+        ] {
+            let mut reference = randomized_reference(start, order);
+            let before_reset = schedule(reference.clone(), start, split - start, 100, 127);
+            reference
+                .effective_blocks
+                .retain(|block| block.start >= split);
+            let fresh = schedule(reference.clone(), split, Duration::hours(4), 100, -953);
+            reference.existing_history = before_reset.added_history;
+            for (index, entry) in reference.existing_history.iter_mut().enumerate() {
+                entry.id = i64::try_from(index + 1).unwrap();
+            }
+            let resumed = schedule(reference, split, Duration::hours(4), 100, -953);
+            assert_eq!(resumed.added_items, fresh.added_items, "{order:?}");
+        }
+    }
+
+    #[test]
+    fn block_shuffle_membership_change_keeps_unconsumed_survivors_first() {
+        let start = utc("2026-04-15T23:40:00Z");
+        for order in [PlaybackOrder::Shuffle, PlaybackOrder::RandomRotation] {
+            let mut reference = randomized_reference(start, order);
+            let uninterrupted = schedule(reference.clone(), start, Duration::hours(6), 100, 127);
+            let removed = uninterrupted.added_items[4].media_item_id;
+            let first = schedule(reference.clone(), start, Duration::minutes(40), 100, 127);
+            reference.existing_items = first.added_items;
+            reference.existing_history = first.added_history;
+            for (index, item) in reference.existing_items.iter_mut().enumerate() {
+                item.id = i64::try_from(index + 1).unwrap();
+            }
+            for (index, entry) in reference.existing_history.iter_mut().enumerate() {
+                entry.id = i64::try_from(index + 1).unwrap();
+            }
+            let media = reference.media_by_key.get_mut("series").unwrap();
+            media.retain(|item| item.id != removed);
+            media.push(SchedulingMediaItem::new(7, Duration::minutes(20)));
+            let resumed = BlockSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        seed: 127,
+                        ..Playout::default()
+                    },
+                    start: start + Duration::minutes(40),
+                    finish: start + Duration::hours(6),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference,
+                })
+                .unwrap();
+            let mut expected = uninterrupted.added_items[2..6]
+                .iter()
+                .map(|item| item.media_item_id)
+                .filter(|id| *id != removed)
+                .collect::<Vec<_>>();
+            expected.push(7);
+            assert_eq!(
+                resumed
+                    .added_items
+                    .iter()
+                    .take(expected.len())
+                    .map(|item| item.media_item_id)
+                    .collect::<Vec<_>>(),
+                expected,
+                "{order:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn block_ordered_sources_resume_across_blocks_and_history_restart() {
+        let start = utc("2026-04-15T23:40:00Z");
+        for order in [PlaybackOrder::Chronological, PlaybackOrder::SeasonEpisode] {
+            let mut reference = SchedulingReferenceData::default();
+            reference.media_by_key.insert(
+                "series".into(),
+                (1..=3)
+                    .map(|id| {
+                        let mut media = SchedulingMediaItem::new(id, Duration::minutes(20));
+                        media.release_date = Some(start + Duration::days(id));
+                        media.season = Some(1);
+                        media.episode = Some(i32::try_from(id).unwrap());
+                        media
+                    })
+                    .collect(),
+            );
+            reference.effective_blocks = (0..4)
+                .map(|index| {
+                    let mut block =
+                        effective_block(10, 20, "series", start + Duration::minutes(index * 20));
+                    block.items[0].playback_order = order;
+                    block
+                })
+                .collect();
+            let uninterrupted = schedule(reference.clone(), start, Duration::hours(2), 100, 0);
+            assert_eq!(
+                uninterrupted
+                    .added_items
+                    .iter()
+                    .map(|item| item.media_item_id)
+                    .collect::<Vec<_>>(),
+                vec![1, 2, 3, 1],
+                "{order:?}"
+            );
+
+            let mut first_reference = reference.clone();
+            first_reference.effective_blocks.truncate(2);
+            let first = schedule(first_reference, start, Duration::minutes(40), 100, 0);
+            reference.existing_items = first.added_items;
+            reference.existing_history = first.added_history;
+            for (index, item) in reference.existing_items.iter_mut().enumerate() {
+                item.id = i64::try_from(index + 1).unwrap();
+            }
+            for (index, entry) in reference.existing_history.iter_mut().enumerate() {
+                entry.id = i64::try_from(index + 1).unwrap();
+            }
+            let continued = BlockSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start: start + Duration::minutes(40),
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference,
+                })
+                .unwrap();
+            assert_eq!(
+                continued.added_items,
+                uninterrupted.added_items[2..],
+                "restart: {order:?}"
+            );
+        }
+    }
 
     #[test]
     fn collection_etag_changes_only_when_playback_override_is_present() {
@@ -2233,7 +2464,7 @@ mod tests {
         assert!(result.added_history.is_empty());
     }
 
-    fn filler_reference_data(start: DateTime<Utc>) -> SchedulingReferenceData {
+    pub(super) fn filler_reference_data(start: DateTime<Utc>) -> SchedulingReferenceData {
         let mut first = effective_block(10, 20, "movies", start);
         first.duration = Duration::minutes(10);
         first.deco = Some(EffectiveDeco {
@@ -2521,7 +2752,7 @@ mod tests {
         assert_eq!(schedule.deco_for(utc("2026-04-15T14:00:00Z")), None);
     }
 
-    fn schedule(
+    pub(super) fn schedule(
         reference_data: SchedulingReferenceData,
         start: DateTime<Utc>,
         duration: Duration,
@@ -2543,7 +2774,7 @@ mod tests {
             .expect("block schedule builds")
     }
 
-    fn utc(value: &str) -> DateTime<Utc> {
+    pub(super) fn utc(value: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(value)
             .expect("valid time")
             .with_timezone(&Utc)

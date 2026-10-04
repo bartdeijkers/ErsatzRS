@@ -1,3 +1,5 @@
+mod block_playout_state;
+pub(super) use block_playout_state::BlockPlayoutStateHealthCheck;
 mod addon_list_disk_usage;
 mod addon_media_list;
 mod addon_platform;
@@ -10,6 +12,7 @@ mod downgrade;
 mod dynamic_text_graphics;
 mod empty_schedule;
 mod episode_metadata;
+mod external_json_playout_state;
 mod ffmpeg_capabilities;
 mod ffmpeg_reports;
 mod ffmpeg_runtime_acquisition;
@@ -38,6 +41,7 @@ mod tsduck_availability;
 mod unavailable;
 mod vaapi_device;
 mod vaapi_driver;
+mod yaml_playout_state;
 mod zero_duration;
 
 pub(super) use addon_list_disk_usage::AddonListDiskUsageHealthCheck;
@@ -52,6 +56,7 @@ pub(super) use downgrade::DowngradeHealthCheck;
 pub(super) use dynamic_text_graphics::DynamicTextGraphicsHealthCheck;
 pub(super) use empty_schedule::EmptyScheduleHealthCheck;
 pub(super) use episode_metadata::EpisodeMetadataHealthCheck;
+pub(super) use external_json_playout_state::ExternalJsonPlayoutStateHealthCheck;
 pub(super) use ffmpeg_capabilities::FFmpegCapabilitiesHealthCheck;
 pub(super) use ffmpeg_reports::FFmpegReportsHealthCheck;
 pub(super) use ffmpeg_runtime_acquisition::FFmpegRuntimeAcquisitionHealthCheck;
@@ -82,6 +87,7 @@ pub(super) use tsduck_availability::TsduckAvailabilityHealthCheck;
 pub(super) use unavailable::UnavailableHealthCheck;
 pub(super) use vaapi_device::VaapiDeviceHealthCheck;
 pub(super) use vaapi_driver::VaapiDriverHealthCheck;
+pub(super) use yaml_playout_state::YamlPlayoutStateHealthCheck;
 pub(super) use zero_duration::ZeroDurationHealthCheck;
 
 mod next_runtime;

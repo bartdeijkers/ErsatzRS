@@ -248,6 +248,7 @@ pub(super) async fn project_publishable_for_origin(
                 media_file_id: media.media_file_id,
                 path: media.path.clone(),
                 remote_stream_id: media.remote_stream_id,
+                candidate_overlays: media.candidate_overlays.clone(),
             },
             max_height: u32::try_from(resolution.height).ok(),
         })
@@ -413,18 +414,10 @@ pub(super) async fn project_for_origin(
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
     let (graphics, watermarks) = match &origin {
-        Origin::Persisted => (
-            playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
-                .await?,
-            playback::select_playback_watermarks(
-                pool,
-                channel,
-                media.item.id,
-                media.item.disable_watermarks,
-                selection_time,
-            )
-            .await?,
-        ),
+        Origin::Persisted => {
+            let (watermarks, graphics) = media.overlays(pool, channel).await?;
+            (graphics, watermarks)
+        }
         Origin::Fallback(_) => (
             playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
             playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
@@ -468,6 +461,7 @@ pub(super) async fn project_for_origin(
             media_file_id: media.media_file_id,
             path: media.path.clone(),
             remote_stream_id: media.remote_stream_id,
+            candidate_overlays: media.candidate_overlays.clone(),
         },
         projection,
         identity: Identity {

@@ -1,5 +1,6 @@
 use super::*;
 use chrono::{Duration, TimeZone};
+use ersatzrs_core::locking::PlayoutLockGuard;
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{ChannelPlayoutSource, FFmpegProfile, PinnedStreamSelection};
 

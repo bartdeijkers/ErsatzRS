@@ -150,7 +150,8 @@ pub use playout::{
     PlayoutCreateChannelAdmin, PlayoutCreateScheduleAdmin, PlayoutDateFilterAdmin,
     PlayoutDecoAdmin, PlayoutDecoGroupAdmin, PlayoutDetailAdminItem, PlayoutKindEditorAdmin,
     PlayoutListAdminRow, PlayoutNestedChildOptionAdmin, PlayoutNestedOptionAdmin,
-    PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin, SequentialPlayoutAdmin,
+    PlayoutPendingWork, PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin,
+    SequentialPlayoutAdmin,
 };
 pub use program_schedule::{
     ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleFillerOption,

@@ -885,6 +885,7 @@ impl SqliteSchedulingContentRepository {
                 media_by_key,
                 playlist_items_by_key,
                 graphics_ids_by_path,
+                existing_yaml_checkpoints: self.yaml_checkpoints(playout_id).await?,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
                 max_playout_offset,
@@ -3743,6 +3744,32 @@ impl SqliteSchedulingContentRepository {
                     playout_id: row.try_get("PlayoutId").repository()?,
                     checkpoint_date: decode_datetime(
                         "scripted checkpoint date",
+                        row.try_get("CheckpointDate").repository()?,
+                    )?,
+                    context: row.try_get("Context").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn yaml_checkpoints(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<ersatzrs_domain::PlayoutYamlCheckpoint>> {
+        let rows = sqlx::query(
+            r#"SELECT "PlayoutId", "CheckpointDate", "Context" FROM "PlayoutYamlCheckpoint"
+               WHERE "PlayoutId" = ? ORDER BY "CheckpointDate""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ersatzrs_domain::PlayoutYamlCheckpoint {
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    checkpoint_date: decode_datetime(
+                        "yaml checkpoint date",
                         row.try_get("CheckpointDate").repository()?,
                     )?,
                     context: row.try_get("Context").repository()?,

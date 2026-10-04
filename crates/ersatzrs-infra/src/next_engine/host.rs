@@ -4,9 +4,7 @@ use super::{
     config,
     coordinator::{ChannelPublisher, RefreshError, RefreshOutcome},
     process::{NextProcess, ProcessError},
-    selection,
     session::NextSession,
-    source,
 };
 use crate::{
     db::DbPool,
@@ -16,6 +14,19 @@ use crate::{
         ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
     },
 };
+#[path = "host_publication.rs"]
+mod publication;
+pub(crate) use publication::AppliedHostPlayout;
+#[cfg(test)]
+pub(crate) async fn publication_fixture(
+    root: &std::path::Path,
+) -> (Arc<NextHost>, DbPool, EntityLocker, chrono::DateTime<Utc>) {
+    let (host, start) = publication::tests::fixture(root).await;
+    (host.clone(), host.pool.clone(), host.locker.clone(), start)
+}
+pub use publication::PreparedHostPlayout;
+use publication::ProjectedSchedule;
+
 use chrono::Utc;
 use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry},
@@ -23,7 +34,6 @@ use ersatzrs_core::{
     path_replacement::PathReplacement,
     repositories::{ChannelRepository, RepositoryError},
 };
-use ersatzrs_domain::StreamingEngine;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, time::Instant};
 
@@ -226,19 +236,7 @@ impl NextHost {
                 &request,
                 session.started_at,
             );
-            let mut publishers = host.publishers.lock().await;
-            let publisher = publishers
-                .entry(request.channel_id)
-                .or_insert_with(|| {
-                    ChannelPublisher::new(
-                        host.pool.clone(),
-                        host.locker.clone(),
-                        &host.root,
-                        request.channel_id,
-                    )
-                })
-                .clone();
-            drop(publishers);
+            let publisher = host.publisher(request.channel_id).await;
             let mut reservation = None;
             let checkpoints = super::on_demand::Checkpoints::new(
                 host.pool.clone(),
@@ -272,9 +270,14 @@ impl NextHost {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
                 checkpoints.prepare().await?;
-                host.refresh(&publisher, request.channel_id, &request.replacements)
-                    .await
-                    .map_err(|_| ProcessError::Preparation("playout publication"))?;
+                host.refresh(
+                    &publisher,
+                    request.channel_id,
+                    &request.replacements,
+                    request.deadline.into_std(),
+                )
+                .await
+                .map_err(|_| ProcessError::Preparation("playout publication"))?;
                 NextProcess::start_with_session(
                     &request.executable,
                     &request.number,
@@ -287,8 +290,8 @@ impl NextHost {
                 .await
             };
             let outcome = tokio::select! {
-                outcome = Box::pin(session.run(startup, request.idle_timeout, || {
-                    host.refresh(&publisher, request.channel_id, &request.replacements)
+                outcome = Box::pin(session.run(startup, request.idle_timeout, |deadline| {
+                    host.refresh(&publisher, request.channel_id, &request.replacements, deadline)
                 })) => outcome,
                 never = checkpoints.run(&session) => match never {},
             };
@@ -383,12 +386,12 @@ impl NextHost {
         Ok(item)
     }
 
-    #[allow(clippy::too_many_lines)] // Keep the atomic publication steps together.
     async fn refresh(
         &self,
         publisher: &ChannelPublisher,
         channel_id: i64,
         replacements: &[PathReplacement],
+        deadline: std::time::Instant,
     ) -> std::result::Result<(), RefreshError> {
         loop {
             let finish =
@@ -404,109 +407,10 @@ impl NextHost {
             let publication_gaps = Arc::new(Mutex::new(Vec::new()));
             let projected_gaps = publication_gaps.clone();
             let outcome = publisher
-                .refresh(start, finish, |channel, media| async move {
-                    if channel.streaming_engine != StreamingEngine::Next {
-                        return Err(unavailable("engine changed"));
-                    }
-                    let profile = load_channel_playback_profile(&self.pool, channel_id)
-                        .await?
-                        .ok_or_else(|| unavailable("profile unavailable"))?;
-                    let mut items = Vec::with_capacity(media.len());
-                    for media in media {
-                        if media.remote_stream_id.is_some() {
-                            let mut snapshot = super::remote_projection::project_publishable(
-                                &self.pool,
-                                &channel,
-                                &media,
-                                &profile.resolution,
-                                selection::AudioDirective::Select,
-                            )
-                            .await?;
-                            snapshot.projection.publish_graphics(
-                                &self.media,
-                                None,
-                                media.item.start,
-                            )?;
-                            items.push(self.defer_item(
-                                channel_id,
-                                media.item.id,
-                                &snapshot.identity.descriptor,
-                                snapshot.projection.item,
-                            )?);
-                            continue;
-                        }
-                        let source = source::resolve_published(
-                            &self.pool,
-                            &media,
-                            replacements,
-                            Some(&self.media),
-                        )
+                .refresh_before(start, finish, deadline, |channel, media| async move {
+                    let ProjectedSchedule { items, gaps } = self
+                        .project_schedule(channel, media, replacements, start)
                         .await?;
-                        let selection_time =
-                            crate::channel_playout::ChannelPlayoutContext::for_channel(&channel)
-                                .source_time(media.item.start)?;
-                        let watermarks = crate::playback::select_playback_watermarks(
-                            &self.pool,
-                            &channel,
-                            media.item.id,
-                            media.item.disable_watermarks,
-                            selection_time,
-                        )
-                        .await?;
-                        let graphics = crate::playback::select_playback_graphics(
-                            &self.pool,
-                            &channel,
-                            media.item.id,
-                            selection_time,
-                        )
-                        .await?;
-                        let mut projection = selection::project_deferred_item(
-                            &self.pool,
-                            &channel,
-                            &media.item,
-                            media.media_version_id,
-                            source,
-                            &profile.resolution,
-                        )
-                        .await?;
-                        super::credits::attach(
-                            &self.pool,
-                            &self.media,
-                            &channel,
-                            &media.item,
-                            &mut projection,
-                        )
-                        .await?;
-                        projection.canvas = super::graphics::project(
-                            &self.pool,
-                            &channel,
-                            &media,
-                            &profile.resolution,
-                            &mut projection.item,
-                            &watermarks,
-                            &graphics,
-                        )
-                        .await?;
-                        if projection.pending_burn.is_some() {
-                            let identity = super::dynamic_projection::fingerprint(
-                                &self.pool,
-                                &media,
-                                &projection,
-                                &channel,
-                            )
-                            .await?;
-                            projection.item = self.defer_item(
-                                channel_id,
-                                media.item.id,
-                                &identity.descriptor,
-                                projection.item,
-                            )?;
-                        }
-                        projection.publish_graphics(&self.media, None, media.item.start)?;
-                        items.push(projection.item);
-                    }
-                    let (items, gaps) =
-                        super::fallback::insert_gaps(&self.media, channel_id, start, items)?;
                     *projected_gaps.lock().await = gaps;
                     Ok(items)
                 })
@@ -517,7 +421,7 @@ impl NextHost {
                 return Ok(());
             }
             // Rebuild notification can precede release of its scheduler guard.
-            // The session's startup deadline or cancellation bounds this wait.
+            // Startup or the session's per-refresh timeout bounds this wait.
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }

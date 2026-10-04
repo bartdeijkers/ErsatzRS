@@ -207,3 +207,12 @@ description = 'MarathonGroupBy::None selected an empty playlist instead of the u
 discovered = '2026-09-29'
 evidence = 'The build-local schedule copy now uses Random and emits the upstream warning. All 94 Classic tests pass; the focused regression also proves serialized Continue and dated Refresh checkpoints across midnight. UCU-09 owns integrated acceptance.'
 resolved = true
+
+
+[[debt]]
+id = 'v111-classic-deferred-save-and-midnight-overlap'
+description = 'Findings 11 and 12 require deferred schedule saves with a truthful effective boundary and Classic midnight overlap prevention/repair that preserves continuation state.'
+discovered = '2026-10-04'
+resolved = false
+adr = '0110'
+evidence = 'The released Windows editor requests Refresh on save and published films overlap at UTC midnight. v111-findings-11 and v111-findings-12 own separate implementation and acceptance. Reuse the local day-seam correction from v111-findings-06; deferred-save UI, natural Continue and complete overlap/repair acceptance remain unproven. No live repair is authorized by these source milestones.'

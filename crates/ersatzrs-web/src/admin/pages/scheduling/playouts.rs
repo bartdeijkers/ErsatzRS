@@ -8,17 +8,19 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{playout_reset_prompt, playout_schedule_kind_label, tr, TextKey};
+use crate::admin::i18n::{
+    external_json_help, playout_reset_prompt, playout_schedule_kind_label, tr, TextKey,
+};
 use crate::admin::server_fns::playouts::{
     count_playout_detail_items, count_playouts, delete_playout, get_show_filler_pref,
-    list_playout_detail_items, list_playouts, process_scheduling_context, reset_all_playouts,
-    reset_playout, save_playout_daily_reset, set_show_filler_pref, update_external_json_playout,
-    PlayoutDetailItem, PlayoutListRow, KIND_BLOCK, KIND_CLASSIC, KIND_EXTERNAL_JSON, KIND_SCRIPTED,
-    KIND_SEQUENTIAL,
+    list_playout_detail_items, list_playouts, process_scheduling_context, rebuild_playout,
+    reset_all_playouts, save_playout_daily_reset, set_show_filler_pref,
+    update_external_json_playout, PlayoutDetailItem, PlayoutListRow, PlayoutPendingWork,
+    KIND_BLOCK, KIND_CLASSIC, KIND_EXTERNAL_JSON, KIND_SCRIPTED, KIND_SEQUENTIAL,
 };
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
-use crate::admin::ui::primitives::form::TextField;
+use crate::admin::ui::primitives::form::{CheckBox, TextField};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
@@ -67,6 +69,8 @@ fn PlayoutsIsland(
     initial_count: u64,
     initial_show_filler: bool,
 ) -> impl IntoView {
+    // Islands hydrate independently from the SSR application's context tree.
+    crate::admin::i18n::provide_i18n_context();
     // -- list state --
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
@@ -105,11 +109,7 @@ fn PlayoutsIsland(
             .iter()
             .find(|row| Some(row.id) == selected_id.get())
         {
-            build_message.set(if row.build_success == Some(false) {
-                row.build_message.clone().unwrap_or_default()
-            } else {
-                String::new()
-            });
+            build_message.set(playout_failure_message(row));
         }
     });
     let show_filler = RwSignal::new(initial_show_filler);
@@ -216,9 +216,34 @@ fn PlayoutsIsland(
     });
 
     // -- actions --
-    let reset_action = Action::new(|(id, kind): &(i64, i32)| {
-        let (id, kind) = (*id, *kind);
-        async move { reset_playout(id, kind).await }
+    let rebuild_target: RwSignal<Option<PlayoutListRow>> = RwSignal::new(None);
+    let rebuild_open = RwSignal::new(false);
+    let rebuild_mode = RwSignal::new("refresh".to_owned());
+    let preserve_current = RwSignal::new(true);
+    let external_rebuild = Signal::derive(move || {
+        rebuild_target.with(|row| {
+            row.as_ref()
+                .is_some_and(|row| row.schedule_kind == KIND_EXTERNAL_JSON)
+        })
+    });
+    let external_direct = Signal::derive(move || {
+        rebuild_target.with(|row| {
+            row.as_ref().is_some_and(|row| {
+                row.schedule_kind == KIND_EXTERNAL_JSON && row.source_revision.is_none()
+            })
+        })
+    });
+    let rebuild_error = RwSignal::new(String::new());
+    let open_rebuild = Callback::new(move |row: PlayoutListRow| {
+        rebuild_target.set(Some(row));
+        rebuild_mode.set("refresh".to_owned());
+        preserve_current.set(true);
+        rebuild_error.set(String::new());
+        rebuild_open.set(true);
+    });
+    let reset_action = Action::new(|(id, mode, preserve): &(i64, String, bool)| {
+        let (id, mode, preserve) = (*id, mode.clone(), *preserve);
+        async move { rebuild_playout(id, mode, preserve).await }
     });
     let reset_all_action = Action::new(|(): &()| async move { reset_all_playouts().await });
     let delete_action = Action::new(|id: &i64| delete_playout(*id));
@@ -236,13 +261,13 @@ fn PlayoutsIsland(
     });
     let save_filler_action = Action::new(|value: &bool| set_show_filler_pref(*value));
     let reset_toast = use_toast();
-    Effect::new(move |_| {
-        if let Some(Ok(_)) = reset_action.value().get() {
-            reset_toast.push(
-                tr(TextKey::PlayoutBuildQueued).to_string(),
-                ToastSeverity::Success,
-            );
-        }
+    Effect::new(move |_| match reset_action.value().get() {
+        Some(Ok(_)) => reset_toast.push(
+            tr(TextKey::PlayoutBuildQueued).to_string(),
+            ToastSeverity::Success,
+        ),
+        Some(Err(error)) => rebuild_error.set(error.to_string()),
+        None => {}
     });
     let reset_all_toast = use_toast();
     Effect::new(move |_| {
@@ -322,17 +347,18 @@ fn PlayoutsIsland(
             build_message.set(String::new());
         } else {
             selected_id.set(Some(row.id));
-            let msg = if row.build_success == Some(false) {
-                row.build_message.clone().unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let msg = playout_failure_message(row);
             build_message.set(msg);
         }
     };
 
     view! {
         <div class=style::page>
+            <div role="alert" class=style::build_alert
+                style:display=move || if rebuild_error.with(String::is_empty) { "none" } else { "" }>
+                <p>{tr(TextKey::ErrorOccurred)}</p>
+                <p>{move || rebuild_error.get()}</p>
+            </div>
             // ---- action bar ----
             <div class=style::action_bar>
                 <div class=style::add_menu>
@@ -386,14 +412,14 @@ fn PlayoutsIsland(
                 <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
                 <div class=style::divider/>
 
-                <section data-playout-failures style:display=move || if current_list_rows.with(|rows| rows.iter().any(|row| row.build_success == Some(false))) { "" } else { "none" }>
+                <section data-playout-failures style:display=move || if current_list_rows.with(|rows| rows.iter().any(playout_failed)) { "" } else { "none" }>
                     <h2 class=style::detail_title>{tr(TextKey::PublicationActivity)}</h2>
                     <For
-                        each=move || { current_list_rows.get().into_iter().filter(|row| row.build_success == Some(false)).collect::<Vec<_>>() }
-                        key=|row| (row.id, row.build_message.clone())
+                        each=move || { current_list_rows.get().into_iter().filter(playout_failed).collect::<Vec<_>>() }
+                        key=|row| (row.id, playout_failure_message(row))
                         children=move |row| {
                             let label = format!("{} - {}", row.channel_number, row.channel_name);
-                            let message = row.build_message.clone().unwrap_or_default();
+                            let message = playout_failure_message(&row);
                             view! {
                                 <div class=style::build_alert>
                                     <button type="button" class=btn_class(ButtonVariant::Secondary) on:click=move |_| select_row(&row)>{label}</button>
@@ -448,7 +474,7 @@ fn PlayoutsIsland(
                                         selected_id,
                                         locked,
                                         select_row,
-                                        reset_action,
+                                        open_rebuild,
                                         delete_target,
                                         delete_open,
                                         schedule_target,
@@ -537,6 +563,56 @@ fn PlayoutsIsland(
             </section>
 
             // ---- dialogs ----
+            <Modal
+                dialog_id="playout-rebuild-dialog"
+                open=rebuild_open
+                title=tr(TextKey::RebuildPlayout).to_string()
+                confirm_label=Some(tr(TextKey::QueuePlayoutBuild))
+                confirm_disabled=Signal::derive(move || reset_action.pending().get()
+                    || (external_direct.get() && preserve_current.get())
+                    || rebuild_target.with(|row| row.as_ref().is_none_or(|row| locked.with(|ids| ids.contains(&row.id)))))
+                on_close=Callback::new(move |confirmed: bool| {
+                    if confirmed {
+                        if let Some(row) = rebuild_target.get_untracked() {
+                            let mode = rebuild_mode.get_untracked();
+                            let keep = mode == "continue" || preserve_current.get_untracked();
+                            rebuild_error.set(String::new());
+                            reset_action.dispatch((row.id, mode, keep));
+                        }
+                    }
+                })
+            >
+                <p class=style::dialog_prompt>{move || rebuild_target.get().map(playout_entity_name).unwrap_or_default()}</p>
+                <p id="external-json-adoption-help" class=style::rebuild_help data-external-json-help
+                    style:display=move || if external_direct.get() { "" } else { "none" }>
+                    {external_json_help(TextKey::ExternalJsonDirectHelp)}
+                </p>
+                <label class=style::field_label for="playout-rebuild-mode">{tr(TextKey::PlayoutRebuildMode)}</label>
+                <select id="playout-rebuild-mode" class=style::select_input
+                    aria-describedby="playout-rebuild-help external-json-adoption-help"
+                    prop:value=move || rebuild_mode.get()
+                    on:change=move |event| {
+                        let mode = event_target_value(&event);
+                        if mode == "continue" { preserve_current.set(true); }
+                        rebuild_mode.set(mode);
+                    }>
+                    <option value="continue" disabled=move || external_direct.get()>{tr(TextKey::ContinuePlayout)}</option>
+                    <option value="refresh">{tr(TextKey::RefreshPlayout)}</option>
+                    <option value="reset">{tr(TextKey::ResetPlayout)}</option>
+                </select>
+                <p id="playout-rebuild-help" class=style::rebuild_help>{move || if external_rebuild.get() {
+                    external_json_help(TextKey::ExternalJsonAcceptedHelp)
+                } else { match rebuild_mode.get().as_str() {
+                    "continue" => tr(TextKey::PlayoutContinueHelp),
+                    "reset" => tr(TextKey::PlayoutResetHelp),
+                    _ => tr(TextKey::PlayoutRefreshHelp),
+                }.to_owned() }}</p>
+                <fieldset class=style::rebuild_preservation disabled=move || rebuild_mode.get() == "continue">
+                    <CheckBox label=tr(TextKey::KeepCurrentProgramme) value=preserve_current/>
+                </fieldset>
+                <p class=style::rebuild_help style:display=move || if preserve_current.get() && !external_direct.get() { "" } else { "none" }>{tr(TextKey::KeepCurrentProgrammeHelp)}</p>
+                <p class=style::rebuild_warning style:display=move || if preserve_current.get() { "none" } else { "" }>{tr(TextKey::ReplaceCurrentProgrammeHelp)}</p>
+            </Modal>
             <DeleteDialog
                 dialog_id="playout-delete-dialog"
                 open=delete_open
@@ -612,6 +688,7 @@ fn PlayoutsIsland(
                 })
             >
                 <p class=style::dialog_prompt>{tr(TextKey::EditExternalJsonFilePrompt)}</p>
+                <p class=style::rebuild_help>{external_json_help(TextKey::ExternalJsonSourceHelp)}</p>
                 <TextField label=tr(TextKey::ExternalJsonFileLabel) value=json_value/>
             </Modal>
 
@@ -655,10 +732,7 @@ fn playout_row(
     selected_id: RwSignal<Option<i64>>,
     locked: RwSignal<Vec<i64>>,
     select_row: impl Fn(&PlayoutListRow) + Copy + 'static,
-    reset_action: Action<
-        (i64, i32),
-        Result<crate::admin::server_fns::playouts::PlayoutBuildEnqueueResult, ServerFnError>,
-    >,
+    open_rebuild: Callback<PlayoutListRow>,
     delete_target: RwSignal<Option<PlayoutListRow>>,
     delete_open: RwSignal<bool>,
     schedule_target: RwSignal<Option<PlayoutListRow>>,
@@ -678,13 +752,15 @@ fn playout_row(
     let kind_label = playout_schedule_kind_label(kind);
     let (schedule_display, schedule_title) =
         schedule_display_name(&row.schedule_name, &row.schedule_file);
-    let build_failed = row.build_success == Some(false);
+    let build_failed = playout_failed(&row);
+    let status = playout_status(&row);
 
     let is_locked = move || locked.with(|ids| ids.contains(&id));
     let row_for_select = row.clone();
     let row_for_delete = row.clone();
     let row_for_schedule = row.clone();
     let row_for_json = row.clone();
+    let row_for_rebuild = row.clone();
 
     let row_class = move || {
         let selected = selected_id.get() == Some(id);
@@ -712,9 +788,9 @@ fn playout_row(
                 <button
                     class=style::icon_btn
                     disabled=is_locked
-                    title=tr(TextKey::RefreshPlayout)
-                    aria-label=tr(TextKey::RefreshPlayout)
-                    on:click=move |_| { reset_action.dispatch((id, kind)); }
+                    title=tr(TextKey::RebuildPlayout)
+                    aria-label=tr(TextKey::RebuildPlayout)
+                    on:click=move |_| open_rebuild.run(row_for_rebuild.clone())
                 >
                     <span style=icon_style(IconName::Refresh, "1.1rem") aria-hidden="true"/>
                 </button>
@@ -749,7 +825,11 @@ fn playout_row(
                 >
                     <span style=icon_style(IconName::Edit, "1.1rem") aria-hidden="true"/>
                 </button>
-                <span class=style::icon_slot/>
+                <button class=style::icon_btn disabled=is_locked
+                    title=tr(TextKey::RebuildPlayout) aria-label=tr(TextKey::RebuildPlayout)
+                    on:click=move |_| open_rebuild.run(row_for_rebuild.clone())>
+                    <span style=icon_style(IconName::Refresh, "1.1rem") aria-hidden="true"/>
+                </button>
                 <span class=style::icon_slot/>
             </>
         }
@@ -774,9 +854,9 @@ fn playout_row(
                     <button
                         class=style::icon_btn
                         disabled=is_locked
-                        title=tr(TextKey::ResetPlayout)
-                        aria-label=tr(TextKey::ResetPlayout)
-                        on:click=move |_| { reset_action.dispatch((id, kind)); }
+                        title=tr(TextKey::RebuildPlayout)
+                        aria-label=tr(TextKey::RebuildPlayout)
+                        on:click=move |_| open_rebuild.run(row_for_rebuild.clone())
                     >
                         <span style=icon_style(IconName::Refresh, "1.1rem") aria-hidden="true"/>
                     </button>
@@ -799,9 +879,9 @@ fn playout_row(
                 <button
                     class=style::icon_btn
                     disabled=is_locked
-                    title=tr(TextKey::RefreshPlayout)
-                    aria-label=tr(TextKey::RefreshPlayout)
-                    on:click=move |_| { reset_action.dispatch((id, kind)); }
+                    title=tr(TextKey::RebuildPlayout)
+                    aria-label=tr(TextKey::RebuildPlayout)
+                    on:click=move |_| open_rebuild.run(row_for_rebuild.clone())
                 >
                     <span style=icon_style(IconName::Refresh, "1.1rem") aria-hidden="true"/>
                 </button>
@@ -817,7 +897,7 @@ fn playout_row(
             class=row_class
             on:click=move |_| select_row(&row_for_select)
         >
-            <td>{channel}</td>
+            <td>{channel}{status}</td>
             <td class=style::col_md title=schedule_title>{schedule_display}</td>
             <td class=move || format!("{} {}", style::col_md, style::cell_muted)>{kind_label}</td>
             <td on:click=|e| e.stop_propagation()>
@@ -843,6 +923,77 @@ fn playout_row(
                 </div>
             </td>
         </tr>
+    }
+}
+
+fn playout_failed(row: &PlayoutListRow) -> bool {
+    row.build_success == Some(false)
+        || row.refresh_work == PlayoutPendingWork::Failed
+        || row.source_work == PlayoutPendingWork::Failed
+}
+
+fn playout_failure_message(row: &PlayoutListRow) -> String {
+    let mut messages = Vec::new();
+    if row.build_success == Some(false) {
+        if let Some(message) = &row.build_message {
+            messages.push(if row.schedule_kind == KIND_EXTERNAL_JSON {
+                external_json_help(if message.contains("accepted planning baseline") {
+                    TextKey::ExternalJsonDirectHelp
+                } else if message.contains("Next does not consume") {
+                    TextKey::ExternalJsonNextHelp
+                } else if message.contains("accepted planning is invalid") {
+                    TextKey::ExternalJsonInvalidHelp
+                } else {
+                    TextKey::ExternalJsonBuildFailedHelp
+                })
+            } else if message.contains(
+                "Classic Continue refused because saved continuation state is incomplete.",
+            ) {
+                tr(TextKey::PlayoutContinueStateIncomplete).to_owned()
+            } else {
+                message.clone()
+            });
+        }
+    }
+    if row.refresh_work == PlayoutPendingWork::Failed {
+        messages.push(tr(TextKey::PlayoutRefreshFailed).to_owned());
+    }
+    if row.source_work == PlayoutPendingWork::Failed {
+        messages.push(tr(TextKey::PlayoutSourceCheckFailed).to_owned());
+    }
+    messages.join(" ")
+}
+
+fn playout_status(row: &PlayoutListRow) -> impl IntoView {
+    let last_success = row
+        .last_successful_build
+        .clone()
+        .unwrap_or_else(|| tr(TextKey::NotAvailable).to_owned());
+    let revision = row
+        .source_revision
+        .map(|revision| revision.to_string())
+        .unwrap_or_default();
+    let has_revision = row.source_revision.is_some();
+    let refresh_pending = row.refresh_work == PlayoutPendingWork::Pending;
+    let checking = row.source_work == PlayoutPendingWork::Pending;
+    view! {
+        <div class=style::adaptation_status data-playout-adaptation=row.id>
+            <p data-external-json-mode style:display=if row.schedule_kind == KIND_EXTERNAL_JSON { "" } else { "none" }>
+                {tr(if has_revision { TextKey::ExternalJsonControlled } else { TextKey::ExternalJsonDirect })}
+            </p>
+            <dl>
+                <div>
+                    <dt>{tr(TextKey::LastSuccessfulPlayoutBuild)}</dt>
+                    <dd data-playout-last-success>{last_success}</dd>
+                </div>
+                <div style:display=if has_revision { "" } else { "none" }>
+                    <dt>{tr(if row.schedule_kind == KIND_EXTERNAL_JSON { TextKey::AcceptedRevision } else { TextKey::SourceRevision })}</dt>
+                    <dd data-playout-source-revision>{revision}</dd>
+                </div>
+            </dl>
+            <p data-playout-refresh-pending style:display=if refresh_pending { "" } else { "none" }>{tr(TextKey::PlayoutRefreshPending)}</p>
+            <p data-playout-source-check style:display=if checking { "" } else { "none" }>{tr(TextKey::PlayoutSourceCheckPending)}</p>
+        </div>
     }
 }
 

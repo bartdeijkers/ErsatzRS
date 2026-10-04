@@ -13418,9 +13418,20 @@ channel/programme context, seek and resolution. Detect missing variables, fonts
 and media before saving. Reuse the domain and parser; no second renderer.
 Prove kind-specific persistence/import/export, invalid input, actual rendered
 preview and all supported cultures with hydrated/no-JS admin behavior.
+The 2026-10-03 findings addendum requires renderer-supported font/width/wrap
+behavior to be implemented or explicitly exposed. Cover long titles and non-ASCII
+text with real font files; do not hide font substitution or add another renderer.
 '''
 evidence = '''
 Implementation and acceptance evidence pending.
+The addendum reports that the deployed form still creates Text only; drawvg Text
+uses bitmap glyphs without the supplied font, while drawtext accepts a font file
+but does not enforce Width/TextFit. These source-supported limitations are not
+accepted typography or a claimed live overflow reproduction.
+The 2026-10-04 findings reread confirms the same typed authoring gap in the
+released editor. External registration of exact geometry, alpha and fonts is a
+workaround, not editor acceptance; retain actual-font long-title previews and
+faithful renderer capability controls in this milestone.
 '''
 
 [[milestone]]
@@ -13502,9 +13513,21 @@ Native CurrentProgramme, NextProgramme and later-today objects use XMLTV guide
 grouping. Provide filler-aware helpers and bounded default syntax in editor
 preview. Prove transitions, pre/post-roll, boundary promos, absent future items
 and historical previews using actual render context. Preserve raw Epg compatibility.
+The 2026-10-03 findings addendum also requires Continuing programme projection,
+split films and inserted idents, channel-local calendar-day boundaries and absent
+metadata. Suppress unavailable labels instead of inventing titles or times, and
+prove a decoded served transition rather than only a static preview.
 '''
 evidence = '''
 Implementation and acceptance evidence pending.
+The addendum's exported-guide overlap is a separate undiagnosed observation;
+neither its cause nor its actual playout impact is established or corrected.
+The 2026-10-04 findings reread adds concrete variable-lifecycle evidence:
+schedule-wide graphics associations materialize element IDs with null variables;
+drawtext refresh reuses startup-captured variables and does not reread database
+overrides. Implement explicit per-item propagation and bounded repository refresh
+where live metadata is intended. Expose effective refresh semantics, preserve
+channel-local date/DST and programme grouping, and verify a served transition.
 '''
 
 [[milestone]]
@@ -13531,7 +13554,7 @@ Implementation and acceptance evidence pending.
 id = 'v111-findings-06'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Continuity-safe scripted adaptation'
-status = 'In progress'
+status = 'Complete'
 feature = 'playout-rebuild-on-impacting-changes'
 depends_on = []
 acceptance = '''
@@ -13680,6 +13703,761 @@ transactional.
 The maintainer authorized an engineering checkpoint commit on 2026-10-02.
 Implementation and feature acceptance remain in progress; this checkpoint does
 not complete v111-findings-06 or authorize publication.
+Operator status implementation: an additive migration retains LastSuccessfulBuild
+independently of failed attempts and counts changed Scripted selections on the
+playout, transactionally with comparison acknowledgement and Refresh intent.
+No-change scans leave the revision unchanged; acknowledgement does not erase it.
+The bounded list projection exposes separate comparison and Refresh states
+without multiplying rows. /playouts -> PlayoutsPage -> PlayoutsIsland reads the
+extended list_playouts DTO; ordinary SSR row metadata is available without
+JavaScript, and the existing activity poll refreshes it while the page is open.
+Nine cultures include success/pending/failure labels; no shared primitive changed.
+Four focused SQL/migration/restart regressions pass (Nextest
+01d65e75-3b85-4fac-8e9f-ef98a0af80e0), including legacy unknown-success handling,
+coalesced revision counting, intent completion and source-failure recovery.
+Strict all-target core/infra/web Clippy, architecture, hydration, formatting and
+progress checks pass for the status slice. The matched Leptos build passes four
+Chromium/Firefox cases for rejected-build feedback and durable adaptation status.
+After reviewing screenshots, the status case now waits for the mobile drawer's
+closing animation and asserts that the full status box fits the viewport; both
+browsers pass that strengthened case. Evidence: tests/e2e/playouts-feedback.spec.ts
+"shows durable adaptation status without JavaScript and updates it while open";
+no-JS success/revision/failure HTML, live pending/revision recovery, unchanged
+success time, English/Dutch labels, desktop/mobile captures and no hydration/page
+errors. Results: test-results/finding06-status-final/playwright-results.json.
+Explicit validated rebuild choices and live producer handover remain required.
+The in-progress implementation carries an explicit programme policy through queue
+coalescing and production Scripted Refresh. Latest explicit operator choices
+supersede older queued choices; automatic requests retain the existing strongest-
+mode rule and cannot overwrite an explicit choice. Fifteen focused queue,
+Scripted Refresh and production publication checks pass (Nextest
+37485ae8-bbfe-4a3f-b04f-2f5baed20885). The application validates the stored
+scheduler and explicit policy before queue admission; its production-composition
+regression passes (d1a43170-cd0c-4a78-88be-97958b7afe21), including rejection
+without queue tokens or activity entries for invalid policy, missing playout or
+unsupported stored kind.
+Scripted Keep-current Reset now stores a fresh boundary checkpoint and inherited
+history cutoff, preserving the published group while starting future rotation
+anew. Nine focused core/production publication checks pass (Nextest
+56df1ef5-b16b-4ea3-bb36-774224d4a602). They cover chronological/shuffle/random
+sources, grouped programmes across a fractional midnight boundary, late source
+registration, malformed cutoffs and a real SQLite restart. Subsequent Refresh
+before and after the retained boundary preserves the new playlist sequence;
+retained row identity, attachments, history and other channels remain unchanged.
+This is timeline and restoration evidence, not running-producer handover proof.
+The restart regression also passes after strengthening its comparison to every
+future item field and graphics attachment except regenerated row ids
+(e2f0157d-cbfa-4de2-aac2-b9b3a1104f03). Final strict all-target core/infra/app/web
+Clippy, formatting, architecture and progress checks pass for this edit batch.
+Classic preservation now captures complete source/scheduler checkpoints at
+programme boundaries, including intermediate Multiple/Flood state, and restores
+the selected boundary for explicit Keep-current Refresh. Explicit Reset retains
+the current group and starts fresh future source and fill-group state. The
+existing daily checkpoint selection remains the legacy Refresh contract.
+The shared programme-boundary resolver also retains Scripted grouping semantics.
+Classic Health now refuses missing current-programme restore state even when
+the daily checkpoint is present. Preserving Classic builds avoid immediate
+native-producer restart notification; running-producer handover is still unproven.
+A causal midnight regression exposed an existing cursor clamp: a programme
+ending at 00:03 was followed by one starting at 00:00. Daily passes now advance
+past the actually emitted finish before continuing. The expanded checkpoint
+snapshot changes only saved checkpoint/anchor rows, not the existing fixture's
+programme output; the snapshot and per-boundary source-deduplication assertion
+were reviewed and updated accordingly.
+All 116 focused Classic/Scripted/production-maintenance/Health checks pass
+(cb25fd4b-5c25-4cec-a41d-2523627b9db8). New coverage includes 64 comparisons
+against uninterrupted One/Multiple/Duration/Flood planning with Chronological,
+Shuffle, Random and RandomRotation, grouped programmes and fractional midnight
+seams; playlist child batches; pre/post-roll and changed shuffle membership;
+fresh ordered/shuffled fill-group state; SQLite restart with retained row/history
+identity, future subtitle-setting changes, another channel unchanged, and unsafe
+checkpoint refusal before writes. Final strict core/infra all-target Clippy,
+formatting, architecture and progress checks pass. The full maintainer findings
+document was reread after this engineering step; its solution scope is unchanged.
+Sequential YAML explicit Reset now retains the current programme and starts a
+fresh rotation. Its serialized cutoff excludes archived simple-source and
+marathon history after restart; long locked groups retain their history, and
+rewind instructions fail before publication. Production SQLite coverage exposed
+and corrected YAML ignoring source rows preloaded under their content keys.
+All 75 focused YAML/core/production-maintenance checks pass after resumption
+(6e9d5665-16f1-4504-a13b-29ef2c7a148f), including two database reopenings, exact
+current row/history preservation, Continue without overlap and refused rewind
+without timeline mutation. Strict core/infra all-target Clippy passes.
+The full findings document was reread on 2026-10-04, including the new VHS
+Nightmares evidence for Findings 2, 4 and 9; those solutions remain in scope.
+YAML now persists complete programme-boundary instruction/source checkpoints
+atomically with the timeline, including pending Count/All iterations, timed
+targets, list/sequence state, deterministic future shuffle counters and source
+reconciliation. Refresh restores the retained boundary, including attached
+pre/mid/post rolls; Continue prefers the complete tail checkpoint. Empty sources
+cannot overwrite the preceding boundary with partially consumed instructions,
+and pending iterations finish before a midnight alternate schedule takes over.
+All 87 focused YAML/core/production-maintenance/Health checks pass
+(c13ade23-c892-48c3-8376-95c735c6b71b), covering fractional midnight, locked groups,
+marathon membership changes, gap resumption, explicit replacement, invalid state
+and rewind refusal. Production SQLite coverage proves unchanged current row IDs
+and future settings, repeated Refresh after reopening, and an additive legacy
+database upgrade that preserves rows and requires explicit Reset before unsafe
+Refresh. An additional strengthened Reset/reopen/Refresh/Continue regression
+passes (ed6b3535-c1a1-48c5-a3b5-7c734c93507c). The earlier combined 82-test run
+(d21c883b-a2ec-4b3e-a144-f150347e4434) also proves the YAML Health recovery text in
+all nine supported cultures; that unchanged localization evidence is reused.
+After extracting the shared Scripted/YAML Health translation helper for lint,
+the focused nine-culture YAML regression passes again
+(3d0bdb23-7c4f-4cad-b3da-9590097b5c13). Strict core/infra/web all-target Clippy and
+formatting pass. The full maintainer findings document was reread after this
+engineering step; its addenda are recorded in the owning graphics milestones
+and open parity debt without claiming a product fix for those findings.
+Block and External JSON preservation, explicit UI modes and
+running-producer handover still require implementation/acceptance. Temporary
+refusals are not accepted exceptions or completed rebuild-mode UI.
+Block source audit against BlockPlayoutBuilder.GetEnumerator and
+BlockPlayoutEnumerator reproduced a continuity defect: four ordered blocks
+selected [1,1,1,1] instead of [1,2,3,1] (causal failing run
+349b8f29-47b4-4625-831f-ba0e42d3eccc). Ordered sources now consult eligible
+persisted and newly emitted history, excluding removed history and future rows.
+Chronological and SeasonEpisode sources use their defined sorting rather than
+database row order. All 22 focused Block/core/SQL checks pass
+(d76c2af3-f8e7-4401-8dfb-abfd1c9cdd95), including production PlayoutBuilder
+publication, SQLite close/reopen and full future-item equality for both orders.
+The existing SQL change-detection fixture now correctly selects its older movie
+before the newer episodes; the former assertion encoded loader order.
+Strict core/infra all-target Clippy, formatting and whitespace checks pass.
+The complete findings document was reread after this engineering checkpoint;
+there are no further additions beyond the already recorded graphics addendum.
+Randomized Block audit then reproduced the same first-item repetition for
+Shuffle (13e0ea14-9e46-41cb-8a97-3668e928656e). Primary history now carries an
+additive versioned next-source checkpoint: exact membership/order, playout and
+cycle seeds, random draw position and Smart Shuffle state. Shared Classic
+shuffle/group-separation and membership reconciliation restore the future without
+placing consumed survivors ahead of the remaining cycle. New playout seeds
+prevent archived randomized sources from reviving pre-Reset cycles.
+All 26 focused core/production-SQL checks pass
+(06cbaf05-da69-4f3e-817e-a5d26f62f150): Shuffle/Random/RandomRotation mid-cycle and
+wrap continuation, group separation, membership additions/removals, a new negative
+Reset seed, SQLite reopen equality for all five orders, and corrupted-checkpoint
+refusal through production maintenance with identical stored items/history.
+Final strict core/infra all-target Clippy, formatting and whitespace checks pass.
+The complete findings document was reread; no further additions were present.
+Next implement explicit Block preservation and boundary-readiness Health without
+resetting rotation or repositioning the retained programme. External JSON uses
+transient file-backed occurrences rather than scheduler rows; its explicit
+action needs that runtime ownership contract. These remain unfinished work.
+Explicit Block preservation checkpoint: Refresh restores source state at the
+complete retained guide interval; Reset records a fresh history floor and seed.
+Rolls/filler and repeated template guide groups are retained by occurrence, while
+future settings are rebuilt. Invalid intervals, legacy/corrupt checkpoints and
+incompatible anchors refuse unsafe replacement. A resumed test exposed Default
+anchor version zero; the default now matches the serialized version contract.
+All 56 focused core/infra/web checks pass
+(4016013c-f7c2-4eb5-8a6e-368bad7fae0e), including existing Classic/YAML preservation,
+five-order production SQLite reopen/Refresh, current row/settings/history
+retention, Reset recovery and later Refresh, explicit replacement, rolls/filler,
+invalid anchors and all nine localized Health translations. An initial new
+replacement fixture incorrectly expected oversized content to fit a fixed block;
+the corrected fixture preserves the established BeforeDurationEnd policy.
+The October 4 findings reread adds milestones 11/12 and further graphics
+variable/phase/throughput evidence. Actual producer handover, External JSON
+actions and explicit mode UI remain open; this checkpoint is not finding 06
+acceptance and does not claim live-stream continuity.
+Strict core/infra/web all-target Clippy, formatting and whitespace checks pass.
+The complete findings document was reread during checkpoint closeout, including
+the latest v19 preview clarification and deferred-preset maintenance evidence.
+Publication-deadline checkpoint: a production Classic preserving rebuild at one
+persisted tick before the seam previously returned success after that seam
+(2897b8d1-e98d-48ba-9c73-b5ce55026779). Explicit-build admission now captures a
+monotonic origin before asynchronous input loading. A future retention seam
+becomes a process-local candidate deadline, checked before repository work,
+after database-writer acquisition and immediately before commit. Expiry rolls
+back candidate writes, preserves old items/history/checkpoints/seed, reports a
+failed attempt and defers existing durable intent with bounded backoff.
+All 97 focused core/infra checks pass
+(ef8ae0b2-3c62-450b-b2fc-acbac3f8cbfe): expired Refresh and Reset, production
+state preservation and later successful retry, a candidate polled into a real
+blocked SQLite writer then rejected after expiry, existing automatic maintenance,
+Classic/YAML/Block preservation and Scripted scan-generation/coalescing behavior.
+This is build/publication-expiry protection, not complete producer handover.
+The native HLS worker can select work up to its sixty-second buffer horizon;
+Next channel_session.rs at source f6350a0ad9077290c0fbad7ea3feacaef71f0ca3 also
+selects at its forward cursor and reloads the snapshot per transcode. Current
+host notifications request Next snapshot publication asynchronously. Next prove
+and implement a safe future selection/publication boundary for prefetched work,
+including source/mirror/preview/direct ownership, then decoded native/Next
+handover. External JSON actions and explicit localized mode controls remain open.
+Strict core/infra/web all-target Clippy passes for this deadline checkpoint.
+The complete findings document was reread after verification; no additions beyond
+the now-recorded October 4 v19 preview and deferred-maintenance clarifications
+were present. The remaining producer and explicit-action acceptance stays open.
+Next refresh-failure checkpoint: a real managed-process fixture reproduced a
+single schedule-read error immediately making the running session terminal
+(e4626216-8c52-4803-a9e0-802ddb42f465). The existing session now retains playback
+and retries snapshot publication with a thirty-second attempt timeout and
+one-to-thirty-second exponential backoff. Coalesced notifications cannot bypass
+cooldown. Channel deletion or switching engines remains a typed terminal result.
+All 24 focused Next session, publisher, atomic-file and host tests pass
+(e444c2a8-a90a-4e62-86e0-c0593de85049), covering failed-read/projection recovery,
+timeout cancellation/recovery, retained playlist access, notification coalescing,
+heartbeat/Stop, engine retirement, snapshot retention and serialized abandoned
+writers. A local HTTP listener required the approved unsandboxed test run;
+the preceding sandbox run passed 23 and failed only that listener's bind.
+This is process/snapshot failure handling with a portable process fixture,
+not a decoded native/Next programme transition. Effective-boundary publication
+acknowledgement and prefetched-content handover still require implementation.
+The full findings document was reread at this checkpoint; October 4 v19 and
+deferred-maintenance evidence remains the latest, with no new scope changes.
+Strict infra all-target Clippy passes for the Next refresh-failure checkpoint.
+Next publication-acknowledgement checkpoint: build success, last successful-build
+time and durable Refresh completion now wait for a fresh session publication.
+Monotonic session request generations prevent an older in-flight read from
+acknowledging newer work. Source/mirror notifications and live/direct/preview
+owners are polled concurrently under one deadline; failed or expired publication
+retains generation-aware durable retry. Native preserving builds still do not
+restart their producer. Snapshot readers now share only the committed phase of
+the owning build lock; later builders remain excluded through completion, and
+readers retain exclusion through an abandoned blocking file swap.
+The focused suite passed 82 checks (f0f60fb3-1157-491f-9616-ffd440a658e7); its new
+SQLite deadline fixture initially auto-advanced pool-acquisition timers while
+waiting for database I/O. Resuming real time immediately after the deliberate
+deadline advance corrected the fixture. Both production database tests then pass
+(75136de4-c0d9-4011-a933-96c108bf564b), including delayed acknowledgement, failed
+publication/preserved success time, durable retry, later successful atomic
+publication with exact persisted IDs/times, and hard publication timeout.
+Session tests cover stale acknowledgements, per-generation failure, ended
+sessions and a bounded caller wait that does not cancel the active producer.
+Registry/read-lock tests cover all owners, exclusion and cancellation ownership.
+These are lifecycle/database/file proofs, not decoded programme handover.
+Prefetch-safe boundary selection, External JSON actions and explicit UI modes
+remain open before finding 06 acceptance or its solution commit.
+Strict core/infra/web all-target Clippy passes after correcting a test helper's
+literal return lifetime. The full findings document was reread after this
+checkpoint; October 4 v19/deferred-maintenance evidence remains the latest.
+Prefetch-retention checkpoint: connected preserving builds now keep complete
+programme units beyond the native/Next buffer and unknown-fallback reservation,
+including the largest configured leading-mirror offset. Idle configured readers
+are included to cover viewers joining during construction. Publication must
+finish before readers can reach that boundary; the minimum construction window
+is thirty seconds. Whole published gaps and unfilled guide intervals are kept.
+Classic, Block, Scripted and YAML use the same horizon while retaining the real
+request clock for cleanup/history. Seventy-two focused scheduler/publication/
+maintenance checks pass (b0722cff-184a-4a6c-a823-4a3dc897b69a). After rounding
+the floor upward to persisted 100 ns ticks, three focused host checks pass
+(43cc5ee2-b433-497c-ba1f-9001197fbe2e): fractional empty-timeline publication,
+expiry with durable retry, and six Refresh/Reset cases with absent, leading or
+delayed mirrors. Retained IDs/settings and unrelated timelines remain intact;
+future settings apply after the effective boundary. This is scheduler/database
+evidence, not decoded native/Next handover or recovery from a snapshot owner
+missing its publication deadline. External JSON actions and explicit UI modes
+also remain open; finding 06 is not ready for its solution commit.
+The full findings document was reread; October 4 v19 remains the latest addition.
+Strict core/infra/web all-target Clippy and formatting pass for this checkpoint.
+Decoded native producer checkpoint: the opt-in maintenance fixture now runs
+the actual HLS worker with Classic synthetic one-minute programmes, changes collection
+membership during playback and calls preserving Refresh through production
+maintenance. It collects the worker's actual segments, requires the same session
+identity, and decodes the retained blue programmes, complete white opening and
+green replacement. Initial native proof passes (b9979d00-6f26-49c6-bec7-0494093cd367):
+174.0 seconds retained, 2.0 seconds opening, with 442/880 Hz old/new audio.
+The shared producer fixture also passes natively
+(c0a3f867-ba92-47ef-8fac-8ee88d3964d8): 173.9 seconds retained, 2.0 seconds
+opening and at least 7.1 seconds replacement body, with 444/880 Hz audio.
+The Next case in that run failed at startup; captured runtime diagnostics in
+a1be424c-cdb3-4e39-a6d3-476f8cbef147 identify sandbox Operation not permitted
+while loading configuration. This is not Next handover acceptance.
+Test commands and coverage limits are documented in docs/how-to/testing.md.
+The full findings document was reread; October 4 v19 remains the latest addition.
+The isolated Next runtime starts with the necessary execution permission. Its
+first decoded run exposed a fixture clock error: Next creates its session before
+initial projection, so instance creation includes preparation time without video.
+Use the first segment's published broadcast timestamp for the duration assertion;
+keep the same one-second maximum discrepancy and independent session identity.
+The corrected three-case run passes (c27ba134-fa7f-4f02-b97e-ffa2ed87eddc):
+Classic/Next retains 159.8 seconds, Scripted/Next 162.4 seconds and
+Scripted/native 174.2 seconds from their first decoded frame; every opening is
+2.0 seconds, with at least 7.2 seconds replacement body. Audio decodes at
+442 Hz before the change and 879/880 Hz afterward. Combined with the earlier
+Classic/native proof, all four producer/scheduler combinations pass with the
+same session identity and bounded cancellation/registry cleanup. The test
+subscriber exposes sanitized runtime warnings when a real engine cannot start.
+Runtime identity: Next executable SHA256
+6af8d67f9f31873d4fa9039a4a453f658803032555bcdb8d173c259c91296f7c;
+FFmpeg n9.0-20260805 executable SHA256
+0da9feb315425f096496ff3d86afe05abf4099e3973da17efe93f5a676cee73a.
+These are actual producer segments with synthetic media, not served HTTP,
+Windows acceptance, subjective listening, or delayed-publication recovery.
+The remaining finding 06 work and its separate solution commit remain open.
+Strict Clippy for the maintenance integration target passes after moving fixture
+configuration into its owning helper and correcting two style diagnostics.
+Formatting and diff whitespace checks pass; findings content is unchanged since
+the full reread at this checkpoint.
+Explicit-action checkpoint: the existing /playouts PlayoutsIsland now owns an
+always-mounted shared Modal and CheckBox for Continue/Refresh/Reset and programme
+preservation. The action sends only the persisted playout ID, mode and policy to
+rebuild_playout; it accepts no client scheduler kind. Refresh plus preservation
+is the default, Continue forces preservation, and cancellation sends no request.
+All nine cultures include the controls, mode explanations and incomplete-state
+guidance. Existing blocking SSR resources and no-JS status output are retained.
+Matched-build browser acceptance passes all twelve playout cases in Chromium and
+Firefox: exact mode/policy round trips, cancellation without admission, preserved
+defaults, no-JS status, polling, rejected previews and existing list/detail flows.
+Evidence: test-results/finding06-actions-final/playwright-results.json and the
+explicit-rebuild-mobile.png / explicit-rebuild-dutch-desktop.png artifacts.
+Screenshots were reviewed at 390 and 1440 pixels, in dark English and light Dutch.
+The initial browser run exposed missing island language context; re-establishing
+the existing i18n context inside PlayoutsIsland fixes English action labels after
+Dutch hydration. The mobile fixture now waits for the responsive drawer listener
+instead of racing its automatic close with a toggle click. It retains the actual
+drawer-position and horizontal-overflow assertions. The successful final run uses
+a fresh temporary database and a jointly rebuilt SSR/WASM bundle.
+Twenty-seven focused server-action, Classic continuation and localization tests
+pass (9866509f-65bd-46aa-b5d2-331e747116bc). Explicit Classic Continue now rejects
+missing continuation state without changing published items/history or notifying
+producers; legacy automatic promotion remains covered and unchanged.
+Hydration lint reports no new findings. The full findings document was reread;
+October 4 v19 remains the latest addition. External JSON actions and delayed
+snapshot-publication recovery remain required before finding 06 acceptance.
+Strict infra/web all-target Clippy passes; after the island-context correction,
+strict web all-target Clippy also passes. Formatting and diff whitespace checks
+pass. The isolated test host and its owned worker are shut down normally.
+External JSON policy checkpoint: the source audit confirms upstream's no-op
+ExternalJsonPlayoutBuilder and direct file-backed playback/guide ownership.
+The new reconciliation policy accepts a retained baseline and bounded parsed
+candidate without writing source files, library items or timeline rows. Continue
+only appends an adjoining unchanged-prefix suffix; Refresh/Reset preserve whole
+programmes at shared absolute boundaries, including the prefetch horizon.
+Different durations cannot be trimmed or shifted to fabricate a seam. Empty
+candidates withdraw only unprotected future; unchanged effective schedules do
+not count as changes. Missing baselines, changed source identity on Continue,
+gaps and incompatible guide visibility are refused. The production parser now
+rejects non-positive durations that previously allowed non-progressing or
+backward external timelines.
+Nineteen focused reader/policy/playback tests pass
+(11be8968-9264-452d-b419-60a065334833), including file replacement, fractional
+durations, midnight, mirror selection, transient graphics and Plex binding.
+Four existing mock-server tests required local socket permission; their initial
+sandbox failures are not product failures. The successful repeat includes the
+final idempotency and gap assertions. These are policy and reader proofs only:
+durable accepted-snapshot storage, playback/guide consumption, explicit external
+actions and live handover remain unimplemented. Delayed Next publication
+recovery also remains open. No finding 06 solution commit or acceptance is claimed.
+Strict infra library/test Clippy passes after making the refusal helper consume
+its result explicitly. Production behavior and assertions are unchanged from the
+nineteen-test proof. The configured target exceeded 60 GiB during checking;
+the required cargo clean completed before the final successful cold check.
+The full findings document was reread after the checkpoint; October 4 v19
+remains the latest addition, with no scope reduction.
+External JSON storage checkpoint: additive PlayoutExternalJsonSnapshot storage
+retains an explicitly accepted, versioned document across SQLite reopen and
+source-file loss. Playback, XMLTV, graphics guide context and mirrors share the
+accepted document. Upgrades insert no baseline, preserving legacy direct-file
+reading until explicit adoption; corrupt accepted state fails closed.
+Publication fences revision and stored source identity inside the SQLite writer,
+checks its monotonic deadline after writer admission and before commit, and
+bounds JSON encoding to 32 MiB. It creates no library, history or PlayoutItem rows.
+Twenty-three focused policy/storage/consumer tests pass
+(dd37e22f-32a8-4034-b491-d15352c6e868), including concurrent revision contention,
+writer-delayed deadline expiry, unsupported versions, source edits, cascade
+deletion and pre-migration direct-reader preservation. Strict infra library/test
+Clippy and formatting pass. Worker admission, operator controls, Health and
+decoded external handover remain required; this checkpoint does not establish
+External JSON action acceptance. Delayed Next publication recovery remains open.
+The full findings document was reread again; October 4 v19 remains current.
+External JSON worker checkpoint: explicit Continue/Refresh/Reset now bypass the
+core no-op through the existing per-playout lock and status lifecycle. The core
+no-op rejects explicit policies rather than claiming execution. Legacy automatic
+requests do not create a baseline. After explicit adoption, automatic Continue
+appends and scheduled Reset preserves programmes; missing/null source documents
+cannot withdraw the accepted future. Unchanged checks retain the revision.
+Preserving publication reuses the native prefetch/leading-mirror deadline and
+does not notify or restart retained native owners. Explicit replacement retries
+owner notification if a previous attempt committed but notification failed.
+Next channels or mirrors are refused before publication because their existing
+projection does not consume external documents. No Next External JSON support
+is claimed by this change.
+Thirty focused policy/storage/worker/reader/core-admission checks pass
+(589539b7-abd6-4edc-a34c-513ec9a1deb7). Worker cases generate their baseline through
+the production build path and cover SQLite restart, missing baseline, append-only
+continuation, unchanged revision, current/leading-mirror preservation, native
+owner identity, cancellation/lock exclusion, missing source, Next refusal and
+replacement-notification retry. Strict core/infra library/test Clippy passes.
+Existing internal publication acknowledgement/status completion was extracted
+without changing its ordering. The final 37-check run passes
+(479286f2-bd9d-45a0-91ea-4c120274d02c), adding real server-action admission for
+External JSON, existing Classic request/seed behavior, and both stalled/failed
+Next acknowledgement regressions to the complete focused external set.
+Operator controls, Health and decoded external handover remain outstanding.
+The full findings document was reread after this checkpoint; October 4 v19
+remains current. No solution commit or finding 06 completion is claimed.
+
+External JSON admin/Health checkpoint: the existing /playouts row action and
+mounted rebuild dialog now expose direct versus controlled updates, accepted
+revision, explicit first adoption and preserving future updates. The existing
+PlayoutsPage SSR wrapper, PlayoutsIsland, blocking list resource, rebuild_playout
+server action, Modal and CheckBox own this boundary. No-JS HTML exposes status;
+the rebuild dialog requires hydration. No new UI primitive or route is added.
+All nine cultures explain absolute external timing and source-file changes.
+Health reads accepted state without consulting mutable files and distinguishes
+legacy direct mode, changed source paths, expired or invalid planning and
+unsupported Next consumers. Only explicit replacement can repair corrupt
+accepted state, retaining its optimistic revision fence. Preserving actions
+still fail closed. Nineteen focused checks pass
+(848b4fa7-a77a-4280-b3a6-75942f110470), including production adoption/recovery,
+Health severity, list cardinality, translations and existing worker/storage
+regressions. Strict infra/web all-target Clippy, formatting and hydration lint
+pass (31 existing baseline suppressions, no new findings). Fourteen matched
+Chromium/Firefox cases pass in 2.7 minutes, including real worker adoption,
+preserving Refresh, corrupt-version Health diagnosis and explicit Reset repair,
+no-JS accepted status and responsive English/Dutch dialogs. Results:
+test-results/finding06-external-admin/playwright-results.json. Mobile adoption
+and Dutch controlled-update screenshots were visually reviewed in both browsers.
+The complete findings document was reread after this checkpoint; v19 is unchanged.
+Decoded external handover and delayed Next publication recovery remain required
+before finding acceptance.
+
+External JSON producer checkpoint: the existing real-producer harness now also
+adopts an external document through the production worker, changes its media
+bindings during playback and requests preserving Refresh. The accepted revision
+advances without materialized PlayoutItem rows or changed authored timestamps.
+Actual native HLS output passes full transition decoding
+(fcece4c7-4a25-486b-9d90-77dae36cc05a, 185.639 seconds): 1750 retained blue samples,
+20 white opening samples and 70 green body samples at 10 fps, with 443 Hz and
+880 Hz audio against the expected 440/880 Hz tones. The producer identity remains
+unchanged and normal cancellation releases it. This is native producer proof,
+not HTTP delivery, Windows acceptance or Next External JSON support.
+The initial fixture omitted the existing Plex-origin registration and failed
+before playback. Correcting that fixture exposed a separate cancellation gap:
+repeated source-read failures could bypass the process-level cancel receiver.
+Startup reads now observe cancellation and mark the retry loop terminal.
+Two targeted cancellation tests pass (648ba40c-1f1c-46bc-8930-7ade95d98dc4).
+The decoded run preceded this cancellation-only correction. The whole-worker
+missing-source regression also passes (2a90f731-a08c-43e1-9fe7-d89c60a7f0dd),
+proving cancellation releases its registry entry before any segment exists.
+Strict infra library/test Clippy, formatting and progress validation pass.
+The full findings document was reread again; v19
+remains unchanged. Delayed Next publication recovery remains unproven and
+required before finding acceptance.
+
+Next delayed-write checkpoint: a deterministic coordinator reproduction starts
+from a real old manifest, changes the second occurrence from 60 to 90 seconds,
+holds the blocking writer, cancels its async owner and then releases the writer.
+Before the correction it replaces the old manifest and exposes a programme
+already in progress at the old reserved finish. Next upstream's
+playout_loader.rs selects by start/finish at transcoded_until; this reproduction
+checks that selection hazard, not decoded Next playback.
+The async publication attempt now revokes replacement permission on drop. The
+blocking publisher checks it before creating its temporary file and again after
+serialization/fsync, immediately before replacement. It retains the publisher
+and source-read locks until cleanup, preventing a newer attempt from overtaking
+an abandoned writer. Cancellation after replacement starts cannot undo the swap.
+Fifteen focused coordinator/publication/session acknowledgement checks pass
+(973eaa1a-3cf8-492d-a5b1-9d9e610611b1), including the formerly failing longer-item
+case, cancellation during serialization, temporary-file cleanup, successful
+retry, concurrent readers and ownership fences. Strict infra library/test Clippy,
+formatting and progress validation pass.
+The full findings document was reread; October 4 v19 is unchanged.
+Remaining: carry the scheduler's programme-safe deadline through the Next
+attempt to the final replacement check, reconcile committed SQL with the retained
+Next manifest after failure, and prove recovered decoded continuity. This
+cancellation fence is necessary groundwork, not complete failure recovery.
+
+Scheduler-deadline checkpoint: the Next session now forwards the earliest queued
+safe deadline to the host and serialized publisher, bounded by its ordinary
+attempt timeout. The blocking writer checks the deadline before temporary-file
+creation and after serialization/fsync, immediately before replacement. A
+coalesced unconstrained notification cannot erase the queued deadline; expired
+work does not retry until a fresh request arrives. The running producer remains
+ready. Already-started replacement still cannot be undone.
+Forty-one focused infra library checks pass
+(ec0ef0ad-f5d3-45b1-bee8-37bb068f6dc5): deadline expiry during projection and
+serialization retain byte-identical old manifests, cancellation drops attempt
+ownership without stopping playback, coalescing preserves the earliest deadline,
+and a fresh request can publish after expiry. Existing ownership, heartbeat,
+reader and on-demand regressions also pass. This proves deadline enforcement,
+not SQL/manifest reconciliation or recovered decoded continuity. Those remain
+the next required correction and acceptance evidence.
+Strict infra library/test Clippy, formatting and progress validation pass.
+The complete findings document was reread after this checkpoint; October 4 v19
+is unchanged. No finding-completion or recovered-playback claim is made.
+
+SQL preparation checkpoint: apply_build_result now delegates to an owned
+PendingPlayoutBuild transaction and commit. The existing source fences and
+complete scheduler write set are unchanged. Candidate reads reuse the ordinary
+item decoder, including real assigned IDs, audio/subtitle selection, watermarks
+and graphics attachments. Ordinary connections still observe the previous
+accepted state until commit. Deadline expiry or owner cancellation rolls back
+items, history, checkpoints, dependency baselines and continuation state together.
+The pending owner reserves SQLite's writer; callers must bound preparation and
+retain the playout build lock.
+Sixty-four existing scheduling/playout repository tests pass in
+034f135a-7771-4e58-a4bc-0d78577d6f51. The first new commit test used the abbreviated
+scheduler-reference projection as its graphics oracle; correcting that test to
+compare the actual repository item reader yields two passing preparation tests
+(a93d169f-ce8a-4dae-8721-484c1d0de8ed). They exercise real Scripted Refresh,
+concurrent old-state reads, assigned candidate IDs and attachments, deadline
+expiry, cancelled owners, released writer admission, successful commit and
+SQLite reopen, while preserving another playout.
+The normal maintenance path still commits immediately before notifying Next.
+Next: prepare the Next projection/file while SQL is still private, coordinate
+final publication failures, and prove recovered decoded continuity. This SQL
+preparation API is groundwork; it does not yet repair the cross-resource race.
+Strict infra library/test Clippy, formatting and progress validation pass.
+The full findings document was reread after the checkpoint; v19 is unchanged.
+
+Next candidate preparation checkpoint: the channel publisher now reads the owned
+uncommitted SQL candidate alongside other accepted source playouts, applies target
+mirror clocks, and serializes/flushes a private temporary file. It retains its
+publisher admission and other-source read guards until discard/publication. The
+earlier SQL/caller deadline bounds admission and projection; replacement rechecks
+that deadline and attempt ownership. Dropping preparation removes temporary bytes
+without replacing the old file.
+Twenty-seven existing/focused publication, coordinator, schedule and SQL
+preparation checks pass in 11681e37-f0f4-4c2f-8385-8b20db48e372, including the new
+post-staging deadline/ownership regression. The two new integration fixtures
+initially lacked library-folder/file bindings because their scheduling fixture
+only needs media durations. After adding those isolated bindings, both pass
+(666911b5-9b91-4d72-bff7-84785e412c84): source and leading mirror retain old SQL and
+files during preparation, discarding the pair cleans up and allows a fresh pair,
+explicit successful publication uses the candidate IDs/clocks, and a stalled
+projector cannot outlive the SQL deadline or expose its candidate.
+These use the production SQL builder and channel publisher with a simple wire
+projector, not the running Next host or decoded media. The worker is not wired
+yet. The host's full projector currently reloads watermark/graphics contexts by
+item ID through the ordinary pool; new candidate IDs and changed template state
+are invisible there before commit. Next: resolve prospective overlay/context
+inputs from the pending build, reuse the full host projector, coalesce shared
+main/preview publishers, and coordinate final SQL/file failure recovery. Decoded
+recovered continuity remains required before finding completion.
+Strict infra library/test Clippy, formatting and progress validation pass.
+The complete findings document was reread at this checkpoint; October 4 v19
+is unchanged. No running-host or cross-resource recovery acceptance is claimed.
+
+Candidate overlay checkpoint: pending SQL reads now capture item watermark IDs,
+graphics variables, decoration context and active template selection before
+mirror clocks are shifted. Local and Remote Stream projectors resolve these
+inputs through the same precedence helpers as ordinary playback. Existing
+committed reads remain the default outside candidate preparation.
+Thirty-nine focused coordinator, schedule, remote projection, preparation and
+playback overlay tests pass (23e99dea-efbe-46ec-b476-b98cb7b247cd). The new
+file-backed integration case compares prospective selection with ordinary reads
+after commit, covering per-item variables and template override while proving
+the selected new ID is invisible to committed readers beforehand. Its first
+oracle incorrectly assumed large IDs were always unpublished on a second build;
+the corrected test compares against actual committed membership. Seven existing
+watermark tests initially failed because their default image directory was
+read-only; rerunning with an isolated application-state root passes unchanged.
+This verifies overlay selection, not full running-host candidate projection or
+decoded recovery. Next: reuse the host projector for candidate preparation,
+coalesce shared main/preview publishers, coordinate SQL/file failure recovery
+and prove recovered producer continuity. No acceptance requirement is changed.
+Strict infra library/test Clippy passes. The complete findings document was
+reread at this checkpoint; October 4 v19 is unchanged.
+
+Full host preparation checkpoint: ordinary Next refresh and pending-build
+preparation now share the actual local/Remote Stream projector, including source
+binding, track selection, deferred subtitle handling, credits, graphics and gaps.
+The host retains one publisher per channel; a prepared host owner discards its
+file on drop and registers fallback gaps only after successful replacement.
+Nine focused host/callback and preparation checks pass
+(d3ce43b2-da9d-43d2-ae34-0c87a0870654). The new file-backed test stages a real
+Scripted candidate through the full host projector, discards it, retries and
+publishes after SQL commit. The old file remains byte-identical during staging;
+the published rows retain candidate IDs/clocks, Dutch audio index 2, English
+bitmap subtitle index 3 and a graphics canvas. Temporary files are removed.
+The shared scheduling fixture needed valid playback scan/image-source values
+and explicit logo metadata; those corrections are isolated to the new test.
+The existing live-caption callback test needs localhost listening permission
+and passes with that permission. Strict infra library/test Clippy passes.
+This is full projection/serialization proof, not a running producer or decoded
+handover. The maintenance worker still commits SQL before notifying sessions.
+Next: connect preparation to worker/registry admission, coalesce main/preview
+owners of a shared publisher, coordinate final SQL/file errors and verify decoded
+failure recovery. The complete findings document was reread; v19 is unchanged.
+
+Active-owner preparation checkpoint: the host now selects active source/mirror
+contexts and groups main/preview sessions by channel publisher before staging.
+All owners of a shared manifest must agree on path replacements. Selection and
+the complete preparation group share the earlier SQL/caller deadline. Failure,
+contention or timeout drops earlier staged files without publishing the group.
+Three focused host-publication tests pass
+(07a870a8-007d-41d5-bb1d-3bf4faefbd5b): source main/preview coalescing, leading
+mirror clocks, unrelated-channel exclusion, discard/retry/publication, conflicting
+owner refusal before staging, and a later publisher's held admission causing
+timeout and cleanup of the earlier source preparation. The existing publisher
+remains the owner; no additional registry or shared-channel file is introduced.
+Next: pass the existing NextHost from web composition through SchedulerOptions
+and maintenance execution, prepare active owners before SQL commit, and resolve
+final SQL/file failures with decoded continuity proof. Maintenance currently
+still uses the old commit-then-notify sequence; this checkpoint does not claim
+that production race fixed. Full findings reread confirms unchanged October 4 v19.
+
+Worker preparation checkpoint: web composition now passes the shared NextHost
+through scheduler options to manual, periodic and startup-repair builds. These
+builds stage active source/mirror projections while the complete SQL candidate
+remains private. Preparation failure/cancellation discards the candidate;
+successful commit is followed by prepared-file publication. Already published
+Next channels are excluded from redundant live/preview refresh notifications.
+Twenty-three focused checks pass (74428f81-7f52-4a05-be35-7f4f7db30142), including
+the real requested worker's failed preparation, unchanged timeline/continuation
+state, visible failed status and fresh successful retry. Unpolled Next sessions
+prove that successful direct publication does not wait for duplicate requests.
+The retry test exposed an empty leading-mirror projection: shifting an unbounded
+year-9999 range produced a year-10000 SQL string which sorts before ordinary
+dates. The shared reader now caps that upper bound at its supported horizon;
+source and mirror publication retain the expected candidate IDs and clocks.
+Strict infra/scheduler/web library/test Clippy passes, as do formatting and
+diff checks. Final file errors after SQL commit still require coordinated
+recovery; this integration does not claim database/filesystem atomicity.
+The real Next Scripted producer passes through this new worker route
+(19a7d37b-b9ff-4028-b5b4-2cdd8416b1c1, 182.217 seconds), retaining producer
+identity, the complete protected interval, the two-second replacement opening,
+new programme body and the expected old/new audio. The fixture now uses the
+production file-backed SQLite WAL pool: its former single-connection helper
+could not serve accepted-state reads while preparation held its writer. The
+first sandbox attempt failed before readiness with EPERM; the permitted run
+with that old fixture exposed its connection timeout. Neither is passing proof.
+This accepted normal handover is not injected post-commit failure recovery,
+HTTP delivery or Windows acceptance. Runtime hashes remain unchanged from the
+earlier producer evidence. Full findings reread confirms unchanged October 4 v19.
+The other non-ignored user of the changed fixture, failed-source cancellation,
+also passes (e5b801c1-673b-4279-99f1-e3d65ca5f8ce). Focused maintenance-test
+Clippy passes after the fixture correction; progress validation passes without
+summary-budget warnings.
+
+Final replacement retry checkpoint: a red regression demonstrated that the
+first transient persist error discarded the prepared file. Replacement now
+retains those exact flushed bytes and its publisher/source guards through at
+most eight attempts and 1.775 seconds of backoff. The original deadline and
+cancellation are checked before each attempt; permanent errors fail immediately.
+Twenty-four focused publication/coordinator/session checks pass
+(cde55ea5-e3bb-4c4f-9af9-5092ded94ad7), including the formerly failing retry,
+bounded exhaustion, cancellation during backoff, deadline expiry and concurrent
+readers. Windows sharing/access codes are only interpreted on Windows; the
+real held-handle recovery regression is added but unrun on this Linux host.
+This repairs transient replacement within one owned attempt. Exhausted or expired
+post-commit failures still require SQL/manifest reconciliation and decoded
+recovery proof before finding completion.
+Strict infra library/test Clippy, formatting and diff checks pass. The complete
+findings document was reread at this checkpoint; October 4 v19 is unchanged.
+
+Reversible finalization checkpoint: protected builds now replace their prepared
+Next files before committing the private SQL candidate. Each applied owner keeps
+the exact previous bytes for compensation; successful SQL commit disarms the
+entire group. One blocking finalizer retains the build hold and source/publisher
+guards even if its async caller disappears. The boundary reserves five seconds
+per configured Next publisher and two seconds for the SQL decision; native-only
+boundaries remain unchanged. Immediate replacement and append-only builds retain
+their SQL-first ordering because their new IDs are immediately selectable.
+Sixty-seven focused core/infra checks pass
+(a46ce1c1-56c0-47af-871f-55de0d326905): partial mirror publication, deadline
+refusal after replacement, abandoned callers, successful group commit, insufficient
+recovery time and persistent storage-failure reporting, together with existing
+maintenance/Scripted continuation tests. Compensation failure remains visible;
+old bytes are retained when possible, and startup projects accepted SQL before
+launching Next. No cross-resource atomicity or uninterrupted persistent-storage
+failure guarantee is claimed.
+Cancellation of an automatic Refresh previously made its durable intent terminal
+Failed. A red regression (e227ccca-b481-41d3-ab11-c6bbd8633818) establishes this;
+cancellation now retains Pending state and bounded retry eligibility. Four focused
+checks pass (b9da6652-82d0-4a5f-9fd9-1c5ca54cf91c), including cooldown, recovery
+selection and fresh successful completion.
+The first real producer recovery run (8373b526-dacc-4b5e-a1c4-7c05a71c9829)
+proved post-replacement cancellation, exact SQL/file restoration, successful retry
+and a complete replacement video opening, but failed its input-seek-based end
+audio assertion. It is not accepted playback evidence. The test now decodes the
+complete audio and measures actual first/last PCM windows, retaining failed
+synthetic captures for diagnosis. The corrected real Next Scripted producer check
+passes (a70ce044-f4e8-481f-8f9f-a6c2ebf416c9, 239.265 seconds): exact restoration
+after post-replacement cancellation, fresh successful retry, unchanged producer
+identity, 228.0 seconds of retained blue video, the complete two-second white
+opening, eight seconds of new green content, and 440/880 Hz first/last decoded
+audio. The earlier failed capture was not retained, so its input-seek result
+does not establish a diagnosed runtime audio defect. This full-decode run is
+the accepted evidence for the new finalization route.
+Native Windows Cargo is available, but cargo-nextest is absent; the held-handle
+tests remain unrun. No tool installation or platform acceptance is implied.
+Workspace all-target strict Clippy passes after the finalizer, recovery fixture
+and cancellation-policy changes. Formatting and diff checks pass. The complete
+findings document was reread after the decoded recovery checkpoint; October 4
+v19 remains unchanged. Initial full test closeout ran 3,799 tests: 3,798 passed;
+the minimal External JSON admission fixture lacked the new accepted-snapshot
+table (9b15d132-7fa8-463b-9ae8-dccb3fdedab9). Applying just that scheduling
+migration preserves its no-provider/no-media-table assertion; the focused test
+passes (641d96cc-4a10-41e5-a3be-65e40b19fa9e). No runtime fallback was weakened.
+Full test closeout subsequently passes: all 3,799 unit/integration tests
+(a75a7146-056e-40bc-b255-e73887e9423d, 67.828 seconds) and the workspace
+doctest step complete successfully. The 155 excluded opt-in tests are not
+implicitly accepted. Native HTTP smoke passes MPEG-TS legacy/hybrid and HLS
+segmenter (ersatzrs-smoke-293516-1791139650). Next HTTP smoke passes HLS/preview
+segments, Hybrid wrapper restart, decoded Dutch 881 Hz audio and burned subtitles,
+continued HLS after wrapper disconnect, private callback rejection and idle
+cleanup (ersatzrs-smoke-305931-1791140118). The configured target cache reached
+72 GiB during full closeout and was cleaned under the 60-GiB repository
+policy before the remaining build/transport checks. Source/test evidence remains
+valid; cache deletion is not a code change or a passed remaining gate.
+After cleanup, the TSDuck playback gate passes all 87 checks across legacy and
+hybrid MPEG-TS, HLS segmenter and HLS Direct, including zero continuity-counter,
+PTS/DTS/PCR leap failures and a clean server log (tsduck-gate.Qt73pq).
+The staged finding-06 selection excludes the unrelated items-all.yml file;
+new-Clippy-allow policy and cached diff checks pass. No solution commit yet.
+Strict infra all-target Clippy passes after the fixture correction. The matched
+Leptos build and actual server/WASM bundle gate pass; the referenced JavaScript
+and WASM both resolve successfully. Dependency audit passes advisories, bans,
+licenses and sources. Final parity validation reuses the passing workspace
+tests and strict Clippy rather than rerunning them.
+Architecture validation then found deferred writer admission in External JSON
+snapshot publication. It now uses the shared BEGIN IMMEDIATE helper before
+checking source ownership/revision. All ten affected snapshot, worker, migration,
+Health and deadline/concurrent-revision tests pass
+(4ec2d9dd-7e9c-4d14-9ea2-af77aed051b6), followed by strict infra all-target
+Clippy. Final parity-check passes progress, formatting, architecture and hydration
+checks, reusing the earlier full workspace tests/Clippy plus this focused
+post-correction evidence. Native/Next HTTP and TSDuck exercise unchanged paths.
+The matched Leptos rebuild and actual JS/WASM HTTP bundle gate also pass after
+that writer-admission correction; both final assets return HTTP 200.
+Extended decoded acceptance to Block and YAML on both producers. The first
+four-case run (01c2caab-f420-499d-815c-2a9ec80d5f23) passes Next/YAML:
+post-replacement cancellation restores exact SQL/files, then fresh Refresh
+retains 227.3 seconds, the complete two-second opening and 7.7 seconds of new
+body, with 441/880 Hz audio. Native Block/YAML retain their full video/openings
+but their raw PCM output muxer rejects timestamp resets in concatenated HLS
+segments. Decoding the retained Block capture with a sample-derived output
+clock yields identical PCM bytes and no errors; the frequency oracle now uses
+that clock without claiming transport-timing verification. Next/Block cannot
+initially publish future gap descriptors because the isolated fixture lacks a
+callback address. The corrected fixture binds a private listener and asserts
+that the captured programme transition never requests it. Those three cases
+are being repeated; they are not yet accepted. The full findings document was
+reread at this checkpoint and remains the unchanged October 4 v19 revision.
+
+Final decoded Block/YAML acceptance: the corrected three-case run passes
+(b1444bbf-55e5-456f-b744-e92fba1e39e7, 614.982 seconds). Native Block retains
+177.2 seconds with 441/885 Hz audio; native YAML retains 173.8 seconds with
+440/885 Hz audio. Next Block retains 217.8 seconds with 444/880 Hz audio,
+after post-replacement cancellation, exact SQL/file restoration and fresh retry.
+Every case retains the complete two-second opening and at least 7.2 seconds of
+replacement body without restarting the producer. No callback is requested by
+the captured Block handover. Together with the earlier Next/YAML and
+Classic/Scripted proofs, both producers now have decoded acceptance for every
+internal scheduler. The External JSON native proof remains applicable.
+Final test review extracted fixture/capture helpers to keep strict Clippy clean;
+behavior and assertions are unchanged. The affected maintenance target passes
+strict Clippy. Formatting, staged whitespace and new-Clippy-allow policy pass.
+Acceptance on 2026-10-04: stored-kind explicit modes/preservation, Scripted
+library/tag dependencies and bounded durable successful-scan adaptation,
+localized revision/build/pending/failure UI, programme/history retention,
+no-change and irrelevant scans, decoded changed-source handover, restart and
+retry are proven by the focused, browser and runtime evidence above. Workspace
+closeout, strict lint, native/Next HTTP smoke, TSDuck, dependency audit and the
+matched final server/WASM bundle pass. No remaining finding-06 feature blocker.
+Native Windows held-handle execution remains an unrun supplemental platform
+check; packaged Windows, other-platform runtime acceptance, CI and publication
+are not claimed. Persistent storage failure is explicitly reported, not promised
+uninterrupted playback. Findings 11/12 and existing Remote Stream dependency
+selection debt remain separate. This local acceptance supports the authorized
+finding-06 solution commit and does not authorize a release.
+Final progress validation keeps ADR 0110 Partial because its separately linked
+Classic findings 11/12 debt remains open; finding 06 itself is Complete.
+The final parity check passes progress, formatting, architecture and hydration,
+reusing the recorded workspace tests and strict affected lint.
 '''
 
 [[milestone]]
@@ -13722,6 +14500,12 @@ formatting, hydration lint, JavaScript syntax and new-Clippy-allow policy pass.
 The reviewed finding-07 code changes neither channel delivery nor timeline
 persistence; milestone 08 owns the separate pending lifecycle correction.
 This is solution acceptance, not integrated v1.1.1 release acceptance.
+October 4 reread: released v1.1.0 preview-mode mismatch also explains the
+missing diagnostic watermark under the temporary stored-mode workaround. The
+current editor already renders explicit watermark controls only for media-item
+preview (playback_form_fields); channel preview uses channel selection. Preserve
+this distinction and the shared-decoder correction. New guarded v19 visual proof
+belongs to the external workaround, not deployment proof for this solution.
 '''
 
 [[milestone]]
@@ -13801,10 +14585,26 @@ Image/Motion authoring and actual-engine preview. Prove alpha preservation,
 repeat boundaries, fractional live joins and programme-relative timing with
 argv snapshots and native FFmpeg encoding/decoding. Generic decoder capability
 alone is not animated-input acceptance.
+The 2026-10-03 findings addendum requires JXL MIME/extension and animation
+detection, compatible input options, bounded cycling and decode-forward seeking.
+Bound native failure reproductions to 15 seconds and verify alpha, looping and
+mid-stream entry in the actual served stream. Preserve JPEG XL delivery; GIF
+substitution is not a solution.
 '''
 evidence = '''
 The current findings document includes this additional measured runtime gap.
 Implementation and acceptance pending; preserve the complete requested scope.
+The addendum records a valid 175-frame, seven-second RGBA animation decoded by
+the deployed Windows FFmpeg 9 runtime. Still-image loop options fail, demuxer
+input seeking fails and stream_loop stalls. This input-path evidence does not
+establish on-air integration; package QC remains distinct from product acceptance.
+The 2026-10-04 findings reread adds actual native-graph throughput failures
+for three alpha carriers despite valid animated JXL decoding. Scaling precedes
+per-pixel opacity evaluation; normal Motion uses zero source offset. Preserve
+programme-relative source phase and enable timing in normal playback, support
+constant/Boolean alpha gates without needless per-pixel processing, and measure
+the complete native graph under representative decoding load. An offline font-
+glyph workaround does not prove Motion/JXL repair or served-stream acceptance.
 '''
 
 [[milestone]]
@@ -13889,3 +14689,55 @@ Recorded from the required post-milestone reread on 2026-10-02. Implementation
 and acceptance pending; current findings contain ten numbered entries and this
 additional separate proposed solution within finding 09.
 '''
+
+
+[[milestone]]
+id = 'v111-findings-11'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Defer Classic schedule changes until the next continuation'
+status = 'Not started'
+feature = 'classic-scheduling'
+depends_on = []
+acceptance = """
+Implement the proposed correction from the 2026-10-04 findings addition in its
+own commit with an Unreleased entry. Provide an explicit deferred save showing
+the actual effective boundary and build status, retaining generated rows,
+history, anchors and enumerator state. Prove the next natural Continue consumes
+the saved configuration without rewriting the published horizon. Immediate
+next-programme adaptation remains separately owned by v111-findings-06.
+No live configuration mutation or release publication is included.
+"""
+evidence = """
+The findings describe a released Classic editor that unconditionally requests
+Refresh on save, while a guarded external deferred update preserved existing
+state. Future filler appearance remains unobserved. Product implementation and
+localized UI, persistence and natural-Continue acceptance remain pending.
+A later October 4 snapshot comparison confirms that ordinary maintenance
+loaded the deferred filler preset into anchor context while preserving all film
+rows and the continuation horizon. It still emitted no filler rows. Reuse this
+as source evidence of configuration consumption, not deferred-junction acceptance.
+"""
+
+[[milestone]]
+id = 'v111-findings-12'
+phase = 'v1.1.1 — channel setup findings'
+title = 'Prevent Classic programme overlap across midnight and restart'
+status = 'Not started'
+feature = 'classic-scheduling'
+depends_on = []
+acceptance = """
+Implement the proposed correction from the 2026-10-04 findings addition in its
+own coherent commit with an Unreleased entry; reuse applicable existing work.
+Preserve actual emitted programme finish across internal daily chunks and
+validate candidate programme overlap before publication. Prove midnight-crossing
+films with and without fillers through Continue and process restart. Preserve
+guide, history and anchors when repairing an affected timeline; reject unsafe
+repair without mutating existing state. No live repair or release is included.
+"""
+evidence = """
+The released Windows timeline contains programmes starting at UTC midnight while
+the preceding full film still runs. Exact released-source inspection identifies
+a plausible backward cursor clamp, distinct from Scripted finding 10. Finding 06
+already contains a local Classic day-seam correction and focused evidence; audit
+and reuse it before additional edits. Full finding 12 acceptance is not claimed.
+"""

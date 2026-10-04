@@ -1,7 +1,10 @@
 mod block;
+mod block_sources;
+pub use block_sources::validate_block_history_checkpoint;
 mod classic;
 #[cfg(test)]
 mod playlist_tests;
+mod programme;
 mod scripted;
 mod smart_shuffle;
 mod yaml;
@@ -45,8 +48,8 @@ pub use smart_shuffle::{
     SchedulingSmartShuffleUnit,
 };
 pub use yaml::{
-    YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutScheduleItem,
-    YamlPlayoutSequenceItem, YamlRepeat,
+    validate_yaml_checkpoint, YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine,
+    YamlPlayoutScheduleItem, YamlPlayoutSequenceItem, YamlRepeat,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -55,6 +58,18 @@ pub enum PlayoutBuildMode {
     Reset,
     #[default]
     Continue,
+}
+
+/// Current-programme policy for a scheduler-owned rebuild.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlayoutPreservation {
+    /// Preserve the existing automatic/legacy scheduler contract.
+    #[default]
+    EngineDefault,
+    /// Retain the published programme through its complete guide boundary.
+    KeepCurrent,
+    /// The operator permits replacement of the programme currently on air.
+    ReplaceCurrent,
 }
 
 /// Request for the scheduler-owned playout builder.
@@ -67,6 +82,61 @@ pub enum PlayoutBuildMode {
 pub struct PlayoutBuildRequest {
     pub playout_id: EntityId,
     pub mode: PlayoutBuildMode,
+    pub preservation: PlayoutPreservation,
+}
+
+impl PlayoutBuildRequest {
+    /// Build using the scheduler's established automatic/legacy semantics.
+    #[must_use]
+    pub const fn new(playout_id: EntityId, mode: PlayoutBuildMode) -> Self {
+        Self {
+            playout_id,
+            mode,
+            preservation: PlayoutPreservation::EngineDefault,
+        }
+    }
+
+    /// Attach the operator's explicit current-programme choice.
+    #[must_use]
+    pub const fn with_preservation(mut self, preservation: PlayoutPreservation) -> Self {
+        self.preservation = preservation;
+        self
+    }
+
+    /// Refuse an explicit policy without a supported restore/publication path.
+    ///
+    /// # Errors
+    /// Returns an error rather than silently discarding the operator's choice.
+    pub fn validate_preservation(self, kind: PlayoutScheduleKind) -> Result<(), SchedulingError> {
+        if self.preservation != PlayoutPreservation::EngineDefault
+            && kind == PlayoutScheduleKind::None
+        {
+            return Err(SchedulingError::UnsupportedScheduleKind(kind));
+        }
+        let supported = match self.preservation {
+            PlayoutPreservation::EngineDefault => true,
+            PlayoutPreservation::KeepCurrent => {
+                self.mode == PlayoutBuildMode::Continue
+                    || matches!(
+                        kind,
+                        PlayoutScheduleKind::Scripted
+                            | PlayoutScheduleKind::Classic
+                            | PlayoutScheduleKind::Block
+                            | PlayoutScheduleKind::ExternalJson
+                    )
+                    || kind == PlayoutScheduleKind::Sequential
+            }
+            PlayoutPreservation::ReplaceCurrent => self.mode != PlayoutBuildMode::Continue,
+        };
+        if supported {
+            Ok(())
+        } else {
+            Err(SchedulingError::InvalidRebuild(
+                "the requested programme-preservation policy is not supported for this rebuild"
+                    .into(),
+            ))
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -321,6 +391,11 @@ pub trait BlockPreviewRepository: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
+    /// Explicit rebuild policy supplied by the scheduler owner after admission.
+    pub preservation: PlayoutPreservation,
+    /// Host-selected earliest handover, accounting for producer work ahead and
+    /// leading mirrors. This changes boundary selection, not the cleanup clock.
+    pub preservation_not_before: Option<DateTime<Utc>>,
     /// Production Classic loaders supply the host civil clock; pure inputs default to UTC.
     pub classic_clock: ClassicClock,
     pub channel_playout_mode: ChannelPlayoutMode,
@@ -356,6 +431,7 @@ pub struct SchedulingReferenceData {
     pub existing_program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
     pub existing_classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
     pub existing_scripted_checkpoints: Vec<PlayoutScriptedCheckpoint>,
+    pub existing_yaml_checkpoints: Vec<ersatzrs_domain::PlayoutYamlCheckpoint>,
     pub existing_fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
@@ -755,6 +831,10 @@ pub struct SchedulingResult {
     /// Storage revision captured before loading build inputs. Production hosts
     /// attach this guard; publication checks it before any persisted mutation.
     pub publication_guard: Option<PlayoutPublicationGuard>,
+    /// Process-local deadline for replacing the future after a retained
+    /// programme. Production accounts for the request clock, elapsed build time,
+    /// producer prefetch and mirror offsets; storage refuses expired candidates.
+    pub publication_deadline: Option<std::time::Instant>,
     pub clear_items: bool,
     /// Classic Refresh keeps the already-built prefix through this checkpoint.
     pub retain_through: Option<DateTime<Utc>>,
@@ -773,6 +853,8 @@ pub struct SchedulingResult {
     pub classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
     /// Scripted source state at every retained and generated item boundary.
     pub scripted_checkpoints: Vec<PlayoutScriptedCheckpoint>,
+    /// YAML instruction and source state at complete programme boundaries.
+    pub yaml_checkpoints: Vec<ersatzrs_domain::PlayoutYamlCheckpoint>,
     /// Runtime-resolved SQL sources, published atomically with their timeline.
     pub scripted_sources: Vec<ScriptedSourceDependency>,
     /// Fill-group enumerator state produced by Classic scheduling.
@@ -838,13 +920,20 @@ pub trait PlayoutSchedulingEngine {
 pub struct ExternalJsonSchedulingEngine;
 
 impl PlayoutSchedulingEngine for ExternalJsonSchedulingEngine {
-    fn schedule(&self, _request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+    fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        if request.reference_data.preservation != PlayoutPreservation::EngineDefault {
+            return Err(SchedulingError::InvalidRebuild(
+                "explicit external JSON adaptation requires the snapshot publication worker".into(),
+            ));
+        }
         Ok(SchedulingResult::default())
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SchedulingError {
+    #[error("invalid playout rebuild: {0}")]
+    InvalidRebuild(String),
     #[error("playout build cancelled")]
     Cancelled,
     #[error("cannot reposition Block item {0}: scheduling history is missing")]

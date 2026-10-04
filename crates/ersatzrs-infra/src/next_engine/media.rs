@@ -387,6 +387,7 @@ impl MediaRelay {
             media_file_id: file_id,
             path: row.try_get("Path").repository()?,
             remote_stream_id: None,
+            candidate_overlays: None,
         };
         let plex = self
             .plex

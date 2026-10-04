@@ -73,6 +73,43 @@ audio/video PIDs are part of the change:
 scripts/e2e/tsduck-playback-gate.sh gate
 ```
 
+### Check programme-preserving producer handover
+
+The opt-in maintenance tests run the actual native HLS worker or Next host
+against a disposable database and generated one-minute media. Configure the
+usual `FFMPEG_PATH` and `FFPROBE_PATH` overrides for FFmpeg 9. The Next case also
+requires `ERSATZRS_NEXT_TEST_BIN` pointing to the channel executable.
+
+```bash
+./run.sh test -p ersatzrs-infra --test maintenance -E 'test(producer_handover::native_)' --run-ignored ignored-only --success-output immediate --test-threads 1
+./run.sh test -p ersatzrs-infra --test maintenance -E 'test(producer_handover::next_)' --run-ignored ignored-only --success-output immediate --test-threads 1
+```
+
+Both producers have cases for Classic, Scripted, Block and YAML schedules. Those cases
+replace collection membership while a producer is running. A native External
+JSON case instead adopts a real document through the build worker, changes its
+media paths and checks that accepted programme clocks remain unchanged without
+materialized PlayoutItem rows. All cases request programme-preserving Refresh.
+Each collects actual HLS segments and
+decodes the retained blue programmes, the replacement's complete two-second
+white opening and green body, plus the old/new audio frequencies. Producer
+identity must remain unchanged and cancellation must release its registry entry.
+Next cases first cancel a real preserving build after its manifest replacement,
+assert restoration of the accepted file and complete scheduling state, then retry
+through the same worker before decoding the transition. Audio assertions use
+the first and last PCM windows from a complete decode rather than input-side
+MPEG-TS seeking. The raw PCM output uses a sample-derived clock so transport
+timestamp resets in concatenated HLS segments do not confuse its output muxer;
+this frequency assertion does not verify transport timing. Block fixtures bind
+a private callback listener for future gap descriptors and assert that playback
+never requests those gaps during the captured programme transition.
+A failed decode assertion retains its synthetic fixture for
+inspection and prints its temporary location.
+Allow several minutes for real-clock buffering and handover. These tests cover
+producer output and that injected cancellation recovery, not HTTP delivery,
+Windows acceptance or recovery from persistent storage failure; run the separate
+gates for those claims.
+
 ### Check Next HTTP playback
 
 Set `ETV_NEXT_FOLDER` to the directory containing `ersatztv-channel` (include

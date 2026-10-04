@@ -44,6 +44,26 @@ pub const KIND_EXTERNAL_JSON: i32 = 20;
 // Shared value types
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum PlayoutPendingWork {
+    #[default]
+    None,
+    Pending,
+    Failed,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_core::repositories::PlayoutPendingWork> for PlayoutPendingWork {
+    fn from(work: ersatzrs_core::repositories::PlayoutPendingWork) -> Self {
+        use ersatzrs_core::repositories::PlayoutPendingWork as Work;
+        match work {
+            Work::None => Self::None,
+            Work::Pending => Self::Pending,
+            Work::Failed => Self::Failed,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlayoutListRow {
     pub id: i64,
@@ -59,6 +79,11 @@ pub struct PlayoutListRow {
     pub build_success: Option<bool>,
     /// Build failure message, shown as a warning alert when the row is selected.
     pub build_message: Option<String>,
+    /// Explicit UTC timestamp; an unknown historic success remains absent.
+    pub last_successful_build: Option<String>,
+    pub source_revision: Option<i64>,
+    pub refresh_work: PlayoutPendingWork,
+    pub source_work: PlayoutPendingWork,
 }
 
 /// Result returned immediately after an operator requests one or more playout
@@ -443,6 +468,12 @@ pub async fn list_playouts(
                     daily_rebuild_minutes: row.daily_rebuild_minutes,
                     build_success: row.build_success,
                     build_message: row.build_message,
+                    last_successful_build: row
+                        .last_successful_build
+                        .map(|time| time.format("%Y-%m-%d %H:%M:%S UTC").to_string()),
+                    source_revision: row.source_revision,
+                    refresh_work: row.refresh_work.into(),
+                    source_work: row.source_work.into(),
                 })
                 .collect()
         })
@@ -603,6 +634,39 @@ pub async fn reset_playout(
         state
             .application
             .reset_playout(id)
+            .await
+            .map_err(ServerFnError::new)?,
+    )
+}
+
+/// Queue an explicit operator choice; only persisted state selects the scheduler.
+#[server(prefix = "/admin-api")]
+pub async fn rebuild_playout(
+    id: i64,
+    mode: String,
+    preserve_current: bool,
+) -> Result<PlayoutBuildEnqueueResult, ServerFnError> {
+    use crate::admin::i18n::{tr, TextKey};
+    use crate::host::state::AppState;
+    use ersatzrs_app::commands::RequestPlayoutBuild;
+    use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutPreservation};
+
+    let mode = match mode.as_str() {
+        "continue" => PlayoutBuildMode::Continue,
+        "refresh" => PlayoutBuildMode::Refresh,
+        "reset" => PlayoutBuildMode::Reset,
+        _ => return Err(ServerFnError::new(tr(TextKey::InvalidPlayoutBuildMode))),
+    };
+    let preservation = if preserve_current {
+        PlayoutPreservation::KeepCurrent
+    } else {
+        PlayoutPreservation::ReplaceCurrent
+    };
+    let state = expect_context::<AppState>();
+    map_build_outcome(
+        state
+            .application
+            .rebuild_playout(RequestPlayoutBuild::new(id, mode).with_preservation(preservation))
             .await
             .map_err(ServerFnError::new)?,
     )
@@ -2986,6 +3050,116 @@ mod legacy_sql_regressions {
             );
             assert_eq!(reset_all_playout_mode(KIND_EXTERNAL_JSON), None);
             assert_eq!(reset_all_playout_mode(0), None);
+        }
+
+        #[tokio::test]
+        async fn explicit_rebuild_server_action_preserves_operator_choice_and_rejects_invalid_input(
+        ) {
+            use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutPreservation};
+            let (state, mut receiver) = playout_queue_state();
+            sqlx::query(r#"CREATE TABLE "Playout" ("Id" INTEGER PRIMARY KEY, "ScheduleKind" INTEGER NOT NULL)"#)
+                .execute(&state.pool).await.unwrap();
+            let owner = Owner::new();
+            owner.with(|| provide_context(state.clone()));
+            owner.set();
+            for kind in [
+                KIND_CLASSIC,
+                KIND_BLOCK,
+                KIND_SEQUENTIAL,
+                KIND_SCRIPTED,
+                KIND_EXTERNAL_JSON,
+            ] {
+                sqlx::query("INSERT INTO Playout (Id, ScheduleKind) VALUES (?, ?)")
+                    .bind(kind)
+                    .bind(kind)
+                    .execute(&state.pool)
+                    .await
+                    .unwrap();
+                for (wire, mode) in [
+                    ("continue", PlayoutBuildMode::Continue),
+                    ("refresh", PlayoutBuildMode::Refresh),
+                    ("reset", PlayoutBuildMode::Reset),
+                ] {
+                    for keep in [true, false] {
+                        let result = rebuild_playout(i64::from(kind), wire.into(), keep).await;
+                        if mode == PlayoutBuildMode::Continue && !keep {
+                            assert!(result.is_err());
+                            assert!(receiver.try_recv().is_err());
+                            continue;
+                        }
+                        assert_eq!(result.unwrap().accepted, 1);
+                        let (request, guard) = state
+                            .application
+                            .operations()
+                            .playout_activity()
+                            .start_guard(receiver.try_recv().unwrap());
+                        assert_eq!(request.mode, mode);
+                        assert_eq!(
+                            request.preservation,
+                            if keep {
+                                PlayoutPreservation::KeepCurrent
+                            } else {
+                                PlayoutPreservation::ReplaceCurrent
+                            }
+                        );
+                        drop(guard);
+                    }
+                }
+            }
+            for (id, mode) in [(1, "unknown"), (0, "refresh"), (999, "reset")] {
+                assert!(rebuild_playout(id, mode.into(), true).await.is_err());
+                assert!(receiver.try_recv().is_err());
+            }
+        }
+
+        #[tokio::test]
+        async fn explicit_rebuild_validates_stored_kind_and_preservation_before_admission() {
+            use ersatzrs_app::commands::{RequestPlayoutBuild, RequestPlayoutBuildOutcome};
+            use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutPreservation};
+
+            let (state, mut receiver) = playout_queue_state();
+            sqlx::query(r#"CREATE TABLE "Playout" ("Id" INTEGER PRIMARY KEY, "ScheduleKind" INTEGER NOT NULL)"#)
+                .execute(&state.pool).await.unwrap();
+            sqlx::query(r#"INSERT INTO "Playout" ("Id", "ScheduleKind") VALUES (9, 'Scripted')"#)
+                .execute(&state.pool)
+                .await
+                .unwrap();
+            let command = RequestPlayoutBuild::new(9, PlayoutBuildMode::Refresh)
+                .with_preservation(PlayoutPreservation::KeepCurrent);
+            assert_eq!(
+                state.application.rebuild_playout(command).await.unwrap(),
+                RequestPlayoutBuildOutcome::Accepted
+            );
+            let (request, guard) = state
+                .application
+                .operations()
+                .playout_activity()
+                .start_guard(receiver.try_recv().unwrap());
+            assert_eq!(request.mode, PlayoutBuildMode::Refresh);
+            assert_eq!(request.preservation, PlayoutPreservation::KeepCurrent);
+            drop(guard);
+            for invalid in [
+                RequestPlayoutBuild::new(9, PlayoutBuildMode::Refresh),
+                RequestPlayoutBuild::new(9, PlayoutBuildMode::Continue)
+                    .with_preservation(PlayoutPreservation::ReplaceCurrent),
+                RequestPlayoutBuild::new(999, PlayoutBuildMode::Refresh)
+                    .with_preservation(PlayoutPreservation::KeepCurrent),
+            ] {
+                assert!(state.application.rebuild_playout(invalid).await.is_err());
+                assert!(receiver.try_recv().is_err());
+                assert!(state
+                    .application
+                    .operations()
+                    .playout_activity()
+                    .queued_playouts()
+                    .is_empty());
+            }
+            sqlx::query(r#"UPDATE "Playout" SET "ScheduleKind" = 0 WHERE "Id" = 9"#)
+                .execute(&state.pool)
+                .await
+                .unwrap();
+            assert!(state.application.rebuild_playout(command).await.is_err());
+            assert!(receiver.try_recv().is_err());
         }
 
         #[tokio::test]

@@ -150,10 +150,7 @@ async fn classic_rerun_collection_identities_survive_restart_and_reject_legacy_s
     let refused = run_requested_playout_build(
         &pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, PlayoutBuildMode::Refresh),
         start,
         None,
     )

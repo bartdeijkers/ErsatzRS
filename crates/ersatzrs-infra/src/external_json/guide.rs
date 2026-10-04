@@ -53,10 +53,8 @@ async fn load_filtered_items(
     for row in rows {
         let playout_id: i64 = row.try_get("Id")?;
         let path: Option<String> = row.try_get("ScheduleFile")?;
-        let Some(path) = path.filter(|path| !path.trim().is_empty()) else {
-            continue;
-        };
-        let schedule = super::load(std::path::Path::new(&path))
+        let path = path.unwrap_or_default();
+        let schedule = super::snapshot::load_playout(pool, playout_id, std::path::Path::new(&path))
             .await
             .map_err(|error| {
                 tracing::warn!(playout_id, %error, "Unable to read external JSON guide");
