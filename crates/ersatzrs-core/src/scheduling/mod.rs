@@ -31,9 +31,9 @@ pub use block::{
 pub use classic::{
     audit_classic_refresh_checkpoint, audit_classic_runtime_state,
     classic_playlist_continuation_is_complete, classic_schedule_item_key,
-    classic_schedule_item_policy_key, truncate_to_persisted_precision, ClassicClock,
-    ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
-    ClassicSchedulingEngine,
+    classic_schedule_item_policy_key, truncate_to_persisted_precision, validate_classic_timeline,
+    ClassicClock, ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit,
+    ClassicSchedulingContext, ClassicSchedulingEngine,
 };
 pub use scripted::{
     validate_scripted_checkpoint, validate_scripted_timeline, ScriptedContentResolver,

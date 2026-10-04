@@ -6,10 +6,10 @@ Accepted (2026-10-02) — implements the maintainer-approved finding 06 solution
 
 ## Implementation
 
-Partial — finding 06 has local feature acceptance in `v111-findings-06`.
-The linked Classic deferred-save and midnight-overlap debt remains owned by
-findings 11/12; this ADR cannot claim complete implementation until that work
-is accepted. Stored-kind admission, transactional refresh-intent publication
+Partial — findings 06 and 12 have local feature acceptance in
+`v111-findings-06` and `v111-findings-12`. The linked Classic deferred-save debt
+remains owned by finding 11; this ADR cannot claim complete implementation
+until that work is accepted. Stored-kind admission, transactional refresh-intent publication
 fencing, versioned Scripted boundary checkpoints, runtime source capture and
 bounded successful-scan comparison/admission are implemented locally. Candidate
 source revalidation fences unprocessed receipts and concurrent managed-library
@@ -128,6 +128,18 @@ from publishing after a newer source change.
 
 ## Decision
 
+- Classic publication validates the exact retained and candidate intervals
+  under the SQLite writer before changing rows, history or continuation state.
+  Reject overlap, backward/non-positive intervals, a cut retention boundary,
+  foreign candidate ownership and an anchor before the emitted finish. Include
+  filler intervals and persisted timestamp precision. Forward gaps remain valid.
+  Health also reports invalid existing Classic timelines.
+  A programme-preserving Classic Refresh may repair overlap confined to the
+  future it will replace, provided the entire retained prefix is unambiguous
+  and its complete source checkpoint is valid. This deliberately strengthens
+  upstream publication safety. It cannot repair an ambiguous current programme
+  by guessing which film to retain; that request fails without changing state.
+  Live repair remains a separately authorized operation.
 - Resolve scheduler identity from persisted playout state. Expose explicit,
   validated rebuild modes and a preserve-current-programme option; an implicit
   kind-to-mode mapping is retained only for the compatible legacy action.

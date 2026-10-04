@@ -525,6 +525,52 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await expect(page.getByText(/\d+ playout rebuilds queued/, { exact: true })).toBeVisible();
   });
 
+  test('localizes rejected Classic overlaps and preserves the published preview', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    const seed = seedDetailedPlayoutWorkflow(testInfo);
+    sqlite(`INSERT OR REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
+      VALUES (${seed.classicPlayoutId}, datetime('now', '+1 hour'), 0,
+      'invalid playout rebuild: Classic timeline contains overlapping, backward or non-positive intervals');`);
+    const snapshot = () => sqlite(`SELECT group_concat("Id" || ':' || "Start" || ':' || "Finish") FROM "PlayoutItem" WHERE "PlayoutId" = ${seed.classicPlayoutId};`);
+    const before = snapshot();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (/failed_to_cast_marker_node|hydration.*mismatch/i.test(message.text())) errors.push(message.text());
+    });
+    for (const [language, message] of [
+      ['en-us', 'The schedule contains overlapping or invalid programme times. Published programmes remain unchanged. Review the schedule and rebuild from a verified programme boundary.'],
+      ['nl', 'De planning bevat overlappende of ongeldige programmatijden. Gepubliceerde programma’s blijven ongewijzigd. Controleer de planning en bouw opnieuw op vanaf een gecontroleerde programmagrens.'],
+    ]) {
+      await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'false', language }, maxRedirects: 0 });
+      const noJs = await browser.newContext({ javaScriptEnabled: false, baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409' });
+      try {
+        const fallback = await noJs.newPage();
+        await fallback.goto('/playouts');
+        await expect(fallback.locator('[data-playout-failures]')).toContainText(message);
+      } finally { await noJs.close(); }
+      await page.goto('/playouts');
+      await waitForHydration(page);
+      const activity = page.locator('[data-playout-failures]');
+      await expect(activity).toContainText(message);
+      await activity.getByRole('button', { name: new RegExp(seed.classicChannelName) }).click();
+      const detail = page.getByRole('heading', { name: language === 'nl' ? 'Uitzenddetails' : 'Playout Detail', exact: true }).locator('..');
+      await expect(detail).toContainText(message);
+      await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 844 });
+      const navigation = page.getByRole('button', { name: language === 'nl' ? 'Navigatie omschakelen' : 'Toggle navigation' });
+      if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+      await expect(navigation).toHaveAttribute('aria-expanded', 'false');
+      await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
+      await detail.scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`classic-overlap-${language}.png`), fullPage: true, animations: 'disabled' });
+      expect(snapshot()).toBe(before);
+    }
+    expect(errors).toEqual([]);
+    await forceEnglish(page);
+  });
+
   test('shows rejected scripted builds in Activity and preserves the published preview', async ({ page, browser }, testInfo) => {
     test.setTimeout(90_000);
     const seed = seedDetailedPlayoutWorkflow(testInfo);

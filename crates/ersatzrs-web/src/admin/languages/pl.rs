@@ -334,7 +334,7 @@ impl LanguageStrings for PolishStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Stan klasycznej emisji nie pozwala na bezpieczne odświeżenie dla: {playouts}. Użyj Resetuj emisję dla starego lub niezgodnego stanu; Odśwież nigdy nie usuwa okna bez pełnego punktu kontrolnego."
+            "Stan klasycznej emisji wymaga uwagi dla: {playouts}. Sprawdź godziny programów i zapisany stan kontynuacji. Odświeżenie wymaga zweryfikowanej granicy programu i pełnego punktu kontrolnego; niebezpieczne żądania pozostawiają opublikowane programy bez zmian."
         )
     }
 
@@ -2185,6 +2185,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::QueuePlayoutBuild => "Dodaj aktualizację do kolejki",
         TextKey::InvalidPlayoutBuildMode => "Wybierz prawidłowe działanie dla planu emisji.",
         TextKey::PlayoutContinueStateIncomplete => "Zapisany stan kontynuacji jest niekompletny. Zachowano istniejący plan. Wybierz odświeżenie lub odbudowanie z zachowaniem programu.",
+        TextKey::PlayoutClassicTimelineRejected => "Plan zawiera nakładające się lub nieprawidłowe godziny programów. Opublikowane programy pozostają bez zmian. Sprawdź plan i odbuduj go od zweryfikowanej granicy programu.",
         TextKey::ScheduleReset => "Zaplanuj odbudowę",
         TextKey::SchedulePlayoutReset => "Zaplanuj odbudowę planu emisji",
         TextKey::EditExternalJsonFile => "Edytuj zewnętrzny plik JSON",

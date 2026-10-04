@@ -75,15 +75,17 @@ and running playback. Full workspace closeout, strict lint, HTTP smokes,
 TSDuck, dependency audit and final matched Leptos bundle checks pass.
 Canonical acceptance and platform limits live in v111-findings-06 and ADR 0110.
 Native Windows held-handle testing and packaged/platform release acceptance are
-not claimed. After the separate solution commit and findings reread, address
-finding 12 midnight-overlap validation and Continue/restart/filler proof before
-finding 11 deferred Classic save; retain all other authorized findings.
+not claimed. Finding 12 is also locally accepted: Classic overlap rejection,
+verified-prefix repair, full midnight Continue/restart/filler evidence, Health
+and localized browser guidance. Canonical acceptance lives in v111-findings-12.
+After its separate solution commit and findings reread, address finding 11
+deferred Classic save; retain all other authorized findings.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
 variable refresh semantics, Motion phase and native alpha throughput. New
 Findings 11 (deferred Classic save) and 12 (midnight overlap) have separate
 milestones; reuse the existing finding 06 day-seam correction where applicable.
-Findings 03, 06, 07, 08 and 10 are locally accepted. Finding 10 adds persisted-tail
+Findings 03, 06, 07, 08, 10 and 12 are locally accepted. Finding 10 adds persisted-tail
 Scripted continuation, atomic timeline validation and observable rejection, with
 SQL restart/automatic-build, Health, browser and native playback proof. Finding 03 adds shared television
 discovery, MPEG/TS recognition and bounded localized folder preview with native

@@ -50,6 +50,22 @@ pub fn classic_schedule_item_key(item: &ProgramScheduleItem) -> String {
     item_key(item)
 }
 
+/// Validate Classic broadcast intervals in emission order, including filler.
+/// Forward gaps are valid; overlapping and non-positive intervals are not.
+///
+/// # Errors
+/// Refuses a timeline that cannot be published or continued safely.
+pub fn validate_classic_timeline(
+    intervals: impl IntoIterator<Item = (DateTime<Utc>, DateTime<Utc>)>,
+    earliest_start: Option<DateTime<Utc>>,
+) -> Result<(), SchedulingError> {
+    super::validate_scripted_timeline(intervals, earliest_start).map_err(|_| {
+        SchedulingError::InvalidRebuild(
+            "Classic timeline contains overlapping, backward or non-positive intervals; correct the schedule or rebuild from a verified checkpoint. The published timeline was not changed".into(),
+        )
+    })
+}
+
 /// Summary of persisted Classic enumerator state compared with the active schedule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ClassicRuntimeStateAudit {
@@ -142,7 +158,7 @@ pub fn audit_classic_refresh_checkpoint(
     let start_day = midnight(start);
     let next_day = start_day + Duration::days(1);
     let programme_seam = if reference_data.preservation == PlayoutPreservation::KeepCurrent {
-        match super::programme::preserved_programme_finish(
+        match super::programme::preserved_programme_finish_for_repair(
             &reference_data.existing_items,
             super::programme::preservation_clock(reference_data, start),
         ) {
@@ -514,7 +530,7 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
             }
         }
         if keep_current {
-            request.start = super::programme::preserved_programme_finish(
+            request.start = super::programme::preserved_programme_finish_for_repair(
                 &request.reference_data.existing_items,
                 super::programme::preservation_clock(&request.reference_data, requested_start),
             )?;
@@ -541,7 +557,15 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         if let Some(error) = context.error.take() {
             return Err(error);
         }
-        Ok(context.into_result())
+        let result = context.into_result();
+        validate_classic_timeline(
+            result
+                .added_items
+                .iter()
+                .map(|item| (item.start, item.finish)),
+            result.retain_through,
+        )?;
+        Ok(result)
     }
 }
 

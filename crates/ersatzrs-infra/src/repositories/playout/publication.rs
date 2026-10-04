@@ -138,6 +138,10 @@ impl SqlitePlayoutRepository {
             )
             .await?;
         }
+        if playout.schedule_kind == ersatzrs_domain::PlayoutScheduleKind::Classic {
+            classic_timeline::validate_publication(&mut tx, playout.id, result, max_playout_offset)
+                .await?;
+        }
         if result.clear_items {
             if let Some(seam) = result.retain_through {
                 let cutoff = result.remove_before.unwrap_or(seam)

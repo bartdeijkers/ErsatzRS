@@ -950,6 +950,11 @@ fn playout_failure_message(row: &PlayoutListRow) -> String {
                 "Classic Continue refused because saved continuation state is incomplete.",
             ) {
                 tr(TextKey::PlayoutContinueStateIncomplete).to_owned()
+            } else if row.schedule_kind == KIND_CLASSIC
+                && (message.contains("Classic timeline")
+                    || message.contains("overlapping or non-positive intervals"))
+            {
+                tr(TextKey::PlayoutClassicTimelineRejected).to_owned()
             } else {
                 message.clone()
             });

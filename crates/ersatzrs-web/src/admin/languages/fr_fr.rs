@@ -338,7 +338,7 @@ impl LanguageStrings for FrenchStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "L’état de la diffusion classique ne permet pas une actualisation sûre pour : {playouts}. Utilisez Réinitialiser la diffusion pour un état ancien ou incompatible ; l’actualisation n’efface jamais une fenêtre sans point de contrôle complet."
+            "L’état de la diffusion classique nécessite une vérification pour : {playouts}. Vérifiez les horaires des programmes et l’état de continuation enregistré. Actualiser nécessite une limite de programme vérifiée et un point de contrôle complet ; les demandes non sûres laissent les programmes publiés inchangés."
         )
     }
 
@@ -1458,6 +1458,7 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::QueuePlayoutBuild => "Mettre la mise à jour en file",
         TextKey::InvalidPlayoutBuildMode => "Choisissez une action de diffusion valide.",
         TextKey::PlayoutContinueStateIncomplete => "L’état de reprise enregistré est incomplet. La grille existante a été conservée. Choisissez Actualiser ou Réinitialiser en conservant le programme.",
+        TextKey::PlayoutClassicTimelineRejected => "La grille contient des horaires de programmes qui se chevauchent ou sont invalides. Les programmes publiés restent inchangés. Vérifiez la grille et reconstruisez-la à partir d’une limite de programme vérifiée.",
         TextKey::ScheduleReset => "Planifier la réinitialisation",
         TextKey::SchedulePlayoutReset => "Planifier la réinitialisation de la diffusion",
         TextKey::EditExternalJsonFile => "Modifier le fichier JSON externe",

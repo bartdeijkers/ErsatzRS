@@ -334,7 +334,7 @@ impl LanguageStrings for PortugueseBrazilStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "O estado da programação clássica não permite uma atualização segura para: {playouts}. Use Redefinir programação para estados antigos ou incompatíveis; Atualizar nunca limpa uma janela sem um ponto de controle completo."
+            "O estado da programação clássica requer atenção para: {playouts}. Verifique os horários dos programas e o estado de continuação salvo. Atualizar exige um limite de programa verificado e um ponto de controle completo; solicitações inseguras mantêm os programas publicados inalterados."
         )
     }
 
@@ -2196,6 +2196,7 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::QueuePlayoutBuild => "Enfileirar atualização",
         TextKey::InvalidPlayoutBuildMode => "Escolha uma ação válida para a programação.",
         TextKey::PlayoutContinueStateIncomplete => "O estado de continuação salvo está incompleto. A programação existente foi mantida. Escolha Atualizar ou Reconstruir mantendo o programa.",
+        TextKey::PlayoutClassicTimelineRejected => "A programação contém horários de programas sobrepostos ou inválidos. Os programas publicados permanecem inalterados. Revise a programação e reconstrua-a a partir de um limite de programa verificado.",
         TextKey::ScheduleReset => "Agendar reconstrução",
         TextKey::SchedulePlayoutReset => "Agendar reconstrução da programação",
         TextKey::EditExternalJsonFile => "Editar arquivo JSON externo",

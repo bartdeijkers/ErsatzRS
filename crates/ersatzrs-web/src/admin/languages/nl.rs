@@ -338,7 +338,7 @@ impl LanguageStrings for DutchStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "De status van de klassieke uitzending kan niet veilig worden vernieuwd voor: {playouts}. Gebruik Uitzending opnieuw instellen voor verouderde of incompatibele status; Vernieuwen wist nooit een venster zonder een volledig controlepunt."
+            "De klassieke uitzending vereist aandacht voor: {playouts}. Controleer de programmatijden en de opgeslagen voortzettingsstatus. Vernieuwen vereist een gecontroleerde programmagrens en een volledig controlepunt; onveilige verzoeken laten gepubliceerde programma’s ongewijzigd."
         )
     }
 
@@ -2176,6 +2176,7 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::QueuePlayoutBuild => "Bijwerken inplannen",
         TextKey::InvalidPlayoutBuildMode => "Kies een geldige actie voor de uitzending.",
         TextKey::PlayoutContinueStateIncomplete => "De opgeslagen voortgang is onvolledig. De bestaande planning is behouden. Kies Vernieuwen of Opnieuw opbouwen met programmabehoud.",
+        TextKey::PlayoutClassicTimelineRejected => "De planning bevat overlappende of ongeldige programmatijden. Gepubliceerde programma’s blijven ongewijzigd. Controleer de planning en bouw opnieuw op vanaf een gecontroleerde programmagrens.",
         TextKey::ScheduleReset => "Heropbouw plannen",
         TextKey::SchedulePlayoutReset => "Heropbouw van uitzending plannen",
         TextKey::EditExternalJsonFile => "Extern JSON-bestand bewerken",

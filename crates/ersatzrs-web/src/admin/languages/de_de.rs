@@ -348,7 +348,7 @@ impl LanguageStrings for GermanStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Der Zustand des klassischen Playouts kann nicht sicher aktualisiert werden für: {playouts}. Verwenden Sie Playout zurücksetzen für veraltete oder inkompatible Zustände; Aktualisieren löscht nie ein Fenster ohne vollständigen Prüfpunkt."
+            "Der klassische Playout-Zustand erfordert Aufmerksamkeit für: {playouts}. Prüfen Sie die Programmzeiten und den gespeicherten Fortsetzungszustand. Aktualisieren erfordert eine verifizierte Programmgrenze und einen vollständigen Prüfpunkt; unsichere Anfragen lassen veröffentlichte Programme unverändert."
         )
     }
 
@@ -1482,6 +1482,7 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::QueuePlayoutBuild => "Aktualisierung einreihen",
         TextKey::InvalidPlayoutBuildMode => "Wählen Sie eine gültige Playout-Aktion.",
         TextKey::PlayoutContinueStateIncomplete => "Der gespeicherte Fortsetzungsstand ist unvollständig. Der bestehende Zeitplan bleibt erhalten. Wählen Sie Aktualisieren oder Zurücksetzen mit Beibehaltung des Programms.",
+        TextKey::PlayoutClassicTimelineRejected => "Der Zeitplan enthält überlappende oder ungültige Programmzeiten. Veröffentlichte Programme bleiben unverändert. Prüfen Sie den Zeitplan und erstellen Sie ihn ab einer überprüften Programmgrenze neu.",
         TextKey::ScheduleReset => "Sendeplan zurücksetzen",
         TextKey::SchedulePlayoutReset => "Playout-Zurücksetzung planen",
         TextKey::EditExternalJsonFile => "Externe JSON-Datei bearbeiten",

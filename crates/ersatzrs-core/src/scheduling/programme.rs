@@ -47,8 +47,52 @@ pub(super) fn preserved_programme_finish(
     items: &[PlayoutItem],
     now: DateTime<Utc>,
 ) -> Result<DateTime<Utc>, SchedulingError> {
+    resolve_programme_finish(items, now, false)
+}
+
+/// Classic may replace an invalid future after a verified retained boundary.
+/// Ambiguity inside the retained programme or prefix still refuses repair.
+pub(super) fn preserved_programme_finish_for_repair(
+    items: &[PlayoutItem],
+    now: DateTime<Utc>,
+) -> Result<DateTime<Utc>, SchedulingError> {
+    resolve_programme_finish(items, now, true)
+}
+
+fn resolve_programme_finish(
+    items: &[PlayoutItem],
+    now: DateTime<Utc>,
+    repair_future: bool,
+) -> Result<DateTime<Utc>, SchedulingError> {
     let mut items = items.iter().collect::<Vec<_>>();
     items.sort_by_key(|item| (item.start, item.finish));
+    let index = items
+        .iter()
+        .position(|item| item.start <= now && item.finish > now);
+    let mut finish = now;
+    if let Some(index) = index {
+        let current = items[index];
+        finish = current
+            .finish
+            .max(current.guide_finish.unwrap_or(current.finish));
+        for item in &items[index + 1..] {
+            if item.start < finish
+                || (item.start == finish
+                    && current.guide_group > 0
+                    && item.guide_group == current.guide_group
+                    && item.guide_start == current.guide_start)
+            {
+                finish = finish
+                    .max(item.finish)
+                    .max(item.guide_finish.unwrap_or(item.finish));
+            } else {
+                break;
+            }
+        }
+    }
+    if repair_future {
+        items.retain(|item| item.start < finish);
+    }
     if items.iter().any(|item| item.finish <= item.start)
         || items.windows(2).any(|pair| pair[1].start < pair[0].finish)
     {
@@ -56,30 +100,6 @@ pub(super) fn preserved_programme_finish(
             "cannot preserve a programme in a timeline with overlapping or non-positive intervals"
                 .into(),
         ));
-    }
-    let Some(index) = items
-        .iter()
-        .position(|item| item.start <= now && item.finish > now)
-    else {
-        return Ok(now);
-    };
-    let current = items[index];
-    let mut finish = current
-        .finish
-        .max(current.guide_finish.unwrap_or(current.finish));
-    for item in &items[index + 1..] {
-        if item.start < finish
-            || (item.start == finish
-                && current.guide_group > 0
-                && item.guide_group == current.guide_group
-                && item.guide_start == current.guide_start)
-        {
-            finish = finish
-                .max(item.finish)
-                .max(item.guide_finish.unwrap_or(item.finish));
-        } else {
-            break;
-        }
     }
     Ok(finish)
 }

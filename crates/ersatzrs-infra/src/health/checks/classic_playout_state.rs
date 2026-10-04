@@ -3,7 +3,9 @@ use super::super::{
     Result, Row,
 };
 use chrono::{Duration, Utc};
-use ersatzrs_core::scheduling::{audit_classic_refresh_checkpoint, PlayoutPreservation};
+use ersatzrs_core::scheduling::{
+    audit_classic_refresh_checkpoint, validate_classic_timeline, PlayoutPreservation,
+};
 use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::maintenance::classic_runtime_state_is_complete;
@@ -76,7 +78,18 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
             } else {
                 true
             };
-            if runtime_complete && refresh_audit.is_complete() && preservation_ready {
+            let mut intervals = reference_data
+                .existing_items
+                .iter()
+                .map(|item| (item.start, item.finish))
+                .collect::<Vec<_>>();
+            intervals.sort_unstable();
+            let timeline_ready = validate_classic_timeline(intervals, None).is_ok();
+            if runtime_complete
+                && refresh_audit.is_complete()
+                && preservation_ready
+                && timeline_ready
+            {
                 continue;
             }
 
@@ -101,7 +114,7 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
             self.title(),
             HealthCheckStatus::Fail,
             format!(
-                "Classic playout state is not safe to Refresh or preserve the current programme for: {}. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.",
+                "Classic playout state needs attention for: {}. Check programme times and saved continuation state. Refresh requires a verified programme boundary and complete checkpoint; unsafe requests leave published programmes unchanged.",
                 invalid.join(", ")
             ),
             format!("{} Classic playout state error(s)", invalid.len()),

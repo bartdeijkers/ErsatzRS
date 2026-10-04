@@ -21,6 +21,7 @@ use sqlx::{Pool, Row, Transaction};
 use super::common::upsert_sql;
 mod publication;
 pub use publication::PendingPlayoutBuild;
+mod classic_timeline;
 mod scripted_checkpoints;
 mod scripted_timeline;
 mod yaml_checkpoints;

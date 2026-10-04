@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reject overlapping, backward or non-positive Classic programme timelines
+  before publication, including unsafe Continue boundaries and anchors. Report
+  existing overlaps in Health and show localized rejection guidance. Allow a
+  verified programme-preserving Refresh to repair an invalid future while
+  retaining current programmes, guide settings and consumed history; refuse
+  ambiguous retained programmes without changing published state.
+
 - Offer explicit Extend, Refresh and Reset playout actions with programme
   preservation enabled by default. Validate the stored scheduler kind, retain
   complete programmes beyond producer buffering and leading mirrors, and restore

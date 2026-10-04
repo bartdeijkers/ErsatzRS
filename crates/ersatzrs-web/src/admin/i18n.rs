@@ -2046,6 +2046,7 @@ pub enum TextKey {
     QueuePlayoutBuild,
     InvalidPlayoutBuildMode,
     PlayoutContinueStateIncomplete,
+    PlayoutClassicTimelineRejected,
     ScheduleReset,
     SchedulePlayoutReset,
     EditExternalJsonFile,
@@ -4096,6 +4097,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::QueuePlayoutBuild,
     TextKey::InvalidPlayoutBuildMode,
     TextKey::PlayoutContinueStateIncomplete,
+    TextKey::PlayoutClassicTimelineRejected,
     TextKey::ScheduleReset,
     TextKey::SchedulePlayoutReset,
     TextKey::EditExternalJsonFile,
@@ -4668,9 +4670,9 @@ const SCAN_REFRESH_STATE_TITLE: &str = "Scan Refresh State";
 const ARTWORK_CARDINALITY_TITLE: &str = "Artwork Cardinality";
 const HLS_LIVE_DELIVERY_TITLE: &str = "HLS Live Delivery";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
-const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
-    "Classic playout state is not safe to Refresh for: ";
-const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str = ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str = "Classic playout state needs attention for: ";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str = ". Check programme times and saved continuation state. Refresh requires a verified programme boundary and complete checkpoint; unsafe requests leave published programmes unchanged.";
+const CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX: &str = ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
 const SCAN_REFRESH_STATE_MESSAGE_PREFIX: &str = "Scan refresh state needs attention: ";
 const SCAN_REFRESH_UNRESOLVED_RESOLUTION_SEPARATOR: &str = " unresolved impact resolution(s), ";
 const SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR: &str = " stale impact resolution(s), ";
@@ -5081,9 +5083,11 @@ pub fn health_check_message_text(
         return text(language, TextKey::AddonDerivedMetadataLimited).to_owned();
     }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
-        if let Some(playouts) = displayed_message
-            .strip_prefix(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX)
-            .and_then(|value| value.strip_suffix(CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX))
+        if let Some(playouts) = [
+            (CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX, CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX),
+            ("Classic playout state is not safe to Refresh for: ", CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX),
+            ("Classic playout state is not safe to Refresh or preserve the current programme for: ", CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX),
+        ].into_iter().find_map(|(prefix, suffix)| displayed_message.strip_prefix(prefix)?.strip_suffix(suffix))
         {
             return languages_for(language).classic_playout_state_message(playouts);
         }
@@ -5737,21 +5741,26 @@ mod tests {
 
     #[test]
     fn classic_playout_health_text_is_localized_for_every_language() {
-        let message = "Classic playout state is not safe to Refresh for: 50 - Health. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
-        for definition in crate::admin::languages::LANGUAGES {
-            let language = UiLanguage::from_config(definition.code);
-            let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
-            let localized = health_check_message_text(
-                language,
-                CLASSIC_PLAYOUT_STATE_TITLE,
-                message,
-                "1 Classic playout state error(s)",
-            );
-            assert!(!title.trim().is_empty());
-            assert!(localized.contains("50 - Health"));
-            if definition.code != UiLanguage::English.code() {
-                assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
-                assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
+        for message in [
+            format!("{CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX}50 - Health{CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX}"),
+            format!("Classic playout state is not safe to Refresh for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
+            format!("Classic playout state is not safe to Refresh or preserve the current programme for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
+        ] {
+            for definition in crate::admin::languages::LANGUAGES {
+                let language = UiLanguage::from_config(definition.code);
+                let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
+                let localized = health_check_message_text(
+                    language,
+                    CLASSIC_PLAYOUT_STATE_TITLE,
+                    &message,
+                    "1 Classic playout state error(s)",
+                );
+                assert!(!title.trim().is_empty());
+                assert!(localized.contains("50 - Health"));
+                if definition.code != UiLanguage::English.code() {
+                    assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
+                    assert!(!localized.starts_with("Classic playout state"));
+                }
             }
         }
     }

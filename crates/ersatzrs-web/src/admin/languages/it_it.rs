@@ -344,7 +344,7 @@ impl LanguageStrings for ItalianStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Lo stato della riproduzione classica non consente un aggiornamento sicuro per: {playouts}. Usa Reimposta riproduzione per stati precedenti o incompatibili; Aggiorna non cancella mai una finestra senza un checkpoint completo."
+            "Lo stato del playout classico richiede attenzione per: {playouts}. Controlla gli orari dei programmi e lo stato di continuazione salvato. Aggiornare richiede un confine di programma verificato e un punto di controllo completo; le richieste non sicure lasciano invariati i programmi pubblicati."
         )
     }
 
@@ -1468,6 +1468,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::QueuePlayoutBuild => "Accoda aggiornamento",
         TextKey::InvalidPlayoutBuildMode => "Scegli un’azione valida per il playout.",
         TextKey::PlayoutContinueStateIncomplete => "Lo stato di continuazione salvato è incompleto. La programmazione esistente è stata mantenuta. Scegli Aggiorna o Ripristina mantenendo il programma.",
+        TextKey::PlayoutClassicTimelineRejected => "La pianificazione contiene orari dei programmi sovrapposti o non validi. I programmi pubblicati restano invariati. Controlla la pianificazione e ricostruiscila da un confine di programma verificato.",
         TextKey::ScheduleReset => "Ripristino programma",
         TextKey::SchedulePlayoutReset => "Pianifica il ripristino del playout",
         TextKey::EditExternalJsonFile => "Modifica file JSON esterno",

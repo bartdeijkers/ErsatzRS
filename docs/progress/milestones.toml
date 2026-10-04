@@ -14722,7 +14722,7 @@ as source evidence of configuration consumption, not deferred-junction acceptanc
 id = 'v111-findings-12'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Prevent Classic programme overlap across midnight and restart'
-status = 'Not started'
+status = 'Complete'
 feature = 'classic-scheduling'
 depends_on = []
 acceptance = """
@@ -14735,9 +14735,45 @@ guide, history and anchors when repairing an affected timeline; reject unsafe
 repair without mutating existing state. No live repair or release is included.
 """
 evidence = """
-The released Windows timeline contains programmes starting at UTC midnight while
-the preceding full film still runs. Exact released-source inspection identifies
-a plausible backward cursor clamp, distinct from Scripted finding 10. Finding 06
-already contains a local Classic day-seam correction and focused evidence; audit
-and reuse it before additional edits. Full finding 12 acceptance is not claimed.
+Source audit: upstream 960421e8 PlayoutModeSchedulerOne advances to the maximum
+emitted finish; PlayoutBuilder starts the next daily pass at the saved anchor.
+Finding 06 (8e97ad80) already preserves that complete finish. This slice adds
+Classic core and transactional publication validation for retained/candidate
+intervals, persisted precision, ownership, anchors and cut retention boundaries.
+The initial real-repository regression accepted an overlapping midnight film;
+the correction rejects it before changing items, guide fields, history or state.
+A verified retained prefix may repair only its invalid future. Ambiguous current
+programmes refuse both preserving Refresh and Reset without mutation.
+
+All 130 focused Classic/preservation/SQLite tests pass
+(dfdf8d75-8d38-4d4a-ae0e-cb693ad00c19). Eight fresh-process Continue
+cases cover Chronological, Shuffle, Random and RandomRotation, with/without
+chapter pre-roll, post-roll padding and fallback. Full programme/filler/guide/
+track rows and anchors match uninterrupted generation. Repair retains original
+current row identities and consumed history. Health reports existing overlap
+and recovers after a valid rebuild.
+
+Workspace closeout: 3,804 nextest tests plus all doctests pass
+(c55b3d73-9cb0-4157-a622-c9e7471e402c). A shared gap-projection
+fixture deliberately offering overlapping input now uses Block, preserving its
+original gap/rollback assertions; Classic rejection has its own regression.
+All 25 final i18n/Classic Health checks pass after the last text correction
+(dd9b8ed7-0c6a-472c-9c5a-305a41b37739). All nine cultures translate
+the new rejection and accurate Health guidance, including both older persisted
+Health message forms. Strict core/infra/web all-target Clippy passes.
+
+UI map: /playouts -> PlayoutsPage -> PlayoutsIsland; existing build-message
+projection -> Activity and detail text, including SSR/no-JS failure output.
+No controls, route, server-function contract or DOM shape changes. Matched
+Chromium/Firefox tests pass for English/Dutch, hydrated/no-JS messages, unchanged
+published preview rows, zero page/hydration errors and 390-pixel mobile width.
+Screenshots were visually inspected after waiting for menu-animation completion.
+The actual final SSR binary and JS/WASM assets pass verify-web-bundle.
+
+Native HTTP smoke passes for legacy/hybrid MPEG-TS and segmenter HLS; private
+producer callbacks remain inaccessible publicly. Finding-06 Next HTTP, decoded
+handover and TSDuck evidence is reused for unchanged producer/transport code.
+No live timeline repair, native Windows package acceptance, CI or release is
+claimed. Final progress, architecture, hydration and format checks pass; the
+parity gate reuses the successful tests and strict Clippy above.
 """

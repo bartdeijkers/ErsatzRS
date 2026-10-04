@@ -342,7 +342,7 @@ impl LanguageStrings for EnglishStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Classic playout state is not safe to Refresh for: {playouts}. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint."
+            "Classic playout state needs attention for: {playouts}. Check programme times and saved continuation state. Refresh requires a verified programme boundary and complete checkpoint; unsafe requests leave published programmes unchanged."
         )
     }
 
@@ -1437,6 +1437,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::QueuePlayoutBuild => "Queue update",
         TextKey::InvalidPlayoutBuildMode => "Choose a valid playout action.",
         TextKey::PlayoutContinueStateIncomplete => "The saved continuation state is incomplete. The existing timeline was kept. Choose Refresh or Reset with programme preservation.",
+        TextKey::PlayoutClassicTimelineRejected => "The schedule contains overlapping or invalid programme times. Published programmes remain unchanged. Review the schedule and rebuild from a verified programme boundary.",
         TextKey::ScheduleReset => "Schedule Reset",
         TextKey::SchedulePlayoutReset => "Schedule Playout Reset",
         TextKey::EditExternalJsonFile => "Edit External Json File",
