@@ -29,15 +29,15 @@ pub struct GraphicsElement {
     /// Path to the source YAML the element was imported from, if any.
     pub path: Option<String>,
     pub z_index: i32,
-    /// Static opacity, 0–100 (`Image`/`Text`).
+    /// Static opacity, 0–100 (`Image`/`Text`/`Motion`).
     pub opacity_percent: Option<i32>,
-    /// Dynamic opacity expression (`Image`/`Text`).
+    /// Dynamic opacity expression (`Image`/`Text`/`Motion`).
     pub opacity_expression: Option<String>,
     /// Anchor location (`Image`/`Text`/`Motion`); reuses the watermark location enum.
     pub location: WatermarkLocation,
     pub horizontal_margin_percent: Option<f64>,
     pub vertical_margin_percent: Option<f64>,
-    /// Absolute placement override (`Image`).
+    /// Absolute placement override in output pixels; both coordinates are required.
     pub location_x: Option<f64>,
     pub location_y: Option<f64>,
     pub scale: bool,

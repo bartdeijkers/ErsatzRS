@@ -1427,11 +1427,15 @@ fn build_transcode_pipeline(
         has_watermark_overlay,
         has_image_subtitle_burn,
     ) || request.graphics_overlays.iter().any(|graphics| {
-        // overlay_vaapi has no timeline enable support. Compose timed and
-        // compact alpha animations in software, then use the existing upload
+        // The current VAAPI overlay emits no position or timeline options.
+        // Compose positioned/timed graphics and compact alpha in software,
+        // then use the existing upload
         // path for VAAPI encoding; never silently discard a programme gate.
         matches!(graphics, GraphicsPipelineOverlay::NativeImage { input, overlay, .. }
             if overlay.enable.is_some()
+                || overlay.horizontal_margin_percent != 0.0
+                || overlay.vertical_margin_percent != 0.0
+                || overlay.place_within_source_content
                 || overlay.opacity_expression.as_deref().is_some_and(|expression|
                     crate::filter::watermark_opacity_boolean_gate(expression, &request.watermark_opacity_clock).is_some())
                 || input.input_options.windows(2).any(|options| options == ["-f", "concat"]))

@@ -281,3 +281,100 @@ for (const culture of ['en-us', 'nl']) for (const js of [true, false]) {
     } finally { await context.close(); }
   });
 }
+
+function rgbaPreview(png: Buffer): Buffer {
+  return execFileSync(ffmpeg, ['-v', 'error', '-f', 'image2pipe', '-i', 'pipe:0',
+    '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'],
+  { input: png, timeout: 15000 });
+}
+
+for (const culture of ['en-us', 'nl']) for (const js of [true, false]) {
+  test(`finding 09b Motion pixels YAML and independent real typography (${culture}, ${js ? 'hydrated' : 'no JS'})`, async ({ browser }, info) => {
+    test.skip(!database, 'Requires a disposable migrated database'); test.setTimeout(180000);
+    const context = await browser.newContext({ javaScriptEnabled: js, baseURL: process.env.E2E_BASE_URL });
+    const page = await context.newPage(); const fixture = assets(info);
+    const errors: string[] = []; page.on('pageerror', error => {
+      if (!(error.name === 'AbortError' && /operation was aborted/i.test(error.message))) errors.push(error.message);
+    });
+    try {
+      await language(page, culture); await page.goto('/graphics-elements/add'); if (js) await hydrated(page);
+      let form = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+      await openFields(form, 'Motion', js);
+      await expect(form).toContainText(culture === 'nl' ? 'wanneer zowel X als Y is ingevuld' : 'when both X and Y are set');
+      await field(form, 'name', `Motion pixels ${info.project.name} ${culture} ${js}`);
+      await field(form, 'video_path', fixture.motion);
+      await form.locator('[name="location"]').selectOption('BottomRight');
+      await field(form, 'horizontal_margin_percent', '25'); await field(form, 'vertical_margin_percent', '10');
+      await form.locator('[name="place_within_source_content"]').selectOption('true');
+      await field(form, 'location_x', '31'); await field(form, 'location_y', '43');
+      await field(form, 'opacity_expression', '0.5 + 0 * content_seconds');
+      await field(form, 'start_seconds', '1.25'); await field(form, 'hold_seconds', '2.5');
+      await form.locator('[name="end_behavior"]').selectOption('Hold');
+      await field(form, 'preview_width', '320'); await field(form, 'preview_height', '180');
+      await field(form, 'preview_seek', '1');
+      await preview(page, form, info, `motion-before-${culture}-${js}`, false);
+      const assertPlacement = async (label: string) => {
+        await field(form, 'preview_seek', '2');
+        const png = await preview(page, form, info, label); const rgba = rgbaPreview(png);
+        let mismatch = '';
+        for (let y = 0; y < 180; y++) for (let x = 0; x < 320; x++) {
+          const expected = x >= 31 && x < 159 && y >= 43 && y < 123 ? 64 : 0;
+          if (Math.abs(rgba[(y * 320 + x) * 4 + 3] - expected) > 1 && !mismatch) mismatch = `${label} alpha at ${x},${y}: ${rgba[(y * 320 + x) * 4 + 3]} != ${expected}`;
+        }
+        expect(mismatch).toBe(''); return png;
+      };
+      const originalPng = await assertPlacement(`motion-position-${culture}-${js}`);
+      await field(form, 'preview_seek', '5'); await preview(page, form, info, `motion-held-${culture}-${js}`);
+      await field(form, 'preview_seek', '5.75'); await preview(page, form, info, `motion-expired-${culture}-${js}`, false);
+      await form.locator('[data-save-graphics-element]').click(); await expect(page).toHaveURL(/\/graphics-elements\/\d+\?saved=1$/);
+      const id = Number(new URL(page.url()).pathname.split('/').at(-1));
+      const query = `SELECT "LocationX"||'|'||"LocationY"||'|'||"OpacityExpression"||'|'||"Config" FROM "GraphicsElement" WHERE "Id"=${id};`;
+      const original = sql(query); expect(original).toContain('31.0|43.0|0.5 + 0 * content_seconds|');
+      form = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+      const download = page.waitForEvent('download'); await form.locator('[data-graphics-yaml-export]').click();
+      const yaml = readFileSync((await (await download).path())!, 'utf8');
+      for (const part of ['location_x: 31.0', 'location_y: 43.0', 'opacity_expression: 0.5 + 0 * content_seconds', 'start_seconds: 1.25', 'hold_seconds: 2.5', 'end_behavior: Hold']) expect(yaml).toContain(part);
+      await field(form, 'yaml', yaml); await form.locator('[data-graphics-yaml-import]').click();
+      await expect(page).toHaveURL(new RegExp(`/graphics-elements/${id}\\?saved=1$`)); expect(sql(query)).toBe(original);
+      form = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+      await openFields(form, 'Motion', js); await field(form, 'preview_width', '320'); await field(form, 'preview_height', '180');
+      expect(await assertPlacement(`motion-roundtrip-${culture}-${js}`)).toEqual(originalPng);
+
+      let headingId = 0; let headingConfig = '';
+      for (const role of ['heading', 'title']) {
+        await page.goto('/graphics-elements/add'); if (js) await hydrated(page);
+        form = page.locator('[data-graphics-element-editor]').filter({ visible: true }); await openFields(form, 'Text', js);
+        await field(form, 'name', `${role} ${info.project.name} ${culture} ${js}`);
+        await form.locator('[name="renderer"]').selectOption('drawtext');
+        await field(form, 'font_file', role === 'heading' ? 'assets/fonts/Sen.ttf' : 'assets/fonts/Roboto-Regular.ttf');
+        await field(form, 'font_size', role === 'heading' ? '28' : '18'); await field(form, 'text_color', 'white');
+        await field(form, 'location_x', '10'); await field(form, 'location_y', role === 'heading' ? '10' : '50');
+        await field(form, 'width_percent', '10'); await form.locator('[name="text_fit"]').selectOption('Wrap');
+        await field(form, 'text', role === 'heading' ? 'NEXT UP' : '{{ LongTitle }}');
+        await field(form, 'preview_width', '320'); await field(form, 'preview_height', '180');
+        await field(form, 'preview_variables', JSON.stringify({ LongTitle: 'Épisode très long — naïve façade & Straße\nActual scheduled title' }));
+        await expect(form).toContainText(culture === 'nl' ? 'Drawtext gebruikt het gekozen echte lettertype op vaste grootte' : 'Drawtext uses the selected real font at a fixed size');
+        const first = await preview(page, form, info, `${role}-real-font-${culture}-${js}`);
+        if (role === 'title') {
+          const rgba = rgbaPreview(first); const xs: number[] = [], ys: number[] = [];
+          for (let y = 0; y < 180; y++) for (let x = 0; x < 320; x++) if (rgba[(y * 320 + x) * 4 + 3] > 0) { xs.push(x); ys.push(y); }
+          expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(32);
+          expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(25);
+          await field(form, 'width_percent', '5'); expect(await preview(page, form, info, `title-fixed-size-${culture}-${js}`)).toEqual(first);
+          await field(form, 'font_file', 'assets/fonts/Sen.ttf');
+          expect(await preview(page, form, info, `title-Sen-${culture}-${js}`)).not.toEqual(first);
+          await field(form, 'font_file', 'assets/fonts/Roboto-Regular.ttf');
+          expect(sql(`SELECT "Config" FROM "GraphicsElement" WHERE "Id"=${headingId};`)).toBe(headingConfig);
+        }
+        await form.locator('[data-save-graphics-element]').click(); await expect(page).toHaveURL(/\/graphics-elements\/\d+\?saved=1$/);
+        const textId = Number(new URL(page.url()).pathname.split('/').at(-1));
+        if (role === 'heading') { headingId = textId; headingConfig = sql(`SELECT "Config" FROM "GraphicsElement" WHERE "Id"=${textId};`); }
+        else {
+          expect(textId).not.toBe(headingId); expect(sql(`SELECT "Config" FROM "GraphicsElement" WHERE "Id"=${headingId};`)).toBe(headingConfig);
+          expect(sql(`SELECT "Config" FROM "GraphicsElement" WHERE "Id"=${textId};`)).toContain('assets/fonts/Roboto-Regular.ttf');
+        }
+      }
+      expect(errors).toEqual([]);
+    } finally { await context.close(); }
+  });
+}

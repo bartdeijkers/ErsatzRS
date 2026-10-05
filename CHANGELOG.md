@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Apply exact Image/Motion pixel placement in native rendering and previews,
+  overriding anchors, percentage margins and source-content padding. Preserve
+  authored Motion alpha/timing through YAML and show long titles with independent
+  heading/title fonts and truthful fixed-size text behavior.
+
 - Play compact animated JPEG XL graphics with decoded duration, bounded native
   repeat and programme-relative phase seeking. Preserve source alpha, evaluate
   constant and Boolean opacity without per-pixel processing, and apply Motion

@@ -11,7 +11,8 @@ the imported source YAML need not remain available. UCU-04 row 53 owns focused
 import/persistence/render and decoded four-kind graphics evidence.
 Findings 02/04/05/09 are locally accepted (ADRs 0114/0112/0111/0115): five-kind
 YAML/native preview, programme context and JPEG XL repeat/phase/alpha. Exact
-Motion placement and final roundtrip/typography acceptance remain finding 09b.
+Motion pixel placement and final YAML/alpha/timing/independent real-font
+typography have local acceptance under finding 09b and ADR 0114.
 '''
 
 [[debt]]
@@ -26,8 +27,8 @@ evidence = 'Locally accepted 2026-10-05; v111-findings-04 owns source-reviewed g
 id = 'v111-channel-graphics-integration'
 description = 'Complete typed graphics authoring and actual-engine preview, accurate font/fit behavior, programme-aware metadata, animated JPEG XL input semantics and Motion YAML alpha/location roundtrips.'
 discovered = '2026-10-02'
-resolved = false
-evidence = 'Findings 02, 04, 05 and 09 are locally accepted under their owning milestones and ADRs 0114/0112/0111/0115, including typed native authoring, programme context and actual animated JPEG XL native-graph throughput. Milestone v111-findings-09b retains exact Motion location, faithful YAML/alpha/timing and independent real-font typography acceptance. Deployment remains separate; generic decoder or offline glyph evidence does not close the remaining authoring acceptance.'
+resolved = true
+evidence = 'All channel graphics findings are locally accepted under v111-findings-02/-04/-05/-09/-09b and ADRs 0114/0112/0111/0115. Finding 09b closes actual Motion pixel placement, alpha/timing/YAML and independent long-title real-font acceptance: 16 focused/native checks, eight complete browser cases, 3868 native tests plus doctests, strict lint, native smoke, 87 TSDuck checks, parity and final paired-bundle verification. Owning milestones retain canonical evidence and platform limits. Windows deployment and publication remain separate; latest-upstream catch-up triage is not claimed complete.'
 
 [[debt]]
 id = 'ucu09-row146-next-graphics-canvas'
@@ -59,7 +60,7 @@ description = 'Finding 02: typed all-kind editor, validated YAML and actual nati
 discovered = '2026-10-02'
 resolved = true
 adr = '0114'
-evidence = 'Locally accepted 2026-10-05; v111-findings-02 owns 79 focused checks, 3863 native tests plus doctests, strict lint, 18 complete matched-build Chromium/Firefox cases, all-culture hydrated/no-JS controls, actual fonts/historical PNGs, native smoke, 87 TSDuck checks and bundle/contract proof. Animated JPEG XL and Motion alpha/phase now have separate accepted finding 09 evidence; exact placement and final roundtrip/typography acceptance remain finding 09b.'
+evidence = 'Locally accepted 2026-10-05; v111-findings-02 owns 79 focused checks, 3863 native tests plus doctests, strict lint, 18 complete matched-build Chromium/Firefox cases, all-culture hydrated/no-JS controls, actual fonts/historical PNGs, native smoke, 87 TSDuck checks and bundle/contract proof. Animated JPEG XL and Motion alpha/phase now have separate accepted finding 09 evidence; exact placement and final roundtrip/typography are separately accepted under finding 09b.'
 
 [[debt]]
 id = 'v111-compact-jpeg-xl-playback'
@@ -67,4 +68,4 @@ description = 'Finding 09 requires typed animated JPEG XL, bounded native repeat
 discovered = '2026-10-05'
 resolved = true
 adr = '0115'
-evidence = 'Locally accepted 2026-10-05; v111-findings-09 retains complete acceptance. Thirteen focused checks prove native RGBA, loop/seek and Motion/VFR/24 fps timing with reviewed native/VAAPI snapshots. Eight actual editor cases and two real native HTTP/public IPTV cases prove MIME/YAML/PNG, source phase, repeated alpha/disappearance and 200 decoded frames per route. Full native producer capacity is 1.09-1.12x with three 1080p carriers active; public pacing and cold startup latency are recorded separately. All final integrated gates pass: 3867 native tests plus doctests, strict workspace all-target lint, native smoke, 87 TSDuck checks, progress/architecture/hydration parity and final paired Leptos build/HTTP bundle verification. Canonical logs live in test-results/finding09; exact Motion placement/typography remains finding 09b.'
+evidence = 'Locally accepted 2026-10-05; v111-findings-09 retains complete acceptance. Thirteen focused checks prove native RGBA, loop/seek and Motion/VFR/24 fps timing with reviewed native/VAAPI snapshots. Eight actual editor cases and two real native HTTP/public IPTV cases prove MIME/YAML/PNG, source phase, repeated alpha/disappearance and 200 decoded frames per route. Full native producer capacity is 1.09-1.12x with three 1080p carriers active; public pacing and cold startup latency are recorded separately. All final integrated gates pass: 3867 native tests plus doctests, strict workspace all-target lint, native smoke, 87 TSDuck checks, progress/architecture/hydration parity and final paired Leptos build/HTTP bundle verification. Canonical logs live in test-results/finding09; exact Motion placement/typography is separately accepted under finding 09b.'

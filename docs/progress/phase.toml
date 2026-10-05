@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Implement all current channel setup findings for v1.1.1 with one verified commit per solution'
+current_focus = 'All channel setup findings locally accepted for v1.1.1; release and deployment gates remain separate'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -101,8 +101,15 @@ v111-findings-02 and ADR 0114. Finding 09 is locally accepted: decoded JPEG XL
 repeat/phase/alpha, actual native producer throughput, eight editor cases and
 two real producer/public IPTV cases pass alongside complete native, transport,
 parity and paired-bundle gates. Canonical acceptance lives in v111-findings-09
-and ADR 0115. Next: reread the entire findings document, then finish finding 09b
-with its complete acceptance and separate commit.
+and ADR 0115. Finding 09b is locally accepted: native exact Image/Motion pixel
+placement, preserved alpha/timing/YAML and independent real-font heading/title
+rendering, eight complete browser cases, 3868 native tests plus doctests and all
+transport/parity/final paired-bundle gates pass. Canonical acceptance lives in
+v111-findings-09b and ADR 0114. All twelve numbered findings plus the separate
+09b solution are locally accepted, each with its own commit and changelog entry.
+Re-read the complete findings document after the final commit; any new additions
+retain the agreed per-solution delivery rule. Deployment, CI and release gates
+remain separate.
 No publication is authorized.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
@@ -117,8 +124,8 @@ discovery, MPEG/TS recognition and bounded localized folder preview with native
 rescan/identity and JS/no-JS browser proof. Findings 07/08 retain shared-decoder
 and owned preview lifecycle proof, including native/Next playback and cleanup.
 Selection, typed authoring/preview, programme metadata and animated JPEG XL
-are locally accepted; exact Motion placement and final roundtrip/typography
-acceptance remain open under finding 09b.
+are locally accepted, including exact Motion placement and final
+roundtrip/typography under finding 09b.
 Finding 09 also includes separate Motion YAML/alpha/location and native
 text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
 selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are

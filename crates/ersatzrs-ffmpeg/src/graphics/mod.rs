@@ -510,7 +510,7 @@ pub fn graphics_motion_overlay(
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return None;
     };
-    Some(graphics_native_overlay(
+    let mut overlay = graphics_native_overlay(
         element,
         Some(graphics_motion_enable_expression(
             config,
@@ -518,7 +518,22 @@ pub fn graphics_motion_overlay(
             context.stream_offset.as_secs_f64(),
         )),
         config.end_behavior == MotionEndBehavior::Disappear,
-    ))
+    );
+    apply_native_pixel_location(&mut overlay, element, context.frame_size);
+    Some(overlay)
+}
+
+fn apply_native_pixel_location(
+    overlay: &mut WatermarkOverlay,
+    element: &GraphicsElement,
+    frame_size: FrameSize,
+) {
+    if let (Some(x), Some(y)) = (element.location_x, element.location_y) {
+        overlay.location = ersatzrs_domain::WatermarkLocation::TopLeft;
+        overlay.horizontal_margin_percent = x * 100.0 / f64::from(frame_size.width);
+        overlay.vertical_margin_percent = y * 100.0 / f64::from(frame_size.height);
+        overlay.place_within_source_content = false;
+    }
 }
 
 fn graphics_subtitle_overlay(element: &GraphicsElement) -> WatermarkOverlay {
@@ -602,10 +617,12 @@ fn render_image_graphics_element(
             id: element.id,
             field: "image",
         })?;
-    let overlay = graphics_image_overlay(element).ok_or(GraphicsTemplateError::MissingField {
-        id: element.id,
-        field: "image overlay",
-    })?;
+    let mut overlay =
+        graphics_image_overlay(element).ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "image overlay",
+        })?;
+    apply_native_pixel_location(&mut overlay, element, context.frame_size);
     Ok(Some(RenderedGraphicsElement::NativeImage {
         id: element.id,
         z_index: element.z_index,

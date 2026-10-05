@@ -404,3 +404,103 @@ fn jpeg_xl_numbered_delivery_retains_image2_options() {
             .is_empty());
     }
 }
+
+fn placed_graphics_request(root: &Path, image: bool) -> CanvasRenderRequest {
+    let source = root
+        .join("animated plate's.jxl")
+        .to_string_lossy()
+        .into_owned();
+    let element = GraphicsElement {
+        id: 9,
+        name: "Explicit pixel plate".into(),
+        kind: if image {
+            GraphicsElementKind::Image
+        } else {
+            GraphicsElementKind::Motion
+        },
+        location: WatermarkLocation::BottomRight,
+        location_x: Some(31.0),
+        location_y: Some(43.0),
+        horizontal_margin_percent: Some(25.0),
+        vertical_margin_percent: Some(10.0),
+        place_within_source_content: true,
+        opacity_expression: Some("0.5 + 0 * content_seconds".into()),
+        config: if image {
+            GraphicsElementConfig::Image(ImageGraphicsConfig {
+                image: Some(source),
+            })
+        } else {
+            GraphicsElementConfig::Motion(MotionGraphicsConfig {
+                video_path: Some(source),
+                start_seconds: Some(0.2),
+                hold_seconds: Some(2.0),
+                end_behavior: MotionEndBehavior::Loop,
+            })
+        },
+        ..Default::default()
+    };
+    let frame = FrameSize::new(160, 120);
+    let offset = if image { 0.4 } else { 0.6 };
+    let context = GraphicsRenderContext::new(frame, FrameSize::new(80, 80))
+        .with_stream_offset(Duration::from_secs_f64(offset))
+        .with_stream_duration(Duration::from_millis(400))
+        .with_jpeg_xl_timing(
+            9,
+            JpegXlTiming {
+                frame_count: 5,
+                duration_seconds: 1.0,
+                last_frame_seconds: 0.8,
+                frame_timestamps: vec![0.0, 0.2, 0.4, 0.6, 0.8],
+            },
+        );
+    CanvasRenderRequest {
+        resolution: frame,
+        content_size: FrameSize::new(80, 80),
+        frame_rate: FrameRate::new(5, 1).into(),
+        duration: Duration::from_millis(400),
+        opacity_clock: WatermarkOpacityClock::new(0.0, offset, Some(10.0), 0.0),
+        overlays: GraphicsTemplateRenderer::new(root)
+            .render_graphics_elements(&[element], &BTreeMap::new(), &context)
+            .unwrap()
+            .into_iter()
+            .map(ersatzrs_ffmpeg::RenderedGraphicsElement::into_pipeline_overlay)
+            .collect(),
+    }
+}
+
+#[test]
+fn native_graphics_pixel_location_command_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("animated plate's.jxl"), [0xff, 0x0a]).unwrap();
+    let commands = [true, false].map(|image| {
+        let command = build_canvas_command(placed_graphics_request(root.path(), image)).unwrap();
+        let args = normalized(&command.arguments.join(" "), root.path());
+        assert!(args.contains("overlay=x=31:y=43:format=rgb"));
+        format!("image={image}\n{args}")
+    });
+    insta::assert_snapshot!(commands.join("\n\n"));
+}
+
+#[tokio::test]
+#[ignore = "requires the exact packaged FFmpeg 9 runtime"]
+async fn native_graphics_pixel_location_preserves_decoded_alpha_and_phase() {
+    let root = tempfile::tempdir().unwrap();
+    encode_jpeg_xl_source(root.path(), "5").await;
+    for image in [true, false] {
+        let decoded = decode_canvas(root.path(), placed_graphics_request(root.path(), image)).await;
+        assert_eq!(decoded.len(), 2 * 160 * 120 * 4);
+        for (frame, expected) in decoded.chunks_exact(160 * 120 * 4).zip([64_u8, 96]) {
+            for y in 0..120 {
+                for x in 0..160 {
+                    let alpha = frame[(y * 160 + x) * 4 + 3];
+                    let inside = (31..95).contains(&x) && (43..107).contains(&y);
+                    let expected = if inside { expected } else { 0 };
+                    assert!(
+                        i16::from(alpha).abs_diff(i16::from(expected)) <= 1,
+                        "image={image} ({x},{y}) alpha {alpha} != {expected}"
+                    );
+                }
+            }
+        }
+    }
+}

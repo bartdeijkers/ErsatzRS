@@ -14849,7 +14849,7 @@ integrated v1.1.1 workspace/release closeout remains a separate program gate.
 id = 'v111-findings-09b'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Motion authoring roundtrips and truthful native text fit'
-status = 'Not started'
+status = 'Complete'
 feature = 'drawvg-graphics-engine'
 depends_on = []
 acceptance = '''
@@ -14865,11 +14865,40 @@ roundtrips, actual alpha/timing/location and long-title font rendering; localize
 controls must explain any intentionally fixed-size renderer behavior.
 '''
 evidence = '''
-Recorded from the required post-milestone reread on 2026-10-02. Implementation
-and acceptance pending; current findings contain ten numbered entries and this
-additional separate proposed solution within finding 09.
+Locally accepted 2026-10-05 after the full post-finding-09 document reread.
+Findings 02/09 retain valid typed editor, strict YAML/SQL, real-font fixed-size
+labels and native JPEG XL alpha/phase/Hold evidence. The remaining demonstrated
+native defect ignored Image/Motion absolute pixel coordinates. Shared placement
+now applies both coordinates in output pixels, overriding anchors/margins/source
+padding; the existing software-composition/upload path retains VAAPI position.
+ADR 0114 records this deliberate extension of ErsatzTV anchor-only Motion.
+Sixteen focused checks pass (8e77b4ad-2c0b-477e-b9ca-60693dab09c2), including
+native FFmpeg 9 encode/decode of every Image/Motion output alpha pixel at (31,43),
+source phase/opacity, actual JPEG XL repeat/24 fps joins, YAML/SQL persistence,
+typed editor preservation and reviewed native/VAAPI/CUDA snapshots. Canonical
+log: test-results/finding09b/focused-native.log.
+Eight complete Chromium/Firefox editor cases pass across English/Dutch and
+hydrated/no-JS clients (zero skips/failures): actual alpha/pixel bounds before
+and after unchanged YAML import, Motion start/Hold/disappearance, saved exact
+alpha/timing/location values, truthful localized placement/fixed-size labels,
+long non-ASCII programme titles with explicit line breaks and actual Roboto/Sen
+metrics. Changing width leaves fixed-size Drawtext unchanged; changing the exact
+font changes the pixels. Independent saved heading/title identities and configs
+remain unchanged while editing the other node. Native PNGs were visually reviewed.
+Canonical results: test-results/finding09b-browser/playwright-results.json and
+artifacts/ with motion-position/roundtrip/before/held/expired, heading-real-font
+and title-real-font/fixed-size/Sen PNGs. All nine geometry-help translations match
+the actual renderer. Earlier finding-02 all-culture/font validation remains valid.
+Final closeout passes 3868 native tests plus doctests (165 explicit opt-in skips;
+ecaae456-9d1e-4ed4-b28a-0c40b4ef497a), strict workspace all-target Clippy followed
+by strict web all-target Clippy for the final translation-only edits, native
+MPEG-TS/HLS smoke, all 87 TSDuck checks, progress/architecture/hydration parity,
+formatting, final paired Leptos SSR/WASM and actual HTTP bundle verification.
+Logs: test-results/finding09b/{closeout-final,clippy,clippy-web-final,smoke,tsduck,
+parity,leptos,bundle}.log. Parity reuses the complete current tests and strict lint.
+All findings solutions now have local acceptance; Windows deployment, CI, push
+and publication remain separate and are not claimed.
 '''
-
 
 [[milestone]]
 id = 'v111-findings-11'

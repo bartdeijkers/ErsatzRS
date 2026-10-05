@@ -1854,7 +1854,7 @@ fn vaapi_pipeline_burns_text_subtitle_with_download_and_upload_snapshot() {
 }
 
 #[test]
-fn vaapi_pipeline_with_native_graphics_uses_vaapi_overlay_snapshot() {
+fn vaapi_pipeline_with_positioned_native_graphics_uses_software_overlay_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request
         .graphics_overlays
