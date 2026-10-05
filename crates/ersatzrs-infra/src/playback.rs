@@ -2643,7 +2643,12 @@ async fn render_playback_graphics_overlays_inner(
                 Some(startup) => startup.child_free(variables).await??,
                 None => variables.await?,
             };
-            let element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let mut element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let subtitle = resolve_subtitle_graphics_source(&mut element, &variables, &output_dir);
+            match startup.as_deref_mut() {
+                Some(startup) => startup.child_free(subtitle).await??,
+                None => subtitle.await?,
+            }
             let render_context = graphics_render_context_with_motion_probe(
                 context,
                 &element,
@@ -2853,6 +2858,29 @@ async fn graphics_motion_probe_cancellable(
         }
         result => Ok(result),
     }
+}
+
+async fn resolve_subtitle_graphics_source(
+    element: &mut GraphicsElement,
+    variables: &serde_json::Value,
+    directory: &Path,
+) -> Result<()> {
+    let GraphicsElementConfig::Subtitle(config) = &mut element.config else {
+        return Ok(());
+    };
+    let Some(path) = config.template.as_deref() else {
+        return Ok(());
+    };
+    let source = crate::graphics_template::render_subtitle_graphics_source(path, variables).await?;
+    tokio::fs::create_dir_all(directory)
+        .await
+        .map_err(|_| graphics_startup_error("subtitle directory unavailable"))?;
+    let rendered = directory.join(format!("{}-resolved-template.ass", element.id));
+    tokio::fs::write(&rendered, source)
+        .await
+        .map_err(|_| graphics_startup_error("subtitle source unavailable"))?;
+    config.template = Some(rendered.to_string_lossy().into_owned());
+    Ok(())
 }
 
 pub(crate) fn render_graphics_element_templates(

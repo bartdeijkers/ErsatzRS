@@ -76,9 +76,11 @@ pub struct GraphicsElementListRow {
     pub renderer: Option<TextGraphicsRenderer>,
 }
 
-/// Editable fields for a Text graphics element.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Text compatibility fields plus the complete typed editor definition.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GraphicsElementForm {
+    #[serde(default)]
+    pub definition: Option<ersatzrs_domain::GraphicsElement>,
     pub id: i64,
     pub name: String,
     pub text: String,
@@ -94,6 +96,7 @@ impl Default for GraphicsElementForm {
     fn default() -> Self {
         let config = TextGraphicsConfig::default();
         Self {
+            definition: None,
             id: 0,
             name: String::new(),
             text: String::new(),
@@ -170,6 +173,7 @@ pub async fn save_graphics_element(
         }
     };
     let form = GraphicsElementForm {
+        definition: None,
         id,
         name,
         text,
@@ -288,14 +292,14 @@ async fn get_graphics_element_form_with_repository(
         Err(RepositoryError::Decode { .. }) => return Err(GraphicsElementSaveError::InvalidConfig),
         Err(error) => return Err(GraphicsElementSaveError::Storage(error)),
     };
-    if element.kind != GraphicsElementKind::Text {
-        return Err(GraphicsElementSaveError::NotText);
-    }
-    let GraphicsElementConfig::Text(config) = element.config else {
-        return Err(GraphicsElementSaveError::InvalidConfig);
+    let definition = Some(element.clone());
+    let config = match &element.config {
+        GraphicsElementConfig::Text(config) => config.clone(),
+        _ => TextGraphicsConfig::default(),
     };
 
     Ok(Some(GraphicsElementForm {
+        definition,
         id: element.id,
         name: element.name,
         text: config.text.unwrap_or_default(),
@@ -430,6 +434,7 @@ mod tests {
 
     fn drawtext_form(name: &str) -> GraphicsElementForm {
         GraphicsElementForm {
+            definition: None,
             name: name.to_owned(),
             text: "Now: {{ title }}".to_owned(),
             renderer: TextGraphicsRenderer::Drawtext,
@@ -578,6 +583,7 @@ mod tests {
             (GraphicsElementForm::default(), "name_required"),
             (
                 GraphicsElementForm {
+                    definition: None,
                     name: "Text".to_owned(),
                     ..GraphicsElementForm::default()
                 },
@@ -585,6 +591,7 @@ mod tests {
             ),
             (
                 GraphicsElementForm {
+                    definition: None,
                     refresh_interval_milliseconds: 249,
                     ..drawtext_form("Fast")
                 },
@@ -592,6 +599,7 @@ mod tests {
             ),
             (
                 GraphicsElementForm {
+                    definition: None,
                     refresh_interval_milliseconds: 60_001,
                     ..drawtext_form("Slow")
                 },
@@ -599,6 +607,7 @@ mod tests {
             ),
             (
                 GraphicsElementForm {
+                    definition: None,
                     reload_interval_frames: 0,
                     ..drawtext_form("Reload")
                 },

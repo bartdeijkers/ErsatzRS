@@ -7,6 +7,7 @@ pub mod channels;
 pub mod decos;
 pub mod ffmpeg_profiles;
 pub mod filler;
+pub mod graphics_authoring;
 pub mod graphics_elements;
 pub mod layout;
 pub mod libraries;

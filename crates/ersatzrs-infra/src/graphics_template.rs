@@ -241,6 +241,29 @@ pub fn scalar_template_variables(variables: &Value) -> BTreeMap<String, String> 
     result
 }
 
+/// Resolve ASS contents with the same strict programme-variable parser as text
+/// and paths, before the native libass renderer consumes the source.
+pub(crate) async fn render_subtitle_graphics_source(
+    path: &str,
+    variables: &Value,
+) -> Result<String> {
+    use tokio::io::AsyncReadExt as _;
+    let error = |_| RepositoryError::Decode {
+        kind: "graphics subtitle template",
+        value: "source is missing, unreadable or outside the 256 KiB limit".into(),
+    };
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(error)?
+        .take(256 * 1024 + 1);
+    let mut source = String::new();
+    file.read_to_string(&mut source).await.map_err(error)?;
+    if source.len() > 256 * 1024 {
+        return Err(error(std::io::Error::from(std::io::ErrorKind::InvalidData)));
+    }
+    render_graphics_template(&source, variables)
+}
+
 fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemplateContext) {
     root.insert(
         "Resolution".to_owned(),
@@ -473,6 +496,27 @@ async fn load_epg_template_data(
         result.push(Value::Object(item));
     }
     Ok(result)
+}
+
+/// Apply editor-only overrides after persisted occurrence overrides, as playback
+/// applies occurrence overrides after its native variable map.
+pub(crate) fn combine_variable_overrides(
+    saved: Option<&str>,
+    draft: Option<&str>,
+) -> Result<Option<String>> {
+    let mut combined = parse_variable_overrides(saved)?.unwrap_or_default();
+    if let Some(draft) = parse_variable_overrides(draft)? {
+        merge_object(&mut combined, draft);
+    }
+    if combined.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(&combined)
+        .map(Some)
+        .map_err(|_| RepositoryError::Decode {
+            kind: "graphics element variables",
+            value: "could not serialize preview overrides".into(),
+        })
 }
 
 fn parse_variable_overrides(value: Option<&str>) -> Result<Option<Map<String, Value>>> {

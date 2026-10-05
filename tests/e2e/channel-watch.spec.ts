@@ -456,6 +456,40 @@ test.describe('finding 04 programme graphics acceptance', () => {
       .toHaveText('DRAFT|EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
     await editor.locator('[data-graphics-element-text]').fill(template);
     await expect(editor.locator('[data-graphics-metadata-refresh]')).toHaveValue('5');
+    await expect(editor.locator('[name="preview_channel"]')).toHaveValue(channel.id.toString());
+    await expect(editor.locator('[name="preview_time"]')).toHaveValue('2026-04-15T12:00:26+02:00');
+    await editor.locator('[name="preview_width"]').fill('320');
+    await editor.locator('[name="preview_height"]').fill('180');
+    // Render the changing programme itself, rather than clipping both images to
+    // the identical explicit prefix at the saved 84-pixel type size.
+    await editor.locator('[data-graphics-element-text]').fill('{{ CurrentProgramme.Title | default("", true) }}');
+    await editor.locator('[name="font_size"]').fill('14');
+    const nativeOutputs: string[] = [];
+    for (const seconds of [10, 65]) {
+      await editor.locator('[name="preview_time"]').fill(new Date(anchor.getTime() + seconds * 1000).toISOString());
+      const rendered = page.waitForResponse(response => response.url().includes('/admin-api/graphics-elements/author')
+        && response.request().postData()?.includes('intent=preview') === true, { timeout: 15000 });
+      await editor.locator('[data-graphics-render-submit]').click();
+      const response = await rendered;
+      expect(response.status()).toBe(200);
+      const freshSource = (await response.text()).match(/src="(data:image\/png;base64,[^"]+)"/)?.[1];
+      expect(freshSource).toBeTruthy();
+      const image = page.frameLocator('[data-graphics-render-frame]').locator('[data-graphics-render-output]');
+      await expect(image).toHaveAttribute('src', freshSource!);
+      await expect(image).toBeVisible();
+      const source = (await image.getAttribute('src'))!;
+      const png = Buffer.from(source.split(',')[1], 'base64');
+      const pngPath = testInfo.outputPath(`historical-native-${seconds}.png`);
+      writeFileSync(pngPath, png);
+      const decoded = execFileSync(process.env.ErsatzRS_FFMPEG__PATH ?? 'ffmpeg', ['-v', 'error', '-i', pngPath, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'], { timeout: 15000 });
+      expect(decoded.length).toBe(320 * 180 * 4);
+      expect(decoded.some((value, index) => index % 4 === 3 && value > 0)).toBe(true);
+      nativeOutputs.push(source);
+    }
+    expect(nativeOutputs[0]).not.toBe(nativeOutputs[1]);
+    await editor.locator('[data-graphics-element-text]').fill(template);
+    await editor.locator('[name="font_size"]').fill('84');
+    await editor.locator('[name="preview_time"]').fill('2026-04-15T12:00:26+02:00');
     await editor.locator('[data-save-graphics-element]').click();
     await expect(page).toHaveURL(new RegExp(`/graphics-elements/${graphicId}\\?saved=1$`));
     expect(sqlite(`SELECT json_extract("Config", '$.drawtext.metadata_refresh_interval_seconds')
@@ -485,6 +519,12 @@ test.describe('finding 04 programme graphics acceptance', () => {
       await noScript.goto(`/graphics-elements/${graphicId}?preview_channel=${channel.id}&preview_time=2026-04-15T10%3A00%3A26Z`);
       await expect(noScript.locator('[data-graphics-preview-text]').filter({ visible: true }))
         .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+      const nativeEditor = noScript.locator('[data-graphics-element-editor]').filter({ visible: true });
+      await expect(nativeEditor.locator('[name="preview_channel"]')).toHaveValue(channel.id.toString());
+      await expect(nativeEditor.locator('[name="preview_time"]')).toHaveValue('2026-04-15T10:00:26Z');
+      await nativeEditor.locator('[data-save-graphics-element]').click();
+      await expect(noScript).toHaveURL(new RegExp(`/graphics-elements/${graphicId}\\?saved=1$`));
+
     } finally { await context.close(); }
     expect(programmeTimeline(channel.id + 1)).toBe(before);
     expect(errors).toEqual([]);

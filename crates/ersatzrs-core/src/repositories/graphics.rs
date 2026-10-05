@@ -24,6 +24,102 @@ pub struct GraphicsTextPreview {
     pub programme_context: serde_json::Value,
 }
 
+/// Unsaved definition rendered at an explicit programme instant.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphicsRenderPreviewRequest {
+    pub element: GraphicsElement,
+    pub channel_id: Option<EntityId>,
+    pub seek_seconds: f64,
+    pub render_time: chrono::DateTime<chrono::Utc>,
+    pub width: u32,
+    pub height: u32,
+    /// Explicit preview overrides, separate from persisted attachment variables.
+    pub variables: Option<String>,
+}
+
+/// Actual native canvas output, independent of channel delivery or producers.
+#[derive(Debug, Clone)]
+pub struct GraphicsRenderPreview {
+    pub png: Vec<u8>,
+    pub local_time: String,
+}
+
+/// Validate persisted geometry and kind-specific values before any side effect.
+///
+/// # Errors
+/// Returns a static validation code for invalid or unbounded input.
+pub fn validate_authored_graphics(element: &GraphicsElement) -> Result<()> {
+    use ersatzrs_domain::GraphicsElementConfig as C;
+    let invalid = || RepositoryError::Validation {
+        field: "graphics element",
+        message: "graphics-authoring-invalid".into(),
+    };
+    let bounded = |value: Option<f64>, minimum: f64, maximum: f64| {
+        value.is_none_or(|n| n.is_finite() && (minimum..=maximum).contains(&n))
+    };
+    if element.id < 0
+        || element.name.trim().is_empty()
+        || element.name.chars().count() > 50
+        || element.kind != element.config.kind()
+        || !(0..=256).contains(&element.epg_entries)
+        || !(-10000..=10000).contains(&element.z_index)
+        || element
+            .opacity_percent
+            .is_some_and(|n| !(0..=100).contains(&n))
+        || !bounded(element.horizontal_margin_percent, -100.0, 100.0)
+        || !bounded(element.vertical_margin_percent, -100.0, 100.0)
+        || !bounded(element.location_x, -8192.0, 8192.0)
+        || !bounded(element.location_y, -8192.0, 8192.0)
+        || !bounded(element.scale_width_percent, 0.01, 1000.0)
+        || serde_json::to_vec(element).map_err(|_| invalid())?.len() > 256 * 1024
+    {
+        return Err(invalid());
+    }
+    let required = |value: Option<&str>| -> Result<()> {
+        if value.is_none_or(|s| s.trim().is_empty() || s.len() > 64 * 1024 || s.contains('\0')) {
+            return Err(invalid());
+        }
+        Ok(())
+    };
+    match &element.config {
+        C::Image(c) => required(c.image.as_deref())?,
+        C::Subtitle(c) => required(c.template.as_deref())?,
+        C::Text(c) => {
+            required(c.text.as_deref())?;
+            if !bounded(c.width_percent, 0.01, 100.0)
+                || !(250..=60000).contains(&c.drawtext.refresh_interval_milliseconds)
+                || c.drawtext.reload_interval_frames == 0
+                || c.drawtext
+                    .metadata_refresh_interval_seconds
+                    .is_some_and(|n| n != 0 && !(5..=60).contains(&n))
+                || c.styles.len() > 32
+                || c.styles.iter().any(|s| {
+                    s.font_size
+                        .is_some_and(|n| !n.is_finite() || !(1.0..=2048.0).contains(&n))
+                })
+            {
+                return Err(invalid());
+            }
+        }
+        C::Motion(c) => {
+            required(c.video_path.as_deref())?;
+            if !bounded(c.start_seconds, 0.0, 86400.0) || !bounded(c.hold_seconds, 0.0, 86400.0) {
+                return Err(invalid());
+            }
+        }
+        C::Script(c) => {
+            required(c.command.as_deref())?;
+            if !bounded(c.start_seconds, 0.0, 86400.0)
+                || !bounded(c.duration_seconds, 0.001, 86400.0)
+                || c.args.len() > 32
+            {
+                return Err(invalid());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Parse editor overrides keyed by selected graphics-element identity.
 ///
 /// # Errors
@@ -95,6 +191,34 @@ pub trait GraphicsRepository: Send + Sync {
             "not supported by this adapter",
         ))
     }
+    async fn parse_yaml(
+        &self,
+        _kind: ersatzrs_domain::GraphicsElementKind,
+        _yaml: &str,
+    ) -> Result<GraphicsElement> {
+        Err(RepositoryError::unavailable(
+            "graphics YAML",
+            "not supported by this adapter",
+        ))
+    }
+    async fn export_yaml(&self, _element: &GraphicsElement) -> Result<String> {
+        Err(RepositoryError::unavailable(
+            "graphics YAML",
+            "not supported by this adapter",
+        ))
+    }
+    async fn validate_authoring(&self, request: &GraphicsRenderPreviewRequest) -> Result<()> {
+        validate_authored_graphics(&request.element)
+    }
+    async fn render_preview(
+        &self,
+        _request: &GraphicsRenderPreviewRequest,
+    ) -> Result<GraphicsRenderPreview> {
+        Err(RepositoryError::unavailable(
+            "graphics rendered preview",
+            "not supported by this adapter",
+        ))
+    }
     async fn list_elements(&self) -> Result<Vec<GraphicsElement>>;
     async fn get_element(&self, id: EntityId) -> Result<GraphicsElement>;
     async fn list_for_channel(&self, channel_id: EntityId) -> Result<Vec<GraphicsElement>>;
@@ -105,6 +229,39 @@ pub trait GraphicsRepository: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authored_graphics_rejects_invalid_geometry_kind_and_timing() {
+        use ersatzrs_domain::{GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig};
+        let valid = GraphicsElement {
+            name: "Valid".into(),
+            config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+                image: Some("logo.png".into()),
+            }),
+            ..Default::default()
+        };
+        assert!(validate_authored_graphics(&valid).is_ok());
+        for invalid in [
+            GraphicsElement {
+                kind: GraphicsElementKind::Text,
+                ..valid.clone()
+            },
+            GraphicsElement {
+                location_x: Some(f64::NAN),
+                ..valid.clone()
+            },
+            GraphicsElement {
+                opacity_percent: Some(101),
+                ..valid.clone()
+            },
+            GraphicsElement {
+                epg_entries: 257,
+                ..valid.clone()
+            },
+        ] {
+            assert!(validate_authored_graphics(&invalid).is_err());
+        }
+    }
 
     #[test]
     fn graphics_attachment_variables_require_selected_bounded_objects() {

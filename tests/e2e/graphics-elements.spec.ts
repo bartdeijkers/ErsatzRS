@@ -110,8 +110,6 @@ test.describe('localized graphics-elements selector and editor', () => {
     await expect(page.locator(`[data-graphics-element-row="${seed.textId}"]`)).toContainText(seed.name);
     await expect(page.locator(`[data-graphics-element-row="${seed.imageId}"]`)).toContainText('Image');
     await expect(page.locator(`[data-graphics-element-row="${seed.imageId}"] [data-graphics-element-edit]`))
-      .toHaveCount(0);
-    await expect(page.locator(`[data-graphics-element-row="${seed.imageId}"] [data-graphics-element-not-editable]`))
       .toBeVisible();
     await expect(page.getByText('Existing elements and new elements use Drawvg by default.'))
       .toBeVisible();
@@ -123,13 +121,14 @@ test.describe('localized graphics-elements selector and editor', () => {
     const editor = page.locator('[data-graphics-element-editor]');
     await expect(editor).toBeVisible();
     await expect(page.locator('[data-graphics-element-renderer-select]')).toHaveValue('drawvg');
-    await expect(page.locator('[data-drawtext-controls]')).toBeHidden();
-    await expect(page.locator('[data-drawtext-refresh-period]')).toBeDisabled();
+    await expect(page.getByText('Drawvg uses built-in bitmap glyphs')).toBeVisible();
+    await expect(page.locator('[data-drawtext-refresh-period]')).toBeEnabled();
 
     const addedName = `DTX ${testInfo.project.name} added`;
     sqlite(`DELETE FROM "GraphicsElement" WHERE "Name" = '${addedName}';`);
     await page.locator('[data-graphics-element-name]').fill(addedName);
     await page.locator('[data-graphics-element-text]').fill('Static {{ title }}');
+    await page.locator('[name="preview_variables"]').fill('{"title":"Actual preview title"}');
     await page.locator('[data-save-graphics-element]').click();
     await expect(page).toHaveURL(/\/graphics-elements\/\d+\?saved=1$/);
     await expect.poll(() => sqlite(`
@@ -140,16 +139,17 @@ FROM "GraphicsElement" WHERE "Name" = '${addedName}';
     await page.goto(`/graphics-elements/${seed.textId}`);
     await waitForHydration(page);
     await page.locator('[data-graphics-element-renderer-select]').selectOption('drawtext');
-    await expect(page.locator('[data-drawtext-controls]')).toBeVisible();
+    await expect(page.locator('[data-drawtext-font-file]')).toBeVisible();
     await expect(page.locator('[data-drawtext-refresh-period]')).toBeEnabled();
     await expect(page.locator('[data-drawtext-font-file]')).toHaveValue('');
-    await expect(page.getByText('Optional. Leave empty to use the packaged Roboto font fallback.'))
+    await expect(page.getByText('With neither selection, packaged Roboto is used.'))
       .toBeVisible();
 
     await page.locator('[data-graphics-element-name]').fill(`${seed.name} edited`);
     await page.locator('[data-graphics-element-text]').fill('Now: {{ title }}');
     await page.locator('[data-drawtext-refresh-period]').fill('750');
     await page.locator('[data-drawtext-reload-frames]').fill('3');
+    await page.locator('[name="preview_variables"]').fill('{"title":"Actual preview title"}');
     await page.locator('[data-save-graphics-element]').click();
     await expect(page).toHaveURL(new RegExp(`/graphics-elements/${seed.textId}\\?saved=1$`));
 
@@ -186,6 +186,7 @@ FROM "GraphicsElement" WHERE "Id" = ${seed.textId};
       await editor.locator('[data-graphics-element-name]').fill(name);
       await editor.locator('[data-graphics-element-text]').fill('No script {{ title }}');
       await editor.locator('[data-graphics-element-renderer-select]').selectOption('drawtext');
+      await editor.locator('[name="preview_variables"]').fill('{"title":"Actual preview title"}');
       await editor.locator('[data-save-graphics-element]').click();
       await expect(page).toHaveURL(/\/graphics-elements\/\d+\?saved=1$/);
 
@@ -202,9 +203,10 @@ FROM "GraphicsElement" WHERE "Id" = ${id};
       editor = page.locator(
         '[data-graphics-element-noscript] [data-graphics-element-editor]',
       );
-      await expect(editor.locator('[data-drawtext-controls]')).toBeVisible();
+      await expect(editor.locator('[data-drawtext-font-file]')).toBeVisible();
       await editor.locator('[data-drawtext-refresh-period]').fill('1250');
       await editor.locator('[data-drawtext-reload-frames]').fill('4');
+      await editor.locator('[name="preview_variables"]').fill('{"title":"Actual preview title"}');
       await editor.locator('[data-save-graphics-element]').click();
       await expect(page).toHaveURL(new RegExp(`/graphics-elements/${id}\\?saved=1$`));
       expect(sqlite(`

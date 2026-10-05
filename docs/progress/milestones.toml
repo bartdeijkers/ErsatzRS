@@ -13432,7 +13432,7 @@ diff checks pass. Packaged/platform deployment and publication are not claimed.
 id = 'v111-findings-02'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Full graphics authoring and actual-engine preview'
-status = 'Not started'
+status = 'Complete'
 feature = 'drawvg-graphics-engine'
 depends_on = []
 acceptance = '''
@@ -13450,15 +13450,58 @@ behavior to be implemented or explicitly exposed. Cover long titles and non-ASCI
 text with real font files; do not hide font substitution or add another renderer.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
-The addendum reports that the deployed form still creates Text only; drawvg Text
-uses bitmap glyphs without the supplied font, while drawtext accepts a font file
-but does not enforce Width/TextFit. These source-supported limitations are not
-accepted typography or a claimed live overflow reproduction.
-The 2026-10-04 findings reread confirms the same typed authoring gap in the
-released editor. External registration of exact geometry, alpha and fonts is a
-workaround, not editor acceptance; retain actual-font long-title previews and
-faithful renderer capability controls in this milestone.
+Hydration/source map: /graphics-elements/add and /graphics-elements/{id} retain
+GraphicsElementEditorPage and GraphicsElementEditorIsland. One native HTML form
+handles all five kinds and Save/Import/Export/Preview with or without JavaScript.
+The existing GraphicsRepository application port owns typed conversion, strict
+YAML, preflight and read-only native canvas rendering; no admin SQL or second
+renderer. Historical text-context selection is retained and copies its channel,
+time and resolution into native authoring. Source baseline: ErsatzTV Core/Graphics/
+*GraphicsElement.cs, GraphicsElementLoader and RefreshGraphicsElementsHandler.
+ADR 0114 records the complete local implementation and renderer limits.
+
+Focused native acceptance passes 79 checks (Nextest
+23224bda-c4d3-419c-8849-5eb3662d8ade; test-results/finding02-focused.log): exact
+five-kind SQL/YAML roundtrips, root/nested/alias rejection, missing inputs before
+publication, bounded Lua/coroutines, unchanged canvas snapshots, historical saved
+and draft overrides and actual database metadata refresh. Shared ASS parsing
+resolves spaced/nested programme variables in native artifacts without modifying
+the original file. A reviewed PNG-output argv snapshot reuses the existing canvas;
+original NUT snapshots remain unchanged. Runtime/Health require PNG encoding.
+
+Full closeout passes 3,863 tests plus doctests with 162 documented platform/provider
+skips (Nextest d8354d7f-5840-4251-8c03-30dec05048bf;
+test-results/finding02-closeout.log), including lossless existing Script arguments.
+Strict workspace all-target Clippy passes in test-results/finding02-clippy.log;
+final strict web all-target Clippy passes after the API escaping fix and final
+translation wording (test-results/finding02-web-clippy.log). The final wording
+changes no translation keys or native behavior; valid native evidence is reused.
+
+The regenerated complete matched-build browser suite passes 18 cases with zero
+failed/skipped/flaky results in test-results/finding02-browser-accepted/
+playwright-results.json. Chromium/Firefox prove all kinds, hydrated/no-JS create,
+edit, YAML export/reimport/new import, geometry persistence and missing input errors.
+Unsaved native PNGs decode correctly, timed Image/Motion become transparent outside
+their window, spaced ASS captions change actual pixels, and exact Roboto/Sen files
+produce distinct long/non-ASCII text. Literal timestamp overrides remain text.
+Every supported culture exposes localized controls/capability explanations; Dutch
+mobile layout remains within 390 pixels. Historical native images show FIRST and
+SECOND PROGRAMME while original template/style/overrides/timeline are preserved.
+Firefox tests initialize and inspect the visible iframe before comparing the
+returned PNG with the displayed image. Font, historical and mobile screenshots
+were visually reviewed. A diagnostic's default output directory cleared transient
+local test artifacts; final logs and all 18 browser cases were regenerated in
+explicit output directories before acceptance.
+
+Native smoke passes both MPEG-TS routes and HLS (test-results/finding02-smoke.log).
+TSDuck passes 87 checks across four pipelines (test-results/finding02-tsduck.log).
+The final paired SSR/WASM build passes the HTTP bundle gate
+(test-results/finding02-bundle.log). Web parity contracts, formatting, architecture
+and hydration pass with no new findings (31 existing suppressions), reusing native
+test/lint proof (test-results/finding02-parity.log). Added-content privacy and
+progress validation pass at commit. No live Windows change, package/platform
+acceptance, CI, push or publication is claimed. Findings 09/09b retain full typed
+animated JPEG XL and faithful Motion alpha/phase/pixel-placement acceptance.
 '''
 
 [[milestone]]

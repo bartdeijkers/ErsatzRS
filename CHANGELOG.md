@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Author every native graphics kind with placement, timing, layering and guide
+  controls; validate YAML and missing fonts, media and variables before saving.
+  Preview unsaved definitions through the real native canvas and explain each
+  text renderer's font and width behavior. Resolve subtitle programme variables
+  through the shared parser, bound native Lua drawing and include PNG encoding
+  in runtime health checks.
+
 - Select add-on list items with saved rolling age, newest-count, duration and
   title filters, manual pins and exclusions, and an accepted/rejected preview.
   Keep archived media and the last complete publication while the existing

@@ -28,6 +28,7 @@ fn canvas_runtime_contract_rejects_each_missing_required_capability() {
     assert!(collect_runtime_issues(&config, &supported).is_empty());
     for (kind, name) in [
         ("encoder", "ffv1"),
+        ("encoder", "png"),
         ("decoder", "ffv1"),
         ("muxer", "nut"),
         ("demuxer", "nut"),

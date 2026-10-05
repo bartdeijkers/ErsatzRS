@@ -145,3 +145,18 @@ fn canvas_packaged_runtime_preserves_alpha_order_geometry_and_duration() {
         }
     }
 }
+
+#[test]
+fn authored_graphics_preview_uses_native_canvas_snapshot() {
+    let mut preview = request();
+    preview.opacity_clock = WatermarkOpacityClock::new(36000.0, 2.25, Some(30.0), 2.25);
+    preview.overlays = vec![
+        image("red", 1, 50),
+        GraphicsPipelineOverlay::Drawtext {
+            z_index: 2,
+            filter: "drawtext=font=Roboto:text=Example:fontsize=28:enable='between(t,2,4)'".into(),
+        },
+    ];
+    let command = ersatzrs_ffmpeg::build_canvas_preview_command(preview).unwrap();
+    insta::assert_snapshot!(command.arguments.join("\n"));
+}

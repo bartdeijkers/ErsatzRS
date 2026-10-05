@@ -123,6 +123,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::maintenance::clean_artwork),
             )
             .route(
+                "/admin-api/graphics-elements/author",
+                post(crate::api::graphics_elements::author),
+            )
+            .route(
                 "/admin-api/system/health/refresh",
                 post(api::maintenance::refresh_health),
             )

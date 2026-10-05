@@ -330,3 +330,98 @@ async fn graphics_owned_refresh_adopts_database_variables_for_the_same_source_an
         artifact.shutdown().await;
     }
 }
+
+#[tokio::test]
+async fn authored_graphics_validation_uses_historical_occurrence_overrides_without_mutation() {
+    use ersatzrs_core::repositories::GraphicsRenderPreviewRequest;
+    use ersatzrs_domain::{
+        GraphicsElement, GraphicsElementConfig, GraphicsElementKind, TextGraphicsConfig,
+    };
+    let pool = fixture().await;
+    let repos = make_repositories(pool.clone());
+    let override_json = r#"{"headline":"Occurrence heading"}"#;
+    sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId", "Variables") VALUES (32, 100, ?)"#)
+        .bind(override_json).execute(&pool).await.unwrap();
+    let mut request = GraphicsRenderPreviewRequest {
+        element: GraphicsElement {
+            id: 100, name: "Historical draft".into(), kind: GraphicsElementKind::Text,
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some("{{ headline }} / {{ ContinuingProgramme.Title }} / {{ Programme_LocalTime }} / {{ MediaItem_SeekSeconds }}".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        channel_id: Some(10), render_time: common::fixed_time() + Duration::seconds(26),
+        seek_seconds: 1.5, width: 320, height: 180, variables: None,
+    };
+    repos.graphics.validate_authoring(&request).await.unwrap();
+    request.variables = Some(r#"{"headline":"Unsaved replacement"}"#.into());
+    repos.graphics.validate_authoring(&request).await.unwrap();
+    let stored: String = sqlx::query_scalar(r#"SELECT "Variables" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId"=32 AND "GraphicsElementId"=100"#).fetch_one(&pool).await.unwrap();
+    assert_eq!(stored, override_json);
+    request.variables = None;
+    request.render_time = common::fixed_time() + Duration::seconds(10);
+    assert!(repos.graphics.validate_authoring(&request).await.is_err());
+}
+
+#[tokio::test]
+async fn authored_subtitle_uses_the_native_programme_parser_and_preserves_its_source() {
+    use ersatzrs_domain::{
+        GraphicsElement, GraphicsElementConfig, GraphicsElementKind, SubtitleGraphicsConfig,
+    };
+    use ersatzrs_ffmpeg::{FrameRate, FrameSize};
+    use ersatzrs_infra::{
+        graphics_template::GraphicsMedia,
+        playback::{
+            render_playback_graphics_overlays, PlaybackGraphicsRenderContext,
+            ResolvedPlaybackGraphicsElement,
+        },
+    };
+    let pool = fixture().await;
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source.ass");
+    let template = "[Script Info]\nTitle: {{ CurrentProgramme.Title }} / {{ Caption }} / {{ NextProgramme.Title | default(\"\", true) }}\n";
+    std::fs::write(&source, template).unwrap();
+    let graphics = ResolvedPlaybackGraphicsElement {
+        element: GraphicsElement {
+            id: 100,
+            name: "Programme subtitle".into(),
+            kind: GraphicsElementKind::Subtitle,
+            config: GraphicsElementConfig::Subtitle(SubtitleGraphicsConfig {
+                template: Some(source.to_string_lossy().into_owned()),
+            }),
+            ..Default::default()
+        },
+        variables: Some(r#"{"Caption":"Explicit caption"}"#.into()),
+    };
+    let context = PlaybackGraphicsRenderContext {
+        channel_id: 10,
+        channel_number: "10".into(),
+        render_time: common::fixed_time() + Duration::seconds(10),
+        playout_item_id: Some(31),
+        media: GraphicsMedia::Persisted(1),
+        media_path: "/media/fixture.mp4".into(),
+        channel_start_time: common::fixed_time(),
+        content_start_time: common::fixed_time() + Duration::seconds(5),
+        content_finish_time: Some(common::fixed_time() + Duration::seconds(25)),
+        stream_seek_seconds: 5.0,
+        duration_seconds: 20.0,
+        frame_size: FrameSize::new(320, 180),
+        square_pixel_frame_size: FrameSize::new(320, 180),
+        frame_rate: Some(FrameRate::new(25, 1).into()),
+    };
+    let rendered = directory.path().join("rendered");
+    let artifacts = render_playback_graphics_overlays(&pool, &[graphics], &context, &rendered)
+        .await
+        .unwrap();
+    assert_eq!(artifacts.overlays.len(), 1);
+    let expected = "[Script Info]\nTitle: Film 1 / Explicit caption / Film 2\n";
+    for file in std::fs::read_dir(&rendered).unwrap() {
+        assert_eq!(
+            std::fs::read_to_string(file.unwrap().path()).unwrap(),
+            expected
+        );
+    }
+    assert_eq!(std::fs::read_to_string(source).unwrap(), template);
+    artifacts.shutdown().await;
+}

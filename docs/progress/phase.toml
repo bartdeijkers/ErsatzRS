@@ -92,8 +92,13 @@ Canonical acceptance lives in v111-findings-04 and ADR 0112. Finding 01 is local
 accepted: saved rolling selection and reasons, optional first-review hold, durable
 worker acquisition/retry, archive preservation, SQLite restart and all localized
 admin paths. Full Rust tests, lint, browser/runtime and matched-bundle gates pass.
-Canonical acceptance lives in v111-findings-01 and ADR 0113. Next: reread the full
-findings document, then finish findings 02, 09 and 09b with their full acceptance.
+Canonical acceptance lives in v111-findings-01 and ADR 0113. Finding 02 is locally
+accepted: typed five-kind authoring, strict YAML, missing-input preflight, actual
+native previews and accurate renderer capabilities. Native closeout, 18 complete
+Chromium/Firefox cases, all cultures/hydrated/no-JS, historical/real-font rendering,
+transport and paired-bundle gates pass. Canonical acceptance lives in
+v111-findings-02 and ADR 0114. Next: reread the entire findings document, then finish
+findings 09 and 09b with their complete acceptance and separate commits.
 No publication is authorized.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including

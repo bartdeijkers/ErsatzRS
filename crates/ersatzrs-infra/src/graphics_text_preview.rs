@@ -37,12 +37,7 @@ pub(crate) async fn preview(
         });
     }
     let context = load_context(pool, request).await?;
-    let overrides: Option<String> = if let Some(id) = request.element_id {
-        sqlx::query_scalar(r#"SELECT "Variables" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ? AND "GraphicsElementId" = ?"#)
-            .bind(context.playout_item_id).bind(id).fetch_optional(pool).await.repository()?.flatten()
-    } else {
-        None
-    };
+    let overrides = load_item_variables(pool, context.playout_item_id, request.element_id).await?;
     let variables =
         graphics_template_variables(pool, &context, request.epg_entries, overrides.as_deref())
             .await?;
@@ -89,7 +84,20 @@ pub(crate) async fn preview(
     })
 }
 
-async fn load_context(
+pub(crate) async fn load_item_variables(
+    pool: &DbPool,
+    playout_item_id: Option<i64>,
+    element_id: Option<i64>,
+) -> Result<Option<String>> {
+    if let (Some(item), Some(element)) = (playout_item_id, element_id) {
+        sqlx::query_scalar(r#"SELECT "Variables" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ? AND "GraphicsElementId" = ?"#)
+            .bind(item).bind(element).fetch_optional(pool).await.repository().map(Option::flatten)
+    } else {
+        Ok(None)
+    }
+}
+
+pub(crate) async fn load_context(
     pool: &DbPool,
     request: &GraphicsTextPreviewRequest,
 ) -> Result<GraphicsTemplateContext> {

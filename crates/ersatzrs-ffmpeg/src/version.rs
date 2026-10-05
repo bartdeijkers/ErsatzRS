@@ -59,7 +59,15 @@ const REQUIRED_FILTERS: &[&str] = &[
     "yadif",
     "zscale",
 ];
-const REQUIRED_ENCODERS: &[&str] = &["aac", "ac3", "ffv1", "libsvtav1", "libx264", "libx265"];
+const REQUIRED_ENCODERS: &[&str] = &[
+    "aac",
+    "ac3",
+    "ffv1",
+    "libsvtav1",
+    "libx264",
+    "libx265",
+    "png",
+];
 const REQUIRED_DECODERS: &[&str] = &["av1", "ffv1", "h264", "hevc"];
 const REQUIRED_MUXERS: &[&str] = &["nut"];
 const REQUIRED_DEMUXERS: &[&str] = &["nut"];

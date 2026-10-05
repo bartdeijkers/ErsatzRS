@@ -59,6 +59,7 @@ pub mod ffmpeg_config;
 pub mod ffprobe;
 pub mod file_system_layout;
 pub mod filter_graph_file;
+mod graphics_authoring;
 pub mod graphics_import;
 mod graphics_metadata_refresh;
 pub mod graphics_template;

@@ -788,6 +788,59 @@ fn render_script_graphics_element(
     }))
 }
 
+fn bounded_graphics_lua(id: i64) -> Result<Lua, GraphicsTemplateError> {
+    // ADRs 0005/0114: scripts produce native drawing commands, never processes.
+    let lua = Lua::new_with(
+        mlua::StdLib::TABLE
+            | mlua::StdLib::STRING
+            | mlua::StdLib::MATH
+            | mlua::StdLib::UTF8
+            | mlua::StdLib::COROUTINE
+            | mlua::StdLib::OS,
+        mlua::LuaOptions::default(),
+    )
+    .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    let source = lua
+        .globals()
+        .get::<Table>("os")
+        .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    let clocks = lua
+        .create_table()
+        .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    for name in ["date", "time", "clock", "difftime"] {
+        let function = source
+            .get::<Value>(name)
+            .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+        clocks
+            .set(name, function)
+            .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    }
+    lua.globals()
+        .set("os", clocks)
+        .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    for name in ["dofile", "loadfile"] {
+        lua.globals()
+            .set(name, Value::Nil)
+            .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    }
+    lua.set_memory_limit(16 * 1024 * 1024)
+        .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    let instructions = std::sync::atomic::AtomicUsize::new(0);
+    lua.set_global_hook(
+        mlua::HookTriggers::new().every_nth_instruction(10_000),
+        move |_, _| {
+            if instructions.fetch_add(10_000, std::sync::atomic::Ordering::Relaxed) >= 1_000_000 {
+                return Err(mlua::Error::RuntimeError(
+                    "graphics script instruction limit exceeded".into(),
+                ));
+            }
+            Ok(mlua::VmState::Continue)
+        },
+    )
+    .map_err(|source| GraphicsTemplateError::Script { id, source })?;
+    Ok(lua)
+}
+
 fn render_script_drawvg(
     element: &GraphicsElement,
     config: &ersatzrs_domain::ScriptGraphicsConfig,
@@ -795,7 +848,7 @@ fn render_script_drawvg(
     command: &str,
     context: &GraphicsRenderContext,
 ) -> Result<String, GraphicsTemplateError> {
-    let lua = Lua::new();
+    let lua = bounded_graphics_lua(element.id)?;
     let globals = lua.globals();
     let variables_table =
         lua_table_from_map(&lua, variables).map_err(|source| GraphicsTemplateError::Script {
@@ -902,11 +955,25 @@ fn lua_element_table(
 }
 
 fn script_lua_source(command: &str) -> std::io::Result<String> {
+    use std::io::Read as _;
+    const MAX_SOURCE_BYTES: usize = 64 * 1024;
     let path = Path::new(command);
-    if path.is_file() {
-        std::fs::read_to_string(path)
+    let source = if path.is_file() {
+        let mut source = String::new();
+        std::fs::File::open(path)?
+            .take((MAX_SOURCE_BYTES + 1) as u64)
+            .read_to_string(&mut source)?;
+        source
     } else {
-        Ok(command.to_owned())
+        command.to_owned()
+    };
+    if source.len() > MAX_SOURCE_BYTES {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "graphics script exceeds 64 KiB",
+        ))
+    } else {
+        Ok(source)
     }
 }
 

@@ -119,7 +119,8 @@ pub use ersatzrs_domain::AddonMediaListAutoPublicationHoldReason;
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
 pub use graphics::{
-    parse_graphics_attachment_variables, validate_graphics_attachment_variables,
+    parse_graphics_attachment_variables, validate_authored_graphics,
+    validate_graphics_attachment_variables, GraphicsRenderPreview, GraphicsRenderPreviewRequest,
     GraphicsRepository, GraphicsTextPreview, GraphicsTextPreviewRequest,
 };
 pub use jellyfin::{

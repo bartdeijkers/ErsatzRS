@@ -30,7 +30,24 @@ pub struct InvalidCanvasRenderRequest;
 /// # Errors
 /// Returns an error for zero dimensions, rate or duration.
 pub fn build_canvas_command(
+    request: CanvasRenderRequest,
+) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
+    build_canvas_output(request, false)
+}
+
+/// Render a single PNG through the same native canvas and programme-clock filters.
+///
+/// # Errors
+/// Returns invalid geometry/rate/duration errors.
+pub fn build_canvas_preview_command(
+    request: CanvasRenderRequest,
+) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
+    build_canvas_output(request, true)
+}
+
+fn build_canvas_output(
     mut request: CanvasRenderRequest,
+    preview: bool,
 ) -> Result<FfmpegCommand, InvalidCanvasRenderRequest> {
     if request.resolution.width == 0
         || request.resolution.height == 0
@@ -110,6 +127,29 @@ pub fn build_canvas_command(
         loglevel_error(),
         PipelineStep::complex_filter(complex.options),
         time_limit(request.duration),
+        canvas_output_step(preview),
+        pipe_output(),
+    ];
+    Ok(CommandGenerator::generate_command(&inputs, &steps, false))
+}
+
+fn canvas_output_step(preview: bool) -> PipelineStep {
+    if preview {
+        PipelineStep::generic(
+            "canvas_preview",
+            [
+                "-an",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "png",
+                "-pix_fmt",
+                "rgba",
+                "-f",
+                "image2pipe",
+            ],
+        )
+    } else {
         PipelineStep::generic(
             "canvas_output",
             [
@@ -127,10 +167,8 @@ pub fn build_canvas_command(
                 "-f",
                 "nut",
             ],
-        ),
-        pipe_output(),
-    ];
-    Ok(CommandGenerator::generate_command(&inputs, &steps, false))
+        )
+    }
 }
 
 fn programme_filter(filter: String, clock: &WatermarkOpacityClock) -> String {
