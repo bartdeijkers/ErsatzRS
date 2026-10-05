@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Escape generated drawvg file paths through both FFmpeg parsers, including
+  Windows drive letters, separators, spaces and quotes. Channel previews now
+  identify error-slate segments and show the original redacted transcode failure,
+  even while the browser successfully decodes the replacement video.
+
 - Let Classic schedule items save compatible filler, graphics, guide and track
   changes for the next automatic extension without replacing published programmes
   or resetting rotation. Show the retained horizon and persisted application/build

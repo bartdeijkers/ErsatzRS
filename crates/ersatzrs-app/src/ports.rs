@@ -52,6 +52,16 @@ pub trait ChannelRuntime: Send + Sync {
         &self,
     ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError>;
 
+    /// Read output provenance from the isolated browser-preview worker.
+    async fn preview_segment_output(
+        &self,
+        _number: &str,
+        _segment: &str,
+        _started_at_millis: i64,
+    ) -> Result<Option<ersatzrs_core::hls::HlsSegmentOutput>, ChannelRuntimeError> {
+        Ok(None)
+    }
+
     /// Stop one channel streaming session, returning whether it existed.
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError>;
 

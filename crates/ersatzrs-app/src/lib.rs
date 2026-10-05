@@ -356,6 +356,23 @@ impl ApplicationServices {
         queries::list_streaming_sessions(self.ports.channel_runtime()).await
     }
 
+    /// Read browser-preview output without extending or starting a session.
+    pub async fn preview_segment_output(
+        &self,
+        number: &str,
+        segment: &str,
+        started_at_millis: i64,
+    ) -> Result<Option<ersatzrs_core::hls::HlsSegmentOutput>> {
+        self.ports
+            .channel_runtime()
+            .preview_segment_output(number, segment, started_at_millis)
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "read preview segment output",
+                message: error.to_string(),
+            })
+    }
+
     /// Stop one active channel streaming session.
     pub async fn stop_channel_session(&self, number: &str) -> Result<bool> {
         queries::stop_channel_session(number, self.ports.channel_runtime()).await

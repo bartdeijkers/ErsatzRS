@@ -2,24 +2,25 @@ feature    = 'Drawvg graphics engine'
 etv_source = 'ErsatzTV external graphics renderer flow; `$ERSATZTV_SRC/ErsatzTV.Core/Graphics/*GraphicsElement.cs`; `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/`'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-infra`, `crates/ersatzrs-ffmpeg`, `assets/`'
 status     = 'In progress'
-adr        = ['0005', '0105']
+adr        = ['0005', '0105', '0111']
 summary    = '''
 Drawvg script rendering replaces ErsatzTV's external graphics-renderer pipe and is used by the watermark editor preview path. The Phase 1 storage/import slice reshapes `GraphicsElement` around typed shared columns plus a kind-specific JSON `Config`, decodes `Config = NULL` as the row-kind default, rejects malformed/mismatched config JSON, and imports ErsatzTV-style YAML definitions with the upstream `YamlMember` aliases into the canonical DB shape while keeping `Path` as the source link. The Phase 2 resolver selects active template-deco, playout-deco, and playout-item graphics with ErsatzTV merge/override/disable precedence, honors `UseGraphicsElementsDuringFiller`, carries per-item `Variables`, and returns concrete elements sorted by `z_index` for render wiring. Phase 3 adds render-time variables/templates: DB-backed media/EPG variables, `MediaItem_Duration` arithmetic, per-item variable overrides, and `{{ ... }}` placeholder rendering with dotted/indexed lookup. Phase 4 in `ersatzrs-ffmpeg` renders Image elements as native looped graphics-image overlay inputs, Text elements as deterministic full-frame VGS draw scripts, Motion elements as native video overlay inputs with loop/start/eof behavior, Subtitle elements as generated `.ass` files through transparent lavfi/libass overlay inputs, and Script elements as in-process Lua that returns a drawvg script without spawning an external graphics process; `PipelineRequest::graphics_overlays` interleaves native image/motion/subtitle overlays with drawvg filters by `z_index` while carrying generated inputs into the final FFmpeg command. Drawvg overlays force the post-graphics software filter graph back to the desired encoder pixel format so libx264 high-profile MPEG-TS output opens after drawvg's 4:4:4 negotiation. Motion Hold probes source duration in infra, falls back to zero duration when probing fails, and emits bounded native overlay visibility through `start_seconds + source_duration + hold_seconds`. Phase 5 streaming plumbing is command-wired and runtime-proven: IPTV and HLS resolve active graphics from the DB, render template-bearing config strings with runtime/media/EPG/per-item variables, write generated VGS/ASS artifacts, and pass the resulting graphics overlay plan into the shared pipeline; the dev MPEG-TS builder accepts the same overlay plan. Ignored FFmpeg smokes prove drawvg compositing in IPTV MPEG-TS output, HLS segment output, and dev MPEG-TS output, and IPTV/HLS temp graphics directories are removed after FFmpeg exits or render failure. Phase 6 schedule integration materializes generated playout-item graphics join rows across classic/block/YAML/scripted paths and preserves YAML/scripted per-item `Variables` for playback. Phase 7 adds durable checked-in VGS source templates for lower-third and song-progress drawvg overlays, a libass subtitle graphics template, README variable documentation, and focused template coverage that guards against raw SVG/XML being treated as drawvg input. The live end-to-end proof imports ErsatzTV-style YAML graphics, attaches Image/Text/Subtitle/Motion elements through `PlayoutItemGraphicsElement`, resolves and renders them through playback, encodes the shared FFmpeg pipeline, and decodes red/white/green/blue pixels from the final MPEG-TS stream. The broad gates pass across fmt, default clippy, mysql-feature clippy, and workspace all-features tests.
 Image YAML imports now accept epg_entries and persist the requested guide
 context. Render-time image paths can select programme-specific assets from Epg;
 the imported source YAML need not remain available. UCU-04 row 53 owns focused
 import/persistence/render and decoded four-kind graphics evidence.
+Finding 05 closes Windows generated-path escaping and truthful native preview
+slate status, with local acceptance in v111-findings-05 and ADR 0111.
 Channel-setup findings retain open editor, typography, programme-context,
-Windows path/slate and animated JPEG XL gaps. Their owning v1.1.1 milestones
-separate existing runtime proof from the still-unimplemented corrections.
+animated JPEG XL and Motion gaps under their owning v1.1.1 milestones.
 '''
 
 [[debt]]
 id = 'v111-channel-graphics-integration'
-description = 'Complete typed graphics authoring and actual-engine preview, accurate font/fit behavior, programme-aware metadata, Windows drawvg paths and truthful error-slate status, animated JPEG XL input semantics and Motion YAML alpha/location roundtrips.'
+description = 'Complete typed graphics authoring and actual-engine preview, accurate font/fit behavior, programme-aware metadata, animated JPEG XL input semantics and Motion YAML alpha/location roundtrips.'
 discovered = '2026-10-02'
 resolved = false
-evidence = 'Milestones v111-findings-02, -04, -05, -09 and -09b own the accepted solutions and required browser/native/served-stream evidence. The October 3-4 findings addenda confirm Text-only authoring, renderer-specific font/fit gaps, missing continuing/local-day context, startup-snapshot variables, measured Windows JPEG XL loop/seek failures, Motion phase gaps and unsustainable per-pixel alpha throughput. Existing canvas, generic decoder and offline font-glyph workaround proof do not close these gaps. No product correction or deployment is claimed.'
+evidence = 'Finding 05 is locally accepted under v111-findings-05 and ADR 0111. Milestones v111-findings-02, -04, -09 and -09b own the remaining accepted solutions and required browser/native/served-stream evidence. The October 3-4 findings addenda confirm Text-only authoring, renderer-specific font/fit gaps, missing continuing/local-day context, startup-snapshot variables, measured Windows JPEG XL loop/seek failures, Motion phase gaps and unsustainable per-pixel alpha throughput. Existing canvas, generic decoder and offline font-glyph workaround proof do not close these gaps. These remaining corrections and deployment are not claimed.'
 
 [[debt]]
 id = 'ucu09-row146-next-graphics-canvas'
@@ -36,3 +37,11 @@ discovered = '2026-09-30'
 resolved = true
 adr = '0105'
 evidence = 'Row154 source/acceptance map in plans/upstream-catch-up.md and UCU-09 own 75 passing focused/runtime checks, reviewed native argv, 18 Chromium/Firefox cases, strict lint and native/Next smoke. Published v2.0.3 and official Next e7997fa prove EOF/NTSC/expiry/loop timing, anchored seek/live previews, Dutch audio/subtitles/credits and owned cleanup; no acceptance weakened.'
+
+[[debt]]
+id = 'v111-drawvg-paths-and-slate-status'
+description = 'Finding 05 requires shared Windows drawvg path escaping and truthful preview error-slate status for the segment actually being decoded.'
+discovered = '2026-10-05'
+resolved = true
+adr = '0111'
+evidence = 'Locally accepted 2026-10-05; v111-findings-05 owns reviewed snapshots, six actual Windows drawvg/native-Drawtext renders, portable rendering, 118 final worker checks, ownership/i18n tests, four final real Chromium/Firefox playback cases, strict lint and matched-bundle proof. Upstream session JSON remains unchanged; engines/native HLS without segment provenance remain explicitly unknown.'

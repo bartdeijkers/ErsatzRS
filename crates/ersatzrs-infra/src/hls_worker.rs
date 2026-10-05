@@ -1,3 +1,5 @@
+mod output_status;
+
 #[path = "hls_worker_external.rs"]
 mod external;
 
@@ -461,6 +463,8 @@ pub struct HlsSessionWorker {
     path_replacements: Vec<PathReplacement>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     media_relay: std::sync::OnceLock<Arc<crate::next_engine::media::MediaRelay>>,
+    output_status: std::sync::Mutex<output_status::SegmentOutputs>,
+    output_error: std::sync::Mutex<Option<String>>,
     startup: std::sync::Mutex<HlsStartupReadiness>,
     startup_minimum_segments: std::sync::atomic::AtomicUsize,
     startup_changed: Notify,
@@ -521,6 +525,8 @@ impl HlsSessionWorker {
             path_replacements,
             ffmpeg_runtime,
             media_relay: std::sync::OnceLock::new(),
+            output_status: std::sync::Mutex::default(),
+            output_error: std::sync::Mutex::default(),
             startup: std::sync::Mutex::new(HlsStartupReadiness::Legacy),
             startup_minimum_segments: std::sync::atomic::AtomicUsize::new(3),
             startup_changed: Notify::new(),
@@ -2308,6 +2314,14 @@ impl HlsSessionWorker {
                             "hls playlist not ready to trim before error fallback append"
                         );
                     }
+                    if let Ok(mut output_error) = self.output_error.lock() {
+                        *output_error = Some(
+                            crate::remote_stream::sanitize_remote_stream_diagnostic(&error_message)
+                                .chars()
+                                .take(4096)
+                                .collect(),
+                        );
+                    }
                     match self
                         .run_hls_process(
                             error_command,
@@ -2490,6 +2504,9 @@ impl HlsSessionWorker {
             );
         }
 
+        if let Ok(mut output_error) = self.output_error.lock() {
+            *output_error = Some(ALL_STREAMS_IN_USE_SLATE_MESSAGE.to_owned());
+        }
         self.run_hls_process(
             command,
             cleanup_interval,
@@ -2610,8 +2627,49 @@ impl HlsSessionWorker {
         Err(interrupted)
     }
 
-    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Preserve the existing process boundary while tracking per-segment output provenance"
+    )]
     async fn run_hls_process_with_remote(
+        &self,
+        command: FfmpegCommand,
+        cleanup_interval: &mut tokio::time::Interval,
+        idle_timeout: Option<Duration>,
+        watch_idle_timeout: Option<Duration>,
+        remote_stream: Option<ResolvedRemoteStream>,
+        retained: Option<RetainedHlsProcess>,
+        capacity: HlsProcessCapacity<'_>,
+    ) -> HlsProcessOutcome {
+        let baseline = playlist_segment_uris(&self.working_dir).await.ok();
+        let error = self
+            .output_error
+            .lock()
+            .ok()
+            .and_then(|mut error| error.take());
+        if let Ok(mut outputs) = self.output_status.lock() {
+            outputs.begin(baseline, error);
+        }
+        let outcome = self
+            .run_hls_process_with_remote_inner(
+                command,
+                cleanup_interval,
+                idle_timeout,
+                watch_idle_timeout,
+                remote_stream,
+                retained,
+                capacity,
+            )
+            .await;
+        let segments = playlist_segment_uris(&self.working_dir).await.ok();
+        if let Ok(mut outputs) = self.output_status.lock() {
+            outputs.finish(segments.as_ref());
+        }
+        outcome
+    }
+
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)] // Preserve the existing process state machine behind the provenance wrapper.
+    async fn run_hls_process_with_remote_inner(
         &self,
         command: FfmpegCommand,
         cleanup_interval: &mut tokio::time::Interval,
@@ -3471,6 +3529,30 @@ fn apply_hls_software_video_fallback(playback_profile: &mut PlaybackProfile) {
 
 #[async_trait]
 impl HlsSessionHandle for HlsSessionWorker {
+    async fn segment_output(
+        &self,
+        segment: &str,
+        started_at_millis: i64,
+    ) -> Option<ersatzrs_core::hls::HlsSegmentOutput> {
+        let playlist = tokio::fs::read_to_string(self.working_dir.join("live.m3u8"))
+            .await
+            .ok()?;
+        if !playlist.contains("#EXT-X-PROGRAM-DATE-TIME:") {
+            return None;
+        }
+        // Public playlists use the saved timeline anchor rather than FFmpeg's
+        // spawn clock. Reuse that projection without trimming/writing media.
+        let playlist_start = *self.playlist_start.lock().await;
+        let segments = parsed_playlist_segments_from(&playlist, playlist_start);
+        if !segments.iter().any(|entry| {
+            entry.uri == segment && entry.start_time.timestamp_millis() == started_at_millis
+        }) {
+            return None;
+        }
+        let served = segments.into_iter().map(|entry| entry.uri).collect();
+        self.output_status.lock().ok()?.get(segment, &served)
+    }
+
     fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
         Some(ersatzrs_core::hls::HlsSessionModel {
             started_at: DateTime::from_timestamp_millis(
@@ -5228,7 +5310,14 @@ async fn hls_delivery_segments(working_dir: &Path) -> io::Result<Vec<HlsDelivery
 }
 
 fn parsed_playlist_segments(playlist: &str) -> Vec<PlaylistSegment> {
-    parse_playlist(playlist, Utc::now(), false)
+    parsed_playlist_segments_from(playlist, Utc::now())
+}
+
+fn parsed_playlist_segments_from(
+    playlist: &str,
+    playlist_start: DateTime<Utc>,
+) -> Vec<PlaylistSegment> {
+    parse_playlist(playlist, playlist_start, false)
         .map(|parsed| {
             parsed
                 .items
@@ -7255,6 +7344,74 @@ mod tests {
                 allow_watched_preemption,
             ),
         )
+    }
+
+    #[tokio::test]
+    async fn segment_output_rejects_reused_names_and_missing_programme_date_time() {
+        let root = tempfile::tempdir().unwrap();
+        let worker = HlsSessionWorker::new(
+            "native-test".into(),
+            1,
+            root.path().into(),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        worker
+            .output_status
+            .lock()
+            .unwrap()
+            .begin(Some(HashSet::new()), Some("drawvg failed".into()));
+        let header = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4.004,\n";
+        let time = DateTime::from_timestamp_millis(1_634_389_200_142).unwrap();
+        *worker.playlist_start.lock().await = time;
+        let producer_time = time + chrono::Duration::hours(1);
+        let original = format!(
+            "{header}#EXT-X-PROGRAM-DATE-TIME:{}\nlive000000.ts\n#EXTINF:4.004,\n#EXT-X-PROGRAM-DATE-TIME:{}\nlive000001.ts\n",
+            producer_time.to_rfc3339(),
+            (producer_time + chrono::Duration::milliseconds(4_004)).to_rfc3339()
+        );
+        tokio::fs::write(root.path().join("live.m3u8"), &original)
+            .await
+            .unwrap();
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis())
+            .await
+            .unwrap()
+            .error
+            .is_some());
+        assert!(worker
+            .segment_output("live000001.ts", time.timestamp_millis() + 4_004)
+            .await
+            .unwrap()
+            .error
+            .is_some());
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis() - 1)
+            .await
+            .is_none());
+        assert!(worker
+            .segment_output("live000000.ts", producer_time.timestamp_millis())
+            .await
+            .is_none());
+        assert_eq!(
+            tokio::fs::read_to_string(root.path().join("live.m3u8"))
+                .await
+                .unwrap(),
+            original
+        );
+        assert_eq!(*worker.playlist_start.lock().await, time);
+        assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 0);
+        tokio::fs::write(
+            root.path().join("live.m3u8"),
+            format!("{header}live000000.ts\n"),
+        )
+        .await
+        .unwrap();
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis())
+            .await
+            .is_none());
     }
 
     #[test]

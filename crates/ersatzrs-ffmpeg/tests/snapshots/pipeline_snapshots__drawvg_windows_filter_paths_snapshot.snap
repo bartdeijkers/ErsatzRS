@@ -1,0 +1,11 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 6072
+expression: filters
+---
+drawvg=file=C\\:/graphics/panel.vgs
+drawvg=file=D\\:/overlay files/director\\\'s \[cut\]\, next\; title.vgs
+drawvg=file=C\\:/graphics/unicode café.vgs
+drawvg=file=//server/share/panel.vgs
+drawvg=file=/graphics/panel\\\'s \[cut\]\, next\; title.vgs
+drawvg=file=\\ panel.vgs\\\

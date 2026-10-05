@@ -137,6 +137,25 @@ automatic landing removal and hydration before asserting the exact item IDs,
 order and title. Do not restore a manual navigation that hides a broken import
 completion transition.
 
+## Drawvg path and preview slate proof
+
+Finding 05 uses `native_drawvg_paths_render_complete_marker_frames` in
+`ersatzrs-ffmpeg/tests/drawvg_paths.rs` with `FFMPEG_PATH` and explicit ignored-test
+selection for generated-path rendering. The Windows gate is
+`scripts/e2e/windows-drawvg-paths.ps1` (PowerShell 7): prepare an owned temporary
+root, emit filters with the `drawvg-paths` example, then render all six manifest
+cases and check complete red/blue/white pixels. It also proves following native
+Drawtext with a real font and a text-file reload path. No server/database is used.
+
+The `channel-watch.spec.ts` real error-slate case injects invalid synthetic VGS
+through a disposable graphics attachment. It requires actual Hls.js playback and
+the matching segment's original redacted failure, plus responsive warning layout.
+An interrupted status request must show unknown output and recover afterwards.
+The ordinary real derivative case requires ordinary output without that warning.
+Backend regressions preserve buffered slate provenance across subsequent encoder
+success, match served playlist times from the saved anchor independently of the
+current clock, reject stale replacement-worker reads and verify read-only polling.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

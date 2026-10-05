@@ -44,7 +44,10 @@ pub struct DrawvgOverlay {
 impl DrawvgOverlay {
     #[must_use]
     pub fn filter(&self) -> String {
-        let mut filter = format!("drawvg=file='{}'", escape_path(&self.script_path));
+        let mut filter = format!(
+            "drawvg=file={}",
+            crate::filter::escaping::escape_filtergraph_path(&self.script_path)
+        );
         if let Some(enable) = &self.enable {
             filter.push_str(":enable='");
             filter.push_str(&escape_filter_value(enable));
@@ -1575,13 +1578,6 @@ fn trim_float(value: f64) -> String {
         .trim_end_matches('0')
         .trim_end_matches('.')
         .to_owned()
-}
-
-fn escape_path(path: &Path) -> String {
-    path.display()
-        .to_string()
-        .replace('\\', "\\\\")
-        .replace('\'', "\\'")
 }
 
 fn escape_filter_value(value: &str) -> String {

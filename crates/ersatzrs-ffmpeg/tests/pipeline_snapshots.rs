@@ -6045,3 +6045,29 @@ fn av1_native_fmp4_output_snapshot() {
         ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).unwrap();
     insta::assert_snapshot!(command.arguments.join(" "));
 }
+
+#[test]
+fn drawvg_windows_filter_paths_snapshot() {
+    let paths = [
+        r"C:\graphics\panel.vgs",
+        r"D:\overlay files\director's [cut], next; title.vgs",
+        r"C:/graphics/unicode café.vgs",
+        r"\\server\share\panel.vgs",
+        "/graphics/panel's [cut], next; title.vgs",
+        " panel.vgs ",
+    ];
+    let filters = paths
+        .map(|path| {
+            DrawvgOverlay {
+                script_path: path.into(),
+                x: 0,
+                y: 0,
+                width: 64,
+                height: 64,
+                enable: None,
+            }
+            .filter()
+        })
+        .join("\n");
+    insta::assert_snapshot!(filters);
+}

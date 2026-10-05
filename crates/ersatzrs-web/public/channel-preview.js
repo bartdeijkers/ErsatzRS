@@ -157,6 +157,7 @@ async function start(video, url) {
         manifestLoadingTimeOut: 30000,
       });
       entry.hls = hls;
+      hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => { entry.fragment = data.frag; });
       if (entry.syncCaptions) {
         hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, entry.syncCaptions);
         hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, entry.syncCaptions);
@@ -227,3 +228,22 @@ window.addEventListener("pagehide", () => {
 });
 
 export { start, reload, destroy };
+
+// Report the fragment actually at media.currentTime, including buffered slates.
+// A server clock or the latest encoder process cannot establish this identity.
+function currentSegment(video) {
+  const entry = players.get(video);
+  const fragment = entry?.fragment;
+  if (!fragment || video.ended || !video.currentTime) return "";
+  const start = fragment.start;
+  if (video.currentTime < start || video.currentTime >= start + fragment.duration) return "";
+  return new URL(fragment.url, window.location.href).pathname.split("/").pop() || "";
+}
+window.ErsatzRSChannelPreview.currentSegment = currentSegment;
+
+function currentSegmentStart(video) {
+  const fragment = players.get(video)?.fragment;
+  const millis = fragment?.programDateTime;
+  return Number.isFinite(millis) ? String(Math.round(millis)) : "";
+}
+window.ErsatzRSChannelPreview.currentSegmentStart = currentSegmentStart;

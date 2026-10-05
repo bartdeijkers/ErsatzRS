@@ -13534,7 +13534,7 @@ channel-local date/DST and programme grouping, and verify a served transition.
 id = 'v111-findings-05'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Windows drawvg paths and truthful slate status'
-status = 'Not started'
+status = 'Complete'
 feature = 'drawvg-graphics-engine'
 depends_on = []
 acceptance = '''
@@ -13547,7 +13547,57 @@ intentional error slate and surfaces the underlying transcode error. Preserve
 native dynamic text and supported platforms; prove browser slate status.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
+Source map (2026-10-05): upstream SubtitlesFilter.cs applies Windows drive
+escaping; ScriptGraphicsElement.cs supplies external script configuration.
+HlsSessionWorker.cs replaces failed FFmpeg output with an error process, while
+HlsSessionModel.cs has no content/slate discriminator. ChannelPreviewDialog.razor
+uses an 800px video controller with media controls and no server-output warning.
+Rust targets: filter/drawtext.rs and graphics/mod.rs share option escaping;
+hls_worker.rs owns native output provenance; core HlsSessionHandle and the app
+ChannelRuntime expose read-only preview segment status. The watch/list preview
+component uses that status without changing player ownership or guide layout.
+Visual/hydration map: /channels/:id/watch -> ChannelWatchPage -> ChannelWatchIsland
+-> ChannelPreviewPlayer, also used by the list preview. Reuse existing video,
+controls and status styles; add an always-mounted localized server-output warning
+separate from decoder state. Preserve JS-required playback fallback. Polling uses
+the actual Hls.js playing fragment, stops with its component/player, and never
+extends server demand. Generated/buffered future slates must not relabel a healthy
+current fragment; healthy future output must not clear a playing slate.
+Shared two-parser escaping now covers drawvg and native Drawtext paths. Reviewed
+argv snapshots cover drive letters, both separators, spaces, apostrophes, graph
+metacharacters, Unicode, UNC and Unix literal backslashes. Actual Windows FFmpeg
+n9.0-20260930 passes six generated-filter cases with complete 64x64 RGB frames,
+red/blue marker pixels and 35 white pixels from a following native Drawtext.
+The owned synthetic directories were removed; no live server/library changed.
+Portable FFmpeg 9 render proof passes including leading/trailing option spaces
+(54b668be-03cd-48db-9a5b-8bac8842ece2). Final 118 HLS-worker checks pass
+(2ae53e90-fc6c-451e-9008-2486e0ff57d1), including buffered slate provenance,
+bounded/unknown reports, reused-name/date-time fencing and existing trimming,
+retained-process and continuity behavior. Status reads reuse the same saved-anchor
+projection as the served playlist rather than FFmpeg's spawn clock, without
+changing files, the anchor or demand. A fixed historical anchor and different
+producer time exercise multiple segments. Twenty-six web/i18n checks include isolated
+preview registry reads and replacement-worker rejection
+(da62deed-d271-41d5-bac1-d0dc9d87c79c). Strict affected-crate Clippy, architecture
+and hydration lint pass. Native streaming smoke passes across legacy/hybrid TS
+and HLS. Workspace closeout passes 3,818 tests and doctests
+(af883b3b-3ab1-4099-bb91-5982b1acdd0b), before the final served-time correction.
+Final matched SSR/WASM, structural bundle verification and four Chromium/Firefox
+playback cases pass after that correction. Canonical browser results are in
+`test-results/finding05-final/playwright-results.json`: zero failures, skipped or
+flaky cases. A real invalid VGS attachment produces decoded replacement video
+with the original redacted drawvg failure, English/Dutch warnings and recoverable
+unknown status after a failed poll. Ordinary H.264/AAC output has no slate warning.
+Every fixture explicitly cancels its own server session and verifies directory
+removal, preserving transcode capacity for the next browser. Reviewed desktop
+and 390x844 mobile screenshots show wrapped high-contrast theme text with an
+error-colour border and no horizontal overflow. Final infrastructure all-target
+Clippy, architecture lint and hydration lint pass (31 unchanged baseline findings).
+No schema, capability or persisted-media requirement changed; existing FFmpeg/
+graphics health checks remain applicable. ADR 0111 records native provenance
+and the explicit unknown result for engines/browsers without fragment identity.
+No packaged Windows application, exact-SHA CI or publication is claimed.
+All other findings remain in scope.
 '''
 
 [[milestone]]

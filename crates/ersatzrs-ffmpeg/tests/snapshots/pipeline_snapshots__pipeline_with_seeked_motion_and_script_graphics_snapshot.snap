@@ -23,7 +23,7 @@ h264
 -i
 /media/motion.mkv
 -filter_complex
-[1:0]reverse,trim=end_frame=1,setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=W-w-0:y=H-h-0:format=0:enable='gte((t+3),1)*lt((t+3),5)'[vge0];[vge0]settb=AVTB,setpts=PTS+3/TB,drawvg=file='<tmp>/22-graphics-script.vgs':enable='between(t,2,4)',setpts=PTS-3/TB[vge1];[vge1]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709,format=yuv420p[vpf];[0:1]aresample=async=1,apad[a]
+[1:0]reverse,trim=end_frame=1,setpts=PTS-STARTPTS[gi0];[0:0][gi0]overlay=x=W-w-0:y=H-h-0:format=0:enable='gte((t+3),1)*lt((t+3),5)'[vge0];[vge0]settb=AVTB,setpts=PTS+3/TB,drawvg=file=<tmp>/22-graphics-script.vgs:enable='between(t,2,4)',setpts=PTS-3/TB[vge1];[vge1]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709,format=yuv420p[vpf];[0:1]aresample=async=1,apad[a]
 -map
 [vpf]
 -map

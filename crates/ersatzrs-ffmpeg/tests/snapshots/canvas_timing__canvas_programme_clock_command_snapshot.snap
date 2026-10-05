@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/canvas_timing.rs
-assertion_line: 75
+assertion_line: 103
 expression: "command.arguments.join(\"\\n\").replace(&root.path().to_string_lossy().to_string(),\n\"<graphics>\")"
 ---
 -nostdin
@@ -15,7 +15,7 @@ lavfi
 -i
 color=c=black@0.0:s=64x64:r=4/1,format=bgra
 -filter_complex
-[0:0]settb=AVTB,setpts=PTS+2.25/TB,drawvg=file='<graphics>/1-graphics-script.vgs':enable='between(t,2,3)',setpts=PTS-2.25/TB[vge0];[vge0]format=bgra[vpf]
+[0:0]settb=AVTB,setpts=PTS+2.25/TB,drawvg=file=<graphics>/1-graphics-script.vgs:enable='between(t,2,3)',setpts=PTS-2.25/TB[vge0];[vge0]format=bgra[vpf]
 -map
 [vpf]
 -t

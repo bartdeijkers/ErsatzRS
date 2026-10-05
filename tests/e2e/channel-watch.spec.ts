@@ -950,6 +950,71 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     expect(errors).toEqual([]);
   });
 
+  test('shows the real transcode error when decoded preview video is an error slate', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const clipPath = makeCalibrationClip(testInfo, 'color=c=blue:s=640x360:r=30');
+    const channel = seedChannel(testInfo, clipPath, 5);
+    const elementId = channel.id + 500;
+    const config = JSON.stringify({ kind: 'script', command: "return 'deliberately_invalid_vgs_command'", args: [] });
+    sqlite(`
+      INSERT INTO "GraphicsElement" ("Id", "Kind", "Name", "Config")
+      VALUES (${elementId}, 4, 'Synthetic invalid drawvg', ${sqlString(config)});
+      INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId")
+      SELECT "Id", ${elementId} FROM "PlayoutItem" WHERE "PlayoutId" = ${channel.id + 1};
+    `);
+    await forceEnglish(page);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (/failed_to_cast_marker_node|hydration/i.test(message.text()) && message.type() === 'error') errors.push(message.text());
+    });
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      const root = page.locator('[data-channel-preview]');
+      await expect(root).toHaveAttribute('data-preview-state', 'live', { timeout: 60_000 });
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 20_000 });
+      const warning = root.locator('[data-preview-output-error]');
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText('Error slate: programme playback failed.');
+      await expect(warning).toContainText(/drawvg|deliberately_invalid_vgs_command|Invalid argument/i);
+      await expect(root.locator('[data-preview-output-unknown]')).not.toBeVisible();
+      expect(await root.locator('video').evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
+      // Decode/playback success is intentionally simultaneous with a failed programme.
+      await warning.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath('channel-error-slate.png'), fullPage: true, animations: 'disabled' });
+      const statusRoute = '**/admin-api/get_channel_preview_output*';
+      await page.route(statusRoute, route => route.abort());
+      await expect(root).toHaveAttribute('data-preview-output', 'unknown', { timeout: 10_000 });
+      await expect(root.locator('[data-preview-output-unknown]')).toBeVisible();
+      await expect(warning).not.toBeVisible();
+      await page.unroute(statusRoute);
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 10_000 });
+      await page.request.post('/admin-api/settings/ui/save', {
+        form: { is_dark_mode: 'true', language: 'nl' }, maxRedirects: 0,
+      });
+      await page.reload();
+      await waitForHydration(page);
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 30_000 });
+      await expect(warning).toContainText('Foutbeeld: het programma kan niet worden afgespeeld.');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(() => warning.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 0 && rect.right <= window.innerWidth
+          && document.documentElement.scrollWidth <= window.innerWidth;
+      })).toBe(true);
+      await warning.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath('channel-error-slate-mobile.png'), fullPage: true, animations: 'disabled' });
+      expect(errors).toEqual([]);
+    } finally {
+      await forceEnglish(page);
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await page.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+      await stopFixtureTranscode(page, channel.number);
+    }
+  });
+
   test('plays a real H.264/AAC preview derivative through Hls.js', async ({
     page,
   }, testInfo) => {
@@ -976,47 +1041,54 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
       }
     });
 
-    await page.goto(`/channels/${channel.id}/watch`);
-    await waitForHydration(page);
-    await page.evaluate(() => {
-      const root = document.querySelector('[data-channel-preview]');
-      (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates = [];
-      root?.addEventListener('ersatzrs-preview-state', ((event: CustomEvent) => {
-        if (['network', 'media', 'unsupported'].includes(event.detail.state)) {
-          (window as Window & { __previewFatalStates: unknown[] }).__previewFatalStates.push(
-            event.detail,
-          );
-        }
-      }) as EventListener);
-    });
-
     const previewRoot = page.locator('[data-channel-preview]');
-    const video = previewRoot.locator('video');
-    await expect(video).toHaveAttribute('autoplay', '');
-    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
-    await expect(previewRoot).toHaveAttribute('data-preview-engine', 'hlsjs', {
-      timeout: 30_000,
-    });
-    await expect
-      .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), {
-        timeout: 60_000,
-      })
-      .toBeGreaterThanOrEqual(2);
-    const startTime = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
-    await expect
-      .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime), {
-        timeout: 20_000,
-      })
-      .toBeGreaterThanOrEqual(startTime + 2);
-    await expect(previewRoot).toHaveAttribute('data-preview-state', 'live');
-    expect(previewRequests.variant).toBeGreaterThan(0);
-    expect(previewRequests.segments).toBeGreaterThan(0);
-    expect(
-      await page.evaluate(
-        () =>
-          (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates ?? [],
-      ),
-    ).toEqual([]);
-    expect(fatalErrors).toEqual([]);
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await page.evaluate(() => {
+        const root = document.querySelector('[data-channel-preview]');
+        (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates = [];
+        root?.addEventListener('ersatzrs-preview-state', ((event: CustomEvent) => {
+          if (['network', 'media', 'unsupported'].includes(event.detail.state)) {
+            (window as Window & { __previewFatalStates: unknown[] }).__previewFatalStates.push(
+              event.detail,
+            );
+          }
+        }) as EventListener);
+      });
+
+      const video = previewRoot.locator('video');
+      await expect(video).toHaveAttribute('autoplay', '');
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
+      await expect(previewRoot).toHaveAttribute('data-preview-engine', 'hlsjs', {
+        timeout: 30_000,
+      });
+      await expect
+        .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), {
+          timeout: 60_000,
+        })
+        .toBeGreaterThanOrEqual(2);
+      const startTime = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+      await expect
+        .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime), {
+          timeout: 20_000,
+        })
+        .toBeGreaterThanOrEqual(startTime + 2);
+      await expect(previewRoot).toHaveAttribute('data-preview-state', 'live');
+      await expect(previewRoot).toHaveAttribute('data-preview-output', 'stream', { timeout: 15_000 });
+      await expect(previewRoot.locator('[data-preview-output-error]')).not.toBeVisible();
+      expect(previewRequests.variant).toBeGreaterThan(0);
+      expect(previewRequests.segments).toBeGreaterThan(0);
+      expect(
+        await page.evaluate(
+          () =>
+            (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates ?? [],
+        ),
+      ).toEqual([]);
+      expect(fatalErrors).toEqual([]);
+    } finally {
+      await previewRoot.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+      await stopFixtureTranscode(page, channel.number);
+    }
   });
 });
