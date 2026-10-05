@@ -769,6 +769,7 @@ pub async fn get_block_items(
             collection_name: item.collection_name,
             watermark_ids: item.watermark_ids,
             graphics_element_ids: item.graphics_element_ids,
+            graphics_element_variables: item.graphics_element_variables,
         })
         .collect())
 }
@@ -2654,6 +2655,7 @@ pub struct PreviewBlockItem {
     pub watermark_ids: Vec<EntityId>,
     /// Graphics elements attached to this unsaved item.
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
     /// Unsaved Smart Shuffle attachment for this item.
     pub smart_shuffle_policy: SchedulingSmartShufflePolicy,
 }
@@ -3081,6 +3083,7 @@ pub async fn preview_playlist_playout(
             disable_watermarks: false,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: std::collections::BTreeMap::new(),
         });
         included_items.push((content, collection_key, item));
     }
@@ -3391,6 +3394,7 @@ fn temporary_block_state(
                 disable_watermarks: item.disable_watermarks,
                 watermark_ids: item.watermark_ids,
                 graphics_element_ids: item.graphics_element_ids,
+                graphics_element_variables: item.graphics_element_variables,
             }
         })
         .collect::<Vec<_>>();
@@ -3812,6 +3816,7 @@ mod block_preview_tests {
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
             smart_shuffle_policy: SchedulingSmartShufflePolicy::default(),
+            graphics_element_variables: BTreeMap::default(),
         }
     }
 
@@ -3873,6 +3878,7 @@ mod block_preview_tests {
                 disable_watermarks: true,
                 watermark_ids: vec![3],
                 graphics_element_ids: vec![4],
+                graphics_element_variables: BTreeMap::default(),
                 smart_shuffle_policy: SchedulingSmartShufflePolicy::default(),
             },
         ];

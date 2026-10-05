@@ -13503,7 +13503,7 @@ Integrated v1.1.1 closeout remains separate from this milestone.
 id = 'v111-findings-04'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Programme-aware graphics context'
-status = 'Not started'
+status = 'Complete'
 feature = 'drawvg-graphics-engine'
 depends_on = []
 acceptance = '''
@@ -13517,17 +13517,44 @@ The 2026-10-03 findings addendum also requires Continuing programme projection,
 split films and inserted idents, channel-local calendar-day boundaries and absent
 metadata. Suppress unavailable labels instead of inventing titles or times, and
 prove a decoded served transition rather than only a static preview.
+The October 4 addendum requires explicit per-item variable propagation and bounded
+opt-in database metadata refresh with honest editor semantics, real refresh and
+cancellation, and preserved overrides/planning after Continue and restart.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
-The addendum's exported-guide overlap is a separate undiagnosed observation;
-neither its cause nor its actual playout impact is established or corrected.
-The 2026-10-04 findings reread adds concrete variable-lifecycle evidence:
-schedule-wide graphics associations materialize element IDs with null variables;
-drawtext refresh reuses startup-captured variables and does not reread database
-overrides. Implement explicit per-item propagation and bounded repository refresh
-where live metadata is intended. Expose effective refresh semantics, preserve
-channel-local date/DST and programme grouping, and verify a served transition.
+Locally accepted 2026-10-05 under ADR 0112. Shared read-only occurrence projection
+matches upstream Classic/sequential/scripted grouping and Block guide windows;
+raw Epg remains compatible. Explicit broadcast render time avoids treating source
+InPoint as elapsed broadcast time. Named Europe/Amsterdam historical/DST tests
+resolve the next local date independently; missing/ambiguous programmes suppress
+labels. No per-channel timezone setting or live timeline repair is claimed.
+Core programme/default tests and graphics_programme_context integration cases
+prove split films, inserted junctions, pre/post-roll, boundary promos, absent
+future/metadata, mirrors and a long split programme outside former query padding.
+Actual producer controllers adopt database title/override changes for source and
+mirror occurrences; zero retains the startup snapshot. Deleted/reused occurrences,
+invalid variables, stalled reads and cancellation preserve the last good file.
+The nullable attachment migration preserves legacy IDs. Repository copies,
+Classic/Block materialization and Continue/reload preserve variables and published
+programme order. The deferred-save fixture runs natural maintenance in an actual
+fresh child process and proves new overrides with an unchanged published prefix,
+series rotation and Dutch-audio/English-subtitle selections.
+Historical draft/saved text previews pass in Chromium and Firefox, both renderers,
+English/Dutch, mobile and no-JavaScript, with an unchanged stored timeline:
+test-results/finding04-final4/playwright-results.json (2 cases). Real decoded
+Hls.js frames and 30-second regular IPTV captures show FIRST PROGRAMME followed
+by SECOND PROGRAMME, with full A/V decode and unchanged timeline:
+test-results/finding04-final6/playwright-results.json (2 cases), programme PNGs
+and served-transition.json in test-results/finding04-frames6. Frames were visually
+reviewed. Matroska/null remux diagnostics at the boundary are not represented as
+an original-transport clock guarantee; the separate four-pipeline TSDuck gate
+passes all 87 checks. Final workspace nextest run b6f4f90f-328c-42e8-97df-5ec6961d8657
+passes 3836 tests, plus Cargo doctests. Strict workspace all-target Clippy, fmt,
+architecture/hydration/progress checks, playback smoke and assembled-bundle
+verification pass. The web gate reuses the valid workspace test/lint results.
+The addendum's exported-guide overlap remains a separate undiagnosed observation;
+neither its cause nor actual playout impact is established or corrected here.
+Native/package acceptance on other platforms and publication are not claimed.
 '''
 
 [[milestone]]

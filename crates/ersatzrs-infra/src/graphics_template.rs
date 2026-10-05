@@ -34,6 +34,10 @@ pub enum GraphicsMedia {
 pub struct GraphicsTemplateContext {
     pub channel_id: i64,
     pub channel_number: String,
+    /// Broadcast instant being rendered, independent of source `InPoint` seek.
+    pub render_time: DateTime<Utc>,
+    /// Source playout attachment identity, when this render belongs to a row.
+    pub playout_item_id: Option<i64>,
     pub media: GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
@@ -78,10 +82,111 @@ pub async fn graphics_template_variables(
             Value::Array(load_epg_template_data(pool, context, epg_entries).await?),
         );
     }
+    programme_variables(pool, context, &mut root).await?;
     if let Some(overrides) = parse_variable_overrides(per_item_variables)? {
         merge_object(&mut root, overrides);
     }
     Ok(Value::Object(root))
+}
+
+async fn programme_variables(
+    pool: &DbPool,
+    context: &GraphicsTemplateContext,
+    root: &mut Map<String, Value>,
+) -> Result<()> {
+    use ersatzrs_core::programme::{select_programmes, ProgrammeClock};
+    let clock = ProgrammeClock::system().map_err(programme_clock_error)?;
+    let (start, finish) = clock
+        .day_bounds(context.render_time)
+        .map_err(programme_clock_error)?;
+    root.insert(
+        "Programme_RenderTime".into(),
+        Value::String(context.render_time.to_rfc3339()),
+    );
+    root.insert(
+        "Programme_LocalTime".into(),
+        Value::String(
+            clock
+                .local_time(context.render_time)
+                .map_err(programme_clock_error)?,
+        ),
+    );
+    let items = if context.channel_id > 0 {
+        crate::xmltv::load_channel_programmes(
+            pool,
+            context.channel_id,
+            start,
+            finish + chrono::Duration::days(1),
+        )
+        .await
+        .repository()?
+    } else {
+        Vec::new()
+    };
+    let selected = select_programmes(&items, context.render_time, finish, 32);
+    root.insert(
+        "Programme_ContextAmbiguous".into(),
+        Value::Bool(selected.ambiguous),
+    );
+    for (name, item) in [
+        ("CurrentProgramme", selected.current),
+        ("NextProgramme", selected.next),
+        ("ContinuingProgramme", selected.continuing),
+    ] {
+        root.insert(
+            name.into(),
+            item.map(|item| programme_value(item, &clock))
+                .transpose()?
+                .unwrap_or(Value::Null),
+        );
+    }
+    root.insert(
+        "LaterToday".into(),
+        Value::Array(
+            selected
+                .later_today
+                .into_iter()
+                .map(|item| programme_value(item, &clock))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|value| !value.is_null())
+                .collect(),
+        ),
+    );
+    Ok(())
+}
+
+fn programme_clock_error(error: impl std::fmt::Display) -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "graphics programme clock",
+        value: error.to_string(),
+    }
+}
+
+fn programme_value(
+    occurrence: &ersatzrs_core::programme::ProgrammeOccurrence,
+    clock: &ersatzrs_core::programme::ProgrammeClock,
+) -> Result<Value> {
+    let programme = &occurrence.programme;
+    let title = programme
+        .custom_title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(&programme.title);
+    if title.trim().is_empty() || programme.start >= programme.stop {
+        return Ok(Value::Null);
+    }
+    Ok(serde_json::json!({
+        "Title": title,
+        "SubTitle": programme.content.sub_title,
+        "Description": programme.content.description,
+        "Start": programme.start.to_rfc3339(),
+        "Stop": programme.stop.to_rfc3339(),
+        "LocalStart": clock.local_time(programme.start).map_err(programme_clock_error)?,
+        "LocalStop": clock.local_time(programme.stop).map_err(programme_clock_error)?,
+        "PlayoutId": occurrence.playout_id,
+        "FirstItemId": occurrence.first_item_id,
+    }))
 }
 
 /// Render `{{ ... }}` graphics placeholders from a variable map.
@@ -234,7 +339,7 @@ async fn load_media_item_template_data(
                OR mv."SongId" = mi."Id"
                OR mv."ImageId" = mi."Id"
            WHERE mi."Id" = ?
-           ORDER BY mv."Id", mm."Id", em."Id", mvm."Id", ovm."Id", rsm."Id", sm."Id"
+           ORDER BY mv."Id", mm."Id", em."Id", mvm."Id", ovm."Id", rsm."Id", sm."Id", smd."Id", amd."Id"
            LIMIT 1"#,
     )
     .bind(media_item_id)
@@ -395,6 +500,73 @@ fn merge_object(target: &mut Map<String, Value>, source: Map<String, Value>) {
 }
 
 fn render_expression(expression: &str, variables: &Value) -> Result<String> {
+    if let Some((path, filter)) = expression.split_once('|') {
+        // Keep historical path/arithmetic semantics. Only bounded scalar
+        // defaults opt into the existing parser, never an ad-hoc quote parser.
+        if expression.len() > 1024
+            || !filter.trim().starts_with("default(")
+            || !filter.trim().ends_with(')')
+            || resolve_path(path.trim(), variables)
+                .is_some_and(|value| value.is_array() || value.is_object())
+        {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "expected a scalar path and default(value, true)".into(),
+            });
+        }
+        let mut environment = crate::minijinja_compat::environment();
+        environment.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
+        let arguments = filter
+            .trim()
+            .strip_prefix("default(")
+            .and_then(|value| value.strip_suffix(')'))
+            .unwrap_or_default();
+        let arguments: Vec<Value> =
+            serde_json::from_str(&format!("[{arguments}]")).map_err(|_| {
+                RepositoryError::Decode {
+                    kind: "graphics template default",
+                    value: "default requires a JSON scalar literal, optionally followed by , true"
+                        .into(),
+                }
+            })?;
+        if arguments.is_empty()
+            || arguments.len() > 2
+            || arguments
+                .get(1)
+                .is_some_and(|value| value != &Value::Bool(true))
+        {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default accepts one scalar and optional true".into(),
+            });
+        }
+        let fallback = &arguments[0];
+        if fallback.is_object() || fallback.is_array() || fallback.is_null() {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default requires a non-null scalar literal".into(),
+            });
+        }
+        let source = format!("value | default({fallback}, true)");
+        let input = serde_json::json!({"value": resolve_path(path.trim(), variables).unwrap_or(&Value::Null)});
+        let value = environment
+            .compile_expression(&source)
+            .and_then(|expression| expression.eval(input))
+            .map_err(|error| RepositoryError::Decode {
+                kind: "graphics template default",
+                value: error.to_string(),
+            })?;
+        let value = serde_json::to_value(value).map_err(|error| RepositoryError::Decode {
+            kind: "graphics template default",
+            value: error.to_string(),
+        })?;
+        return value_to_template_string(&value)
+            .filter(|value| value.len() <= 64 * 1024)
+            .ok_or_else(|| RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default result must be a bounded scalar".into(),
+            });
+    }
     if contains_numeric_operator(expression) {
         let value = eval_numeric_expression(expression, variables)?;
         return Ok(format_number(value));
@@ -586,5 +758,38 @@ mod tests {
         let value =
             evaluate_graphics_number("MediaItem_Duration.TotalSeconds - 5", &variables).unwrap();
         assert!((value - 115.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn scalar_defaults_suppress_missing_null_and_empty_programme_labels() {
+        let variables =
+            json!({"CurrentProgramme": null, "Empty": "", "NextProgramme": {"Title": "Film"}});
+        for (expression, expected) in [
+            (r#"{{ CurrentProgramme.Title | default("", true) }}"#, ""),
+            (r#"{{ LaterToday[0].Title | default("",true) }}"#, ""),
+            (r#"{{ Empty | default("fallback") }}"#, "fallback"),
+            (r#"{{ NextProgramme.Title | default("", true) }}"#, "Film"),
+            (
+                r#"{{ Missing | default("quote: \" / slash: \\", true) }}"#,
+                "quote: \" / slash: \\",
+            ),
+        ] {
+            assert_eq!(
+                render_graphics_template(expression, &variables).unwrap(),
+                expected
+            );
+        }
+        for expression in [
+            "{{ NextProgramme }}",
+            r#"{{ NextProgramme | default("", true) }}"#,
+            r#"{{ Missing | default("x" * 10000000) }}"#,
+            r#"{{ Missing | default(["array"]) }}"#,
+            r#"{{ Missing | default("", false) }}"#,
+        ] {
+            assert!(
+                render_graphics_template(expression, &variables).is_err(),
+                "{expression}"
+            );
+        }
     }
 }

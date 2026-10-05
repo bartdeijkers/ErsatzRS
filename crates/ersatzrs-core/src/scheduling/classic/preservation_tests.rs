@@ -3,6 +3,74 @@ use chrono::TimeZone;
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
 
 #[test]
+fn classic_continue_carries_new_graphics_variables_without_reordering_published_programmes() {
+    let mut original = request(PlayoutMode::One, PlaybackOrder::Shuffle, false);
+    let item = &mut original.reference_data.classic_schedule_items[0];
+    item.graphics_element_ids = vec![7];
+    item.graphics_elements = vec![ersatzrs_domain::ProgramScheduleItemGraphicsElement {
+        program_schedule_item_id: item.id,
+        graphics_element_id: 7,
+        variables: Some(r#"{"headline":"Original"}"#.into()),
+    }];
+    let full = ClassicSchedulingEngine.schedule(original.clone()).unwrap();
+    assert!(full
+        .added_items
+        .iter()
+        .all(|item| item.graphics_elements[0].variables.as_deref()
+            == Some(r#"{"headline":"Original"}"#)));
+    let mut continued = published_request(&original, &full);
+    continued.mode = PlayoutBuildMode::Continue;
+    continued.start += Duration::minutes(1);
+    continued.finish += Duration::hours(1);
+    // Compare with the same stored Continue state and request clock before
+    // changing branding. Reset over a larger horizon is a different build.
+    let unchanged = ClassicSchedulingEngine.schedule(continued.clone()).unwrap();
+    // Simulate reconstruction from the persisted schedule and anchor JSON.
+    continued.reference_data.classic_schedule_items = serde_json::from_str(
+        &serde_json::to_string(&continued.reference_data.classic_schedule_items).unwrap(),
+    )
+    .unwrap();
+    continued.playout.anchor =
+        serde_json::from_str(&serde_json::to_string(&continued.playout.anchor).unwrap()).unwrap();
+    continued.reference_data.classic_schedule_items[0].graphics_elements[0].variables =
+        Some(r#"{"headline":"Deferred"}"#.into());
+    let result = ClassicSchedulingEngine.schedule(continued).unwrap();
+    assert!(!result.clear_items);
+    assert!(result.added_items.iter().all(|item| item.start
+        >= full.added_items.last().unwrap().finish
+        && item.graphics_elements[0].variables.as_deref() == Some(r#"{"headline":"Deferred"}"#)));
+    let actual = full
+        .added_items
+        .iter()
+        .chain(&result.added_items)
+        .map(|item| {
+            (
+                item.media_item_id,
+                item.start,
+                item.finish,
+                item.in_point,
+                item.out_point,
+            )
+        })
+        .collect::<Vec<_>>();
+    let expected = full
+        .added_items
+        .iter()
+        .chain(&unchanged.added_items)
+        .map(|item| {
+            (
+                item.media_item_id,
+                item.start,
+                item.finish,
+                item.in_point,
+                item.out_point,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn classic_preservation_retains_prefetched_programmes_without_advancing_cleanup_clock() {
     let original = request(PlayoutMode::One, PlaybackOrder::Shuffle, false);
     let full = ClassicSchedulingEngine.schedule(original.clone()).unwrap();

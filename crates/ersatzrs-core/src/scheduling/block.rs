@@ -110,6 +110,8 @@ pub struct EffectiveBlockItem {
     pub disable_watermarks: bool,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub graphics_element_variables: BTreeMap<EntityId, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -618,6 +620,15 @@ fn effective_block_playout_item(
         )),
     );
     item.guide_start = Some(block.start);
+    item.graphics_elements = block_item
+        .graphics_element_ids
+        .iter()
+        .map(|id| ersatzrs_domain::PlayoutItemGraphicsElement {
+            playout_item_id: item.id,
+            graphics_element_id: Some(*id),
+            variables: block_item.graphics_element_variables.get(id).cloned(),
+        })
+        .collect();
     item.guide_finish = Some(block_finish);
     item.block_key = block_key;
     item.collection_key = Some(collection_key);
@@ -968,6 +979,16 @@ fn effective_block_item_changed(
         || item.disable_watermarks != block_item.disable_watermarks
         || sorted_ids(&item.watermark_ids) != sorted_ids(&block_item.watermark_ids)
         || sorted_ids(&item.graphics_element_ids) != sorted_ids(&block_item.graphics_element_ids)
+        || item
+            .graphics_elements
+            .iter()
+            .filter_map(|attachment| {
+                attachment
+                    .graphics_element_id
+                    .zip(attachment.variables.clone())
+            })
+            .collect::<BTreeMap<_, _>>()
+            != block_item.graphics_element_variables
 }
 
 fn sorted_ids(ids: &[EntityId]) -> Vec<EntityId> {
@@ -1787,6 +1808,7 @@ mod tests {
                     disable_watermarks: true,
                     watermark_ids: vec![],
                     graphics_element_ids: vec![77],
+                    graphics_element_variables: std::collections::BTreeMap::new(),
                 },
             ],
             deco: None,
@@ -2796,6 +2818,7 @@ mod tests {
             disable_watermarks: false,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: std::collections::BTreeMap::new(),
         }
     }
 

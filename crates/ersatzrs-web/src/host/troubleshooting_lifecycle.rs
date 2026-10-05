@@ -565,6 +565,8 @@ mod tests {
     #[cfg(unix)]
     async fn refreshing_controller(text_file: PathBuf) -> DynamicTextController {
         DynamicTextController::start(ersatzrs_infra::dynamic_text::DynamicTextControllerRequest {
+            broadcast_start_time: None,
+            metadata_refresh: None,
             element_id: 1,
             template: "{{ Playback.ElapsedMilliseconds }}".into(),
             variables: serde_json::json!({}),

@@ -1250,6 +1250,8 @@ async fn serve_channel_stream_admitted_inner(
             let start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
             let graphics_context = PlaybackGraphicsRenderContext {
                 channel_id: channel.id,
+                render_time: now,
+                playout_item_id: Some(active.playout_item_id),
                 channel_number: channel.number.clone(),
                 media: active.external.as_ref().map_or_else(
                     || {

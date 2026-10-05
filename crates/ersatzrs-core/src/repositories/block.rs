@@ -58,6 +58,7 @@ pub struct BlockItemAdmin {
     pub collection_name: String,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
 }
 
 #[async_trait]

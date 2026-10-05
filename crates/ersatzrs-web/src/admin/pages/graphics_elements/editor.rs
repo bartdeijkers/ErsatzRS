@@ -4,7 +4,9 @@ use leptos::prelude::*;
 use leptos::server_fn::ServerFn;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use super::context_preview::{load_channels, saved_preview_html, GraphicsContextPreview};
 use crate::admin::i18n::{graphics_element_error_message, tr, TextKey};
+use crate::admin::server_fns::channels::ChannelNumberEditorRow;
 use crate::admin::server_fns::graphics_elements::{
     save_graphics_element, GraphicsElementForm, SaveGraphicsElement,
     MAX_REFRESH_INTERVAL_MILLISECONDS, MIN_REFRESH_INTERVAL_MILLISECONDS,
@@ -14,7 +16,7 @@ use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 #[cfg(feature = "ssr")]
 use crate::admin::server_fns::graphics_elements::get_graphics_element_form;
 
-stylance::import_crate_style!(style, "src/admin/pages/graphics_elements/editor.module.css");
+stylance::import_crate_style!(pub(super) style, "src/admin/pages/graphics_elements/editor.module.css");
 
 const MAX_NAME_CHARS: usize = 50;
 const MAX_TEMPLATE_BYTES: usize = 64 * 1024;
@@ -39,10 +41,21 @@ pub fn GraphicsElementEditorPage() -> impl IntoView {
     let error_code = query.with_untracked(|query| query.get("error").unwrap_or_default());
     let saved = query.with_untracked(|query| query.get("saved").as_deref() == Some("1"));
     let data = load_graphics_element_no_script_data(element_id);
+    let channels = load_channels();
+    let saved_preview = query.with_untracked(|query| {
+        saved_preview_html(
+            data.as_ref().ok().and_then(|form| form.as_ref()),
+            &channels,
+            query.get("preview_channel").as_deref(),
+            query.get("preview_time"),
+            query.get("preview_width").as_deref(),
+            query.get("preview_height").as_deref(),
+        )
+    });
     let no_script_html = graphics_element_no_script_html(data.clone());
     let editor = match data {
         Ok(Some(initial_form)) => view! {
-            <GraphicsElementEditorIsland initial_form error_code saved/>
+            <GraphicsElementEditorIsland initial_form error_code saved channels/>
         }
         .into_any(),
         Ok(None) => view! {
@@ -68,6 +81,7 @@ pub fn GraphicsElementEditorPage() -> impl IntoView {
                 data-graphics-element-noscript
                 inner_html=no_script_html
             ></div>
+            <div class="graphics-element-noscript" inner_html=saved_preview></div>
         </noscript>
         <div class="graphics-element-js">
             {editor}
@@ -111,7 +125,7 @@ fn graphics_element_no_script_html(data: Result<Option<GraphicsElementForm>, Str
     let mut html = String::new();
     let _ = write!(
         html,
-        r#"<form method="post" action="{action}" class="{page}" data-graphics-element-editor><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/graphics-elements" class="{back_link}">&#8592; {elements}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button type="submit" class="{primary}" data-save-graphics-element>{save_label}</button><a href="/graphics-elements" class="{secondary}">{cancel}</a></div><section class="{section}"><h2 class="{section_title}">{element}</h2><label class="{field}"><span class="{label}">{name_label}</span><input class="{input}" type="text" name="name" required maxlength="{max_name}" value="{name}" data-graphics-element-name></label><label class="{field}"><span class="{label}">{renderer_label}</span><select class="{input}" name="renderer" data-graphics-element-renderer-select><option value="drawvg"{drawvg_selected}>{drawvg}</option><option value="drawtext"{drawtext_selected}>{drawtext}</option></select></label><label class="{field}"><span class="{label}">{template_label}</span><textarea class="{textarea}" name="text" required maxlength="{max_template}" data-graphics-element-text>{text}</textarea></label></section><section class="{section}" data-drawtext-controls><h2 class="{section_title}">{settings}</h2><p class="{help}">{font_help}</p><label class="{field}"><span class="{label}">{font_label}</span><input class="{input}" type="text" name="font_file" value="{font_file}" data-drawtext-font-file></label><div class="{field_grid}"><label class="{field}"><span class="{label}">{refresh_label}</span><input class="{input}" type="number" name="refresh_interval_milliseconds" min="{min_refresh}" max="{max_refresh}" required value="{refresh}" data-drawtext-refresh-period></label><label class="{field}"><span class="{label}">{reload_label}</span><input class="{input}" type="number" name="reload_interval_frames" min="1" required value="{reload}" data-drawtext-reload-frames></label></div></section></form>"#,
+        r#"<form method="post" action="{action}" class="{page}" data-graphics-element-editor><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/graphics-elements" class="{back_link}">&#8592; {elements}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button type="submit" class="{primary}" data-save-graphics-element>{save_label}</button><a href="/graphics-elements" class="{secondary}">{cancel}</a></div><section class="{section}"><h2 class="{section_title}">{element}</h2><label class="{field}"><span class="{label}">{name_label}</span><input class="{input}" type="text" name="name" required maxlength="{max_name}" value="{name}" data-graphics-element-name></label><label class="{field}"><span class="{label}">{renderer_label}</span><select class="{input}" name="renderer" data-graphics-element-renderer-select><option value="drawvg"{drawvg_selected}>{drawvg}</option><option value="drawtext"{drawtext_selected}>{drawtext}</option></select></label><label class="{field}"><span class="{label}">{template_label}</span><textarea class="{textarea}" name="text" required maxlength="{max_template}" data-graphics-element-text>{text}</textarea></label></section><section class="{section}" data-drawtext-controls><h2 class="{section_title}">{settings}</h2><p class="{help}">{font_help}</p><label class="{field}"><span class="{label}">{font_label}</span><input class="{input}" type="text" name="font_file" value="{font_file}" data-drawtext-font-file></label><div class="{field_grid}"><label class="{field}"><span class="{label}">{refresh_label}</span><input class="{input}" type="number" name="refresh_interval_milliseconds" min="{min_refresh}" max="{max_refresh}" required value="{refresh}" data-drawtext-refresh-period></label><label class="{field}"><span class="{label}">{reload_label}</span><input class="{input}" type="number" name="reload_interval_frames" min="1" required value="{reload}" data-drawtext-reload-frames></label></div></section><section class="{section}"><label class="{field}"><span class="{label}">{metadata_label}</span><input class="{input}" type="number" name="metadata_refresh_interval_seconds" min="0" max="60" required value="{metadata_interval}" data-graphics-metadata-refresh></label><p class="{help}">{metadata_help}</p><p class="{help}">{programme_help}</p></section></form>"#,
         action = SaveGraphicsElement::PATH,
         page = style::page,
         id = form.id,
@@ -155,6 +169,10 @@ fn graphics_element_no_script_html(data: Result<Option<GraphicsElementForm>, Str
         refresh = form.refresh_interval_milliseconds,
         reload_label = escape_html(tr(TextKey::ReloadFrameInterval)),
         reload = form.reload_interval_frames,
+        metadata_label = escape_html(tr(TextKey::GraphicsMetadataRefreshSeconds)),
+        metadata_interval = form.metadata_refresh_interval_seconds,
+        metadata_help = escape_html(tr(TextKey::GraphicsMetadataRefreshHelp)),
+        programme_help = escape_html(tr(TextKey::ProgrammeTemplateHelp)),
     );
     html
 }
@@ -189,7 +207,7 @@ fn selected_attr(selected: bool) -> &'static str {
     }
 }
 
-fn escape_html(value: &str) -> String {
+pub(super) fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -203,12 +221,14 @@ fn GraphicsElementEditorIsland(
     initial_form: GraphicsElementForm,
     error_code: String,
     saved: bool,
+    channels: Vec<ChannelNumberEditorRow>,
 ) -> impl IntoView {
     view! {
         <GraphicsElementEditorForm
             initial_form
             initial_error=error_code
             saved
+            channels
         />
     }
 }
@@ -218,6 +238,7 @@ fn GraphicsElementEditorForm(
     initial_form: GraphicsElementForm,
     initial_error: String,
     saved: bool,
+    channels: Vec<ChannelNumberEditorRow>,
 ) -> impl IntoView {
     let toast = use_toast();
     let element_id = initial_form.id;
@@ -228,6 +249,8 @@ fn GraphicsElementEditorForm(
     let font_file = RwSignal::new(initial_form.font_file);
     let refresh_interval = RwSignal::new(initial_form.refresh_interval_milliseconds.to_string());
     let reload_interval = RwSignal::new(initial_form.reload_interval_frames.to_string());
+    let metadata_interval =
+        RwSignal::new(initial_form.metadata_refresh_interval_seconds.to_string());
     let error_message = RwSignal::new(if initial_error.is_empty() {
         String::new()
     } else {
@@ -236,7 +259,7 @@ fn GraphicsElementEditorForm(
     let drawtext_selected = Signal::derive(move || renderer.get() == "drawtext");
 
     let save_action = Action::new(
-        |(id, name, text, renderer, font_file, refresh, reload): &(
+        |(id, name, text, renderer, font_file, refresh, reload, metadata): &(
             i64,
             String,
             String,
@@ -244,8 +267,9 @@ fn GraphicsElementEditorForm(
             String,
             u64,
             u32,
+            u64,
         )| {
-            let (id, name, text, renderer, font_file, refresh, reload) = (
+            let (id, name, text, renderer, font_file, refresh, reload, metadata) = (
                 *id,
                 name.clone(),
                 text.clone(),
@@ -253,9 +277,20 @@ fn GraphicsElementEditorForm(
                 font_file.clone(),
                 *refresh,
                 *reload,
+                *metadata,
             );
             async move {
-                save_graphics_element(id, name, text, renderer, font_file, refresh, reload).await
+                save_graphics_element(
+                    id,
+                    name,
+                    text,
+                    renderer,
+                    font_file,
+                    refresh,
+                    reload,
+                    Some(metadata),
+                )
+                .await
             }
         },
     );
@@ -284,6 +319,7 @@ fn GraphicsElementEditorForm(
         let current_text = text.get_untracked();
         let refresh = refresh_interval.get_untracked().parse::<u64>().ok();
         let reload = reload_interval.get_untracked().parse::<u32>().ok();
+        let metadata = metadata_interval.get_untracked().parse::<u64>().ok();
         let validation_key = if current_name.trim().is_empty() {
             Some(TextKey::NameRequired)
         } else if current_name.chars().count() > MAX_NAME_CHARS {
@@ -296,6 +332,8 @@ fn GraphicsElementEditorForm(
             (MIN_REFRESH_INTERVAL_MILLISECONDS..=MAX_REFRESH_INTERVAL_MILLISECONDS).contains(&value)
         }) {
             Some(TextKey::RefreshPeriodBounds)
+        } else if metadata.is_none_or(|value| value != 0 && !(5..=60).contains(&value)) {
+            Some(TextKey::GraphicsMetadataRefreshBounds)
         } else if reload.is_none_or(|value| value == 0) {
             Some(TextKey::ReloadFrameIntervalBounds)
         } else {
@@ -305,7 +343,7 @@ fn GraphicsElementEditorForm(
             error_message.set(tr(key).to_owned());
             return;
         }
-        let (Some(refresh), Some(reload)) = (refresh, reload) else {
+        let (Some(refresh), Some(reload), Some(metadata)) = (refresh, reload, metadata) else {
             error_message.set(tr(TextKey::GraphicsElementSaveFailed).to_owned());
             return;
         };
@@ -318,6 +356,7 @@ fn GraphicsElementEditorForm(
             font_file.get_untracked(),
             refresh,
             reload,
+            metadata,
         ));
     };
 
@@ -488,6 +527,20 @@ fn GraphicsElementEditorForm(
                 </div>
             </section>
 
+            <section class=style::section>
+                <label class=style::field>
+                    <span class=style::label>{tr(TextKey::GraphicsMetadataRefreshSeconds)}</span>
+                    <input class=style::input type="number" name="metadata_refresh_interval_seconds"
+                        min="0" max="60" required
+                        prop:value=move || metadata_interval.get()
+                        on:input=move |event| metadata_interval.set(event_target_value(&event))
+                        data-graphics-metadata-refresh/>
+                </label>
+                <p class=style::help>{tr(TextKey::GraphicsMetadataRefreshHelp)}</p>
+                <p class=style::help>{tr(TextKey::ProgrammeTemplateHelp)}</p>
+            </section>
+
+            <GraphicsContextPreview element_id text renderer channels/>
             <section class=format!("{} {}", style::section, style::information)>
                 <h2 class=style::section_title>{tr(TextKey::Information)}</h2>
                 <p class=style::help>{tr(TextKey::GraphicsExistingDrawvgHelp)}</p>

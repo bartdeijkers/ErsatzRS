@@ -1,5 +1,5 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -324,6 +324,248 @@ INSERT INTO "Channel" (
 `);
   return { id, name, number };
 }
+
+function seedProgrammeGraphics(testInfo: TestInfo, anchor: Date) {
+  const clip = makeCalibrationClip(testInfo, 'color=c=black:size=640x360:rate=30');
+  const channels = [20, 21, 22].map((ordinal) => seedChannel(testInfo, clip, ordinal));
+  const channel = channels[0];
+  const graphicId = channel.id + 400;
+  const template = '{{ headline }}|{{ CurrentProgramme.Title | default("", true) }}|'
+    + '{{ NextProgramme.Title | default("", true) }}|'
+    + '{{ ContinuingProgramme.Title | default("", true) }}|{{ Epg[0].Title }}';
+  const config = JSON.stringify({ kind: 'text', renderer: 'drawtext', text: template,
+    drawtext: { font_file: null, refresh_interval_milliseconds: 250,
+      reload_interval_frames: 1, metadata_refresh_interval_seconds: 5 },
+    base_style: 'proof', styles: [{ name: 'proof', font_size: 84, text_color: '#ffffff' }] });
+  const titles = ['FIRST PROGRAMME', 'SECOND PROGRAMME', 'JUNCTION'];
+  const segments = [
+    [0, 5, 1, 1, 2, 0], [5, 25, 1, 0, 0, 0], [25, 30, 1, 2, 2, 0],
+    [30, 50, 1, 0, 0, 20], [50, 55, 1, 3, 2, 0],
+    [55, 60, 2, 1, 2, 0], [60, 80, 2, 0, 1, 0],
+  ];
+  sqlite(`
+${channels.map((row, index) => `UPDATE "MovieMetadata" SET "Title"=${sqlString(titles[index])}
+  WHERE "MovieId"=${row.id + 103};`).join('\n')}
+DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${channel.id + 1};
+DELETE FROM "PlayoutGap" WHERE "PlayoutId"=${channel.id + 1};
+DELETE FROM "PlayoutItemGraphicsElement" WHERE "GraphicsElementId"=${graphicId};
+DELETE FROM "GraphicsElement" WHERE "Id"=${graphicId};
+UPDATE "FFmpegProfile" SET "HardwareAcceleration"=0, "VideoPreset"='ultrafast'
+  WHERE "Id"=${channel.id + 200};
+INSERT INTO "GraphicsElement" ("Id", "Name", "Kind", "Config", "EpgEntries")
+VALUES (${graphicId}, 'Programme context proof', 1, ${sqlString(config)}, 8);
+${segments.map(([begin, end, group, filler, media, source], index) => `
+INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "MediaItemId", "Start", "Finish",
+  "InPoint", "OutPoint", "GuideGroup", "FillerKind", "DisableWatermarks")
+VALUES (${channel.id + 600 + index}, ${channel.id + 1}, ${channels[media].id + 103},
+  '${dbTime(new Date(anchor.getTime() + begin * 1000)).replace(/\.000$/, '')}',
+  '${dbTime(new Date(anchor.getTime() + end * 1000)).replace(/\.000$/, '')}',
+  '00:00:${source.toString().padStart(2, '0')}',
+  '00:00:${(source + end - begin).toString().padStart(2, '0')}', ${group}, ${filler}, 0);
+INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId", "Variables")
+VALUES (${channel.id + 600 + index}, ${graphicId}, '{"headline":"EXPLICIT"}');
+`).join('\n')}
+`);
+  return { channel, graphicId, template };
+}
+
+function programmeTimeline(playoutId: number): string {
+  return sqlite(`SELECT json_group_array(json_object('id', pi."Id", 'start', pi."Start",
+    'finish', pi."Finish", 'in', pi."InPoint", 'out', pi."OutPoint", 'media', pi."MediaItemId",
+    'variables', pg."Variables")) FROM "PlayoutItem" pi
+    LEFT JOIN "PlayoutItemGraphicsElement" pg ON pg."PlayoutItemId"=pi."Id"
+    WHERE pi."PlayoutId"=${playoutId} ORDER BY pi."Start", pi."Id";`);
+}
+
+function recordProgrammeBroadcast(testInfo: TestInfo, number: string) {
+  const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
+    ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+  const path = testInfo.outputPath('iptv-programme-transition.mkv');
+  const base = process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409';
+  const child = spawn(ffmpeg, ['-v', 'error', '-y', '-analyzeduration', '1000000',
+    '-probesize', '1000000', '-rw_timeout', '15000000', '-i',
+    `${base}/iptv/channel/${number}.ts?mode=ts`, '-t', '30', '-c', 'copy', path]);
+  let stderr = '';
+  child.stderr.on('data', (data: Buffer) => { stderr = (stderr + data.toString()).slice(-65536); });
+  const timer = setTimeout(() => {
+    stderr += '\nProgramme capture exceeded its 45-second deadline.';
+    child.kill('SIGKILL');
+  }, 45_000);
+  const result = new Promise<number | null>((resolve) => {
+    child.on('error', (error) => { stderr += error.message; clearTimeout(timer); resolve(null); });
+    child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
+  });
+  return {
+    async decode() {
+      expect(await result, stderr).toBe(0);
+      execFileSync(ffmpeg, ['-v', 'error', '-i', path, '-f', 'null', '-'], { timeout: 20_000 });
+      for (const [time, label] of [['0.5', 'first'], ['26', 'second']]) {
+        const framePath = testInfo.outputPath(`iptv-${label}-programme.png`);
+        execFileSync(ffmpeg, ['-v', 'error', '-y', '-ss', time, '-i', path,
+          '-frames:v', '1', framePath], { timeout: 15_000 });
+        expect(existsSync(framePath), `${label} regular IPTV frame was not decoded`).toBe(true);
+      }
+    },
+    async stop() { child.kill('SIGTERM'); await result; },
+  };
+}
+
+test.describe('finding 04 programme graphics acceptance', () => {
+  test.skip(!dbPath, 'Requires a disposable migrated database');
+
+  test('historical editor preview preserves split programmes, defaults and raw Epg', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    await forceEnglish(page);
+    const anchor = new Date('2026-04-15T10:00:00Z');
+    const { channel, graphicId, template } = seedProgrammeGraphics(testInfo, anchor);
+    const before = programmeTimeline(channel.id + 1);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => {
+      // Firefox cancels the old document's requests during the intentional reload.
+      if (error.name !== 'AbortError' || !/operation was aborted/i.test(error.message)) {
+        errors.push(error.message);
+      }
+    });
+    await page.goto(`/graphics-elements/${graphicId}`);
+    await waitForHydration(page);
+    const preview = page.locator('[data-graphics-context-preview]').filter({ visible: true });
+    await preview.locator('[data-graphics-preview-channel]').selectOption(channel.id.toString());
+    for (const [seconds, expected] of [
+      [1, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||JUNCTION'],
+      [10, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||FIRST PROGRAMME'],
+      [26, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION'],
+      [52, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||JUNCTION'],
+      [56, 'EXPLICIT|SECOND PROGRAMME|||JUNCTION'],
+      [65, 'EXPLICIT|SECOND PROGRAMME|||SECOND PROGRAMME'],
+    ] as const) {
+      await preview.locator('[data-graphics-preview-time]').fill(
+        new Date(anchor.getTime() + seconds * 1000).toISOString());
+      await preview.locator('[data-graphics-preview-submit]').click();
+      await expect(preview.locator('[data-graphics-preview-text]')).toHaveText(expected);
+      await expect(preview.locator('[data-graphics-preview-error]')).toBeHidden();
+    }
+    await page.locator('[data-graphics-element-renderer-select]').filter({ visible: true }).selectOption('drawvg');
+    await preview.locator('[data-graphics-preview-time]').fill('2026-04-15T12:00:26+02:00');
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    const editor = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+    await editor.locator('[data-graphics-element-text]').fill(`DRAFT|${template}`);
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('DRAFT|EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    await editor.locator('[data-graphics-element-text]').fill(template);
+    await expect(editor.locator('[data-graphics-metadata-refresh]')).toHaveValue('5');
+    await editor.locator('[data-save-graphics-element]').click();
+    await expect(page).toHaveURL(new RegExp(`/graphics-elements/${graphicId}\\?saved=1$`));
+    expect(sqlite(`SELECT json_extract("Config", '$.drawtext.metadata_refresh_interval_seconds')
+      FROM "GraphicsElement" WHERE "Id"=${graphicId};`)).toBe('5');
+    await page.request.post('/admin-api/settings/ui/save', {
+      form: { is_dark_mode: 'true', language: 'nl' }, maxRedirects: 0,
+    });
+    await page.reload();
+    await waitForHydration(page);
+    await expect(preview.locator('h2')).toHaveText('Voorbeeld van programmatekst');
+    await preview.locator('[data-graphics-preview-channel]').selectOption(channel.id.toString());
+    await preview.locator('[data-graphics-preview-time]').fill('2026-04-15T12:00:26+02:00');
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole('button', { name: 'Navigatie omschakelen' });
+    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => page.locator('[data-nav-drawer]')
+      .evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await preview.screenshot({ path: testInfo.outputPath('historical-editor-mobile.png') });
+    const context = await browser.newContext({ baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409', javaScriptEnabled: false });
+    try {
+      const noScript = await context.newPage();
+      await noScript.goto(`/graphics-elements/${graphicId}?preview_channel=${channel.id}&preview_time=2026-04-15T10%3A00%3A26Z`);
+      await expect(noScript.locator('[data-graphics-preview-text]').filter({ visible: true }))
+        .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    } finally { await context.close(); }
+    expect(programmeTimeline(channel.id + 1)).toBe(before);
+    expect(errors).toEqual([]);
+  });
+
+  test('decodes native programme titles across a served transition', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await forceEnglish(page);
+    const anchor = new Date(Date.now() - 2000);
+    const { channel, graphicId } = seedProgrammeGraphics(testInfo, anchor);
+    // Two complete occurrences make the broadcast boundary independent of the
+    // editor's historical fixture. The black source contains no glyphs.
+    const first = channel.id + 601;
+    const second = channel.id + 606;
+    sqlite(`
+DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${channel.id + 1} AND "Id" NOT IN (${first}, ${second});
+UPDATE "PlayoutItem" SET "Start"='${dbTime(anchor)}',
+  "Finish"='${dbTime(new Date(anchor.getTime() + 24000))}', "InPoint"='00:00:00', "OutPoint"='00:00:24'
+  WHERE "Id"=${first};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(anchor.getTime() + 24000))}',
+  "Finish"='${dbTime(new Date(anchor.getTime() + 70000))}', "InPoint"='00:00:00', "OutPoint"='00:00:46'
+  WHERE "Id"=${second};
+UPDATE "GraphicsElement" SET "Config"=json_set("Config", '$.text',
+  'ON AIR {{ CurrentProgramme.Title | default("", true) }}') WHERE "Id"=${graphicId};
+`);
+    const before = programmeTimeline(channel.id + 1);
+    const limitKey = 'ffmpeg.segmenter.active_transcode_limit';
+    const originalLimit = sqlite(`SELECT quote("Value") FROM "ConfigElement" WHERE "Key"='${limitKey}';`);
+    // Each of the two native outputs needs capacity for its boundary handover.
+    sqlite(`UPDATE "ConfigElement" SET "Value"='4' WHERE "Key"='${limitKey}';`);
+    const root = page.locator('.channel-watch-js [data-channel-preview]');
+    const video = root.locator('video');
+    const frame = () => video.evaluate((element: HTMLVideoElement) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640; canvas.height = 360;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(element, 0, 0, 640, 360);
+      const pixels = context.getImageData(0, 0, 640, 360).data;
+      let white = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] > 180 && pixels[i + 1] > 180 && pixels[i + 2] > 180) white++;
+      }
+      return { white, png: canvas.toDataURL('image/png'), time: element.currentTime };
+    });
+    let recording: ReturnType<typeof recordProgrammeBroadcast> | undefined;
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState),
+        { timeout: 45_000 }).toBeGreaterThanOrEqual(2);
+      await expect.poll(async () => (await frame()).white).toBeGreaterThan(100);
+      const initial = await frame();
+      recording = recordProgrammeBroadcast(testInfo, channel.number);
+      writeFileSync(testInfo.outputPath('served-first-programme.png'), Buffer.from(initial.png.split(',')[1], 'base64'));
+      await expect.poll(async () => Math.abs((await frame()).white - initial.white),
+        { timeout: 60_000 }).toBeGreaterThan(150);
+      const next = await frame();
+      writeFileSync(testInfo.outputPath('served-second-programme.png'), Buffer.from(next.png.split(',')[1], 'base64'));
+      expect(next.time).toBeGreaterThan(initial.time + 2);
+      expect(next.white).toBeGreaterThan(100);
+      await recording.decode();
+      expect(programmeTimeline(channel.id + 1)).toBe(before);
+      writeFileSync(testInfo.outputPath('served-transition.json'), JSON.stringify({
+        expectedTitles: ['FIRST PROGRAMME', 'SECOND PROGRAMME'],
+        first: { whitePixels: initial.white, decodedTime: initial.time },
+        second: { whitePixels: next.white, decodedTime: next.time }, timelinePreserved: true,
+        regularIptvCaptureSeconds: 30, regularIptvFullyDecoded: true,
+      }, null, 2));
+    } finally {
+      try {
+        await recording?.stop();
+        if (await root.getByRole('button', { name: 'Stop Preview', exact: true }).isVisible()) {
+          await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+          await stopFixtureTranscode(page, channel.number);
+        }
+      } finally {
+        sqlite(`UPDATE "ConfigElement" SET "Value"=${originalLimit} WHERE "Key"='${limitKey}';`);
+      }
+    }
+  });
+});
 
 function programmeStartMinutes(title: string): number {
   const match = title.match(/·\s*(\d{2}):(\d{2})/);

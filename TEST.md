@@ -156,6 +156,29 @@ Backend regressions preserve buffered slate provenance across subsequent encoder
 success, match served playlist times from the saved anchor independently of the
 current clock, reject stale replacement-worker reads and verify read-only polling.
 
+## Programme-aware graphics proof
+
+Finding 04 uses `ersatzrs-core::programme_tests` for scheduler-specific grouping,
+split films, filler boundaries, occurrence identity, missing/overlapping context
+and local-day/DST selection. `ersatzrs-infra/tests/graphics_programme_context.rs`
+checks actual historical repository previews, raw Epg compatibility, explicit
+overrides, long split programmes and real database refresh for source/mirror
+controllers. Dynamic-text tests prove bounded reads, cancellation and retention
+of the last good file. Schedule-copy, migration-upgrade, Block continuation and
+the deferred-save fresh-process maintenance fixtures preserve attachment values
+and the published programme prefix.
+
+Run the `finding 04 programme graphics acceptance` cases in
+`tests/e2e/channel-watch.spec.ts` against the runner's disposable database.
+Historical cases cover draft/saved text, both renderers, English/Dutch, mobile
+and no-JavaScript operation. The live cases require decoded Hls.js pixels and a
+bounded 30-second capture of the regular IPTV endpoint, full audio/video decode,
+programme frames on both sides of the boundary and an unchanged stored timeline.
+Inspect the saved programme frames alongside `served-transition.json`; a pixel
+change alone does not identify the displayed title. The fixture reserves four
+bounded transcode slots for both outputs and their boundary handovers, then
+restores the setting. The transport-integrity gate remains a separate check.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

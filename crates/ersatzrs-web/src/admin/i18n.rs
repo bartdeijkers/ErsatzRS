@@ -1056,6 +1056,19 @@ pub enum TextKey {
     AddGraphicsElement,
     DrawtextRendererOption,
     DrawtextSettings,
+    GraphicsMetadataRefreshSeconds,
+    GraphicsMetadataRefreshHelp,
+    GraphicsMetadataRefreshBounds,
+    ProgrammeTemplateHelp,
+    GraphicsItemVariables,
+    GraphicsItemVariablesHelp,
+    GraphicsContextPreview,
+    GraphicsContextPreviewHelp,
+    GraphicsPreviewTimeHelp,
+    GraphicsPreviewSavedHelp,
+    GraphicsPreviewAmbiguous,
+    GraphicsItemVariablesInvalid,
+
     DrawvgRendererOption,
     EditGraphicsElement,
     FontFile,
@@ -3150,6 +3163,18 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddGraphicsElement,
     TextKey::DrawtextRendererOption,
     TextKey::DrawtextSettings,
+    TextKey::GraphicsMetadataRefreshSeconds,
+    TextKey::GraphicsMetadataRefreshHelp,
+    TextKey::GraphicsMetadataRefreshBounds,
+    TextKey::ProgrammeTemplateHelp,
+    TextKey::GraphicsItemVariables,
+    TextKey::GraphicsItemVariablesHelp,
+    TextKey::GraphicsContextPreview,
+    TextKey::GraphicsContextPreviewHelp,
+    TextKey::GraphicsPreviewTimeHelp,
+    TextKey::GraphicsPreviewSavedHelp,
+    TextKey::GraphicsPreviewAmbiguous,
+    TextKey::GraphicsItemVariablesInvalid,
     TextKey::DrawvgRendererOption,
     TextKey::EditGraphicsElement,
     TextKey::FontFile,
@@ -4361,6 +4386,9 @@ pub fn schedule_item_fallback_label(id: i64) -> String {
 
 pub fn schedule_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
+    if message.contains("graphics attachment variables") || message.contains("graphics-variables") {
+        return tr(TextKey::GraphicsItemVariablesInvalid).to_owned();
+    }
     languages_for(use_i18n()).schedule_error_message(&message)
 }
 
@@ -4370,6 +4398,9 @@ pub fn schedule_error_text(language: UiLanguage, error: &str) -> String {
 
 pub fn scheduling_content_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
+    if message.contains("graphics attachment variables") || message.contains("graphics-variables") {
+        return tr(TextKey::GraphicsItemVariablesInvalid).to_owned();
+    }
     languages_for(use_i18n()).scheduling_content_error_message(&message)
 }
 
@@ -4396,6 +4427,8 @@ pub fn graphics_element_error_message(error: impl std::fmt::Display) -> String {
         TextKey::TextTemplateRequired
     } else if error.contains("text_too_long") {
         TextKey::TextTemplateTooLong
+    } else if error.contains("metadata_refresh_interval_out_of_range") {
+        TextKey::GraphicsMetadataRefreshBounds
     } else if error.contains("refresh_interval_out_of_range") {
         TextKey::RefreshPeriodBounds
     } else if error.contains("reload_interval_out_of_range") {

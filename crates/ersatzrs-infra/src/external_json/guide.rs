@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
+    programme::ProgrammeGuideItem,
     repositories::ArtworkReference,
     xmltv::{IconSizeHint, XmltvGuideItem, XmltvItemKind, XmltvProgrammeContent},
 };
@@ -10,21 +11,28 @@ use sqlx::Row;
 
 use crate::{db::DbPool, repositories::common::try_decode_signed_duration_text};
 
-pub(crate) async fn load_items(
-    pool: &DbPool,
-    start: DateTime<Utc>,
-    finish: DateTime<Utc>,
-) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
-    load_filtered_items(pool, None, start, finish).await
-}
-
 pub(crate) async fn load_channel_items(
     pool: &DbPool,
     channel_id: i64,
     start: DateTime<Utc>,
     finish: DateTime<Utc>,
 ) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
-    load_filtered_items(pool, Some(channel_id), start, finish).await
+    Ok(
+        load_filtered_items(pool, Some(channel_id), start, finish, false)
+            .await?
+            .into_iter()
+            .map(|item| item.guide)
+            .collect(),
+    )
+}
+
+pub(crate) async fn load_programme_items(
+    pool: &DbPool,
+    channel_id: Option<i64>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<ProgrammeGuideItem>, sqlx::Error> {
+    load_filtered_items(pool, channel_id, start, finish, channel_id.is_some()).await
 }
 
 async fn load_filtered_items(
@@ -32,7 +40,8 @@ async fn load_filtered_items(
     channel_id: Option<i64>,
     start: DateTime<Utc>,
     finish: DateTime<Utc>,
-) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
+    programme_context: bool,
+) -> Result<Vec<ProgrammeGuideItem>, sqlx::Error> {
     let rows = sqlx::query(
         r#"SELECT c."Number", c."PlayoutSource", c."PlayoutOffset",
                   p."Id", p."ScheduleFile"
@@ -40,11 +49,12 @@ async fn load_filtered_items(
            JOIN "Playout" p ON p."ChannelId" = CASE
                WHEN c."PlayoutSource" = 1 THEN c."MirrorSourceChannelId"
                ELSE c."Id" END
-           WHERE c."IsEnabled" = 1 AND c."ShowInEpg" = 1
+           WHERE (? = 1 OR (c."IsEnabled" = 1 AND c."ShowInEpg" = 1))
              AND p."ScheduleKind" IN (20, 'ExternalJson')
              AND (? IS NULL OR c."Id" = ?)
            ORDER BY c."Number", p."Id""#,
     )
+    .bind(programme_context)
     .bind(channel_id)
     .bind(channel_id)
     .fetch_all(pool)
@@ -83,20 +93,34 @@ async fn load_filtered_items(
             if shifted_start >= finish || shifted_finish <= start {
                 continue;
             }
-            let (title, content) = content(item.program);
-            items.push(XmltvGuideItem {
-                channel_number: channel_number.clone(),
-                start: shifted_start,
-                finish: shifted_finish,
-                guide_start: None,
-                guide_finish: None,
-                guide_group: i32::try_from(index)
+            let (title, content) = content(item.program, programme_context);
+            items.push(ProgrammeGuideItem {
+                playout_id,
+                item_id: i64::try_from(index)
                     .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
-                filler_kind: FillerKind::None,
-                custom_title: None,
-                title,
-                content,
+                media_item_id: None,
+                schedule_kind: ersatzrs_domain::PlayoutScheduleKind::ExternalJson,
+                in_point: Duration::zero(),
+                out_point: shifted_finish - shifted_start,
+                guide: XmltvGuideItem {
+                    channel_number: channel_number.clone(),
+                    start: shifted_start,
+                    finish: shifted_finish,
+                    guide_start: None,
+                    guide_finish: None,
+                    guide_group: i32::try_from(index)
+                        .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+                    filler_kind: FillerKind::None,
+                    custom_title: None,
+                    title,
+                    content,
+                },
             });
+            if programme_context && items.len() > 8192 {
+                return Err(sqlx::Error::Decode(
+                    "external programme context exceeds 8192 rows".into(),
+                ));
+            }
         }
     }
     Ok(items)
@@ -107,7 +131,10 @@ fn shift(time: DateTime<Utc>, offset: Duration) -> Result<DateTime<Utc>, sqlx::E
         .ok_or_else(|| sqlx::Error::Decode(Box::new(super::ExternalJsonError::TimeRange)))
 }
 
-fn content(program: super::ExternalJsonProgram) -> (String, XmltvProgrammeContent) {
+fn content(
+    program: super::ExternalJsonProgram,
+    programme_context: bool,
+) -> (String, XmltvProgrammeContent) {
     let episode = program.kind.as_deref() == Some("episode");
     let title = if episode {
         program.show_title
@@ -148,7 +175,13 @@ fn content(program: super::ExternalJsonProgram) -> (String, XmltvProgrammeConten
     (
         title
             .filter(|title| !title.trim().is_empty())
-            .unwrap_or_else(|| "Unknown".into()),
+            .unwrap_or_else(|| {
+                if programme_context {
+                    String::new()
+                } else {
+                    "Unknown".into()
+                }
+            }),
         content,
     )
 }

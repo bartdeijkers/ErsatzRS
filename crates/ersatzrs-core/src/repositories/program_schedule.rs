@@ -66,6 +66,7 @@ pub struct ScheduleItemAdmin {
     pub fallback_filler_id: Option<EntityId>,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
     pub preferred_audio_language_code: Option<String>,
     pub preferred_audio_title: String,
     pub preferred_subtitle_language_code: Option<String>,

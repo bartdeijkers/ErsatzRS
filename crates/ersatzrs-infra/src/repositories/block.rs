@@ -630,6 +630,12 @@ async fn map_block_item_admin(pool: &Pool<Db>, row: &DbRow) -> Result<BlockItemA
             id,
         )
         .await?,
+        graphics_element_variables: super::graphics_attachments::load(
+            pool,
+            super::graphics_attachments::Owner::Block,
+            id,
+        )
+        .await?,
     })
 }
 
@@ -710,6 +716,11 @@ async fn copy_admin_items(
             new_item_id,
         )
         .await?;
+        sqlx::query(r#"UPDATE "BlockItemGraphicsElement" SET "Variables" = (
+            SELECT source."Variables" FROM "BlockItemGraphicsElement" source
+            WHERE source."BlockItemId" = ? AND source."GraphicsElementId" = "BlockItemGraphicsElement"."GraphicsElementId"
+        ) WHERE "BlockItemId" = ?"#)
+            .bind(old_item_id).bind(new_item_id).execute(&mut **transaction).await.repository()?;
         let json = sqlx::query_scalar::<_, String>(
             r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
         )
@@ -767,17 +778,14 @@ async fn insert_admin_item(
         .await
         .repository()?;
     }
-    for graphics_id in &item.graphics_element_ids {
-        sqlx::query(
-            r#"INSERT INTO "BlockItemGraphicsElement"
-               ("BlockItemId", "GraphicsElementId") VALUES (?, ?)"#,
-        )
-        .bind(id)
-        .bind(graphics_id)
-        .execute(&mut **transaction)
-        .await
-        .repository()?;
-    }
+    super::graphics_attachments::replace(
+        transaction,
+        super::graphics_attachments::Owner::Block,
+        id,
+        &item.graphics_element_ids,
+        &item.graphics_element_variables,
+    )
+    .await?;
     if let Some(policy) = &item.smart_shuffle {
         persist_smart_shuffle(transaction, id, policy).await?;
     }
@@ -1015,12 +1023,22 @@ async fn upsert_block_item(tx: &mut Transaction<'_, Db>, item: &BlockItem) -> Re
         &item.watermark_ids,
     )
     .await?;
-    replace_ids(
+    let variables = item
+        .graphics_elements
+        .iter()
+        .filter_map(|attachment| {
+            attachment
+                .variables
+                .as_ref()
+                .map(|variables| (attachment.graphics_element_id, variables.clone()))
+        })
+        .collect();
+    super::graphics_attachments::replace(
         tx,
-        r#"DELETE FROM "BlockItemGraphicsElement" WHERE "BlockItemId" = ?"#,
-        r#"REPLACE INTO "BlockItemGraphicsElement" ("BlockItemId", "GraphicsElementId") VALUES (?, ?)"#,
+        super::graphics_attachments::Owner::Block,
         item.id,
         &item.graphics_element_ids,
+        &variables,
     )
     .await?;
 
@@ -1083,5 +1101,8 @@ async fn map_block_item(pool: &Pool<crate::db::Db>, row: &DbRow) -> Result<Block
             id,
         )
         .await?,
+        graphics_elements: super::graphics_attachments::load(pool, super::graphics_attachments::Owner::Block, id).await?.into_iter().map(|(graphics_element_id, variables)| ersatzrs_domain::BlockItemGraphicsElement {
+            block_item_id: id, graphics_element_id, variables: Some(variables),
+        }).collect(),
     })
 }

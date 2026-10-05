@@ -73,13 +73,17 @@ pub struct BlockItemsSaveForm {
     #[serde(default)]
     item_graphics_element_ids: Vec<String>,
     #[serde(default)]
+    item_graphics_element_variables: Vec<String>,
+    #[serde(default)]
     new_collection_id: String,
 }
 
 pub async fn save_block_items_form(State(state): State<AppState>, body: Bytes) -> Redirect {
     let input = BlockItemsSaveForm::from_urlencoded_bytes(&body);
     let block_id = input.block_id;
-    let mut items = input.to_items();
+    let Ok(mut items) = input.to_items() else {
+        return Redirect::to(&format!("/blocks/{block_id}?error=graphics-variables"));
+    };
     let (action, action_index) = parse_action(&input.action);
 
     match action.as_str() {
@@ -190,6 +194,9 @@ impl BlockItemsSaveForm {
                 }
                 "item_watermark_ids" => form.item_watermark_ids.push(value),
                 "item_graphics_element_ids" => form.item_graphics_element_ids.push(value),
+                "item_graphics_element_variables" => {
+                    form.item_graphics_element_variables.push(value);
+                }
                 "new_collection_id" => form.new_collection_id = value,
                 _ => {}
             }
@@ -197,13 +204,19 @@ impl BlockItemsSaveForm {
         form
     }
 
-    fn to_items(&self) -> Vec<BlockItemForm> {
+    fn to_items(&self) -> Result<Vec<BlockItemForm>, ersatzrs_core::repositories::RepositoryError> {
         let epg_indexes = parse_index_set(&self.item_include_in_program_guide_index);
         let disable_watermark_indexes = parse_index_set(&self.item_disable_watermarks_index);
         let mut items = Vec::with_capacity(self.item_index.len());
         for pos in 0..self.item_index.len() {
             let form_index = parse_i32(self.item_index.get(pos)).unwrap_or_default();
             items.push(BlockItemForm {
+                graphics_element_variables:
+                    ersatzrs_core::repositories::parse_graphics_attachment_variables(
+                        self.item_graphics_element_variables
+                            .get(pos)
+                            .map_or("", String::as_str),
+                    )?,
                 id: parse_i64(self.item_id.get(pos)).unwrap_or_default(),
                 index: form_index,
                 collection_type: parse_i32(self.item_collection_type.get(pos))
@@ -255,7 +268,7 @@ impl BlockItemsSaveForm {
                 graphics_element_ids: parse_id_list(self.item_graphics_element_ids.get(pos)),
             });
         }
-        items
+        Ok(items)
     }
 
     fn new_item(&self) -> BlockItemForm {
@@ -367,7 +380,7 @@ mod tests {
             ..BlockItemsSaveForm::default()
         };
 
-        let items = form.to_items();
+        let items = form.to_items().unwrap();
 
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].collection_id, Some(3));
@@ -402,7 +415,8 @@ mod tests {
             item_smart_shuffle_preset: vec!["off".to_owned()],
             ..BlockItemsSaveForm::default()
         }
-        .to_items();
+        .to_items()
+        .unwrap();
         assert!(inherited[0].smart_shuffle.inherited_legacy);
 
         let explicit = BlockItemsSaveForm {
@@ -411,7 +425,8 @@ mod tests {
             item_smart_shuffle_inherited_legacy: vec!["false".to_owned()],
             ..BlockItemsSaveForm::default()
         }
-        .to_items();
+        .to_items()
+        .unwrap();
         assert!(!explicit[0].smart_shuffle.inherited_legacy);
     }
 
@@ -435,7 +450,7 @@ mod tests {
         assert_eq!(form.group_id, 2);
         assert_eq!(form.name, "Prime Time");
 
-        let items = form.to_items();
+        let items = form.to_items().unwrap();
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, 11);

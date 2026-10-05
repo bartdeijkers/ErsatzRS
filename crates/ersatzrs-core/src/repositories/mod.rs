@@ -118,7 +118,10 @@ pub use error::{RepositoryError, Result};
 pub use ersatzrs_domain::AddonMediaListAutoPublicationHoldReason;
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
-pub use graphics::GraphicsRepository;
+pub use graphics::{
+    parse_graphics_attachment_variables, validate_graphics_attachment_variables,
+    GraphicsRepository, GraphicsTextPreview, GraphicsTextPreviewRequest,
+};
 pub use jellyfin::{
     JellyfinActor, JellyfinCollectionItem, JellyfinCollectionMediaItem,
     JellyfinCollectionMediaKind, JellyfinCollectionMediaPage, JellyfinCollectionPage,

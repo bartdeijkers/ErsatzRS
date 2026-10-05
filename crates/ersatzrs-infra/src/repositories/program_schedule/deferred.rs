@@ -102,6 +102,9 @@ fn copy_deferred_fields(source: &ScheduleItemAdmin, target: &mut ScheduleItemAdm
         .graphics_element_ids
         .clone_from(&source.graphics_element_ids);
     target
+        .graphics_element_variables
+        .clone_from(&source.graphics_element_variables);
+    target
         .preferred_audio_language_code
         .clone_from(&source.preferred_audio_language_code);
     target
@@ -192,9 +195,13 @@ async fn update_item(
         r#"DELETE FROM "ProgramScheduleItemWatermark" WHERE "ProgramScheduleItemId"=?"#,
         r#"INSERT INTO "ProgramScheduleItemWatermark" ("ProgramScheduleItemId", "WatermarkId") VALUES (?, ?)"#,
         item.id, &item.watermark_ids).await?;
-    replace_ids(tx,
-        r#"DELETE FROM "ProgramScheduleItemGraphicsElement" WHERE "ProgramScheduleItemId"=?"#,
-        r#"INSERT INTO "ProgramScheduleItemGraphicsElement" ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
-        item.id, &item.graphics_element_ids).await?;
+    crate::repositories::graphics_attachments::replace(
+        tx,
+        crate::repositories::graphics_attachments::Owner::Schedule,
+        item.id,
+        &item.graphics_element_ids,
+        &item.graphics_element_variables,
+    )
+    .await?;
     Ok(())
 }

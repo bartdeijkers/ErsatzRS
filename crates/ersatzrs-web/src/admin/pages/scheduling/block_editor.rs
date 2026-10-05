@@ -699,7 +699,7 @@ fn block_item_fallback_row_html(
     options: &BlockEditorOptions,
 ) -> String {
     format!(
-        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{smart_shuffle_hidden}{collection_type}</td><td>{collection}{multi_collection}{smart_collection}<input type="hidden" name="item_playlist_id" value="{playlist_id}">{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
+        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{smart_shuffle_hidden}{collection_type}</td><td>{collection}{multi_collection}{smart_collection}<input type="hidden" name="item_playlist_id" value="{playlist_id}">{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}">{variables_html}</td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
         item_index = item.index,
         id = item.id,
         smart_shuffle_hidden = smart_shuffle_hidden_fields_html(item),
@@ -782,6 +782,7 @@ fn block_item_fallback_row_html(
         },
         watermark_ids = id_csv(&item.watermark_ids),
         graphics_ids = id_csv(&item.graphics_element_ids),
+        variables_html = block_graphics_variables_html(item),
         watermark_ids_label = escape_html(tr(TextKey::WatermarkIds)),
         graphics_ids_label = escape_html(tr(TextKey::GraphicsIds)),
         row_actions = style::row_actions,
@@ -792,6 +793,19 @@ fn block_item_fallback_row_html(
         down = escape_html(tr(TextKey::MoveDown)),
         delete = escape_html(tr(TextKey::Delete)),
         move_up_disabled = if index == 0 { "disabled" } else { "" },
+    )
+}
+
+fn block_graphics_variables_html(item: &BlockItemForm) -> String {
+    format!(
+        r#"<details><summary>{label}</summary><label class="{field}"><span>{label}</span><textarea class="{textarea}" name="item_graphics_element_variables" rows="4" maxlength="262144" data-graphics-item-variables-map>{value}</textarea></label><p>{help}</p></details>"#,
+        label = escape_html(tr(TextKey::GraphicsItemVariables)),
+        field = style::field,
+        textarea = style::textarea,
+        value = escape_html(&super::graphics_variables::variables_json(
+            &item.graphics_element_variables
+        )),
+        help = escape_html(tr(TextKey::GraphicsItemVariablesHelp)),
     )
 }
 
@@ -1246,8 +1260,21 @@ fn ItemEditor(
                 update_item(items, idx, |item| item.watermark_ids = values);
             })}
             {multi_select_i64(tr(TextKey::GraphicsElements), &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
-                update_item(items, idx, |item| item.graphics_element_ids = values);
+                update_item(items, idx, |item| {
+                    item.graphics_element_variables.retain(|id, _| values.contains(id));
+                    item.graphics_element_ids = values;
+                });
             })}
+            {super::graphics_variables::variables_editor(
+                &item.graphics_element_ids,
+                options.graphics_elements.iter().map(|option| (option.id, option.name.clone())).collect(),
+                &item.graphics_element_variables,
+                (style::field, style::textarea),
+                move |id, value| update_item(items, idx, |item| {
+                    if value.trim().is_empty() { item.graphics_element_variables.remove(&id); }
+                    else { item.graphics_element_variables.insert(id, value); }
+                }),
+            )}
         </div>
     }
 }

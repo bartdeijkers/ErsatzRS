@@ -2,6 +2,7 @@
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -101,6 +102,23 @@ pub struct DynamicTextControllerRequest {
     pub refresh_interval_milliseconds: u64,
     pub playback_offset_seconds: f64,
     pub playback_duration_seconds: f64,
+    pub broadcast_start_time: Option<DateTime<Utc>>,
+    pub metadata_refresh: Option<DynamicTextMetadataRefresh>,
+}
+
+/// Producer-owned repository refresh. The controller bounds and cancels each read.
+#[async_trait::async_trait]
+pub trait DynamicTextVariables: Send + Sync {
+    /// Resolve variables at this render instant, preserving historical preview time.
+    ///
+    /// # Errors
+    /// Returns a repository error; the controller retains the last good file.
+    async fn load(&self, render_time: DateTime<Utc>) -> Result<Value, String>;
+}
+
+pub struct DynamicTextMetadataRefresh {
+    pub source: Arc<dyn DynamicTextVariables>,
+    pub interval_seconds: u64,
 }
 
 /// Owns the refresh task for one reloadable `FFmpeg` `drawtext` text file.
@@ -122,11 +140,13 @@ impl DynamicTextController {
         let DynamicTextControllerRequest {
             element_id,
             template,
-            variables,
+            mut variables,
             text_file,
             refresh_interval_milliseconds,
             playback_offset_seconds,
             playback_duration_seconds,
+            broadcast_start_time,
+            metadata_refresh,
         } = request;
         let template = DynamicTextTemplate::compile(template)?;
         if let Some(parent) = text_file.parent() {
@@ -142,7 +162,7 @@ impl DynamicTextController {
         let initial = template.render(
             &variables,
             DynamicTextRenderContext {
-                now: Utc::now(),
+                now: broadcast_start_time.unwrap_or_else(Utc::now),
                 playback_elapsed_seconds: playback_offset_seconds,
                 playback_duration_seconds,
             },
@@ -153,6 +173,10 @@ impl DynamicTextController {
         let (shutdown, mut shutdown_rx) = oneshot::channel();
         let task_text_file = text_file.clone();
         let task = tokio::spawn(async move {
+            let mut next_metadata_refresh = Instant::now();
+            if let Some(refresh) = &metadata_refresh {
+                next_metadata_refresh += Duration::from_secs(refresh.interval_seconds.clamp(5, 60));
+            }
             let first_tick = tokio::time::Instant::now() + refresh_interval;
             let mut interval = tokio::time::interval_at(first_tick, refresh_interval);
             interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -161,11 +185,31 @@ impl DynamicTextController {
                     _ = &mut shutdown_rx => break,
                     _ = interval.tick() => {
                         let elapsed = playback_offset_seconds + started_at.elapsed().as_secs_f64();
+                        let now = broadcast_start_time
+                            .and_then(|start| chrono::Duration::from_std(started_at.elapsed()).ok().and_then(|elapsed| start.checked_add_signed(elapsed)))
+                            .unwrap_or_else(Utc::now);
+                        if let Some(refresh) = &metadata_refresh {
+                            if Instant::now() >= next_metadata_refresh {
+                                let update = tokio::select! {
+                                    biased;
+                                    _ = &mut shutdown_rx => break,
+                                    update = tokio::time::timeout(Duration::from_secs(2), refresh.source.load(now)) => update,
+                                };
+                                match update {
+                                    Ok(Ok(updated)) if template.render(&updated, DynamicTextRenderContext {
+                                        now, playback_elapsed_seconds: elapsed, playback_duration_seconds,
+                                    }).is_ok() => variables = updated,
+                                    Ok(Err(error)) => tracing::warn!(element_id, %error, "dynamic text metadata refresh failed; retaining last good variables"),
+                                    _ => tracing::warn!(element_id, "dynamic text metadata refresh timed out or returned invalid variables; retaining last good variables"),
+                                }
+                                next_metadata_refresh = Instant::now() + Duration::from_secs(refresh.interval_seconds.clamp(5, 60));
+                            }
+                        }
                         match template
                             .render(
                                 &variables,
                                 DynamicTextRenderContext {
-                                    now: Utc::now(),
+                                    now,
                                     playback_elapsed_seconds: elapsed,
                                     playback_duration_seconds,
                                 },
@@ -339,10 +383,123 @@ fn atomic_replace_if_changed(path: &Path, bytes: &[u8]) -> Result<bool, DynamicT
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone as _;
+    use chrono::{Datelike as _, TimeZone as _};
     use serde_json::json;
 
     use super::*;
+
+    struct MetadataSource {
+        calls: std::sync::atomic::AtomicUsize,
+        mode: u8,
+        started: tokio::sync::Notify,
+        cancelled: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    struct CancelRead(Arc<std::sync::atomic::AtomicBool>);
+    impl Drop for CancelRead {
+        fn drop(&mut self) {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl DynamicTextVariables for MetadataSource {
+        async fn load(&self, render_time: DateTime<Utc>) -> Result<Value, String> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.started.notify_one();
+            match self.mode {
+                0 => Ok(json!({"title": "Updated", "at": render_time.year()})),
+                1 => Err("repository unavailable".into()),
+                2 => Ok(json!({"unrelated": "missing title"})),
+                _ => {
+                    let _cancel = CancelRead(self.cancelled.clone());
+                    std::future::pending().await
+                }
+            }
+        }
+    }
+
+    async fn metadata_controller(
+        mode: u8,
+    ) -> (
+        tempfile::TempDir,
+        DynamicTextController,
+        Arc<MetadataSource>,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let source = Arc::new(MetadataSource {
+            calls: std::sync::atomic::AtomicUsize::new(0),
+            mode,
+            started: tokio::sync::Notify::new(),
+            cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        });
+        let controller = DynamicTextController::start(DynamicTextControllerRequest {
+            element_id: 7,
+            template: "{{ title }}|{{ at }}".into(),
+            variables: json!({"title": "Initial", "at": 2026}),
+            text_file: directory.path().join("current.txt"),
+            refresh_interval_milliseconds: 250,
+            playback_offset_seconds: 120.0,
+            playback_duration_seconds: 300.0,
+            broadcast_start_time: Some(Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap()),
+            metadata_refresh: Some(DynamicTextMetadataRefresh {
+                source: source.clone(),
+                interval_seconds: 5,
+            }),
+        })
+        .await
+        .unwrap();
+        (directory, controller, source)
+    }
+
+    #[tokio::test]
+    async fn metadata_refresh_uses_historical_clock_and_keeps_the_previous_file_on_failure() {
+        for mode in 0..=2 {
+            let (_directory, controller, source) = metadata_controller(mode).await;
+            tokio::time::timeout(Duration::from_secs(8), source.started.notified())
+                .await
+                .unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            assert_eq!(
+                std::fs::read_to_string(controller.text_file()).unwrap(),
+                if mode == 0 {
+                    "Updated|2026"
+                } else {
+                    "Initial|2026"
+                }
+            );
+            assert_eq!(source.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+            controller.shutdown().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn stopping_a_controller_cancels_its_owned_metadata_read() {
+        let (_directory, controller, source) = metadata_controller(3).await;
+        tokio::time::timeout(Duration::from_secs(8), source.started.notified())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), controller.shutdown())
+            .await
+            .unwrap();
+        assert!(source.cancelled.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(source.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_stalled_metadata_read_times_out_without_changing_the_file() {
+        let (_directory, controller, source) = metadata_controller(3).await;
+        tokio::time::timeout(Duration::from_secs(8), source.started.notified())
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(2250)).await;
+        assert!(source.cancelled.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(
+            std::fs::read_to_string(controller.text_file()).unwrap(),
+            "Initial|2026"
+        );
+        controller.shutdown().await;
+    }
 
     #[test]
     fn renders_static_and_dynamic_graphics_variables_deterministically() {
@@ -404,6 +561,8 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let text_file = directory.path().join("current.txt");
         let controller = DynamicTextController::start(DynamicTextControllerRequest {
+            broadcast_start_time: None,
+            metadata_refresh: None,
             element_id: 7,
             template: "{{ Playback.ElapsedMilliseconds }}".to_owned(),
             variables: json!({}),

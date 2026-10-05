@@ -975,6 +975,8 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
     common::seed_profile_and_channel(&repos, 110).await;
     seed_playout_item(&pool, 110, None, 1009, 10).await;
     let context = GraphicsTemplateContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 110,
         channel_number: "110".to_owned(),
         media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
@@ -1058,6 +1060,8 @@ async fn imported_image_graphics_use_persisted_epg_context_without_source_yaml()
     assert_eq!(element.epg_entries, 1);
     assert!(!missing_yaml.exists());
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 110,
         channel_number: "110".to_owned(),
         media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
@@ -1112,6 +1116,8 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
         variables: Some(r#"{"Custom":"Slot"}"#.to_owned()),
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
         media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
@@ -1207,6 +1213,8 @@ async fn verify_dynamic_graphics_media(
         variables: Some(r#"{"Custom":"Dynamic"}"#.to_owned()),
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
         media,
@@ -1288,6 +1296,8 @@ async fn invalid_drawtext_element_does_not_suppress_valid_static_graphics() {
         },
     ];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
         media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
@@ -1345,6 +1355,8 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
         variables: None,
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
         media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
@@ -1643,6 +1655,8 @@ async fn render_scheduled_graphics(
         pool,
         selected,
         &PlaybackGraphicsRenderContext {
+            render_time: common::fixed_time(),
+            playout_item_id: None,
             channel_id: 121,
             channel_number: "121".to_owned(),
             media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),

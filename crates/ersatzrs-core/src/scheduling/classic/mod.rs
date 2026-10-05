@@ -1758,6 +1758,19 @@ impl ClassicContext {
             schedule_item.graphics_element_ids.clone(),
             scheduling_context,
         );
+        item.graphics_elements = schedule_item
+            .graphics_element_ids
+            .iter()
+            .map(|id| ersatzrs_domain::PlayoutItemGraphicsElement {
+                playout_item_id: item.id,
+                graphics_element_id: Some(*id),
+                variables: schedule_item
+                    .graphics_elements
+                    .iter()
+                    .find(|attachment| attachment.graphics_element_id == *id)
+                    .and_then(|attachment| attachment.variables.clone()),
+            })
+            .collect();
         if schedule_item.preferred_audio_language_code.is_some() {
             item.preferred_audio_language_code
                 .clone_from(&schedule_item.preferred_audio_language_code);

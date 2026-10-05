@@ -5,6 +5,7 @@ use super::*;
 async fn setup(pool: &SqlitePool) -> DateTime<Utc> {
     seed_acceptance_fixture(pool).await;
     seed_continuity_filler_chapters(pool).await;
+    pool.execute(r#"INSERT INTO "GraphicsElement" ("Id", "Name", "Kind") VALUES (9100, 'Deferred title', 1)"#).await.unwrap();
     pool.execute(
         r#"UPDATE "ProgramScheduleItem" SET "PreRollFillerId"=NULL,
         "PostRollFillerId"=NULL, "FallbackFillerId"=NULL WHERE "Id"=401;
@@ -38,6 +39,9 @@ async fn edited_items(pool: &SqlitePool) -> Vec<ersatzrs_core::repositories::Sch
     items[0].custom_title = "Deferred programme".into();
     items[0].preferred_audio_language_code = Some("nld".into());
     items[0].preferred_subtitle_language_code = Some("eng".into());
+    items[0].graphics_element_ids = vec![9100];
+    items[0].graphics_element_variables =
+        [(9100, r#"{"headline":"Deferred after restart"}"#.to_owned())].into();
     items
 }
 
@@ -125,15 +129,7 @@ async fn deferred_save_preserves_state_and_natural_continue_consumes_it_after_re
         primary.media_item_id, expected_next_media,
         "continuation must retain series rotation"
     );
-    assert_eq!(primary.custom_title.as_deref(), Some("Deferred programme"));
-    assert_eq!(
-        primary.preferred_audio_language_code.as_deref(),
-        Some("nld")
-    );
-    assert_eq!(
-        primary.preferred_subtitle_language_code.as_deref(),
-        Some("eng")
-    );
+    assert_deferred_branding(primary);
     let applied = repos
         .program_schedule
         .deferred_changes_admin(301)
@@ -143,6 +139,24 @@ async fn deferred_save_preserves_state_and_natural_continue_consumes_it_after_re
     assert_eq!(applied[0].applied_from, Some(boundary));
     assert_eq!(applied[0].build_succeeded, Some(true));
     reopened.close().await;
+}
+
+fn assert_deferred_branding(primary: &ersatzrs_domain::PlayoutItem) {
+    assert_eq!(primary.custom_title.as_deref(), Some("Deferred programme"));
+    assert_eq!(
+        primary.preferred_audio_language_code.as_deref(),
+        Some("nld")
+    );
+    assert_eq!(
+        primary.preferred_subtitle_language_code.as_deref(),
+        Some("eng")
+    );
+    assert_eq!(primary.graphics_elements.len(), 1);
+    assert_eq!(primary.graphics_elements[0].graphics_element_id, Some(9100));
+    assert_eq!(
+        primary.graphics_elements[0].variables.as_deref(),
+        Some(r#"{"headline":"Deferred after restart"}"#)
+    );
 }
 
 async fn run_natural_maintenance_in_child(path: &Path) {

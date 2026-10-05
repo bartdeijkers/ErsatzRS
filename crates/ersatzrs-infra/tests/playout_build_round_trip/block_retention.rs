@@ -16,6 +16,7 @@ async fn block_future_boundary_preserves_generated_items_after_reload() {
             let repos = make_repositories(pool.clone());
             common::seed_profile_and_channel(&repos, 1).await;
             common::seed_media_graph(&pool).await;
+            pool.execute(r#"INSERT INTO "GraphicsElement" ("Id", "Name", "Kind") VALUES (7, 'Block title', 1)"#).await.unwrap();
             pool.execute(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, 'Block', 42)"#)
                 .await.unwrap();
             let now = common::fixed_time();
@@ -46,6 +47,10 @@ async fn block_future_boundary_preserves_generated_items_after_reload() {
                 .await
                 .unwrap();
             assert_eq!(persisted.len(), 4);
+            assert!(persisted
+                .iter()
+                .all(|item| item.graphics_elements[0].variables.as_deref()
+                    == Some(r#"{"headline":"Block title"}"#)));
             reference.existing_items = persisted.clone();
             reference
                 .effective_blocks
@@ -125,7 +130,9 @@ fn reference_data(now: chrono::DateTime<Utc>, delay: Duration) -> SchedulingRefe
                 include_in_program_guide: true,
                 disable_watermarks: false,
                 watermark_ids: Vec::new(),
-                graphics_element_ids: Vec::new(),
+                graphics_element_ids: vec![7],
+                graphics_element_variables: [(7, r#"{"headline":"Block title"}"#.to_owned())]
+                    .into(),
             }],
             deco: None,
         })

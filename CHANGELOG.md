@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Resolve native graphics programme labels through the same scheduler-specific
+  guide grouping as XMLTV, including split films, filler, historical timestamps
+  and local calendar days across DST. Provide bounded defaults and a channel-aware
+  text preview; keep raw Epg templates compatible. Carry explicit item variables
+  through Classic and Block schedules, copies and continuation, and offer bounded
+  opt-in Drawtext metadata refresh separate from clock updates and file reload.
+
 - Escape generated drawvg file paths through both FFmpeg parsers, including
   Windows drive letters, separators, spaces and quotes. Channel previews now
   identify error-slate segments and show the original redacted transcode failure,

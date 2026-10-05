@@ -25,6 +25,8 @@ use tokio::time::Instant;
 
 fn graphics_context(media: GraphicsMedia) -> GraphicsTemplateContext {
     GraphicsTemplateContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 1,
         channel_number: "1".into(),
         media,

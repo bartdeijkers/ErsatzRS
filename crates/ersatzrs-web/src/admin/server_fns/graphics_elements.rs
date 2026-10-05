@@ -14,6 +14,59 @@ pub const MAX_REFRESH_INTERVAL_MILLISECONDS: u64 = 60_000;
 const MAX_NAME_CHARS: usize = 50;
 const MAX_TEMPLATE_BYTES: usize = 64 * 1024;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GraphicsTextPreviewForm {
+    pub channel_id: i64,
+    pub element_id: i64,
+    pub render_time: String,
+    pub template: String,
+    pub renderer: TextGraphicsRenderer,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GraphicsTextPreviewResult {
+    pub text: String,
+    pub local_time: String,
+    pub programme_context: String,
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn preview_graphics_text(
+    request: GraphicsTextPreviewForm,
+) -> Result<GraphicsTextPreviewResult, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_core::repositories::GraphicsTextPreviewRequest;
+    let state = expect_context::<AppState>();
+    let render_time = chrono::DateTime::parse_from_rfc3339(&request.render_time)
+        .map_err(|_| ServerFnError::new("graphics-preview-invalid-time"))?
+        .with_timezone(&chrono::Utc);
+    let request = GraphicsTextPreviewRequest {
+        channel_id: request.channel_id,
+        element_id: (request.element_id > 0).then_some(request.element_id),
+        render_time,
+        template: request.template,
+        renderer: request.renderer,
+        epg_entries: 32,
+        width: request.width,
+        height: request.height,
+    };
+    let preview = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        state.application.ports().graphics().preview_text(&request),
+    )
+    .await
+    .map_err(|_| ServerFnError::new("graphics-preview-timeout"))?
+    .map_err(ServerFnError::new)?;
+    Ok(GraphicsTextPreviewResult {
+        text: preview.text,
+        local_time: preview.local_time,
+        programme_context: serde_json::to_string_pretty(&preview.programme_context)
+            .map_err(ServerFnError::new)?,
+    })
+}
+
 /// A graphics element shown by the admin selector.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphicsElementListRow {
@@ -33,6 +86,8 @@ pub struct GraphicsElementForm {
     pub font_file: String,
     pub refresh_interval_milliseconds: u64,
     pub reload_interval_frames: u32,
+    #[serde(default)]
+    pub metadata_refresh_interval_seconds: u64,
 }
 
 impl Default for GraphicsElementForm {
@@ -46,6 +101,12 @@ impl Default for GraphicsElementForm {
             font_file: config.drawtext.font_file.unwrap_or_default(),
             refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
             reload_interval_frames: config.drawtext.reload_interval_frames,
+            metadata_refresh_interval_seconds: config
+                .drawtext
+                .metadata_refresh_interval_seconds
+                .filter(|seconds| *seconds > 0)
+                .map(|seconds| seconds.clamp(5, 60))
+                .unwrap_or_default(),
         }
     }
 }
@@ -93,6 +154,7 @@ pub async fn save_graphics_element(
     font_file: String,
     refresh_interval_milliseconds: u64,
     reload_interval_frames: u32,
+    metadata_refresh_interval_seconds: Option<u64>,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -115,6 +177,7 @@ pub async fn save_graphics_element(
         font_file,
         refresh_interval_milliseconds,
         reload_interval_frames,
+        metadata_refresh_interval_seconds: metadata_refresh_interval_seconds.unwrap_or_default(),
     };
 
     match save_graphics_element_with_repository(state.application.ports().graphics(), form).await {
@@ -156,6 +219,8 @@ pub enum GraphicsElementSaveError {
     RefreshIntervalOutOfRange,
     #[error("reload_interval_out_of_range")]
     ReloadIntervalOutOfRange,
+    #[error("metadata_refresh_interval_out_of_range")]
+    MetadataRefreshIntervalOutOfRange,
     #[error("graphics_element_not_found")]
     NotFound,
     #[error("graphics_element_not_text")]
@@ -178,6 +243,7 @@ impl GraphicsElementSaveError {
             Self::InvalidRenderer => "invalid_renderer",
             Self::RefreshIntervalOutOfRange => "refresh_interval_out_of_range",
             Self::ReloadIntervalOutOfRange => "reload_interval_out_of_range",
+            Self::MetadataRefreshIntervalOutOfRange => "metadata_refresh_interval_out_of_range",
             Self::NotFound => "graphics_element_not_found",
             Self::NotText => "graphics_element_not_text",
             Self::InvalidConfig => "graphics_element_config_invalid",
@@ -237,6 +303,12 @@ async fn get_graphics_element_form_with_repository(
         font_file: config.drawtext.font_file.unwrap_or_default(),
         refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
         reload_interval_frames: config.drawtext.reload_interval_frames,
+        metadata_refresh_interval_seconds: config
+            .drawtext
+            .metadata_refresh_interval_seconds
+            .filter(|seconds| *seconds > 0)
+            .map(|seconds| seconds.clamp(5, 60))
+            .unwrap_or_default(),
     }))
 }
 
@@ -267,6 +339,11 @@ pub async fn save_graphics_element_with_repository(
     if form.reload_interval_frames == 0 {
         return Err(GraphicsElementSaveError::ReloadIntervalOutOfRange);
     }
+    if form.metadata_refresh_interval_seconds != 0
+        && !(5..=60).contains(&form.metadata_refresh_interval_seconds)
+    {
+        return Err(GraphicsElementSaveError::MetadataRefreshIntervalOutOfRange);
+    }
 
     form.name = name.to_owned();
     let font_file = (!form.font_file.trim().is_empty()).then(|| form.font_file.trim().to_owned());
@@ -279,6 +356,8 @@ pub async fn save_graphics_element_with_repository(
                 font_file,
                 refresh_interval_milliseconds: form.refresh_interval_milliseconds,
                 reload_interval_frames: form.reload_interval_frames,
+                metadata_refresh_interval_seconds: (form.metadata_refresh_interval_seconds > 0)
+                    .then_some(form.metadata_refresh_interval_seconds),
             },
             ..TextGraphicsConfig::default()
         };
@@ -313,6 +392,9 @@ pub async fn save_graphics_element_with_repository(
     config.drawtext.font_file = font_file;
     config.drawtext.refresh_interval_milliseconds = form.refresh_interval_milliseconds;
     config.drawtext.reload_interval_frames = form.reload_interval_frames;
+    config.drawtext.metadata_refresh_interval_seconds = (form.metadata_refresh_interval_seconds
+        > 0)
+    .then_some(form.metadata_refresh_interval_seconds);
     element.name = form.name;
     element.config = GraphicsElementConfig::Text(config);
     repository

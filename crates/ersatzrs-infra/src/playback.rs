@@ -170,6 +170,8 @@ pub struct ResolvedPlaybackGraphicsElement {
 pub struct PlaybackGraphicsRenderContext {
     pub channel_id: i64,
     pub channel_number: String,
+    pub render_time: DateTime<Utc>,
+    pub playout_item_id: Option<i64>,
     pub media: crate::graphics_template::GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
@@ -2609,6 +2611,8 @@ async fn render_playback_graphics_overlays_inner(
             let variable_context = GraphicsTemplateContext {
                 channel_id: context.channel_id,
                 channel_number: context.channel_number.clone(),
+                render_time: context.render_time,
+                playout_item_id: context.playout_item_id,
                 media: context.media.clone(),
                 media_path: context.media_path.clone(),
                 channel_start_time: context.channel_start_time,
@@ -2672,6 +2676,26 @@ async fn render_playback_graphics_overlays_inner(
                     refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
                     playback_offset_seconds: context.stream_seek_seconds,
                     playback_duration_seconds: context.duration_seconds,
+                    broadcast_start_time: Some(context.render_time),
+                    metadata_refresh: config
+                        .drawtext
+                        .metadata_refresh_interval_seconds
+                        .filter(|seconds| *seconds > 0)
+                        .map(
+                            |interval_seconds| crate::dynamic_text::DynamicTextMetadataRefresh {
+                                interval_seconds,
+                                source: std::sync::Arc::new(
+                                    crate::graphics_metadata_refresh::GraphicsMetadataRefresh {
+                                        pool: pool.clone(),
+                                        context: variable_context.clone(),
+                                        element_id: element.id,
+                                        epg_entries: usize::try_from(element.epg_entries.max(0))
+                                            .unwrap_or_default(),
+                                        startup_overrides: resolved.variables.clone(),
+                                    },
+                                ),
+                            },
+                        ),
                 });
                 let controller = match startup.as_deref_mut() {
                     Some(startup) => startup.child_free(controller).await?,
@@ -4046,6 +4070,8 @@ mod tests {
     fn graphics_startup_context() -> PlaybackGraphicsRenderContext {
         PlaybackGraphicsRenderContext {
             channel_id: 1,
+            render_time: Utc::now(),
+            playout_item_id: None,
             channel_number: "1".to_owned(),
             media: crate::graphics_template::GraphicsMedia::Persisted(1),
             media_path: "synthetic-media.mkv".to_owned(),

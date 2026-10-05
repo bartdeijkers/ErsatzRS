@@ -171,6 +171,8 @@ async fn render_context(
     };
     Ok(PlaybackGraphicsRenderContext {
         channel_id: session.channel.id,
+        render_time: session.timeline.now,
+        playout_item_id: (session.media.item.id > 0).then_some(session.media.item.id),
         channel_number: session.request.number.clone(),
         media: GraphicsMedia::Persisted(session.media.item.media_item_id),
         media_path: session.media.path.clone(),

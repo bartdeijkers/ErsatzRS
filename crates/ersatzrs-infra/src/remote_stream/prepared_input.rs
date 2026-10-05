@@ -560,6 +560,8 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let controller = crate::dynamic_text::DynamicTextController::start(
             crate::dynamic_text::DynamicTextControllerRequest {
+                broadcast_start_time: None,
+                metadata_refresh: None,
                 element_id: 1,
                 template: "canvas".to_owned(),
                 variables: serde_json::json!({}),

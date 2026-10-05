@@ -130,6 +130,10 @@ pub struct DrawtextGraphicsConfig {
     pub refresh_interval_milliseconds: u64,
     /// `FFmpeg` text-file reload interval measured in frames.
     pub reload_interval_frames: u32,
+    /// None preserves startup metadata. Some(seconds) opts into repository
+    /// refresh independently of the clock and `FFmpeg`'s text-file reload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_refresh_interval_seconds: Option<u64>,
 }
 
 impl Default for DrawtextGraphicsConfig {
@@ -138,6 +142,7 @@ impl Default for DrawtextGraphicsConfig {
             font_file: None,
             refresh_interval_milliseconds: 1_000,
             reload_interval_frames: 1,
+            metadata_refresh_interval_seconds: None,
         }
     }
 }
@@ -233,12 +238,16 @@ pub struct PlayoutItemGraphicsElement {
 pub struct ProgramScheduleItemGraphicsElement {
     pub program_schedule_item_id: EntityId,
     pub graphics_element_id: EntityId,
+    #[serde(default)]
+    pub variables: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BlockItemGraphicsElement {
     pub block_item_id: EntityId,
     pub graphics_element_id: EntityId,
+    #[serde(default)]
+    pub variables: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

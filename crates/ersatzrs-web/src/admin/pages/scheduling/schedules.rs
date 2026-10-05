@@ -1005,6 +1005,17 @@ fn schedule_item_hidden_fields_html(item: &ScheduleItemForm) -> String {
             &item.index.to_string(),
         ));
     }
+    let _ = write!(
+        fields,
+        r#"<details><summary>{label}</summary><label class="{field}"><span>{label}</span><textarea class="{textarea}" name="item_graphics_element_variables" rows="4" maxlength="262144" data-graphics-item-variables-map>{value}</textarea></label><p>{help}</p></details>"#,
+        label = escape_html(tr(TextKey::GraphicsItemVariables)),
+        field = style::field,
+        textarea = style::textarea,
+        value = escape_html(&super::graphics_variables::variables_json(
+            &item.graphics_element_variables
+        )),
+        help = escape_html(tr(TextKey::GraphicsItemVariablesHelp)),
+    );
     fields
 }
 
@@ -1607,8 +1618,21 @@ fn schedule_item_editor(
                 update_item(items, index, |item| item.watermark_ids = values);
             })}
             {multi_select_i64(tr(TextKey::GraphicsElements), &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
-                update_item(items, index, |item| item.graphics_element_ids = values);
+                update_item(items, index, |item| {
+                    item.graphics_element_variables.retain(|id, _| values.contains(id));
+                    item.graphics_element_ids = values;
+                });
             })}
+            {super::graphics_variables::variables_editor(
+                &item.graphics_element_ids,
+                options.graphics_elements.iter().map(|option| (option.id, option.name.clone())).collect(),
+                &item.graphics_element_variables,
+                (style::field, style::textarea),
+                move |id, value| update_item(items, index, |item| {
+                    if value.trim().is_empty() { item.graphics_element_variables.remove(&id); }
+                    else { item.graphics_element_variables.insert(id, value); }
+                }),
+            )}
             {language_picker(tr(TextKey::PreferredAudioLanguage), item.preferred_audio_language_code.clone(), options.languages.clone(), move |value| {
                 update_item(items, index, |item| item.preferred_audio_language_code = blank_to_none(&value));
             })}

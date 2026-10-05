@@ -122,6 +122,8 @@ pub struct ProgramScheduleItem {
     pub sort_order: i32,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graphics_elements: Vec<crate::ProgramScheduleItemGraphicsElement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -195,6 +197,8 @@ pub struct BlockItem {
     pub sort_order: i32,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graphics_elements: Vec<crate::BlockItemGraphicsElement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

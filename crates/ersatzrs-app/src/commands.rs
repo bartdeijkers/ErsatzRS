@@ -290,6 +290,7 @@ pub struct BlockItemAdminForm {
     pub collection_name: String,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1974,6 +1975,10 @@ fn block_item_from_admin(form: BlockItemAdminForm) -> crate::Result<BlockItemAdm
         }
         _ => {}
     }
+    ersatzrs_core::repositories::validate_graphics_attachment_variables(
+        &form.graphics_element_ids,
+        &form.graphics_element_variables,
+    )?;
     validate_schedule_smart_shuffle(&form.smart_shuffle)?;
     let smart_shuffle = if form.inherited_legacy_smart_shuffle
         && form.smart_shuffle.preset == SchedulingSmartShufflePreset::Off
@@ -1999,6 +2004,7 @@ fn block_item_from_admin(form: BlockItemAdminForm) -> crate::Result<BlockItemAdm
         collection_name: form.collection_name,
         watermark_ids: form.watermark_ids,
         graphics_element_ids: form.graphics_element_ids,
+        graphics_element_variables: form.graphics_element_variables,
     })
 }
 
@@ -3581,6 +3587,10 @@ fn validate_schedule_items(
 ) -> crate::Result<()> {
     let mut playback_by_key = std::collections::BTreeMap::new();
     for item in items {
+        ersatzrs_core::repositories::validate_graphics_attachment_variables(
+            &item.graphics_element_ids,
+            &item.graphics_element_variables,
+        )?;
         validate_schedule_item(item, padded_filler_ids)?;
         validate_schedule_smart_shuffle(&item.smart_shuffle)?;
         if let Some(key) = schedule_item_collection_key(item) {
@@ -10604,6 +10614,7 @@ mod tests {
             collection_name: "News".to_owned(),
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: BTreeMap::default(),
         };
         let mapped = super::block_item_from_admin(valid.clone()).unwrap();
         assert_eq!(mapped.collection_type, CollectionType::SearchQuery);
@@ -10788,6 +10799,7 @@ mod tests {
             fallback_filler_id: None,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: BTreeMap::default(),
             preferred_audio_language_code: None,
             preferred_audio_title: String::new(),
             preferred_subtitle_language_code: None,

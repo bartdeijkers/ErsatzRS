@@ -13,6 +13,7 @@ pub mod media_chapters;
 pub mod metadata_facets;
 pub mod path_replacement;
 pub mod playout_builder;
+pub mod programme;
 pub mod repositories;
 pub mod scheduling;
 pub mod search;

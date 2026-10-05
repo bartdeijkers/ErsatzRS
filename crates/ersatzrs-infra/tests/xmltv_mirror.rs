@@ -181,6 +181,12 @@ async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
 #[tokio::test]
 async fn xmltv_mirror_offsets_actual_and_guide_windows_once_without_mutating_source() {
     let pool = fixture().await;
+    // This test exercises the persisted Block behavior. Classic has its own
+    // programme grouping and must not inherit the Block guide-window setting.
+    sqlx::query(r#"UPDATE "Playout" SET "ScheduleKind" = 'Block' WHERE "Id" = 20"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     let repos = make_repositories(pool.clone());
     let now = common::fixed_time();
     let mut item = common::playout_item(30, 20, 1);
@@ -243,4 +249,59 @@ async fn xmltv_mirror_offsets_actual_and_guide_windows_once_without_mutating_sou
     assert_eq!(persisted[0].finish, original[0].finish);
     assert_eq!(persisted[0].guide_start, original[0].guide_start);
     assert_eq!(persisted[0].guide_finish, original[0].guide_finish);
+}
+
+#[tokio::test]
+async fn classic_guide_groups_film_segments_and_rolls_without_changing_rows() {
+    let pool = fixture().await;
+    let repos = make_repositories(pool.clone());
+    let now = common::fixed_time();
+    for (id, group, start, finish, filler, in_point, out_point) in [
+        (30, 1, 0, 10, ersatzrs_domain::FillerKind::PreRoll, 0, 10),
+        (31, 1, 10, 60, ersatzrs_domain::FillerKind::None, 0, 50),
+        (32, 1, 60, 65, ersatzrs_domain::FillerKind::MidRoll, 0, 5),
+        (33, 1, 65, 115, ersatzrs_domain::FillerKind::None, 50, 100),
+        (34, 2, 115, 120, ersatzrs_domain::FillerKind::PostRoll, 0, 5),
+        (35, 2, 120, 170, ersatzrs_domain::FillerKind::None, 0, 50),
+    ] {
+        let mut item = common::playout_item(id, 20, 1);
+        item.guide_group = group;
+        item.guide_start = None;
+        item.guide_finish = None;
+        item.start = now + Duration::seconds(start);
+        item.finish = now + Duration::seconds(finish);
+        item.filler_kind = filler;
+        item.in_point = Duration::seconds(in_point);
+        item.out_point = Duration::seconds(out_point);
+        repos.playout.upsert_item(&item).await.unwrap();
+    }
+    let before = repos
+        .playout
+        .items_in_range(20, now, now + Duration::seconds(180))
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let programmes =
+            load_xmltv_programmes(&pool, now + Duration::seconds(62), now + Duration::hours(2))
+                .await
+                .unwrap();
+        assert_eq!(programmes.len(), 4);
+        for (number, offset) in [("3", Duration::zero()), ("9", Duration::hours(1))] {
+            let rows = programmes
+                .iter()
+                .filter(|programme| programme.channel_number == number)
+                .collect::<Vec<_>>();
+            assert_eq!(rows.len(), 2);
+            assert_eq!(rows[0].start, now + offset);
+            assert_eq!(rows[0].stop, now + offset + Duration::seconds(120));
+            assert_eq!(rows[1].start, now + offset + Duration::seconds(120));
+            assert_eq!(rows[0].title, "Mirror Movie");
+        }
+    }
+    let after = repos
+        .playout
+        .items_in_range(20, now, now + Duration::seconds(180))
+        .await
+        .unwrap();
+    assert_eq!(before, after);
 }

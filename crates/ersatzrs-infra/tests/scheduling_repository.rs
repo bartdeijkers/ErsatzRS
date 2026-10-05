@@ -1465,6 +1465,7 @@ fn block_preview_items() -> Vec<EffectiveBlockItem> {
             disable_watermarks: false,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: std::collections::BTreeMap::new(),
         })
         .collect()
 }
@@ -1551,6 +1552,7 @@ async fn block_preview_content_propagates_closed_pool_failure() {
         disable_watermarks: false,
         watermark_ids: Vec::new(),
         graphics_element_ids: Vec::new(),
+        graphics_element_variables: std::collections::BTreeMap::new(),
     };
 
     let error = repository

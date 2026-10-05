@@ -3377,6 +3377,12 @@ impl SqliteSchedulingContentRepository {
                     id,
                 )
                 .await?,
+                graphics_element_variables: super::graphics_attachments::load(
+                    &self.0,
+                    super::graphics_attachments::Owner::Block,
+                    id,
+                )
+                .await?,
             });
         }
 

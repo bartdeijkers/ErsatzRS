@@ -140,6 +140,8 @@ pub struct ScheduleItemsSaveForm {
     #[serde(default)]
     item_graphics_element_ids: Vec<String>,
     #[serde(default)]
+    item_graphics_element_variables: Vec<String>,
+    #[serde(default)]
     item_preferred_audio_language_code: Vec<String>,
     #[serde(default)]
     item_preferred_audio_title: Vec<String>,
@@ -242,7 +244,11 @@ pub async fn copy_schedule_form(
 pub async fn save_schedule_items_form(State(state): State<AppState>, body: Bytes) -> Redirect {
     let input = ScheduleItemsSaveForm::from_urlencoded_bytes(&body);
     let schedule_id = input.schedule_id;
-    let mut items = input.to_items();
+    let Ok(mut items) = input.to_items() else {
+        return Redirect::to(&format!(
+            "/schedules/{schedule_id}/items?error=graphics-variables"
+        ));
+    };
     let (action, embedded_index) = parse_action(&input.action);
     let action_index = embedded_index.or_else(|| input_action_index(&items, &input.action_index));
 
@@ -388,6 +394,9 @@ impl ScheduleItemsSaveForm {
                 "item_fallback_filler_id" => form.item_fallback_filler_id.push(value),
                 "item_watermark_ids" => form.item_watermark_ids.push(value),
                 "item_graphics_element_ids" => form.item_graphics_element_ids.push(value),
+                "item_graphics_element_variables" => {
+                    form.item_graphics_element_variables.push(value);
+                }
                 "item_preferred_audio_language_code" => {
                     form.item_preferred_audio_language_code.push(value);
                 }
@@ -411,13 +420,21 @@ impl ScheduleItemsSaveForm {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn to_items(&self) -> Vec<ScheduleItemForm> {
+    fn to_items(
+        &self,
+    ) -> Result<Vec<ScheduleItemForm>, ersatzrs_core::repositories::RepositoryError> {
         let marathon_shuffle_groups = parse_index_set(&self.item_marathon_shuffle_groups_index);
         let marathon_shuffle_items = parse_index_set(&self.item_marathon_shuffle_items_index);
         let mut items = Vec::with_capacity(self.item_index.len());
         for pos in 0..self.item_index.len() {
             let form_index = parse_i32(self.item_index.get(pos)).unwrap_or_default();
             items.push(ScheduleItemForm {
+                graphics_element_variables:
+                    ersatzrs_core::repositories::parse_graphics_attachment_variables(
+                        self.item_graphics_element_variables
+                            .get(pos)
+                            .map_or("", String::as_str),
+                    )?,
                 id: parse_i64(self.item_id.get(pos)).unwrap_or_default(),
                 index: form_index,
                 start_type: parse_i32(self.item_start_type.get(pos)).unwrap_or(START_TYPE_DYNAMIC),
@@ -520,7 +537,7 @@ impl ScheduleItemsSaveForm {
                     }),
             });
         }
-        items
+        Ok(items)
     }
 
     fn new_item(&self) -> ScheduleItemForm {
@@ -664,7 +681,7 @@ mod tests {
         assert_eq!(form.action, "save");
         assert_eq!(form.item_index, vec!["0", "1"]);
 
-        let parsed = form.to_items();
+        let parsed = form.to_items().unwrap();
 
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].id, 11);
@@ -744,7 +761,7 @@ mod tests {
             ..ScheduleItemsSaveForm::default()
         };
 
-        let parsed = form.to_items();
+        let parsed = form.to_items().unwrap();
 
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].collection_id, Some(5));

@@ -17,6 +17,7 @@ mod deco;
 mod ffmpeg_profile;
 mod filler;
 mod graphics;
+mod graphics_attachments;
 mod library;
 pub(crate) mod managed_library_operation;
 mod media_item;

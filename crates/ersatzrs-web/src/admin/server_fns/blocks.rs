@@ -124,6 +124,8 @@ pub struct BlockItemForm {
     /// IDs from `BlockItemGraphicsElement` — round-tripped through save unchanged.
     #[serde(default)]
     pub graphics_element_ids: Vec<i64>,
+    #[serde(default)]
+    pub graphics_element_variables: std::collections::BTreeMap<i64, String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -194,6 +196,7 @@ pub(crate) fn block_form_into_command(
                 collection_name: item.collection_name,
                 watermark_ids: item.watermark_ids,
                 graphics_element_ids: item.graphics_element_ids,
+                graphics_element_variables: item.graphics_element_variables,
             })
             .collect(),
     }
@@ -238,6 +241,7 @@ pub(crate) fn block_item_form_from_admin(
         collection_name: item.collection_name,
         watermark_ids: item.watermark_ids,
         graphics_element_ids: item.graphics_element_ids,
+        graphics_element_variables: item.graphics_element_variables,
     }
 }
 
@@ -789,6 +793,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                         collection_name: item.collection_name,
                         watermark_ids: item.watermark_ids,
                         graphics_element_ids: item.graphics_element_ids,
+                        graphics_element_variables: item.graphics_element_variables,
                     }
                 })
                 .collect()
@@ -913,6 +918,7 @@ fn block_item_form_from_row(row: &ersatzrs_infra::db::DbRow) -> BlockItemForm {
         },
         watermark_ids: parse_id_list(row.try_get("WatermarkIds").unwrap_or(None)),
         graphics_element_ids: parse_id_list(row.try_get("GraphicsElementIds").unwrap_or(None)),
+        graphics_element_variables: std::collections::BTreeMap::default(),
     }
 }
 
@@ -1101,6 +1107,7 @@ fn block_preview_query(
                 disable_watermarks: item.disable_watermarks,
                 watermark_ids: item.watermark_ids,
                 graphics_element_ids: item.graphics_element_ids,
+                graphics_element_variables: item.graphics_element_variables,
                 smart_shuffle_policy: smart_shuffle_policy_from_form(&item.smart_shuffle),
             })
         })

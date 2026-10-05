@@ -1891,6 +1891,12 @@ impl HlsSessionWorker {
                             &graphics,
                             &PlaybackGraphicsRenderContext {
                                 channel_id: self.channel_id,
+                                render_time: if decision.start_at_zero {
+                                    active.playout_start
+                                } else {
+                                    decision.request_time
+                                },
+                                playout_item_id: Some(active.playout_item_id),
                                 channel_number: self.channel_number.clone(),
                                 media: active.external.as_ref().map_or_else(
                                     || {

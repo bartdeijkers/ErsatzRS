@@ -596,8 +596,8 @@ async fn copy_schedule_item_relations(
            SELECT ?, "WatermarkId" FROM "ProgramScheduleItemWatermark"
            WHERE "ProgramScheduleItemId" = ?"#,
         r#"INSERT INTO "ProgramScheduleItemGraphicsElement"
-               ("ProgramScheduleItemId", "GraphicsElementId")
-           SELECT ?, "GraphicsElementId" FROM "ProgramScheduleItemGraphicsElement"
+               ("ProgramScheduleItemId", "GraphicsElementId", "Variables")
+           SELECT ?, "GraphicsElementId", "Variables" FROM "ProgramScheduleItemGraphicsElement"
            WHERE "ProgramScheduleItemId" = ?"#,
     ] {
         sqlx::query(sql)
@@ -697,11 +697,14 @@ async fn list_schedule_items_admin_on_connection(
         let smart_shuffle = explicit_policy
             .or_else(|| legacy_policy.clone())
             .unwrap_or_default();
-        items.push(map_schedule_item_admin(
-            row,
-            smart_shuffle,
-            inherited_legacy_smart_shuffle,
-        )?);
+        let mut item = map_schedule_item_admin(row, smart_shuffle, inherited_legacy_smart_shuffle)?;
+        item.graphics_element_variables = super::graphics_attachments::load_on_connection(
+            connection,
+            super::graphics_attachments::Owner::Schedule,
+            item.id,
+        )
+        .await?;
+        items.push(item);
     }
     Ok(items)
 }
@@ -803,6 +806,7 @@ fn map_schedule_item_admin(
                 .repository()?
                 .as_deref(),
         )?,
+        graphics_element_variables: std::collections::BTreeMap::new(),
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
         preferred_audio_title: row
             .try_get::<Option<String>, _>("PreferredAudioTitle")
@@ -1257,17 +1261,14 @@ async fn replace_schedule_items_admin(
             .await
             .repository()?;
         }
-        for graphics_element_id in &item.graphics_element_ids {
-            sqlx::query(
-                r#"INSERT INTO "ProgramScheduleItemGraphicsElement"
-                       ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
-            )
-            .bind(new_item_id)
-            .bind(graphics_element_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
+        super::graphics_attachments::replace(
+            &mut tx,
+            super::graphics_attachments::Owner::Schedule,
+            new_item_id,
+            &item.graphics_element_ids,
+            &item.graphics_element_variables,
+        )
+        .await?;
     }
     sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
         .bind(legacy_program_schedule_cooldown_config_key(schedule_id))
@@ -1538,12 +1539,22 @@ async fn upsert_program_schedule_item(
         &item.watermark_ids,
     )
     .await?;
-    replace_ids(
+    let variables = item
+        .graphics_elements
+        .iter()
+        .filter_map(|attachment| {
+            attachment
+                .variables
+                .as_ref()
+                .map(|variables| (attachment.graphics_element_id, variables.clone()))
+        })
+        .collect();
+    super::graphics_attachments::replace(
         tx,
-        r#"DELETE FROM "ProgramScheduleItemGraphicsElement" WHERE "ProgramScheduleItemId" = ?"#,
-        r#"REPLACE INTO "ProgramScheduleItemGraphicsElement" ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
+        super::graphics_attachments::Owner::Schedule,
         item.id,
         &item.graphics_element_ids,
+        &variables,
     )
     .await?;
 
@@ -1765,6 +1776,9 @@ async fn map_program_schedule_item(
             id,
         )
         .await?,
+        graphics_elements: super::graphics_attachments::load(pool, super::graphics_attachments::Owner::Schedule, id).await?.into_iter().map(|(graphics_element_id, variables)| ersatzrs_domain::ProgramScheduleItemGraphicsElement {
+            program_schedule_item_id: id, graphics_element_id, variables: Some(variables),
+        }).collect(),
     })
 }
 

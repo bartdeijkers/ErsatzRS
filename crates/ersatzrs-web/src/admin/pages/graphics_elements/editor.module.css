@@ -110,6 +110,16 @@
     font-size: 0.875rem;
 }
 
+.preview-output {
+    max-width: 100%;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
 .textarea {
     min-height: 11rem;
     resize: vertical;

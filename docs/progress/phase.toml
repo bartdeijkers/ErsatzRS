@@ -84,16 +84,19 @@ Canonical acceptance lives in v111-findings-11. Resumed on explicit instruction
 on 2026-10-05 after rereading the full findings document. Finding 05 is locally
 accepted: shared path escaping and truthful native preview segment provenance,
 with Windows render and final worker/browser/matched-bundle proof. Canonical
-acceptance lives in v111-findings-05 and ADR 0111. Next: reread the full findings
-document, then implement finding 04 programme-aware graphics context. Remaining
-findings 01, 02, 04, 09 and 09b retain their full acceptance.
+acceptance lives in v111-findings-05 and ADR 0111. Finding 04 is locally accepted
+with shared guide projection, historical/DST and filler context, actual database
+refresh/cancellation, override propagation and fresh-process Continue preservation,
+historical browser previews, decoded HLS/regular-IPTV transitions and final gates.
+Canonical acceptance lives in v111-findings-04 and ADR 0112. Next: reread the full
+findings document, then finish findings 01, 02, 09 and 09b with their full acceptance.
 No publication is authorized.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
 variable refresh semantics, Motion phase and native alpha throughput. New
 Findings 11 (deferred Classic save) and 12 (midnight overlap) have separate
 milestones; reuse the existing finding 06 day-seam correction where applicable.
-Findings 03, 05, 06, 07, 08, 10, 11 and 12 are locally accepted.
+Findings 03, 04, 05, 06, 07, 08, 10, 11 and 12 are locally accepted.
 Finding 10 adds persisted-tail
 Scripted continuation, atomic timeline validation and observable rejection, with
 SQL restart/automatic-build, Health, browser and native playback proof. Finding 03 adds shared television
