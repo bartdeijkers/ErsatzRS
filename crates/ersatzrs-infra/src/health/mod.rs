@@ -811,13 +811,25 @@ mod tests {
             },
             FfmpegRuntimeIssue::RequiredMuxer { name: "nut".into() },
             FfmpegRuntimeIssue::RequiredDemuxer { name: "nut".into() },
+            FfmpegRuntimeIssue::RequiredDecoder {
+                name: "libjxl_anim".into(),
+            },
+            FfmpegRuntimeIssue::RequiredDemuxer {
+                name: "jpegxl_anim".into(),
+            },
         ];
         let failed = FFmpegCapabilitiesHealthCheck::new(report, pool.clone())
             .check()
             .await
             .unwrap();
         assert_eq!(failed.status, HealthCheckStatus::Fail);
-        for missing in ["ffv1", "muxer nut", "demuxer nut"] {
+        for missing in [
+            "ffv1",
+            "muxer nut",
+            "demuxer nut",
+            "libjxl_anim",
+            "demuxer jpegxl_anim",
+        ] {
             assert!(failed.message.contains(missing), "{missing}");
         }
         let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)

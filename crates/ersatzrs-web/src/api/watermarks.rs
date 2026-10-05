@@ -212,6 +212,7 @@ fn extension_for_content_type(content_type: &str) -> &'static str {
         "image/jpeg" | "image/jpg" => "jpg",
         "image/gif" => "gif",
         "image/webp" => "webp",
+        "image/jxl" => "jxl",
         _ => "bin",
     }
 }
@@ -287,6 +288,7 @@ pub async fn serve_watermark_image(Path(filename): Path<String>) -> Response {
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        "jxl" => "image/jxl",
         _ => "application/octet-stream",
     };
 

@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Play compact animated JPEG XL graphics with decoded duration, bounded native
+  repeat and programme-relative phase seeking. Preserve source alpha, evaluate
+  constant and Boolean opacity without per-pixel processing, and apply Motion
+  timing to regular playback as well as previews. Support JPEG XL uploads and
+  native Image/Motion previews with localized animation guidance.
+
 - Author every native graphics kind with placement, timing, layering and guide
   controls; validate YAML and missing fonts, media and variables before saving.
   Preview unsaved definitions through the real native canvas and explain each

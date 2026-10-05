@@ -322,6 +322,54 @@ impl FfprobeExtractor {
             })
     }
 
+    /// Decode JPEG XL frame timestamps with the existing bounded process owner.
+    /// Format duration is frequently absent for animated JPEG XL.
+    ///
+    /// # Errors
+    /// Rejects failed decoding, nonmonotonic timing, timeout or cancellation.
+    pub async fn jpeg_xl_timing_cancellable(
+        &self,
+        path: &str,
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<ersatzrs_ffmpeg::graphics::JpegXlTiming> {
+        let label = "graphics JPEG XL timing";
+        let args = [
+            "-v",
+            "error",
+            // Bound decoder parallelism; serial full-frame probing otherwise
+            // dominates startup even when the actual producer is fast enough.
+            "-threads",
+            "4",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=pts_time,duration_time",
+            "-of",
+            "json",
+            path,
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let (status, stdout, _) = self
+            .run_owned_probe_output(
+                label,
+                None,
+                args,
+                None,
+                deadline.min(tokio::time::Instant::now() + StdDuration::from_secs(15)),
+                cancellation,
+            )
+            .await?;
+        if !status.success() {
+            return Err(FfprobeError::InvalidOutput { path: label.into() });
+        }
+        parse_jpeg_xl_timing(&stdout)
+            .ok_or_else(|| FfprobeError::InvalidOutput { path: label.into() })
+    }
+
     #[allow(clippy::too_many_lines)] // One owner keeps process, readers and producer cleanup ordered.
     async fn run_owned_probe_output(
         &self,
@@ -585,6 +633,36 @@ fn finish_remote_ffprobe(
                 source,
             }
         }
+    })
+}
+
+fn parse_jpeg_xl_timing(bytes: &[u8]) -> Option<ersatzrs_ffmpeg::graphics::JpegXlTiming> {
+    let document: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let frames = document.get("frames")?.as_array()?;
+    let mut previous = None;
+    let mut duration = 0.0;
+    let mut frame_timestamps = Vec::with_capacity(frames.len());
+    for frame in frames {
+        let timestamp = frame.get("pts_time")?.as_str()?.parse::<f64>().ok()?;
+        let frame_duration = frame.get("duration_time")?.as_str()?.parse::<f64>().ok()?;
+        if !timestamp.is_finite()
+            || timestamp < 0.0
+            || !frame_duration.is_finite()
+            || frame_duration <= 0.0
+            || previous.is_some_and(|value| timestamp <= value)
+            || (previous.is_none() && timestamp.abs() > 0.000_001)
+        {
+            return None;
+        }
+        previous = Some(timestamp);
+        frame_timestamps.push(timestamp);
+        duration = timestamp + frame_duration;
+    }
+    Some(ersatzrs_ffmpeg::graphics::JpegXlTiming {
+        frame_count: frames.len(),
+        duration_seconds: duration,
+        last_frame_seconds: previous?,
+        frame_timestamps,
     })
 }
 
@@ -1756,6 +1834,21 @@ mod tests {
                 stream.max_cll, None,
                 "an unindexed frame must not be attributed by guesswork"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod jpeg_xl_tests {
+    use super::parse_jpeg_xl_timing;
+    #[test]
+    fn jpeg_xl_duration_uses_decoded_variable_frame_timing() {
+        let timing = parse_jpeg_xl_timing(br#"{"frames":[{"pts_time":"0.0","duration_time":"0.04"},{"pts_time":"0.04","duration_time":"0.1"}]}"#).unwrap();
+        assert_eq!(timing.frame_count, 2);
+        assert!((timing.duration_seconds - 0.14).abs() < f64::EPSILON);
+        assert!((timing.last_frame_seconds - 0.04).abs() < f64::EPSILON);
+        for source in [br#"{"frames":[]}"#.as_slice(), br#"{"frames":[{"pts_time":"0","duration_time":"0"}]}"#, br#"{"frames":[{"pts_time":"1","duration_time":"1"}]}"#, br#"{"frames":[{"pts_time":"0","duration_time":"1"},{"pts_time":"0","duration_time":"1"}]}"#] {
+            assert!(parse_jpeg_xl_timing(source).is_none());
         }
     }
 }

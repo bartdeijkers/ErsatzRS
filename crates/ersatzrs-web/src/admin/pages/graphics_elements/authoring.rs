@@ -454,6 +454,14 @@ pub(super) fn html(
                 }
             }
         }
+        if matches!(kind, "Image" | "Motion") {
+            let _ = write!(
+                html,
+                r#"<p class="{}" data-jpeg-xl-help>{}</p>"#,
+                style::help,
+                label(TextKey::GraphicsJpegXlHelp)
+            );
+        }
         html.push_str("</details>");
     }
     let _ = write!(

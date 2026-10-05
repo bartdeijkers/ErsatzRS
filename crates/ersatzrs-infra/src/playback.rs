@@ -2447,13 +2447,16 @@ pub async fn render_playback_graphics_overlays(
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
 ) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid graphics offset"))?;
     render_playback_graphics_overlays_inner(
         pool,
         graphics,
         context,
         output_dir.as_ref(),
         None,
-        Duration::ZERO,
+        offset,
+        None,
     )
     .await
 }
@@ -2478,6 +2481,7 @@ pub async fn render_playback_preview_graphics_overlays(
         output_dir.as_ref(),
         None,
         offset,
+        None,
     )
     .await?;
     artifacts.overlays = artifacts
@@ -2504,6 +2508,8 @@ pub async fn render_playback_graphics_overlays_cancellable(
     deadline: tokio::time::Instant,
     cancellation: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid graphics offset"))?;
     let mut startup = GraphicsStartupBudget {
         deadline,
         cancellation,
@@ -2514,13 +2520,13 @@ pub async fn render_playback_graphics_overlays_cancellable(
         context,
         output_dir.as_ref(),
         Some(&mut startup),
-        Duration::ZERO,
+        offset,
+        None,
     )
     .await
 }
 
-/// Render source phases for an independent Next canvas chunk. Native programme
-/// pipelines keep their existing zero-offset input clock through the other entrypoints.
+/// Render programme-relative source phases for an independent Next canvas chunk.
 /// Cancellation still waits for probes and controllers before releasing assets.
 ///
 /// # Errors
@@ -2530,6 +2536,7 @@ pub async fn render_playback_canvas_overlays_cancellable(
     graphics: &[ResolvedPlaybackGraphicsElement],
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
+    output_duration: Duration,
     deadline: tokio::time::Instant,
     cancellation: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<PlaybackGraphicsArtifacts> {
@@ -2546,6 +2553,7 @@ pub async fn render_playback_canvas_overlays_cancellable(
         output_dir.as_ref(),
         Some(&mut startup),
         offset,
+        Some(output_duration),
     )
     .await
 }
@@ -2599,6 +2607,7 @@ async fn render_playback_graphics_overlays_inner(
     output_dir: &Path,
     mut startup: Option<&mut GraphicsStartupBudget>,
     stream_offset: Duration,
+    output_duration: Option<Duration>,
 ) -> Result<PlaybackGraphicsArtifacts> {
     let output_dir = output_dir.to_path_buf();
     let renderer = GraphicsTemplateRenderer::new(&output_dir);
@@ -2654,6 +2663,7 @@ async fn render_playback_graphics_overlays_inner(
                 &element,
                 startup.as_deref_mut(),
                 stream_offset,
+                output_duration,
             )
             .await?;
             let drawtext_config = match &element.config {
@@ -2773,16 +2783,54 @@ async fn render_playback_graphics_overlays_inner(
 async fn graphics_render_context_with_motion_probe(
     context: &PlaybackGraphicsRenderContext,
     element: &GraphicsElement,
-    startup: Option<&mut GraphicsStartupBudget>,
+    mut startup: Option<&mut GraphicsStartupBudget>,
     stream_offset: Duration,
+    output_duration: Option<Duration>,
 ) -> Result<GraphicsRenderContext> {
     let render_context =
         GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size)
             .with_stream_offset(stream_offset)
             .with_stream_duration(
-                Duration::try_from_secs_f64(context.duration_seconds)
-                    .map_err(|_| graphics_startup_error("invalid graphics duration"))?,
+                output_duration.unwrap_or(
+                    Duration::try_from_secs_f64(context.duration_seconds)
+                        .map_err(|_| graphics_startup_error("invalid graphics duration"))?,
+                ),
             );
+    let image_path = match &element.config {
+        GraphicsElementConfig::Image(config) => config.image.as_deref(),
+        GraphicsElementConfig::Motion(config) => config.video_path.as_deref(),
+        _ => None,
+    };
+    if let Some(path) =
+        image_path.filter(|path| ersatzrs_ffmpeg::image_file_is_jpeg_xl(Path::new(path)))
+    {
+        let extractor = FfprobeExtractor::new(ffprobe_path());
+        let (cancel, cancellation) = tokio::sync::oneshot::channel();
+        let deadline = startup.as_ref().map_or_else(
+            || tokio::time::Instant::now() + Duration::from_secs(15),
+            |budget| budget.deadline,
+        );
+        let probe = extractor.jpeg_xl_timing_cancellable(path, deadline, cancellation);
+        tokio::pin!(probe);
+        let timing = if let Some(startup) = startup.as_deref_mut() {
+            startup.check()?;
+            tokio::select! {
+                biased;
+                _ = &mut startup.cancellation => {
+                    let _ = cancel.send(());
+                    let _ = probe.await;
+                    return Err(graphics_startup_error("cancelled"));
+                }
+                result = &mut probe => result,
+            }
+        } else {
+            let result = probe.await;
+            drop(cancel);
+            result
+        };
+        let timing = timing.map_err(|_| graphics_startup_error("JPEG XL timing unavailable"))?;
+        return Ok(render_context.with_jpeg_xl_timing(element.id, timing));
+    }
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return Ok(render_context);
     };

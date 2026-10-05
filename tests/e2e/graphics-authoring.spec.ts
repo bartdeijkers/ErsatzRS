@@ -212,3 +212,72 @@ for (const js of [true, false]) test(`finding 02 every culture exposes native ki
     }
   } finally { await context.close(); }
 });
+
+for (const culture of ['en-us', 'nl']) for (const js of [true, false]) {
+  test(`finding 09 compact JPEG XL authoring and native phase (${culture}, ${js ? 'hydrated' : 'no JS'})`, async ({ browser }, info) => {
+    test.skip(!database, 'Requires a disposable migrated database');
+    test.setTimeout(180000);
+    const root = join(dirname(database!), `jpeg-xl-${info.project.name}-${culture}-${js}`);
+    mkdirSync(root, { recursive: true });
+    const raw = join(root, 'source.rgba'), source = join(root, "animated plate's.jxl");
+    const bytes = Buffer.alloc(5 * 64 * 64 * 4);
+    [0, 64, 128, 192, 255].forEach((alpha, frame) => {
+      for (let pixel = 0; pixel < 64 * 64; pixel++) {
+        const start = (frame * 64 * 64 + pixel) * 4;
+        bytes[start] = alpha === 0 ? 0 : 255; bytes[start + 1] = frame * 10; bytes[start + 3] = alpha;
+      }
+    });
+    writeFileSync(raw, bytes);
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'rawvideo', '-pixel_format', 'rgba',
+      '-video_size', '64x64', '-framerate', '5', '-i', raw, '-c:v', 'libjxl_anim',
+      '-effort', '1', '-distance', '0', '-f', 'image2pipe', source], { timeout: 15000 });
+    const decoded = execFileSync(ffmpeg, ['-v', 'error', '-i', source, '-pix_fmt', 'rgba',
+      '-f', 'rawvideo', 'pipe:1'], { timeout: 15000 });
+    expect(decoded).toEqual(bytes);
+    const context = await browser.newContext({ javaScriptEnabled: js, baseURL: process.env.E2E_BASE_URL });
+    const page = await context.newPage();
+    try {
+      await language(page, culture);
+      const uploaded = await page.request.post('/admin-api/watermarks/image', {
+        multipart: { file: { name: 'alpha.jxl', mimeType: 'image/jxl', buffer: readFileSync(source) } },
+      });
+      expect(uploaded.ok()).toBe(true);
+      const upload = await uploaded.json(); expect(upload.path).toMatch(/\.jxl$/);
+      const served = await page.request.get(`/artwork/watermarks/${upload.path}`);
+      expect(served.ok()).toBe(true); expect(served.headers()['content-type']).toBe('image/jxl');
+      expect(await served.body()).toEqual(readFileSync(source));
+      for (const kind of ['Image', 'Motion']) {
+        await page.goto('/graphics-elements/add'); if (js) await hydrated(page);
+        const form = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+        await openFields(form, kind, js);
+        await field(form, 'name', `JXL ${kind} ${info.project.name} ${culture} ${js}`);
+        await form.locator('[name="location"]').selectOption('TopLeft');
+        await field(form, 'horizontal_margin_percent', '0'); await field(form, 'vertical_margin_percent', '0');
+        await field(form, kind === 'Image' ? 'image' : 'video_path', source);
+        if (kind === 'Motion') {
+          await field(form, 'start_seconds', '0'); await form.locator('[name="end_behavior"]').selectOption('Loop');
+        }
+        await expect(form.locator(`[data-kind-fields="${kind}"] [data-jpeg-xl-help]`)).toContainText('JPEG XL');
+        await field(form, 'preview_width', '320'); await field(form, 'preview_height', '180');
+        for (const [seek, expectedAlpha] of [['0', 0], ['0.4', 128], ['1.4', 128], ['1.8', 255]] as const) {
+          await field(form, 'preview_seek', seek);
+          const png = await preview(page, form, info, `jxl-${kind}-${culture}-${js}-${seek}`, expectedAlpha > 0);
+          const rgba = execFileSync(ffmpeg, ['-v', 'error', '-f', 'image2pipe', '-i', 'pipe:0',
+            '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'], { input: png, timeout: 15000 });
+          expect(Math.abs(rgba[(4 * 320 + 4) * 4 + 3] - expectedAlpha)).toBeLessThanOrEqual(1);
+        }
+        await field(form, 'opacity_expression', 'content_seconds < 1');
+        await field(form, 'preview_seek', '1.4');
+        await preview(page, form, info, `jxl-${kind}-${culture}-${js}-gate-clear`, false);
+        await form.locator('[data-save-graphics-element]').click();
+        await expect(page).toHaveURL(/\/graphics-elements\/\d+\?saved=1$/);
+        const id = Number(new URL(page.url()).pathname.split('/').at(-1));
+        expect(sql(`SELECT "OpacityExpression" FROM "GraphicsElement" WHERE "Id"=${id};`)).toBe('content_seconds < 1');
+        const saved = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+        const download = page.waitForEvent('download'); await saved.locator('[data-graphics-yaml-export]').click();
+        const yaml = readFileSync((await (await download).path())!, 'utf8');
+        expect(yaml).toContain(source); expect(yaml).toContain('opacity_expression: content_seconds < 1');
+      }
+    } finally { await context.close(); }
+  });
+}

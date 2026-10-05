@@ -135,6 +135,11 @@ impl InputFile {
     #[must_use]
     pub fn graphics_image(path: impl Into<String>) -> Self {
         let path = path.into();
+        if image_file_is_jpeg_xl(std::path::Path::new(&path)) {
+            // JPEG XL's demuxer has no image2 loop option. The render context
+            // supplies decoded timing and a finite concat input for animations.
+            return Self::new(InputKind::GraphicsImage, path, 0);
+        }
         let animated = image_file_is_animated(std::path::Path::new(&path));
         Self::graphics_image_with_animation(path, animated)
     }
@@ -159,7 +164,7 @@ impl InputFile {
     #[must_use]
     pub fn graphics_motion(path: impl Into<String>, loop_input: bool) -> Self {
         let mut input = Self::new(InputKind::GraphicsImage, path, 0);
-        if loop_input {
+        if loop_input && !image_file_is_jpeg_xl(std::path::Path::new(&input.path)) {
             input
                 .input_options
                 .extend(["-stream_loop".to_owned(), "-1".to_owned()]);
@@ -259,6 +264,48 @@ impl InputFile {
         self.seek_after_input = true;
         self
     }
+}
+
+/// Identify JPEG XL by its codestream/container signature, or its extension
+/// when the source has not yet been opened. Animation timing is decoded by
+/// the bounded infrastructure probe rather than guessed from codec support.
+#[must_use]
+pub fn image_file_is_jpeg_xl(path: &std::path::Path) -> bool {
+    use std::io::Read as _;
+    let mut signature = [0_u8; 12];
+    if let Ok(mut file) = std::fs::File::open(path) {
+        if let Ok(count) = file.read(&mut signature) {
+            if count >= 2 && signature[..2] == [0xff, 0x0a] {
+                return true;
+            }
+            if count == 12 && signature == *b"\x00\x00\x00\x0cJXL \x0d\x0a\x87\x0a" {
+                return true;
+            }
+        }
+    }
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("jxl"))
+        && !is_image_sequence_path(&path.to_string_lossy())
+}
+
+fn is_image_sequence_path(path: &str) -> bool {
+    let mut characters = path.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '%' {
+            continue;
+        }
+        if characters.peek() == Some(&'%') {
+            characters.next();
+            continue;
+        }
+        while characters.peek().is_some_and(char::is_ascii_digit) {
+            characters.next();
+        }
+        if characters.peek() == Some(&'d') {
+            return true;
+        }
+    }
+    false
 }
 
 /// Whether an image file contains an animation.

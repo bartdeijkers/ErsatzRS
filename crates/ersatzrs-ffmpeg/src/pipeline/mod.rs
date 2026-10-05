@@ -38,7 +38,7 @@ const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
 
 pub(crate) fn prepare_graphics_image_filters(
     input: &mut InputFile,
-    overlay: &WatermarkOverlay,
+    overlay: &mut WatermarkOverlay,
     resolution: FrameSize,
     clock: &WatermarkOpacityClock,
 ) {
@@ -52,11 +52,20 @@ pub(crate) fn prepare_graphics_image_filters(
         .as_deref()
         .filter(|value| !value.trim().is_empty())
     {
-        input
-            .filter_steps
-            .push(watermark_opacity_expression_filter_with_clock(
-                expression, clock,
-            ));
+        if let Some(gate) = crate::filter::watermark_opacity_boolean_gate(expression, clock) {
+            overlay.enable = Some(
+                overlay
+                    .enable
+                    .as_ref()
+                    .map_or_else(|| gate.clone(), |enable| format!("({enable})*({gate})")),
+            );
+        } else {
+            input
+                .filter_steps
+                .push(watermark_opacity_expression_filter_with_clock(
+                    expression, clock,
+                ));
+        }
     } else if overlay.opacity < 100 {
         input
             .filter_steps
@@ -1417,7 +1426,16 @@ fn build_transcode_pipeline(
         &request.desired,
         has_watermark_overlay,
         has_image_subtitle_burn,
-    );
+    ) || request.graphics_overlays.iter().any(|graphics| {
+        // overlay_vaapi has no timeline enable support. Compose timed and
+        // compact alpha animations in software, then use the existing upload
+        // path for VAAPI encoding; never silently discard a programme gate.
+        matches!(graphics, GraphicsPipelineOverlay::NativeImage { input, overlay, .. }
+            if overlay.enable.is_some()
+                || overlay.opacity_expression.as_deref().is_some_and(|expression|
+                    crate::filter::watermark_opacity_boolean_gate(expression, &request.watermark_opacity_clock).is_some())
+                || input.input_options.windows(2).any(|options| options == ["-f", "concat"]))
+    });
     download_cuda_frames_for_software_overlay(
         effective_acceleration,
         &request.desired,
@@ -1641,11 +1659,13 @@ fn build_transcode_pipeline(
                     .push(GraphicsOverlayFilter::Drawtext(filter));
             }
             GraphicsPipelineOverlay::NativeImage {
-                mut input, overlay, ..
+                mut input,
+                mut overlay,
+                ..
             } => {
                 prepare_graphics_image_filters(
                     &mut input,
-                    &overlay,
+                    &mut overlay,
                     request.desired.frame_size,
                     &request.watermark_opacity_clock,
                 );
@@ -1687,7 +1707,12 @@ fn build_transcode_pipeline(
             }
         }
     }
-    if has_drawtext_graphics && request.desired.video_format != FFmpegProfileVideoFormat::Copy {
+    if (has_drawtext_graphics
+        || (effective_acceleration == HardwareAccelerationKind::Vaapi
+            && force_vaapi_software_overlay
+            && has_native_graphics_overlay))
+        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+    {
         upload_software_frames_for_hardware_encoder_filters(
             effective_acceleration,
             &mut target_state,

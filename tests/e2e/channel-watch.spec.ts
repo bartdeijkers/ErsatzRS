@@ -1374,3 +1374,166 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     }
   });
 });
+
+async function captureJpegXlStream(ffmpeg: string, url: string, output: string) {
+  const started = Date.now();
+  const samples: { wallSeconds: number; mediaSeconds: number }[] = [];
+  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', '0.1',
+    '-progress', 'pipe:1', '-analyzeduration', '1000000', '-probesize', '1000000',
+    '-rw_timeout', '15000000', '-i', url, '-t', '8', '-c', 'copy', output],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+  let pending = '', stderr = '', expired = false;
+  child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (data: string) => {
+    pending += data;
+    let newline: number;
+    while ((newline = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+      if (line.startsWith('out_time_us=')) {
+        const mediaSeconds = Number(line.slice('out_time_us='.length)) / 1_000_000;
+        if (Number.isFinite(mediaSeconds) && mediaSeconds > 0) {
+          samples.push({ wallSeconds: (Date.now() - started) / 1000, mediaSeconds });
+        }
+      }
+    }
+    if (pending.length > 65536 || samples.length > 512) child.kill('SIGKILL');
+  });
+  child.stderr.on('data', (data: string) => { stderr = (stderr + data).slice(-65536); });
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => { expired = true; child.kill('SIGKILL'); }, 15000);
+    child.once('error', (error) => { clearTimeout(timer); reject(error); });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (expired) reject(new Error('native served JPEG XL capture exceeded 15 seconds'));
+      else if (code !== 0) reject(new Error(`native capture exited ${code}: ${stderr}`));
+      else resolve();
+    });
+  });
+  return { wallSeconds: (Date.now() - started) / 1000, samples };
+}
+
+test('finding 09 decodes compact JPEG XL in a full native broadcast graph', async ({ page }, testInfo) => {
+  test.skip(!dbPath, 'Requires an isolated migrated database');
+  test.setTimeout(120_000);
+  const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? 'ffmpeg';
+  const clip = testInfo.outputPath('jxl-programme-1080p.mp4');
+  const animation = testInfo.outputPath('compact-alpha-animation.jxl');
+  // Real 1080p H.264/AAC decoding and three full-frame alpha carriers exercise
+  // the complete production graph, including the area that made geq expensive.
+  execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i',
+    'testsrc2=s=1920x1080:r=25,drawbox=x=0:y=0:w=300:h=150:color=black:t=fill',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '15',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', clip],
+    { timeout: 15000 });
+  execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i',
+    'color=c=black@0:s=1920x1080:r=25:duration=1,format=rgba', '-vf',
+    "drawtext=fontfile=assets/fonts/Roboto-Regular.ttf:text='%{n}':x=30:y=30:fontsize=90:fontcolor=white,colorchannelmixer=aa=0.5",
+    '-c:v', 'libjxl_anim', '-effort', '1', '-distance', '0', '-f', 'image2pipe', animation],
+    { timeout: 15000 });
+  const channel = seedChannel(testInfo, clip, 29);
+  const anchor = new Date(Date.now() - 2450);
+  const playout = channel.id + 1;
+  const graphic = channel.id + 500;
+  const config = JSON.stringify({ kind: 'motion', video_path: animation,
+    start_seconds: 0, hold_seconds: 0, end_behavior: 'Loop' });
+  sqlite(`
+INSERT INTO "Resolution" ("Id","Width","Height","Name") VALUES (${channel.id + 201},1920,1080,'JPEG XL proof');
+UPDATE "Channel" SET "StreamingMode"=1 WHERE "Id"=${channel.id};
+UPDATE "FFmpegProfile" SET "ResolutionId"=${channel.id + 201},"HardwareAcceleration"=0,"VideoPreset"='ultrafast',"VideoBitrate"=8000,"NormalizeFramerate"=1
+ WHERE "Id"=${channel.id + 200};
+UPDATE "MediaVersion" SET "Width"=1920,"Height"=1080,"RFrameRate"='25/1',"Duration"='00:00:15' WHERE "Id"=${channel.id + 105};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(anchor)}',"Finish"='${dbTime(new Date(anchor.getTime()+60000))}',"InPoint"='00:00:00',"OutPoint"='00:01:00' WHERE "Id"=${channel.id + 2};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(anchor.getTime()+60000))}',"Finish"='${dbTime(new Date(anchor.getTime()+120000))}' WHERE "Id"=${channel.id + 3};
+${[0,1,2].map((index) => `
+INSERT INTO "GraphicsElement" ("Id","Name","Kind","Config","Location","HorizontalMarginPercent","VerticalMarginPercent","OpacityExpression","ZIndex")
+ VALUES (${graphic+index},'Native JXL carrier ${index}',3,${sqlString(config)},0,0,0,'content_seconds < 7.5',${index});
+INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") VALUES (${channel.id+2},${graphic+index});`).join('\n')}
+`);
+  await page.goto(`/channels/${channel.id}`);
+  await expect(page.locator('input[name="name"]')).toHaveValue(channel.name);
+  // The existing MPEG troubleshooting report identifies the exact private
+  // HTTP producer used by ordinary IPTV. Keep public playback proof too: its
+  // wrapper deliberately paces delivery at 1x and cannot measure spare capacity.
+  const diagnostic = await page.request.get(`/system/troubleshooting/mpeg?channel=${channel.number}&mode=internal-legacy&duration=1`);
+  expect(diagnostic.ok()).toBe(true);
+  const producerUrl = (await diagnostic.text()).match(/http:\/\/127\.0\.0\.1:\d+\/ffmpeg\/stream\/\d+/)?.[0];
+  expect(producerUrl, 'existing native MPEG report must expose its real sample URL').toBeTruthy();
+  const base = process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409';
+  for (const [label, url] of [
+    ['producer', producerUrl!],
+    ['iptv', `${base}/iptv/channel/${channel.number}.ts?mode=ts-legacy`],
+  ]) {
+    const actualAnchor = new Date(Date.now() - 2450);
+    sqlite(`UPDATE "PlayoutItem" SET "Start"='${dbTime(actualAnchor)}',"Finish"='${dbTime(new Date(actualAnchor.getTime()+60000))}' WHERE "Id"=${channel.id+2};
+  UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(actualAnchor.getTime()+60000))}',"Finish"='${dbTime(new Date(actualAnchor.getTime()+120000))}' WHERE "Id"=${channel.id+3};`);
+    const before = programmeTimeline(playout);
+    const capture = testInfo.outputPath(`served-jxl-${label}-1080p.mkv`);
+    const { wallSeconds, samples } = await captureJpegXlStream(
+      ffmpeg, url, capture,
+    );
+    writeFileSync(testInfo.outputPath(`served-jxl-${label}-progress.json`), JSON.stringify(samples, null, 2));
+    execFileSync(ffmpeg, ['-v', 'error', '-i', capture, '-f', 'null', '-'], { timeout: 15000 });
+    const frames = execFileSync(ffmpeg, ['-v', 'error', '-i', capture,
+      '-vf', 'crop=300:150:0:0', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'],
+      { timeout: 15000, maxBuffer: 64*1024*1024 });
+    const frameBytes = 300*150*3;
+    expect(frames.length % frameBytes).toBe(0);
+    const count = frames.length / frameBytes;
+    expect(count).toBeGreaterThanOrEqual(195);
+    const peaks: number[] = [], white: number[] = [];
+    for (let index=0; index<count; index++) {
+      const data = frames.subarray(index*frameBytes,(index+1)*frameBytes);
+      let peak=0, bright=0;
+      for (let pixel=0;pixel<data.length;pixel+=3) { peak=Math.max(peak,data[pixel]); if(data[pixel]>170&&data[pixel+1]>170&&data[pixel+2]>170) bright++; }
+      peaks.push(peak); white.push(bright);
+    }
+    const sourceFrames = execFileSync(ffmpeg,['-v','error','-i',animation,
+      '-vf','crop=300:150:0:0','-pix_fmt','rgba','-f','rawvideo','pipe:1'],{timeout:15000,maxBuffer:8*1024*1024});
+    expect(sourceFrames.length).toBe(25*300*150*4);
+    const scores = Array.from({length:25},(_,frame) => {
+      let error=0;
+      for(let pixel=0;pixel<300*150;pixel++) {
+        const sourcePixel=frame*300*150*4+pixel*4;
+        const alpha=sourceFrames[sourcePixel+3]/255;
+        const predicted=sourceFrames[sourcePixel]*(1-Math.pow(1-alpha,3));
+        error+=Math.abs(frames[pixel*3]-predicted);
+      }
+      return error/(300*150);
+    });
+    const firstSourceFrame = scores.indexOf(Math.min(...scores));
+    expect(firstSourceFrame, 'ordinary native playback must join the running JXL phase instead of restarting frame zero').not.toBe(0);
+    expect(firstSourceFrame).toBeGreaterThanOrEqual(10);
+    expect(Math.min(...scores), 'decoded served glyph must match an actual source animation frame').toBeLessThan(5);
+    expect(Math.max(...peaks.slice(0,40))).toBeGreaterThan(180);
+    expect(Math.max(...peaks.slice(0,40))).toBeLessThan(250);
+    expect(new Set(white.slice(0,40)).size).toBeGreaterThan(5);
+    expect(Math.max(...peaks.slice(-40))).toBeLessThan(35);
+    // Measure live delivery while all three carriers are active. The total
+    // request time separately includes bounded probes and legacy demuxer startup;
+    // it is startup latency, not the running graph's sustainable throughput.
+    const activeSamples = samples.filter((sample) => sample.mediaSeconds >= 0.5 && sample.mediaSeconds <= 4.5);
+    expect(activeSamples.length).toBeGreaterThanOrEqual(6);
+    const firstSample = activeSamples[0], lastSample = activeSamples.at(-1)!;
+    const measuredMediaSeconds = lastSample.mediaSeconds - firstSample.mediaSeconds;
+    expect(measuredMediaSeconds).toBeGreaterThanOrEqual(2.5);
+    const speed = measuredMediaSeconds / (lastSample.wallSeconds - firstSample.wallSeconds);
+    if (label === 'producer') {
+      expect(speed, 'actual full native HTTP graph capacity with all three carriers active').toBeGreaterThanOrEqual(1);
+    } else {
+      // The public wrapper uses -readrate 1.0. At 25 fps, reported media progress
+      // is quantized to 40 ms; require realtime delivery within one output frame.
+      expect(measuredMediaSeconds + 1 / 25).toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
+    }
+    expect(programmeTimeline(playout)).toBe(before);
+    for(const [time,state] of [['0.4','visible'],['7.2','clear']]) {
+      const image = testInfo.outputPath(`served-jxl-${label}-${state}.png`);
+      execFileSync(ffmpeg,['-v','error','-y','-ss',time,'-i',capture,'-frames:v','1',image],{timeout:15000});
+      expect(existsSync(image)).toBe(true);
+    }
+    writeFileSync(testInfo.outputPath(`served-jxl-${label}-proof.json`),JSON.stringify({
+      route:label, resolution:'1920x1080', carriers:3, sourceFormat:'compact JPEG XL', requestedJoinSeconds:2.45,
+      decodedFrames:count, wallSeconds, coldRequestMediaRatio:(count/25)/wallSeconds,
+      initialMediaLatencySeconds:samples[0]?.wallSeconds, measuredMediaSeconds, completeGraphSpeed:speed, progress:samples, firstSourceFrame, sourceFrameScores:scores, firstPeaks:peaks.slice(0,40),
+      lastPeaks:peaks.slice(-40), timelinePreserved:true },null,2));
+  }
+});

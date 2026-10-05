@@ -68,9 +68,9 @@ const REQUIRED_ENCODERS: &[&str] = &[
     "libx265",
     "png",
 ];
-const REQUIRED_DECODERS: &[&str] = &["av1", "ffv1", "h264", "hevc"];
+const REQUIRED_DECODERS: &[&str] = &["av1", "ffv1", "h264", "hevc", "libjxl", "libjxl_anim"];
 const REQUIRED_MUXERS: &[&str] = &["nut"];
-const REQUIRED_DEMUXERS: &[&str] = &["nut"];
+const REQUIRED_DEMUXERS: &[&str] = &["nut", "concat", "jpegxl_anim", "jpegxl_pipe"];
 const REQUIRED_CONFIGURATION_FLAGS: &[&str] = &[
     "--enable-cairo",
     "--enable-libfontconfig",
@@ -2851,6 +2851,7 @@ h264_nvenc AVOptions:
             required_filters: vec!["drawvg".to_owned()],
             required_encoders: vec!["libx264".to_owned()],
             required_decoders: vec!["h264".to_owned()],
+            required_demuxers: vec!["nut".to_owned()],
             required_configuration_flags: vec!["--enable-cairo".to_owned()],
             required_hwaccels: vec!["vaapi".to_owned()],
             optional_hwaccels: vec!["cuda".to_owned()],
@@ -3203,6 +3204,7 @@ mod unix_tests {
             required_filters: vec!["drawvg".to_owned()],
             required_encoders: Vec::new(),
             required_decoders: Vec::new(),
+            required_demuxers: vec!["nut".to_owned()],
             required_configuration_flags: Vec::new(),
             required_hwaccels: Vec::new(),
             optional_hwaccels: Vec::new(),

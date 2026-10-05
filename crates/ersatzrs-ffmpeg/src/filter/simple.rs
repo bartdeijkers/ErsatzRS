@@ -548,12 +548,86 @@ pub fn watermark_opacity_expression_filter_with_clock(
     clock: &WatermarkOpacityClock,
 ) -> String {
     let expression = translate_watermark_opacity_expression_with_clock(expression, clock);
+    if let Ok(value) = expression.parse::<f64>() {
+        if value.is_finite() {
+            return format!("format=rgba,colorchannelmixer=aa={}", value.clamp(0.0, 1.0));
+        }
+    }
     // `geq` requires a luminance (or RGB) expression — alpha alone fails at
     // runtime with "A luminance or RGB expression is mandatory". Copy the
     // color planes through and rewrite only alpha.
     format!(
-        "format=yuva420p|yuva444p|yuva422p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(255*({expression}),0,255)'"
+        "format=yuva420p|yuva444p|yuva422p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(alpha(X,Y)*({expression}),0,255)'"
     )
+}
+
+/// Boolean opacity can gate the compositor once per frame without replacing
+/// decoded alpha or evaluating every pixel. Unknown/continuous expressions
+/// retain the general alpha-multiplication path.
+pub(crate) fn watermark_opacity_boolean_gate(
+    expression: &str,
+    clock: &WatermarkOpacityClock,
+) -> Option<String> {
+    let translated = OpacityExpressionParser::translate(expression, clock)?;
+    opacity_result_is_boolean(&translated).then(|| translated.replace('T', "t"))
+}
+
+fn opacity_result_is_boolean(expression: &str) -> bool {
+    let mut expression = expression.trim();
+    while expression.starts_with('(') && expression.ends_with(')') {
+        let mut depth = 0;
+        let complete = expression.char_indices().all(|(index, character)| {
+            match character {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            depth > 0 || index + 1 == expression.len()
+        });
+        if !complete {
+            break;
+        }
+        expression = &expression[1..expression.len() - 1];
+    }
+    if matches!(expression, "0" | "1") {
+        return true;
+    }
+    let Some((name, arguments)) = expression.split_once('(') else {
+        return false;
+    };
+    let Some(arguments) = arguments.strip_suffix(')') else {
+        return false;
+    };
+    let mut depth = 0;
+    let mut start = 0;
+    let mut parts = Vec::new();
+    for (index, character) in arguments.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            ',' if depth == 0 => {
+                parts.push(&arguments[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return false;
+    }
+    parts.push(&arguments[start..]);
+    match name {
+        "lt" | "lte" | "gt" | "gte" | "eq" => parts.len() == 2,
+        "between" => parts.len() == 3,
+        "not" => parts.len() == 1,
+        "min" | "max" => parts.len() == 2 && parts.into_iter().all(opacity_result_is_boolean),
+        _ => false,
+    }
 }
 
 /// Translate an `ErsatzTV` (`NCalc`) watermark opacity expression into

@@ -29,6 +29,8 @@ pub enum GraphicsTemplateError {
     Script { id: i64, source: mlua::Error },
     #[error("graphics element {id} script did not return drawvg script")]
     InvalidScriptResult { id: i64 },
+    #[error("graphics element {id} has invalid or unbounded JPEG XL timing")]
+    InvalidJpegXlTiming { id: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,6 +217,16 @@ pub struct GraphicsRenderContext {
     motion_source_durations: BTreeMap<i64, f64>,
     stream_offset: std::time::Duration,
     stream_duration: Option<std::time::Duration>,
+    jpeg_xl_sources: BTreeMap<i64, JpegXlTiming>,
+}
+
+/// Actual decoded frame timing; a single decoded frame is a still image.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JpegXlTiming {
+    pub frame_count: usize,
+    pub duration_seconds: f64,
+    pub last_frame_seconds: f64,
+    pub frame_timestamps: Vec<f64>,
 }
 
 impl GraphicsRenderContext {
@@ -226,11 +238,11 @@ impl GraphicsRenderContext {
             motion_source_durations: BTreeMap::new(),
             stream_offset: std::time::Duration::ZERO,
             stream_duration: None,
+            jpeg_xl_sources: BTreeMap::new(),
         }
     }
 
-    /// Offset for an independently rendered canvas chunk. Native programme
-    /// pipelines retain the default zero value and their existing input clock.
+    /// Programme-relative source phase for native playback and canvas chunks.
     #[must_use]
     pub fn with_stream_offset(mut self, offset: std::time::Duration) -> Self {
         self.stream_offset = offset;
@@ -255,6 +267,13 @@ impl GraphicsRenderContext {
 
     fn motion_source_duration(&self, element_id: i64) -> Option<f64> {
         self.motion_source_durations.get(&element_id).copied()
+    }
+
+    #[must_use]
+    pub fn with_jpeg_xl_timing(mut self, element_id: i64, timing: JpegXlTiming) -> Self {
+        let duration = timing.duration_seconds;
+        self.jpeg_xl_sources.insert(element_id, timing);
+        self.with_motion_source_duration(element_id, duration)
     }
 }
 
@@ -551,12 +570,14 @@ fn render_graphics_element(
     context: &GraphicsRenderContext,
 ) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
     match &element.config {
-        GraphicsElementConfig::Image(config) => render_image_graphics_element(element, config),
+        GraphicsElementConfig::Image(config) => {
+            render_image_graphics_element(element, config, output_dir, context)
+        }
         GraphicsElementConfig::Text(_) => {
             render_text_graphics_element(element, variables, output_dir, context)
         }
         GraphicsElementConfig::Motion(config) => {
-            render_motion_graphics_element(element, config, context)
+            render_motion_graphics_element(element, config, output_dir, context)
         }
         GraphicsElementConfig::Subtitle(config) => {
             render_subtitle_graphics_element(element, config, variables, output_dir, context)
@@ -570,6 +591,8 @@ fn render_graphics_element(
 fn render_image_graphics_element(
     element: &GraphicsElement,
     config: &ersatzrs_domain::ImageGraphicsConfig,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
 ) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
     let image = config
         .image
@@ -586,7 +609,18 @@ fn render_image_graphics_element(
     Ok(Some(RenderedGraphicsElement::NativeImage {
         id: element.id,
         z_index: element.z_index,
-        input: InputFile::graphics_image(image),
+        input: if crate::input::image_file_is_jpeg_xl(Path::new(image)) {
+            jpeg_xl_input(
+                element.id,
+                image,
+                output_dir,
+                context,
+                true,
+                context.stream_offset.as_secs_f64(),
+            )?
+        } else {
+            InputFile::graphics_image(image)
+        },
         overlay,
     }))
 }
@@ -624,6 +658,7 @@ fn render_text_graphics_element(
 fn render_motion_graphics_element(
     element: &GraphicsElement,
     config: &ersatzrs_domain::MotionGraphicsConfig,
+    output_dir: &Path,
     context: &GraphicsRenderContext,
 ) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
     let video_path = config
@@ -639,6 +674,7 @@ fn render_motion_graphics_element(
             id: element.id,
             field: "motion overlay",
         })?;
+    let jpeg_xl = crate::input::image_file_is_jpeg_xl(Path::new(video_path));
     let mut input =
         InputFile::graphics_motion(video_path, config.end_behavior == MotionEndBehavior::Loop);
     let start = config.start_seconds.unwrap_or_default().max(0.0);
@@ -669,17 +705,29 @@ fn render_motion_graphics_element(
         && context
             .motion_source_duration(element.id)
             .is_some_and(|duration| seek >= duration && duration > 0.0);
-    if held_frame {
-        let duration = context
-            .motion_source_duration(element.id)
-            .unwrap_or_default();
-        input
-            .input_options
-            .extend(["-ss".into(), trim_float((duration - 1.0).max(0.0))]);
-        // Decode at most the final second, then retain the exact last frame.
-        input
-            .filter_steps
-            .push("reverse,trim=end_frame=1,setpts=PTS-STARTPTS".into());
+    if jpeg_xl {
+        input = jpeg_xl_input(
+            element.id,
+            video_path,
+            output_dir,
+            context,
+            config.end_behavior == MotionEndBehavior::Loop,
+            if held_frame { 0.0 } else { seek },
+        )?;
+        if held_frame {
+            let timing = &context.jpeg_xl_sources[&element.id];
+            input.filter_steps.push(format!(
+                "trim=start={},trim=end_frame=1,setpts=PTS-STARTPTS",
+                jpeg_xl_time(timing.last_frame_seconds)
+            ));
+        }
+    } else if held_frame {
+        hold_final_motion_frame(
+            &mut input,
+            context
+                .motion_source_duration(element.id)
+                .unwrap_or_default(),
+        );
     } else if seek > 0.0 {
         let input_seek = if config.end_behavior == MotionEndBehavior::Hold {
             context
@@ -719,6 +767,134 @@ fn render_motion_graphics_element(
         input,
         overlay,
     }))
+}
+
+fn hold_final_motion_frame(input: &mut InputFile, duration: f64) {
+    input
+        .input_options
+        .extend(["-ss".into(), trim_float((duration - 1.0).max(0.0))]);
+    // Decode at most the final second, then retain the exact last frame.
+    input
+        .filter_steps
+        .push("reverse,trim=end_frame=1,setpts=PTS-STARTPTS".into());
+}
+
+fn jpeg_xl_time(value: f64) -> String {
+    // FFprobe frame timestamps and FFmpeg's AVTB use microseconds. Rounding a
+    // 24 fps frame up to milliseconds would trim away the in-progress frame.
+    format!("{value:.6}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
+}
+
+fn jpeg_xl_input(
+    id: i64,
+    source: &str,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
+    repeat: bool,
+    seek: f64,
+) -> Result<InputFile, GraphicsTemplateError> {
+    let timing = context
+        .jpeg_xl_sources
+        .get(&id)
+        .filter(|value| {
+            value.frame_count > 0
+                && value.duration_seconds.is_finite()
+                && value.duration_seconds > 0.0
+        })
+        .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?;
+    if timing.frame_count == 1 {
+        let mut input = InputFile::new(crate::InputKind::GraphicsImage, source, 0);
+        input.filter_steps.push(format!(
+            "loop=loop=-1:size=1:start=0,setpts=N*{}/TB",
+            jpeg_xl_time(timing.duration_seconds)
+        ));
+        return Ok(input);
+    }
+    let seek = if repeat {
+        seek.rem_euclid(timing.duration_seconds)
+    } else {
+        seek
+    };
+    let mut input = if repeat {
+        let remaining = context
+            .stream_duration
+            .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?
+            .as_secs_f64();
+        let cycles = ((remaining + seek) / timing.duration_seconds).ceil() + 1.0;
+        if !cycles.is_finite() || !(1.0..=100_000.0).contains(&cycles) {
+            return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
+        }
+        let source_path =
+            std::fs::canonicalize(source).map_err(|source_error| GraphicsTemplateError::Io {
+                path: source.into(),
+                source: source_error,
+            })?;
+        let source = source_path.to_string_lossy();
+        if source.contains(['\n', '\r', '\0']) {
+            return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
+        }
+        // ffconcat quoting is independent of filtergraph escaping. Native
+        // Windows paths use forward slashes; POSIX literal backslashes survive.
+        let source = if cfg!(windows) {
+            source
+                .strip_prefix(r"\\?\UNC\")
+                .map_or_else(
+                    || source.strip_prefix(r"\\?\").unwrap_or(&source).to_owned(),
+                    |rest| format!("//{rest}"),
+                )
+                .replace('\\', "/")
+        } else {
+            source.into_owned()
+        };
+        let record = format!(
+            "file '{}'\nduration {}\n",
+            source.replace('\'', "'\\''"),
+            jpeg_xl_time(timing.duration_seconds)
+        );
+        let mut manifest = String::from("ffconcat version 1.0\n");
+        let mut cycle = 0.0;
+        while cycle < cycles {
+            if manifest.len().saturating_add(record.len()) > 8 * 1024 * 1024 {
+                return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
+            }
+            manifest.push_str(&record);
+            cycle += 1.0;
+        }
+        let path = output_dir.join(format!("{id}-jpeg-xl.ffconcat"));
+        std::fs::create_dir_all(output_dir)
+            .and_then(|()| std::fs::write(&path, manifest))
+            .map_err(|source| GraphicsTemplateError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        InputFile::new(crate::InputKind::GraphicsImage, path.to_string_lossy(), 0)
+            .with_input_options(["-f", "concat", "-safe", "0", "-protocol_whitelist", "file"])
+    } else {
+        InputFile::new(crate::InputKind::GraphicsImage, source, 0)
+    };
+    // Decode the compact source from its beginning. Reopening each concat
+    // entry bounds decoded memory and supplies monotonic packet timestamps.
+    let first_timestamp = timing
+        .frame_timestamps
+        .iter()
+        .rev()
+        .find(|timestamp| **timestamp <= seek + 0.000_001)
+        .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?;
+    if !repeat {
+        input.filter_steps.push(format!(
+            "tpad=stop_mode=clone:stop_duration={}",
+            jpeg_xl_time(timing.duration_seconds - timing.last_frame_seconds)
+        ));
+    }
+    input.filter_steps.push(format!(
+        "settb=AVTB,trim=start={},setpts=PTS-{}/TB",
+        jpeg_xl_time(*first_timestamp),
+        jpeg_xl_time(seek)
+    ));
+    Ok(input)
 }
 
 fn render_subtitle_graphics_element(
@@ -1539,6 +1715,15 @@ fn graphics_motion_enable_expression(
         "t".into()
     };
     match config.end_behavior {
+        MotionEndBehavior::Disappear
+            if source_duration_seconds.is_some_and(|duration| duration > 0.0) =>
+        {
+            format!(
+                "gte({time},{})*lt({time},{})",
+                trim_float(start),
+                trim_float(start + source_duration_seconds.unwrap_or_default())
+            )
+        }
         MotionEndBehavior::Disappear | MotionEndBehavior::Loop => {
             format!("gte({time},{})", trim_float(start))
         }

@@ -6071,3 +6071,45 @@ fn drawvg_windows_filter_paths_snapshot() {
         .join("\n");
     insta::assert_snapshot!(filters);
 }
+
+#[test]
+fn jpeg_xl_vaapi_timing_uses_native_software_composition_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            1,
+            InputFile::new(
+                ersatzrs_ffmpeg::InputKind::GraphicsImage,
+                "/graphics/9-jpeg-xl.ffconcat",
+                0,
+            )
+            .with_input_options([
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-protocol_whitelist",
+                "file",
+            ]),
+            WatermarkOverlay {
+                size: WatermarkSize::ActualSize,
+                enable: Some("gte(t,1)".into()),
+                opacity_expression: Some("content_seconds < 7".into()),
+                ..Default::default()
+            },
+        ));
+    let command = VaapiPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+    assert!(!arguments.contains("overlay_vaapi"));
+    assert!(
+        arguments.contains("hwdownload")
+            && arguments.contains("hwupload")
+            && arguments.contains("overlay=")
+            && arguments.contains("enable=")
+    );
+    assert!(!arguments.contains("geq="));
+    insta::assert_snapshot!(arguments);
+}

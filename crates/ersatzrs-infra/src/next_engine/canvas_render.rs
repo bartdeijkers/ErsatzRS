@@ -65,6 +65,7 @@ pub(super) async fn prepare(
             &session.graphics,
             &context,
             directory.path(),
+            session.timeline.duration,
             deadline,
             receiver,
         ),

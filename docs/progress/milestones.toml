@@ -14719,7 +14719,7 @@ closeout/publication remains separate from this solution acceptance.
 id = 'v111-findings-09'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Typed animated JPEG XL playback'
-status = 'Not started'
+status = 'Complete'
 feature = 'drawvg-graphics-engine'
 depends_on = []
 acceptance = '''
@@ -14740,7 +14740,7 @@ substitution is not a solution.
 '''
 evidence = '''
 The current findings document includes this additional measured runtime gap.
-Implementation and acceptance pending; preserve the complete requested scope.
+Locally accepted 2026-10-05 with the complete requested scope.
 The addendum records a valid 175-frame, seven-second RGBA animation decoded by
 the deployed Windows FFmpeg 9 runtime. Still-image loop options fail, demuxer
 input seeking fails and stream_loop stalls. This input-path evidence does not
@@ -14752,6 +14752,39 @@ programme-relative source phase and enable timing in normal playback, support
 constant/Boolean alpha gates without needless per-pixel processing, and measure
 the complete native graph under representative decoding load. An offline font-
 glyph workaround does not prove Motion/JXL repair or served-stream acceptance.
+Implementation/runtime evidence 2026-10-05: 13 focused checks pass, including
+exact native FFmpeg 9 RGBA decoding, repeat boundaries, fractional 5/24 fps
+joins, Motion start/Hold/Disappear, reviewed native/VAAPI snapshots and decoded
+VFR duration. Log: test-results/finding09/focused-native.log; nextest
+4aaec97d-06ee-4d7f-83b5-e75886e38a19. Strict full workspace all-target lint
+passes: test-results/finding09/clippy-final.log. Eight complete Chromium/Firefox
+editor cases pass across English/Dutch and hydrated/no-JS forms, proving actual
+Image/Motion PNG phases, alpha, Boolean gates, JPEG XL upload MIME/extension,
+saved values and YAML. Canonical results:
+test-results/finding09-editor/playwright-results.json and artifacts/.
+Two native served-stream browser cases pass: each captures and fully decodes
+200 frames both from the real native HTTP producer and ordinary public IPTV,
+with three full-frame 1920x1080 JPEG XL carriers, H.264 decoding and six-channel
+AC-3 output. Decoded source-frame matching proves fractional ordinary entry;
+repeated animation, preserved alpha, Boolean disappearance and unchanged
+programme rows pass. Visible/cleared PNGs were visually reviewed. The complete
+native producer measures 1.1225x and 1.0944x during the all-carriers-active
+window; the public concat wrapper deliberately paces at 1x and meets that
+cadence within one 25 fps frame of progress quantization. Cold request times
+are separately recorded (11.034-12.381 seconds for eight seconds of media),
+not substituted for sustainable producer capacity. Every native fixture,
+capture and decode child is bounded to 15 seconds. Canonical results:
+test-results/finding09-stream/playwright-results.json and artifacts/ with
+per-route served-jxl-*-proof.json, progress, MKV and actual PNGs.
+Final integrated gates pass: 3867 native tests plus doctests (164 explicitly
+opt-in skips; nextest b954ce52-2826-4983-9ca0-27b4a4b56db2), native MPEG-TS/HLS
+smoke, all 87 TSDuck transport checks, formatting, strict workspace all-target
+Clippy, progress/architecture/hydration parity checks and the final paired
+Leptos SSR/WASM build with actual HTTP bundle verification. Canonical logs:
+test-results/finding09/{closeout,smoke,tsduck,clippy-final,parity,leptos,bundle}.log.
+The parity check reuses the complete current native tests and strict lint.
+Finding 09b retains its separate Motion location/typography acceptance; no
+Windows deployment, CI, push or publication is claimed.
 '''
 
 [[milestone]]

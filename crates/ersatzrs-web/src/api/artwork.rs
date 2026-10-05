@@ -411,7 +411,7 @@ pub(super) fn is_cached_image_filename(filename: &str) -> bool {
     is_native_uuid
         && matches!(
             extension,
-            Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bin")
+            Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "jxl" | "svg" | "bin")
         )
 }
 

@@ -229,6 +229,7 @@ pub(crate) async fn render_preview(
         }],
         &render_context,
         directory.path(),
+        Duration::from_millis(40),
         deadline,
         receiver,
     )

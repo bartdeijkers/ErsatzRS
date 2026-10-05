@@ -97,8 +97,12 @@ accepted: typed five-kind authoring, strict YAML, missing-input preflight, actua
 native previews and accurate renderer capabilities. Native closeout, 18 complete
 Chromium/Firefox cases, all cultures/hydrated/no-JS, historical/real-font rendering,
 transport and paired-bundle gates pass. Canonical acceptance lives in
-v111-findings-02 and ADR 0114. Next: reread the entire findings document, then finish
-findings 09 and 09b with their complete acceptance and separate commits.
+v111-findings-02 and ADR 0114. Finding 09 is locally accepted: decoded JPEG XL
+repeat/phase/alpha, actual native producer throughput, eight editor cases and
+two real producer/public IPTV cases pass alongside complete native, transport,
+parity and paired-bundle gates. Canonical acceptance lives in v111-findings-09
+and ADR 0115. Next: reread the entire findings document, then finish finding 09b
+with its complete acceptance and separate commit.
 No publication is authorized.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
@@ -112,7 +116,9 @@ SQL restart/automatic-build, Health, browser and native playback proof. Finding 
 discovery, MPEG/TS recognition and bounded localized folder preview with native
 rescan/identity and JS/no-JS browser proof. Findings 07/08 retain shared-decoder
 and owned preview lifecycle proof, including native/Next playback and cleanup.
-Selection, authoring/preview, programme metadata and animated JPEG XL remain open.
+Selection, typed authoring/preview, programme metadata and animated JPEG XL
+are locally accepted; exact Motion placement and final roundtrip/typography
+acceptance remain open under finding 09b.
 Finding 09 also includes separate Motion YAML/alpha/location and native
 text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
 selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are
