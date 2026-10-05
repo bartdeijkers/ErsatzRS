@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-05): `007b34151fc36e039282bc4a2726e1086e6a8105`
-  — feat: local deep scan (#3059).
-- Ledger: **195 commits**, **12 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-10-05): `897a6ef936c23fedc3a29111c0cc04625eefbec1`
+  — fix: coerce next channels to supported streaming modes (#3062).
+- Ledger: **198 commits**, **15 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -27,6 +27,9 @@
   commits, the troubleshooting seek point, local library duration and the local
   deep scan as pending rows 190-195; all 189 existing SHA/subject pairs remain
   an exact prefix.
+  A later 2026-10-05 refresh appends the Windows artifact size build change,
+  unextracted text subtitles on Next and streaming-mode coercion as pending rows
+  196-198; all 195 existing SHA/subject pairs remain an exact prefix.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
@@ -5164,3 +5167,6 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 193 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; provisional: Port, concrete gap. Upstream stops trusting `format.duration`, which follows the longest stream and can be a subtitle running past the content: it takes the highest-bitrate non-attached video stream duration, else the max over all audio streams when every one is known, and falls back to the Matroska `DURATION`/`DURATION-<lang>` tag parsed by hand because hours may exceed 23 and the fraction has nine digits. ErsatzRS reads `format.duration` (`crates/ersatzrs-infra/src/ffprobe.rs:657`) and its `FfprobeStream` has no per-stream `duration` field (`:957`), so both the stream rule and the tag fallback are missing. Claude 2026-10-05 triage. |
 | 194 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |
 | 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |
+| 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |
+| 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | | | | ucu-09; provisional: Covered, pending a focused check. Upstream drops the Next exemption in `CustomStreamSelector`, so an embedded text subtitle that has not been extracted is ignored for Next too, exactly as for the legacy engine. ErsatzRS selection and extraction carry no engine-specific exemption (`crates/ersatzrs-infra/src/subtitles.rs:1448` re-extracts on any missing cache file regardless of engine), and row 174 already applied automatic eligibility to both engines, so the audit only has to prove an unextracted embedded text track is skipped rather than selected. Claude 2026-10-05 triage. |
+| 198 | `897a6ef9` | fix: coerce next channels to supported streaming modes (#3062) | | | | ucu-09; provisional: Port. Cached lineup and playlist URLs still carry legacy modes, so upstream coerces `ts-legacy` to `ts` and any non-segmenter playlist mode to `segmenter` for channels on the Next engine, logging the substitution. ErsatzRS refuses instead of coercing: the legacy transport path returns 404 for a Next channel (`crates/ersatzrs-web/src/transport/iptv/stream.rs:280`) while the HLS path branches to the Next handler (`transport/iptv/hls.rs:751`), so a client holding an older URL loses the channel. Claude 2026-10-05 triage. |
