@@ -641,6 +641,38 @@ pub enum TextKey {
     AddonDeliveryNewVideos,
     AddonDeliveryHelp,
     AddonDeliveryUnavailable,
+    AddonSelectionInitialReview,
+    AddonSelectionInitialReviewHelp,
+    AddonSelectionReviewRequired,
+    AddonSelectionEvaluatedAt,
+    AddonSelection,
+    AddonSelectionHelp,
+    AddonSelectionEnabled,
+    AddonSelectionPause,
+    AddonSelectionAge,
+    AddonSelectionNewest,
+    AddonSelectionMinimum,
+    AddonSelectionMaximum,
+    AddonSelectionInclude,
+    AddonSelectionExclude,
+    AddonSelectionActive,
+    AddonSelectionArchived,
+    AddonSelectionPreviewHelp,
+    AddonSelectionManual,
+    AddonSelectionPinned,
+    AddonSelectionExcluded,
+    AddonSelectionAutomatic,
+    AddonSelectionCutoff,
+    AddonSelectionMissingDate,
+    AddonSelectionFutureDate,
+    AddonSelectionTooOld,
+    AddonSelectionMissingDuration,
+    AddonSelectionTooShort,
+    AddonSelectionTooLong,
+    AddonSelectionTitleNotIncluded,
+    AddonSelectionTitleExcluded,
+    AddonSelectionNewestLimit,
+    AddonSelectionInvalid,
     AddonDeliveryCutoff,
     AddonDeliveryFreshCutoff,
     AdaptiveRefreshUnavailable,
@@ -2747,6 +2779,38 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonDeliveryNewVideos,
     TextKey::AddonDeliveryHelp,
     TextKey::AddonDeliveryUnavailable,
+    TextKey::AddonSelectionInitialReview,
+    TextKey::AddonSelectionInitialReviewHelp,
+    TextKey::AddonSelectionReviewRequired,
+    TextKey::AddonSelectionEvaluatedAt,
+    TextKey::AddonSelection,
+    TextKey::AddonSelectionHelp,
+    TextKey::AddonSelectionEnabled,
+    TextKey::AddonSelectionPause,
+    TextKey::AddonSelectionAge,
+    TextKey::AddonSelectionNewest,
+    TextKey::AddonSelectionMinimum,
+    TextKey::AddonSelectionMaximum,
+    TextKey::AddonSelectionInclude,
+    TextKey::AddonSelectionExclude,
+    TextKey::AddonSelectionActive,
+    TextKey::AddonSelectionArchived,
+    TextKey::AddonSelectionPreviewHelp,
+    TextKey::AddonSelectionManual,
+    TextKey::AddonSelectionPinned,
+    TextKey::AddonSelectionExcluded,
+    TextKey::AddonSelectionAutomatic,
+    TextKey::AddonSelectionCutoff,
+    TextKey::AddonSelectionMissingDate,
+    TextKey::AddonSelectionFutureDate,
+    TextKey::AddonSelectionTooOld,
+    TextKey::AddonSelectionMissingDuration,
+    TextKey::AddonSelectionTooShort,
+    TextKey::AddonSelectionTooLong,
+    TextKey::AddonSelectionTitleNotIncluded,
+    TextKey::AddonSelectionTitleExcluded,
+    TextKey::AddonSelectionNewestLimit,
+    TextKey::AddonSelectionInvalid,
     TextKey::AddonDeliveryCutoff,
     TextKey::AddonDeliveryFreshCutoff,
     TextKey::AdaptiveRefreshUnavailable,
@@ -5076,6 +5140,27 @@ fn playout_health_message(language: UiLanguage, title: &str, message: &str) -> O
     )
 }
 
+fn addon_list_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<&'static str> {
+    if title != "Add-on media lists" {
+        return None;
+    }
+    let key = match message {
+        "Initial add-on selection is awaiting review" |
+        "Preview and save the list selection before its first publication or media acquisition." => TextKey::AddonSelectionReviewRequired,
+        "Automatic publication needs review" | "Automatic processing needs attention" => TextKey::AutoPublicationHeld,
+        "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation." => TextKey::PreparationProcessRecoveryRequired,
+        "Media preparation worker is unavailable. Restart the server before retrying preparation." => TextKey::PreparationWorkerUnavailable,
+        "Derived show metadata reached its size limit" |
+        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete." => TextKey::AddonDerivedMetadataLimited,
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -5118,30 +5203,8 @@ pub fn health_check_message_text(
             return lines.join("\n");
         }
     }
-    if title == "Add-on media lists"
-        && matches!(
-            displayed_message,
-            "Automatic publication needs review" | "Automatic processing needs attention"
-        )
-    {
-        return text(language, TextKey::AutoPublicationHeld).to_owned();
-    }
-    if title == "Add-on media lists"
-        && displayed_message
-            == "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation."
-    {
-        return text(language, TextKey::PreparationProcessRecoveryRequired).to_owned();
-    }
-    if title == "Add-on media lists"
-        && displayed_message
-            == "Media preparation worker is unavailable. Restart the server before retrying preparation."
-    {
-        return text(language, TextKey::PreparationWorkerUnavailable).to_owned();
-    }
-    if title == "Add-on media lists" && matches!(displayed_message,
-        "Derived show metadata reached its size limit" |
-        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete.") {
-        return text(language, TextKey::AddonDerivedMetadataLimited).to_owned();
+    if let Some(localized) = addon_list_health_message(language, title, displayed_message) {
+        return localized.to_owned();
     }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
         if let Some(playouts) = [
@@ -6075,6 +6138,20 @@ mod tests {
                     health_check_message_text(language, title, unknown, ""),
                     unknown
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn selection_review_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for message in ["Initial add-on selection is awaiting review",
+                "Preview and save the list selection before its first publication or media acquisition."] {
+                for (full, brief) in [(message, ""), ("", message)] {
+                    assert_eq!(health_check_message_text(language, "Add-on media lists", full, brief),
+                        text(language, TextKey::AddonSelectionReviewRequired));
+                }
             }
         }
     }

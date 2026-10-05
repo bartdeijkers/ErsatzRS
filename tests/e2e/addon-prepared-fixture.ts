@@ -76,6 +76,8 @@ export interface PreparedFixtureVariant {
   extraSetting?: boolean;
   /** Rich source metadata for automatic publication and parent derivation. */
   richMetadata?: boolean;
+  /** Synthetic provider failure for one candidate, before a file is written. */
+  failPreparationFor?: string;
 }
 
 export function preparedInvocationLog(dbPath: string, variant: PreparedFixtureVariant = {}): string {
@@ -135,6 +137,7 @@ else if (command === 'discover' || command === 'list') {
 } else if (command === 'prepare') {
   const request = JSON.parse(fs.readFileSync(0, 'utf8'));
   if (request.options.values.processed !== true) throw new Error('Saved preparation option was not forwarded');
+  if (request.provider_id === ${JSON.stringify(variant.failPreparationFor ?? '')}) throw new Error('Synthetic preparation failure');
   if (${pauseFirst} && fs.readFileSync(log, 'utf8').split('\\n').filter(line => line && JSON.parse(line).command === 'prepare').length === 1) {
     const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     fs.appendFileSync(log, JSON.stringify({ command: 'paused', provider: process.pid, descendant: descendant.pid }) + '\\n');

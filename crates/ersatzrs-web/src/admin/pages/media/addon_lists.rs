@@ -1566,6 +1566,7 @@ fn AddonMediaListsIsland(
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
     let add_refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
     let add_load_item_details = RwSignal::new(true);
+    let add_selection_review = RwSignal::new(false);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
     // The plain HTML form path distinguishes an unroutable URL from a generic
@@ -1603,6 +1604,7 @@ fn AddonMediaListsIsland(
             AddonMediaListContentKind,
             AddonMediaListRefreshCadence,
             bool,
+            bool,
         )| {
             let (
                 addon_id,
@@ -1611,6 +1613,7 @@ fn AddonMediaListsIsland(
                 content_kind_override,
                 refresh_cadence,
                 load_item_details,
+                initial_selection_review,
             ) = value.clone();
             async move {
                 add_addon_media_list(
@@ -1622,6 +1625,7 @@ fn AddonMediaListsIsland(
                     load_item_details,
                     refresh_cadence,
                     AddonMediaListDeliveryMode::Stream,
+                    Some(initial_selection_review),
                 )
                 .await
             }
@@ -1646,6 +1650,7 @@ fn AddonMediaListsIsland(
                     add_addon_id.set(String::new());
                     add_addon_chosen.set(false);
                     add_load_item_details.set(true);
+                    add_selection_review.set(false);
                     add_refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
                     add_open.set(false);
                     data.refetch();
@@ -1982,8 +1987,9 @@ fn AddonMediaListsIsland(
                 content_kind=add_content_kind
                 refresh_cadence=add_refresh_cadence
                 load_item_details=add_load_item_details
+                initial_selection_review=add_selection_review
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, AddonMediaListRefreshCadence, bool)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, AddonMediaListRefreshCadence, bool, bool)| {
                     add_action.dispatch(value);
                 })
             />
@@ -2019,6 +2025,7 @@ fn AddAddonMediaListDialog(
     content_kind: RwSignal<AddonMediaListContentKind>,
     refresh_cadence: RwSignal<AddonMediaListRefreshCadence>,
     load_item_details: RwSignal<bool>,
+    initial_selection_review: RwSignal<bool>,
     providers: Vec<AddonMediaListProviderRow>,
     on_submit: Callback<(
         String,
@@ -2026,6 +2033,7 @@ fn AddAddonMediaListDialog(
         String,
         AddonMediaListContentKind,
         AddonMediaListRefreshCadence,
+        bool,
         bool,
     )>,
 ) -> impl IntoView {
@@ -2098,7 +2106,7 @@ fn AddAddonMediaListDialog(
                         // from the URL, so the same rule applies to the plain
                         // HTML form post.
                         if !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name, content_kind, refresh_cadence, load_item_details));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind, refresh_cadence, load_item_details, initial_selection_review.get_untracked()));
                         }
                     }
                 >
@@ -2196,6 +2204,11 @@ fn AddAddonMediaListDialog(
                                 on:input=move |event| folder_name.set(event_target_value(&event))
                             />
                         </label>
+                        <label class=style::playlist_option>
+                        <input type="hidden" name="load_item_details_present" value="true"/>
+                        <input type="checkbox" name="initial_selection_review" value="true" prop:checked=move || initial_selection_review.get() on:change=move |event| initial_selection_review.set(event_target_checked(&event))/>
+                        <span><b>{tr(TextKey::AddonSelectionInitialReview)}</b><small>{tr(TextKey::AddonSelectionInitialReviewHelp)}</small></span>
+                    </label>
                         <label class=style::playlist_option>
                             <input
                                 type="checkbox"
@@ -2465,6 +2478,7 @@ fn AddAddonMediaListPageIsland(
     let refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
     let generate_playlist = RwSignal::new(false);
     let load_item_details = RwSignal::new(true);
+    let initial_selection_review = RwSignal::new(false);
     let resolved_name = RwSignal::new(String::new());
     let hydrated = RwSignal::new(false);
     let supports_adaptive_refresh =
@@ -2508,6 +2522,7 @@ fn AddAddonMediaListPageIsland(
             AddonMediaListDeliveryMode,
             bool,
             bool,
+            bool,
         )| {
             let (
                 addon_id,
@@ -2518,6 +2533,7 @@ fn AddAddonMediaListPageIsland(
                 delivery_mode,
                 playlist,
                 load_item_details,
+                initial_selection_review,
             ) = value.clone();
             async move {
                 let id = add_addon_media_list(
@@ -2529,6 +2545,7 @@ fn AddAddonMediaListPageIsland(
                     load_item_details,
                     refresh_cadence,
                     delivery_mode,
+                    Some(initial_selection_review),
                 )
                 .await?;
                 // The list now exists. A later settings failure must open that
@@ -2595,6 +2612,7 @@ fn AddAddonMediaListPageIsland(
                             delivery_mode.get_untracked(),
                             generate_playlist.get_untracked(),
                             load_item_details.get_untracked(),
+                            initial_selection_review.get_untracked(),
                         ));
                     }
                     }
@@ -2736,6 +2754,12 @@ fn AddAddonMediaListPageIsland(
                                 TextKey::OverviewOnlyManualDetailsHelp
                             })}</small>
                         </span>
+                    </label>
+
+                    <label class=style::playlist_option>
+                        <input type="hidden" name="load_item_details_present" value="true"/>
+                        <input type="checkbox" name="initial_selection_review" value="true" prop:checked=move || initial_selection_review.get() on:change=move |event| initial_selection_review.set(event_target_checked(&event))/>
+                        <span><b>{tr(TextKey::AddonSelectionInitialReview)}</b><small>{tr(TextKey::AddonSelectionInitialReviewHelp)}</small></span>
                     </label>
 
                     <footer class=style::import_footer>
@@ -4140,6 +4164,9 @@ fn publication_recovery_view(
 
 const fn publication_blocker_text_key(kind: AddonMediaListPublicationBlockerKind) -> TextKey {
     match kind {
+        AddonMediaListPublicationBlockerKind::SelectionReviewRequired => {
+            TextKey::AddonSelectionReviewRequired
+        }
         AddonMediaListPublicationBlockerKind::OverviewIncomplete => {
             TextKey::BlockerOverviewIncomplete
         }
@@ -4221,7 +4248,8 @@ const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) ->
     match kind {
         AddonMediaListPublicationBlockerKind::CollectionTitleMissing
         | AddonMediaListPublicationBlockerKind::InvalidArtwork => "#addon-list-general-metadata",
-        AddonMediaListPublicationBlockerKind::OverviewIncomplete
+        AddonMediaListPublicationBlockerKind::SelectionReviewRequired
+        | AddonMediaListPublicationBlockerKind::OverviewIncomplete
         | AddonMediaListPublicationBlockerKind::PublicationInProgress
         | AddonMediaListPublicationBlockerKind::RecoveryRequired => "#addon-list-import-progress",
         AddonMediaListPublicationBlockerKind::NoIncludedItems
@@ -5740,6 +5768,7 @@ fn AddonMediaListEditorIsland(
                             ],
                         );
                         save_action.dispatch((AddonMediaListForm {
+                            selection: form.selection.clone(),
                             delivery_mode: delivery_mode.get_untracked(),
                             delivery_cutoff_at: form.delivery_cutoff_at.clone(),
                             auto_publication_hold: auto_publication_hold.get_untracked(),

@@ -4608,6 +4608,8 @@ fn validation_error<T>(field: &'static str, message: impl Into<String>) -> crate
 /// Import or refresh one add-on media list from its public URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddAddonMediaList {
+    /// Discover the first overview without publishing or acquiring media until selection is saved.
+    pub initial_selection_review: bool,
     /// Installed provider add-on identity.
     pub addon_id: String,
     /// Provider-specific public list or saved-search URL.
@@ -4921,14 +4923,17 @@ pub async fn add_addon_media_list(
         },
     )?;
     repository
-        .add_or_refresh_with_policy(
+        .add_or_refresh_with_options(
             command.addon_id.trim(),
             &source_url,
             (!folder_name.is_empty()).then_some(folder_name),
             command.content_kind_override,
             command.chapter_input.trim(),
-            command.detail_import_policy,
-            command.delivery_mode,
+            ersatzrs_core::addon_list_selection::AddonListImportOptions {
+                detail_policy: command.detail_import_policy,
+                delivery_mode: command.delivery_mode,
+                initial_selection_review: command.initial_selection_review,
+            },
         )
         .await
         .map_err(Into::into)
@@ -8653,6 +8658,7 @@ mod tests {
         ] {
             let error = add_addon_media_list(
                 AddAddonMediaList {
+                    initial_selection_review: false,
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: source_url.to_owned(),
                     delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
@@ -8834,6 +8840,7 @@ mod tests {
         let repository = RecordingAddonMediaListRepository::default();
         add_addon_media_list(
             AddAddonMediaList {
+                initial_selection_review: false,
                 addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                 source_url: r"https://allowed.example\@evil.example/list".to_owned(),
                 delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
@@ -8868,6 +8875,7 @@ mod tests {
             let repository = RecordingAddonMediaListRepository::default();
             let error = add_addon_media_list(
                 AddAddonMediaList {
+                    initial_selection_review: false,
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: "https://example.test/episode".to_owned(),
                     delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,

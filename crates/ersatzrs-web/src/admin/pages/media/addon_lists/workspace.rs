@@ -57,6 +57,8 @@ pub struct Draft {
 
 #[derive(Clone, Default)]
 pub struct Submission {
+    #[cfg(feature = "ssr")]
+    pub selection_preview: Option<ersatzrs_core::addon_list_selection::AddonListSelectionPreview>,
     pub draft: Draft,
     pub error: Option<String>,
     pub error_fields: Vec<String>,

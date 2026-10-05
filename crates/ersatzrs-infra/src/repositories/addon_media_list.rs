@@ -453,6 +453,92 @@ async fn require_delivery_capability(
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl AddonMediaListRepository for SqliteAddonMediaListRepository {
+    async fn add_or_refresh_with_options(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+        content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
+        options: ersatzrs_core::addon_list_selection::AddonListImportOptions,
+    ) -> Result<EntityId> {
+        require_delivery_capability(&self.0, addon_id, options.delivery_mode).await?;
+        AddonMediaListImportCoordinator::new(self.0.clone())
+            .with_delivery_mode(options.delivery_mode)
+            .with_initial_selection_review(options.initial_selection_review)
+            .add_or_refresh(
+                addon_id,
+                source_url,
+                requested_folder,
+                content_kind_override,
+                chapter_input,
+                options.detail_policy,
+            )
+            .await
+    }
+    async fn preview_selection(
+        &self,
+        id: EntityId,
+        policy: Option<ersatzrs_core::addon_list_selection::AddonListSelectionPolicy>,
+    ) -> Result<ersatzrs_core::addon_list_selection::AddonListSelectionPreview> {
+        // A read-only transaction assesses the overview and policy without publishing.
+        let mut tx = self.0.begin().await.repository()?;
+        let exists: bool =
+            sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "AddonMediaList" WHERE "Id"=?)"#)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        if !exists {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            });
+        }
+        let state = crate::addon_list_selection::state_in_tx(&mut tx, id).await?;
+        let fallback = ersatzrs_core::addon_list_selection::AddonListSelectionPolicy::default();
+        let effective = policy
+            .as_ref()
+            .or_else(|| state.settings.policy.as_ref().map(|_| &fallback));
+        let result =
+            crate::addon_list_selection::preview_in_tx(&mut tx, id, effective, Utc::now()).await?;
+        tx.commit().await.repository()?;
+        Ok(result)
+    }
+
+    async fn set_selection_override(
+        &self,
+        id: EntityId,
+        item_id: EntityId,
+        expected_revision: i32,
+        manual: Option<bool>,
+    ) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, id).await?;
+        let revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        if revision != expected_revision {
+            return Err(RepositoryError::Conflict(
+                "the saved draft changed; review the current revision".into(),
+            ));
+        }
+        let updated = sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SelectionOverride"=?, "IncludedByUser"=?, "Included"=COALESCE(?, 1) WHERE "AddonMediaListId"=? AND "Id"=?"#)
+            .bind(manual).bind(manual.is_some()).bind(manual).bind(id).bind(item_id).execute(&mut *tx).await.repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list item",
+                id: item_id,
+            });
+        }
+        crate::addon_list_selection::apply_in_tx(&mut tx, id, Utc::now()).await?;
+        mark_list_ready_tx(&mut tx, id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
+    }
     async fn list_admin(
         &self,
         page: u32,
@@ -642,6 +728,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let mut form = row
             .map(|row| {
                 Ok(AddonMediaListAdminForm {
+                    selection:
+                        ersatzrs_core::addon_list_selection::AddonListSelectionState::default(),
                     auto_publication_hold: None,
                     delivery_mode: crate::repositories::common::decode_enum_column(
                         "AddonMediaListDeliveryMode",
@@ -722,6 +810,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             })
             .transpose()?;
         if let Some(form) = &mut form {
+            form.selection = crate::addon_list_selection::load_state(&self.0, id).await?;
             form.auto_publication_hold =
                 crate::addon_media_list_auto_publication::load_hold(&self.0, id).await?;
             form.import_progress = AddonMediaListImportCoordinator::new(self.0.clone())
@@ -747,7 +836,19 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id,
             })?;
         let items = self.query_items(id, None, 0, None).await?;
-        addon_media_list_publication_readiness(&self.0, &form, &items).await
+        let mut readiness = addon_media_list_publication_readiness(&self.0, &form, &items).await?;
+        if form.selection.review_required {
+            readiness.blockers.push(
+                ersatzrs_core::repositories::AddonMediaListPublicationBlocker {
+                    item_id: None,
+                    kind: AddonMediaListPublicationBlockerKind::SelectionReviewRequired,
+                    item_rank: None,
+                    item_title: None,
+                    count: 1,
+                },
+            );
+        }
+        Ok(readiness)
     }
 
     async fn list_items_page(
@@ -1014,6 +1115,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 r#"UPDATE "AddonMediaListItem"
                    SET "ContentKind" = ?, "Included" = ?,
                        "IncludedByUser" = CASE WHEN "Included" <> ? THEN 1 ELSE "IncludedByUser" END,
+                       "SelectionOverride" = CASE WHEN "Included" <> ? THEN ? ELSE "SelectionOverride" END,
                        "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
                        "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
                        "LivenessConflict" = CASE WHEN "Kind" = 4 THEN 0 ELSE "LivenessConflict" END,
@@ -1021,6 +1123,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                    WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
             )
             .bind(content_kind)
+            .bind(edit.included)
+            .bind(edit.included)
             .bind(edit.included)
             .bind(edit.included)
             .bind(liveness)
@@ -1395,6 +1499,14 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn prepare_publication_media(&self, id: EntityId, saved_revision: i32) -> Result<u64> {
+        if crate::addon_list_selection::load_state(&self.0, id)
+            .await?
+            .review_required
+        {
+            return Err(RepositoryError::Conflict(
+                "review and save the initial selection before acquiring media".into(),
+            ));
+        }
         let automatic = automatic_publication_enabled(&self.0, id).await?;
         let mut excluded = self
             .list_items(id)
@@ -2085,9 +2197,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
-            r#"UPDATE "AddonMediaListItem" SET "Included" = ?, "IncludedByUser" = 1
+            r#"UPDATE "AddonMediaListItem" SET "Included" = ?, "SelectionOverride" = ?, "IncludedByUser" = 1
                WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
         )
+        .bind(included)
         .bind(included)
         .bind(item_id)
         .bind(list_id)
@@ -5504,7 +5617,7 @@ async fn load_item_metadata_form(
     metadata_form_from_json(&provider_json, &override_json, conflict_json.as_deref())
 }
 
-pub(super) fn metadata_form_from_json(
+pub(crate) fn metadata_form_from_json(
     provider_json: &str,
     override_json: &str,
     conflict_json: Option<&str>,
@@ -5605,7 +5718,7 @@ const fn artwork_role_value(role: AddonMediaListArtworkRole) -> i32 {
 /// not cover that window: a publication between verification retries holds no
 /// lease. An abandoned publication that never reached verification stays
 /// editable, so an expired lease still releases the draft.
-async fn mark_list_ready_tx(
+pub(crate) async fn mark_list_ready_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
 ) -> Result<()> {
@@ -6251,6 +6364,9 @@ async fn required_playback_detail_states(
 fn publication_blocker_message(blocker: &AddonMediaListPublicationBlocker) -> String {
     let title = blocker.item_title.as_deref().unwrap_or("item");
     match blocker.kind {
+        AddonMediaListPublicationBlockerKind::SelectionReviewRequired => {
+            "review and save the initial selection before publication".to_owned()
+        }
         AddonMediaListPublicationBlockerKind::OverviewIncomplete => {
             "the complete add-on overview must be verified before publication".to_owned()
         }

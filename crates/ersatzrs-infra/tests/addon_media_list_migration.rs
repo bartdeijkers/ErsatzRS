@@ -1,6 +1,41 @@
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row, SqlitePool};
 
 #[tokio::test]
+async fn selection_migration_preserves_legacy_settings_revisions_and_manual_inclusion() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|m| m.version < 202_610_051_730)
+            .cloned()
+            .collect(),
+    )
+    .run(&pool)
+    .await
+    .unwrap();
+    seed_legacy_lifecycle_rows(&pool).await;
+    sqlx::raw_sql(r#"UPDATE "AddonMediaList" SET "RefreshCadence"=5,"DeliveryMode"=1,"NextRefreshAt"='2026-10-06T12:00:00Z' WHERE "Id"=1;
+        INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","Kind","Rank","DisplayTitle","Title","Included","IncludedByUser","Published") VALUES
+        (10,1,'pin',4,0,'Pin','Pin',1,1,1),(11,1,'exclude',4,1,'Exclude','Exclude',0,1,0),(12,1,'auto',4,2,'Auto','Auto',1,0,1);"#).execute(&pool).await.unwrap();
+    let before: (i32,i32,i32,i32,String)=sqlx::query_as(r#"SELECT "DraftRevision","PublishedRevision","RefreshCadence","DeliveryMode","NextRefreshAt" FROM "AddonMediaList" WHERE "Id"=1"#).fetch_one(&pool).await.unwrap();
+    migrations.run(&pool).await.unwrap();
+    assert_eq!(sqlx::query_as::<_,(i32,i32,i32,i32,String)>(r#"SELECT "DraftRevision","PublishedRevision","RefreshCadence","DeliveryMode","NextRefreshAt" FROM "AddonMediaList" WHERE "Id"=1"#).fetch_one(&pool).await.unwrap(),before);
+    assert_eq!(sqlx::query_as::<_,(i64,Option<bool>,bool,bool)>(r#"SELECT "Id","SelectionOverride","Included","Published" FROM "AddonMediaListItem" ORDER BY "Id""#).fetch_all(&pool).await.unwrap(),[(10,Some(true),true,true),(11,Some(false),false,false),(12,None,true,true)]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "AddonMediaListSelection""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
 async fn disk_warning_migration_defaults_existing_lists_without_revising_them() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

@@ -13381,7 +13381,7 @@ pending in UCU-09 and the processed pin stays at row 90 (35b5a259).
 id = 'v111-findings-01'
 phase = 'v1.1.1 — channel setup findings'
 title = 'Selective add-on list ingestion'
-status = 'Not started'
+status = 'Complete'
 feature = 'addon-metadata-management'
 depends_on = []
 acceptance = '''
@@ -13398,7 +13398,34 @@ pause/resume. Prove upgrade defaults, selection boundaries, failure preservation
 worker restart/retry behavior and localized hydrated/no-JS admin flows.
 '''
 evidence = '''
-Implementation and acceptance evidence pending.
+Locally accepted after finding 04 was completed and committed. ADR 0113 records
+this intentional extension using the existing durable import, adaptive source
+checks, checkpoints, enrichment, acquisition and exact-revision publication.
+Core boundary checks and real SQLite upgrade/close-reopen tests prove saved
+filters, effective cutoff, explicit decisions, unrelated-list preservation,
+source validators, retry deadlines and pause/resume. Selection candidates use
+the existing detail worker without resetting attempts or cooldowns. Reduced
+publication preserves archived sources and owned artifacts; invalid selection
+preserves the last complete published revision.
+The full Rust closeout passes 3,853 tests and doctests, with 162 documented
+preexisting skips (nextest run 290c0f48-68bf-420f-b4cb-071cf4c5f067).
+Strict workspace/all-target Clippy passes after the final implementation edits.
+The eight English/Dutch hydrated/no-JS Chromium/Firefox selection flows pass
+against the final matched SSR/WASM pair. Evidence is in
+ test-results/finding01-browser-final and
+ test-results/finding01-browser-final-firefox; the latter reruns the one
+Firefox case after correcting equivalent zero-fraction timestamp formatting in
+the assertion. Both final Dutch mobile viewports were visually inspected.
+The additional Chromium real-worker case in test-results/finding01-browser6
+fully decodes prepared media, verifies byte preservation after archival and a
+failed candidate, and retains the last complete publication. Its Firefox copy
+is intentionally skipped; later edits only changed two localized UI labels.
+All nine cultures contain the new controls and rejection reasons. Runtime smoke
+passes both MPEG-TS routes and HLS. The final matched-bundle gate resolves JS and
+WASM; web parity-check passes progress, formatting, architecture and hydration,
+reusing the final full tests and lint. No dependencies or FFmpeg output changed;
+the accepted finding-04 TSDuck result remains valid. Added-content privacy and
+diff checks pass. Packaged/platform deployment and publication are not claimed.
 '''
 
 [[milestone]]

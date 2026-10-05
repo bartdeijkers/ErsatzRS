@@ -1,4 +1,4 @@
-mod addon_media_list;
+pub(crate) mod addon_media_list;
 pub(crate) mod addon_media_list_auto_eligibility;
 mod addon_media_list_derived_metadata;
 mod addon_media_list_lifecycle;

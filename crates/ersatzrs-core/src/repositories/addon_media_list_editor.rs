@@ -19,6 +19,9 @@ pub struct AddonMediaListEditorMetadata {
 /// List settings edited together, independently of playback and publication.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddonMediaListEditorSettings {
+    /// Absent in older clients: preserve the current selection and pause state.
+    #[serde(default)]
+    pub selection: Option<crate::addon_list_selection::AddonListSelectionSettings>,
     pub refresh_cadence: AddonMediaListRefreshCadence,
     pub refresh_publication_policy: AddonMediaListRefreshPublicationPolicy,
     pub detail_policy: AddonMediaListDetailPolicy,

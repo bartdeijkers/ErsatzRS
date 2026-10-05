@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Select add-on list items with saved rolling age, newest-count, duration and
+  title filters, manual pins and exclusions, and an accepted/rejected preview.
+  Keep archived media and the last complete publication while the existing
+  durable workers apply the selection; pause polling without losing its cadence.
+
 - Resolve native graphics programme labels through the same scheduler-specific
   guide grouping as XMLTV, including split films, filler, historical timestamps
   and local calendar days across DST. Provide bounded defaults and a channel-aware

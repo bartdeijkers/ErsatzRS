@@ -904,8 +904,10 @@ impl AddonMediaListSynchronizer {
                 .repository()?;
             insert_item_guids(&mut tx, item_id, &item.guids).await?;
         }
+        let selection_changed =
+            crate::addon_list_selection::apply_in_tx(&mut tx, list_id, Utc::now()).await?;
         if automatic {
-            if operational_change || previous_metadata != next_metadata {
+            if selection_changed || operational_change || previous_metadata != next_metadata {
                 sqlx::query(
                     r#"UPDATE "AddonMediaList"
                     SET "ReviewState" = 1, "ReviewError" = NULL,
@@ -1118,6 +1120,7 @@ impl AddonMediaListSynchronizer {
         &self,
         list: &AddonMediaList,
         metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+        initial_selection_review: bool,
     ) -> Result<EntityId> {
         let provider_metadata = encode_metadata(metadata)?;
         let maybe_existing = sqlx::query(
@@ -1135,17 +1138,13 @@ impl AddonMediaListSynchronizer {
         .repository()?;
 
         if let Some(row) = maybe_existing {
+            if initial_selection_review {
+                return Err(RepositoryError::Conflict(
+                    "initial selection review requires a new list".into(),
+                ));
+            }
             let id = row.try_get("Id").repository()?;
-            let previous_provider: String = row.try_get("ProviderMetadataJson").repository()?;
-            let overrides: String = row.try_get("MetadataOverrideJson").repository()?;
-            let existing_conflicts: Option<String> =
-                row.try_get("MetadataConflictJson").repository()?;
-            let conflicts = refresh_conflict_json(
-                &previous_provider,
-                &provider_metadata,
-                &overrides,
-                existing_conflicts.as_deref(),
-            )?;
+            let conflicts = list_refresh_conflicts(&row, &provider_metadata)?;
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "SourceUrl" = ?, "Name" = ?, "Description" = ?, "ItemCount" = ?,
@@ -1213,6 +1212,9 @@ impl AddonMediaListSynchronizer {
                 id,
             )
             .await?;
+            if initial_selection_review {
+                crate::addon_list_selection::request_review_in_tx(&mut transaction, id).await?;
+            }
             transaction.commit().await.repository()?;
             Ok(id)
         }
@@ -1690,7 +1692,10 @@ impl AddonMediaListSynchronizer {
         } else {
             i64::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i64::MAX)
         };
-        let draft_changed = reconcile_generation.is_some() || (delta && !incoming.is_empty());
+        let selection_changed =
+            crate::addon_list_selection::apply_in_tx(&mut tx, list_id, observed_at).await?;
+        let draft_changed =
+            selection_changed || reconcile_generation.is_some() || (delta && !incoming.is_empty());
         sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "ItemCount" = ?,
@@ -2423,6 +2428,7 @@ pub struct AddonMediaListRemoteSynchronizer<P> {
     provider: P,
     editor_revision: Option<i32>,
     delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
+    initial_selection_review: bool,
 }
 
 impl<P> AddonMediaListRemoteSynchronizer<P>
@@ -2436,12 +2442,18 @@ where
             provider,
             delivery_mode: None,
             editor_revision: None,
+            initial_selection_review: false,
         }
     }
 
     #[must_use]
     pub(crate) fn with_editor_revision(mut self, revision: Option<i32>) -> Self {
         self.editor_revision = revision;
+        self
+    }
+
+    pub(crate) fn with_initial_selection_review(mut self, review: bool) -> Self {
+        self.initial_selection_review = review;
         self
     }
 
@@ -2793,7 +2805,10 @@ where
         enumerated: &mut EnumeratedAddonMediaList,
         requested_folder: Option<&str>,
     ) -> Result<EntityId> {
-        let list_id = self.local.save_list(list, &enumerated.metadata).await?;
+        let list_id = self
+            .local
+            .save_list(list, &enumerated.metadata, self.initial_selection_review)
+            .await?;
         if let Some(mode) = self.delivery_mode {
             let mut tx = crate::db::begin_write(&self.local.pool)
                 .await
@@ -3380,6 +3395,21 @@ pub(crate) async fn ensure_not_publishing_tx(
 fn publication_in_progress() -> RepositoryError {
     RepositoryError::Conflict(
         "the add-on media list is being published; wait for publication to finish".to_owned(),
+    )
+}
+
+fn list_refresh_conflicts(
+    row: &sqlx::sqlite::SqliteRow,
+    provider_metadata: &str,
+) -> Result<Option<String>> {
+    let previous: String = row.try_get("ProviderMetadataJson").repository()?;
+    let overrides: String = row.try_get("MetadataOverrideJson").repository()?;
+    let existing: Option<String> = row.try_get("MetadataConflictJson").repository()?;
+    refresh_conflict_json(
+        &previous,
+        provider_metadata,
+        &overrides,
+        existing.as_deref(),
     )
 }
 

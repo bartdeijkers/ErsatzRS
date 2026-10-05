@@ -216,6 +216,9 @@ pub(super) async fn save(
         }
         save_item(&mut tx, save.list_id, item).await?;
     }
+    if changes_draft {
+        crate::addon_list_selection::apply_in_tx(&mut tx, save.list_id, Utc::now()).await?;
+    }
     if let Some(options) = &save.options {
         if options.list_id != save.list_id || options.draft_revision != revision {
             return Err(conflict("option scope or saved revision changed"));
@@ -347,13 +350,14 @@ async fn save_item(
     let liveness = edit.liveness_override.map(encode_enum);
     sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ?, "Included" = ?,
         "IncludedByUser" = CASE WHEN "Included" <> ? THEN 1 ELSE "IncludedByUser" END,
+                       "SelectionOverride" = CASE WHEN "Included" <> ? THEN ? ELSE "SelectionOverride" END,
         "CollectionRole" = COALESCE(?, "CollectionRole"),
         "ChapterInput" = CASE WHEN ? THEN ? ELSE "ChapterInput" END,
         "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
         "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
         "LivenessConflict" = CASE WHEN "Kind" = 4 AND ? THEN 0 ELSE "LivenessConflict" END,
         "MetadataOverrideJson" = ?, "MetadataConflictJson" = ? WHERE "Id" = ? AND "AddonMediaListId" = ?"#)
-        .bind(encode_enum(edit.content_kind)).bind(edit.included).bind(edit.included).bind(item.role.map(encode_enum))
+        .bind(encode_enum(edit.content_kind)).bind(edit.included).bind(edit.included).bind(edit.included).bind(edit.included).bind(item.role.map(encode_enum))
         .bind(item.chapters.is_some()).bind(item.chapters.as_deref().map(str::trim).filter(|s| !s.is_empty()))
         .bind(liveness).bind(liveness).bind(edit.liveness_override != previous.liveness_override).bind(overrides).bind(conflicts)
         .bind(edit.item_id).bind(list_id).execute(&mut **tx).await.repository()?;
@@ -443,6 +447,9 @@ async fn save_settings(
                 "NextEligibleAt" = ?, "DiagnosticCode" = NULL, "UpdatedAt" = ? WHERE "AddonMediaListId" = ?"#)
                 .bind(encode_enum(ersatzrs_domain::AddonMediaListRefreshState::Idle)).bind(due)
                 .bind(encode_datetime(now)).bind(list_id).execute(&mut **tx).await.repository()?;
+    }
+    if let Some(selection) = &settings.selection {
+        crate::addon_list_selection::save_in_tx(tx, list_id, selection, now).await?;
     }
     Ok(())
 }

@@ -58,6 +58,12 @@ impl HealthCheck for AddonMediaListHealthCheck {
         if let Some(result) = automatic_publication_hold_warning(&self.pool, self.title()).await? {
             return Ok(result);
         }
+        if let Some(id) = sqlx::query_scalar::<_, i64>(r#"SELECT "AddonMediaListId" FROM "AddonMediaListSelection" WHERE "ReviewRequired"=1 ORDER BY "AddonMediaListId" LIMIT 1"#).fetch_optional(&self.pool).await.map_err(sqlx_error)? {
+            return Ok(HealthCheckResult::new(self.title(),HealthCheckStatus::Warning,
+                "Initial add-on selection is awaiting review",
+                "Preview and save the list selection before its first publication or media acquisition.")
+                .with_link(format!("/media/addon-lists/{id}/settings#selection")));
+        }
         if let Some(id) = sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "AddonMediaList" WHERE "DerivedMetadataLimited"=1 ORDER BY "Id" LIMIT 1"#)
             .fetch_optional(&self.pool).await.map_err(sqlx_error)? {
             return Ok(HealthCheckResult::new(self.title(),HealthCheckStatus::Warning,
@@ -1560,10 +1566,15 @@ mod tests {
                 "ReviewState" INTEGER NOT NULL DEFAULT 2,
                 "ReviewError" TEXT NULL,
                 "PublicationStartedAt" TEXT NULL,
+                "DerivedMetadataLimited" INTEGER NOT NULL DEFAULT 0,
                 "PresentationKind" INTEGER NOT NULL DEFAULT 1,
                 "ProviderMetadataJson" TEXT NOT NULL DEFAULT '{}',
                 "MetadataOverrideJson" TEXT NOT NULL DEFAULT '{}',
                 "MetadataConflictJson" TEXT NULL
+            );
+            CREATE TABLE "AddonMediaListSelection" (
+                "AddonMediaListId" INTEGER PRIMARY KEY,
+                "ReviewRequired" INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE "AddonMediaListItem" (
                 "Id" INTEGER PRIMARY KEY,
@@ -1823,6 +1834,42 @@ mod tests {
         .execute(pool)
         .await
         .expect("fixture add-on");
+    }
+
+    #[tokio::test]
+    async fn initial_selection_review_health_links_to_the_saved_selection() {
+        let pool = fixture_pool().await;
+        insert_adaptive_list(&pool, "org.example.list").await;
+        set_fixture_addon(&pool, true, true).await;
+        sqlx::query(r#"INSERT INTO "AddonMediaListSelection" VALUES (1,1)"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let result = AddonMediaListHealthCheck::new(pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            result.message,
+            "Initial add-on selection is awaiting review"
+        );
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/media/addon-lists/1/settings#selection")
+        );
+        sqlx::query(r#"UPDATE "AddonMediaListSelection" SET "ReviewRequired"=0"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_ne!(
+            AddonMediaListHealthCheck::new(pool)
+                .check()
+                .await
+                .unwrap()
+                .message,
+            result.message
+        );
     }
 
     #[tokio::test]

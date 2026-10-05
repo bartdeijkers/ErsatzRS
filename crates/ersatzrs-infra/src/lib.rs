@@ -2,6 +2,7 @@
 
 pub mod addon_artwork;
 pub mod addon_chapters;
+mod addon_list_selection;
 pub mod addon_media_list;
 mod addon_media_list_archive;
 pub mod addon_media_list_artifacts;

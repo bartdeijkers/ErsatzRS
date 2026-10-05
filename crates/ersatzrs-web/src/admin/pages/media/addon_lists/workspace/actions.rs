@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 
 mod bulk;
 mod lifecycle;
+mod selection;
 use bulk::preview_bulk;
 
 pub const MAX_FORM_BYTES: usize = 8 * 1024 * 1024;
@@ -327,6 +328,61 @@ async fn execute(
         d.expanded_bulk = true;
     }
     match intent {
+        "preview-selection" => {
+            let current = state
+                .application
+                .get_addon_media_list(d.list_id)
+                .await
+                .map_err(|_| TextKey::AddonSelectionInvalid)?
+                .ok_or(TextKey::AddonMediaListNotFound)?;
+            let settings = selection::parse_selection(&fields, &current.selection.settings)?;
+            submission.selection_preview = Some(
+                state
+                    .application
+                    .ports()
+                    .addon_media_lists()
+                    .preview_selection(d.list_id, settings.policy)
+                    .await
+                    .map_err(|_| TextKey::AddonSelectionInvalid)?,
+            );
+        }
+        "selection-pin" | "selection-exclude" | "selection-auto" => {
+            if group != "settings" {
+                return Err(TextKey::AddonSelectionInvalid);
+            }
+            let item_id = parse(&fields, "selection_item_id")?;
+            let manual = match intent {
+                "selection-pin" => Some(true),
+                "selection-exclude" => Some(false),
+                _ => None,
+            };
+            state
+                .application
+                .ports()
+                .addon_media_lists()
+                .set_selection_override(d.list_id, item_id, d.revision, manual)
+                .await
+                .map_err(|_| TextKey::AddonSelectionInvalid)?;
+            let current = state
+                .application
+                .get_addon_media_list(d.list_id)
+                .await
+                .map_err(|_| TextKey::AddonSelectionInvalid)?
+                .ok_or(TextKey::AddonMediaListNotFound)?;
+            d.revision = current.draft_revision;
+            submission.selection_preview = Some(
+                state
+                    .application
+                    .ports()
+                    .addon_media_lists()
+                    .preview_selection(
+                        d.list_id,
+                        selection::parse_selection(&fields, &current.selection.settings)?.policy,
+                    )
+                    .await
+                    .map_err(|_| TextKey::AddonSelectionInvalid)?,
+            );
+        }
         "navigate" => {}
         "review-current" => {
             let current = state
@@ -847,51 +903,63 @@ async fn save_command(
                     save.metadata = Some(metadata(fields, current.metadata)?);
                 }
             }
-            if group == "settings"
-                && [
-                    "refresh_cadence",
-                    "refresh_publication_policy",
-                    "load_item_details",
-                    "generate_playlist",
-                    "presentation_kind",
-                ]
-                .iter()
-                .any(|key| fields.contains_key(*key))
-            {
+            if group == "settings" {
                 let current = state
                     .application
                     .get_addon_media_list(d.list_id)
                     .await
                     .map_err(|_| TextKey::AddonWorkspaceRetained)?
                     .ok_or(TextKey::AddonMediaListNotFound)?;
-                save.settings = Some(AddonMediaListEditorSettings {
-                    refresh_cadence: if fields.contains_key("refresh_cadence") {
-                        enum_value(fields, "refresh_cadence")?
-                    } else {
-                        current.refresh_cadence
-                    },
-                    refresh_publication_policy: if fields.contains_key("refresh_publication_policy")
-                    {
-                        enum_value(fields, "refresh_publication_policy")?
-                    } else {
-                        current.refresh_publication_policy
-                    },
-                    detail_policy: if !fields.contains_key("load_item_details") {
-                        current.detail_import_policy
-                    } else if field(fields, "load_item_details") == "true" {
-                        AddonMediaListDetailPolicy::Automatic
-                    } else {
-                        AddonMediaListDetailPolicy::ManualOnly
-                    },
-                    generate_playlist: fields
-                        .get("generate_playlist")
-                        .map_or(current.generate_playlist, |v| v == "true"),
-                    presentation_kind: if fields.contains_key("presentation_kind") {
-                        enum_value(fields, "presentation_kind")?
-                    } else {
-                        current.requested_presentation_kind
-                    },
-                });
+                if current.selection.review_required
+                    || ([
+                        "refresh_cadence",
+                        "refresh_publication_policy",
+                        "load_item_details",
+                        "generate_playlist",
+                        "presentation_kind",
+                    ]
+                    .iter()
+                    .any(|key| fields.contains_key(*key))
+                        || fields
+                            .keys()
+                            .any(|key| key.starts_with("selection_") && key != "selection_item_id"))
+                {
+                    save.settings = Some(AddonMediaListEditorSettings {
+                        selection: (current.selection.review_required
+                            || fields.keys().any(|key| {
+                                key.starts_with("selection_") && key != "selection_item_id"
+                            }))
+                        .then(|| selection::parse_selection(fields, &current.selection.settings))
+                        .transpose()?,
+                        refresh_cadence: if fields.contains_key("refresh_cadence") {
+                            enum_value(fields, "refresh_cadence")?
+                        } else {
+                            current.refresh_cadence
+                        },
+                        refresh_publication_policy: if fields
+                            .contains_key("refresh_publication_policy")
+                        {
+                            enum_value(fields, "refresh_publication_policy")?
+                        } else {
+                            current.refresh_publication_policy
+                        },
+                        detail_policy: if !fields.contains_key("load_item_details") {
+                            current.detail_import_policy
+                        } else if field(fields, "load_item_details") == "true" {
+                            AddonMediaListDetailPolicy::Automatic
+                        } else {
+                            AddonMediaListDetailPolicy::ManualOnly
+                        },
+                        generate_playlist: fields
+                            .get("generate_playlist")
+                            .map_or(current.generate_playlist, |v| v == "true"),
+                        presentation_kind: if fields.contains_key("presentation_kind") {
+                            enum_value(fields, "presentation_kind")?
+                        } else {
+                            current.requested_presentation_kind
+                        },
+                    });
+                }
             }
         }
         "playback" => {

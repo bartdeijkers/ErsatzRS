@@ -88,8 +88,12 @@ acceptance lives in v111-findings-05 and ADR 0111. Finding 04 is locally accepte
 with shared guide projection, historical/DST and filler context, actual database
 refresh/cancellation, override propagation and fresh-process Continue preservation,
 historical browser previews, decoded HLS/regular-IPTV transitions and final gates.
-Canonical acceptance lives in v111-findings-04 and ADR 0112. Next: reread the full
-findings document, then finish findings 01, 02, 09 and 09b with their full acceptance.
+Canonical acceptance lives in v111-findings-04 and ADR 0112. Finding 01 is locally
+accepted: saved rolling selection and reasons, optional first-review hold, durable
+worker acquisition/retry, archive preservation, SQLite restart and all localized
+admin paths. Full Rust tests, lint, browser/runtime and matched-bundle gates pass.
+Canonical acceptance lives in v111-findings-01 and ADR 0113. Next: reread the full
+findings document, then finish findings 02, 09 and 09b with their full acceptance.
 No publication is authorized.
 The full findings document was reread on 2026-10-04;
 its Windows activation additions for Findings 2, 4 and 9 remain in scope, including

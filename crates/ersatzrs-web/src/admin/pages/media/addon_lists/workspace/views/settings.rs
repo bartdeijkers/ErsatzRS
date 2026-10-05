@@ -39,6 +39,7 @@ pub(super) fn settings(w: &Workspace) -> AnyView {
         {metadata_fields(d,"settings",&w.metadata,false)}
 <button class="button secondary" form=FORM formaction=format!("/media/addon-lists/{}/artwork",f.id) name="intent" value="navigate" formnovalidate>{tr(TextKey::Artwork)}</button>
         </section>
+        {super::selection::selection(w)}
         {save_bar(w,TextKey::AddonWorkspaceSaveSettings)}
         <section class="work-section"><h3>{tr(TextKey::AddonMediaListFolder)}</h3><p>{f.folder_name.clone()}</p>{button("reset-preview",TextKey::ResetAndReload,false)}</section>
     </div> }.into_any()
