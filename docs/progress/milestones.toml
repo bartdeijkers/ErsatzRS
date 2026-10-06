@@ -11486,6 +11486,113 @@ Next action: obtain the maintainer decision on the consolidated extension, then 
 animated WebP and finish the existing row186 acceptance gates. No FFmpeg build,
 publication, acceptance exception or baseline advancement is claimed.
 
+The maintainer subsequently approves the consolidated FFmpeg extension with
+the explicit condition to update the separate ErsatzRS-ffmpeg repository to
+v2.0.6. Implementation, four-RID builds/tests, commit/push, CI and verified
+publication are now authorized; no completed build or row acceptance is inferred.
+Work uses an isolated checkout at bf3db00fd5a879c15e0d065e2871d1a749be86da and
+existing dependency images by exact ID, with host Docker and no socket mount.
+
+The authorized v2.0.6 checkpoint subsequently builds all four RIDs from FFmpeg
+d32b387 and the two reviewed WebP patches, using cached dependency images by
+exact ID. Runtime repository 38e61e30709b4854a0c5af946a9a76eb384cafb9 is pushed.
+Manifest SHA256 af6132181dd191b5eb68503debcc6d7e699d6a6047ab85eaa93c74f64e123f0f
+pins the four prepared archive/payload inventories; each embedded record verifies
+source, patches and build inputs. Linux compiled-demuxer ICC/EXIF cleanup and
+clean Bookworm software gates pass; ARM64/ARMv7 emulated animation, SVG, sparse
+audio/subtitles and decoded graphics/AV1 pass. Windows animation/SVG/sparse-audio
+and native Vulkan/CUDA/NVENC 25-frame BT.709 output pass. Native Windows package
+CI remains required; run37537377524 is open and its draft is unpublished.
+Actual Linux Next finite/infinite WebP local/HTTP half-second seeking, complete
+frame repetition, static handoff and exact eight-second natural termination
+pass alongside existing GIF cases and persisted demuxer hints: seven tests,
+run66ed4e05-1f91-486b-9aab-528ecfd18250. The shared assertion samples displayed
+frame intervals so 2fps WebP and 4fps GIF retain the same exact color sequence.
+Canonical evidence: tmp/ucu09-ffmpeg-v2.0.6/{finalized-package-checksums.json,
+linux64-webp-library-proof.json,linux64-bookworm-proof.log,linuxarm64-runtime-proof.log,
+linuxarmv7-runtime-proof.log,win64-webp-proof.json,win64-svg-proof.json,
+win64-sparse-proof.json,win64-vulkan-cuda-proof.log} and
+tmp/ucu09-row186/next-webp-lifecycle-proof.log. Production Next/FFmpeg pins and
+row186 acceptance remain unchanged pending publication/integration/compatibility.
+
+The runtime release subsequently completes all four package CI jobs successfully
+in run37539516801 at b221a3d32d3169fc563d2443af7f897d2259b1e8. Stable v2.0.6
+is published with the same ten verified assets; each published digest matches
+the frozen local files, including the manifest above. Native Windows Python
+software acceptance also passes graphics, AV1, WebP, sparse subtitles and alternate
+audio. Evidence: tmp/ucu09-ffmpeg-v2.0.6/{package-ci-final.json,
+published-release.json,win64-native-python-runtime-proof.log}. This supersedes
+the open draft/CI status above. No duplicate FFmpeg build or Docker publication
+was started; existing hardware/platform debt and row185 baseline are unchanged.
+
+The reviewed Next candidate adopts upstream0362692 plus both still-needed local
+patches at version0.1.0-0362692-ersatzrs.1. All244 library tests, strict lint,
+format and nine decoded software color/padding cases pass. Nineteen Linux
+application regressions pass across images, animation, copy/AVI, captions/audio
+and RTSP; the two RTSP cases were rerun with the required MediaMTX fixture.
+Unpatched0362692 still fails the static-WebP and live-RTSP regressions, so neither
+patch retires. Both executable identities and retained synthetic failure evidence
+are in tmp/ucu09-row186/next-036-candidate/ and next-036-unpatched/.
+Linuxx64 and both ARM source packages pass checksum/provenance and native/emulated
+startup. Native Windows acceptance subsequently passes all20 selected tests
+(19 actual runtime cases plus one interval/silence unit) in run
+910e0d27-93c0-46ee-b29b-46cf9abbea3c with the exact release executable; all1479
+application snapshot hashes remain unchanged, with no owned fixture processes
+left afterward. Evidence: tmp/ucu09-row186/next-036-windows/application-proof.json.
+Candidate branch e769ff67 was pushed solely for macOS packaging run37540133448;
+both jobs stopped at the source checksum guard because the canonical archive
+route differed from the pinned legacy archive bytes. The archive audit proves
+identical normalized source content; changing only to the legacy URL reproduces
+the exact pinned checksum. Corrected checkpoint4b5b1523 is building in run37540386999;
+macOS ARM package job is green while Intel macOS and exact optimized Linux
+application acceptance remain pending. No production Next pin or ordered row
+acceptance has changed.
+
+Both macOS jobs subsequently pass in terminal green run37540386999 at exact
+4b5b152374bb4afc87a2f4c8476b367c1ce6d9b3. The exact optimized Linux release
+executable passes all20 selected checks (19 runtime plus one interval/silence
+unit) in6a526d2e-51ef-4c69-b258-f5e53f2a0da0, with no owned fixture processes
+remaining. Six-platform next-0362692-ersatzrs.1 is published with all19 verified
+asset digests matching the frozen bundle. Production source/patch/archive pins
+now adopt that snapshot; all29 source/package/staging regressions and allsix
+real archive staging guards pass. An independent public Linux download has
+executable SHA473bd8068e78f7d8bca34475aa69dc3197db38049d68bc0abf588eb4268c2bb4.
+Neither local patch retires: unpatched0362692 still fails the corresponding
+WebP/RTSP regressions. Canonical evidence is in
+ tmp/ucu09-row186/next-036-release/{packages/provenance.json,published-release.json,
+macos-ci-final.json,staging-proof.json} and
+ tmp/ucu09-row186/next-036-packages-linux/application-acceptance/.
+Production HTTP smoke and ordered row186 acceptance remain required; no main
+push/window CI, stable application release or baseline advancement is claimed.
+
+Managed FFmpeg default and the exact CI runtime pin subsequently move to v2.0.6.
+All14 runtime-manager regressions pass (ec7e000d-53d2-4898-a95e-6e3de8bca393),
+preserving checksum rejection, explicit overrides, update behavior, RID/ARM
+selection and historical package fixtures. Row194's prerequisite duration parser
+also passes four selection/tag regressions (8a8cde5b-8c39-4fe4-979e-5b1ab1712e8e),
+the actual one-second-video/twenty-second-caption projection
+(22096e64-6b96-40c2-8c8d-119f10a4e835), existing JSON/argv snapshots
+(31afd437-039a-49f5-9ddb-b817496b2a9d), and strict infrastructure Clippy.
+Independent behavioral review finds no concrete regression. Decoded application
+handoff remains required for row194; this prerequisite does not accept it early.
+
+2026-10-07 row186 acceptance: the production HTTP gate passes using the exact
+published Next executable (SHA473bd8068e78f7d8bca34475aa69dc3197db38049d68bc0abf588eb4268c2bb4)
+and managed FFmpeg v2.0.6. MPEG-TS/HLS and preview segments return200 with
+H.264/AAC; decoded Dutch audio is880Hz and captions render35 white pixels.
+Playback survives wrapper disconnect/restart; normal/preview sessions clean
+up after idle, and public private-callback routes return404. Canonical proof:
+tmp/ucu09-row186/next-036-production-http/{production-http-proof.json,smoke.log}.
+Independent review finds no concrete runtime/packaging blocker. All208 ordered
+SHA/subject rows match the fixed v26.11.1 ancestry. Row186 is Adapt (ADR0117),
+186/208 accepted with22 pending. Pin/ledger land together; then align the clean
+upstream checkout. Row187 block scheduling/history is next. Rows194/207,
+final application window gates and terminal exact-SHA CI remain open.
+Fourteen verified obsolete local duplicate Next files were removed, reclaiming
+121186613 logical bytes; current packages, rollback, recovery and warm caches
+remain. All three GitHub dependency releases retain live references, so none
+was deleted. Cleanup proofs are in tmp/ucu09-row186/next-retention-audit/.
+
 Subsequent maintainer-requested audit covers all rows186-208, exact current Next
 03626929089a438245cfc77cbedda6e92d98dc9f and all15 patches in ErsatzTV-ffmpeg8.1.2-4.
 One additional binary amendment is necessary: upstream cfaaf006's exact ICC/EXIF

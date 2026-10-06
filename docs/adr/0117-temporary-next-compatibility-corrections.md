@@ -7,17 +7,44 @@ including implementation, commit/push, CI and verified package publication.
 Individual qualifying fixes do not require another ADR or approval. UCU-09 is
 bounded by upstream v26.11.1, not later releases.
 
-The consolidated FFmpeg extension below is **Proposed**. Acceptance of the
-Next policy does not authorize its FFmpeg builds or publication.
+The maintainer also accepted the consolidated FFmpeg extension on 2026-10-06,
+conditional on updating the separate ErsatzRS-ffmpeg repository to **v2.0.6**.
+This authorizes its implementation, four package builds, testing, commit/push,
+CI and verified publication. It does not claim completed runtime acceptance.
 
 ## Implementation
 
-Partial — a candidate patch distinguishes static WebP from animated WebP and
-repeats complete GIF cycles. All six static image formats and a finite GIF
-animation pass decoded Linux application checks, including local/HTTP fractional
-seeking, six-second handoff to static WebP and an exact eight-second finite output.
-Live inputs retain their EOF behavior. Production packages are
-unchanged; finite animated WebP remains blocked by FFmpeg demuxer seeking.
+Partial — row186 corrections are implemented and accepted. The runtime
+distinguishes static WebP from animated WebP and repeats
+complete GIF/WebP cycles. All six static formats and finite/infinite animated
+WebP pass decoded Linux application checks, including local/HTTP half-second
+seeking, six-second handoff to static WebP and exact eight-second termination.
+The exact native Windows release executable also passes 19 runtime cases plus
+one interval/silence unit, including copy/AVI, Burn/Convert/Off subtitles,
+alternate audio and RTSP source-clock/EOF/handoff. Live inputs retain their EOF
+behavior. The reviewed upstream0362692 and both local patches are now published for all
+six platforms as `next-0362692-ersatzrs.1`. Both macOS package jobs passed at
+checkpoint `4b5b1523`; Linux and Windows optimized executables each passed 20
+focused checks. Production staging pins all source, patch and archive hashes;
+all six real archives pass its guards, and an independent public Linux download
+matches the verified executable. Production HTTP smoke passes normal/preview
+playback, selected Dutch audio and rendered captions, reconnect and idle cleanup.
+Row186 is accepted; later ordered rows, final window CI and ARM/macOS application
+debt remain open. UCU-09 owns the canonical acceptance evidence.
+
+All four v2.0.6 FFmpeg packages are published with verified archive, executable,
+source and patch checksums. Package CI
+[37539516801](https://github.com/bartdeijkers/ErsatzRS-ffmpeg/actions/runs/37539516801)
+passed all four jobs at release commit `b221a3d32d3169fc563d2443af7f897d2259b1e8`.
+Clean Bookworm and emulated ARM software checks pass; native Windows graphics,
+AV1, animation, SVG, sparse subtitles and selected alternate audio also pass.
+The compiled Linux demuxer preserves complete ICC/EXIF and removes short-read
+side data. Native Windows NVIDIA interop and Linux software Vulkan pass.
+All ten published asset digests match the frozen verified files. The manifest
+SHA-256 is `af6132181dd191b5eb68503debcc6d7e699d6a6047ab85eaa93c74f64e123f0f`.
+[The stable runtime release](https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/tag/v2.0.6)
+supplies the tested runtime for row186 acceptance; package publication alone
+does not complete UCU-09 application acceptance.
 
 ## Context
 
@@ -28,8 +55,8 @@ its "playout item ended early" error card. FFmpeg decodes the source files;
 the failure is in Next's input lifetime, not the ErsatzRS hint or FFmpeg build.
 The runtime was built from e88b2d7. A later 2026-10-06 source audit found
 upstream 0362692, which corrects VAAPI padding and color-state handling. It
-does not change image repeat recognition or live RTSP buffering. Its runtime
-acceptance and adoption remain pending.
+does not change image repeat recognition or live RTSP buffering. The reviewed successor package adoption is recorded above; native VAAPI
+padding and ordered row207 application acceptance remain pending.
 
 Next's still-image loop recognizes PNG, JPEG, BMP and TIFF. WebP and GIF may
 contain animation, so adding them to the single-frame loop would risk freezing
@@ -154,14 +181,15 @@ approval; existing approved debt remains unchanged.
 ErsatzRS owns a bounded, evidence-backed patch set with one approval boundary
 and independent retirement criteria. The final number of corrections cannot be
 known before runtime acceptance. Required tests, transparent scope and source
-identity control that uncertainty. Row 186 and ordered catch-up remain open
-until runtime acceptance is complete. Acceptance authorizes the work; it does
+identity control that uncertainty. Row186 runtime acceptance is complete;
+later ordered catch-up and final application gates remain open. Acceptance authorizes the work; it does
 not claim that replacement packages or their verification are complete.
 
-### Proposed FFmpeg extension
+### Accepted FFmpeg extension
 
-This amendment is proposed, not accepted. The accepted policy above still
-excludes FFmpeg rebuilds and releases until the maintainer accepts this extension.
+The maintainer accepted this amendment after the consolidated audit, explicitly
+requiring ErsatzRS-ffmpeg v2.0.6. This extends the earlier Next-only authority
+to the bounded FFmpeg changes and package scope below.
 
 Finite animated WebP exposes a defect in the existing FFmpeg demuxer at source
 revision `d32b387f2b0a484599d4587d651891f0c63c4238`. Its packet positions point
@@ -171,7 +199,8 @@ The native infinite-loop path seeks to the correct header and decodes all frames
 Evidence and a four-line candidate correction are retained in
 `tmp/ucu09-row186/animation-audit/webp-packet-offsets.json` and
 `tmp/ucu09-row186/ffmpeg-review/0001-correct-animated-webp-seek-position.patch`.
-The correction has not been built or runtime-verified. Current FFmpeg upstream
+The initial proposal was not built or runtime-verified; the implementation
+checkpoint above records its subsequent verified publication. Audited FFmpeg upstream
 `9008db55d29631ae4ec62d46edea77c840ce0663` still has this seek-position defect.
 
 #### Consolidated audit through v26.11.1
@@ -186,10 +215,10 @@ It establishes one additional FFmpeg source amendment:
   The same WebP demuxer allocates ICC/EXIF side data for the declared chunk size
   but accepts a positive short read, leaving unread bytes uninitialized. The
   upstream fix requires exact-length reads and removes incomplete side data.
-  The published source lacks it. A truncated EXIF fixture currently finishes
-  probing without an error; post-fix demuxer error/side-data handling still
-  requires verification. This is source evidence of the unsafe read path,
-  not proof of an exploit or a validated replacement binary.
+  The published source lacks it. The original truncated EXIF fixture finished probing without an error.
+  The compiled corrected demuxer subsequently passed complete and truncated
+  ICC/EXIF tests, preserving complete data and removing incomplete side data.
+  This does not establish an exploit in the previous runtime.
 
 | Pending rows / runtime surface | Audit result and required owner |
 | --- | --- |
@@ -244,9 +273,9 @@ Retained audit evidence is in `tmp/ucu09-ffmpeg-amendment-audit/`: the upstream
 source window, `patch-review/patch-equivalence.json`, `arm-package-audit.json`,
 `existing-runtime-probes.json`, `content-duration-packets.json` and malformed
 WebP probes. The owning milestone records the result; no pending row is accepted
-by this audit and the ordered baseline remains at row 185.
+by this audit alone. Subsequent row186 runtime acceptance is recorded in UCU-09.
 
-#### Proposed authority and package scope
+#### Authority and package scope
 
 Extend this same decision to the two necessary WebP corrections, their regression
 tests, implementation, commit/push, CI and verified v2.0.6 package publication.

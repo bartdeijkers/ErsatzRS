@@ -47,20 +47,24 @@
      },
      Subtitle {
          input_source: InputSource,
-@@ -643,6 +644,24 @@
+@@ -643,6 +644,28 @@
                  },
                  realtime: final_output_settings.realtime && !final_output_settings.is_live,
                  decoder: video_decoder,
-+                // Reopen GIFs after one cycle; embedded finite loop counts must not
++                // Reopen animations after one cycle; embedded finite loops must not
 +                // end a scheduled image early or freeze it to its first frame.
 +                extra_input_args: if !final_output_settings.is_live
-+                    && video_stream.codec == "gif"
-+                    && input_settings
-+                        .video_input
-+                        .probe_result
-+                        .format_name
-+                        .as_deref()
-+                        == Some("gif")
++                    && matches!(
++                        (
++                            video_stream.codec.as_str(),
++                            input_settings
++                                .video_input
++                                .probe_result
++                                .format_name
++                                .as_deref()
++                        ),
++                        ("gif", Some("gif")) | ("webp_anim", Some("webp_anim"))
++                    )
 +                    && matches!(
 +                        input_settings.video_input.input_source,
 +                        InputSource::Local(_) | InputSource::Http(_)
@@ -72,7 +76,7 @@
              },
          ];
  
-@@ -1245,11 +1264,13 @@
+@@ -1245,11 +1268,13 @@
                      seek,
                      realtime,
                      decoder,
@@ -86,7 +90,7 @@
  
                      if let Some((audio_path, audio_args)) = &audio_decoder_args
                          && *audio_path == path.as_str()
-@@ -1626,5 +1647,48 @@
+@@ -1626,5 +1651,53 @@
              subtitle_force_style: None,
              reports_folder: None,
              report_id: None,
@@ -94,11 +98,16 @@
 +    }
 +
 +    #[test]
-+    fn gif_programme_loops_all_frames_with_input_options_and_output_bound() {
++    fn animated_programme_loops_all_frames_with_input_options_and_output_bound() {
 +        for (codec, container, live, http, repeated) in [
 +            ("gif", "gif", false, false, true),
 +            ("gif", "gif", false, true, true),
 +            ("gif", "gif", true, true, false),
++            ("webp_anim", "webp_anim", false, false, true),
++            ("webp_anim", "webp_anim", false, true, true),
++            ("webp_anim", "webp_anim", true, false, false),
++            ("webp_anim", "webp_anim", true, true, false),
++            ("webp_anim", "matroska", false, false, false),
 +            ("gif", "matroska", false, false, false),
 +            ("webp", "webp_pipe", false, false, false),
 +            ("h264", "matroska", false, false, false),

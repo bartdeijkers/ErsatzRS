@@ -6,25 +6,48 @@ use ersatzrs_core::repositories::ChannelRepository as _;
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9; finite GIF seek and static WebP handoff"]
 async fn real_next_image_seek_and_handoff_finish_at_the_schedule_boundary() {
-    run(false).await;
+    run(false, None).await;
 }
 
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9; seekable HTTP GIF repeat and termination"]
 async fn real_next_http_image_seek_and_handoff_finish_at_the_schedule_boundary() {
-    run(true).await;
+    run(true, None).await;
 }
 
-async fn run(http: bool) {
+#[tokio::test]
+#[ignore = "requires real Next and patched FFmpeg 9; finite animated WebP seek/repeat/handoff"]
+async fn real_next_finite_webp_seek_and_handoff_finish_at_the_schedule_boundary() {
+    run(false, Some(1)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Next and patched FFmpeg 9; infinite animated WebP finite schedule"]
+async fn real_next_infinite_webp_seek_and_handoff_finish_at_the_schedule_boundary() {
+    run(false, Some(0)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Next and patched FFmpeg 9; seekable HTTP finite animated WebP"]
+async fn real_next_http_finite_webp_seek_and_handoff_finish_at_the_schedule_boundary() {
+    run(true, Some(1)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Next and patched FFmpeg 9; seekable HTTP infinite animated WebP"]
+async fn real_next_http_infinite_webp_seek_and_handoff_finish_at_the_schedule_boundary() {
+    run(true, Some(0)).await;
+}
+
+async fn run(http: bool, webp_loop_count: Option<u16>) {
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let root = tempfile::tempdir().unwrap();
-    let (pool, locker) = prepare_image(&ffmpeg, root.path(), "animated.gif").await;
-    let gif = root.path().join("still.animated.gif");
+    let (pool, locker, animation) = prepare_animation(&ffmpeg, root.path(), webp_loop_count).await;
     let start = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp(), 0).unwrap();
     let second_start = start + chrono::Duration::seconds(6);
     let finish = second_start + chrono::Duration::seconds(2);
     let (pool2, _) = prepare_image(&ffmpeg, root.path(), "webp").await;
-    let mut first = project(&pool, &gif, start, second_start, 500).await;
+    let mut first = project(&pool, &animation, start, second_start, 500).await;
     let mut second = project(
         &pool2,
         &root.path().join("still.webp"),
@@ -35,7 +58,7 @@ async fn run(http: bool) {
     .await;
     second.id = "second-image".to_owned();
     let origin = if http {
-        Some(serve_image(&mut first, gif).await)
+        Some(serve_image(&mut first, animation).await)
     } else {
         None
     };
@@ -84,7 +107,7 @@ async fn run(http: bool) {
     }
     let retained = root.keep();
     eprintln!(
-        "decoded finite image seek/handoff, HTTP={http}: {}",
+        "decoded finite image seek/handoff, HTTP={http}, WebP loop={webp_loop_count:?}: {}",
         retained.display()
     );
     let status = status
@@ -108,15 +131,124 @@ async fn run(http: bool) {
     )
     .await;
     assert_blue_handoff(&ffmpeg, &playlist).await;
+    assert_schedule_duration(&playlist).await;
     // Only disposable fixture pools are touched; no running host/database is used.
     drop(locker);
 }
 
+async fn prepare_animation(
+    ffmpeg: &Path,
+    root: &Path,
+    webp_loop_count: Option<u16>,
+) -> (
+    crate::db::DbPool,
+    ersatzrs_core::locking::EntityLocker,
+    PathBuf,
+) {
+    let (pool, locker) = prepare_image(ffmpeg, root, "animated.gif").await;
+    let animation = if let Some(loop_count) = webp_loop_count {
+        prepare_webp(ffmpeg, root, &pool, loop_count).await
+    } else {
+        root.join("still.animated.gif")
+    };
+    (pool, locker, animation)
+}
+
+async fn prepare_webp(
+    ffmpeg: &Path,
+    root: &Path,
+    pool: &crate::db::DbPool,
+    loop_count: u16,
+) -> PathBuf {
+    let animation = root.join("animated.webp");
+    let mut encode = Command::new(ffmpeg);
+    encode
+        .args(["-v", "error", "-nostdin", "-ignore_loop", "1", "-i"])
+        .arg(root.join("still.animated.gif"))
+        .args(["-c:v", "libwebp_anim", "-lossless", "1", "-loop"])
+        .arg(loop_count.to_string())
+        .arg(&animation);
+    tool(encode).await;
+    // Assert the embedded loop count itself; both fixtures must remain animated.
+    let bytes = tokio::fs::read(&animation).await.unwrap();
+    let mut offset = 12;
+    let mut observed_loop_count = None;
+    let mut frame_durations = Vec::new();
+    while offset + 8 <= bytes.len() {
+        let size = usize::try_from(u32::from_le_bytes(
+            bytes[offset + 4..offset + 8].try_into().unwrap(),
+        ))
+        .unwrap();
+        assert!(
+            offset + 8 + size <= bytes.len(),
+            "fixture chunk is complete"
+        );
+        if &bytes[offset..offset + 4] == b"ANIM" {
+            assert_eq!(size, 6, "WebP ANIM chunk must contain its loop count");
+            observed_loop_count = Some(u16::from_le_bytes(
+                bytes[offset + 12..offset + 14].try_into().unwrap(),
+            ));
+        } else if &bytes[offset..offset + 4] == b"ANMF" {
+            assert!(size >= 16, "WebP frame must contain its duration");
+            frame_durations.push(u32::from_le_bytes([
+                bytes[offset + 20],
+                bytes[offset + 21],
+                bytes[offset + 22],
+                0,
+            ]));
+        }
+        offset += 8 + size + size % 2;
+    }
+    assert_eq!(observed_loop_count, Some(loop_count));
+    assert_eq!(frame_durations, vec![500; 4]);
+    let mut probe = Command::new(runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"));
+    probe
+        .args(["-v", "error", "-show_streams", "-of", "json"])
+        .arg(&animation);
+    let metadata: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let stream = &metadata["streams"][0];
+    assert_eq!(stream["codec_name"], "webp_anim");
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path"=? WHERE "Id"=1"#)
+        .bind(animation.to_str().unwrap())
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaStream" SET "Codec"=?,"PixelFormat"=? WHERE "MediaVersionId"=100 AND "Index"=0"#)
+        .bind(stream["codec_name"].as_str().unwrap())
+        .bind(stream["pix_fmt"].as_str().unwrap())
+        .execute(pool).await.unwrap();
+    animation
+}
+
+async fn assert_schedule_duration(playlist: &Path) {
+    let mut probe = Command::new(runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"));
+    probe
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+        ])
+        .arg(playlist);
+    let metadata: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let duration: f64 = metadata["format"]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(
+        (duration - 8.0).abs() < 0.05,
+        "animation and handoff must fill only their eight-second schedule: {duration}"
+    );
+}
+
 async fn serve_image(
     first: &mut crate::next_engine::protocol::PlayoutItem,
-    gif: PathBuf,
+    image: PathBuf,
 ) -> direct_remote_servers::Http {
-    let origin = direct_remote_servers::Http::start(gif).await;
+    let origin = direct_remote_servers::Http::start(image).await;
     let source = first
         .tracks
         .as_mut()

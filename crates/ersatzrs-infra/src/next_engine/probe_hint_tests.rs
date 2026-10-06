@@ -277,6 +277,7 @@ async fn persisted_image_formats_and_avi_use_the_selected_container() {
         ("bmp", "bmp_pipe"),
         ("tiff", "tiff_pipe"),
         ("webp", "webp_pipe"),
+        ("webp_anim", "webp_anim"),
         ("gif", "gif"),
     ] {
         sqlx::query(

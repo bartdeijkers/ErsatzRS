@@ -15,19 +15,23 @@ import zipfile
 
 REPOSITORY = "ErsatzTV/next"
 DISTRIBUTION_REPOSITORY = "bartdeijkers/ErsatzRS"
-DISTRIBUTION_TAG = "next-e88b2d7-ersatzrs.1"
+DISTRIBUTION_TAG = "next-0362692-ersatzrs.1"
 RELEASE_URL = f"https://api.github.com/repos/{DISTRIBUTION_REPOSITORY}/releases/tags/{DISTRIBUTION_TAG}"
 DOWNLOAD_BASE = f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download/{DISTRIBUTION_TAG}"
 # Update only after source review and runtime acceptance, then rerun candidate CI.
-PINNED_REVISION = "e88b2d7e445308f33996bbb12474949c2e31f348"
-SOURCE_ARCHIVE_SHA256 = "999585876402095b7448a05201f15a22babbe1463f57cef0fa5d8d07023e3b6b"
+PINNED_REVISION = "03626929089a438245cfc77cbedda6e92d98dc9f"
+SOURCE_ARCHIVE_SHA256 = "06e4f530f0985a8c8cde4380f9abb43d4352b7ab07917272b33b75394fa891e7"
 SOURCE_LOCK_SHA256 = "abf9a7d03c93a4e1602d421f2cad4f1295edadaae9f5e50a13b7b24be0072fd8"
 # Set with the accepted six-platform snapshot; None retains official staging.
-PATCHED_DISTRIBUTION_VERSION = "0.1.0-e88b2d7-ersatzrs.1"
+PATCHED_DISTRIBUTION_VERSION = "0.1.0-0362692-ersatzrs.1"
 PINNED_PATCHES = [
     {
         "file": "0001-bound-live-rtsp-shortest-buffer.patch",
         "sha256": "75c2b4d7128e140f65322978c8fc6d144638aee24c22e19512f9b746ba8b88f0"
+    },
+    {
+        "file": "0002-repeat-programme-images.patch",
+        "sha256": "b62884eae96f03a2ea14fc25338ec76ccbac0134e16d9babb637bdf6023a3156"
     }
 ]
 TARGETS = {
@@ -42,13 +46,13 @@ PLATFORMS = {
 }
 PINNED_HASHES = {
     "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-linux-arm.tar.gz": "5a7a5078e875013f4ba2462e5a695c2690f79922e3fd4b07dd02405adace4e79",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-linux-arm64.tar.gz": "7626d2f26bbd7a2c8136dac5fcabb548b3a0557ba71e7e90ca9fd441a100cfba",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-linux-x64.tar.gz": "cd9136f5939df616f8ee82cfd85571c4e3dac7a91afc501d26fac62b880237a0",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-osx-arm64.tar.gz": "ba5d7e3e732e4d297717ad2e6a32ee96b01f158ae62f9e46f91d0c5bcffc1a0b",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-osx-x64.tar.gz": "df2d9dfac027f2f89e0b442e3c485bfa2f0913847c5ef224f643c98b748f87ce",
-    "ersatzrs-next-0.1.0-e88b2d7-ersatzrs.1-win-x64.zip": "1b1d54b132fe626ab4f38d61544d5533473ac735784291d6b8a554badf200c60",
-    "provenance.json": "de0eb9ec3572eb496b15f727602249358777e0c003c5d23db85fc5aefe179482"
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm.tar.gz": "a597770522f383418aa75ec22d9f3f5b93801589e9471951176969ac3f27096e",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm64.tar.gz": "4a108d1d7d7b08d73cd00cce1753a7929a3d557b453e6e11281c551e2d7db4eb",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-x64.tar.gz": "365373706913e099c0609f8e447d041a0f1e9b3deb4556066a4dc91024d5f9b3",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-arm64.tar.gz": "36ff3f5fca69bded87759621b192348bd3785a89dde398ff2ded13199e9bcfcf",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-x64.tar.gz": "278032d1470f2b891d69bf22e00c601cfcc380f5583f28b198015839142c624d",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-win-x64.zip": "4f14f94f8a904a61d3b69f9d50ba072aa54db36939cd8a50a692a2276427611e",
+    "provenance.json": "511ec0d2bf8d142433bb5ac4410702e84f0ec4bea3cdbd739b7ae3150bc6bd6a"
 }
 
 BINARIES = ("ersatztv-channel",)
@@ -158,7 +162,7 @@ def verify_patched_payload(files, rid):
 
 
 def stage_patched_snapshot(rid, output, archive_path=None, fetch=download):
-    """Stage the reviewed ADR 0116 distribution without executing or extracting it."""
+    """Stage the reviewed ADR 0117 distribution without executing or extracting it."""
     if not PATCHED_DISTRIBUTION_VERSION or not PINNED_PATCHES:
         raise ValueError("No patched Next snapshot is accepted")
     output = Path(output)

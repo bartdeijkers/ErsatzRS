@@ -4,7 +4,7 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-185 are accepted; rows186-208 are the 23 remaining in-scope
+verified). Rows1-186 are accepted; rows187-208 are the 22 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
@@ -12,14 +12,20 @@ Next corrections and their verified packages, with mandatory upstream retirement
 
 ## Row 186 source map and acceptance
 
-Active slice: `b4a7efe2`, image/remote-stream playout duration and Next input
+Accepted slice: `b4a7efe2`, image/remote-stream playout duration and Next input
 hints. Use image metadata duration (15 seconds when unset), otherwise the
 selected/head media version duration, with RemoteStream.Duration as the fallback
 only for a zero version duration. Preserve fractional image duration, explicit
 track pins, finite/live source policy and ordinary video behavior. No schedule
 reset, data migration or later ledger row is included. The accepted ADR 0117
-now authorizes the necessary Next runtime correction and verified replacement
-packages; reuse the existing FFmpeg runtime.
+now authorizes the necessary Next correction and verified packages; its accepted
+FFmpeg extension supplies the published checksum-verified v2.0.6 runtime.
+The reviewed six-platform next-0362692-ersatzrs.1 snapshot is now published and
+pinned, with successful Linux/Windows optimized executable compatibility and
+both macOS package jobs. The independent unpatched comparison still requires
+both local corrections. Production HTTP smoke now passes with the independently
+downloaded release executable, selected Dutch audio and rendered captions,
+normal/preview playback, reconnect and idle cleanup.
 
 - Upstream: `MediaItemExtensions`, troubleshooting preparation, chapterless
   filler conversion in `PlayoutBuilder`, `DynamicPlayoutItemService`, and
@@ -38,7 +44,10 @@ Acceptance: duration matrices (image default/fractional/zero; remote fallback
 versus nonzero version; multiple versions/metadata), scheduling and fallback
 bounds, troubleshooting seek/duration, all image/AVI wire hints, actual decoded
 image and AVI playback using the published runtime, strict affected lint and
-production smoke. Baseline remains at row185 until acceptance passes.
+production smoke. Row186 is accepted as Adapt under ADR 0117. UCU-09 owns
+exact test and runtime evidence; the baseline advances with this checkpoint.
+Next action: row187 block scheduling/history correctness. Rows194 and 207
+remain pending despite their independently reviewed implementation prerequisites.
 
 ## Row 185 source map and acceptance
 
@@ -229,7 +238,7 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
   — docs: prep for release v26.11.1.
-- Ledger: **208 commits**, **23 pending**. The original plan covered 152 through
+- Ledger: **208 commits**, **22 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -269,7 +278,7 @@ remain. See `post-publication-cleanup.json`.
   processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **185**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **186**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -5390,7 +5399,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 183 | `960421e8` | fix: remove av1 from ui (#3048) | Adapt | Native pipeline, HLS routing and output health | `fix(ffmpeg): retain compatible native AV1 output` | ucu-09; accepted ADR 0106 preserves AV1 with automatic fMP4, explicit TS/Next rejection and localized guidance. Decoded Linux application and Windows runtime proof, six AV1 regressions, four browser cases, workspace/parity gates, both-engine smoke and 87 TSDuck checks pass. |
 | 184 | `aad7bdc4` | feat: use next copy mode when normalization is disabled (#3049) | Adapt (ADR 0116) | upstream-baseline-catch-up | `feat(infra): support Next copy mode with verified runtime` | ucu-09; versioned independent copy/transcode mapping, codec fallback, overlay health upgrade, six-platform patched snapshot with mandatory upstream retirement. 328 Linux compatibility, decoded RTSP handoff/EOF, six Windows application, Burn/Convert HTTP, 83 TSDuck checks, strict lint and published artifact identity pass. Candidate build CI 37503854054 green; application window CI remains pending. |
 | 185 | `e1d2cac0` | fix: cleanup for next copy mode (#3050) | Port | Next projection, profile commands and HLS playlists | `fix(next): preserve copy mode across profile and overlay changes` | ucu-09; editor/API and channel-profile saves notify normal/preview without scheduling changes; copied video skips overlays and Next playlists omit fixed resolution. 18 focused, 63 projection and 17 final fallback checks, decoded copy/non-copy graphics, strict affected lint and Convert HTTP lifecycle pass. |
-| 186 | `b4a7efe2` | fix: image and remote stream durations using next engine (#3051) | | | | ucu-09; pending acceptance. Duration/probe-hint application changes and candidate Next image repetition are implemented; six static formats, finite GIF repetition and local/HTTP seek/handoff pass. Finite animated WebP remains blocked by FFmpeg generic rewind. The consolidated proposed ADR0117 extension adds rewind plus upstream ICC/EXIF read safety in all four supplied runtime packages; no FFmpeg build or row acceptance has occurred. UCU-09 owns exact evidence. |
+| 186 | `b4a7efe2` | fix: image and remote stream durations using next engine (#3051) | Adapt (ADR 0117) | upstream-baseline-catch-up | `fix(next): integrate verified image runtime packages` | ucu-09; shared image/remote duration and indexed probe hints preserve selection and scheduling. 18 focused and 64 scheduling checks, all image/AVI hints, optimized Linux/Windows runtime compatibility, six checksum-pinned Next packages and published FFmpeg v2.0.6 pass. Production HTTP playback, Dutch audio/captions, preview/reconnect/idle cleanup and independent review pass. Both temporary Next corrections remain required; final application window CI stays open. |
 | 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | | | | ucu-09; provisional: Port, partly covered; highest-value row of this batch because it is native scheduling correctness. (a) Enumerators must not see history queued for removal: ErsatzRS filters this for break content (`crates/ersatzrs-core/src/scheduling/block.rs:1386`) while block item enumerators consume no history at all, so this needs an architecture check rather than a 1:1 port. (b) Removing every history row at a removed item's start is already covered by the set-based `history_to_remove_for_items` (`block.rs:984`). (c) Dropping orphaned history at or after the requested start has no counterpart; `cleanup_history` (`scheduling/mod.rs:1252`) only prunes old rows per key. Claude 2026-10-04 triage. |
 | 188 | `26755a16` | update changelog for most recent next build | | | | ucu-09; provisional: N/A (one upstream CHANGELOG line for a Next build; no product behavior). Claude 2026-10-04 triage. |
 | 189 | `481840fb` | feat: add songs to next engine (#3053) | | | | ucu-09; provisional: Port. Songs become playable through Next: an audio-only item keeps its source as the audio track and gains a generated video track (song background over a signed internal HTTP source with a png_pipe hint, black video for other audio-only items), the song background generator is seeded per playout item instead of using a shared RNG, and an internal signed route serves that background. Needs the ErsatzRS song video surface and the Next item projection audited; shares the audio and video stream split with row 186. Claude 2026-10-04 triage. |

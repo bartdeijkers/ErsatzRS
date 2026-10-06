@@ -4,13 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-185/208 in-scope rows accepted; rows186-208 remain pending through v26.11.1.
-The maintainer fixed this boundary on 2026-10-06; rows209 onward are later work
-and do not reopen UCU-09. ADR 0117 is accepted for qualifying Next corrections.
-Row184 copy/fallback and RTSP acceptance passes with the published six-platform
-next-e88b2d7-ersatzrs.1 snapshot. ADR 0116 requires patch retirement when an
-upstream equivalent passes. Linux/Windows application, HTTP, 83 TSDuck checks,
-health, lint and artifact identity pass; window CI remains open.
+186/208 in-scope rows accepted; rows187-208 remain pending through v26.11.1.
+Rows209 onward are later work and do not reopen UCU-09.
+ADR 0117 accepts qualifying Next corrections.
+Six packages pin next-0362692-ersatzrs.1; unpatched upstream still fails both
+local regressions. ADRs 0116/0117 require independent patch retirement. Linux/Windows compatibility
+and macOS package CI pass. Row186 production HTTP playback, selected audio/
+captions, preview, reconnect and idle cleanup pass; application window CI remains open.
 UCU-00 through UCU-08 are Complete; UCU-09 remains open through its fixed v26.11.1
 release boundary. Earlier evidence and approved platform debt remain. Final window local gates and terminal
 green exact-SHA CI 36900396649 at b76d11c6 pass. Stable v1.1.0 package acceptance remains separate.
@@ -70,15 +70,15 @@ id = 'ucu09-row186-media-duration'
 adr = '0117'
 description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
 discovered = '2026-10-06'
-evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions. The consolidated ADR0117 extension proposes that correction plus upstream ICC/EXIF short-read hardening for all four currently published RID payloads; ARM archives share the affected source and must not retain the known defect. Full remaining-row and 15-patch source audits establish no further binary amendment with current dependency pins. The extension is not built or accepted; UCU-09 owns exact evidence. Row186 and its baseline remain pending.'
-resolved = false
+evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The reviewed six-platform next-0362692-ersatzrs.1 snapshot is published and production staging pins its exact source, both patches and all archive hashes. Linux and Windows optimized executables each pass 20 focused checks, and both macOS package CI jobs pass at 4b5b1523. Finite/infinite animated WebP now passes Linux application seek/handoff checks with the corrected FFmpeg runtime. The maintainer accepted the consolidated ADR0117 extension with the condition to update the separate ErsatzRS-ffmpeg repository to v2.0.6, including that correction plus upstream ICC/EXIF short-read hardening for all four currently published RID payloads; ARM archives share the affected source and must not retain the known defect. Full remaining-row and 15-patch source audits establish no further binary amendment with current dependency pins. All four corrected v2.0.6 packages are published at b221a3d after terminal green package CI37539516801; all published asset hashes match the verified archives. Production HTTP smoke with the independently downloaded release passes normal/preview playback, decoded Dutch audio and rendered captions, reconnect and idle cleanup. Independent review finds no concrete runtime or packaging blocker. Row186 is accepted as Adapt under ADR0117; UCU-09 owns exact evidence and final window CI remains open.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row194-content-duration'
 adr = '0117'
 description = 'Use selected content-stream duration for local scans, guarding against FFmpeg 9 Matroska numeric durations synthesized from a longer subtitle/container; preserve video selection and complete-audio fallback.'
 discovered = '2026-10-06'
-evidence = 'Remaining-row audit and exact-package probe find one second of video packets and a one-second video DURATION tag but numeric video and format durations of twenty seconds. FFmpeg timing source explains the estimate; a scanner correction and conflicting/missing/invalid-tag regression plus decoded handoff remain required. No binary patch is justified. Canonical evidence is recorded in UCU-09; row194 is not accepted.'
+evidence = 'Remaining-row audit and exact-package probe find one second of video packets and a one-second video DURATION tag but numeric video and format durations of twenty seconds. FFmpeg timing source explains the estimate; The scanner correction and conflicting/missing/invalid-tag regressions now pass, including the actual one-second-video/twenty-second-subtitle fixture; decoded application handoff remains required. No binary patch is justified. Canonical evidence is recorded in UCU-09; row194 is not accepted.'
 resolved = false
 
 [[debt]]
@@ -101,7 +101,15 @@ id = 'ucu-next-rtsp-patch-retirement'
 description = 'At every Next update, verify the unpatched candidate against live RTSP startup and EOF/handoff acceptance; remove the temporary buffer patch and return to official artifacts when an equivalent upstream correction passes.'
 discovered = '2026-10-06'
 adr = '0116'
-evidence = 'Explicit maintainer condition attached to patch approval. Source/patch manifests must reject unreviewed revisions; keep the regression tests after retirement. UCU-09 owns implementation and current runtime acceptance; ADR 0116 owns the removal contract.'
+evidence = 'Explicit maintainer condition attached to patch approval. Unpatched0362692 still fails the unchanged RTSP source-clock/startup regression; both source/patch manifests retain patch0001 with its exact hash and reject unreviewed revisions. Retain regression tests after retirement. ADRs 0116/0117 own the removal contract; UCU-09 owns executable identities and failure evidence.'
+resolved = false
+
+[[debt]]
+id = 'ucu-next-image-patch-retirement'
+description = 'At every Next update, verify unpatched static/animated WebP and GIF seek, complete repetition and schedule-boundary handoff; independently remove patch0002 when equivalent upstream behavior passes, retaining the regressions.'
+discovered = '2026-10-07'
+adr = '0117'
+evidence = 'Unpatched0362692 fails the static-WebP regression while the published six-platform next-0362692-ersatzrs.1 snapshot passes required available Linux/Windows compatibility. The active source/patch manifest records the exact correction hash, reviewed upstream revision, failing regression and retirement condition. UCU-09 retains synthetic comparison evidence and executable hashes.'
 resolved = false
 
 [[debt]]

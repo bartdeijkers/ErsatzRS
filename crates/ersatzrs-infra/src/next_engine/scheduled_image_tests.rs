@@ -264,7 +264,9 @@ async fn assert_animation_cycle(ffmpeg: &Path, saved: &Path, first_color: Option
                 "-frames:v",
                 "1",
                 "-vf",
-                "scale=1:1",
+                // Sample the displayed interval, not the next source frame: WebP
+                // coalesces each pair of GIF frames into one half-second frame.
+                "fps=4,scale=1:1",
                 "-pix_fmt",
                 "rgb24",
                 "-f",

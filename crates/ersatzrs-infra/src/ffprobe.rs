@@ -732,12 +732,7 @@ fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMedia
         ..MediaVersion::default()
     };
 
-    if let Some(duration) = probe
-        .format
-        .as_ref()
-        .and_then(|format| format.duration.as_deref())
-        .and_then(parse_seconds)
-    {
+    if let Some(duration) = content_duration(probe).or_else(|| format_duration(probe)) {
         version.duration = duration;
     }
 
@@ -981,6 +976,130 @@ fn parse_seconds(value: &str) -> Option<Duration> {
     Some(Duration::seconds(seconds) + Duration::milliseconds(millis))
 }
 
+fn format_duration(probe: &FfprobeOutput) -> Option<Duration> {
+    parse_positive_duration(probe.format.as_ref()?.duration.as_deref()?)
+}
+
+/// The selected video bounds playback; audio-only items need every audio duration.
+fn content_duration(probe: &FfprobeOutput) -> Option<Duration> {
+    // ErsatzTV LocalStatisticsProvider.GetContentDuration keeps the first stream
+    // on bitrate ties and excludes attached cover art.
+    let video = probe
+        .streams
+        .iter()
+        .filter(|stream| {
+            stream.codec_type.as_deref() == Some("video")
+                && stream.disposition.as_ref().and_then(|d| d.attached_pic) != Some(1)
+        })
+        .reduce(|selected, candidate| {
+            if content_bit_rate(candidate) > content_bit_rate(selected) {
+                candidate
+            } else {
+                selected
+            }
+        });
+    if let Some(video) = video {
+        return stream_content_duration(video, probe);
+    }
+
+    let mut longest = None;
+    for stream in probe
+        .streams
+        .iter()
+        .filter(|stream| stream.codec_type.as_deref() == Some("audio"))
+    {
+        let duration = stream_content_duration(stream, probe)?;
+        longest = Some(longest.map_or(duration, |current: Duration| current.max(duration)));
+    }
+    longest
+}
+
+fn content_bit_rate(stream: &FfprobeStream) -> i64 {
+    parse_i64(stream.bit_rate.as_deref())
+        .or_else(|| parse_i64(stream.tags.as_ref()?.extra.get("variant_bitrate")?.as_str()))
+        .unwrap_or(0)
+}
+
+fn stream_content_duration(stream: &FfprobeStream, probe: &FfprobeOutput) -> Option<Duration> {
+    let numeric = stream.duration.as_deref().and_then(parse_positive_duration);
+    let tagged = stream.tags.as_ref().and_then(duration_tag);
+    let matroska = probe
+        .format
+        .as_ref()
+        .and_then(|format| format.format_name.as_deref())
+        .is_some_and(|names| {
+            names.split(',').any(|name| {
+                name.trim().eq_ignore_ascii_case("matroska")
+                    || name.trim().eq_ignore_ascii_case("webm")
+            })
+        });
+    if let (Some(numeric), Some(tagged)) = (numeric, tagged) {
+        // ADR 0117: FFmpeg 9 can fill a Matroska stream duration from the
+        // container, including subtitles past content EOF. Override only that
+        // demonstrated conflict, not an independently reported numeric duration.
+        if matroska && Some(numeric) == format_duration(probe) && tagged < numeric {
+            return Some(tagged);
+        }
+    }
+    numeric.or(tagged)
+}
+
+fn duration_tag(tags: &FfprobeTags) -> Option<Duration> {
+    let (_, value) = tags
+        .extra
+        .iter()
+        .filter(|(key, _)| {
+            key.eq_ignore_ascii_case("DURATION")
+                || (key.len() > 9
+                    && key
+                        .get(..9)
+                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("DURATION-")))
+        })
+        .min_by_key(|(key, _)| key.len())?;
+    let mut parts = value.as_str()?.trim().split(':');
+    let hours = parse_unsigned_seconds(parts.next()?)?;
+    let minutes = parse_unsigned_seconds(parts.next()?)?;
+    let seconds = parse_decimal_duration(parts.next()?)?;
+    if parts.next().is_some() || minutes >= 60 || seconds >= Duration::seconds(60) {
+        return None;
+    }
+    let whole = hours
+        .checked_mul(3600)?
+        .checked_add(minutes.checked_mul(60)?)?;
+    let duration = Duration::try_seconds(whole)?.checked_add(&seconds)?;
+    (duration > Duration::zero()).then_some(duration)
+}
+
+fn parse_unsigned_seconds(value: &str) -> Option<i64> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok()
+}
+
+fn parse_decimal_duration(value: &str) -> Option<Duration> {
+    let value = value.trim();
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    let seconds = parse_unsigned_seconds(whole)?;
+    let nanos = if fraction.is_empty() {
+        if value.contains('.') {
+            return None;
+        }
+        0
+    } else {
+        if fraction.len() > 9 {
+            return None;
+        }
+        parse_unsigned_seconds(fraction)?
+            .checked_mul(10_i64.pow(u32::try_from(9 - fraction.len()).ok()?))?
+    };
+    Duration::try_seconds(seconds)?.checked_add(&Duration::nanoseconds(nanos))
+}
+
+fn parse_positive_duration(value: &str) -> Option<Duration> {
+    parse_decimal_duration(value).filter(|duration| *duration > Duration::zero())
+}
+
 fn parse_i64(value: Option<&str>) -> Option<i64> {
     value?.parse().ok()
 }
@@ -1045,6 +1164,7 @@ struct FfprobeStream {
     field_order: Option<String>,
     r_frame_rate: Option<String>,
     bit_rate: Option<String>,
+    duration: Option<String>,
     pix_fmt: Option<String>,
     color_range: Option<String>,
     color_space: Option<String>,
@@ -1186,6 +1306,8 @@ struct FfprobeTags {
     title: Option<String>,
     filename: Option<String>,
     mimetype: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[cfg(test)]

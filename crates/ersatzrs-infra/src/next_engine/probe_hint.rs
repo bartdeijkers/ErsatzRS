@@ -128,6 +128,7 @@ pub(crate) async fn persisted(
                             "bmp" => "bmp_pipe",
                             "tiff" => "tiff_pipe",
                             "webp" => "webp_pipe",
+                            "webp_anim" => "webp_anim",
                             "gif" => "gif",
                             _ => return Ok(None),
                         }

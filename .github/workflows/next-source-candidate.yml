@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           revision=$(python3 -c 'import json; print(json.load(open("scripts/release/next-patches/manifest.json"))["upstream_revision"])')
-          curl --fail --location --retry 3 --output next-source.tar.gz "https://codeload.github.com/ErsatzTV/next/tar.gz/$revision"
+          curl --fail --location --retry 3 --output next-source.tar.gz "https://codeload.github.com/ErsatzTV/next/legacy.tar.gz/$revision"
           python3 scripts/release/prepare-next-source.py --source-archive next-source.tar.gz --output .next-source
       - uses: Swatinem/rust-cache@v2
         with:

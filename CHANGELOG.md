@@ -15,11 +15,19 @@ release section when tagging a release.
 
 ### Changed
 
-- Expand ADR 0117's proposed FFmpeg amendment after auditing the v26.11.1
-  catch-up window: cover animated WebP seeking and upstream ICC/EXIF read safety
-  in all four supplied runtime packages. Record native VAAPI padding and
-  Matroska duration gaps separately; build approval and runtime acceptance remain
-  pending.
+- Update the optional Next engine to the reviewed six-platform
+  `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding fixes,
+  complete GIF/WebP programme repetition and bounded live RTSP buffering.
+  Pin exact source, patch and archive checksums, preserve licenses and platform
+  companions, and retain independent removal requirements for both local
+  corrections (ADR 0117). Available Linux/Windows application checks and macOS
+  package CI pass; existing hardware/platform acceptance debt remains explicit.
+
+- Update the managed FFmpeg runtime to the published v2.0.6 packages for Linux
+  x64, Windows x64, ARM64 and ARMv7, with animated WebP seeking and ICC/EXIF
+  read safety (ADR 0117). All four package CI jobs pass and published checksums
+  match the tested archives. Native VAAPI padding and application acceptance
+  remain tracked separately.
 
 - Use one accepted approval policy for temporary Next compatibility corrections
   during upstream catch-up (ADR 0117), retaining verified package provenance,
@@ -28,9 +36,15 @@ release section when tagging a release.
 
 ### Fixed
 
-- Prepare a temporary Next correction that holds static WebP and repeats complete
-  GIF animations for the scheduled duration, with decoded regression coverage.
-  Preserve fractional seeking, local/HTTP image handoff and live-input EOF.
+- Use the selected content stream's duration when scanning media, excluding
+  attached artwork and preserving audio/subtitle metadata. For Matroska/WebM,
+  use a valid shorter stream duration tag when FFmpeg has copied a longer
+  container estimate from subtitles; preserve numeric duration precedence
+  elsewhere (ADR 0117).
+
+- Hold static WebP and repeat complete GIF/WebP animations for the scheduled
+  duration in Next. Preserve fractional seeking, local/HTTP image handoff and
+  live-input EOF, with decoded Linux/Windows and production HTTP regression proof.
   Replacement packages and finite animated-WebP acceptance remain pending.
 
 - Use image metadata and remote-stream fallback durations consistently for
