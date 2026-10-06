@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Use image metadata and remote-stream fallback durations consistently for
+  scheduling, troubleshooting and Next input hints; identify BMP, TIFF, WebP,
+  GIF and AVI inputs explicitly. Runtime acceptance is in progress.
+
 - Refresh Next projections after profile copy/resolution changes, omit graphics
   from copied video and stop advertising a fixed copied-video HLS resolution.
 

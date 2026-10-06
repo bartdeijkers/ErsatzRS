@@ -2,7 +2,7 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..d55be01f (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
 185/206 accepted; rows 186-206 remain pending at fetched tip d55be01f.
 Row184 copy/fallback and RTSP acceptance passes with the published six-platform
@@ -65,6 +65,14 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
 """
+
+[[debt]]
+id = 'ucu09-row186-media-duration'
+adr = '0117'
+description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
+discovered = '2026-10-06'
+evidence = '18 focused and 64 scheduling repository tests pass. Decoded PNG/JPEG/BMP/TIFF and AVI fallback pass. Published Next ends single-frame WebP/GIF early despite correct hints; ADR 0117 proposes a separate temporary correction and awaits maintainer acceptance. UCU-09 owns evidence; row186 and its baseline remain pending.'
+resolved = false
 
 [[debt]]
 id = 'ucu09-row185-copy-projection'

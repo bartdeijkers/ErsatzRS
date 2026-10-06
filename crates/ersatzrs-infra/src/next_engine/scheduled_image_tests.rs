@@ -63,8 +63,9 @@ async fn scheduled_image_keeps_interval_and_supplies_silence() {
 async fn prepare_image(
     ffmpeg: &Path,
     root: &Path,
+    extension: &str,
 ) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
-    let image = root.join("still.png");
+    let image = root.join(format!("still.{extension}"));
     let mut generate = Command::new(ffmpeg);
     generate
         .args([
@@ -92,17 +93,58 @@ async fn prepare_image(
     // No pinned mute: the Image's actual absence of audio selects silence.
     let (pool, locker) = prepare_schedule(&image, false, &profile).await;
     image_metadata(&pool).await;
+    let mut probe = Command::new(runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"));
+    probe
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_streams",
+            "-of",
+            "json",
+        ])
+        .arg(&image);
+    let metadata: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let stream = &metadata["streams"][0];
+    sqlx::query(r#"UPDATE "MediaStream" SET "Codec"=?,"PixelFormat"=? WHERE "MediaVersionId"=100 AND "Index"=0"#)
+        .bind(stream["codec_name"].as_str().unwrap()).bind(stream["pix_fmt"].as_str().unwrap())
+        .execute(&pool).await.unwrap();
     (pool, locker)
 }
 
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9 with disposable app-data/state roots"]
 async fn real_next_scheduled_image_holds_picture_with_silent_audio() {
+    run_image("png").await;
+}
+
+#[tokio::test]
+#[ignore = "requires published Next and FFmpeg 9; decodes every persisted image container"]
+async fn real_next_scheduled_image_formats_hold_picture_with_silent_audio() {
+    for extension in ["jpg", "bmp", "tiff"] {
+        run_image(extension).await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires published Next and FFmpeg 9; validates WebP hold duration"]
+async fn real_next_scheduled_webp_holds_picture_with_silent_audio() {
+    run_image("webp").await;
+}
+
+#[tokio::test]
+#[ignore = "requires published Next and FFmpeg 9; validates GIF hold duration"]
+async fn real_next_scheduled_gif_holds_picture_with_silent_audio() {
+    run_image("gif").await;
+}
+
+async fn run_image(extension: &str) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let root = tempfile::tempdir().unwrap();
-    let (pool, locker) = prepare_image(&ffmpeg, root.path()).await;
+    let (pool, locker) = prepare_image(&ffmpeg, root.path(), extension).await;
     let host = std::sync::Arc::new(host::NextHost::new(
         pool,
         locker,
@@ -159,11 +201,29 @@ async fn real_next_scheduled_image_holds_picture_with_silent_audio() {
             })
             .unwrap(),
     );
-    assert_audio_and_subtitle(&ffmpeg, &ffprobe, &segment, true, "aac").await;
-    let mut decode = Command::new(&ffmpeg);
+    let saved = root.path().join("captured.ts");
+    tokio::fs::copy(&segment, &saved).await.unwrap();
+    assert!(registry.stop_channel("1").await);
+    timeout(Duration::from_secs(15), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!output.exists());
+    assert!(registry.try_get("1").await.is_none());
+    let retained = root.keep();
+    eprintln!(
+        "decoded image container {extension}: {}",
+        retained.display()
+    );
+    assert_audio_and_subtitle(&ffmpeg, &ffprobe, &saved, true, "aac").await;
+    assert_blue_picture(&ffmpeg, &saved).await;
+}
+
+async fn assert_blue_picture(ffmpeg: &Path, saved: &Path) {
+    let mut decode = Command::new(ffmpeg);
     decode
         .args(["-v", "error", "-nostdin", "-i"])
-        .arg(&segment)
+        .arg(saved)
         .args([
             "-ss",
             "2",
@@ -180,13 +240,6 @@ async fn real_next_scheduled_image_holds_picture_with_silent_audio() {
             "pipe:1",
         ]);
     let pixels = tool(decode).await;
-    assert!(registry.stop_channel("1").await);
-    timeout(Duration::from_secs(15), task)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(!output.exists());
-    assert!(registry.try_get("1").await.is_none());
     assert_eq!(
         pixels.len(),
         32 * 18 * 3,

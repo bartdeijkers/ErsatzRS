@@ -313,3 +313,76 @@ async fn real_next_copy_profile_burns_graphics_without_transcoding_selected_audi
         "graphics must not re-encode the selected AAC stream"
     );
 }
+
+#[tokio::test]
+#[ignore = "requires published Next and FFmpeg 9; decodes persisted AVI with selected alternate audio"]
+async fn real_next_avi_hint_preserves_picture_and_selected_audio() {
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let root = tempfile::tempdir().unwrap();
+    let original = root.path().join("source.mkv");
+    let avi = root.path().join("fixture.AVI");
+    generate_clip(&ffmpeg, &original).await;
+    let mut remux = Command::new(&ffmpeg);
+    remux
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(&original)
+        .args(["-map", "0", "-c", "copy", "-bsf:v", "h264_mp4toannexb"])
+        .arg(&avi);
+    tool(remux).await;
+    let saved = capture(root.path(), &avi, ("h264", "aac"), false).await;
+    let mut probe = Command::new(runtime_path("ERSATZRS_NEXT_TEST_FFPROBE"));
+    probe
+        .args(["-v", "error", "-show_streams", "-of", "json"])
+        .arg(&saved);
+    let info: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let streams = info["streams"].as_array().unwrap();
+    // Next's ContainerWithoutPts blocker must use the configured fallback.
+    assert!(streams
+        .iter()
+        .any(|s| s["width"] == 640 && s["height"] == 360));
+    assert!(streams
+        .iter()
+        .any(|s| s["codec_name"] == "aac" && s["sample_rate"] == "32000" && s["channels"] == 2));
+    let mut audio = Command::new(&ffmpeg);
+    audio
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(&saved)
+        .args([
+            "-map", "0:a:0", "-t", "1", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1",
+        ]);
+    let pcm = tool(audio).await;
+    let samples: Vec<_> = pcm
+        .chunks_exact(2)
+        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    assert!(samples.len() >= 7000);
+    let crossings = samples.windows(2).filter(|p| p[0] <= 0 && p[1] > 0).count();
+    let frequency = f64::from(u32::try_from(crossings).unwrap()) * 8000.0
+        / f64::from(u32::try_from(samples.len()).unwrap());
+    assert!(
+        (860.0..900.0).contains(&frequency),
+        "selected Dutch audio: {frequency} Hz"
+    );
+    let mut decode = Command::new(&ffmpeg);
+    decode
+        .args(["-v", "error", "-xerror", "-i"])
+        .arg(&saved)
+        .args([
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=32:18",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixels = tool(decode).await;
+    assert_eq!(pixels.len(), 32 * 18 * 3);
+    assert!(pixels
+        .chunks_exact(3)
+        .all(|pixel| pixel[2] > 200 && pixel[0] < 30 && pixel[1] < 30));
+}

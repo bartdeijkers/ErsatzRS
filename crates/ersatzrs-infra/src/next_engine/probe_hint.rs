@@ -8,7 +8,7 @@ use sqlx::Row;
 
 use crate::db::DbPool;
 use crate::ffprobe::FfprobeMediaVersion;
-use crate::repositories::{common::try_decode_duration_text, SqlxResultExt as _};
+use crate::repositories::SqlxResultExt as _;
 
 use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHint};
 
@@ -27,8 +27,13 @@ pub(crate) async fn persisted(
 ) -> RepositoryResult<Option<ProbeHint>> {
     let version = sqlx::query(
         r#"SELECT "Duration", "Width", "Height", "RFrameRate", "SampleAspectRatio",
-                  "DisplayAspectRatio", "VideoScanKind", "ImageId"
-           FROM "MediaVersion" WHERE "Id"=?"#,
+                  "DisplayAspectRatio", "VideoScanKind", "ImageId",
+                  (SELECT "DurationSeconds" FROM "ImageMetadata" WHERE "ImageId"=mv."ImageId"
+                   ORDER BY "Id" LIMIT 1) AS "ImageDurationSeconds",
+                  (SELECT "Duration" FROM "RemoteStream" WHERE "Id"=mv."RemoteStreamId") AS "RemoteDuration",
+                  (SELECT "Path" FROM "MediaFile" WHERE "MediaVersionId"=mv."Id"
+                   ORDER BY "Id" LIMIT 1) AS "Path"
+           FROM "MediaVersion" mv WHERE "Id"=?"#,
     )
     .bind(version_id)
     .fetch_optional(pool)
@@ -40,18 +45,24 @@ pub(crate) async fn persisted(
     let width: i32 = version.try_get("Width").repository()?;
     let height: i32 = version.try_get("Height").repository()?;
     let frame_rate: Option<String> = version.try_get("RFrameRate").repository()?;
-    let duration: String = version.try_get("Duration").repository()?;
-    let duration_ms = try_decode_duration_text(&duration)
-        .ok()
-        .and_then(|duration| u64::try_from(duration.num_milliseconds()).ok())
-        .filter(|duration| *duration > 0);
+    let duration_ms =
+        u64::try_from(crate::playout_duration::from_row(&version)?.num_milliseconds())
+            .ok()
+            .filter(|duration| *duration > 0);
     let image: Option<i64> = version.try_get("ImageId").repository()?;
     let scan_kind: i64 = version.try_get("VideoScanKind").repository()?;
     let mut hint = ProbeHint {
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),
-        format_name: None,
+        format_name: version
+            .try_get::<Option<String>, _>("Path")
+            .repository()?
+            .filter(|path| {
+                path.rsplit_once('.')
+                    .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("avi"))
+            })
+            .map(|_| "avi".into()),
         duration_ms,
     };
     let rows = sqlx::query(
@@ -114,6 +125,10 @@ pub(crate) async fn persisted(
                         match codec.as_str() {
                             "png" => "png_pipe",
                             "mjpeg" => "jpeg_pipe",
+                            "bmp" => "bmp_pipe",
+                            "tiff" => "tiff_pipe",
+                            "webp" => "webp_pipe",
+                            "gif" => "gif",
                             _ => return Ok(None),
                         }
                         .into(),

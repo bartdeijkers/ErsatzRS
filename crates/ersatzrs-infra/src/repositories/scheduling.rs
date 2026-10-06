@@ -3088,16 +3088,16 @@ impl SqliteSchedulingContentRepository {
         let row = sqlx::query(
             r#"SELECT
                 "mi"."Id",
-                COALESCE(
-                    NULLIF((SELECT MAX("mv"."Duration") FROM "MediaVersion" AS "mv" WHERE
-                        "mv"."MovieId" = "mi"."Id" OR "mv"."EpisodeId" = "mi"."Id" OR
-                        "mv"."MusicVideoId" = "mi"."Id" OR "mv"."OtherVideoId" = "mi"."Id" OR
-                        "mv"."SongId" = "mi"."Id" OR "mv"."ImageId" = "mi"."Id" OR
-                        "mv"."RemoteStreamId" = "mi"."Id"), '00:00:00'),
-                    (SELECT "rs"."Duration" FROM "RemoteStream" AS "rs"
-                     WHERE "rs"."Id" = "mi"."Id" LIMIT 1),
-                    '00:00:00'
-                ) AS "duration_text",
+                (SELECT "mv"."Duration" FROM "MediaVersion" AS "mv" WHERE
+                    "mv"."MovieId" = "mi"."Id" OR "mv"."EpisodeId" = "mi"."Id" OR
+                    "mv"."MusicVideoId" = "mi"."Id" OR "mv"."OtherVideoId" = "mi"."Id" OR
+                    "mv"."SongId" = "mi"."Id" OR "mv"."ImageId" = "mi"."Id" OR
+                    "mv"."RemoteStreamId" = "mi"."Id" ORDER BY "mv"."Id" LIMIT 1
+                ) AS "Duration",
+                (SELECT "Id" FROM "Image" WHERE "Id"="mi"."Id") AS "ImageId",
+                (SELECT "DurationSeconds" FROM "ImageMetadata" WHERE "ImageId"="mi"."Id"
+                    ORDER BY "Id" LIMIT 1) AS "ImageDurationSeconds",
+                (SELECT "Duration" FROM "RemoteStream" WHERE "Id"="mi"."Id") AS "RemoteDuration",
                 COALESCE(
                     (SELECT "em"."Title" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
                     (SELECT "mm"."Title" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
@@ -4207,8 +4207,7 @@ fn optional_id(row: &DbRow, column: &'static str) -> Result<Option<EntityId>> {
 }
 
 fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
-    let duration_text: String = row.try_get("duration_text").unwrap_or_default();
-    let duration = decode_duration_text(&duration_text);
+    let duration = crate::playout_duration::from_row(row)?;
     Ok(SchedulingMediaItem {
         id: row.try_get("Id").repository()?,
         duration,
@@ -5169,5 +5168,26 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
             .filter_map(|(item, id)| artwork.get(&id).cloned().map(|art| (item, art)))
             .collect();
         Ok(enrichment)
+    }
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn chapterless_image_filler_uses_metadata_duration() {
+        let (pool, _, _) = crate::playout_duration::tests::image_fixture().await;
+        sqlx::query(r#"INSERT INTO "FillerPreset" ("Id","AllowWatermarks","CollectionType","MediaItemId","FillerKind","FillerMode","UseChaptersAsMediaItems") VALUES (1,0,60,10,4,0,1)"#)
+            .execute(&pool).await.unwrap();
+        let repository = SqliteSchedulingContentRepository::new(pool);
+        let preset = repository
+            .scheduling_filler_preset(1)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(preset.media_items.len(), 1);
+        assert_eq!(preset.media_items[0].duration, Duration::seconds(15));
+        assert!(preset.media_items[0].chapter.is_none());
     }
 }

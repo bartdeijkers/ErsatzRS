@@ -463,6 +463,10 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
             r#"SELECT mv."Id" AS "MediaVersionId",
                       mf."Path" AS "Path",
                       mv."Duration" AS "Duration",
+                      mv."ImageId",
+                      (SELECT "DurationSeconds" FROM "ImageMetadata" WHERE "ImageId"=mv."ImageId"
+                       ORDER BY "Id" LIMIT 1) AS "ImageDurationSeconds",
+                      (SELECT "Duration" FROM "RemoteStream" WHERE "Id"=mv."RemoteStreamId") AS "RemoteDuration",
                       CASE
                         WHEN mv."MovieId" IS NOT NULL THEN 'Movie'
                         WHEN mv."EpisodeId" IS NOT NULL THEN 'Episode'
@@ -499,13 +503,11 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
         .await
         .repository()?;
         row.map(|row| {
-            let duration = row.try_get::<Option<String>, _>("Duration").repository()?;
-            let duration =
-                super::common::try_decode_duration_text(duration.as_deref().unwrap_or("00:00:00"))?
-                    .to_std()
-                    .map_err(|_| {
-                        RepositoryError::unavailable("preview duration", "invalid time span")
-                    })?;
+            let duration = crate::playout_duration::from_row(&row)?
+                .to_std()
+                .map_err(|_| {
+                    RepositoryError::unavailable("preview duration", "invalid time span")
+                })?;
             Ok(TroubleshootingPreviewMediaAdmin {
                 media_item_id,
                 media_version_id: row.try_get("MediaVersionId").repository()?,

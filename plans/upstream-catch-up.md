@@ -1,5 +1,33 @@
 # Upstream ErsatzTV catch-up
 
+## Row 186 source map and acceptance
+
+Active slice: `b4a7efe2`, image/remote-stream playout duration and Next input
+hints. Use image metadata duration (15 seconds when unset), otherwise the
+selected/head media version duration, with RemoteStream.Duration as the fallback
+only for a zero version duration. Preserve fractional image duration, explicit
+track pins, finite/live source policy and ordinary video behavior. No schedule
+reset, data migration, runtime rebuild or later ledger row is included.
+
+- Upstream: `MediaItemExtensions`, troubleshooting preparation, chapterless
+  filler conversion in `PlayoutBuilder`, `DynamicPlayoutItemService`, and
+  `PlayoutItemConverter` plus its image/AVI hint tests.
+- Rust: scheduling repository candidate duration feeds both chapterless fillers
+  and demand-time fallback. Troubleshooting preview reads and persisted Next
+  probe hints need the same duration rule. Retained/one-shot hints continue to
+  use their fresh source metadata and independent duration policy.
+- Next image formats: PNG, JPEG, BMP, TIFF, WebP and GIF; AVI extension is
+  case-insensitive. Unknown image codecs retain ordinary probing.
+- SQL invariant: one logical media/version row; image metadata and media-file
+  selection use indexed, deterministic first-row lookups, never multiplying
+  candidates. Existing persisted playout items are not rewritten.
+
+Acceptance: duration matrices (image default/fractional/zero; remote fallback
+versus nonzero version; multiple versions/metadata), scheduling and fallback
+bounds, troubleshooting seek/duration, all image/AVI wire hints, actual decoded
+image and AVI playback using the published runtime, strict affected lint and
+production smoke. Baseline remains at row185 until acceptance passes.
+
 ## Row 185 source map and acceptance
 
 Active slice: `e1d2cac0`, copy-mode cleanup. The outcome is faithful copied

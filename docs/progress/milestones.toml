@@ -11448,6 +11448,30 @@ Evidence: tmp/ucu09-row185/. Pin and upstream HEAD advance to e1d2cac0:
 185/206 accepted, 21 pending. No intermediate application CI; the final window
 and release gates remain open. Existing approved platform debt is unchanged.
 
+Row 186 remains open after application implementation. One shared decoder now
+uses image metadata duration (15-second default), head/selected version duration
+and remote duration only when the version is zero. Scheduling, chapterless
+filler, demand-time fallback, troubleshooting and persisted Next hints share
+that rule; first-row lookups avoid metadata/file/version multiplication. The
+new queries use existing indexes (tmp/ucu09-row186/query-plans.log). Eighteen
+focused duration/hint/health checks and all 64 scheduling repository checks pass.
+Existing static-image/animated-image and Remote Stream health distinctions remain.
+Real published Next acceptance b4494731-3da5-4675-b0d5-0e932c0d1285 passes PNG,
+JPEG, BMP, TIFF and AVI. AVI correctly invokes ContainerWithoutPts fallback,
+with 640x360 video, 32 kHz stereo audio and the selected Dutch 880 Hz signal.
+Single-frame WebP/GIF fail: their hints are correct and FFmpeg decodes the
+source, but Next ends the image input and displays its early-EOF error card.
+The retained WebP capture and decoded frame prove the failure, rather than a
+codec-name-only assertion (tmp/ucu09-row186/runtime-third.log and webp-output.png).
+An upstream Next fetch still returns e88b2d7. Proposed ADR 0117 requests a
+separate minimal repeat-input correction that preserves animation and must be
+retired after equivalent upstream acceptance. The maintainer decision is pending;
+no new runtime build/publication has started. Row185 remains the accepted pin.
+Strict infrastructure all-target Clippy, architecture/progress validation and
+production Convert HTTP smoke pass, including decoded audio/captions, normal
+and preview HLS, wrapper restart and idle cleanup. This is an application
+checkpoint only; WebP/GIF runtime acceptance and ADR 0117 remain open.
+
 The following chronology retains rejected candidate evidence before correction.
 Row 184 partial implementation: schema 0.1.0, independent audio/video modes,
 AAC/H.264 fallback and copy-audio loudness suppression. Eleven conversion

@@ -241,7 +241,7 @@ async fn persisted_still_image_keeps_image_container_identity() {
     }
     let hint = persisted(&pool, 100).await.unwrap().unwrap();
     assert_eq!(hint.format_name.as_deref(), Some("png_pipe"));
-    assert_eq!(hint.duration_ms, None);
+    assert_eq!(hint.duration_ms, Some(15_000));
     assert_eq!(hint.video[0].pix_fmt, "rgb24");
 }
 
@@ -265,5 +265,54 @@ fn ordinary_producer_rejects_incomplete_and_ambiguous_prefix_metadata() {
             _ => probe.streams.clear(),
         }
         assert!(producer(&probe).is_err(), "invalid producer case {case}");
+    }
+}
+
+#[tokio::test]
+async fn persisted_image_formats_and_avi_use_the_selected_container() {
+    let (pool, _, _) = crate::playout_duration::tests::image_fixture().await;
+    for (codec, format) in [
+        ("png", "png_pipe"),
+        ("mjpeg", "jpeg_pipe"),
+        ("bmp", "bmp_pipe"),
+        ("tiff", "tiff_pipe"),
+        ("webp", "webp_pipe"),
+        ("gif", "gif"),
+    ] {
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "Codec"=? WHERE "MediaVersionId"=100 AND "Index"=0"#,
+        )
+        .bind(codec)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let hint = persisted(&pool, 100).await.unwrap().unwrap();
+        assert_eq!(hint.format_name.as_deref(), Some(format));
+        assert_eq!(hint.video[0].codec, codec);
+    }
+    sqlx::query(
+        r#"UPDATE "MediaStream" SET "Codec"='unknown' WHERE "MediaVersionId"=100 AND "Index"=0"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(persisted(&pool, 100).await.unwrap().is_none());
+    let (pool, _, _, _) = super::super::schedule::tests::fixture().await;
+    for (path, expected) in [
+        ("synthetic.avi", Some("avi")),
+        ("synthetic.AVI", Some("avi")),
+        ("synthetic.mkv", None),
+        ("synthetic.avi/file", None),
+        ("avi", None),
+    ] {
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path"=? WHERE "Id"=1"#)
+            .bind(path)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let hint = persisted(&pool, 100).await.unwrap().unwrap();
+        assert_eq!(hint.format_name.as_deref(), expected);
+        assert_eq!(hint.audio.len(), 2);
+        assert_eq!(hint.subtitle.len(), 2);
     }
 }

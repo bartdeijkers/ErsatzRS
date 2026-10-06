@@ -81,6 +81,7 @@ pub mod mpegts_scripts;
 pub mod music_video_credits;
 pub mod next_engine;
 pub mod playback;
+mod playout_duration;
 pub mod plex;
 pub mod provider_collection_refresh;
 pub(crate) mod provider_collections;
