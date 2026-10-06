@@ -405,6 +405,65 @@ async fn assert_audio_and_subtitle(
 
 #[tokio::test]
 #[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
+async fn real_next_copy_profiles_preserve_audio_and_burn_subtitle_fallback() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    tokio::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:00,000 --> 00:01:00,000\nNext copy fallback proof\n",
+    )
+    .await
+    .unwrap();
+    for (audio_copy, video_copy) in [(true, true), (true, false), (false, true)] {
+        let profile = FFmpegProfile {
+            video_format: if video_copy {
+                FFmpegProfileVideoFormat::Copy
+            } else {
+                FFmpegProfileVideoFormat::H264
+            },
+            audio_format: if audio_copy {
+                FFmpegProfileAudioFormat::Copy
+            } else {
+                FFmpegProfileAudioFormat::Aac
+            },
+            video_bitrate: 1000,
+            video_buffer_size: 2000,
+            audio_sample_rate: 48,
+            audio_channels: 1,
+            ..Default::default()
+        };
+        let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+        let host = std::sync::Arc::new(host::NextHost::new(
+            pool,
+            locker,
+            root.path().join("playout"),
+        ));
+        assert_next_session(
+            &host,
+            host::NextStart {
+                channel_id: 1,
+                preview: false,
+                number: "1".into(),
+                executable: binary.clone(),
+                output: root.path().join("output"),
+                ffmpeg: ffmpeg.clone(),
+                ffprobe: ffprobe.clone(),
+                replacements: Vec::new(),
+                idle_timeout: None,
+                deadline: Instant::now() + Duration::from_secs(30),
+            },
+            false,
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
 async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
@@ -1043,7 +1102,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
     std::fs::create_dir(&overlays).unwrap();
     std::fs::write(
         overlays.join("default.json"),
-        br#"{"normalization":{"video":{"width":352}}}"#,
+        br#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"video":{"width":352}}}"#,
     )
     .unwrap();
     let profile = FFmpegProfile {
@@ -1076,7 +1135,7 @@ async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tra
         if expected_width == 384 {
             std::fs::write(
                 overlays.join("1.json"),
-                br#"{"normalization":{"video":{"width":384}}}"#,
+                br#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"video":{"width":384}}}"#,
             )
             .unwrap();
         }
@@ -1213,3 +1272,6 @@ mod fallback_error_runtime_tests;
 
 #[path = "rotation_runtime_tests.rs"]
 mod rotation_runtime_tests;
+
+#[path = "copy_runtime_tests.rs"]
+mod copy_runtime_tests;

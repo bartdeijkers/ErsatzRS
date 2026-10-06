@@ -11387,12 +11387,12 @@ row136 after refreshing upstream. No new release is implied.
 id         = 'ucu-09'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through the latest fetched tip'
-status     = 'Complete'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 960421e8 (latest fetched tip) in order,
+Process every ledger row in this release window through d55be01f (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
@@ -11420,6 +11420,92 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-06 reopened under the existing latest-tip acceptance clause: fetched
+origin/main is d55be01f1b7d8e72e68445ab9d2022421a86518d. Rows 184-206 are
+pending at reopening; row 184 is now accepted and rows 185-206 remain.
+Earlier acceptance and approved platform debt are unchanged.
+Pending rows 193/194 were reversed in the ledger and have been corrected to
+upstream history order. Pin, last accepted row and upstream checkout HEAD
+now agree at aad7bdc4. Next action: process row 185 copy-mode cleanup.
+The following chronology retains rejected candidate evidence before correction.
+Row 184 partial implementation: schema 0.1.0, independent audio/video modes,
+AAC/H.264 fallback and copy-audio loudness suppression. Eleven conversion
+tests pass (d551e329-b3d6-4c97-867d-479172cc82b9); ten protocol/health checks
+pass. Candidate Next e88b2d7 Linux x64 archive SHA256
+8baa0ac5a91acee551a5162e63d84bc3541bf3df6ece4858230ca9481dd6482d is verified.
+Ordinary decoded HLS preserves audio/subtitles (57e06e57-9b85-4157-8011-93d0d98a6763).
+Three mixed copy/transcode cases preserve selected audio and burned subtitle
+fallback (8432063e-6677-4b31-968a-a287940aaea7). These runs require host
+loopback/process permissions; the sandbox-only startup attempt failed.
+Strict infra library Clippy, formatting and progress validation pass.
+Evidence: tmp/ucu09-row184/. Copy runtime matrix passes
+(d95bf35c-7765-4412-aad7-cd68aa5ec143): H.264 coded slices and selected AAC
+frames match source payloads exactly while fallback normalization is bypassed;
+FFV1/PCM input uses H.264/AAC fallback with 640x360 video and 32 kHz stereo
+audio, preserving the selected 880 Hz track; graphics force video transcoding
+while selected AAC payloads remain unchanged. Initial codec fallback failures
+were caused by stale synthetic codec/channel-count metadata, corrected to match
+the generated input without changing product behavior. Five official candidate
+packages and the exact source/Cargo.lock are retained with checksums under
+tmp/ucu09-row184/snapshot/. All five upstream payload architectures and the
+separately retained source license are verified. The missing ARMv7 candidate
+built from unmodified e88b2d7 source with Rust 1.97.1 and Bookworm cross GCC,
+requiring GLIBC 2.34. Its SHA256 is
+030a97227c81aef95c7173e376f8bcd074c6f49ae0f44052ee0889671cbf48f4; archive
+SHA256 812de1531a24331f5a446dd50dac596afe7897bcc68dc15c6ae364876062d960.
+ARMv7 --version passes under emulation; native ARM remains unverified.
+Strict infra test-target Clippy also passes after correcting two test lints.
+Candidate staging passes all 16 offline security/provenance regressions and
+all six real package staging checks. Exact Windows executable SHA256
+a434334173510a77cbe654f93fd6b274abde33d837c195efd8129e9897454baa launches
+natively and reports 0.1.0-e88b2d7; this is executable readiness, not Windows
+application acceptance. Upstream exact-revision build 37461661610 is green.
+Native Windows copy runtime proof now also passes: 320x180 video, 48 kHz mono
+and selected 880 Hz audio remain unchanged despite different fallback settings.
+The subsequent native Windows application run passes all six selected tests
+(54c42a27-43d6-4aa8-8e8e-845fe3939640): exact compressed copy payloads,
+unsupported-codec fallback, graphics/audio-copy independence, mixed copy modes
+with burned captions, JavaScript-selected audio and ordinary HLS subtitle/audio
+retention. Evidence: tmp/ucu09-row184/windows-application.log. This uses the
+production Rust adapter with exact candidate binaries, not a deployed release.
+Final strict infra test-target Clippy, formatting and progress validation pass.
+The 328-test Next compatibility run initially passed 322 checks. Five failures
+were corrected fixture setup (shared FFmpeg resolver and versioned overlays);
+focused checks also prove the new overlay health boundary. One candidate runtime
+regression remains: RTSP startup exceeds the unchanged 30-second limit. The
+accepted 4ad282f binary passes the identical test twice. Diagnostic-only removal
+of e88b2d7's added -shortest passes, as does keeping it with a 0.5-second buffer.
+No such wrapper is used as acceptance or proposed as product integration.
+Canonical analysis and log paths: plans/upstream-catch-up.md, row 184 candidate
+runtime regression section. The maintainer then accepted ADR 0116's narrow
+live-RTSP buffer patch with mandatory removal when upstream has an equivalent
+correction. All 220 upstream pipeline unit tests and all 328 Linux Next
+compatibility checks pass on the actual patched executable. An additional
+decoded RTSP-to-file handoff/EOF regression passes, preserving selected tracks,
+programme timestamps and padded-audio termination (34e72437-2621-42cb-9870-d4305a66f776).
+Strict infra test-target Clippy and four source identity/retirement checks pass.
+Windows rebuilt application acceptance passes all six selected checks
+(4b14a195-3591-45da-a120-72235c5dd4a5). Linux x64/ARMv7/ARM64 and Windows
+archives and payloads are verified; native ARM playback remains unverified.
+Eight source/package guard tests and twenty staging regressions pass. Both macOS
+builds, version startup and packaging pass in terminal run 37503854054 at
+bfa2c5be. All six packages and twelve draft assets are independently verified;
+release 404996006 is published as next-e88b2d7-ersatzrs.1. All twelve published
+asset hashes/sizes match; all six packages stage through the production CLI,
+and the online Linux downloader passes. Twenty-one staging regressions pass.
+Production Burn/Convert HTTP lifecycle, nine-language overlay warning and
+strict web-library Clippy pass. Next copy-mode TSDuck passes 83 checks with
+zero unmarked continuity/timestamp errors and 20 ms maximum audio-pip deviation.
+Its fixture now registers the local library; HLS validation preserves declared
+RFC 8216 discontinuity boundaries and unchanged segment bytes. Five checker
+regressions prove unexpected resets and packet loss still fail. Exact source,
+patch, archive and payload pins are integrated, with mandatory patch retirement
+tracked separately under ADR 0116. Codex source/failure-path review passes.
+Row 184 is Adapt (ADR 0116); baseline and upstream HEAD advance to aad7bdc4.
+Canonical evidence: plans/upstream-catch-up.md, approved temporary correction.
+No intermediate application CI is run; final window and stable-release gates
+remain pending. This checkpoint establishes row acceptance only.
+
 2026-10-01 UCU-09 acceptance closeout: published candidate
 b76d11c65339cd31540ef4d36d016b7e75663c58 has terminal green CI 36900396649.
 Every required job executed successfully: Format, Documentation links, Cargo

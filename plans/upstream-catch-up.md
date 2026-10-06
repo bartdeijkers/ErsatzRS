@@ -1,5 +1,156 @@
 # Upstream ErsatzTV catch-up
 
+## Row 184 source map and acceptance preparation
+
+The 2026-10-06 Codex review starts with upstream `aad7bdc4` and preserves
+all accepted rows through `960421e8`. Row 184 is now accepted at `aad7bdc4`.
+
+- Upstream conversion: `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/ChannelConfigConverter.cs`.
+- Upstream wire schema: `$ERSATZTV_SRC/ErsatzTV.Core/Next/Config/ChannelConfig.cs`.
+- Upstream regressions: `$ERSATZTV_SRC/ErsatzTV.Tests/Streaming/ChannelConfigConverterTests.cs`.
+- Rust wire and mapping: `crates/ersatzrs-infra/src/next_engine/protocol.rs`,
+  `config.rs` and `config_tests.rs` in the same directory.
+- Runtime distribution: `scripts/release/stage-next.py`; its previously pinned
+  `4ad282f` source predates Next copy-mode/schema support. Next introduced the
+  typed copy policy, per-item blockers and channel configuration in commits
+  `0ec1ac0`, `38d035e` and `09d8289`. Upstream currently publishes `e88b2d7`
+  packages for five supported architectures, but no ARMv7 package.
+- Runtime/health and callers must be audited before changing the pin. A newer
+  executable is not accepted merely because it parses the configuration.
+
+Required behavior: emit the channel schema version; select copy/transcode
+independently for audio and video; retain AAC/H.264 fallback configuration for
+copy profiles; suppress loudness normalization for audio copy, as upstream
+explicitly does. The converter does not populate copy_formats, so engine
+codec defaults apply. Unsupported source codecs and copy blockers still need
+transcoding. Preserve the existing supported-codec refusals outside Copy.
+
+Acceptance must include serialization and mixed-mode conversion regressions,
+decoded compatible-source copy, incompatible-source fallback, graphics and
+subtitle burn fallback, selected alternate audio and captions, and normal
+transcode behavior through the production Next path. Runtime pin, package
+checksums, platform provenance and existing approved hardware/platform debt
+must remain explicit. This row does not change the default engine, process
+later ledger rows, or advance the baseline before acceptance.
+
+### Candidate runtime regression (2026-10-06)
+
+The copy-mode and fallback matrices pass on Linux; the exact Windows candidate
+also preserves native copy geometry, sample rate, channel count and selected
+880 Hz audio. The subsequent native Windows Rust application run passes all
+six tests for exact copy payloads, codec fallback, graphics, mixed modes,
+burned captions, JavaScript-selected audio and ordinary HLS
+(`54c42a27-43d6-4aa8-8e8e-845fe3939640`;
+`tmp/ucu09-row184/windows-application.log`). The full Linux Next compatibility
+selection ran 328 tests: 322 passed initially. Three failures were missing fixture FFmpeg resolver configuration;
+two were old unversioned overlay fixtures. Those five pass after fixture fixes,
+and the added version-boundary health checks pass.
+
+One real regression remains: the RTSP source-clock/alternate-audio test fails
+its unchanged 30-second startup limit with candidate `e88b2d7`. The same input
+and published FFmpeg payload pass with accepted Next `4ad282f` (27.1–27.3 seconds
+for the complete HTTP/RTSP matrix). Upstream `4138a67` added unconditional
+`-shortest` to audio-transcoding pipelines. Diagnostic-only wrappers establish
+that removing that option restores the test (27.5 seconds), and retaining it
+with `-shortest_buf_duration 0.5` also passes (31.6 seconds for the full matrix;
+the RTSP startup itself remains within 30 seconds). This does not constitute
+acceptance of a wrapper or a patched distribution. Test timeouts, source GOP,
+product behavior and the accepted runtime pin remain unchanged.
+
+Evidence: `tmp/ucu09-row184/next-compatibility.log`,
+`compatibility-focused.log`, `compatibility-diagnostic.log`,
+`rtsp-old-runtime-comparison.log`, `rtsp-old-diagnostic.log`,
+`rtsp-shortest-diagnostic.log` and `rtsp-small-buffer-diagnostic.log` in that
+same directory. The RTSP fixture now retains its synthetic logs on failure.
+The versioned overlays require an explicit upgrade because legacy
+`format: null` copy semantics changed; health and configuration documentation
+explain the boundary.
+
+### Approved temporary correction (2026-10-06)
+
+The maintainer accepted ADR 0116: a source patch bounds shortest buffering to
+0.5 seconds only for live RTSP video inputs. Existing QSV and audio-copy behavior
+remain intact. The patch must be removed when equivalent upstream behavior
+passes the retained startup and EOF/handoff regressions. The source preparation
+manifest rejects a new revision without a fresh unpatched regression review.
+
+All 220 upstream pipeline unit tests pass. The actual patched Linux executable
+(`0.1.0-e88b2d7-ersatzrs.1`, SHA256
+`b06c89ad83ab19043a9543ba3a2110da3858c05d27647ecf8c48eeb78c67e517`)
+passes all 328 Next compatibility checks, including the original RTSP case at
+27.764 seconds. The additional decoded RTSP-to-file handoff/EOF regression
+passes: selected 880 Hz live audio changes to 440 Hz file audio, followed by
+silence padded only through video EOF; programme timestamps remain increasing
+and output terminates at the expected duration. Run
+`34e72437-2621-42cb-9870-d4305a66f776`; logs
+`tmp/ucu09-row184/patched-next-compatibility.log`, `patched-next-endings.log`
+and `next-patch-unit.log`. Strict infra test-target Clippy passes.
+
+The Windows patched binary also passes all six native application checks
+(`4b14a195-3591-45da-a120-72235c5dd4a5`,
+`tmp/ucu09-row184/patched-windows-application.log`); executable SHA256
+`039b26a1503bf32c226289ad84d58ce45efcd467265f72475791b883a52518c2`.
+Linux x64, ARMv7, ARM64 and Windows candidate archives are built and their
+archive/payload hashes verified under `tmp/ucu09-row184/patched-packages/`.
+All three Linux executables require GLIBC 2.34. Native ARM playback remains
+unverified. Source preparation and packaging have eight passing offline
+identity, retirement, companion and archive regression tests. Twenty staging
+regressions also pass, including all six RIDs, rejection of altered source/patch
+provenance and refusal of unpatched staging paths while a patched pin is active.
+The checked-in Linux reproduction recipe reproduces the accepted ARMv7 payload
+byte-for-byte and enforces the GLIBC baseline. Packaging
+checkpoint `bfa2c5be7ecda379aaa16ffc1739cf0f7d5a30e1` is pushed only to
+`build/next-rtsp-candidate`. Its candidate-only macOS
+[run 37503854054](https://github.com/bartdeijkers/ErsatzRS/actions/runs/37503854054)
+is terminal success for both architectures, including native version startup,
+ad-hoc signature verification and packaging. Independently downloaded macOS
+archives, source identity, patch identity and payload checksums match. This is
+not native macOS application playback acceptance.
+
+The dependency snapshot [next-e88b2d7-ersatzrs.1](https://github.com/bartdeijkers/ErsatzRS/releases/tag/next-e88b2d7-ersatzrs.1)
+is published (release ID `404996006`), with all twelve asset hashes and sizes
+verified after publication. All six packages stage through the production CLI;
+the production online downloader also verifies the published Linux package.
+Twenty-one staging regressions pass, including the manifest/pin agreement.
+The rebuilt Windows executable is unsigned; macOS binaries have ad-hoc loader
+signatures, with no upstream publisher identity or Apple notarization claimed.
+
+Production Next Burn and Convert HTTP/HLS lifecycle smoke passes: selected
+Dutch audio, burned captions/WebVTT, preview, wrapper disconnect, idle cleanup
+and restart. The overlay health message passes all nine languages and strict
+web-library Clippy. Next copy transport acceptance passes 83 TSDuck checks
+across programme transitions, with zero unmarked continuity/timestamp errors
+and a maximum decoded audio-pip deviation of 20 ms. The gate now registers its
+synthetic local library and retains HLS discontinuity boundaries under RFC 8216
+section 3. Five checker regressions prove that unmarked resets and packet loss
+inside a declared group still fail. Raw segment bytes and thresholds are unchanged.
+Evidence under `tmp/ucu09-row184/`: `patched-next-http-smoke.log`,
+`patched-next-convert-smoke.log`, `overlay-localization.log`,
+`clippy-web-localization.log`, `patched-next-copy-tsduck-groups.log`,
+`staging-final.log`, and `published-release-metadata.json`.
+
+Source and failure-path review confirms independent stream modes, retained
+codec fallback, copy-audio loudness suppression, explicit overlay upgrade,
+exact archive/source/patch/payload identity and refusal of unpatched staging
+under the patched pin. Row 184 is accepted as Adapt (ADR 0116); baseline and
+upstream checkout advance to `aad7bdc4`. Row 185 is next. Patch retirement
+remains an explicit maintainer-approved obligation. Application window CI and
+stable-release acceptance remain separate and are not claimed by this checkpoint.
+Release/recovery staging derives the dependency tag from the checked-out source;
+older recovery sources continue to require their accepted snapshot.
+
+The authorized package cleanup removed 12 duplicate archives and 23 obsolete
+or duplicate extracted payloads (257 MiB total), preserving provenance and
+test logs. The accepted six-platform `4ad282f` snapshot, release recovery
+packages and new candidate remain. GitHub retains the still-used published
+`next-4ad282f` dependency release alongside the new accepted snapshot; it cannot be removed until its consumers and
+recovery requirements are resolved. Cleanup manifests are
+`tmp/ucu09-row184/next-package-cleanup.json` and
+`next-extracted-cleanup.json` in the same directory. After publication, another
+133.9 MiB of verified duplicate download/staging files was removed (about
+391 MiB total); source archives, accepted payloads and copied staging provenance
+remain. See `post-publication-cleanup.json`.
+
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
@@ -34,7 +185,9 @@
   Next channel troubleshooting, tag-triggered releases, upstream release
   v26.11.0, Windows Next playout folders and two changelog commits as pending
   rows 199-206; all 198 existing SHA/subject pairs remain an exact prefix.
-  Each refresh retains the existing ledger as an exact prefix.
+  The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
+  match upstream history; all 183 accepted rows remain unchanged. All 206
+  SHA/subject pairs now follow the fetched upstream sequence.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
@@ -5159,7 +5312,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 181 | `76884783` | build: bump ffmpeg to 8.1.2-2 (#3046) | Adapt | ADRs 0008/0063; managed FFmpeg 9 and Next runtime | `fix(next): integrate legacy QSV runtime corrections` | ucu-09; published v2.0.4 at 657482cc, exact public archive hashes, 13 acquisition tests, Linux/Windows decoded runtime proof, migrated production canvas coverage, strict affected lint and Next HTTP smoke pass. Approved hardware debt remains unverified. |
 | 182 | `b6666882` | feat: enable mpeg2video when using next engine (#3047) | Port | Next protocol/config, profile health and HLS variants | `feat(next): support MPEG-2 output` | ucu-09; 13 config/health and six playlist checks, decoded Linux/Windows MPEG-2 with selected audio/subtitles and alpha, preserved H.264 scaling, strict workspace Clippy. Eight-bit projection and required bitrate match Next; incomplete CODECS omitted. |
 | 183 | `960421e8` | fix: remove av1 from ui (#3048) | Adapt | Native pipeline, HLS routing and output health | `fix(ffmpeg): retain compatible native AV1 output` | ucu-09; accepted ADR 0106 preserves AV1 with automatic fMP4, explicit TS/Next rejection and localized guidance. Decoded Linux application and Windows runtime proof, six AV1 regressions, four browser cases, workspace/parity gates, both-engine smoke and 87 TSDuck checks pass. |
-| 184 | `aad7bdc4` | feat: use next copy mode when normalization is disabled (#3049) | | | | ucu-09; provisional: Port (Next channel config schema 0.1.0). Adds a `version` URI, a per-stream `mode` (copy/transcode) with `copy_formats`, keeps transcode settings on copy profiles for items Next cannot copy, and rejects loudness normalization with audio copy. ErsatzRS maps only H264/Hevc/Mpeg2Video and deliberately rejects Copy video and Copy audio (`crates/ersatzrs-infra/src/next_engine/config.rs:124`, asserted by `next_engine/config_tests.rs:71`); `wire` carries no channel-config version or stream mode (`next_engine/protocol.rs:186`). Adopting copy mode must be weighed against that accepted rejection and ADRs 0095/0100. Claude 2026-10-04 triage. |
+| 184 | `aad7bdc4` | feat: use next copy mode when normalization is disabled (#3049) | Adapt (ADR 0116) | upstream-baseline-catch-up | `feat(infra): support Next copy mode with verified runtime` | ucu-09; versioned independent copy/transcode mapping, codec fallback, overlay health upgrade, six-platform patched snapshot with mandatory upstream retirement. 328 Linux compatibility, decoded RTSP handoff/EOF, six Windows application, Burn/Convert HTTP, 83 TSDuck checks, strict lint and published artifact identity pass. Candidate build CI 37503854054 green; application window CI remains pending. |
 | 185 | `e1d2cac0` | fix: cleanup for next copy mode (#3050) | | | | ucu-09; provisional: Port, four parts: an FFmpeg profile change on a channel counts as a playout change; an FFmpeg profile save resyncs Next playouts when the video copy flag or the resolution changes; the multi-variant playlist omits RESOLUTION for copied video, which ErsatzRS always emits (`crates/ersatzrs-web/src/transport/iptv/variant.rs:49`); and Next skips watermark and graphics overlay on copied video to match the legacy engine. Depends on row 184. Claude 2026-10-04 triage. |
 | 186 | `b4a7efe2` | fix: image and remote stream durations using next engine (#3051) | | | | ucu-09; provisional: Port. Introduces one duration-for-playout rule using image metadata duration and the RemoteStream fallback instead of the head version duration (troubleshooting seek and clamp, PlayoutBuilder chapter item, dynamic playout items, Next probe hint), plus a `format_name` hint for still images and AVI so Next stops assuming mpegts. ErsatzRS already sets probe hint `format_name` on some paths (`next_engine/probe_hint.rs:54`, `:113`), so the audit must separate that from the duration gap. Claude 2026-10-04 triage. |
 | 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | | | | ucu-09; provisional: Port, partly covered; highest-value row of this batch because it is native scheduling correctness. (a) Enumerators must not see history queued for removal: ErsatzRS filters this for break content (`crates/ersatzrs-core/src/scheduling/block.rs:1386`) while block item enumerators consume no history at all, so this needs an architecture check rather than a 1:1 port. (b) Removing every history row at a removed item's start is already covered by the set-based `history_to_remove_for_items` (`block.rs:984`). (c) Dropping orphaned history at or after the requested start has no counterpart; `cleanup_history` (`scheduling/mod.rs:1252`) only prunes old rows per key. Claude 2026-10-04 triage. |
@@ -5168,15 +5321,15 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | | | | ucu-09; provisional: Adapt. Upstream bundles ffmpeg/ffprobe inside the macOS app, adds a config element and a locator service that prefers the bundled pair, relaxes the version health check and bumps the Docker base images. ErsatzRS already resolves or downloads one managed ErsatzRS-ffmpeg runtime through its platform locator under ADRs 0008/0063, so only the macOS packaging and health wording need checking, not a second locator. Claude 2026-10-05 triage. |
 | 191 | `fdf3b13c` | build: manual develop workflow (#3055) | | | | ucu-09; provisional: N/A (upstream-only release tooling: a manual develop workflow, develop tag script and artifact/docker workflow split). ErsatzRS keeps its own CI and tag-triggered releases, as rows 179-180 already recorded. Claude 2026-10-05 triage. |
 | 192 | `20c81e63` | fix: unsigned mac ci (#3056) | | | | ucu-09; provisional: N/A (upstream-only CI follow-up to row 191: unsigned macOS artifacts, workflow script cleanup). No product behavior. Claude 2026-10-05 triage. |
-| 193 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; provisional: Port, concrete gap. Upstream stops trusting `format.duration`, which follows the longest stream and can be a subtitle running past the content: it takes the highest-bitrate non-attached video stream duration, else the max over all audio streams when every one is known, and falls back to the Matroska `DURATION`/`DURATION-<lang>` tag parsed by hand because hours may exceed 23 and the fraction has nine digits. ErsatzRS reads `format.duration` (`crates/ersatzrs-infra/src/ffprobe.rs:657`) and its `FfprobeStream` has no per-stream `duration` field (`:957`), so both the stream rule and the tag fallback are missing. Claude 2026-10-05 triage. |
-| 194 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |
+| 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |
+| 194 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; provisional: Port, concrete gap. Upstream stops trusting `format.duration`, which follows the longest stream and can be a subtitle running past the content: it takes the highest-bitrate non-attached video stream duration, else the max over all audio streams when every one is known, and falls back to the Matroska `DURATION`/`DURATION-<lang>` tag parsed by hand because hours may exceed 23 and the fraction has nine digits. ErsatzRS reads `format.duration` (`crates/ersatzrs-infra/src/ffprobe.rs:657`) and its `FfprobeStream` has no per-stream `duration` field (`:957`), so both the stream rule and the tag fallback are missing. Claude 2026-10-05 triage. |
 | 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |
 | 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | | | | ucu-09; provisional: Covered, pending a focused check. Upstream drops the Next exemption in `CustomStreamSelector`, so an embedded text subtitle that has not been extracted is ignored for Next too, exactly as for the legacy engine. ErsatzRS selection and extraction carry no engine-specific exemption (`crates/ersatzrs-infra/src/subtitles.rs:1448` re-extracts on any missing cache file regardless of engine), and row 174 already applied automatic eligibility to both engines, so the audit only has to prove an unextracted embedded text track is skipped rather than selected. Claude 2026-10-05 triage. |
 | 198 | `897a6ef9` | fix: coerce next channels to supported streaming modes (#3062) | | | | ucu-09; provisional: Port. Cached lineup and playlist URLs still carry legacy modes, so upstream coerces `ts-legacy` to `ts` and any non-segmenter playlist mode to `segmenter` for channels on the Next engine, logging the substitution. ErsatzRS refuses instead of coercing: the legacy transport path returns 404 for a Next channel (`crates/ersatzrs-web/src/transport/iptv/stream.rs:280`) while the HLS path branches to the Next handler (`transport/iptv/hls.rs:751`), so a client holding an older URL loses the channel. Claude 2026-10-05 triage. |
 | 199 | `df6ae228` | feat: next output frame rate (#3063) | | | | ucu-09; provisional: Port (channel config schema 0.1.1). Adds an output `frame_rate` to the Next video section, derived from the channel framerate and normalization setting, with a strict converter that rejects decimals, zero and anything above 240 and keeps exact NTSC fractions. ErsatzRS only carries `frame_rate` as a source probe hint (`crates/ersatzrs-infra/src/next_engine/protocol.rs:368`); the channel config's video section has no output frame rate at all, so this depends on the row 184 schema work. Claude 2026-10-06 triage. |
 | 200 | `a3bbf89d` | feat: next engine by default (#3064) | | | | ucu-09; provisional: Adapt under ADR 0095, and deliberately not in full. A migration flips every existing channel to the Next engine and rewrites unsupported streaming modes, new channels default to Next, and legacy-only options are hidden. ErsatzRS keeps the native pipeline primary with Next as an accepted optional second engine, so neither the migration nor the default may be copied; the portable half is the editor hiding options that do not apply to the selected engine. A maintainer decision is needed before any default changes. Claude 2026-10-06 triage. |
-| 201 | `33cabcf1` | fix: next channel troubleshooting (#3065) | | | | ucu-09; provisional: Port. Troubleshooting builds a dedicated Next process over a fixed 30-second window instead of reusing the legacy playout-item path, and the channel framerate query gains an ignore-profile mode so an un-normalized profile still yields a rate. ErsatzRS varies only the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:110`), so this lands on the same surface as pending row 194 and should be audited with it. Claude 2026-10-06 triage. |
+| 201 | `33cabcf1` | fix: next channel troubleshooting (#3065) | | | | ucu-09; provisional: Port. Troubleshooting builds a dedicated Next process over a fixed 30-second window instead of reusing the legacy playout-item path, and the channel framerate query gains an ignore-profile mode so an un-normalized profile still yields a rate. ErsatzRS varies only the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:110`), so this lands on the same surface as pending row 193 and should be audited with it. Claude 2026-10-06 triage. |
 | 202 | `6c7c4e69` | build: release from a pushed tag (#3066) | | | | ucu-09; provisional: N/A (upstream-only release workflow: a prep-release script and a tag-triggered publish). ErsatzRS already releases from a pushed tag with its own CI, as rows 179 and 191 recorded. Claude 2026-10-06 triage. |
 | 203 | `4c03f347` | docs: prep for release v26.11.0 | | | | ucu-09; provisional: N/A (upstream CHANGELOG heading and date for v26.11.0; no source change). Marks the upstream release boundary after the Next-by-default batch, like row 168. Claude 2026-10-06 triage. |
 | 204 | `9e537c1b` | fix: next playout folders on windows (#3067) | | | | ucu-09; provisional: Covered, pending one check. Upstream hardens its `current` junction scheme: removal is guarded, failures no longer throw, and non-Windows hosts get a temporary link replaced atomically. ErsatzRS passes the per-channel playout folder to the engine directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link, so the junction failure mode does not exist; the audit only has to confirm the folder swap is atomic. Claude 2026-10-06 triage. |

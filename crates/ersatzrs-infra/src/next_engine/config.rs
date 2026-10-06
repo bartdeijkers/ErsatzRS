@@ -58,6 +58,7 @@ pub fn channel_config(
     ffprobe_path: &Path,
 ) -> Result<wire::ChannelConfig, ConfigError> {
     Ok(wire::ChannelConfig {
+        version: Some(wire::CHANNEL_VERSION.to_owned()),
         fallback: Some(wire::Fallback {
             show_error: Some(true),
         }),
@@ -87,15 +88,19 @@ pub fn channel_config(
 }
 
 fn audio(profile: &FFmpegProfile) -> Result<wire::Audio, ConfigError> {
+    let copy = profile.audio_format == FFmpegProfileAudioFormat::Copy;
     let format = match profile.audio_format {
-        FFmpegProfileAudioFormat::Aac => wire::AudioFormat::Aac,
+        FFmpegProfileAudioFormat::Aac | FFmpegProfileAudioFormat::Copy => wire::AudioFormat::Aac,
         FFmpegProfileAudioFormat::Ac3 => wire::AudioFormat::Ac3,
         _ => return Err(ConfigError::AudioCodec),
     };
     let sample_rate_hz = positive(profile.audio_sample_rate)
         .map(|rate| rate.checked_mul(1_000).ok_or(ConfigError::SampleRate))
         .transpose()?;
-    let normalize_loudness = profile.normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm;
+    // Upstream ChannelConfigConverter suppresses loudness for audio copy;
+    // retain AAC settings for items that the engine must transcode instead.
+    let normalize_loudness =
+        !copy && profile.normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm;
     if normalize_loudness
         && profile
             .target_loudness
@@ -104,6 +109,11 @@ fn audio(profile: &FFmpegProfile) -> Result<wire::Audio, ConfigError> {
         return Err(ConfigError::Loudness);
     }
     Ok(wire::Audio {
+        mode: if copy {
+            wire::StreamMode::Copy
+        } else {
+            wire::StreamMode::Transcode
+        },
         format,
         bitrate_kbps: positive(profile.audio_bitrate),
         buffer_kbps: positive(profile.audio_buffer_size),
@@ -124,7 +134,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         return Err(ConfigError::HdrOutput);
     }
     let format = match profile.video_format {
-        FFmpegProfileVideoFormat::H264 => wire::VideoFormat::H264,
+        FFmpegProfileVideoFormat::H264 | FFmpegProfileVideoFormat::Copy => wire::VideoFormat::H264,
         FFmpegProfileVideoFormat::Hevc => wire::VideoFormat::Hevc,
         FFmpegProfileVideoFormat::Mpeg2Video => {
             if positive(profile.video_bitrate).is_none() {
@@ -164,6 +174,11 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         FFmpegProfileTonemapAlgorithm::Hable => "hable",
     };
     Ok(wire::Video {
+        mode: if profile.video_format == FFmpegProfileVideoFormat::Copy {
+            wire::StreamMode::Copy
+        } else {
+            wire::StreamMode::Transcode
+        },
         format,
         bit_depth: match (profile.video_format, profile.bit_depth) {
             (FFmpegProfileVideoFormat::Mpeg2Video, _) | (_, FFmpegProfileBitDepth::EightBit) => 8,

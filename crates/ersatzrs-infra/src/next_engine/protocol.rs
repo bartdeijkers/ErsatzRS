@@ -4,9 +4,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
+pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.0";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<Fallback>,
     pub playout: PlayoutFolder,
@@ -65,8 +68,19 @@ pub enum SubtitleMode {
     Convert,
 }
 
+/// Copy eligible source streams and retain encoding settings for fallback items.
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamMode {
+    #[default]
+    Transcode,
+    Copy,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Audio {
+    #[serde(default)]
+    pub mode: StreamMode,
     pub format: AudioFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate_kbps: Option<u32>,
@@ -93,6 +107,8 @@ pub struct Loudness {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Video {
+    #[serde(default)]
+    pub mode: StreamMode,
     pub format: VideoFormat,
     pub bit_depth: u8,
     pub width: u32,

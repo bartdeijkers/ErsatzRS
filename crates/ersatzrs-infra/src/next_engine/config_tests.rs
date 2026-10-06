@@ -48,12 +48,15 @@ fn persisted_profile_maps_units_loudness_resolution_and_video_policy() {
     assert_eq!(
         config["normalization"]["audio"],
         json!({
+            "mode": "transcode",
             "format": "ac3", "bitrate_kbps": 384, "buffer_kbps": 768,
             "channels": 6, "sample_rate_hz": 48000, "normalize_loudness": true,
             "loudness": {"integrated_target": -16.0}
         })
     );
     let video = &config["normalization"]["video"];
+    assert_eq!(config["version"], wire::CHANNEL_VERSION);
+    assert_eq!(video["mode"], "transcode");
     assert_eq!(video["format"], "hevc");
     assert_eq!(video["bit_depth"], 10);
     assert_eq!(video["width"], 1920);
@@ -69,11 +72,53 @@ fn persisted_profile_maps_units_loudness_resolution_and_video_policy() {
 }
 
 #[test]
+fn copy_modes_are_independent_and_retain_transcode_fallback_settings() {
+    for (audio_copy, video_copy) in [(true, true), (true, false), (false, true)] {
+        let mut profile = profile();
+        if audio_copy {
+            profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
+        }
+        if video_copy {
+            profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+        }
+        let config = json_config(&profile);
+        assert_eq!(config["version"], wire::CHANNEL_VERSION);
+        let audio = &config["normalization"]["audio"];
+        let video = &config["normalization"]["video"];
+        assert_eq!(audio["mode"], if audio_copy { "copy" } else { "transcode" });
+        assert_eq!(video["mode"], if video_copy { "copy" } else { "transcode" });
+        assert_eq!(audio["format"], if audio_copy { "aac" } else { "ac3" });
+        assert_eq!(video["format"], if video_copy { "h264" } else { "hevc" });
+        assert_eq!(audio["normalize_loudness"], !audio_copy);
+        assert_eq!(audio.get("loudness").is_some(), !audio_copy);
+        assert_eq!(audio["channels"], 6);
+        assert_eq!(audio["sample_rate_hz"], 48000);
+        assert_eq!(video["width"], 1920);
+        assert_eq!(video["height"], 1080);
+        assert_eq!(video["bitrate_kbps"], 4000);
+        assert_eq!(video["bit_depth"], 10);
+        assert!(audio.get("copy_formats").is_none());
+        assert!(video.get("copy_formats").is_none());
+    }
+}
+
+#[test]
+fn audio_copy_ignores_inactive_loudness_but_transcode_validates_it() {
+    let mut profile = profile();
+    profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
+    profile.profile.target_loudness = Some(f64::NAN);
+    let audio = &json_config(&profile)["normalization"]["audio"];
+    assert_eq!(audio["normalize_loudness"], false);
+    assert!(audio.get("loudness").is_none());
+    profile.profile.audio_format = FFmpegProfileAudioFormat::Aac;
+    assert!(matches!(config(&profile), Err(ConfigError::Loudness)));
+}
+
+#[test]
 fn unsupported_explicit_output_is_rejected_without_codec_or_hdr_fallback() {
     for format in [
         FFmpegProfileVideoFormat::None,
         FFmpegProfileVideoFormat::Av1,
-        FFmpegProfileVideoFormat::Copy,
     ] {
         let mut profile = profile();
         profile.profile.video_format = format;
@@ -81,7 +126,6 @@ fn unsupported_explicit_output_is_rejected_without_codec_or_hdr_fallback() {
     }
     for format in [
         FFmpegProfileAudioFormat::None,
-        FFmpegProfileAudioFormat::Copy,
         FFmpegProfileAudioFormat::AacLatm,
     ] {
         let mut profile = profile();

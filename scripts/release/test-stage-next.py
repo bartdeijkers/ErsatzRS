@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import warnings
 import zipfile
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("stage_next", Path(__file__).with_name("stage-next.py"))
 module = importlib.util.module_from_spec(spec)
@@ -57,8 +58,29 @@ def fixture(rid, missing=False, link=False):
     return {"id": 1, "assets": [asset]}, data
 
 
+class AcceptedSourceTests(unittest.TestCase):
+    def test_active_patch_pin_matches_reviewed_manifest(self):
+        if module.PATCHED_DISTRIBUTION_VERSION is None:
+            self.skipTest("No active source patch")
+        manifest = json.loads(Path(__file__).with_name('next-patches').joinpath('manifest.json').read_text())
+        self.assertEqual(module.PINNED_REVISION, manifest['upstream_revision'])
+        self.assertEqual(module.SOURCE_ARCHIVE_SHA256, manifest['source_archive_sha256'])
+        self.assertEqual(module.SOURCE_LOCK_SHA256, manifest['source_lock_sha256'])
+        self.assertEqual(module.PATCHED_DISTRIBUTION_VERSION, manifest['distribution_version'])
+        self.assertEqual(module.PINNED_PATCHES,
+                         [{key: item[key] for key in ('file', 'sha256')} for item in manifest['patches']])
+        for rid in module.PLATFORMS:
+            suffix = '.zip' if rid == 'win-x64' else '.tar.gz'
+            name = f'ersatzrs-next-{module.PATCHED_DISTRIBUTION_VERSION}-{rid}{suffix}'
+            self.assertRegex(module.PINNED_HASHES[name], r'^[0-9a-f]{64}$')
+
+
 class StageNextTests(unittest.TestCase):
     def setUp(self):
+        # Keep the official-artifact path covered for ADR 0116 patch retirement.
+        official = patch.object(module, "PATCHED_DISTRIBUTION_VERSION", None)
+        official.start()
+        self.addCleanup(official.stop)
         original = module.PINNED_HASHES.copy()
         self.addCleanup(lambda: (module.PINNED_HASHES.clear(), module.PINNED_HASHES.update(original)))
         module.PINNED_HASHES["LICENSE"] = hashlib.sha256(b"MIT License\nSynthetic copyright notice\n").hexdigest()
@@ -192,7 +214,7 @@ class StageNextTests(unittest.TestCase):
             folder = Path(temp)
             source, origin = self.source_fixture(folder)
             buffer = io.BytesIO()
-            name = "ersatzrs-next-4ad282f-linux-arm.tar.gz"
+            name = f"ersatzrs-next-{module.PINNED_REVISION[:7]}-linux-arm.tar.gz"
             with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
                 for path in source.iterdir():
                     archive.add(path, arcname=name[:-7] + "/" + path.name)
@@ -277,6 +299,109 @@ class StageNextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(ValueError, "accepted source build"):
                 self.stage(Path(temp), rid="linux-arm")
+
+
+class PatchedSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        values = {
+            "PATCHED_DISTRIBUTION_VERSION": "0.1.0-fixture-ersatzrs.1",
+            "PINNED_PATCHES": [{"file": "fix.patch", "sha256": "a" * 64}],
+            "PINNED_HASHES": {"LICENSE": hashlib.sha256(b"fixture license").hexdigest()},
+        }
+        for name, value in values.items():
+            mock = patch.object(module, name, value)
+            mock.start()
+            self.addCleanup(mock.stop)
+
+    def archive(self, rid, defect=None):
+        binary = "ersatztv-channel.exe" if rid == "win-x64" else "ersatztv-channel"
+        files = {binary: b"fixture binary", "LICENSE": b"fixture license"}
+        if rid == "win-x64":
+            files.update({name: b"fixture companion" for name in module.WINDOWS_COMPANIONS})
+        origin = {
+            "kind": "patched-source-build", "repository": module.REPOSITORY,
+            "source_revision": module.PINNED_REVISION, "rid": rid, "target": module.TARGETS[rid],
+            "source_archive_sha256": module.SOURCE_ARCHIVE_SHA256,
+            "cargo_lock_sha256": module.SOURCE_LOCK_SHA256,
+            "distribution_version": module.PATCHED_DISTRIBUTION_VERSION,
+            "patches": module.PINNED_PATCHES,
+            "payload_sha256": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+        }
+        if defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target"):
+            origin[defect] = "unreviewed"
+        elif defect == "payload":
+            files[binary] = b"changed payload"
+        elif defect == "license":
+            files["LICENSE"] = b"changed license"
+            origin["payload_sha256"]["LICENSE"] = hashlib.sha256(files["LICENSE"]).hexdigest()
+        elif defect == "missing-companion":
+            del files["libvpl.dll"]
+        files["origin.json"] = json.dumps(origin).encode()
+        prefix = f"ersatzrs-next-{module.PATCHED_DISTRIBUTION_VERSION}-{rid}"
+        buffer = io.BytesIO()
+        if rid == "win-x64":
+            with zipfile.ZipFile(buffer, "w") as bundle:
+                for name, data in files.items():
+                    info = zipfile.ZipInfo(prefix + "/" + name)
+                    info.external_attr = (0o120777 if defect == "link" and name == binary else 0o100755) << 16
+                    bundle.writestr(info, data)
+        else:
+            with tarfile.open(fileobj=buffer, mode="w:gz") as bundle:
+                for name, data in files.items():
+                    info = tarfile.TarInfo(prefix + "/" + name)
+                    info.size = len(data)
+                    if defect == "link" and name == binary:
+                        info.type = tarfile.SYMTYPE
+                        info.linkname = "../../outside"
+                    bundle.addfile(info, io.BytesIO(data))
+        name = prefix + (".zip" if rid == "win-x64" else ".tar.gz")
+        data = buffer.getvalue()
+        module.PINNED_HASHES[name] = hashlib.sha256(data).hexdigest()
+        return data
+
+    def test_all_six_platforms_preserve_patch_and_payload_identity(self):
+        for rid in module.PLATFORMS:
+            with self.subTest(rid=rid):
+                data = self.archive(rid)
+                out = self.root / rid
+                module.stage_patched_snapshot(rid, out, fetch=lambda url, limit: data)
+                origin = json.loads((out / "origin.json").read_text())
+                self.assertEqual(origin["patches"], module.PINNED_PATCHES)
+                self.assertEqual(origin["rid"], rid)
+                self.assertEqual(origin["distribution_tag"], module.DISTRIBUTION_TAG)
+                for name, digest in origin["payload_sha256"].items():
+                    self.assertEqual(hashlib.sha256((out / name).read_bytes()).hexdigest(), digest)
+                with self.assertRaisesRegex(ValueError, "already exists"):
+                    module.stage_patched_snapshot(rid, out, fetch=lambda url, limit: data)
+
+    def test_invalid_archive_or_provenance_never_publishes_partial_stage(self):
+        for rid in ("linux-arm", "win-x64"):
+            for defect in ("patches", "source_revision", "cargo_lock_sha256", "rid", "target", "payload", "license", "link", "checksum"):
+                with self.subTest(rid=rid, defect=defect):
+                    data = self.archive(rid, defect)
+                    if defect == "checksum":
+                        data += b"changed"
+                    out = self.root / rid
+                    with self.assertRaises(ValueError):
+                        module.stage_patched_snapshot(rid, out, fetch=lambda url, limit: data)
+                    self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_missing_windows_companion_is_rejected(self):
+        data = self.archive("win-x64", "missing-companion")
+        with self.assertRaises(ValueError):
+            module.stage_patched_snapshot("win-x64", self.root / "next", fetch=lambda url, limit: data)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_patched_pin_cannot_use_unpatched_staging_paths(self):
+        with self.assertRaisesRegex(ValueError, "requires the patched snapshot"):
+            module.stage({}, "linux-x64", self.root / "next")
+        with self.assertRaisesRegex(ValueError, "requires the patched snapshot"):
+            module.stage_arm_snapshot(self.root / "next")
+        with self.assertRaisesRegex(ValueError, "requires the patched snapshot"):
+            module.stage_source_build(self.root, "linux-arm", self.root / "next")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ def sha(path):
 
 
 def build(work, output, archive=None):
+    if stage_next.PATCHED_DISTRIBUTION_VERSION:
+        raise ValueError("The accepted patched Next runtime requires docker/next-source.Dockerfile (ADR 0116)")
     work, output = Path(work).resolve(), Path(output).resolve()
     if output.exists():
         raise ValueError("Next output already exists")

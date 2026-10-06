@@ -1,0 +1,18 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "e88b2d7e445308f33996bbb12474949c2e31f348",
+  "source_archive_sha256": "999585876402095b7448a05201f15a22babbe1463f57cef0fa5d8d07023e3b6b",
+  "source_lock_sha256": "abf9a7d03c93a4e1602d421f2cad4f1295edadaae9f5e50a13b7b24be0072fd8",
+  "distribution_version": "0.1.0-e88b2d7-ersatzrs.1",
+  "adr": "0116",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "75c2b4d7128e140f65322978c8fc6d144638aee24c22e19512f9b746ba8b88f0",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "e88b2d7e445308f33996bbb12474949c2e31f348",
+      "unpatched_regression": "fails: next_engine::process::runtime_tests::text_subtitle_runtime_tests::direct_remote_runtime::real_next_direct_http_and_rtsp_preserve_audio_and_source_clock; unchanged 30-second startup deadline",
+      "evidence": "plans/upstream-catch-up.md"
+    }
+  ]
+}

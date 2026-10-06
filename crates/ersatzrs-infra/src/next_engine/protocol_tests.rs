@@ -92,11 +92,13 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
         "normalization": {
             "subtitle": {"mode": "burn"},
             "audio": {
+                "mode": "transcode",
                 "format": "ac3", "bitrate_kbps": 192, "buffer_kbps": 384,
                 "channels": 2, "sample_rate_hz": 48000, "normalize_loudness": true,
                 "loudness": {"integrated_target": -16.0}
             },
             "video": {
+                "mode": "transcode",
                 "format": "hevc", "bit_depth": 10, "width": 1920, "height": 1080,
                 "scaling_mode": "scale_and_pad", "deinterlace": false,
                 "bitrate_kbps": 2000, "buffer_kbps": 4000, "accel": "vaapi",

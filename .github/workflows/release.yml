@@ -483,7 +483,9 @@ jobs:
       - name: Stage pinned Next snapshot for Docker
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download next-4ad282f --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
+        run: |
+          next_tag=$(python3 -c 'import runpy; print(runpy.run_path("scripts/release/stage-next.py")["DISTRIBUTION_TAG"])')
+          gh release download "$next_tag" --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
 
       - name: Build and push multi-arch image
         uses: docker/bake-action@v7

@@ -126,6 +126,8 @@ async fn fixture_child_native_logos() {
     };
     let _isolated = prepared_artifact_runtime::temporary_root().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(ffmpeg.to_str().unwrap(), ffprobe.to_str().unwrap());
     let root = tempfile::tempdir().unwrap();
     let clip = generate_text_clip(&ffmpeg, root.path()).await;
     let image = root.path().join("red.png");
@@ -246,6 +248,7 @@ async fn watermark_runtime_layers(remote_logo: bool, generated_logo: bool, layer
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_tools(ffmpeg.to_str().unwrap(), ffprobe.to_str().unwrap());
     let root = tempfile::tempdir().unwrap();
     let clip = generate_text_clip(&ffmpeg, root.path()).await;
     let image = root.path().join("red.png");

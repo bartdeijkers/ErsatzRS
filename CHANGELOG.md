@@ -15,6 +15,22 @@ release section when tagging a release.
 
 ### Fixed
 
+- Pin a temporary, revision-verified Next source correction for live RTSP
+  startup buffering (ADR 0116). It preserves padded-audio termination and
+  requires removal when an equivalent upstream correction passes acceptance;
+  all six platform packages retain verified source, patch and payload hashes.
+
+- Support Next copy-mode configuration with independent audio/video selection,
+  transcode fallback settings and audio-copy loudness suppression. Runtime
+  integration passes Linux/Windows playback and transport acceptance.
+  **Breaking for existing Next configuration overlays:** each overlay requires
+  a supported channel schema version; legacy `format: null` copy requests must
+  be reviewed and expressed with `mode: copy`. Health reports incompatible
+  versions before playback startup.
+
+- Reopen upstream catch-up for 23 newer ErsatzTV commits and correct pending
+  ledger ordering while preserving the previously accepted baseline.
+
 - Apply exact Image/Motion pixel placement in native rendering and previews,
   overriding anchors, percentage margins and source-content padding. Preserve
   authored Motion alpha/timing through YAML and show long titles with independent

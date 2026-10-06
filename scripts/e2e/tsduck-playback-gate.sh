@@ -27,7 +27,8 @@
 #
 # Exit status is 0 only if every check passed — wire it as a gate.
 #
-# Common flags: --seconds N  --keep  --frames  -h|--help
+# Common flags: --seconds N  --keep  --frames  --next-copy  -h|--help
+# --next-copy selects Next copy profiles and its supported Hybrid/HLS outputs.
 # Thresholds are environment-overridable; see scripts/e2e/README.md.
 
 set -uo pipefail
@@ -37,7 +38,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=scripts/e2e/tsduck-checks.sh
 source "$SCRIPT_DIR/tsduck-checks.sh"
 
-LISTEN_ADDR="127.0.0.1:8409"
+LISTEN_ADDR="127.0.0.1:${ERSATZRS_SMOKE_PORT:-8409}"
 BASE_URL="http://${LISTEN_ADDR}"
 CALIB_DIR="$REPO_ROOT/calibration-clips"
 CAPTURE_SECONDS="${CAPTURE_SECONDS:-20}"   # per-pipeline live capture window
@@ -46,6 +47,7 @@ MAX_AUDIO_PIP_GAP_DEVIATION_MS="${MAX_AUDIO_PIP_GAP_DEVIATION_MS:-150}"
 DELIVERY_MONITOR_INTERVAL_SECONDS="${DELIVERY_MONITOR_INTERVAL_SECONDS:-12}"
 KEEP=0
 FRAMES=0
+NEXT_COPY=0
 CAPTURE_TOTAL_SECONDS=0
 CAPTURE_MONITOR_LOG=""
 
@@ -346,6 +348,7 @@ INSERT INTO "ConfigElement" ("Key","Value") VALUES ('ffmpeg.segmenter.initial_se
 INSERT INTO "MediaSource" ("Id") VALUES (1);
 INSERT INTO "LocalMediaSource" ("Id") VALUES (1);
 INSERT INTO "Library" ("Id","Name","MediaKind","MediaSourceId") VALUES (1,'Calibration Movies',1,1);
+INSERT INTO "LocalLibrary" ("Id") VALUES (1);
 INSERT INTO "LibraryPath" ("Id","Path","LibraryId","LastScan") VALUES (1,'$calib_db_path','1','$da');
 INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed","OnDemandCheckpoint") VALUES (1,$chid,0,1,'$(date -u -d "@$t0" '+%Y-%m-%d %H:%M:%S')');
 SQL
@@ -382,6 +385,14 @@ UPDATE "Channel" SET "StreamingMode"=5,"IdleBehavior"=0,"PlayoutMode"=0,"IsEnabl
 COMMIT;
 SQL
   } | sqlite3 "$db" || die "seeding failed"
+  if [ "$NEXT_COPY" = 1 ]; then
+    sqlite3 "$db" <<SQL || die "Next copy seed failed"
+UPDATE "Channel" SET "StreamingEngine"=1, "SubtitleMode"=0 WHERE "Id"=$chid;
+UPDATE "FFmpegProfile" SET "VideoFormat"=99, "AudioFormat"=99, "HardwareAcceleration"=0
+WHERE "Id"=(SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=$chid);
+SQL
+    info "Next engine selected with independent video/audio copy modes"
+  fi
   info "seeded channel $channel ($chid): cyclic 1→2→3 playout, ${ITEM_SECONDS}s items"
 }
 
@@ -392,7 +403,7 @@ mode_gate() {
 
   local code; code="$(http_status "$BASE_URL/healthz")"
   if [ "$code" != 000 ]; then
-    die "$LISTEN_ADDR already serving (HTTP $code) — another ersatzrs-web (or another agent's) is running. The port is hardcoded to 8409; stop that server, or use 'url' mode against it instead."
+    die "$LISTEN_ADDR already serving (HTTP $code) — select a free ERSATZRS_SMOKE_PORT or use 'url' mode against that server."
   fi
 
   WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/tsduck-gate.XXXXXX")"
@@ -414,7 +425,9 @@ mode_gate() {
   server_home="$(host_path "$WORKDIR")"
 
   info "booting server (db=$server_db)…"
-  DATABASE_URL="sqlite:$server_db" HOME="$server_home" TEMP="$server_home" TMP="$server_home" TMPDIR="$server_home" \
+  DATABASE_URL="sqlite:$server_db" ERSATZRS_DATABASE__URL="sqlite:$server_db" ErsatzRS_DATABASE__URL="sqlite:$server_db" \
+    ERSATZRS_APP_DATA_DIR="$server_home/data" ERSATZRS_APP_STATE_DIR="$server_home/state" \
+    LEPTOS_SITE_ADDR="$LISTEN_ADDR" TEMP="$server_home" TMP="$server_home" TMPDIR="$server_home" \
     RUST_LOG="${RUST_LOG:-info,ersatzrs_infra::hls_worker=debug,ersatzrs_web::transport::iptv=debug}" \
     "$bin" >"$log" 2>&1 &
   SERVER_PID=$!
@@ -425,7 +438,9 @@ mode_gate() {
 
   # --- MPEG-TS pipelines ---
   local cap
-  for spec in "ts-legacy:legacy concat" "ts:hybrid wrapper"; do
+  local specs=("ts-legacy:legacy concat" "ts:hybrid wrapper")
+  [ "$NEXT_COPY" = 1 ] && specs=("ts:Next hybrid wrapper")
+  for spec in "${specs[@]}"; do
     local mode="${spec%%:*}" desc="${spec#*:}"
     cap="$WORKDIR/ts_${mode}.ts"
     printf '\n=== pipeline: MPEG-TS (%s, ?mode=%s) ===\n' "$desc" "$mode"
@@ -445,7 +460,21 @@ mode_gate() {
   if wait_for "$seg_pl" "#EXTINF" 45; then
     check_hls_playlist "$seg_pl" "hls-segmenter"
     cap="$WORKDIR/hls_segmenter.ts"
-    if capture_stream hls "$seg_pl" "$CAPTURE_SECONDS" "$cap"; then
+    if [ "$NEXT_COPY" = 1 ]; then
+      local py group groups="$WORKDIR/hls-groups"
+      py="$(python_cmd)" || die "Python is required for HLS boundary capture"
+      if "$py" "$SCRIPT_DIR/capture-hls-groups.py" "$seg_pl" "$CAPTURE_SECONDS" "$groups"; then
+        # Preserve RFC 8216 discontinuities; never repair counters or permit
+        # errors within a group, including its unmarked segment boundaries.
+        for group in "$groups"/group-*.ts; do
+          validate_ts "$group" "hls-$(basename "$group" .ts)"
+        done
+        check_audio_pip_cadence "$groups/capture.ts" "hls-segmenter"
+        grab_frames "$groups/capture.ts" "$WORKDIR/frame_hls_segmenter"
+      else
+        fail "hls-segmenter · capture" "could not retain HLS discontinuity groups"
+      fi
+    elif capture_stream hls "$seg_pl" "$CAPTURE_SECONDS" "$cap"; then
       validate_ts "$cap" "hls-segmenter"
       check_audio_pip_cadence "$cap" "hls-segmenter"
       grab_frames "$cap" "$WORKDIR/frame_hls_segmenter"
@@ -457,22 +486,24 @@ mode_gate() {
   fi
 
   # --- HLS direct ---
-  printf '\n=== pipeline: HLS direct (?mode=hls-direct) ===\n'
-  curl -fsS --max-time 10 "$BASE_URL/iptv/channel/$channel.m3u8?mode=hls-direct" >/dev/null 2>&1 \
-    && pass "hls-direct · variant playlist served" || fail "hls-direct · variant playlist"
-  # The public direct mode uses the stable segmenter-backed delivery contract;
-  # its channel URL is a master playlist, just like mode=segmenter above.
-  local direct_pl="$BASE_URL/iptv/session/$channel/hls.m3u8"
-  if wait_for "$direct_pl" "#EXTINF" 20; then
-    check_hls_playlist "$direct_pl" "hls-direct"
-    cap="$WORKDIR/hls_direct.ts"
-    if capture_stream hls "$direct_pl" "$CAPTURE_SECONDS" "$cap"; then
-      validate_ts "$cap" "hls-direct"
+  if [ "$NEXT_COPY" != 1 ]; then
+    printf '\n=== pipeline: HLS direct (?mode=hls-direct) ===\n'
+    curl -fsS --max-time 10 "$BASE_URL/iptv/channel/$channel.m3u8?mode=hls-direct" >/dev/null 2>&1 \
+      && pass "hls-direct · variant playlist served" || fail "hls-direct · variant playlist"
+    # The public direct mode uses the stable segmenter-backed delivery contract;
+    # its channel URL is a master playlist, just like mode=segmenter above.
+    local direct_pl="$BASE_URL/iptv/session/$channel/hls.m3u8"
+    if wait_for "$direct_pl" "#EXTINF" 20; then
+      check_hls_playlist "$direct_pl" "hls-direct"
+      cap="$WORKDIR/hls_direct.ts"
+      if capture_stream hls "$direct_pl" "$CAPTURE_SECONDS" "$cap"; then
+        validate_ts "$cap" "hls-direct"
+      else
+        fail "hls-direct · capture" "failed, empty, or incomplete capture"
+      fi
     else
-      fail "hls-direct · capture" "failed, empty, or incomplete capture"
+      fail "hls-direct · segments" "session playlist had no #EXTINF within 20s (log: $log)"
     fi
-  else
-    fail "hls-direct · segments" "session playlist had no #EXTINF within 20s (log: $log)"
   fi
 
   # --- server log must be free of known runtime-failure signatures ---
@@ -483,6 +514,7 @@ mode_gate() {
     "hls segmenter did not produce initial playlist segments before timeout"
     "Impossible to convert between the formats" "Error submitting packet to decoder"
     "Decode error rate" "no active playout item" "channel has no playback ffmpeg profile"
+    "Next session failed"
   )
   local hit=0 s
   for s in "${sigs[@]}"; do
@@ -507,6 +539,7 @@ main() {
       --item-seconds) ITEM_SECONDS="$2"; shift 2 ;;
       --keep) KEEP=1; shift ;;
       --frames) FRAMES=1; shift ;;
+      --next-copy) NEXT_COPY=1; shift ;;
       baseline|url|gate) cmd="$1"; shift ;;
       *) args+=("$1"); shift ;;
     esac

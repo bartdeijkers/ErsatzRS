@@ -59,7 +59,7 @@ async fn error_card_case(mode: wire::SubtitleMode, enabled: bool, failed_media: 
     if !enabled {
         tokio::fs::write(
             overlays.join("default.json"),
-            br#"{"fallback":{"show_error":false}}"#,
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.0","fallback":{"show_error":false}}"#,
         )
         .await
         .unwrap();
