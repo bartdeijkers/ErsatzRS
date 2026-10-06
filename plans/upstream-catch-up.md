@@ -215,9 +215,9 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-06): `d55be01f1b7d8e72e68445ab9d2022421a86518d`
-  — docs: tweak changelog.
-- Ledger: **206 commits**, **23 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-10-06): `46118d4345a1d2f4a4b2c0b0e5dcbcbe0e0bba8a`
+  — docs: prep for release v26.11.1.
+- Ledger: **208 commits**, **23 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -246,6 +246,9 @@ remain. See `post-publication-cleanup.json`.
   Next channel troubleshooting, tag-triggered releases, upstream release
   v26.11.0, Windows Next playout folders and two changelog commits as pending
   rows 199-206; all 198 existing SHA/subject pairs remain an exact prefix.
+  A later 2026-10-06 refresh appends an upstream changelog update and release
+  v26.11.1 as pending rows 207-208; all 206 existing SHA/subject pairs remain an
+  exact prefix.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
@@ -5396,3 +5399,5 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 204 | `9e537c1b` | fix: next playout folders on windows (#3067) | | | | ucu-09; provisional: Covered, pending one check. Upstream hardens its `current` junction scheme: removal is guarded, failures no longer throw, and non-Windows hosts get a temporary link replaced atomically. ErsatzRS passes the per-channel playout folder to the engine directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link, so the junction failure mode does not exist; the audit only has to confirm the folder swap is atomic. Claude 2026-10-06 triage. |
 | 205 | `2d79d196` | docs: update changelog for next fix | | | | ucu-09; provisional: N/A (one upstream CHANGELOG line for row 204). Claude 2026-10-06 triage. |
 | 206 | `d55be01f` | docs: tweak changelog | | | | ucu-09; provisional: N/A (upstream CHANGELOG wording only). Claude 2026-10-06 triage. |
+| 207 | `47d7716a` | docs: update changelog for next fix | | | | ucu-09; provisional: N/A for the diff (three upstream CHANGELOG lines; no source change). Worth carrying into the FFmpeg audit as an observation, not a row: the entry reports that the iHD, i965 and AMD VAAPI drivers ignore the requested pad colour, so the Next build pads in software. ErsatzRS pads through its own VAAPI filter chain, so whether the same green padding appears on BT.2020 content belongs with the accepted hardware debt rather than with this row. Claude 2026-10-06 triage. |
+| 208 | `46118d43` | docs: prep for release v26.11.1 | | | | ucu-09; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.1; no source change), like rows 168 and 203. Claude 2026-10-06 triage. |
