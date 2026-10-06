@@ -215,7 +215,7 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-06): `46118d4345a1d2f4a4b2c0b0e5dcbcbe0e0bba8a`
+- Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
   — docs: prep for release v26.11.1.
 - Ledger: **208 commits**, **23 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
