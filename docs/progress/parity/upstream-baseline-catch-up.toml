@@ -70,7 +70,7 @@ id = 'ucu09-row186-media-duration'
 adr = '0117'
 description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
 discovered = '2026-10-06'
-evidence = '18 focused and 64 scheduling repository tests pass. Decoded PNG/JPEG/BMP/TIFF and AVI fallback pass. Published Next ends single-frame WebP/GIF early despite correct hints. At maintainer request, accepted ADR 0117 consolidates qualifying UCU-09 Next corrections into one approval with mandatory upstream retirement. UCU-09 owns the animation evidence and forward source audit, including upstream 0362692; row186 and its baseline remain pending.'
+evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint, all six static image formats and complete finite-GIF animation across repeated cycles. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions; a four-line correction and an extension to the same ADR are proposed, not built or accepted. Row186 and its baseline remain pending.'
 resolved = false
 
 [[debt]]

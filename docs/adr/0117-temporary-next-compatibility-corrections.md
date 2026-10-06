@@ -9,7 +9,10 @@ bounded by upstream v26.11.1, not later releases.
 
 ## Implementation
 
-Not implemented
+Partial — a candidate patch distinguishes static WebP from animated WebP and
+repeats complete GIF cycles. All six static image formats and a finite GIF
+animation pass decoded Linux application checks. Production packages are
+unchanged; finite animated WebP remains blocked by FFmpeg demuxer seeking.
 
 ## Context
 
@@ -149,6 +152,34 @@ known before runtime acceptance. Required tests, transparent scope and source
 identity control that uncertainty. Row 186 and ordered catch-up remain open
 until runtime acceptance is complete. Acceptance authorizes the work; it does
 not claim that replacement packages or their verification are complete.
+
+### Proposed FFmpeg extension
+
+This amendment is proposed, not accepted. The accepted policy above still
+excludes FFmpeg rebuilds and releases until the maintainer accepts this extension.
+
+Finite animated WebP exposes a defect in the existing FFmpeg demuxer at source
+revision `d32b387f2b0a484599d4587d651891f0c63c4238`. Its packet positions point
+eight bytes beyond each ANMF chunk header, into the payload. Generic rewind
+seeks there, although the demuxer expects a chunk header; bounded repeat fails.
+The native infinite-loop path seeks to the correct header and decodes all frames.
+Evidence and a four-line candidate correction are retained in
+`tmp/ucu09-row186/animation-audit/webp-packet-offsets.json` and
+`tmp/ucu09-row186/ffmpeg-review/0001-correct-animated-webp-seek-position.patch`.
+The correction has not been built or runtime-verified.
+
+Propose extending this same decision to the minimal FFmpeg animated-WebP
+demuxer correction, its implementation, commit/push, CI and publication of
+verified replacement Linux/Windows packages as v2.0.6. Reuse existing verified
+inputs and build caches; adopt immutable version/checksum pins only after
+acceptance. This exception adds no unrelated FFmpeg changes or platform waiver.
+
+Require decoded finite/infinite animation, fractional seeking, scheduled
+termination and cleanup, plus relevant graphics, audio and subtitle regressions
+on Linux and Windows. Existing approved platform/hardware debt remains unchanged.
+Track source/patch/payload hashes and remove the correction independently once
+equivalent upstream behavior passes these checks, following the retirement
+policy above. A build or publication alone does not accept row 186.
 
 ## Alternatives Considered
 

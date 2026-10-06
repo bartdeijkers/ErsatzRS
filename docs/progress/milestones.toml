@@ -11436,8 +11436,25 @@ the fixture's one-play limit. Generic stream_loop=1 also yields only four
 frames with a demuxer rewind warning; forcing image2 fails decoding and is
 rejected. Retained evidence: tmp/ucu09-row186/animation-audit/finite-loop-results.json.
 Native infinite-loop success alone is insufficient for row186 acceptance.
-Continue the bounded replay investigation before selecting the Next patch;
-no new FFmpeg build or acceptance exception is claimed.
+Candidate Next patch 0002 now distinguishes static WebP from animation and
+repeats complete GIF cycles. All 222 ffpipeline unit tests pass
+(cfe6c1c1-8101-420d-a406-69a50687e7a3); strict all-feature/all-target pipeline
+Clippy and nightly formatting pass. Real application checks pass PNG, JPEG,
+BMP, TIFF, static WebP and GIF with silent AAC and cleanup
+(1be5b606-91ab-42d8-8134-ce5960e965ea). The new finite GIF regression decodes
+all four colors in forward order across two complete cycles
+(5961fac2-eee2-4dd8-85d5-9be82255918c). Infrastructure strict all-target Clippy
+passes. Evidence: tmp/ucu09-row186/next-image-unit.log,
+next-image-candidate-runtime.log, next-gif-animation-runtime-final.log and
+animation-test-clippy.log. Production manifest and package pin remain unchanged.
+The remaining finite animated-WebP failure is traced to FFmpeg packet positions
+eight bytes past ANMF chunk headers at source d32b387f2b0a484599d4587d651891f0c63c4238.
+The four-line correction in tmp/ucu09-row186/ffmpeg-review/ is a reviewable
+proposal, not built or runtime-verified. ADR0117 records a proposed extension
+because its accepted scope explicitly excludes FFmpeg rebuilds/releases.
+Next action: obtain the maintainer decision on that extension, then prove
+animated WebP and finish the existing row186 acceptance gates. No FFmpeg build,
+publication, acceptance exception or baseline advancement is claimed.
 
 2026-10-06 reopened under the existing latest-tip acceptance clause: fetched
 origin/main is d55be01f1b7d8e72e68445ab9d2022421a86518d. Rows 184-206 are

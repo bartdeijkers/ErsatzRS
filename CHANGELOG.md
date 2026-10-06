@@ -22,6 +22,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prepare a temporary Next correction that holds static WebP and repeats complete
+  GIF animations for the scheduled duration, with decoded regression coverage.
+  Replacement packages and finite animated-WebP acceptance remain pending.
+
 - Use image metadata and remote-stream fallback durations consistently for
   scheduling, troubleshooting and Next input hints; identify BMP, TIFF, WebP,
   GIF and AVI inputs explicitly. Runtime acceptance is in progress.

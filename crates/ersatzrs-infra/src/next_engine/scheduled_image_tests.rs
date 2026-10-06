@@ -67,8 +67,22 @@ async fn prepare_image(
 ) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
     let image = root.join(format!("still.{extension}"));
     let mut generate = Command::new(ffmpeg);
-    generate
-        .args([
+    if extension == "animated.gif" {
+        for color in ["blue", "lime", "red", "yellow"] {
+            generate.args(["-f", "lavfi", "-i"]);
+            generate.arg(format!("color=c={color}:s=320x180:r=4:d=0.5"));
+        }
+        generate.args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-filter_complex",
+            "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0",
+            "-loop",
+            "1",
+        ]);
+    } else {
+        generate.args([
             "-v",
             "error",
             "-nostdin",
@@ -78,8 +92,9 @@ async fn prepare_image(
             "color=c=blue:s=320x180",
             "-frames:v",
             "1",
-        ])
-        .arg(&image);
+        ]);
+    }
+    generate.arg(&image);
     tool(generate).await;
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::H264,
@@ -137,6 +152,12 @@ async fn real_next_scheduled_webp_holds_picture_with_silent_audio() {
 #[ignore = "requires published Next and FFmpeg 9; validates GIF hold duration"]
 async fn real_next_scheduled_gif_holds_picture_with_silent_audio() {
     run_image("gif").await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Next and FFmpeg 9; decodes finite GIF animation after source EOF"]
+async fn real_next_scheduled_gif_preserves_all_frames_and_repeats_animation() {
+    run_image("animated.gif").await;
 }
 
 async fn run_image(extension: &str) {
@@ -216,7 +237,57 @@ async fn run_image(extension: &str) {
         retained.display()
     );
     assert_audio_and_subtitle(&ffmpeg, &ffprobe, &saved, true, "aac").await;
-    assert_blue_picture(&ffmpeg, &saved).await;
+    if extension == "animated.gif" {
+        assert_animation_cycle(&ffmpeg, &saved).await;
+    } else {
+        assert_blue_picture(&ffmpeg, &saved).await;
+    }
+}
+
+async fn assert_animation_cycle(ffmpeg: &Path, saved: &Path) {
+    let mut colors = Vec::new();
+    for seek in [
+        "0.25", "0.75", "1.25", "1.75", "2.25", "2.75", "3.25", "3.75",
+    ] {
+        let mut decode = Command::new(ffmpeg);
+        decode
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(saved)
+            .args([
+                "-ss",
+                seek,
+                "-map",
+                "0:v:0",
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=1:1",
+                "-pix_fmt",
+                "rgb24",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ]);
+        let pixel = tool(decode).await;
+        assert_eq!(
+            pixel.len(),
+            3,
+            "animation must last beyond its two-second source"
+        );
+        let color = match pixel.as_slice() {
+            [r, g, b] if *b > 180 && *r < 40 && *g < 40 => 0,
+            [r, g, b] if *g > 180 && *r < 40 && *b < 40 => 1,
+            [r, g, b] if *r > 180 && *g < 40 && *b < 40 => 2,
+            [r, g, b] if *r > 180 && *g > 180 && *b < 40 => 3,
+            _ => panic!("unexpected animation pixel: {pixel:?}"),
+        };
+        colors.push(color);
+    }
+    assert_eq!(&colors[..4], &colors[4..], "animation cycle must repeat");
+    assert!(
+        colors.windows(2).all(|pair| pair[1] == (pair[0] + 1) % 4),
+        "animation must preserve all frames in forward order: {colors:?}"
+    );
 }
 
 async fn assert_blue_picture(ffmpeg: &Path, saved: &Path) {
