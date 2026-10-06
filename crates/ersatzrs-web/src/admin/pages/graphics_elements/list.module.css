@@ -96,7 +96,6 @@
 }
 
 .muted,
-.not-editable,
 .empty {
     color: var(--color-muted);
 }

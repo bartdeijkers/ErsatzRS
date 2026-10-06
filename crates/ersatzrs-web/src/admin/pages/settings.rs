@@ -326,7 +326,7 @@ fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOpti
     options
         .into_iter()
         .map(|mut option| {
-            if option.value == "default" {
+            if option.value.eq_ignore_ascii_case("default") && option.label == "Default" {
                 tr(TextKey::DefaultOption).clone_into(&mut option.label);
             }
             option

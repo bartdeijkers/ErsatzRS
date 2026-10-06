@@ -1224,3 +1224,55 @@ async fn channel_next_engine_text_subtitle_mode_rejects_invalid_editor_values() 
         assert!(repos.channel.get_by_number("84").await.is_err());
     }
 }
+
+#[tokio::test]
+async fn troubleshooting_channel_round_trips_all_persisted_streaming_modes() {
+    use ersatzrs_core::repositories::TroubleshootingRepository as _;
+    use ersatzrs_domain::StreamingMode;
+
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "preview"))
+        .await
+        .unwrap();
+    for (stored, mode) in [
+        (1, StreamingMode::TransportStream),
+        (2, StreamingMode::HttpLiveStreamingDirect),
+        (4, StreamingMode::HttpLiveStreamingSegmenter),
+        (5, StreamingMode::TransportStreamHybrid),
+    ] {
+        let mut channel = common::channel(10, "10", true);
+        channel.streaming_mode = mode;
+        repos.channel.upsert(&channel).await.unwrap();
+        let persisted: i32 =
+            sqlx::query_scalar(r#"SELECT "StreamingMode" FROM "Channel" WHERE "Id" = 10"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(persisted, stored);
+        let live = repos.channel.get_by_number("10").await.unwrap();
+        let preview = repos
+            .troubleshooting
+            .load_preview_channel_admin(10)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(live.streaming_mode, mode);
+        assert_eq!(preview.streaming_mode, live.streaming_mode);
+    }
+    for invalid in [0, 3, 99] {
+        sqlx::query(r#"UPDATE "Channel" SET "StreamingMode" = ? WHERE "Id" = 10"#)
+            .bind(invalid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(repos.channel.get_by_number("10").await.is_err());
+        assert!(repos
+            .troubleshooting
+            .load_preview_channel_admin(10)
+            .await
+            .is_err());
+    }
+}

@@ -6,7 +6,12 @@ Accepted (2026-08-02)
 
 ## Implementation
 
-Implemented (2026-08-02). Full local-TV scans resolve shows within one
+Partial (2026-10-02). The Windows case-alias correction is implemented locally
+and scheduled for v1.1.1; native package deployment remains pending. The
+authorized offline repair removed the affected unreferenced legacy episode
+duplicates while preserving original identities and scheduling/checkpoint rows.
+Evidence is tracked in the [scanner parity record](../progress/parity/scanner.toml).
+Full local-TV scans resolve shows within one
 `LibraryPath` by exclusive top-level-folder provenance, normalized NFO provider
 GUID, then exact title plus non-null year. A pre-scan transaction repairs
 already-merged hierarchies, and the persisted health-check set reports any
@@ -56,6 +61,19 @@ At scan end, delete empty local seasons and then empty local shows. Linked
 ErsatzRS extras count as content. The `Local television identity` health check
 warns when persisted local show or season ownership still crosses top-level
 show folders and passes after reconciliation.
+
+On Windows, a case-only path change can leave two `LibraryFolder` rows for
+one physical directory. Before television reconciliation, merge those folder
+aliases within the same library path, retaining the newest folder spelling,
+reparenting child folders and media-file links, and invalidating ETags in one
+transaction. Require matching canonical filesystem paths; keep missing,
+unreadable or physically distinct directories separate. Folders with image
+duration settings remain outside this television-only repair. Folder and
+episode lookups may reuse verified Windows case aliases, while Unix keeps
+case-sensitive path matching. Existing media IDs, versions, stream pins and
+operator references remain intact; this does not delete legacy duplicate
+episode IDs. Deployment and remaining cleanup are tracked by the scanner
+parity record.
 
 ## Consequences
 

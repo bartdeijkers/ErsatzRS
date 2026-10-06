@@ -4,6 +4,7 @@ mod complex;
 mod deinterlace;
 mod dolby_vision;
 mod drawtext;
+pub(crate) mod escaping;
 mod framerate;
 mod hardware;
 mod hdr;

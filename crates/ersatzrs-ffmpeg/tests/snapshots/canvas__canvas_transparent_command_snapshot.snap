@@ -1,0 +1,36 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/canvas.rs
+assertion_line: 45
+expression: "command.arguments.join(\"\\n\")"
+---
+-nostdin
+-hide_banner
+-nostats
+-loglevel
+error
+-f
+lavfi
+-readrate
+1
+-i
+color=c=black@0.0:s=64x64:r=4/1,format=bgra
+-filter_complex
+[0:0]format=bgra[vpf]
+-map
+[vpf]
+-t
+00:00:01.0000000
+-an
+-c:v
+ffv1
+-level
+3
+-slices
+16
+-slicecrc
+0
+-pix_fmt
+bgra
+-f
+nut
+pipe:1

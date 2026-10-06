@@ -145,13 +145,16 @@ pub async fn get_local_library_form(id: i64) -> Result<LocalLibraryForm, ServerF
 /// Creates or updates a local library. Returns the library id.
 ///
 /// On create: inserts MediaSource → LocalMediaSource → Library → LocalLibrary → LibraryPath rows.
-/// On update: renames the library and replaces all path rows (delete-all + reinsert).
+/// On update: reconciles paths while retaining unchanged path and media identities.
 #[server(prefix = "/admin-api")]
 pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state
+    let language =
+        super::settings::load_ui_language_for_api(state.application.ports().admin_settings())
+            .await?;
+    state
         .application
         .save_local_library(ersatzrs_core::repositories::LocalLibraryAdmin {
             id: form.id,
@@ -166,123 +169,26 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
                 })
                 .collect(),
         })
-        .await?)
+        .await
+        .map_err(|error| ServerFnError::new(local_library_error_text(language, &error)))
 }
 
-#[cfg(all(test, feature = "ssr"))]
-pub(crate) async fn save_local_library_with_pool(
-    pool: &ersatzrs_infra::db::DbPool,
-    form: LocalLibraryForm,
-) -> Result<i64, ServerFnError> {
-    let normalized_paths = normalize_local_library_paths(&form.paths)?;
-
-    let mut tx = pool.begin().await?;
-
-    if form.id == 0 {
-        let ms = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
-            .execute(&mut *tx)
-            .await?;
-        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
-
-        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (?)"#)
-            .bind(ms_id)
-            .execute(&mut *tx)
-            .await?;
-
-        let lib = sqlx::query(
-            r#"INSERT INTO "Library" ("MediaSourceId", "MediaKind", "Name") VALUES (?, ?, ?)"#,
-        )
-        .bind(ms_id)
-        .bind(form.media_kind)
-        .bind(&form.name)
-        .execute(&mut *tx)
-        .await?;
-        let lib_id = ersatzrs_infra::db::last_insert_id(lib);
-
-        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
-            .bind(lib_id)
-            .execute(&mut *tx)
-            .await?;
-
-        for trimmed in &normalized_paths {
-            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
-                .bind(lib_id)
-                .bind(trimmed)
-                .execute(&mut *tx)
-                .await?;
-        }
-
-        tx.commit().await?;
-        Ok(lib_id)
-    } else {
-        sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
-            .bind(&form.name)
-            .bind(form.id)
-            .execute(&mut *tx)
-            .await?;
-
-        // Replace all paths: delete then reinsert the full deduplicated list.
-        sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#)
-            .bind(form.id)
-            .execute(&mut *tx)
-            .await?;
-
-        for trimmed in &normalized_paths {
-            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
-                .bind(form.id)
-                .bind(trimmed)
-                .execute(&mut *tx)
-                .await?;
-        }
-
-        tx.commit().await?;
-        Ok(form.id)
-    }
-}
-
-#[cfg(test)]
-fn normalize_local_library_paths(paths: &[LocalLibraryPath]) -> Result<Vec<String>, ServerFnError> {
-    let mut seen = std::collections::HashSet::new();
-    let mut normalized = Vec::new();
-
-    for path in paths {
-        let Some(candidate) = normalize_local_library_path(&path.path) else {
-            continue;
+#[cfg(feature = "ssr")]
+pub(crate) fn local_library_error_text(
+    language: crate::admin::i18n::UiLanguage,
+    error: &ersatzrs_app::ApplicationError,
+) -> String {
+    use crate::admin::i18n::{text, TextKey};
+    if let ersatzrs_app::ApplicationError::Validation { field, message } = error {
+        let key = match *field {
+            "library_path_absolute" => TextKey::LocalLibraryPathAbsolute,
+            "library_path_exists" => TextKey::LocalLibraryPathExists,
+            "library_path_conflict" => TextKey::LocalLibraryPathConflict,
+            _ => return text(language, TextKey::ErrorOccurred).to_owned(),
         };
-
-        if !std::path::Path::new(&candidate).is_dir() {
-            return Err(ServerFnError::new(format!(
-                "Path does not exist: {candidate}"
-            )));
-        }
-
-        if seen.insert(candidate.clone()) {
-            normalized.push(candidate);
-        }
+        return text(language, key).replace("{path}", message);
     }
-
-    Ok(normalized)
-}
-
-#[cfg(test)]
-fn normalize_local_library_path(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let uri_path = trimmed
-        .strip_prefix("file://localhost")
-        .or_else(|| trimmed.strip_prefix("file://"))
-        .unwrap_or(trimmed);
-    let decoded = urlencoding::decode(uri_path)
-        .map_or_else(|_| uri_path.to_string(), std::borrow::Cow::into_owned);
-    let path = std::path::Path::new(&decoded);
-    let normalized = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let text = normalized.to_string_lossy();
-    let text = text.trim_end_matches(['/', '\\']);
-
-    (!text.is_empty()).then(|| text.to_string())
+    text(language, TextKey::ErrorOccurred).to_owned()
 }
 
 #[server(prefix = "/admin-api")]
@@ -784,69 +690,5 @@ pub fn media_kind_label(kind: i32) -> &'static str {
         6 => "Images",
         7 => "Remote Streams",
         _ => "Unknown",
-    }
-}
-
-#[cfg(all(test, feature = "ssr"))]
-mod tests {
-    use super::*;
-    use sqlx::Row;
-
-    #[tokio::test]
-    async fn local_library_save_normalizes_and_persists_existing_paths() {
-        let database_dir = tempfile::tempdir().expect("temp database dir");
-        let database_url = format!(
-            "sqlite:{}",
-            database_dir.path().join("local-library.db").display()
-        );
-        let pool = ersatzrs_infra::db::init(&database_url)
-            .await
-            .expect("initialize test database");
-        let media_dir = tempfile::tempdir().expect("temp media dir");
-        let raw_path = format!("{}/", media_dir.path().display());
-
-        let id = save_local_library_with_pool(
-            &pool,
-            LocalLibraryForm {
-                id: 0,
-                name: "Movies".to_string(),
-                media_kind: 1,
-                paths: vec![
-                    LocalLibraryPath {
-                        id: 0,
-                        path: raw_path,
-                    },
-                    LocalLibraryPath {
-                        id: 0,
-                        path: format!("file://{}", media_dir.path().display()),
-                    },
-                ],
-            },
-        )
-        .await
-        .expect("save local library");
-
-        let paths = sqlx::query(r#"SELECT "Path" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
-            .bind(id)
-            .fetch_all(&pool)
-            .await
-            .expect("load paths");
-
-        assert_eq!(paths.len(), 1);
-        assert_eq!(
-            paths[0].try_get::<String, _>("Path").expect("path"),
-            dunce::canonicalize(media_dir.path())
-                .expect("canonical path")
-                .display()
-                .to_string()
-        );
-    }
-
-    #[test]
-    fn local_library_path_normalization_accepts_file_uri_input() {
-        assert_eq!(
-            normalize_local_library_path("file:///library/downloads/movies/"),
-            Some("/library/downloads/movies".to_string())
-        );
     }
 }

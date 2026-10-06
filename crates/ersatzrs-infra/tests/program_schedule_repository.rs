@@ -2,8 +2,8 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, ProgramScheduleRepository, ScheduleAdminForm,
-    ScheduleItemAdmin,
+    ChannelRepository, FfmpegProfileRepository, PlayoutRepository, ProgramScheduleRepository,
+    ScheduleAdminForm, ScheduleItemAdmin,
 };
 use ersatzrs_core::scheduling::{SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset};
 use ersatzrs_domain::{
@@ -86,6 +86,11 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
         sort_order: 7,
         watermark_ids: vec![501],
         graphics_element_ids: vec![601],
+        graphics_elements: vec![ersatzrs_domain::ProgramScheduleItemGraphicsElement {
+            program_schedule_item_id: 30,
+            graphics_element_id: 601,
+            variables: Some(r#"{"label":"Schedule label"}"#.to_owned()),
+        }],
         pre_roll_filler_id: Some(701),
         mid_roll_filler_id: Some(702),
         post_roll_filler_id: Some(703),
@@ -104,6 +109,10 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
     assert_eq!(loaded.search_query, Some("genre:comedy".to_owned()));
     assert_eq!(loaded.watermark_ids, vec![501]);
     assert_eq!(loaded.graphics_element_ids, vec![601]);
+    assert_eq!(
+        loaded.graphics_elements[0].variables.as_deref(),
+        Some(r#"{"label":"Schedule label"}"#)
+    );
     assert_eq!(loaded.pre_roll_filler_id, Some(701));
     assert_eq!(loaded.mid_roll_filler_id, Some(702));
     assert_eq!(loaded.post_roll_filler_id, Some(703));
@@ -195,6 +204,23 @@ async fn program_schedule_repository_round_trips_alternates() {
     assert_eq!(alternates[0].months_of_year, vec![5, 12]);
     assert!(alternates[0].limit_to_date_range);
 
+    // Row145: rejection must roll back the DELETE performed inside the repository.
+    assert!(repos
+        .playout
+        .save_alternate_schedules_admin(10, &[])
+        .await
+        .is_err());
+    assert_eq!(
+        repos.program_schedule.list_alternates(1).await.unwrap(),
+        alternates
+    );
+    let default_schedule: i64 =
+        sqlx::query_scalar(r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = 10"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(default_schedule, 1);
+
     let row = sqlx::query(
         r#"SELECT "DaysOfWeek", "DaysOfMonth", "MonthsOfYear"
            FROM "ProgramScheduleAlternate"
@@ -279,7 +305,10 @@ async fn program_schedule_repository_replaces_and_copies_complete_admin_items() 
         .await
         .unwrap();
     let policy = SchedulingSmartShufflePolicy::for_preset(SchedulingSmartShufflePreset::Balanced);
-    let item = admin_search_item(policy.clone());
+    seed_overlay_targets(&pool).await;
+    let mut item = admin_search_item(policy.clone());
+    item.graphics_element_ids = vec![601];
+    item.graphics_element_variables = [(601, r#"{"label":"Copied label"}"#.to_owned())].into();
 
     repos
         .program_schedule
@@ -297,6 +326,10 @@ async fn program_schedule_repository_replaces_and_copies_complete_admin_items() 
     assert_eq!(loaded[0].duration_minutes, 15);
     assert_eq!(loaded[0].watermark_ids, Vec::<i64>::new());
     assert_eq!(loaded[0].smart_shuffle, policy);
+    assert_eq!(
+        loaded[0].graphics_element_variables[&601],
+        r#"{"label":"Copied label"}"#
+    );
     assert_eq!(
         loaded[0].pinned_stream_selection,
         Some(ersatzrs_domain::PinnedStreamSelection {
@@ -320,6 +353,10 @@ async fn program_schedule_repository_replaces_and_copies_complete_admin_items() 
     assert_eq!(copied.len(), 1);
     assert_eq!(copied[0].search_query, loaded[0].search_query);
     assert_eq!(copied[0].smart_shuffle, loaded[0].smart_shuffle);
+    assert_eq!(
+        copied[0].graphics_element_variables,
+        loaded[0].graphics_element_variables
+    );
     assert_eq!(
         copied[0].pinned_stream_selection,
         loaded[0].pinned_stream_selection
@@ -382,6 +419,7 @@ fn admin_search_item(smart_shuffle: SchedulingSmartShufflePolicy) -> ScheduleIte
         fallback_filler_id: None,
         watermark_ids: Vec::new(),
         graphics_element_ids: Vec::new(),
+        graphics_element_variables: std::collections::BTreeMap::default(),
         preferred_audio_language_code: Some("eng".to_owned()),
         preferred_audio_title: String::new(),
         preferred_subtitle_language_code: None,

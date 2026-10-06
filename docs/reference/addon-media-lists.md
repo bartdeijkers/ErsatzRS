@@ -176,8 +176,9 @@ never erase the published overview. Only a transient failure may set
 deadline and a 1 MiB output cap; serialized requests are capped at 512 KiB.
 
 The list detail policy is `automatic` by default or explicitly `manual_only`.
-Automatic enrichment starts only after the verified overview has been
-published. Manual-only lists retain overview metadata and offer the same
+Ordinary automatic enrichment follows overview publication. Saved rolling
+filters may first request facts needed to classify plausible candidates through
+the same queue. Manual-only lists retain overview metadata and offer the same
 per-item Fetch details action before or after publication. Both paths use one
 atomic claim and the same provider-host limiter. The global Add-ons settings
 **Minimum detail wait** and **Maximum detail wait** accept positive whole
@@ -282,6 +283,54 @@ most 256 KiB. Artwork and person-thumbnail URLs are absolute HTTPS URLs without
 userinfo, are limited to 2,048 bytes, and must include a host. These are input
 bounds; publication separately validates and materializes artwork rather than
 letting an NFO depend on an untrusted remote URL forever.
+
+## Per-list rolling selection
+
+The host stores optional selection settings for each list. They do not change
+any frozen provider wire schema. In the list's Settings page, operators can set:
+
+| Setting | Meaning |
+|---|---|
+| Maximum age | An inclusive UTC rolling window of 1–36,500 days. |
+| Newest items | The newest 1–10,000 automatic candidates with known publication dates. Pins do not consume this limit. |
+| Duration | Inclusive minimum and maximum seconds; each bound is at most 604,800. Blank means unbounded. |
+| Include terms | At least one case-insensitive title substring must match. Blank accepts all titles. |
+| Exclude terms | Any case-insensitive title substring rejects the item. |
+| Manual selection | Pin bypasses filters, exclusion always rejects, and Automatic restores policy evaluation. |
+
+Each term list permits at most 32 non-empty terms of at most 256 UTF-8 bytes.
+Assessments reject overviews larger than the existing 10,000-item limit instead
+of silently truncating the selection. Unknown dates or durations needed by a
+filter are reported explicitly. Future publication dates are rejected. Known
+dates sort newest first, then provider rank and stable item identity break ties.
+Operator metadata overrides take precedence over provider title/date metadata.
+
+Preview shows active/archive counts and reasons without acquiring media,
+publishing or saving settings. The table displays the first 100 decisions;
+the counts cover the entire bounded overview. Save commits the filters and
+effective cutoff under the existing revision fence and authorizes the durable
+publication worker. Archived entries retain identities, operator overrides,
+owned media artifacts and historical references. Filtering does not delete
+media files or edit other lists.
+
+On Add, **Select items before first publication** is optional. It commits a
+review hold before the import job becomes visible. The overview can be imported
+and previewed while publication and acquisition wait. Saving Settings clears
+the initial hold, including when the reviewed selection uses no filters. Later
+refreshes use the saved policy without another mandatory review step.
+
+Automatic detail loading reuses the existing bounded enrichment queue for
+plausible candidates missing required facts. Definite title, age or duration
+rejections do not trigger automatic acquisition. Once newest N is filled, older
+dated candidates do not trigger duration enrichment. Manual-only detail loading is
+respected; explicit item detail requests remain available. Retry deadlines,
+provider cooldowns, checkpoints and publication fences remain authoritative.
+
+Pause automatic polling preserves the saved cadence, validator and retry
+state. Resume continues from that state. Rolling policies are also reassessed
+at most hourly when the source is unchanged, unless polling is paused. The
+existing list progress shows successful/next polling and processing state;
+Settings shows the saved policy, cutoff, selection and localized reasons.
 
 ## Automatic publication
 

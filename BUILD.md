@@ -644,30 +644,63 @@ See the disk-space note in
 
 ## Optional Next engine artifacts
 
-Release archive staging requires Python 3.12 and public HTTPS access to the
-[ErsatzTV Next develop release](https://github.com/ErsatzTV/next/releases/tag/develop).
+Release archive staging requires Python 3.12 and access to the pinned
+[Next dependency snapshot](https://github.com/bartdeijkers/ErsatzRS/releases/tag/next-4ad282f).
+The snapshot preserves five unchanged official upstream archives and the
+accepted ARMv7 source build. While this repository is private, host staging
+uses the existing GitHub CLI login or the CI job token. Credentials never enter
+Docker build arguments, layers or containers.
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
 `ersatztv-channel` executable, its MIT license and `origin.json`. Archive
 packaging then moves the executable (with `.exe` on Windows) to the package
 root beside ErsatzRS, retaining only license/provenance in `next/`.
-It requires the release API's SHA-256 digest and records
-the selected asset, revision and license hash. Missing artifacts, invalid
-checksums or missing licenses fail packaging; no GitHub credential is needed.
+Windows packages also require `libvpl.dll` and `libvpl-LICENSE.txt` from the
+same verified Next archive beside `ersatztv-channel.exe` at the package root.
+Missing or invalid companions fail staging before the destination is published.
+It checks archive and license SHA-256 values pinned in source and records
+the selected asset, full pinned source revision and license hash. Staging rejects
+an artifact whose revision differs from `PINNED_REVISION` in the script, even
+when upstream replaces the mutable develop release. Review upstream changes,
+validate the selected runtime, update the pin and obtain green exact-SHA CI
+before releasing a new pin. Missing artifacts, invalid checksums or missing
+licenses fail packaging. A new accepted snapshot requires new pinned hashes.
 All six supported RIDs are mapped, including the currently unpublished macOS
-archive targets. Run `python3 scripts/release/test-stage-next.py` for offline
+archive targets. Upstream publishes no ARMv7 binary. The accepted ADR 0100
+exception builds its pinned, unmodified source with Rust 1.97.1 and the
+Bookworm cross compiler, verifies the source archive and Cargo.lock hashes,
+and rejects a GLIBC requirement newer than 2.36. Build and stage it with:
+
+```sh
+docker buildx build --platform linux/arm/v7 --file Dockerfile \
+  --target next-armv7-source-export --output type=local,dest=tmp/next-armv7 .
+python3 scripts/release/stage-next.py --rid linux-arm \
+  --source-build tmp/next-armv7 --output tmp/staged-next-armv7
+```
+
+The exported directory contains the executable, license and source-build
+provenance. Release archives and Docker images reuse its published binary. This recipe
+is retained for reproduction; it is not rerun during ordinary packaging.
+Docker is invoked from the host and requires no socket mount in a container.
+The other platform branches retain official checksum-verified downloads.
+Run `python3 scripts/release/test-stage-next.py` for offline
 archive, provenance and failure-path regressions.
 
 Docker builds use a separate build-host Python stage and copy the channel
 executable into `/usr/local/bin`, retaining license/provenance under
 `/usr/local/bin/next`; Python is not added to the runtime image. Bake
-passes `VERSION` as `NEXT_RELEASE_REFRESH` to refresh the mutable develop
-release on each product release. For repeated manual builds of the same
-version, use `--no-cache-filter next-artifacts` with buildx, or change
+passes `VERSION` as `NEXT_RELEASE_REFRESH` for explicit cache refreshes;
+archive hashes remain fixed. Before a Docker build, stage the snapshot on the
+host with `gh release download next-4ad282f --repo bartdeijkers/ErsatzRS --dir .next-snapshot`.
+The gitignored directory is copied only into the staging layer; runtime
+images receive the selected executable, license and provenance. For repeated manual builds of the same
+version, use `--no-cache-filter next-official` with buildx, or change
 `--build-arg NEXT_RELEASE_REFRESH=<build-id>`.
 
-This is packaging support only. Native playback remains unchanged; engine
-selection, process supervision and Next playback acceptance remain open under
+Engine selection and process supervision follow
 [ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md).
+Current playback acceptance and approved platform debt are recorded in the
+[structured progress records](docs/progress/README.md); a successful artifact
+staging test does not prove playback acceptance.
 
 ## Intel container userspace verification
 

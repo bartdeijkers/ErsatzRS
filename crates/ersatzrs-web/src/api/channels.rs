@@ -321,6 +321,7 @@ fn extension_for_content_type(content_type: &str) -> &'static str {
         "image/jpeg" | "image/jpg" => "jpg",
         "image/gif" => "gif",
         "image/webp" => "webp",
+        "image/jxl" => "jxl",
         "image/svg+xml" => "svg",
         _ => "bin",
     }
@@ -466,6 +467,7 @@ pub async fn serve_channel_logo(Path(filename): Path<String>) -> Response {
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        "jxl" => "image/jxl",
         "svg" => "image/svg+xml",
         _ => "application/octet-stream",
     };

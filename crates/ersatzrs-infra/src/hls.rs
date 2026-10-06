@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
+use ersatzrs_core::hls::{HlsPublicationError, HlsSessionHandle, HlsSessionRegistry};
 use tokio::sync::RwLock;
 
 /// In-memory [`HlsSessionRegistry`] backed by an `RwLock<HashMap>`.
@@ -57,6 +57,39 @@ impl InMemoryHlsSessionRegistry {
 
 #[async_trait]
 impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
+    async fn publish_playout_update(
+        &self,
+        channel_number: &str,
+        deadline: std::time::Instant,
+    ) -> Result<bool, HlsPublicationError> {
+        let handles = self.channel_handles(channel_number).await;
+        let local = async {
+            let results = futures_util::future::join_all(
+                handles
+                    .iter()
+                    .map(|handle| handle.publish_playout_update(deadline)),
+            )
+            .await;
+            for result in results {
+                result?;
+            }
+            Ok::<_, HlsPublicationError>(!handles.is_empty())
+        };
+        let forwarded = async {
+            if let Some(previews) = &self.playout_updates_to {
+                previews
+                    .publish_playout_update(channel_number, deadline)
+                    .await
+            } else {
+                Ok(false)
+            }
+        };
+        // Poll every owner before waiting; one slow or failed viewer cannot
+        // prevent another active session from receiving the committed update.
+        let (local, forwarded) = tokio::join!(local, forwarded);
+        Ok(local? | forwarded?)
+    }
+
     async fn playout_updated(&self, channel_number: &str) -> bool {
         let mut notified = false;
         for handle in self.channel_handles(channel_number).await {
@@ -165,6 +198,18 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         channels.into_iter().collect()
     }
 
+    async fn session_models(&self) -> Vec<ersatzrs_core::hls::HlsSessionModel> {
+        let mut reports: Vec<_> = self
+            .inner
+            .read()
+            .await
+            .values()
+            .filter_map(|session| session.handle.session_model())
+            .collect();
+        reports.sort_by(|left, right| left.channel_number.cmp(&right.channel_number));
+        reports
+    }
+
     async fn is_active(&self, channel_number: &str) -> bool {
         if self.inner.read().await.contains_key(channel_number) {
             return true;
@@ -193,6 +238,8 @@ mod tests {
         touched: AtomicUsize,
         cancelled: AtomicUsize,
         playout_updated: AtomicUsize,
+        publication_gate: Option<Arc<tokio::sync::Notify>>,
+        publication_error: Option<HlsPublicationError>,
     }
 
     impl FakeHandle {
@@ -202,12 +249,25 @@ mod tests {
                 touched: AtomicUsize::new(0),
                 cancelled: AtomicUsize::new(0),
                 playout_updated: AtomicUsize::new(0),
+                publication_gate: None,
+                publication_error: None,
             })
         }
     }
 
     #[async_trait]
     impl HlsSessionHandle for FakeHandle {
+        async fn publish_playout_update(
+            &self,
+            _deadline: std::time::Instant,
+        ) -> Result<(), HlsPublicationError> {
+            self.playout_updated();
+            if let Some(gate) = &self.publication_gate {
+                gate.notified().await;
+            }
+            self.publication_error.map_or(Ok(()), Err)
+        }
+
         fn channel_number(&self) -> &str {
             &self.channel
         }
@@ -227,6 +287,57 @@ mod tests {
         fn playout_updated(&self) {
             self.playout_updated.fetch_add(1, Ordering::SeqCst);
         }
+    }
+
+    #[tokio::test]
+    async fn publication_wait_reaches_live_direct_and_preview_owners_before_waiting() {
+        let previews = Arc::new(InMemoryHlsSessionRegistry::new());
+        let registry = Arc::new(InMemoryHlsSessionRegistry::with_playout_updates_to(
+            previews.clone(),
+        ));
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let mut handles = [
+            FakeHandle::new("7"),
+            FakeHandle::new("7"),
+            FakeHandle::new("7"),
+        ];
+        for handle in &mut handles {
+            Arc::get_mut(handle).unwrap().publication_gate = Some(gate.clone());
+        }
+        Arc::get_mut(&mut handles[0]).unwrap().publication_error =
+            Some(HlsPublicationError::Failed);
+        registry.insert(handles[0].clone()).await;
+        registry.register_direct(handles[1].clone()).await;
+        previews.insert(handles[2].clone()).await;
+        let pending = registry.clone();
+        let task = tokio::spawn(async move {
+            pending
+                .publish_playout_update(
+                    "7",
+                    std::time::Instant::now() + std::time::Duration::from_secs(5),
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while handles
+                .iter()
+                .any(|handle| handle.playout_updated.load(Ordering::SeqCst) != 1)
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(!task.is_finished());
+        // Waiting must not retain registry locks or prevent ordinary cleanup.
+        registry.remove("7").await;
+        gate.notify_waiters();
+        assert_eq!(task.await.unwrap(), Err(HlsPublicationError::Failed));
+        assert!(
+            registry.is_active("7").await,
+            "the direct viewer remains registered"
+        );
+        assert!(previews.is_active("7").await);
     }
 
     #[tokio::test]

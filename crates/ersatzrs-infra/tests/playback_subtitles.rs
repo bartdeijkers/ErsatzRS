@@ -975,12 +975,15 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
     common::seed_profile_and_channel(&repos, 110).await;
     seed_playout_item(&pool, 110, None, 1009, 10).await;
     let context = GraphicsTemplateContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 110,
         channel_number: "110".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 12.0,
         duration_seconds: 3600.0,
         frame_width: 1920,
@@ -1007,6 +1010,12 @@ async fn graphics_template_variables_include_epg_duration_and_per_item_overrides
         )
         .unwrap(),
         "Override Slot Movie"
+    );
+    assert_eq!(variables["MediaItem_SeekSeconds"], 12.0);
+    assert_eq!(variables["MediaItem_StreamSeek"]["TotalSeconds"], 12.0);
+    assert_eq!(
+        render_graphics_template("{{ MediaItem_SeekSeconds }}", &variables).unwrap(),
+        "12.0"
     );
     let start_seconds =
         evaluate_graphics_number("MediaItem_Duration.TotalSeconds - 5", &variables).unwrap();
@@ -1051,17 +1060,20 @@ async fn imported_image_graphics_use_persisted_epg_context_without_source_yaml()
     assert_eq!(element.epg_entries, 1);
     assert!(!missing_yaml.exists());
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 110,
         channel_number: "110".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 0.0,
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(320, 180),
         square_pixel_frame_size: FrameSize::new(320, 180),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
     let graphics = [ResolvedPlaybackGraphicsElement {
         element,
@@ -1104,17 +1116,20 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
         variables: Some(r#"{"Custom":"Slot"}"#.to_owned()),
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 0.0,
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
@@ -1149,6 +1164,31 @@ fn legacy_text_graphics_json_defaults_to_drawvg() {
 async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed() {
     let pool = common::test_db().await;
     seed_movie_with_subtitles(&pool).await;
+    verify_dynamic_graphics_media(
+        &pool,
+        ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
+        "Movie",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn transient_graphics_renders_and_refreshes_without_library_records() {
+    let pool = common::test_db().await;
+    let media = ersatzrs_infra::graphics_template::GraphicsMedia::Transient(
+        serde_json::json!({"MediaItem_Title":"Transient"})
+            .as_object()
+            .unwrap()
+            .clone(),
+    );
+    verify_dynamic_graphics_media(&pool, media, "Transient").await;
+}
+
+async fn verify_dynamic_graphics_media(
+    pool: &SqlitePool,
+    media: ersatzrs_infra::graphics_template::GraphicsMedia,
+    title: &str,
+) {
     let output_dir = tempfile::tempdir().unwrap();
     let graphics = vec![ResolvedPlaybackGraphicsElement {
         element: GraphicsElement {
@@ -1173,23 +1213,25 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         variables: Some(r#"{"Custom":"Dynamic"}"#.to_owned()),
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media,
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 12.0,
         duration_seconds: 3_600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
-    let artifacts =
-        render_playback_graphics_overlays(&pool, &graphics, &context, output_dir.path())
-            .await
-            .unwrap();
+    let artifacts = render_playback_graphics_overlays(pool, &graphics, &context, output_dir.path())
+        .await
+        .unwrap();
 
     assert_eq!(artifacts.overlays.len(), 1);
     assert_eq!(artifacts.dynamic_text_controllers.len(), 1);
@@ -1202,7 +1244,7 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         .text_file()
         .to_path_buf();
     let initial = tokio::fs::read_to_string(&text_file).await.unwrap();
-    assert!(initial.starts_with("Movie|Dynamic|12000"));
+    assert!(initial.starts_with(&format!("{title}|Dynamic|12000")));
 
     let mut refreshed = initial.clone();
     for _ in 0..20 {
@@ -1213,7 +1255,7 @@ async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed()
         }
     }
     assert_ne!(refreshed, initial);
-    assert!(refreshed.starts_with("Movie|Dynamic|"));
+    assert!(refreshed.starts_with(&format!("{title}|Dynamic|")));
 
     artifacts.shutdown().await;
 }
@@ -1254,17 +1296,20 @@ async fn invalid_drawtext_element_does_not_suppress_valid_static_graphics() {
         },
     ];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 0.0,
         duration_seconds: 3_600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts =
@@ -1310,17 +1355,20 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
         variables: None,
     }];
     let context = PlaybackGraphicsRenderContext {
+        render_time: common::fixed_time(),
+        playout_item_id: None,
         channel_id: 120,
         channel_number: "120".to_owned(),
-        media_item_id: 10,
+        media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
         media_path: "/media/movie.mkv".to_owned(),
         channel_start_time: common::fixed_time(),
         content_start_time: common::fixed_time(),
+        content_finish_time: None,
         stream_seek_seconds: 0.0,
         duration_seconds: 3600.0,
         frame_size: FrameSize::new(1920, 1080),
         square_pixel_frame_size: FrameSize::new(1920, 1080),
-        frame_rate: Some(FrameRate::DEFAULT),
+        frame_rate: Some(FrameRate::DEFAULT.into()),
     };
 
     let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
@@ -1339,7 +1387,7 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
     assert_eq!(*z_index, 14);
     assert_eq!(input.path, missing_motion.to_string_lossy());
     assert_eq!(input.filter_steps, vec!["setpts=PTS+4/TB"]);
-    assert_eq!(overlay.enable.as_deref(), Some("between(t,4,6.5)"));
+    assert_eq!(overlay.enable.as_deref(), Some("gte(t,4)*lt(t,6.5)"));
     assert!(!overlay.eof_action_pass);
 
     artifacts.shutdown().await;
@@ -1607,17 +1655,20 @@ async fn render_scheduled_graphics(
         pool,
         selected,
         &PlaybackGraphicsRenderContext {
+            render_time: common::fixed_time(),
+            playout_item_id: None,
             channel_id: 121,
             channel_number: "121".to_owned(),
-            media_item_id: 10,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(10),
             media_path: assets.input.to_string_lossy().into_owned(),
             channel_start_time: common::fixed_time(),
             content_start_time: common::fixed_time(),
+            content_finish_time: None,
             stream_seek_seconds: 0.0,
             duration_seconds: 1.0,
             frame_size: FrameSize::new(320, 180),
             square_pixel_frame_size: FrameSize::new(320, 180),
-            frame_rate: Some(FrameRate::new(25, 1)),
+            frame_rate: Some(FrameRate::new(25, 1).into()),
         },
         temp.join("rendered"),
     )

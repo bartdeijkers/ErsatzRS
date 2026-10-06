@@ -1,5 +1,11 @@
 /* Shared layout tokens for all media-source pages */
 
+.validation-page {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
 .page {
     display: flex;
     flex-direction: column;

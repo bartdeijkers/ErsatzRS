@@ -1,14 +1,14 @@
 //! Read the persisted channel timeline without multiplying items by media files.
 
 use chrono::{DateTime, Utc};
-use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
+use ersatzrs_core::locking::{EntityLocker, PlayoutReadGuard};
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
 use ersatzrs_domain::{Channel, PlayoutItem};
 use sqlx::Row;
 
 use crate::channel_playout::ChannelPlayoutContext;
 use crate::db::DbPool;
-use crate::repositories::{SqlitePlayoutRepository, SqlxResultExt as _};
+use crate::repositories::{PendingPlayoutBuild, SqlitePlayoutRepository, SqlxResultExt as _};
 
 /// One logical scheduled item and its deterministic persisted source binding.
 /// Remote bindings require the existing provider resolver before wire publication.
@@ -21,6 +21,7 @@ pub struct ScheduledMedia {
     pub media_file_id: i64,
     pub path: String,
     pub remote_stream_id: Option<i64>,
+    pub(crate) candidate_overlays: Option<crate::playback::CandidateOverlayContext>,
 }
 
 /// Keeps the source playouts locked while their derived projection is prepared.
@@ -31,7 +32,7 @@ pub struct ScheduledMedia {
 pub struct LockedSchedule {
     pub context: ChannelPlayoutContext,
     pub items: Vec<ScheduledMedia>,
-    _guards: Vec<PlayoutLockGuard>,
+    _guards: Vec<PlayoutReadGuard>,
 }
 
 /// Read all items overlapping a target-channel time range, in start/id order.
@@ -53,16 +54,64 @@ pub async fn read_locked(
     start: DateTime<Utc>,
     finish: DateTime<Utc>,
 ) -> Result<Option<LockedSchedule>> {
+    read_with_candidate(pool, locker, channel, start, finish, None).await
+}
+
+/// Read one unpublished build alongside the other accepted source playouts.
+/// The caller retains the candidate's exclusive build lock; acquire read locks
+/// for every other source before projecting this channel's complete timeline.
+pub(super) async fn read_pending(
+    pool: &DbPool,
+    locker: &EntityLocker,
+    channel: &Channel,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    pending: &mut PendingPlayoutBuild,
+) -> Result<Option<LockedSchedule>> {
+    read_with_candidate(pool, locker, channel, start, finish, Some(pending)).await
+}
+
+async fn read_with_candidate(
+    pool: &DbPool,
+    locker: &EntityLocker,
+    channel: &Channel,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    mut pending: Option<&mut PendingPlayoutBuild>,
+) -> Result<Option<LockedSchedule>> {
     if finish <= start {
         return Err(invalid("invalid requested time range"));
     }
     let context = ChannelPlayoutContext::for_channel(channel);
     let source_start = context.source_time(start)?;
-    let source_finish = context.source_time(finish)?;
+    // Full publication uses the last four-digit year as its open-ended bound.
+    // A leading mirror can shift it into +10000, whose encoded SQL text sorts
+    // before ordinary programme dates and would silently select no rows.
+    let maximum_query_time = DateTime::from_timestamp(253_402_300_799, 0)
+        .ok_or_else(|| invalid("invalid publication horizon"))?;
+    let source_finish = context.source_time(finish)?.min(maximum_query_time);
+    if pending
+        .as_ref()
+        .is_some_and(|build| build.channel_id() != context.source_channel_id)
+    {
+        return Err(invalid("candidate belongs to another source channel"));
+    }
     let ids = playout_ids(pool, context.source_channel_id).await?;
+    if pending
+        .as_ref()
+        .is_some_and(|build| !ids.contains(&build.playout_id()))
+    {
+        return Err(invalid("candidate source playout is no longer attached"));
+    }
     let mut guards = Vec::with_capacity(ids.len());
     for id in &ids {
-        let Some(guard) = PlayoutLockGuard::try_acquire(locker, *id) else {
+        if pending
+            .as_ref()
+            .is_some_and(|build| build.playout_id() == *id)
+        {
+            continue;
+        }
+        let Some(guard) = PlayoutReadGuard::try_acquire(locker, *id) else {
             return Ok(None);
         };
         guards.push(guard);
@@ -73,10 +122,23 @@ pub async fn read_locked(
     let repository = SqlitePlayoutRepository(pool.clone());
     let mut items = Vec::new();
     for id in &ids {
-        for mut item in repository
-            .items_in_range(*id, source_start, source_finish)
-            .await?
-        {
+        let source_items = match pending.as_mut() {
+            Some(build) if build.playout_id() == *id => {
+                build.items_in_range(source_start, source_finish).await?
+            }
+            _ => {
+                repository
+                    .items_in_range(*id, source_start, source_finish)
+                    .await?
+            }
+        };
+        for mut item in source_items {
+            let candidate_overlays = match pending.as_mut() {
+                Some(build) if build.playout_id() == *id => {
+                    Some(build.overlay_context(item.id, item.start).await?)
+                }
+                _ => None,
+            };
             item.start = context.target_time(item.start)?;
             item.finish = context.target_time(item.finish)?;
             item.guide_start = item
@@ -87,7 +149,9 @@ pub async fn read_locked(
                 .guide_finish
                 .map(|time| context.target_time(time))
                 .transpose()?;
-            items.push(bind_media(pool, item).await?);
+            let mut media = bind_media(pool, item).await?;
+            media.candidate_overlays = candidate_overlays;
+            items.push(media);
         }
     }
     // A source playout may be created or deleted by administration independently
@@ -153,6 +217,7 @@ pub async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMed
         media_version_id: row.try_get("VersionId").repository()?,
         media_file_id: row.try_get("FileId").repository()?,
         remote_stream_id: row.try_get("RemoteStreamId").repository()?,
+        candidate_overlays: None,
     })
 }
 
@@ -166,3 +231,40 @@ fn invalid(message: &str) -> RepositoryError {
 #[cfg(test)]
 #[path = "schedule_tests.rs"]
 pub(crate) mod tests;
+
+impl ScheduledMedia {
+    /// Resolve watermark and graphics precedence for this exact schedule read.
+    /// Pending candidates use their captured item/template inputs; ordinary
+    /// reads keep the existing persisted selection behavior.
+    ///
+    /// # Errors
+    /// Returns selection, database or invalid source-clock errors.
+    pub async fn overlays(
+        &self,
+        pool: &DbPool,
+        channel: &Channel,
+    ) -> Result<(
+        Vec<crate::playback::ResolvedPlaybackWatermark>,
+        Vec<crate::playback::ResolvedPlaybackGraphicsElement>,
+    )> {
+        let source_time =
+            ChannelPlayoutContext::for_channel(channel).source_time(self.item.start)?;
+        if let Some(inputs) = &self.candidate_overlays {
+            return inputs
+                .resolve(pool, channel, self.item.disable_watermarks, source_time)
+                .await;
+        }
+        Ok((
+            crate::playback::select_playback_watermarks(
+                pool,
+                channel,
+                self.item.id,
+                self.item.disable_watermarks,
+                source_time,
+            )
+            .await?,
+            crate::playback::select_playback_graphics(pool, channel, self.item.id, source_time)
+                .await?,
+        ))
+    }
+}

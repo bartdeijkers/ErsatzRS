@@ -5,7 +5,10 @@
 //! these types do not replace the native `FFmpeg` pipeline or scheduler.
 
 pub(crate) mod burn_cache;
-mod burn_subtitles;
+pub(crate) mod burn_subtitles;
+pub mod canvas;
+pub mod canvas_host;
+mod canvas_render;
 pub mod config;
 pub mod connections;
 pub mod coordinator;

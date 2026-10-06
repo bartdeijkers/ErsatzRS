@@ -142,6 +142,7 @@ async fn public_iptv_routes_never_dispatch_internal_callbacks_for_forged_local_h
         "/ffmpeg/next-media/1/2/3",
         "/ffmpeg/next-item/1/2/digest/3",
         "/ffmpeg/next-prepared/instance/transfer",
+        "/ffmpeg/next-canvas?binding=invalid",
         "/ffmpeg/next-fallback/1/2/3",
         "/ffmpeg/next-credits/1/2/3/4/5",
     ] {

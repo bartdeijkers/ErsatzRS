@@ -16,6 +16,30 @@ pub struct SqliteGraphicsRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl GraphicsRepository for SqliteGraphicsRepository {
+    async fn preview_text(
+        &self,
+        request: &ersatzrs_core::repositories::GraphicsTextPreviewRequest,
+    ) -> Result<ersatzrs_core::repositories::GraphicsTextPreview> {
+        crate::graphics_text_preview::preview(&self.0, request).await
+    }
+    async fn parse_yaml(&self, kind: GraphicsElementKind, yaml: &str) -> Result<GraphicsElement> {
+        crate::graphics_import::graphics_element_from_yaml(0, kind, "", yaml)
+    }
+    async fn export_yaml(&self, element: &GraphicsElement) -> Result<String> {
+        crate::graphics_import::graphics_element_to_yaml(element)
+    }
+    async fn validate_authoring(
+        &self,
+        request: &ersatzrs_core::repositories::GraphicsRenderPreviewRequest,
+    ) -> Result<()> {
+        crate::graphics_authoring::validate(&self.0, request).await
+    }
+    async fn render_preview(
+        &self,
+        request: &ersatzrs_core::repositories::GraphicsRenderPreviewRequest,
+    ) -> Result<ersatzrs_core::repositories::GraphicsRenderPreview> {
+        crate::graphics_authoring::render_preview(&self.0, request).await
+    }
     async fn list_elements(&self) -> Result<Vec<GraphicsElement>> {
         let rows = sqlx::query(
             r#"SELECT * FROM "GraphicsElement"

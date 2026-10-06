@@ -20,6 +20,8 @@ use super::protocol as wire;
 pub enum ConfigError {
     #[error("Next does not support the selected video output codec")]
     VideoCodec,
+    #[error("Next MPEG-2 output requires a positive video bitrate")]
+    VideoBitrate,
     #[error("Next does not support the selected audio output codec")]
     AudioCodec,
     #[error("Next does not support the selected HDR output contract")]
@@ -56,6 +58,9 @@ pub fn channel_config(
     ffprobe_path: &Path,
 ) -> Result<wire::ChannelConfig, ConfigError> {
     Ok(wire::ChannelConfig {
+        fallback: Some(wire::Fallback {
+            show_error: Some(true),
+        }),
         playout: wire::PlayoutFolder {
             folder: runtime_path(playout_folder)?,
             virtual_start: None,
@@ -121,6 +126,12 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
     let format = match profile.video_format {
         FFmpegProfileVideoFormat::H264 => wire::VideoFormat::H264,
         FFmpegProfileVideoFormat::Hevc => wire::VideoFormat::Hevc,
+        FFmpegProfileVideoFormat::Mpeg2Video => {
+            if positive(profile.video_bitrate).is_none() {
+                return Err(ConfigError::VideoBitrate);
+            }
+            wire::VideoFormat::Mpeg2Video
+        }
         _ => return Err(ConfigError::VideoCodec),
     };
     let accel = match profile.hardware_acceleration {
@@ -134,12 +145,13 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         HardwareAccelerationKind::V4l2m2m => return Err(ConfigError::Accelerator),
     };
     let vaapi_driver = if profile.hardware_acceleration == HardwareAccelerationKind::Vaapi {
-        Some(match profile.vaapi_driver {
-            VaapiDriver::Auto | VaapiDriver::IHD => wire::VaapiDriver::Ihd,
-            VaapiDriver::I965 => wire::VaapiDriver::I965,
-            VaapiDriver::RadeonSI => wire::VaapiDriver::Radeonsi,
+        match profile.vaapi_driver {
+            VaapiDriver::Auto => None,
+            VaapiDriver::IHD => Some(wire::VaapiDriver::Ihd),
+            VaapiDriver::I965 => Some(wire::VaapiDriver::I965),
+            VaapiDriver::RadeonSI => Some(wire::VaapiDriver::Radeonsi),
             VaapiDriver::Nouveau => return Err(ConfigError::VaapiDriver),
-        })
+        }
     } else {
         None
     };
@@ -153,9 +165,9 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
     };
     Ok(wire::Video {
         format,
-        bit_depth: match profile.bit_depth {
-            FFmpegProfileBitDepth::EightBit => 8,
-            FFmpegProfileBitDepth::TenBit => 10,
+        bit_depth: match (profile.video_format, profile.bit_depth) {
+            (FFmpegProfileVideoFormat::Mpeg2Video, _) | (_, FFmpegProfileBitDepth::EightBit) => 8,
+            (_, FFmpegProfileBitDepth::TenBit) => 10,
         },
         width: positive(playback.resolution.width).ok_or(ConfigError::Resolution)?,
         height: positive(playback.resolution.height).ok_or(ConfigError::Resolution)?,
@@ -168,6 +180,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         bitrate_kbps: positive(profile.video_bitrate),
         buffer_kbps: positive(profile.video_buffer_size),
         accel,
+        amf_device: None,
         filters: wire::VideoFilters {
             libplacebo: wire::LibplaceboOptions {
                 tonemapping: tonemap.to_owned(),

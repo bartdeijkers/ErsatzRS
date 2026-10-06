@@ -89,6 +89,8 @@ pub enum AddonMediaListAdminSortDirection {
 /// Editable settings for one persisted add-on media list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListAdminForm {
+    #[serde(default)]
+    pub selection: crate::addon_list_selection::AddonListSelectionState,
     /// Current scheduled-refresh assessment that still requires review.
     pub auto_publication_hold: Option<AddonMediaListAutoPublicationHold>,
     /// Persisted host identity.
@@ -260,6 +262,7 @@ pub struct AddonMediaListImportProgress {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListPublicationBlockerKind {
+    SelectionReviewRequired,
     OverviewIncomplete,
     PublicationInProgress,
     RecoveryRequired,
@@ -538,6 +541,58 @@ pub struct AddonMediaListReplacementCandidate {
 /// Persistence and synchronization boundary for add-on media-list administration.
 #[async_trait]
 pub trait AddonMediaListRepository: Send + Sync {
+    /// Preserve legacy callers while capturing first-import selection intent atomically.
+    async fn add_or_refresh_with_options(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+        content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
+        options: crate::addon_list_selection::AddonListImportOptions,
+    ) -> Result<EntityId> {
+        if options.initial_selection_review {
+            return Err(RepositoryError::unavailable(
+                "review initial add-on selection",
+                "unsupported repository",
+            ));
+        }
+        self.add_or_refresh_with_policy(
+            addon_id,
+            source_url,
+            requested_folder,
+            content_kind_override,
+            chapter_input,
+            options.detail_policy,
+            options.delivery_mode,
+        )
+        .await
+    }
+    /// Read-only preview of a proposed selection on the committed overview.
+    async fn preview_selection(
+        &self,
+        _id: EntityId,
+        _policy: Option<crate::addon_list_selection::AddonListSelectionPolicy>,
+    ) -> Result<crate::addon_list_selection::AddonListSelectionPreview> {
+        Err(RepositoryError::unavailable(
+            "preview add-on selection",
+            "unsupported repository",
+        ))
+    }
+
+    /// Pin, exclude, or return one item to automatic selection.
+    async fn set_selection_override(
+        &self,
+        _id: EntityId,
+        _item_id: EntityId,
+        _expected_revision: i32,
+        _manual: Option<bool>,
+    ) -> Result<()> {
+        Err(RepositoryError::unavailable(
+            "save add-on selection override",
+            "unsupported repository",
+        ))
+    }
     /// Return one pageable list of administrative rows and its total count.
     async fn list_admin(
         &self,

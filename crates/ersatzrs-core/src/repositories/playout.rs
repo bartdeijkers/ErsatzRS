@@ -8,6 +8,15 @@ use ersatzrs_domain::{
 use super::Result;
 use crate::scheduling::SchedulingResult;
 
+/// Persisted source-comparison or refresh work, including delayed retries.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlayoutPendingWork {
+    #[default]
+    None,
+    Pending,
+    Failed,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlayoutListAdminRow {
     pub id: EntityId,
@@ -19,6 +28,12 @@ pub struct PlayoutListAdminRow {
     pub daily_rebuild_minutes: Option<i32>,
     pub build_success: Option<bool>,
     pub build_message: Option<String>,
+    /// Last successful attempt, retained when a subsequent attempt fails.
+    pub last_successful_build: Option<DateTime<Utc>>,
+    /// Observed Scripted selection changes, or the accepted External JSON revision.
+    pub source_revision: Option<i64>,
+    pub refresh_work: PlayoutPendingWork,
+    pub source_work: PlayoutPendingWork,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -161,6 +176,14 @@ pub struct SequentialPlayoutAdmin {
 #[async_trait]
 pub trait PlayoutRepository: Send + Sync {
     async fn get_with_anchor(&self, id: EntityId) -> Result<Playout>;
+    /// Load the authoritative scheduler kind for a bounded admin action.
+    /// Storage adapters should avoid loading the entire published timeline.
+    async fn schedule_kind_admin(
+        &self,
+        id: EntityId,
+    ) -> Result<ersatzrs_domain::PlayoutScheduleKind> {
+        Ok(self.get_with_anchor(id).await?.schedule_kind)
+    }
     async fn items_in_range(
         &self,
         playout_id: EntityId,

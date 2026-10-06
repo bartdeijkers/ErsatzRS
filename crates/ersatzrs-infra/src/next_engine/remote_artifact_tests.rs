@@ -50,6 +50,12 @@ async fn fixture() -> (
     tokio::fs::write(root.path().join("objects/prepared.media"), b"media")
         .await
         .unwrap();
+    tokio::fs::write(
+        root.path().join("objects/fixture.nl.srt"),
+        "1\n00:00:01,000 --> 00:00:02,000\nCaption\n",
+    )
+    .await
+    .unwrap();
     let channel = make_repositories(pool.clone())
         .channel
         .get_with_profile(channel.id)
@@ -134,8 +140,8 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
         .await
         .unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
-    assert_eq!(initial.projection.item.graphics.len(), 3);
-    let graphics = serde_json::to_value(&initial.projection.item.graphics).unwrap();
+    assert!(initial.projection.canvas.is_some());
+    let canvas = serde_json::to_value(&initial.projection.canvas).unwrap();
     let original_key = initial.identity.cache_key.clone();
     let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
         .await
@@ -143,8 +149,8 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
     assert_ne!(ready.identity.cache_key, original_key);
     assert!(ready.prepared_remote.is_none());
     assert_eq!(
-        serde_json::to_value(&ready.projection.item.graphics).unwrap(),
-        graphics
+        serde_json::to_value(&ready.projection.canvas).unwrap(),
+        canvas
     );
     let tracks = ready.projection.item.tracks.unwrap();
     let audio = tracks.audio.unwrap();
@@ -186,4 +192,25 @@ async fn prepared_open_refuses_missing_bytes_and_stale_publication() {
                 .is_err()
         );
     }
+}
+
+#[tokio::test]
+async fn prepared_sidecar_pins_are_checked_against_the_materialized_source() {
+    let (root, pool, locker, channel, start) = fixture().await;
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=2,"SubtitleStreamIndex"=9"#)
+        .execute(&pool).await.unwrap();
+    let initial = published(&pool, &locker, &channel, start).await;
+    let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
+        .await
+        .unwrap();
+    assert!(ready.projection.item.tracks.unwrap().subtitle.is_some());
+    tokio::fs::remove_file(root.path().join("objects/fixture.nl.srt"))
+        .await
+        .unwrap();
+    let initial = published(&pool, &locker, &channel, start).await;
+    assert!(
+        materialize_prepared(&pool, &locker, initial, Some(2), root.path())
+            .await
+            .is_err()
+    );
 }

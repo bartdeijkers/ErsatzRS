@@ -184,6 +184,23 @@ for the header. Missing or invalid credentials return HTTP 401.
 `GET /api/openapi.json` describes the implemented machine endpoints and their
 authentication scheme; fetching it also requires the header. For example,
 `POST /api/maintenance/clean_artwork` queues cleanup after authenticating.
+The machine CRUD endpoints are `GET /api/ffmpeg/profiles`,
+`POST /api/ffmpeg/profiles/new`, `PUT /api/ffmpeg/profiles/update`,
+`DELETE /api/ffmpeg/delete/{id}`, and their smart-collection counterparts at
+`/api/collections/smart`, `/api/collections/smart/new`,
+`/api/collections/smart/update` and `/api/collections/smart/delete/{id}`.
+Profile updates select `ffmpegProfileId`; smart-collection updates select `id`.
+JSON uses camelCase and accepts enum names or their numeric values.
+`POST /api/maintenance/empty_trash` runs the existing trash cleanup operation.
+Invalid requests return 400, missing records 404, profile and smart-collection
+conflicts 409, and operational failures 500. Mixed known error categories return 400.
+Default profiles cannot be deleted (400); profiles referenced by channels
+cannot be deleted (409). Rejected deletions preserve channels and playouts.
+`GET /api/sessions` returns normal playlist workers from both streaming engines
+with `channelNumber`, `state`, `transcodedUntil` and `lastAccess`. Next reports
+`state: "next"` and `transcodedUntil: null`; a native cursor is also null before
+worker startup. Reports exclude preview workers and direct-response registrations.
+Reading a report does not touch a worker or extend its idle lifetime.
 This description does not advertise upstream endpoints that ErsatzRS does not
 implement.
 
@@ -289,7 +306,8 @@ Treat these values as secrets:
 
 Do not commit them, paste them into issue reports, or include them in
 screenshots. The troubleshooting export redacts recognized secret-bearing
-configuration, but review diagnostics before sharing them.
+configuration and user information or secret query values in allowed environment
+URIs, but review diagnostics before sharing them.
 
 ## Next channel configuration overlays
 
@@ -319,6 +337,16 @@ sets the software deinterlacer's mode:
     }
   }
 }
+```
+
+Generated Next configurations enable `fallback.show_error`. When Next substitutes
+black video and silence for a schedule gap or failed item, it burns the reason
+into that video, including when ordinary subtitles use Convert mode. This is
+independent of selected programme or library fallback captions. To keep plain
+black emergency fallback, set an overlay to:
+
+```json
+{ "fallback": { "show_error": false } }
 ```
 
 Changes take effect when the next engine session starts, including after an idle

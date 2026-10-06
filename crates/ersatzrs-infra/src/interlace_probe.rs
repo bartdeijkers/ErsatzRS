@@ -57,15 +57,30 @@ async fn resolve(
     deadline: Instant,
     executable: &str,
 ) -> Result<Option<f64>, ProbeError> {
+    if !enabled(pool).await? {
+        return Ok(None);
+    }
+    resolve_stored(pool, version_id, path, stream_index, deadline, executable).await
+}
+
+async fn enabled(pool: &DbPool) -> Result<bool, ProbeError> {
     let enabled: Option<String> =
         sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
             .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES)
             .fetch_optional(pool)
             .await
             .map_err(|_| ProbeError)?;
-    if !enabled.is_some_and(|value| value.eq_ignore_ascii_case("true") || value == "1") {
-        return Ok(None);
-    }
+    Ok(enabled.is_some_and(|value| value.eq_ignore_ascii_case("true") || value == "1"))
+}
+
+async fn resolve_stored(
+    pool: &DbPool,
+    version_id: i64,
+    path: &str,
+    stream_index: usize,
+    deadline: Instant,
+    executable: &str,
+) -> Result<Option<f64>, ProbeError> {
     // Protocol inputs are excluded. Unsupported local formats (including an
     // unavailable AviSynth runtime) fail the bounded FFmpeg probe without
     // publishing a ratio.
@@ -113,6 +128,75 @@ async fn resolve(
         return Ok(None);
     }
     if cacheable && !identity.publish(pool, version_id, path, ratio).await? {
+        return Ok(None);
+    }
+    Ok(Some(ratio))
+}
+
+/// Sample a transient local source without looking up or publishing media rows.
+pub(crate) async fn enrich_transient(
+    pool: &DbPool,
+    path: &str,
+    duration: Duration,
+    deinterlace: bool,
+    stream: &mut SourceVideoStream,
+    deadline: Instant,
+) {
+    if !deinterlace || stream.scan_kind == VideoScanKind::Interlaced || stream.is_still_image {
+        return;
+    }
+    let result = tokio::time::timeout_at(
+        deadline,
+        resolve_transient(
+            pool,
+            path,
+            stream.index,
+            duration,
+            deadline,
+            &ersatzrs_ffmpeg::ffmpeg_path(),
+        ),
+    )
+    .await;
+    match result {
+        Ok(Ok(Some(ratio))) => {
+            stream.scan_kind = if ratio > 0.05 {
+                VideoScanKind::Interlaced
+            } else {
+                VideoScanKind::Progressive
+            }
+        }
+        Ok(Ok(None)) => {}
+        _ => tracing::debug!(
+            "transient interlace sampling unavailable; preserving container scan kind"
+        ),
+    }
+}
+
+async fn resolve_transient(
+    pool: &DbPool,
+    path: &str,
+    index: usize,
+    duration: Duration,
+    deadline: Instant,
+    executable: &str,
+) -> Result<Option<f64>, ProbeError> {
+    if !enabled(pool).await? || duration < Duration::from_secs(3) || !Path::new(path).is_absolute()
+    {
+        return Ok(None);
+    }
+    let Ok(before) = tokio::fs::metadata(path).await else {
+        return Ok(None);
+    };
+    if !before.is_file() {
+        return Ok(None);
+    }
+    let _guard = PROBE_GATE.lock().await;
+    if Instant::now() >= deadline {
+        return Err(ProbeError);
+    }
+    let ratio = probe(executable, path, index, duration / 3, deadline).await?;
+    let after = tokio::fs::metadata(path).await.map_err(|_| ProbeError)?;
+    if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
         return Ok(None);
     }
     Ok(Some(ratio))
@@ -606,6 +690,7 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(stored, Some(primary));
+        assert_transient_sampling_without_media_tables(&path, executable).await;
         // Reuse persisted data even when no probe executable can be started.
         assert_eq!(
             resolve(
@@ -619,6 +704,51 @@ mod tests {
             .await
             .unwrap(),
             stored
+        );
+    }
+
+    async fn assert_transient_sampling_without_media_tables(path: &str, executable: &str) {
+        // This pool deliberately has no media tables: transient sampling must
+        // use the selected source, not a sentinel media version or cached ratio.
+        let transient = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::query(r#"CREATE TABLE "ConfigElement" ("Key" TEXT PRIMARY KEY, "Value" TEXT)"#)
+            .execute(&transient)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" VALUES ('ffmpeg.probe_for_interlaced_frames', 'True')"#,
+        )
+        .execute(&transient)
+        .await
+        .unwrap();
+        let transient_ratio = resolve_transient(
+            &transient,
+            path,
+            1,
+            Duration::from_secs(12),
+            Instant::now() + Duration::from_secs(10),
+            executable,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(transient_ratio > 0.05);
+        assert_eq!(
+            resolve_transient(
+                &transient,
+                "https://example.invalid/media",
+                0,
+                Duration::from_secs(12),
+                Instant::now() + Duration::from_secs(10),
+                executable
+            )
+            .await
+            .unwrap(),
+            None
         );
     }
 

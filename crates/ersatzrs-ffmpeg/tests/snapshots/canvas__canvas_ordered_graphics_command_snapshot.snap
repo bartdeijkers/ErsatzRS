@@ -1,0 +1,44 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/canvas.rs
+assertion_line: 53
+expression: "command.arguments.join(\"\\n\")"
+---
+-nostdin
+-hide_banner
+-nostats
+-loglevel
+error
+-f
+lavfi
+-readrate
+1
+-i
+color=c=black@0.0:s=64x64:r=4/1,format=bgra
+-f
+lavfi
+-i
+color=c=blue:s=16x16:r=4,format=rgba
+-f
+lavfi
+-i
+color=c=red:s=16x16:r=4,format=rgba
+-filter_complex
+[2:0]format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.50[gi1];[0:0][1:0]overlay=x=0:y=16:format=rgb[vge0];[vge0][gi1]overlay=x=0:y=16:format=rgb[vge1];[vge1]format=bgra[vpf]
+-map
+[vpf]
+-t
+00:00:01.0000000
+-an
+-c:v
+ffv1
+-level
+3
+-slices
+16
+-slicecrc
+0
+-pix_fmt
+bgra
+-f
+nut
+pipe:1

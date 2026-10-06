@@ -52,6 +52,7 @@ impl YamlContext {
             .iter()
             .filter(|entry| entry.key == history_key && entry.child_key.is_none())
             .filter(|entry| entry.when <= self.current_time && !ignored.contains(&entry.id))
+            .filter(|entry| self.history_start.is_none_or(|start| entry.when >= start))
             .collect::<Vec<_>>();
         let unsafe_history = || {
             SchedulingError::InvalidYaml(
@@ -59,17 +60,17 @@ impl YamlContext {
         )
         };
         let Some(latest) = histories.iter().max_by_key(|entry| (entry.when, entry.id)) else {
-            let previously_used = self
-                .reference_data
-                .existing_history
-                .iter()
-                .any(|entry| entry.key == history_key)
-                || self.reference_data.existing_items.iter().any(|item| {
-                    item.scheduling_context
+            let previously_used = self.reference_data.existing_history.iter().any(|entry| {
+                entry.key == history_key
+                    && self.history_start.is_none_or(|start| entry.when >= start)
+            }) || self.reference_data.existing_items.iter().any(|item| {
+                self.history_start.is_none_or(|start| item.start >= start)
+                    && item
+                        .scheduling_context
                         .as_deref()
                         .and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok())
                         .is_some_and(|value| value["content"].as_str() == Some(content))
-                });
+            });
             return if previously_used {
                 Err(unsafe_history())
             } else {

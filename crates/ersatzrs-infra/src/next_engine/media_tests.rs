@@ -1,6 +1,124 @@
 use super::*;
 
 #[test]
+fn canvas_source_authenticates_occurrence_expiry_and_host_without_exposing_paths() {
+    use super::super::{canvas::CanvasBinding, protocol::ProbeHint};
+    let relay = MediaRelay::new();
+    relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let start = chrono::DateTime::from_timestamp(1_000, 0).unwrap();
+    let binding = CanvasBinding {
+        playout_start: None,
+        video_stream_index: None,
+        session: None,
+        channel: 1,
+        item: 2,
+        media: 3,
+        version: 4,
+        file: 5,
+        start,
+        finish: start + chrono::TimeDelta::minutes(5),
+        in_point_ms: 10_000,
+        out_point_ms: 0,
+        expires: start + chrono::TimeDelta::minutes(6),
+    };
+    let hint = ProbeHint {
+        video: Vec::new(),
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        format_name: Some("nut".into()),
+        duration_ms: None,
+    };
+    let Source::Http {
+        uri,
+        headers,
+        probe_hint,
+        reconnect,
+        in_point_ms,
+        out_point_ms,
+        ..
+    } = relay.canvas_source(&binding, hint).unwrap()
+    else {
+        panic!("HTTP canvas source");
+    };
+    let uri = url::Url::parse(&uri).unwrap();
+    assert_eq!(uri.path(), "/ffmpeg/next-canvas");
+    let query = uri
+        .query_pairs()
+        .find(|(key, _)| key == "binding")
+        .unwrap()
+        .1;
+    assert_eq!(
+        serde_json::from_str::<CanvasBinding>(&query).unwrap(),
+        binding
+    );
+    assert!(headers
+        .iter()
+        .any(|header| header == &format!("{SESSION_HEADER}: {{{{{SESSION_ENV}}}}}")));
+    assert!(probe_hint.is_some());
+    assert_eq!(reconnect, Some(false));
+    assert_eq!((in_point_ms, out_point_ms), (None, None));
+    let ticket = headers
+        .iter()
+        .find_map(|header| header.strip_prefix(&format!("{CANVAS_HEADER}: ")))
+        .unwrap();
+    assert!(relay.authorized_canvas(&binding, ticket, start));
+    assert!(!relay.authorized_canvas(&binding, ticket, binding.expires));
+    assert!(!MediaRelay::new().authorized_canvas(&binding, ticket, start));
+    assert!(!relay.authorized_canvas(&binding, "invalid", start));
+    assert_canvas_tampering(&relay, &binding, ticket, start);
+    let session = Uuid::new_v4();
+    let scoped = binding.for_session(session);
+    let Source::Http { headers, .. } = relay.canvas_source(&scoped, probe_hint.unwrap()).unwrap()
+    else {
+        panic!("HTTP canvas source");
+    };
+    assert!(headers
+        .iter()
+        .any(|header| header == &format!("{SESSION_HEADER}: {session}")));
+}
+
+fn assert_canvas_tampering(
+    relay: &MediaRelay,
+    binding: &super::super::canvas::CanvasBinding,
+    ticket: &str,
+    start: chrono::DateTime<chrono::Utc>,
+) {
+    for field in [
+        "channel",
+        "item",
+        "media",
+        "version",
+        "file",
+        "start",
+        "finish",
+        "in",
+        "out",
+        "expires",
+        "session",
+        "playout_start",
+        "video_stream_index",
+    ] {
+        let mut changed = binding.clone();
+        match field {
+            "channel" => changed.channel += 1,
+            "item" => changed.item += 1,
+            "media" => changed.media += 1,
+            "version" => changed.version += 1,
+            "file" => changed.file += 1,
+            "start" => changed.start += chrono::TimeDelta::seconds(1),
+            "finish" => changed.finish += chrono::TimeDelta::seconds(1),
+            "in" => changed.in_point_ms += 1,
+            "out" => changed.out_point_ms += 1,
+            "session" => changed.session = Some(Uuid::nil()),
+            "playout_start" => changed.playout_start = Some(start + chrono::TimeDelta::seconds(1)),
+            "video_stream_index" => changed.video_stream_index = Some(1),
+            _ => changed.expires += chrono::TimeDelta::seconds(1),
+        }
+        assert!(!relay.authorized_canvas(&changed, ticket, start), "{field}");
+    }
+}
+
+#[test]
 fn callback_credentials_reject_tampering_and_previous_host_instances() {
     let relay = MediaRelay::new();
     let restarted = MediaRelay::new();

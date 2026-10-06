@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
-ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
-ersatzrs-hwprobe = { path = "../ersatzrs-hwprobe", version = "0.1.0" }
+ersatzrs-domain = { path = "../ersatzrs-domain", version = "1.1.0" }
+ersatzrs-hwprobe = { path = "../ersatzrs-hwprobe", version = "1.1.0" }
 flate2 = "1"
 mlua = { version = "0.12", features = ["lua54", "vendored"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

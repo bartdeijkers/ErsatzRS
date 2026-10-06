@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
+    Form,
 };
 use ersatzrs_app::{AdminTroubleshootingRuntimeError, PlaybackPreviewRequest};
 use ersatzrs_domain::StreamingEngine;
@@ -22,6 +23,7 @@ pub struct PlaybackPreviewQuery {
     stream_selector: Option<String>,
     preferred_audio_title: Option<String>,
     subtitle_id: Option<i64>,
+    music_video_credits_template: Option<String>,
     seek_seconds: Option<i64>,
     start: Option<String>,
     start_from_beginning: bool,
@@ -61,6 +63,7 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
                 "watermark" => query.watermark.extend(integer()?),
                 "graphicsElement" => query.graphics_element.extend(integer()?),
                 "streamingMode" => query.streaming_mode = Some(value),
+                "musicVideoCreditsTemplate" => query.music_video_credits_template = Some(value),
                 "streamSelector" => query.stream_selector = Some(value),
                 "preferredAudioTitle" => query.preferred_audio_title = Some(value),
                 "start" => query.start = Some(value),
@@ -87,6 +90,7 @@ impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
             stream_selector: query.stream_selector,
             preferred_audio_title: query.preferred_audio_title,
             subtitle_id: query.subtitle_id,
+            music_video_credits_template: query.music_video_credits_template,
             seek_seconds: if query.start_from_beginning {
                 Some(0)
             } else {
@@ -109,13 +113,110 @@ pub async fn playback_preview(
         Ok(()) => Redirect::temporary(playlist).into_response(),
         Err(AdminTroubleshootingRuntimeError::NotFound(error)) => {
             tracing::warn!(%error, "playback troubleshooting preview cannot be started");
-            StatusCode::NOT_FOUND.into_response()
+            preview_startup_failure(StatusCode::NOT_FOUND, &error)
         }
         Err(AdminTroubleshootingRuntimeError::Unavailable(error)) => {
             tracing::warn!(%error, "failed to start playback troubleshooting preview");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            preview_startup_failure(StatusCode::INTERNAL_SERVER_ERROR, &error)
         }
     }
+}
+
+pub async fn queue_preview(
+    State(state): State<AppState>,
+    Query(query): Query<PlaybackPreviewQuery>,
+) -> Response {
+    match state.application.queue_playback_preview(query.into()).await {
+        Ok(status) => (
+            StatusCode::ACCEPTED,
+            [(header::CACHE_CONTROL, "no-store")],
+            axum::Json(status),
+        )
+            .into_response(),
+        Err(error) => preview_startup_failure(StatusCode::CONFLICT, &error.to_string()),
+    }
+}
+
+pub async fn owned_preview_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Response {
+    match state.application.playback_preview_status(id).await {
+        Ok(Some(status)) => {
+            ([(header::CACHE_CONTROL, "no-store")], axum::Json(status)).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn stop_owned_preview(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    match state.application.stop_playback_preview(id).await {
+        Ok(Some(status)) => {
+            ([(header::CACHE_CONTROL, "no-store")], axum::Json(status)).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn owned_preview_file(
+    State(state): State<AppState>,
+    Path((id, filename)): Path<(String, String)>,
+) -> Response {
+    match state
+        .application
+        .playback_preview_file(id, filename.clone())
+        .await
+    {
+        Ok(Some(bytes)) => {
+            let mut response = crate::transport::iptv::hls::hls_file_response(&filename, bytes);
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn start_preview_form(
+    State(state): State<AppState>,
+    Form(query): Form<PlaybackPreviewQuery>,
+) -> Response {
+    match state.application.queue_playback_preview(query.into()).await {
+        Ok(status) => Redirect::to(&status.return_url).into_response(),
+        Err(error) => preview_startup_failure(StatusCode::CONFLICT, &error.to_string()),
+    }
+}
+
+pub async fn stop_preview_form(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    match state.application.stop_playback_preview(id).await {
+        Ok(Some(status)) => Redirect::to(&status.return_url).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+// Return only a stable diagnostic code. Runtime errors may contain provider
+// credentials or private paths; keep their details in the host diagnostic log.
+fn preview_startup_failure(status: StatusCode, error: &str) -> Response {
+    let code = if error.contains("troubleshooting playback is already running") {
+        "busy"
+    } else if error.contains("cleanup is unconfirmed") {
+        "cleanup"
+    } else if error.starts_with("failed to decode channel streaming_mode:") {
+        "configuration"
+    } else {
+        "startup"
+    };
+    (
+        status,
+        [(header::CACHE_CONTROL, "no-store")],
+        axum::Json(serde_json::json!({"code": code})),
+    )
+        .into_response()
 }
 
 pub async fn playback_log(State(state): State<AppState>) -> Response {
@@ -188,6 +289,56 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn preview_startup_failure_exposes_only_safe_action_codes() {
+        for (error, code) in [
+            (
+                "failed to decode channel streaming_mode: unknown enum value 99",
+                "configuration",
+            ),
+            ("troubleshooting playback is already running", "busy"),
+            (
+                "troubleshooting process cleanup is unconfirmed; restart is required",
+                "cleanup",
+            ),
+            (
+                "provider URL https://user:private@example.invalid/?token=private",
+                "startup",
+            ),
+        ] {
+            let response = preview_startup_failure(StatusCode::INTERNAL_SERVER_ERROR, error);
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            let body = axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value, serde_json::json!({"code": code}));
+        }
+    }
+
+    #[test]
+    fn preview_query_preserves_optional_unicode_credits_and_rejects_duplicates() {
+        for engine in ["Legacy", "Next"] {
+            let query: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
+                "streamingEngine={engine}&musicVideoCreditsTemplate=Caf%C3%A9+%26+Title&subtitleId=9"
+            )).unwrap();
+            let request: PlaybackPreviewRequest = query.into();
+            assert_eq!(
+                request.music_video_credits_template.as_deref(),
+                Some("Café & Title")
+            );
+            assert_eq!(request.subtitle_id, Some(9));
+        }
+        let query: PlaybackPreviewQuery =
+            serde_urlencoded::from_str("musicVideoCreditsTemplate=").unwrap();
+        assert_eq!(query.music_video_credits_template.as_deref(), Some(""));
+        assert!(serde_urlencoded::from_str::<PlaybackPreviewQuery>(
+            "musicVideoCreditsTemplate=a&musicVideoCreditsTemplate=b"
+        )
+        .is_err());
+    }
 
     #[test]
     fn preview_engine_defaults_to_legacy_and_both_engines_retain_all_watermarks() {

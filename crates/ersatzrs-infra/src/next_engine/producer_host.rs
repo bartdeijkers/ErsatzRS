@@ -371,6 +371,7 @@ mod tests {
     fn projection(path: &str) -> DeferredProjection {
         let start = Utc::now();
         DeferredProjection {
+            canvas: None,
             selected_subtitle: Some(PlaybackSubtitle {
                 id: 1,
                 subtitle_kind: crate::metadata::subtitle_kind::SIDECAR,

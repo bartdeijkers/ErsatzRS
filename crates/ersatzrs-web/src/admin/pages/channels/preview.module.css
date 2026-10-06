@@ -138,3 +138,12 @@
         grid-column: 2;
     }
 }
+
+.output-error {
+    color: var(--color-text-primary);
+    border-left: 3px solid var(--color-error);
+    padding-left: 0.75rem;
+    max-height: 12rem;
+    overflow: auto;
+    overflow-wrap: anywhere;
+}

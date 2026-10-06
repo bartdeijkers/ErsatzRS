@@ -56,6 +56,7 @@ pub struct AddonMediaListImportCoordinator {
     scheduled_refresh: bool,
     editor_revision: Option<i32>,
     delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
+    initial_selection_review: bool,
 }
 
 impl AddonMediaListImportCoordinator {
@@ -67,12 +68,18 @@ impl AddonMediaListImportCoordinator {
             scheduled_refresh: false,
             editor_revision: None,
             delivery_mode: None,
+            initial_selection_review: false,
         }
     }
 
     #[must_use]
     pub(crate) fn with_editor_revision(mut self, revision: i32) -> Self {
         self.editor_revision = Some(revision);
+        self
+    }
+
+    pub(crate) fn with_initial_selection_review(mut self, review: bool) -> Self {
+        self.initial_selection_review = review;
         self
     }
 
@@ -213,6 +220,7 @@ impl AddonMediaListImportCoordinator {
             let provider = InstalledAddonMediaListProvider::new(self.pool.clone());
             let id = AddonMediaListRemoteSynchronizer::new(self.pool.clone(), provider)
                 .with_delivery_mode(self.delivery_mode)
+                .with_initial_selection_review(self.initial_selection_review)
                 .add_or_refresh(
                     addon_id,
                     source_url,
@@ -737,6 +745,9 @@ impl AddonMediaListImportCoordinator {
             (id, false)
         };
 
+        if self.initial_selection_review {
+            crate::addon_list_selection::request_review_in_tx(&mut tx, list_id).await?;
+        }
         if let Some(mode) = self.delivery_mode {
             let previous = crate::addon_media_list_delivery::load_in_tx(&mut tx, list_id).await?;
             crate::addon_media_list_delivery::save_in_tx(&mut tx, list_id, mode, Utc::now())
@@ -2509,6 +2520,8 @@ impl AddonMediaListImportCoordinator {
                SET "State" = ?, "RequestedAt" = COALESCE("RequestedAt", ?),
                    "UpdatedAt" = ?
                WHERE "AddonMediaListId" = ? AND "State" = ?
+                 AND (NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection" WHERE "selection"."AddonMediaListId"="AddonMediaListDetailJob"."AddonMediaListId" AND "selection"."PolicyJson" IS NOT NULL)
+                     OR EXISTS (SELECT 1 FROM "AddonMediaListItem" AS "item" WHERE "item"."Id"="AddonMediaListDetailJob"."AddonMediaListItemId" AND ("item"."Included"=1 OR "item"."SelectionReason" IN ('missing_date','missing_duration'))))
                  AND EXISTS (
                      SELECT 1 FROM "AddonMediaList"
                      WHERE "Id" = ? AND "DetailImportPolicy" = ?
@@ -2537,24 +2550,49 @@ impl AddonMediaListImportCoordinator {
         list_id: EntityId,
         item_id: EntityId,
     ) -> Result<()> {
+        self.request_prepublication_details_with_priority(list_id, item_id, true)
+            .await
+    }
+
+    pub(crate) async fn request_selection_details(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+    ) -> Result<()> {
+        self.request_prepublication_details_with_priority(list_id, item_id, false)
+            .await
+    }
+
+    async fn request_prepublication_details_with_priority(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        manual: bool,
+    ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let context =
             crate::addon_media_list_detail_options::capture(&mut tx, list_id, item_id, 1).await?;
         // An identical request preserves its checkpoint, retry delay and active lease.
         sqlx::query(
             r#"UPDATE "AddonMediaListDetailJob"
-            SET "OptionPurpose"=1, "OptionContextJson"=?, "State"=?, "ManualPriority"=1,
+            SET "OptionPurpose"=1, "OptionContextJson"=?, "State"=?, "ManualPriority"=?,
                 "ResultRecordJson"=NULL, "Outcome"=NULL, "LeaseOwner"=NULL, "LeaseExpiresAt"=NULL,
-                "AttemptCount"=0, "NextEligibleAt"=NULL, "Diagnostic"=NULL, "UpdatedAt"=?
+                "AttemptCount"=CASE WHEN ? THEN 0 ELSE "AttemptCount" END, "NextEligibleAt"=CASE WHEN ? THEN NULL ELSE "NextEligibleAt" END, "Diagnostic"=CASE WHEN ? THEN NULL ELSE "Diagnostic" END, "UpdatedAt"=?
             WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=?
-              AND ("OptionPurpose"<>1 OR "OptionContextJson" IS NULL OR "OptionContextJson"<>?)"#,
+              AND ("OptionPurpose"<>1 OR "OptionContextJson" IS NULL OR "OptionContextJson"<>?)
+              AND (? OR ("State" IN (0,1,2,4) AND "ResultRecordJson" IS NULL))"#,
         )
         .bind(&context)
         .bind(encode_enum(AddonMediaListDetailState::Queued))
+        .bind(manual)
+        .bind(manual)
+        .bind(manual)
+        .bind(manual)
         .bind(encode_datetime(Utc::now()))
         .bind(list_id)
         .bind(item_id)
         .bind(&context)
+        .bind(manual)
         .execute(&mut *tx)
         .await
         .repository()?;
@@ -3198,6 +3236,8 @@ impl AddonMediaListImportCoordinator {
                  AND ("detail"."ManualPriority" = 1 OR (
                      "list"."DetailImportPolicy" = ?
                      AND "list"."DetailImportAuthorizedAt" IS NOT NULL
+                     AND (NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection" WHERE "selection"."AddonMediaListId"="list"."Id" AND "selection"."PolicyJson" IS NOT NULL)
+                         OR "item"."Included"=1 OR "item"."SelectionReason" IN ('missing_date','missing_duration'))
                  ))
                ORDER BY "detail"."ManualPriority" DESC,
                         COALESCE("detail"."RequestedAt", "detail"."UpdatedAt"),
@@ -4005,6 +4045,43 @@ mod tests {
             .expect("fixture add-on installation");
             let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
             (temporary, pool, coordinator)
+        }
+
+        #[tokio::test]
+        async fn initial_selection_review_is_committed_with_the_import_and_survives_restart() {
+            let (directory, pool, coordinator) = fixture().await;
+            let coordinator = coordinator.with_initial_selection_review(true);
+            let id = queue(
+                &coordinator,
+                "https://example.invalid/review-first",
+                AddonMediaListDetailPolicy::Automatic,
+            )
+            .await;
+            assert!(
+                crate::addon_list_selection::load_state(&pool, id)
+                    .await
+                    .unwrap()
+                    .review_required
+            );
+            pool.close().await;
+            let url = format!("sqlite:{}", directory.path().join("import.db").display());
+            let pool = crate::db::init(&url).await.unwrap();
+            let restarted = AddonMediaListImportCoordinator::new(pool.clone());
+            let progress = restarted.progress(id).await.unwrap().unwrap();
+            assert_eq!(progress.state, AddonMediaListImportState::Queued);
+            assert_eq!(sqlx::query_scalar::<_,i64>(r#"SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=?"#).bind(id).fetch_one(&pool).await.unwrap(),0);
+            queue(
+                &restarted,
+                "https://example.invalid/review-first",
+                AddonMediaListDetailPolicy::Automatic,
+            )
+            .await;
+            assert!(
+                crate::addon_list_selection::load_state(&pool, id)
+                    .await
+                    .unwrap()
+                    .review_required
+            );
         }
 
         #[tokio::test]
@@ -6730,6 +6807,136 @@ mod tests {
             sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionSchemaId"=101,"DraftOptionValuesJson"='{"enabled":true}' WHERE "Id"=?"#)
                 .bind(list_id).execute(&pool).await.unwrap();
             (temporary, pool, coordinator, list_id, item_id)
+        }
+
+        async fn selection_detail_fixture() -> (
+            tempfile::TempDir,
+            DbPool,
+            AddonMediaListImportCoordinator,
+            EntityId,
+            EntityId,
+        ) {
+            use ersatzrs_core::addon_list_selection::{
+                AddonListSelectionPolicy, AddonListSelectionSettings,
+            };
+            let fixture = detail_option_fixture_for(&["episode:1", "episode:2", "episode:3"]).await;
+            let (_, pool, _, list_id, item_id) = &fixture;
+            sqlx::query(r#"UPDATE "AddonMediaListItem" SET "DurationSeconds"=CASE WHEN "Rank"=2 THEN 30 ELSE 90 END,
+                "DisplayTitle"=CASE WHEN "Rank"=1 THEN 'Promo' ELSE "DisplayTitle" END,
+                "ProviderMetadataJson"=CASE WHEN "Rank"=0 THEN json_remove("ProviderMetadataJson",'$.release_date') WHEN "Rank"=1 THEN json_set("ProviderMetadataJson",'$.title','Promo') ELSE "ProviderMetadataJson" END
+                WHERE "AddonMediaListId"=?"#).bind(list_id).execute(pool).await.unwrap();
+            let mut tx = crate::db::begin_write(pool).await.unwrap();
+            crate::addon_list_selection::save_in_tx(
+                &mut tx,
+                *list_id,
+                &AddonListSelectionSettings {
+                    policy: Some(AddonListSelectionPolicy {
+                        newest_count: Some(3),
+                        minimum_seconds: Some(60),
+                        exclude_terms: vec!["promo".into()],
+                        ..Default::default()
+                    }),
+                    refresh_paused: false,
+                },
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    r#"SELECT "SelectionReason" FROM "AddonMediaListItem" WHERE "Id"=?"#
+                )
+                .bind(item_id)
+                .fetch_one(pool)
+                .await
+                .unwrap(),
+                "missing_date"
+            );
+            fixture
+        }
+
+        #[tokio::test]
+        async fn selection_detail_admission_preserves_manual_policy_and_retry_after_restart() {
+            let (directory, pool, coordinator, list_id, item_id) = selection_detail_fixture().await;
+            crate::addon_list_selection::queue_missing_facts(&pool, list_id)
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "AddonMediaListDetailJob" WHERE "OptionPurpose"=1"#
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+                0
+            );
+            let retry_at = encode_datetime(Utc::now() + Duration::hours(1));
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "DetailImportPolicy"=0,"DetailImportAuthorizedAt"=? WHERE "Id"=?"#)
+                .bind(encode_datetime(Utc::now())).bind(list_id).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "AttemptCount"=3,"NextEligibleAt"=?,"Diagnostic"='provider retry' WHERE "AddonMediaListItemId"=?"#)
+                .bind(&retry_at).bind(item_id).execute(&pool).await.unwrap();
+            crate::addon_list_selection::queue_missing_facts(&pool, list_id)
+                .await
+                .unwrap();
+            let expected = sqlx::query_as::<_,(i32,Option<String>,i32,bool)>(r#"SELECT "AttemptCount","NextEligibleAt","OptionPurpose","ManualPriority" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId"=?"#)
+                .bind(item_id).fetch_one(&pool).await.unwrap();
+            assert_eq!(expected, (3, Some(retry_at), 1, false));
+            assert!(coordinator.claim_detail_job().await.unwrap().is_none());
+            pool.close().await;
+            let url = format!("sqlite:{}", directory.path().join("import.db").display());
+            let pool = crate::db::init(&url).await.unwrap();
+            crate::addon_list_selection::queue_missing_facts(&pool, list_id)
+                .await
+                .unwrap();
+            assert_eq!(sqlx::query_as::<_,(i32,Option<String>,i32,bool)>(r#"SELECT "AttemptCount","NextEligibleAt","OptionPurpose","ManualPriority" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId"=?"#)
+                .bind(item_id).fetch_one(&pool).await.unwrap(),expected);
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "AddonMediaListDetailJob" WHERE "OptionPurpose"=1"#
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+                1
+            );
+        }
+
+        #[tokio::test]
+        async fn selection_checkpointed_enrichment_reclassifies_after_database_restart() {
+            let (directory, pool, coordinator, list_id, item_id) = selection_detail_fixture().await;
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "DetailImportPolicy"=0,"DetailImportAuthorizedAt"=? WHERE "Id"=?"#)
+                .bind(encode_datetime(Utc::now())).bind(list_id).execute(&pool).await.unwrap();
+            crate::addon_list_selection::queue_missing_facts(&pool, list_id)
+                .await
+                .unwrap();
+            let job = coordinator.claim_detail_job().await.unwrap().unwrap();
+            assert_eq!(job.item_id, item_id);
+            let mut detail =
+                serde_json::to_value(item_record("episode:1", 0, "Full programme detail")).unwrap();
+            detail["duration_seconds"] = serde_json::json!(90);
+            let detail = serde_json::from_value(detail).unwrap();
+            coordinator
+                .checkpoint_detail_result(&job, MediaListEnrichOutcomeKind::Complete, None, &detail)
+                .await
+                .unwrap();
+            pool.close().await;
+            let url = format!("sqlite:{}", directory.path().join("import.db").display());
+            let pool = crate::db::init(&url).await.unwrap();
+            let restarted = AddonMediaListImportCoordinator::new(pool.clone());
+            assert!(restarted.process_one_detail().await.unwrap());
+            assert_eq!(
+                sqlx::query_as::<_, (bool, String)>(
+                    r#"SELECT "Included","SelectionReason" FROM "AddonMediaListItem" WHERE "Id"=?"#
+                )
+                .bind(item_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+                (true, "accepted".into())
+            );
+            assert_eq!(sqlx::query_scalar::<_,i64>(r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? AND "Included"=0"#)
+                .bind(list_id).fetch_one(&pool).await.unwrap(),2);
         }
 
         #[tokio::test]

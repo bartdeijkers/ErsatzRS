@@ -54,7 +54,7 @@ notes  = ''
 name   = 'TimelinePage` (`/playouts`)'
 status = '✅'
 routes = ['/playouts', '/playouts/add', '/playouts/add/:kind', '/playouts/classic/:id', '/playouts/block/:id', '/playouts/scripted/:id', '/playouts/:id/alternate-schedules', '/playouts/:id/templates']
-notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback. 2026-07-31: `tests/e2e/channel-watch.spec.ts` proves `/playouts/add` disables a mirror backed by a source playout. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; kind and nested editor workflows remain covered by their owning scheduling/browser specs.'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors. 2026-07-22: `tests/e2e/playouts-feedback.spec.ts` covers the detailed list/detail and dialog workflow plus rebuild feedback. 2026-07-31: `tests/e2e/channel-watch.spec.ts` proves `/playouts/add` disables a mirror backed by a source playout. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`; kind and nested editor workflows remain covered by their owning scheduling/browser specs. UCU-09 row164: concrete server-resolved template island props and in-order SSR pass Chromium/Firefox selection and save/reload checks in dependent-group-selections.spec.ts, without hydration errors. Finding 10 uses in-order SSR for /playouts, exposes latest failures in Activity without JavaScript, retains the published timeline below rejected-build diagnostics, and refreshes recovered status. Chromium/Firefox, mobile English and desktop Dutch acceptance is recorded in v111-findings-10.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -150,7 +150,7 @@ notes  = 'SSR multipart form; `/channels/add` and `/channels/:id` smoke clean.'
 name   = 'LocalLibrariesPage'
 status = '✅'
 routes = ['/media/sources/local', '/media/sources/local/add', '/media/sources/local/:id/edit']
-notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged. The production router contract is audited by `tests/e2e/admin-route-contract.spec.ts`.'
+notes  = 'Delete dialog server fn smoke clean. UCU-09 row167 uses in-order SSR for local editor forms and localized HTML correction responses; eight Chromium/Firefox JS/no-JS cases prove validation, draft recovery, escaped input and retained media identity in tests/e2e/local-library-paths.spec.ts. The production router contract is audited by tests/e2e/admin-route-contract.spec.ts. Finding 03 adds a native POST folder preview using the same populated SSR form; milestone v111-findings-03 owns browser and final acceptance evidence.'
 
 [[page]]
 name   = 'JellyfinSourcesPage` etc.'
@@ -180,7 +180,7 @@ notes  = 'Hydrated group/template add flow and route-family console check covere
 name   = 'TemplateEditorPage'
 status = '✅'
 routes = ['/templates/:id']
-notes  = 'Editor geometry, add/remove/content sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`.'
+notes  = 'Editor geometry, add/remove/content sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`. UCU-09 row164: dependent-group-selections.spec.ts proves playlist-group changes clear the saved child and replacement persistence in Chromium/Firefox.'
 
 [[page]]
 name   = 'DecosPage'
@@ -324,13 +324,13 @@ notes  = '`tests/e2e/scheduling-route-family.spec.ts` covers hydrated list/add/i
 name   = 'CollectionDetailPage'
 status = '✅'
 routes = ['/media/collections/:id']
-notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection and proves completed hydration, card rendering, custom-order persistence, accessible move controls, selected-item removal, and the post-mutation refresh.'
+notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection and proves completed hydration, card rendering, custom-order persistence, poster drag, repeated accessible moves, pending-save and selection exclusion, selected-item removal, post-mutation refresh, and English/Dutch failed-save restoration and retry.'
 
 [[page]]
 name   = 'HealthPage'
 status = '✅'
 routes = ['/system/health']
-notes  = '`tests/e2e/support-pages.spec.ts` proves live and persisted health rows against the scripted Support parity criteria.'
+notes  = '`tests/e2e/support-pages.spec.ts` covers Support health rows. `tests/e2e/health-refresh.spec.ts` proves cached navigation, explicit persisted refresh with and without JavaScript, automatic media-state refresh, navigation and Dutch labels in Chromium and Firefox. SSR resolves the initial snapshot before emitting the island; the old rule-2 exemption is removed (UCU-09 row136).'
 
 [[page]]
 name   = 'LogsPage'
@@ -414,7 +414,7 @@ notes  = 'The production router contract is audited by `tests/e2e/admin-route-co
 name   = 'SettingsPages'
 status = '✅'
 routes = ['/settings/ffmpeg', '/settings/logging', '/settings/hdhr', '/settings/scanner', '/settings/playout', '/settings/ui', '/settings/xmltv']
-notes  = '`tests/e2e/settings-i18n.spec.ts` covers all settings pages in every supported culture plus FFmpeg form persistence; `tests/e2e/island-hydration.spec.ts` covers their island startup and injected storage failure. UCU-08 row 127 adds in-order SSR for HDHomeRun/UI settings and tests JWT-enabled/disabled controls, saves and discovery in Chromium/Firefox with and without JavaScript (`tests/e2e/hdhr-jwt.spec.ts`).'
+notes  = '`tests/e2e/settings-i18n.spec.ts` covers all settings pages in every supported culture plus FFmpeg form persistence; `tests/e2e/island-hydration.spec.ts` covers their island startup and injected storage failure. UCU-08 row 127 adds in-order SSR for HDHomeRun/UI settings and tests JWT-enabled/disabled controls, saves and discovery in Chromium/Firefox with and without JavaScript (`tests/e2e/hdhr-jwt.spec.ts`). UCU-09 row162 adds in-order SSR for FFmpeg settings and verifies discovered/edited/deleted script choices, operator names, persisted selection, retained track preferences and no-JS saves in both browsers (`tests/e2e/mpegts-script-settings.spec.ts`).'
 
 [[page]]
 name   = 'OtherVideosPages'

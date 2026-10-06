@@ -10,12 +10,29 @@ its original native-only wording is superseded by this decision.
 
 ## Implementation
 
-Partial — release and Docker packaging stage the upstream artifacts with
-checksum, license and provenance (UCU-01 row 4). UCU-02 row 11 adds persisted
-per-channel engine selection with retained native defaults and HLS Segmenter
-normalization for Next, verified through migration, repository and browser
-tests. Initial local-video runtime supervision and served HLS have Linux proof
-(UCU-02 row 13); full Next playback and platform acceptance remain open.
+Partial — the optional engine is integrated through persisted selection,
+managed package discovery, supervised processes, authenticated provider/remote
+inputs, selected tracks, fallback, graphics, troubleshooting and health. The
+UCU-09 final window gates pass; approved platform acceptance debt remains open. The
+owning [catch-up milestone](../progress/milestones.toml) records current proof.
+Linux and native Windows application playback tests pass
+with Next `6b49dae` and published ErsatzRS-ffmpeg v2.0.4, including selected
+subtitles/audio and graphics. Direct RGB image opacity is now proven; the
+older limitation described below is superseded. Accepted live embedded-text
+limitations and approved QSV/AMF/native-Linux-NVIDIA hardware debt remain
+explicit in [catch-up parity](../progress/parity/upstream-baseline-catch-up.toml).
+These results do not establish full application acceptance on all six targets.
+On 2026-10-01 the maintainer approved retaining Linux ARMv7/ARM64 and both macOS
+targets as explicit unverified application acceptance debt at UCU-09 closeout.
+Windows proof includes production-adapter Next HLS, JavaScript-selected audio,
+subtitle retention, normal/preview isolation and MPEG-2 output. The owning debt
+is `ucu-arm-macos-application-acceptance`; declared platform support is unchanged.
+
+### Historical implementation checkpoints
+
+The following checkpoints explain the integration sequence. Their references
+to then-open work are historical; current gate status belongs to the owning
+milestone and parity debt records.
 
 The UCU-02 row 13 infrastructure checkpoint adds executable discovery, typed
 JSON exchange and atomic complete-schedule publication. Profile conversion and
@@ -173,8 +190,9 @@ This verifies publication only; full native Windows Next playback remains open.
 
 Map profile dimensions, codecs, bit depth, bitrates, kHz-to-Hz audio rate,
 loudness, scale/crop/stretch, deinterlacing and supported hardware selections
-to the packaged Next API. Its current output contract supports H.264/HEVC and
-AAC/AC3 SDR normalization. Reject explicit unsupported codecs, HDR output,
+to the packaged Next API. Its current output contract supports H.264, HEVC and MPEG-2 with
+AAC/AC3 SDR normalization. MPEG-2 requires a positive video bitrate and forces
+eight-bit output, matching the official Next configuration contract. Reject explicit unsupported codecs, HDR output,
 V4L2M2M and Nouveau selections instead of inheriting the original integration's
 silent codec or acceleration substitutions. User-facing validation and health
 for those failures remain part of integration acceptance. Native encoding
@@ -202,7 +220,8 @@ an audio input, pinned silence uses generated silent audio with a finite probe
 hint, following Next's own synthetic-input contract; it does not restore source
 audio. Sidecar and extracted subtitle paths use the existing native resolver,
 and item in/out points remain on the original media timeline. Prepared provider
-intervals and graphics/watermarks still need integration.
+intervals use the shared version-bound preparation paths; graphics and
+watermarks use the publication rules below.
 
 Schedule loading reuses the canonical playout repository and shared scheduler
 locks, retaining one logical row per item and choosing its pinned version or the
@@ -245,10 +264,12 @@ and intermittent watermarks and image graphics share stable ZIndex ordering and
 independent source timelines. Intermittent timing uses wall-clock cycles and
 Next's default fades. Images reuse native selection and template variables,
 including per-item overrides and source geometry, for scheduled and preview
-playback. Unsupported element kinds, image opacity expressions and absolute
-coordinates fail projection explicitly. Remaining graphics integration is open
-parity work; UCU-06 owns row-105/106 acceptance. The accepted RGB opacity
-limitation is tracked separately in upstream catch-up debt.
+playback. Plain permanent/intermittent watermarks use direct media layers. Mixed or
+expression graphics use the authenticated FFmpeg canvas accepted in ADR 0105,
+including image, text, script, motion and subtitle graphics. Current official
+Next RGB opacity has decoded Linux and Windows proof; the production HTTP
+canvas has decoded Linux application proof. This is implementation evidence, not a waiver of the remaining platform
+acceptance.
 
 On-demand Next sessions shift the stored timeline before manifest publication,
 then checkpoint viewer touches every five minutes and on exit. The saved point

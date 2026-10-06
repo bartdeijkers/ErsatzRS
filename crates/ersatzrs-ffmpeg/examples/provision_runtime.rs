@@ -18,6 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut file = OpenOptions::new().create(true).append(true).open(output)?;
     for (name, value) in [
+        ("ERSATZRS_FFMPEG", &report.ffmpeg.path),
         ("ERSATZRS_NEXT_TEST_FFMPEG", &report.ffmpeg.path),
         ("ERSATZRS_NEXT_TEST_FFPROBE", &report.ffprobe.path),
         ("FFMPEG_PATH", &report.ffmpeg.path),

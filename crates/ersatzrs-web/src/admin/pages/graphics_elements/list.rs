@@ -65,7 +65,6 @@ fn graphics_elements_table(rows: Vec<GraphicsElementListRow>) -> AnyView {
 }
 
 fn graphics_element_row(row: GraphicsElementListRow) -> impl IntoView {
-    let is_text = row.kind == 1;
     let name = if row.name.trim().is_empty() {
         tr(TextKey::UntitledItem).to_owned()
     } else {
@@ -88,19 +87,11 @@ fn graphics_element_row(row: GraphicsElementListRow) -> impl IntoView {
                 <a
                     href=format!("/graphics-elements/{}", row.id)
                     class=style::edit_link
-                    style:display=if is_text { "inline-flex" } else { "none" }
                     aria-label=tr(TextKey::EditGraphicsElement)
-                    data-graphics-element-edit=is_text.then_some("true")
+                    data-graphics-element-edit="true"
                 >
                     {tr(TextKey::Edit)}
                 </a>
-                <span
-                    class=style::not_editable
-                    style:display=if is_text { "none" } else { "inline" }
-                    data-graphics-element-not-editable=(!is_text).then_some("true")
-                >
-                    {tr(TextKey::GraphicsElementNotEditable)}
-                </span>
             </td>
         </tr>
     }

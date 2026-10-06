@@ -1,3 +1,4 @@
+use ersatzrs_core::repositories::PlayoutPendingWork;
 mod common;
 
 use chrono::Duration;
@@ -321,6 +322,56 @@ async fn playout_admin_repository_lists_creates_edits_and_erases_playouts() {
         .unwrap();
     repos.playout.delete_admin(id).await.unwrap();
     assert!(repos.playout.delete_admin(id).await.is_err());
+}
+
+#[tokio::test]
+async fn playout_admin_status_retains_last_success_after_failure_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}", directory.path().join("status.db").display());
+    let pool = ersatzrs_infra::db::init(&url).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    pool.execute(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, 'HD', 1920, 1080)"#)
+        .await.unwrap();
+    seed_runtime_state_fixture(&pool, &repos).await;
+    // The list contract stores numeric scheduler kinds, as do admin writes.
+    pool.execute(r#"UPDATE "Playout" SET "ScheduleKind" = 1 WHERE "Id" = 1"#)
+        .await
+        .unwrap();
+    let mut status = common::build_status(1);
+    status.success = false;
+    status.message = Some("first attempt failed".into());
+    repos.playout.upsert_build_status(&status).await.unwrap();
+    let rows = repos.playout.list_admin("", 0, 10).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].last_successful_build, None);
+    assert_eq!(rows[0].source_revision, None);
+
+    status.success = true;
+    status.message = None;
+    repos.playout.upsert_build_status(&status).await.unwrap();
+    let successful_at = status.last_build;
+    status.last_build += Duration::minutes(1);
+    status.success = false;
+    status.message = Some("replacement refused".into());
+    repos.playout.upsert_build_status(&status).await.unwrap();
+    pool.close().await;
+    let pool = ersatzrs_infra::db::init(&url).await.unwrap();
+    let repos = make_repositories(pool.clone());
+    let row = repos.playout.list_admin("", 0, 10).await.unwrap().remove(0);
+    assert_eq!(row.last_successful_build, Some(successful_at));
+    assert_eq!(row.build_success, Some(false));
+    assert_eq!(row.build_message.as_deref(), Some("replacement refused"));
+    assert_eq!(row.refresh_work, PlayoutPendingWork::None);
+    assert_eq!(row.source_work, PlayoutPendingWork::None);
+
+    status.success = true;
+    status.message = None;
+    status.last_build += Duration::minutes(1);
+    repos.playout.upsert_build_status(&status).await.unwrap();
+    let row = repos.playout.list_admin("", 0, 10).await.unwrap().remove(0);
+    assert_eq!(row.last_successful_build, Some(status.last_build));
+    assert_eq!(row.build_success, Some(true));
+    assert_eq!(row.build_message, None);
 }
 
 #[tokio::test]

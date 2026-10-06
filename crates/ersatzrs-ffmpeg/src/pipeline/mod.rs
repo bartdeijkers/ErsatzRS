@@ -36,6 +36,50 @@ use crate::{
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
 
+pub(crate) fn prepare_graphics_image_filters(
+    input: &mut InputFile,
+    overlay: &mut WatermarkOverlay,
+    resolution: FrameSize,
+    clock: &WatermarkOpacityClock,
+) {
+    if overlay.size == ersatzrs_domain::WatermarkSize::Scaled {
+        input
+            .filter_steps
+            .push(watermark_scale_filter(overlay, resolution));
+    }
+    if let Some(expression) = overlay
+        .opacity_expression
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        if let Some(gate) = crate::filter::watermark_opacity_boolean_gate(expression, clock) {
+            overlay.enable = Some(
+                overlay
+                    .enable
+                    .as_ref()
+                    .map_or_else(|| gate.clone(), |enable| format!("({enable})*({gate})")),
+            );
+        } else {
+            input
+                .filter_steps
+                .push(watermark_opacity_expression_filter_with_clock(
+                    expression, clock,
+                ));
+        }
+    } else if overlay.opacity < 100 {
+        input
+            .filter_steps
+            .push(watermark_opacity_filter(overlay.opacity));
+    }
+    input.filter_steps.extend(
+        overlay
+            .fade_points
+            .iter()
+            .copied()
+            .map(crate::watermark_fade_filter),
+    );
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     MpegTs,
@@ -44,6 +88,21 @@ pub enum OutputFormat {
     Mp4,
     Mkv,
     Nut,
+}
+
+/// Whether a profile requests AV1 encoding (rather than source video copy).
+#[must_use]
+pub fn profile_encodes_av1(profile: &FFmpegProfile) -> bool {
+    profile.transcode_video && profile.video_format == FFmpegProfileVideoFormat::Av1
+}
+
+/// Reject AV1 in MPEG-TS, including MPEG-TS HLS segments (ADR 0106).
+/// Native fragmented MP4 HLS remains available; no codec substitution is made.
+#[must_use]
+pub fn av1_output_error(format: OutputFormat) -> Option<&'static str> {
+    matches!(format, OutputFormat::MpegTs | OutputFormat::Hls).then_some(
+        "AV1 output requires native fMP4 HLS, MP4 or Matroska; MPEG-TS is unsupported. Use native HLS or select H.264/HEVC in the FFmpeg profile.",
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,7 +329,21 @@ impl GraphicsPipelineOverlay {
         }
     }
 
-    const fn z_index(&self) -> i32 {
+    /// Evaluate frame filters on the programme clock while retaining zero-based
+    /// output timestamps. Native image inputs prepare their own source phases.
+    #[must_use]
+    pub fn with_programme_offset(mut self, offset: std::time::Duration) -> Self {
+        if !offset.is_zero() {
+            if let Self::Drawvg { filter, .. } | Self::Drawtext { filter, .. } = &mut self {
+                let offset = offset.as_secs_f64();
+                *filter =
+                    format!("settb=AVTB,setpts=PTS+{offset}/TB,{filter},setpts=PTS-{offset}/TB");
+            }
+        }
+        self
+    }
+
+    pub(crate) const fn z_index(&self) -> i32 {
         match self {
             Self::Drawvg { z_index, .. }
             | Self::Drawtext { z_index, .. }
@@ -1353,7 +1426,20 @@ fn build_transcode_pipeline(
         &request.desired,
         has_watermark_overlay,
         has_image_subtitle_burn,
-    );
+    ) || request.graphics_overlays.iter().any(|graphics| {
+        // The current VAAPI overlay emits no position or timeline options.
+        // Compose positioned/timed graphics and compact alpha in software,
+        // then use the existing upload
+        // path for VAAPI encoding; never silently discard a programme gate.
+        matches!(graphics, GraphicsPipelineOverlay::NativeImage { input, overlay, .. }
+            if overlay.enable.is_some()
+                || overlay.horizontal_margin_percent != 0.0
+                || overlay.vertical_margin_percent != 0.0
+                || overlay.place_within_source_content
+                || overlay.opacity_expression.as_deref().is_some_and(|expression|
+                    crate::filter::watermark_opacity_boolean_gate(expression, &request.watermark_opacity_clock).is_some())
+                || input.input_options.windows(2).any(|options| options == ["-f", "concat"]))
+    });
     download_cuda_frames_for_software_overlay(
         effective_acceleration,
         &request.desired,
@@ -1577,35 +1663,15 @@ fn build_transcode_pipeline(
                     .push(GraphicsOverlayFilter::Drawtext(filter));
             }
             GraphicsPipelineOverlay::NativeImage {
-                mut input, overlay, ..
+                mut input,
+                mut overlay,
+                ..
             } => {
-                if overlay.size == ersatzrs_domain::WatermarkSize::Scaled {
-                    input
-                        .filter_steps
-                        .push(watermark_scale_filter(&overlay, request.desired.frame_size));
-                }
-                if let Some(expression) = overlay
-                    .opacity_expression
-                    .as_deref()
-                    .filter(|value| !value.trim().is_empty())
-                {
-                    input
-                        .filter_steps
-                        .push(watermark_opacity_expression_filter_with_clock(
-                            expression,
-                            &request.watermark_opacity_clock,
-                        ));
-                } else if overlay.opacity < 100 {
-                    input
-                        .filter_steps
-                        .push(watermark_opacity_filter(overlay.opacity));
-                }
-                input.filter_steps.extend(
-                    overlay
-                        .fade_points
-                        .iter()
-                        .copied()
-                        .map(crate::watermark_fade_filter),
+                prepare_graphics_image_filters(
+                    &mut input,
+                    &mut overlay,
+                    request.desired.frame_size,
+                    &request.watermark_opacity_clock,
                 );
                 let square_pixel_frame_size = request
                     .source_video_stream
@@ -1645,7 +1711,12 @@ fn build_transcode_pipeline(
             }
         }
     }
-    if has_drawtext_graphics && request.desired.video_format != FFmpegProfileVideoFormat::Copy {
+    if (has_drawtext_graphics
+        || (effective_acceleration == HardwareAccelerationKind::Vaapi
+            && force_vaapi_software_overlay
+            && has_native_graphics_overlay))
+        && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+    {
         upload_software_frames_for_hardware_encoder_filters(
             effective_acceleration,
             &mut target_state,
@@ -2134,7 +2205,8 @@ pub struct UnsupportedSource {
 /// # Errors
 ///
 /// Returns [`UnsupportedSource`] when the selected source carries a Dolby
-/// Vision configuration with no characterized conversion.
+/// Vision configuration with no characterized conversion, or AV1 output is
+/// requested in an unsupported MPEG-TS container (ADR 0106).
 pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
@@ -2166,6 +2238,17 @@ fn unsupported_source_reason_for_acceleration(
     acceleration: Option<HardwareAccelerationKind>,
     request: &PipelineRequest,
 ) -> Option<String> {
+    let output_is_av1 = request.desired.video_format == FFmpegProfileVideoFormat::Av1
+        || (request.desired.video_format == FFmpegProfileVideoFormat::Copy
+            && request
+                .source_video_stream
+                .as_ref()
+                .is_some_and(|source| source.codec == SourceVideoCodec::Av1));
+    if output_is_av1 {
+        if let Some(reason) = av1_output_error(request.state.output_format) {
+            return Some(reason.to_owned());
+        }
+    }
     if let Some(incomplete) = request
         .source_video_stream
         .as_ref()
@@ -4126,7 +4209,19 @@ fn add_output_options(
             ));
         }
         if let Some(bitrate) = desired.video_bitrate {
-            steps.push(video_bitrate_option(bitrate));
+            if acceleration == HardwareAccelerationKind::None
+                && desired.video_format == FFmpegProfileVideoFormat::Av1
+            {
+                // FFmpeg 9 libsvtav1 selects unsupported random-access CBR when
+                // maxrate equals bitrate. Target-bitrate VBR omits maxrate;
+                // SVT only accepts a maximum bitrate in its CRF mode (ADR 0106).
+                steps.push(PipelineStep::generic(
+                    "video_bitrate",
+                    ["-b:v".to_owned(), format!("{bitrate}k")],
+                ));
+            } else {
+                steps.push(video_bitrate_option(bitrate));
+            }
         }
         if let Some(buffer_size) = desired.video_buffer_size {
             steps.push(PipelineStep::generic(

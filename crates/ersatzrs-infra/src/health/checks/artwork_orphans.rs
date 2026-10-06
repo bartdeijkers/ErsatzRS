@@ -35,7 +35,7 @@ impl HealthCheck for ArtworkOrphansHealthCheck {
         Ok(HealthCheckResult::new(
             self.title(),
             HealthCheckStatus::Warning,
-            format!("Orphan cleanup pending: {actors} actor row(s) and {artwork} artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and cached image files are preserved."),
+            format!("Orphan cleanup pending: {actors} actor row(s) and {artwork} artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and referenced cached images are preserved."),
             format!("{actors} orphan actor row(s) and {artwork} orphan artwork row(s)"),
         ))
     }

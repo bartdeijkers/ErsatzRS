@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5bb3ddfcc4b73b0491a733d6f0c476a248eb1c99` |
-| **Commit subject** | `prep for release v26.9.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5bb3ddfcc4b73b0491a733d6f0c476a248eb1c99 |
+| **Pinned commit** | `960421e8a3cb832864fe096d5f0cfa833dbb1837` |
+| **Commit subject** | `fix: remove av1 from ui (#3048)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/960421e8a3cb832864fe096d5f0cfa833dbb1837 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,8 +59,8 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `8bda4411d8fe17a99ea8fda3a567efb54f26acdb` (verified 2026-09-28),
-currently **180 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `960421e8a3cb832864fe096d5f0cfa833dbb1837` (verified 2026-10-01),
+currently **183 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's

@@ -34,6 +34,26 @@ pub async fn clean_artwork(
     }
 }
 
+/// Machine trash maintenance preserves typed failures and an upstream unit body.
+pub async fn empty_trash(
+    State(state): State<AppState>,
+) -> Result<axum::Json<serde_json::Value>, super::machine::MachineError> {
+    state.application.empty_media_trash().await?;
+    Ok(axum::Json(serde_json::json!({})))
+}
+
+/// Native form fallback for the admin health refresh action.
+pub async fn refresh_health(State(state): State<AppState>) -> axum::response::Response {
+    use axum::response::{IntoResponse, Redirect};
+    match state.application.run_admin_health_checks(true).await {
+        Ok(_) => Redirect::to("/system/health").into_response(),
+        Err(error) => {
+            tracing::warn!(%error, "admin health refresh failed");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,8 +104,19 @@ mod tests {
             .unwrap();
         assert_eq!(before, 1);
         let shutdown = CancellationToken::new();
-        let worker = tokio::spawn(run_artwork_cleanup_worker(
+        let root = tempfile::tempdir().unwrap();
+        let cache = root.path().join("artwork/posters");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        let stale_file = cache.join("DEADBEEF");
+        tokio::fs::write(&stale_file, b"orphaned-cache")
+            .await
+            .unwrap();
+        let maintenance = ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance::new(
             pool.clone(),
+            root.path().to_owned(),
+        );
+        let worker = tokio::spawn(run_artwork_cleanup_worker(
+            maintenance,
             receiver,
             shutdown.clone(),
         ));
@@ -95,7 +126,7 @@ mod tests {
                     let remaining: i64 = sqlx::query_scalar(
                     r#"SELECT (SELECT COUNT(*) FROM "Actor") + (SELECT COUNT(*) FROM "Artwork")"#,
                 ).fetch_one(&pool).await.unwrap();
-                    if remaining == 0 {
+                    if remaining == 0 && !stale_file.exists() {
                         break;
                     }
                     tokio::task::yield_now().await;

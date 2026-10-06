@@ -76,6 +76,8 @@ impl AddonMediaListRefreshCoordinator {
                  ON "refresh"."AddonMediaListId" = "list"."Id"
                WHERE "addon"."Enabled" = 1
                  AND "list"."RefreshCadence" <> ?
+                 AND NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection"
+                     WHERE "selection"."AddonMediaListId"="list"."Id" AND "selection"."RefreshPaused"=1)
                  AND (("list"."RefreshRetryAt" IS NOT NULL
                        AND "list"."RefreshRetryAt" <= ?)
                       OR ("list"."RefreshRetryAt" IS NULL
@@ -163,6 +165,8 @@ impl AddonMediaListRefreshCoordinator {
                  ON "refresh"."AddonMediaListId" = "list"."Id"
                WHERE "list"."Id" = ? AND "addon"."Enabled" = 1
                  AND "list"."RefreshCadence" <> ?
+                 AND NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection"
+                     WHERE "selection"."AddonMediaListId"="list"."Id" AND "selection"."RefreshPaused"=1)
                  AND (("list"."RefreshRetryAt" IS NOT NULL
                        AND "list"."RefreshRetryAt" <= ?)
                       OR ("list"."RefreshRetryAt" IS NULL
@@ -311,6 +315,8 @@ impl AddonMediaListRefreshCoordinator {
                  ON "addon"."AddonId" = "list"."AddonId"
                WHERE "addon"."Enabled" = 1
                  AND "list"."RefreshCadence" <> ?
+                 AND NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection"
+                     WHERE "selection"."AddonMediaListId"="list"."Id" AND "selection"."RefreshPaused"=1)
                  AND "refresh"."State" IN (?, ?)
                  AND ("refresh"."NextEligibleAt" IS NULL
                       OR "refresh"."NextEligibleAt" <= ?)
@@ -1158,7 +1164,7 @@ pub(crate) async fn record_refresh_success_tx(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone as _, Utc};
+    use chrono::{TimeDelta, TimeZone as _, Utc};
     #[cfg(unix)]
     use ersatzrs_domain::AddonMediaListSourceCheckOutcome;
     use ersatzrs_domain::{AddonMediaListRefreshCadence, AddonMediaListRefreshState, EntityId};
@@ -1359,6 +1365,69 @@ mod tests {
             failure_retry_at(now, 1, Some(1_800)),
             now + chrono::TimeDelta::minutes(30)
         );
+    }
+
+    #[tokio::test]
+    async fn selection_pause_survives_restart_and_preserves_queued_validator_retry() {
+        let (directory, pool) = fixture_pool().await;
+        let now = Utc::now();
+        seed_list(
+            &pool,
+            1,
+            AddonMediaListRefreshCadence::Daily,
+            "https://one.example.test/list",
+        )
+        .await;
+        seed_list(
+            &pool,
+            2,
+            AddonMediaListRefreshCadence::Daily,
+            "https://two.example.test/list",
+        )
+        .await;
+        let coordinator = AddonMediaListRefreshCoordinator::new(pool.clone());
+        assert_eq!(coordinator.admit_due(now).await.unwrap(), 2);
+        let retry_at = encode_datetime(now + TimeDelta::hours(1));
+        sqlx::query(r#"UPDATE "AddonMediaListRefreshState" SET "Validator"='source-etag',"AttemptCount"=3,"NextEligibleAt"=? WHERE "AddonMediaListId"=1"#)
+            .bind(&retry_at).execute(&pool).await.unwrap();
+        sqlx::query(r#"INSERT INTO "AddonMediaListSelection" ("AddonMediaListId","RefreshPaused") VALUES (1,1)"#).execute(&pool).await.unwrap();
+        let claimed = coordinator.claim_one(now, 7).await.unwrap().unwrap();
+        assert_eq!(claimed.list_id, 2);
+        sqlx::query(r#"UPDATE "AddonMediaListRefreshState" SET "State"=?,"LeaseOwner"=NULL,"LeaseExpiresAt"=NULL WHERE "AddonMediaListId"=2"#)
+            .bind(encode_enum(AddonMediaListRefreshState::Idle)).execute(&pool).await.unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "NextRefreshAt"=? WHERE "Id"=2"#)
+            .bind(encode_datetime(now + TimeDelta::days(1)))
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(coordinator
+            .claim_one(now + TimeDelta::hours(2), 7)
+            .await
+            .unwrap()
+            .is_none());
+        pool.close().await;
+        let url = format!("sqlite:{}", directory.path().join("refresh.db").display());
+        let pool = crate::db::init(&url).await.unwrap();
+        let coordinator = AddonMediaListRefreshCoordinator::new(pool.clone());
+        assert_eq!(coordinator.admit_due(now).await.unwrap(), 0);
+        assert!(coordinator.claim_one(now, 7).await.unwrap().is_none());
+        assert_eq!(sqlx::query_as::<_,(String,i32,String)>(r#"SELECT "Validator","AttemptCount","NextEligibleAt" FROM "AddonMediaListRefreshState" WHERE "AddonMediaListId"=1"#)
+            .fetch_one(&pool).await.unwrap(),("source-etag".into(),3,retry_at));
+        sqlx::query(
+            r#"UPDATE "AddonMediaListSelection" SET "RefreshPaused"=0 WHERE "AddonMediaListId"=1"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(coordinator.claim_one(now, 7).await.unwrap().is_none());
+        let resumed = coordinator
+            .claim_one(now + TimeDelta::hours(2), 7)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(resumed.list_id, 1);
+        assert_eq!(resumed.validator.as_deref(), Some("source-etag"));
+        assert_eq!(resumed.attempt_count, 3);
     }
 
     #[tokio::test]

@@ -55,7 +55,7 @@ pub(super) struct Context {
 }
 
 impl Context {
-    fn new(request: &TroubleshootingPreview<'_>) -> Self {
+    pub(super) fn new(request: &TroubleshootingPreview<'_>) -> Self {
         Self {
             media: request.media.clone(),
             channel: request.channel.clone(),
@@ -72,10 +72,15 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
-        if let Some(at) = self.selection_time {
-            let source_time =
-                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
-                    .source_time(at)?;
+        self.graphics_at(pool, chrono::TimeDelta::zero()).await
+    }
+
+    pub(super) async fn graphics_at(
+        &self,
+        pool: &crate::db::DbPool,
+        offset: chrono::TimeDelta,
+    ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
+        if let Some(source_time) = self.source_time(offset)? {
             playback::select_playback_graphics(pool, &self.channel, self.media.item.id, source_time)
                 .await
         } else {
@@ -87,10 +92,15 @@ impl Context {
         &self,
         pool: &crate::db::DbPool,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
-        if let Some(at) = self.selection_time {
-            let source_time =
-                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
-                    .source_time(at)?;
+        self.watermarks_at(pool, chrono::TimeDelta::zero()).await
+    }
+
+    pub(super) async fn watermarks_at(
+        &self,
+        pool: &crate::db::DbPool,
+        offset: chrono::TimeDelta,
+    ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
+        if let Some(source_time) = self.source_time(offset)? {
             playback::select_playback_watermarks(
                 pool,
                 &self.channel,
@@ -108,6 +118,21 @@ impl Context {
             .await
         }
     }
+
+    fn source_time(
+        &self,
+        offset: chrono::TimeDelta,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+        self.selection_time
+            .map(|at| {
+                let at = at
+                    .checked_add_signed(offset)
+                    .ok_or_else(|| unavailable("preview decoration clock overflow"))?;
+                crate::channel_playout::ChannelPlayoutContext::for_channel(&self.channel)
+                    .source_time(at)
+            })
+            .transpose()
+    }
 }
 
 struct Snapshot {
@@ -116,7 +141,7 @@ struct Snapshot {
 }
 
 impl NextHost {
-    /// Publish one transient Remote Stream occurrence and admit its exact process
+    /// Prepare one transient occurrence and admit its exact process
     /// instance. The caller must revoke the session after stopping that process,
     /// including on startup failure, before releasing output or transcode capacity.
     /// # Errors
@@ -126,33 +151,53 @@ impl NextHost {
         request: TroubleshootingPreview<'_>,
         start: super::host::NextStart,
     ) -> Result<(uuid::Uuid, protocol::PlayoutItem)> {
+        if Instant::now() >= request.deadline {
+            return Err(unavailable("preparation deadline expired"));
+        }
         if start.channel_id != request.channel.id || start.number != request.channel.number {
             return Err(unavailable("preview session identity differs"));
         }
         let context = std::sync::Arc::new(Context::new(&request));
-        let before = timeout_at(
-            request.deadline,
-            super::remote_projection::project_publishable_for_origin(
-                &self.pool,
-                &context.channel,
-                &context.media,
-                &context.profile.resolution,
-                selection::AudioDirective::Select,
-                super::remote_projection::Origin::Troubleshooting(context.clone()),
-            ),
-        )
-        .await
-        .map_err(|_| unavailable("preparation deadline expired"))??;
-        let item = self.defer_item(
-            context.channel.id,
-            context.media.item.id,
-            &before.identity.descriptor,
-            before.projection.item,
-        )?;
         let instance = uuid::Uuid::new_v4();
+        let item = if request.media.remote_stream_id.is_none() {
+            let mut projection = timeout_at(
+                request.deadline,
+                self.prepare_troubleshooting_inner(&request),
+            )
+            .await
+            .map_err(|_| unavailable("preparation deadline expired"))??;
+            projection.publish_graphics(&self.media, Some(instance), context.media.item.start)?;
+            projection.item
+        } else {
+            let mut before = timeout_at(
+                request.deadline,
+                super::remote_projection::project_publishable_for_origin(
+                    &self.pool,
+                    &context.channel,
+                    &context.media,
+                    &context.profile.resolution,
+                    selection::AudioDirective::Select,
+                    super::remote_projection::Origin::Troubleshooting(context.clone()),
+                ),
+            )
+            .await
+            .map_err(|_| unavailable("preparation deadline expired"))??;
+            before.projection.publish_graphics(
+                &self.media,
+                Some(instance),
+                context.media.item.start,
+            )?;
+            self.defer_item(
+                context.channel.id,
+                context.media.item.id,
+                &before.identity.descriptor,
+                before.projection.item,
+            )?
+        };
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
+                started_at: chrono::Utc::now(),
                 request: start,
                 troubleshooting: Some(context),
                 transfers: std::sync::Arc::default(),
@@ -221,21 +266,25 @@ impl NextHost {
         if Instant::now() >= request.deadline {
             return Err(unavailable("preparation deadline expired"));
         }
-        timeout_at(
+        let projection = timeout_at(
             request.deadline,
             self.prepare_troubleshooting_inner(&request),
         )
         .await
-        .map_err(|_| unavailable("preparation deadline expired"))?
+        .map_err(|_| unavailable("preparation deadline expired"))??;
+        if projection.canvas.is_some() {
+            return Err(unavailable("graphics require an owned preview session"));
+        }
+        Ok(projection.item)
     }
 
     async fn prepare_troubleshooting_inner(
         &self,
         request: &TroubleshootingPreview<'_>,
-    ) -> Result<protocol::PlayoutItem> {
+    ) -> Result<DeferredProjection> {
         let before = self.troubleshooting_snapshot(request).await?;
         let Some(pending) = before.projection.pending_burn.as_ref() else {
-            return Ok(before.projection.item);
+            return Ok(before.projection);
         };
         let validate = || async {
             self.troubleshooting_snapshot(request)
@@ -274,13 +323,14 @@ impl NextHost {
                 .await
         }
         .map_err(|_| unavailable("subtitle preparation failed"))?;
-        let after = self.troubleshooting_snapshot(request).await?;
+        let mut after = self.troubleshooting_snapshot(request).await?;
         if after.identity.descriptor != before.identity.descriptor
             || after.identity.cache_key != before.identity.cache_key
         {
             return Err(unavailable("selection changed during preparation"));
         }
-        install_prepared_track(after.projection.item, &prepared)
+        after.projection.item = install_prepared_track(after.projection.item, &prepared)?;
+        Ok(after.projection)
     }
 
     async fn troubleshooting_snapshot(
@@ -304,18 +354,19 @@ impl NextHost {
                 resolution: &request.profile.resolution,
                 subtitle_id: request.subtitle_id,
                 diagnostics: request.diagnostics.clone(),
+                source_pending: false,
             },
         )
         .await?;
         let context = Context::new(request);
         let watermarks = context.watermarks(&self.pool).await?;
         let graphics = context.graphics(&self.pool).await?;
-        projection.item.graphics = super::graphics::project(
+        projection.canvas = super::graphics::project(
             &self.pool,
             request.channel,
             request.media,
             &request.profile.resolution,
-            &projection.item,
+            &mut projection.item,
             &watermarks,
             &graphics,
         )

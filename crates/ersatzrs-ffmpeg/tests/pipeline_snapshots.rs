@@ -980,6 +980,7 @@ fn software_pipeline_emits_aac_audio_channels_for_surround_output() {
         .arguments
         .windows(2)
         .any(|args| args == ["-ac", "6"]));
+    insta::assert_snapshot!(command.arguments.join(" "));
 }
 
 #[test]
@@ -1853,7 +1854,7 @@ fn vaapi_pipeline_burns_text_subtitle_with_download_and_upload_snapshot() {
 }
 
 #[test]
-fn vaapi_pipeline_with_native_graphics_uses_vaapi_overlay_snapshot() {
+fn vaapi_pipeline_with_positioned_native_graphics_uses_software_overlay_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request
         .graphics_overlays
@@ -3776,7 +3777,66 @@ fn graphics_element_multi_day_motion_timing_snapshot() {
         panic!("motion must use the native input");
     };
     insta::assert_snapshot!(format!("filters={:?} enable={:?}", input.filter_steps, overlay.enable),
-        @r#"filters=["setpts=PTS+172800.125/TB"] enable=Some("between(t,172800.125,349200.875)")"#);
+        @r#"filters=["setpts=PTS+172800.125/TB"] enable=Some("gte(t,172800.125)*lt(t,349200.875)")"#);
+}
+
+#[test]
+fn pipeline_with_seeked_motion_and_script_graphics_snapshot() {
+    // ADRs 0005/0105: native preview sources and frame filters share programme time.
+    let output = tempfile::tempdir().unwrap();
+    let context =
+        GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1920, 1080))
+            .with_stream_offset(Duration::from_secs(3))
+            .with_stream_duration(Duration::from_secs(3))
+            .with_motion_source_duration(21, 2.0);
+    let elements = [
+        GraphicsElement {
+            id: 21,
+            name: "motion".into(),
+            z_index: 2,
+            kind: ersatzrs_domain::GraphicsElementKind::Motion,
+            config: GraphicsElementConfig::Motion(MotionGraphicsConfig {
+                video_path: Some("/media/motion.mkv".into()),
+                start_seconds: Some(1.0),
+                hold_seconds: Some(2.0),
+                end_behavior: MotionEndBehavior::Hold,
+            }),
+            ..GraphicsElement::default()
+        },
+        GraphicsElement {
+            id: 22,
+            name: "timed-script".into(),
+            z_index: 3,
+            kind: ersatzrs_domain::GraphicsElementKind::Script,
+            config: GraphicsElementConfig::Script(ScriptGraphicsConfig {
+                command: Some("return 'setcolor lime\\nrect 64 0 20 20 fill\\n'".into()),
+                start_seconds: Some(2.0),
+                duration_seconds: Some(2.0),
+                ..ScriptGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        },
+    ];
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.state.start = Some(Duration::from_secs(3));
+    request.state.duration = Some(Duration::from_secs(3));
+    request.graphics_overlays = GraphicsTemplateRenderer::new(output.path())
+        .render_graphics_elements(&elements, &BTreeMap::new(), &context)
+        .unwrap()
+        .into_iter()
+        .map(|element| {
+            element
+                .into_pipeline_overlay()
+                .with_programme_offset(Duration::from_secs(3))
+        })
+        .collect();
+    let command = SoftwarePipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs);
+    insta::assert_snapshot!(normalize_temp_paths(
+        &command.arguments.join("\n"),
+        output.path()
+    ));
 }
 
 #[test]
@@ -5931,4 +5991,125 @@ fn a_default_vulkan_device_cannot_stand_in_for_the_playback_gpu() {
         !probe.contains("vulkan=vk "),
         "a standalone default Vulkan device must not be used: {probe}"
     );
+}
+
+#[test]
+fn av1_output_transport_guard_preserves_codec_and_source_decoding() {
+    for output in [
+        OutputFormat::MpegTs,
+        OutputFormat::Hls,
+        OutputFormat::HlsMp4,
+        OutputFormat::Mp4,
+        OutputFormat::Mkv,
+        OutputFormat::Nut,
+    ] {
+        let mut request = h264_request(DesiredVideoState::h264_1080p());
+        request.desired.video_format = FFmpegProfileVideoFormat::Av1;
+        request.state.output_format = output;
+        let refused = matches!(output, OutputFormat::MpegTs | OutputFormat::Hls);
+        assert_eq!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_some(),
+            refused
+        );
+        request.desired.video_format = FFmpegProfileVideoFormat::Copy;
+        request.source_video_stream = Some(SourceVideoStream::new(SourceVideoCodec::Av1));
+        assert_eq!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_some(),
+            refused
+        );
+        request.desired.video_format = FFmpegProfileVideoFormat::H264;
+        assert!(
+            ersatzrs_ffmpeg::unsupported_source_reason(&request).is_none(),
+            "AV1 source decoding remains supported"
+        );
+    }
+}
+
+#[test]
+fn av1_native_fmp4_output_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.desired.video_format = FFmpegProfileVideoFormat::Av1;
+    request.desired.video_profile = None;
+    request.desired.video_preset = None;
+    request.state.output_format = OutputFormat::HlsMp4;
+    request.state.hls = Some(HlsOutput {
+        segment_template: "live_%05d.m4s".into(),
+        init_template: Some("init.mp4".into()),
+        playlist_path: "live.m3u8".into(),
+        segment_options: None,
+        is_first_transcode: true,
+        discontinuity: false,
+        troubleshooting: false,
+    });
+    let command =
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).unwrap();
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn drawvg_windows_filter_paths_snapshot() {
+    let paths = [
+        r"C:\graphics\panel.vgs",
+        r"D:\overlay files\director's [cut], next; title.vgs",
+        r"C:/graphics/unicode café.vgs",
+        r"\\server\share\panel.vgs",
+        "/graphics/panel's [cut], next; title.vgs",
+        " panel.vgs ",
+    ];
+    let filters = paths
+        .map(|path| {
+            DrawvgOverlay {
+                script_path: path.into(),
+                x: 0,
+                y: 0,
+                width: 64,
+                height: 64,
+                enable: None,
+            }
+            .filter()
+        })
+        .join("\n");
+    insta::assert_snapshot!(filters);
+}
+
+#[test]
+fn jpeg_xl_vaapi_timing_uses_native_software_composition_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            1,
+            InputFile::new(
+                ersatzrs_ffmpeg::InputKind::GraphicsImage,
+                "/graphics/9-jpeg-xl.ffconcat",
+                0,
+            )
+            .with_input_options([
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-protocol_whitelist",
+                "file",
+            ]),
+            WatermarkOverlay {
+                size: WatermarkSize::ActualSize,
+                enable: Some("gte(t,1)".into()),
+                opacity_expression: Some("content_seconds < 7".into()),
+                ..Default::default()
+            },
+        ));
+    let command = VaapiPipelineBuilder
+        .build(request.clone())
+        .command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+    assert!(!arguments.contains("overlay_vaapi"));
+    assert!(
+        arguments.contains("hwdownload")
+            && arguments.contains("hwupload")
+            && arguments.contains("overlay=")
+            && arguments.contains("enable=")
+    );
+    assert!(!arguments.contains("geq="));
+    insta::assert_snapshot!(arguments);
 }

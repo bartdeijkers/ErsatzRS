@@ -24,6 +24,8 @@ const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
 const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
 
 mod authentication;
+pub(crate) mod external;
+mod folder_tags;
 mod networks;
 mod tag_ownership;
 pub use networks::sync_plex_networks;
@@ -53,6 +55,8 @@ pub struct PlexServerResource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexLibrarySummary {
+    /// Ordered server-side roots, independent of the ErsatzRS host platform.
+    pub paths: Vec<String>,
     pub key: String,
     pub name: String,
     pub media_kind: LibraryMediaKind,
@@ -60,6 +64,8 @@ pub struct PlexLibrarySummary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlexMediaItem {
+    /// Folder-derived tags populated only by Other Video scans.
+    pub folder_tags: Vec<String>,
     pub key: String,
     pub etag: Option<String>,
     pub title: String,
@@ -1079,6 +1085,20 @@ pub async fn sync_plex_other_video_library_with_progress(
     deep_scan: bool,
     progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
 ) -> Result<usize> {
+    // Resolve once before publication; failure must not erase existing tags.
+    let libraries = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        service.list_libraries(config),
+    )
+    .await
+    .map_err(|_| RepositoryError::unavailable("Plex library locations", "request timed out"))??;
+    let roots = libraries
+        .into_iter()
+        .find(|library| library.key == library_key)
+        .ok_or_else(|| {
+            RepositoryError::unavailable("Plex library locations", "library is missing")
+        })?
+        .paths;
     let mut synced = 0;
     let mut start_index = 0;
     let mut present_item_ids = std::collections::HashSet::new();
@@ -1091,7 +1111,19 @@ pub async fn sync_plex_other_video_library_with_progress(
         sink.report(0.0);
     }
     while start_index < total_size {
-        for item in &page.items {
+        for item in &mut page.items {
+            item.folder_tags = folder_tags::from_path(&item.path, &roots);
+            // Location/path changes can affect tags without changing updatedAt.
+            let fingerprint =
+                serde_json::to_string(&item.folder_tags).map_err(|_| RepositoryError::Decode {
+                    kind: "Plex folder tags",
+                    value: "could not encode folder tags".into(),
+                })?;
+            item.etag = Some(format!(
+                "{}:folders-v1:{}",
+                item.etag.as_deref().unwrap_or_default(),
+                sha256_hex(&fingerprint)
+            ));
             present_item_ids.insert(item.key.clone());
             let item_id = if !deep_scan
                 && item_etag_matches(
@@ -1608,6 +1640,7 @@ async fn upsert_plex_other_video(
     .await?;
     let metadata_id =
         upsert_plex_other_video_metadata(&mut tx, item_id, media_source_id, item).await?;
+    folder_tags::replace(&mut tx, metadata_id, &item.folder_tags).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::OtherVideo(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
     let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
@@ -1719,6 +1752,11 @@ fn project_library(response: PlexLibraryResponse) -> Option<PlexLibrarySummary> 
         _ => return None,
     };
     Some(PlexLibrarySummary {
+        paths: response
+            .location
+            .into_iter()
+            .map(|location| location.path)
+            .collect(),
         key: response.key,
         name: response.title,
         media_kind,
@@ -1805,6 +1843,7 @@ fn project_media_item(item: PlexMetadataItemResponse) -> Option<PlexMediaItem> {
         .and_then(|stream| stream.height)
         .unwrap_or(media.height);
     Some(PlexMediaItem {
+        folder_tags: Vec::new(),
         key: item.key.or(item.rating_key)?,
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
@@ -1954,6 +1993,12 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         } else {
             None
         },
+        rotation: is_video.then_some(match stream.orientation {
+            Some(8) => 270,
+            Some(3) => 180,
+            Some(6) => 90,
+            _ => 0,
+        }),
         bits_per_raw_sample: if is_video {
             stream.bit_depth.unwrap_or_default()
         } else {
@@ -3149,7 +3194,7 @@ pub async fn sync_library_by_id_with_progress(
             })?;
 
     let service = PlexService::new();
-    match kind {
+    let synced = match kind {
         2 => {
             let synced = sync_plex_show_library_with_progress(
                 pool,
@@ -3202,7 +3247,9 @@ pub async fn sync_library_by_id_with_progress(
             )
             .await
         }
-    }
+    }?;
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
+    Ok(synced)
 }
 
 /// Synchronize one Plex show by the local `Show.Id`.
@@ -3290,6 +3337,7 @@ pub async fn sync_plex_show_by_id(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
     Ok(synced)
 }
 
@@ -3555,6 +3603,8 @@ struct PlexLibraryContainerResponse {
 
 #[derive(Debug, Deserialize)]
 struct PlexLibraryResponse {
+    #[serde(rename = "Location", default)]
+    location: Vec<PlexLibraryLocationResponse>,
     #[serde(rename = "Key")]
     key: String,
     #[serde(rename = "Title")]
@@ -3565,6 +3615,11 @@ struct PlexLibraryResponse {
     agent: String,
     #[serde(default)]
     scanner: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexLibraryLocationResponse {
+    path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3633,7 +3688,7 @@ struct PlexMetadataItemResponse {
     key: Option<String>,
     rating_key: Option<String>,
     title: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "Media", alias = "media")]
     media: Vec<PlexMediaResponse>,
     added_at: Option<i64>,
     updated_at: Option<i64>,
@@ -3702,7 +3757,7 @@ struct PlexMediaResponse {
     height: i32,
     #[serde(default)]
     aspect_ratio: f64,
-    #[serde(default)]
+    #[serde(default, rename = "Part", alias = "part")]
     part: Vec<PlexPartResponse>,
 }
 
@@ -3713,7 +3768,7 @@ struct PlexPartResponse {
     id: i32,
     key: Option<String>,
     file: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "Stream", alias = "stream")]
     stream: Vec<PlexStreamResponse>,
 }
 
@@ -3738,6 +3793,7 @@ struct PlexStreamResponse {
     channels: Option<i32>,
     width: Option<i32>,
     height: Option<i32>,
+    orientation: Option<i32>,
     pixel_aspect_ratio: Option<String>,
     scan_type: Option<String>,
     frame_rate: Option<String>,
@@ -3766,6 +3822,28 @@ mod stream_projection_tests {
     use ersatzrs_domain::DolbyVisionMetadataState;
 
     use super::{project_stream, PlexStreamResponse};
+
+    #[test]
+    fn plex_rotation_maps_provider_orientation_without_changing_audio_or_subtitles() {
+        for (orientation, expected) in [
+            (None, 0),
+            (Some(8), 270),
+            (Some(3), 180),
+            (Some(6), 90),
+            (Some(1), 0),
+            (Some(99), 0),
+        ] {
+            for kind in [1, 2, 3] {
+                let response: PlexStreamResponse = serde_json::from_value(serde_json::json!({
+                    "streamType": kind, "codec": "h264", "orientation": orientation,
+                    "index": 0
+                }))
+                .unwrap();
+                let stream = project_stream(response).unwrap();
+                assert_eq!(stream.rotation, (kind == 1).then_some(expected));
+            }
+        }
+    }
 
     #[test]
     fn plex_positive_but_partial_dolby_fixture_is_rejected_safely() {

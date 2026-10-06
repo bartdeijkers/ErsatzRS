@@ -23,7 +23,7 @@ use crate::version::{
 /// First-party `FFmpeg` build repository used by ADR 0008 runtime acquisition.
 pub const ERSATZRS_FFMPEG_REPOSITORY: &str = "bartdeijkers/ErsatzRS-ffmpeg";
 /// Known-good `ErsatzRS-ffmpeg` release tag used when no runtime is available.
-pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "v2.0.2";
+pub const DEFAULT_MANAGED_FFMPEG_TAG: &str = "v2.0.5";
 /// Optional operator pin for the managed `FFmpeg` release tag.
 pub const MANAGED_FFMPEG_TAG_ENV_VAR: &str = "ERSATZRS_FFMPEG_RELEASE_TAG";
 /// Set to `0`, `false`, or `no` to forbid startup downloads.
@@ -724,11 +724,17 @@ fn select_package_asset<'a>(
     release: &'a FfmpegReleaseMetadata,
     rid: &str,
 ) -> Option<&'a FfmpegReleaseAsset> {
+    let rid_suffix = format!("-{rid}");
     release
         .assets
         .iter()
-        .filter(|asset| asset.name.contains(rid))
-        .filter(|asset| supported_archive_kind(&asset.name).is_some())
+        .filter(|asset| {
+            let name = asset.name.to_ascii_lowercase();
+            [".tar.gz", ".tgz", ".tar", ".zip"].iter().any(|extension| {
+                name.strip_suffix(extension)
+                    .is_some_and(|stem| stem.ends_with(&rid_suffix))
+            })
+        })
         .max_by_key(|asset| asset.name.contains("ersatzrs-ffmpeg"))
 }
 
@@ -1373,7 +1379,7 @@ mod tests {
     fn default_manager_uses_ffmpeg_nine_package_line() {
         let config = FfmpegRuntimeManagerConfig::new("/tmp/ersatzrs-ffmpeg-test");
 
-        assert_eq!(config.release_tag, "v2.0.2");
+        assert_eq!(config.release_tag, "v2.0.5");
         assert!(!config.release_tag_pinned);
     }
 
@@ -1592,6 +1598,41 @@ mod tests {
             error,
             FfmpegRuntimeManagerError::ChecksumMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn package_selection_distinguishes_arm_architectures_in_any_asset_order() {
+        let names = [
+            "ersatzrs-ffmpeg-2.0.5-linux-arm.tar.gz",
+            "ersatzrs-ffmpeg-2.0.5-linux-arm64.tar.gz",
+            "ersatzrs-ffmpeg-2.0.4-linux-x64.tar.gz",
+            "ersatzrs-ffmpeg-2.0.4-win-x64.zip",
+        ];
+        let mut release = FfmpegReleaseMetadata {
+            tag_name: "v2.0.5".to_owned(),
+            assets: names
+                .iter()
+                .map(|name| FfmpegReleaseAsset {
+                    name: (*name).to_owned(),
+                    download_url: format!("https://example.test/{name}"),
+                    digest: None,
+                })
+                .collect(),
+        };
+        for _ in 0..2 {
+            assert_eq!(
+                select_package_asset(&release, "linux-arm").map(|asset| asset.name.as_str()),
+                Some(names[0])
+            );
+            assert_eq!(
+                select_package_asset(&release, "linux-arm64").map(|asset| asset.name.as_str()),
+                Some(names[1])
+            );
+            assert!(select_package_asset(&release, "osx-arm64").is_none());
+            release.assets.reverse();
+        }
+        release.assets.retain(|asset| asset.name != names[0]);
+        assert!(select_package_asset(&release, "linux-arm").is_none());
     }
 
     fn seed_managed_runtime(root: &Path, tag: &str) {

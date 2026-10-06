@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use ersatzrs_app::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, PlaybackPreviewLog,
-    PlaybackPreviewRequest,
+    PlaybackPreviewRequest, PlaybackPreviewStatus,
 };
 use ersatzrs_core::{
     path_replacement::{replace_path, PathPlatform, PathReplacement},
@@ -26,14 +26,14 @@ use ersatzrs_infra::{
     hls_worker::build_hls_command_with_opacity_clock,
     playback::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
-        load_playback_profile, load_source_audio_streams, load_source_video_stream,
-        load_subtitles_for_media_item, render_playback_graphics_overlays,
-        resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
-        select_custom_playback_streams, select_playback_audio_stream_index,
-        select_playback_graphics, select_playback_subtitle, select_playback_watermarks,
-        subtitle_input_for_stream, watermark_overlay_for_stream, CustomStreamSelection,
-        PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile,
-        PlaybackSubtitle,
+        load_playback_profile, load_playback_subtitle_candidates, load_source_audio_streams,
+        load_source_video_stream, render_playback_graphics_overlays,
+        render_playback_preview_graphics_overlays, resolve_playback_graphics_by_ids,
+        resolve_playback_watermarks_by_ids, select_custom_playback_streams,
+        select_playback_audio_stream_index, select_playback_graphics, select_playback_subtitle,
+        select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
+        CustomStreamSelection, PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext,
+        PlaybackProfile, PlaybackSubtitle,
     },
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
@@ -43,20 +43,28 @@ use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::process::Command;
-use tokio::sync::{Mutex, OwnedMutexGuard, RwLock};
+use tokio::sync::{oneshot, Mutex, OwnedMutexGuard, RwLock};
 
 use crate::transport::iptv::stream;
+use ersatzrs_infra::managed_process::ManagedProcess;
 
 #[path = "troubleshooting_next.rs"]
 mod next;
 
+#[path = "troubleshooting_credits.rs"]
+mod credits;
+
 #[path = "troubleshooting_progress.rs"]
 mod progress;
+
+#[path = "troubleshooting_lifecycle.rs"]
+mod lifecycle;
 
 #[derive(Default)]
 enum PreviewAvailability {
     #[default]
     Available,
+    Active(Arc<lifecycle::Job>),
     CleanupUnconfirmed {
         _reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
     },
@@ -74,6 +82,7 @@ pub struct NativeAdminTroubleshootingRuntime {
     next_version: Arc<OnceLock<String>>,
     preview_lock: Arc<Mutex<PreviewAvailability>>,
     next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
+    previews: Arc<RwLock<lifecycle::Registry>>,
 }
 
 impl NativeAdminTroubleshootingRuntime {
@@ -91,6 +100,7 @@ impl NativeAdminTroubleshootingRuntime {
             next_version,
             preview_lock: Arc::default(),
             next_engine,
+            previews: Arc::default(),
         }
     }
 }
@@ -130,6 +140,7 @@ struct PlaybackPreviewQuery {
     stream_selector: Option<String>,
     preferred_audio_title: Option<String>,
     subtitle_id: Option<i64>,
+    music_video_credits_template: Option<String>,
     seek_seconds: Option<i64>,
     start: Option<String>,
 }
@@ -147,6 +158,7 @@ impl From<PlaybackPreviewRequest> for PlaybackPreviewQuery {
             stream_selector: request.stream_selector,
             preferred_audio_title: request.preferred_audio_title,
             subtitle_id: request.subtitle_id,
+            music_video_credits_template: request.music_video_credits_template,
             seek_seconds: request.seek_seconds,
             start: request.start,
         }
@@ -170,28 +182,52 @@ impl AdminTroubleshootingRuntime for NativeAdminTroubleshootingRuntime {
         Ok(list_channel_stream_selectors().await)
     }
 
+    async fn list_music_video_credits_templates(
+        &self,
+    ) -> Result<Vec<String>, AdminTroubleshootingRuntimeError> {
+        ersatzrs_infra::music_video_credits::list_music_video_credit_template_names()
+            .await
+            .map_err(|error| AdminTroubleshootingRuntimeError::unavailable(error.to_string()))
+    }
+
     async fn start_playback_preview(
         &self,
         request: PlaybackPreviewRequest,
     ) -> Result<(), AdminTroubleshootingRuntimeError> {
-        let ownership = Arc::clone(&self.preview_lock)
-            .try_lock_owned()
-            .map_err(|_| {
-                AdminTroubleshootingRuntimeError::NotFound(
-                    "troubleshooting playback is already running".to_owned(),
-                )
-            })?;
-        if matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
-            return Err(AdminTroubleshootingRuntimeError::unavailable(
-                "troubleshooting process cleanup is unconfirmed; restart is required",
-            ));
-        }
-        if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-            return next::start(self.clone(), request.into(), ownership).await;
-        }
-        start_playback_preview(self, &request.into(), ownership)
-            .await
-            .map_err(map_runtime_error)
+        self.admit_preview(request).await?.wait_ready().await
+    }
+
+    async fn queue_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> Result<PlaybackPreviewStatus, AdminTroubleshootingRuntimeError> {
+        Ok(self.admit_preview(request).await?.read())
+    }
+
+    async fn playback_preview_status(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        Ok(self.find_preview(&id).await.map(|job| job.read()))
+    }
+
+    async fn stop_playback_preview(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        let Some(job) = self.find_preview(&id).await else {
+            return Ok(None);
+        };
+        job.cancel();
+        Ok(Some(job.read()))
+    }
+
+    async fn playback_preview_file(
+        &self,
+        id: String,
+        filename: String,
+    ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.read_owned_file(&id, &filename).await
     }
 
     async fn build_troubleshooting_archive(
@@ -266,6 +302,9 @@ async fn start_playback_preview(
         .await?
         .ok_or(PreviewNotFound("ffmpeg profile does not exist"))?;
 
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let working_dir = troubleshooting_folder();
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
@@ -286,13 +325,16 @@ async fn start_playback_preview(
         &media_path,
     )
     .await;
-    let seek_seconds = preview_seek_seconds(query.seek_seconds, media.duration_seconds);
+    let seek_seconds = preview_media_seek_seconds(state, &media, query.seek_seconds).await?;
     let program_duration = Duration::from_secs_f64(preview_duration_seconds(
         media.duration_seconds,
         seek_seconds,
     ));
-    let selector_channel =
-        preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter);
+    let selector_channel = credits::channel(
+        query,
+        &media,
+        &preview_selector_channel(query, StreamingMode::HttpLiveStreamingSegmenter),
+    );
     let language_preferences = playback_language_preferences(&state.pool).await?;
     let preferred_audio_language = language_preferences.audio_language(
         None,
@@ -300,7 +342,7 @@ async fn start_playback_preview(
         selector_channel.preferred_audio_title.as_deref(),
         StreamingMode::HttpLiveStreamingSegmenter,
     );
-    let (selected_audio_stream_index, subtitle_input) =
+    let (selected_audio_stream_index, mut subtitle_input) =
         preview_selected_streams(PreviewSelectedStreamsRequest {
             pool: &state.pool,
             channel: &selector_channel,
@@ -308,11 +350,32 @@ async fn start_playback_preview(
             media_item_id,
             media_path: &media_path,
             output_format,
-            subtitle_id: query.subtitle_id,
+            subtitle_id: if credits::enabled(&selector_channel, &media) {
+                Some(0)
+            } else {
+                query.subtitle_id
+            },
             seek_seconds,
             content_start_time: Utc::now(),
         })
         .await?;
+    if let Some(subtitle) = credits::prepare(
+        &state.pool,
+        &media,
+        &selector_channel,
+        &playback_profile,
+        Duration::from_secs(u64::try_from(seek_seconds)?),
+        &working_dir,
+    )
+    .await?
+    {
+        subtitle_input = subtitle_input_for_stream(
+            &subtitle,
+            &media_path,
+            output_format,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        );
+    }
     let selected_audio_stream_index = match selected_audio_stream_index {
         Some(index) => Some(index),
         None => {
@@ -340,6 +403,9 @@ async fn start_playback_preview(
     });
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let PlaybackGraphicsArtifacts {
         overlays: graphics_overlays,
         dynamic_text_controllers,
@@ -393,12 +459,17 @@ async fn start_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    )?;
+    );
 
-    write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format).await?;
-    Ok(())
+    start_native_command(
+        state,
+        &working_dir,
+        command,
+        dynamic_text_controllers,
+        ownership,
+        output_format,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_lines)]
@@ -419,10 +490,21 @@ async fn start_channel_playback_preview(
     if !channel.is_enabled {
         return Err(PreviewNotFound("channel is disabled").into());
     }
-    let start_time = parse_preview_start(query.start.as_deref()).unwrap_or_else(Utc::now);
+    let start_time = requested_preview_start(query.start.as_deref())?;
     let active = stream::load_active_media_path(&state.pool, channel.id, start_time)
         .await?
         .ok_or(PreviewNotFound("channel has no active playout item"))?;
+    let start_time = programme_preview_time(
+        query,
+        parse_sqlite_utc_timestamp(&active.playout_start)
+            .ok_or(PreviewNotFound("invalid preview programme start"))?,
+        parse_sqlite_utc_timestamp(&active.playout_finish)
+            .ok_or(PreviewNotFound("invalid preview programme finish"))?,
+        start_time,
+    )?;
+    if let Some(job) = lifecycle::job(&ownership) {
+        job.selected_at(start_time);
+    }
     let ffmpeg_profile_id = query
         .ffmpeg_profile
         .filter(|id| *id > 0)
@@ -437,6 +519,9 @@ async fn start_channel_playback_preview(
         .load_preview_media_admin(active.media_item_id, Some(active.media_version_id))
         .await?
         .ok_or(PreviewNotFound("active media item does not exist"))?;
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let working_dir = troubleshooting_folder();
     prepare_troubleshooting_folder(&working_dir).await?;
     write_preview_artifacts(state, query, &media, &playback_profile, &working_dir).await?;
@@ -466,7 +551,12 @@ async fn start_channel_playback_preview(
     let start_seconds = duration_as_i64_seconds(start_position);
     let program_duration = active_program_duration(&active)
         .unwrap_or_else(|| Duration::from_secs_f64(preview_duration_seconds(0.0, 0)));
-    let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
+    let credits_channel = credits::channel(query, &media, &channel);
+    let subtitle_mode = if credits::enabled(&credits_channel, &media) {
+        ChannelSubtitleMode::None
+    } else {
+        active.subtitle_mode.unwrap_or(channel.subtitle_mode)
+    };
     let preferred_subtitle_language = active
         .preferred_subtitle_language_code
         .as_deref()
@@ -508,6 +598,9 @@ async fn start_channel_playback_preview(
         )
         .await
         {
+            Ok(Some(selection)) if credits::enabled(&credits_channel, &media) => {
+                (selection.audio_stream_index, None)
+            }
             Ok(Some(selection)) => (
                 selection.audio_stream_index,
                 subtitle_input_from_optional_subtitle(
@@ -600,6 +693,28 @@ async fn start_channel_playback_preview(
         program_duration,
     )
     .await;
+    let subtitle_input = if let Some(subtitle) = credits::prepare(
+        &state.pool,
+        &media,
+        &credits_channel,
+        &playback_profile,
+        start_position,
+        &working_dir,
+    )
+    .await?
+    {
+        subtitle_input_for_stream(
+            &subtitle,
+            &media_path,
+            output_format,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        )
+    } else {
+        subtitle_input
+    };
+    if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
+        return Err("troubleshooting playback cancelled".into());
+    }
     let PlaybackGraphicsArtifacts {
         overlays: graphics_overlays,
         dynamic_text_controllers,
@@ -654,12 +769,42 @@ async fn start_channel_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
-    )?;
+    );
 
-    write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers, ownership)?;
-    wait_for_preview_output(&working_dir, output_format).await?;
-    Ok(())
+    start_native_command(
+        state,
+        &working_dir,
+        command,
+        dynamic_text_controllers,
+        ownership,
+        output_format,
+    )
+    .await
+}
+
+fn programme_preview_time(
+    query: &PlaybackPreviewQuery,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    at: DateTime<Utc>,
+) -> ApiResult<DateTime<Utc>> {
+    let Some(seek) = query.seek_seconds else {
+        return Ok(at);
+    };
+    let last_second = (finish - start).num_seconds().saturating_sub(1).max(0);
+    let seconds = seek.clamp(0, last_second);
+    start
+        .checked_add_signed(chrono::Duration::seconds(seconds))
+        .ok_or_else(|| "invalid preview programme seek".into())
+}
+
+fn requested_preview_start(value: Option<&str>) -> ApiResult<DateTime<Utc>> {
+    match value.filter(|value| !value.trim().is_empty()) {
+        Some(value) => {
+            parse_preview_start(Some(value)).ok_or_else(|| "invalid preview UTC timestamp".into())
+        }
+        None => Ok(Utc::now()),
+    }
 }
 
 fn parse_preview_start(value: Option<&str>) -> Option<DateTime<Utc>> {
@@ -940,6 +1085,26 @@ fn preview_output_format(streaming_mode: Option<&str>) -> OutputFormat {
     }
 }
 
+async fn preview_media_seek_seconds(
+    state: &NativeAdminTroubleshootingRuntime,
+    media: &PreviewMediaItem,
+    requested: Option<i64>,
+) -> ApiResult<i64> {
+    use ersatzrs_core::repositories::AdminMediaRepository as _;
+    if media.kind == "RemoteStream" {
+        let detail = state
+            .repositories
+            .admin_media
+            .get_remote_stream_detail_admin(media.media_item_id)
+            .await?
+            .ok_or(PreviewNotFound("remote stream does not exist"))?;
+        if detail.liveness == ersatzrs_domain::RemoteStreamLiveness::Live {
+            return Ok(0);
+        }
+    }
+    Ok(preview_seek_seconds(requested, media.duration_seconds))
+}
+
 fn preview_seek_seconds(requested: Option<i64>, duration_seconds: f64) -> i64 {
     let seek = requested.unwrap_or_default().max(0);
     if duration_seconds <= 0.0 {
@@ -1038,6 +1203,11 @@ async fn preview_selected_streams(
         .await
         {
             Ok(Some(selection)) => {
+                if channel.music_video_credits_mode
+                    == ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles
+                {
+                    return Ok((selection.audio_stream_index, None));
+                }
                 let explicit_subtitle = if let Some(id) = subtitle_id {
                     load_preview_subtitle(pool, media_item_id, id).await
                 } else {
@@ -1154,7 +1324,7 @@ async fn load_preview_subtitle(
     media_item_id: i64,
     subtitle_id: i64,
 ) -> Option<PlaybackSubtitle> {
-    let subtitles = load_subtitles_for_media_item(pool, media_item_id)
+    let subtitles = load_playback_subtitle_candidates(pool, media_item_id)
         .await
         .ok()?;
     let mut selected = subtitles
@@ -1334,6 +1504,11 @@ async fn preview_graphics_overlays(
         .and_then(|stream| stream.square_pixel_frame_size(frame_size))
         .unwrap_or(frame_size);
     let now = Utc::now();
+    let Some(content_start) =
+        chrono::Duration::try_seconds(seek_seconds).and_then(|seek| now.checked_sub_signed(seek))
+    else {
+        return PlaybackGraphicsArtifacts::default();
+    };
     let graphics = match resolve_playback_graphics_by_ids(pool, graphics_element_ids).await {
         Ok(graphics) => graphics,
         Err(error) => {
@@ -1341,21 +1516,28 @@ async fn preview_graphics_overlays(
             return PlaybackGraphicsArtifacts::default();
         }
     };
-    match render_playback_graphics_overlays(
+    match render_playback_preview_graphics_overlays(
         pool,
         &graphics,
         &PlaybackGraphicsRenderContext {
             channel_id: 0,
+            render_time: now,
+            playout_item_id: None,
             channel_number: TRANSCODE_TROUBLESHOOTING_CHANNEL.to_owned(),
-            media_item_id: media.media_item_id,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(media.media_item_id),
             media_path: media_path.to_owned(),
             channel_start_time: now,
-            content_start_time: now,
+            content_start_time: content_start,
+            content_finish_time: chrono::Duration::from_std(program_duration)
+                .ok()
+                .and_then(|duration| now.checked_add_signed(duration)),
             stream_seek_seconds: seconds_i64_as_f64(seek_seconds),
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,
             square_pixel_frame_size,
-            frame_rate: source_stream.and_then(|stream| stream.frame_rate),
+            frame_rate: source_stream
+                .and_then(|stream| stream.frame_rate)
+                .map(Into::into),
         },
         working_dir.join("graphics"),
     )
@@ -1421,18 +1603,24 @@ async fn preview_channel_graphics_overlays(
         &graphics,
         &PlaybackGraphicsRenderContext {
             channel_id: channel.id,
+            render_time: start_time,
+            playout_item_id: Some(active.playout_item_id),
             channel_number: TRANSCODE_TROUBLESHOOTING_CHANNEL.to_owned(),
-            media_item_id: active.media_item_id,
+            media: ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(
+                active.media_item_id,
+            ),
             media_path: media_path.to_owned(),
             channel_start_time: start_time,
             content_start_time: parse_sqlite_utc_timestamp(&active.playout_start)
                 .unwrap_or(start_time),
+            content_finish_time: parse_sqlite_utc_timestamp(&active.playout_finish),
             stream_seek_seconds: start_position.as_secs_f64(),
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,
             square_pixel_frame_size,
             frame_rate: target_frame_rate
-                .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+                .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate))
+                .map(Into::into),
         },
         working_dir.join("graphics"),
     )
@@ -1475,12 +1663,72 @@ fn preview_command_arguments(command: &FfmpegCommand) -> Vec<String> {
     arguments
 }
 
-fn spawn_preview_ffmpeg(
+async fn start_native_command(
+    state: &NativeAdminTroubleshootingRuntime,
+    working: &FsPath,
+    command: Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource>,
+    controllers: Vec<DynamicTextController>,
+    ownership: PreviewOwnership,
+    output_format: OutputFormat,
+) -> ApiResult<()> {
+    use ersatzrs_infra::transcode_capacity::{
+        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
+        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    };
+    let job = lifecycle::job(&ownership);
+    let command = match command {
+        Ok(command) => command,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(controllers).await;
+            return Err(error.into());
+        }
+    };
+    if job.as_ref().is_some_and(|job| job.cancel.is_cancelled()) {
+        shutdown_dynamic_text_controllers(controllers).await;
+        return Err("troubleshooting playback cancelled".into());
+    }
+    if let Err(error) = write_ffmpeg_arguments(working, &command).await {
+        shutdown_dynamic_text_controllers(controllers).await;
+        return Err(error);
+    }
+    let admission = async {
+        let limit = load_active_transcode_limit(&state.pool)
+            .await?
+            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+        try_reserve_active_transcode(
+            limit,
+            ActiveTranscodeSlot::new_next_hls_with_capacity_key(
+                TRANSCODE_TROUBLESHOOTING_CHANNEL,
+                "troubleshooting",
+            ),
+        )
+        .ok_or_else(|| {
+            Box::<dyn std::error::Error + Send + Sync>::from(
+                "troubleshooting capacity is unavailable",
+            )
+        })
+    }
+    .await;
+    let reservation = match admission {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(controllers).await;
+            return Err(error);
+        }
+    };
+    if let Some(job) = job {
+        job.retain_reservation(reservation);
+    }
+    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership).await?;
+    wait_for_preview_output(&working.to_path_buf(), output_format, completion).await
+}
+
+async fn spawn_preview_ffmpeg(
     working_dir: &FsPath,
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
-) -> ApiResult<()> {
+) -> ApiResult<oneshot::Receiver<bool>> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
     process
@@ -1498,47 +1746,81 @@ fn spawn_preview_ffmpeg(
         process.env(variable.name, variable.value);
     }
 
-    let mut child = process.spawn()?;
-    let stderr = child.stderr.take();
-    let stdout = child.stdout.take();
-    tokio::spawn(write_preview_logs(
-        working_dir.join("logs.txt"),
-        stderr,
-        stdout,
-        child,
-        dynamic_text_controllers,
-        ownership,
-        tokio::time::Instant::now() + Duration::from_mins(2),
-    ));
-    Ok(())
+    let mut child = match ManagedProcess::spawn(process) {
+        Ok(child) => child,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+            if let Some(job) = lifecycle::job(&ownership) {
+                drop(job.take_reservation());
+            }
+            return Err(error.into());
+        }
+    };
+    if let Some(job) = lifecycle::job(&ownership) {
+        job.running();
+    }
+    let stderr = child.take_stderr();
+    let stdout = child.take_stdout();
+    let (finished, completion) = oneshot::channel();
+    let log_path = working_dir.join("logs.txt");
+    tokio::spawn(async move {
+        let succeeded = write_preview_logs(
+            log_path,
+            stderr,
+            stdout,
+            child,
+            dynamic_text_controllers,
+            ownership,
+            tokio::time::Instant::now() + Duration::from_mins(2),
+        )
+        .await;
+        // Diagnostics and owner cleanup complete even if the request disconnected.
+        let _ = finished.send(succeeded);
+    });
+    Ok(completion)
 }
 
 async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
     stdout: Option<tokio::process::ChildStdout>,
-    mut child: tokio::process::Child,
+    mut child: ManagedProcess,
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
-) {
+) -> bool {
     let mut logs = Vec::new();
     let mut progress_output = Vec::new();
-    let result = tokio::time::timeout_at(deadline, async {
-        tokio::join!(
-            read_preview_pipe(stderr, &mut logs),
-            read_preview_pipe(stdout, &mut progress_output)
-        );
-        child.wait().await
-    })
-    .await;
-    let needs_cleanup = !matches!(&result, Ok(Ok(_)));
+    let job = lifecycle::job(&ownership);
+    let cancellation = job
+        .as_ref()
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let result = tokio::select! {
+        result = tokio::time::timeout_at(deadline, async {
+            let ((), (), status) = tokio::join!(
+                read_preview_pipe(stderr, &mut logs),
+                read_preview_pipe(stdout, &mut progress_output),
+                child.wait()
+            );
+            status
+        }) => result.ok(),
+        () = cancellation.cancelled() => {
+            logs.extend_from_slice(b"\ntroubleshooting playback cancelled\n");
+            None
+        }
+    };
+    let succeeded = matches!(&result, Some(Ok(status)) if status.success());
+    let needs_cleanup = !matches!(&result, Some(Ok(_)));
     match result {
-        Ok(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
-        Ok(Err(error)) => {
+        Some(Ok(status)) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
+        Some(Err(error)) => {
             logs.extend_from_slice(format!("\nwait error: {:?}\n", error.kind()).as_bytes());
         }
-        Err(_) => logs.extend_from_slice(b"\ntroubleshooting deadline expired\n"),
+        None if !cancellation.is_cancelled() => {
+            logs.extend_from_slice(b"\ntroubleshooting deadline expired\n");
+        }
+        None => {}
     }
     if needs_cleanup
         && !matches!(
@@ -1552,7 +1834,32 @@ async fn write_preview_logs(
     if let Some(speed) = progress::parse_speed(&String::from_utf8_lossy(&progress_output)) {
         logs.extend_from_slice(progress::speed_diagnostic(speed).as_bytes());
     }
-    let _ = tokio::fs::write(log_path, logs).await;
+    let folder = log_path.parent().unwrap_or_else(|| FsPath::new("."));
+    let written = tokio::fs::write(&log_path, logs).await.is_ok();
+    if !succeeded && !cancellation.is_cancelled() {
+        if let Some(job) = &job {
+            job.fail("startup");
+        }
+    }
+    // Preserve the ID when availability is replaced by the quarantine state.
+    if let Some(job) = &job {
+        let confirmed = !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. });
+        let log = if confirmed && written {
+            read_completed_preview_log(folder).await.ok().flatten()
+        } else {
+            None
+        };
+        let reservation = job.take_reservation();
+        if confirmed {
+            drop(reservation);
+            *ownership = PreviewAvailability::Available;
+        } else if let PreviewAvailability::CleanupUnconfirmed { _reservation } = &mut *ownership {
+            *_reservation = reservation;
+        }
+        drop(ownership);
+        job.finish(succeeded && written, confirmed, log);
+    }
+    succeeded && written
 }
 
 async fn read_preview_pipe(
@@ -1574,6 +1881,7 @@ async fn read_preview_pipe(
 async fn wait_for_preview_output(
     working_dir: &PathBuf,
     output_format: OutputFormat,
+    mut completion: oneshot::Receiver<bool>,
 ) -> ApiResult<()> {
     let playlist_path = working_dir.join("live.m3u8");
     let segment_extension = match output_format {
@@ -1582,6 +1890,15 @@ async fn wait_for_preview_output(
     };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     loop {
+        match completion.try_recv() {
+            Ok(succeeded) => {
+                return completed_preview_output(working_dir, segment_extension, succeeded).await
+            }
+            Err(oneshot::error::TryRecvError::Closed) => {
+                return Err("troubleshooting worker ended without completion".into())
+            }
+            Err(oneshot::error::TryRecvError::Empty) => {}
+        }
         if tokio::fs::try_exists(&playlist_path).await?
             && count_segments(working_dir, segment_extension).await? >= 1
         {
@@ -1590,8 +1907,30 @@ async fn wait_for_preview_output(
         if tokio::time::Instant::now() >= deadline {
             return Err("timed out waiting for troubleshooting HLS output".into());
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::select! {
+            biased;
+            finished = &mut completion => {
+                return completed_preview_output(working_dir, segment_extension, finished.unwrap_or(false)).await;
+            }
+            () = tokio::time::sleep(Duration::from_millis(100)) => {}
+        }
     }
+}
+
+async fn completed_preview_output(
+    working_dir: &PathBuf,
+    segment_extension: &str,
+    succeeded: bool,
+) -> ApiResult<()> {
+    if !succeeded {
+        return Err("troubleshooting playback process failed".into());
+    }
+    if tokio::fs::try_exists(working_dir.join("live.m3u8")).await?
+        && count_segments(working_dir, segment_extension).await? >= 1
+    {
+        return Ok(());
+    }
+    Err("troubleshooting playback completed without HLS output".into())
 }
 
 async fn count_segments(working_dir: &PathBuf, extension: &str) -> ApiResult<usize> {
@@ -1614,13 +1953,16 @@ async fn read_preview_log_from(
     folder: &FsPath,
     ownership: &Arc<Mutex<PreviewAvailability>>,
 ) -> ApiResult<Option<PlaybackPreviewLog>> {
-    use tokio::io::AsyncReadExt as _;
-
     // Keep completed diagnostics stable during the read. Active owners are still
     // writing them; a new preview must not clear the directory midway through.
     let Ok(_ownership) = ownership.try_lock() else {
         return Ok(None);
     };
+    read_completed_preview_log(folder).await
+}
+
+async fn read_completed_preview_log(folder: &FsPath) -> ApiResult<Option<PlaybackPreviewLog>> {
+    use tokio::io::AsyncReadExt as _;
     let file = match tokio::fs::File::open(folder.join("logs.txt")).await {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -1684,6 +2026,7 @@ fn is_archive_member(file_name: &str) -> bool {
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
         || lower.contains("capabilities")
         || lower.contains("stream-selector")
+        || lower.contains("music-video-credits")
         || lower.contains("ffreport")
         || lower.contains("outcome")
 }
@@ -1715,13 +2058,17 @@ async fn build_media_sample_archive(
         .await?;
     let ffmpeg_path = ersatzrs_ffmpeg::resolve_ffmpeg_path(configured_ffmpeg_path.as_deref()).path;
     let extension = media_sample_extension(&media_path);
-    let sample_path = std::env::temp_dir().join(format!(
+    let sample_dir = tempfile::Builder::new()
+        .prefix("ersatzrs-media-sample-")
+        .tempdir()?;
+    let sample_path = sample_dir.path().join(format!(
         "ersatzrs-media-sample-{}.{}",
         uuid::Uuid::new_v4(),
         extension.trim_start_matches('.')
     ));
 
-    let status = Command::new(ffmpeg_path)
+    let mut process = Command::new(ffmpeg_path);
+    process
         .arg("-nostdin")
         .arg("-i")
         .arg(&media_path)
@@ -1732,12 +2079,49 @@ async fn build_media_sample_archive(
         .arg("-c")
         .arg("copy")
         .arg(&sample_path)
-        .kill_on_drop(true)
-        .status()
-        .await?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    // A disconnected request drops this handle, not the worker. The worker
+    // retains the directory until the bounded child and archive read finish.
+    tokio::spawn(capture_media_sample_archive(
+        process,
+        sample_dir,
+        sample_path,
+        tokio::time::Instant::now() + Duration::from_mins(2),
+    ))
+    .await?
+}
+
+async fn capture_media_sample_archive(
+    mut process: Command,
+    sample_dir: tempfile::TempDir,
+    sample_path: PathBuf,
+    deadline: tokio::time::Instant,
+) -> ApiResult<Option<Vec<u8>>> {
+    let mut child = process.spawn()?;
+    let result = tokio::time::timeout_at(deadline, child.wait()).await;
+    let status = match result {
+        Ok(Ok(status)) => status,
+        failure => {
+            // Reap before deleting the output, including on Windows. A failed
+            // termination must not remove files that a child may still own.
+            if !matches!(
+                tokio::time::timeout(Duration::from_secs(5), child.kill()).await,
+                Ok(Ok(()))
+            ) {
+                let _retained_directory = sample_dir.keep();
+                return Err("media sample process termination is unconfirmed".into());
+            }
+            return match failure {
+                Ok(Err(error)) => Err(error.into()),
+                _ => Err("media sample capture deadline expired".into()),
+            };
+        }
+    };
 
     if !status.success() {
-        let _ = tokio::fs::remove_file(&sample_path).await;
         return Ok(None);
     }
 
@@ -1747,7 +2131,6 @@ async fn build_media_sample_archive(
         .unwrap_or("sample.mkv")
         .to_owned();
     let bytes = tokio::fs::read(&sample_path).await?;
-    let _ = tokio::fs::remove_file(&sample_path).await;
     Ok(Some(build_store_zip(vec![(file_name, bytes)])?))
 }
 
@@ -1983,7 +2366,9 @@ mod tests {
         let log = root.path().join("logs.txt");
         let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
         let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
-        let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+        let mut command = Command::new("sh");
+        command.args(["-c", "exit 0"]);
+        let mut child = ManagedProcess::spawn(command).unwrap();
         child.wait().await.unwrap();
         let completion = write_preview_logs(
             log.clone(),
@@ -2006,17 +2391,88 @@ mod tests {
     // Unix shell fixture only; the deadline/kill path is shared Tokio code on all hosts.
     #[cfg(unix)]
     #[tokio::test]
+    async fn preview_readiness_stops_when_process_exits_without_output() {
+        for exit in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
+            let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+            let mut command = Command::new("sh");
+            command.args(["-c", &format!("exit {exit}")]);
+            let child = ManagedProcess::spawn(command).unwrap();
+            let log_path = root.path().join("logs.txt");
+            let (finished, completion) = oneshot::channel();
+            tokio::spawn(async move {
+                let succeeded = write_preview_logs(
+                    log_path,
+                    None,
+                    None,
+                    child,
+                    Vec::new(),
+                    ownership,
+                    tokio::time::Instant::now() + Duration::from_mins(2),
+                )
+                .await;
+                let _ = finished.send(succeeded);
+            });
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                wait_for_preview_output(&root.path().to_path_buf(), OutputFormat::Hls, completion),
+            )
+            .await
+            .expect("process completion must end readiness without waiting 20 seconds");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains(if exit == 0 {
+                "completed without HLS output"
+            } else {
+                "process failed"
+            }));
+            assert!(lock.try_lock().is_ok());
+            assert!(root.path().join("logs.txt").exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn completed_preview_requires_success_and_matching_segments() {
+        for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
+            let root = tempfile::tempdir().unwrap();
+            tokio::fs::write(root.path().join("live.m3u8"), b"#EXTM3U")
+                .await
+                .unwrap();
+            tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
+                .await
+                .unwrap();
+            for succeeded in [true, false] {
+                let (finished, completion) = oneshot::channel();
+                finished.send(succeeded).unwrap();
+                assert_eq!(
+                    wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                        .await
+                        .is_ok(),
+                    succeeded
+                );
+            }
+            let (finished, completion) = oneshot::channel();
+            drop(finished);
+            assert!(
+                wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    // Unix shell fixture only; the deadline/kill path is shared Tokio code on all hosts.
+    #[cfg(unix)]
+    #[tokio::test]
     async fn preview_deadline_terminates_a_stalled_child_before_releasing_ownership() {
         use super::*;
         let root = tempfile::tempdir().unwrap();
         let log = root.path().join("logs.txt");
         let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
         let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
-        let child = Command::new("sh")
-            .args(["-c", "exec sleep 30"])
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
+        let mut command = Command::new("sh");
+        command.args(["-c", "exec sleep 30"]);
+        let child = ManagedProcess::spawn(command).unwrap();
         write_preview_logs(
             log.clone(),
             None,
@@ -2066,6 +2522,8 @@ mod tests {
         assert!(is_archive_member("stream-selector.yml"));
         assert!(is_archive_member("FFREPORT.log"));
         assert!(is_archive_member("playback-outcome.txt"));
+        assert!(is_archive_member("music-video-credits.ass"));
+        assert!(is_archive_member("music-video-credits-template.sbntxt"));
         assert!(!is_archive_member("live.m3u8"));
         assert!(!is_archive_member("seg00001.ts"));
     }
@@ -2078,6 +2536,11 @@ mod tests {
         tokio::fs::create_dir_all(&deeper).await.unwrap();
         for (path, bytes) in [
             (root.path().join("logs.txt"), "native-log"),
+            (root.path().join("music-video-credits.ass"), "credits-ass"),
+            (
+                root.path().join("music-video-credits-template.sbntxt"),
+                "credits-template",
+            ),
             (report_dir.join("playback-outcome.txt"), "next-outcome"),
             (report_dir.join("channel.json"), "next-config"),
             (report_dir.join("seg00001.ts"), "excluded-media"),
@@ -2096,7 +2559,14 @@ mod tests {
             .await
             .unwrap()
             .expect("Next report makes the archive downloadable");
-        for expected in ["native-log", "next-outcome", "next-config", "FFREPORT.log"] {
+        for expected in [
+            "native-log",
+            "next-outcome",
+            "next-config",
+            "FFREPORT.log",
+            "credits-ass",
+            "credits-template",
+        ] {
             assert!(zip
                 .windows(expected.len())
                 .any(|bytes| bytes == expected.as_bytes()));
@@ -2106,6 +2576,95 @@ mod tests {
                 .windows(excluded.len())
                 .any(|bytes| bytes == excluded.as_bytes()));
         }
+    }
+
+    // Unix shell fixtures only; production capture uses Tokio and TempDir on every host.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn media_sample_cleanup_handles_success_failure_and_read_error() {
+        for exit in [0, 1] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = root.path().to_path_buf();
+            let sample = directory.join("sample.mkv");
+            let mut process = Command::new("sh");
+            process
+                .args(["-c", "printf synthetic > \"$1\"; exit \"$2\"", "fixture"])
+                .arg(&sample)
+                .arg(exit.to_string());
+            let result = capture_media_sample_archive(
+                process,
+                root,
+                sample,
+                tokio::time::Instant::now() + Duration::from_secs(2),
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.is_some(), exit == 0);
+            assert!(!directory.exists());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        tokio::fs::create_dir(&sample).await.unwrap();
+        tokio::fs::write(sample.join("partial"), b"partial")
+            .await
+            .unwrap();
+        let mut process = Command::new("sh");
+        process.args(["-c", "exit 0"]);
+        assert!(capture_media_sample_archive(
+            process,
+            root,
+            sample,
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        )
+        .await
+        .is_err());
+        assert!(
+            !directory.exists(),
+            "failed archive read must remove the sample"
+        );
+    }
+
+    // Unix child fixtures; process deadlines and detached ownership are platform-neutral.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn media_sample_cleanup_outlives_disconnected_caller_and_reaps_deadline() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        let mut process = Command::new("sh");
+        process
+            .args(["-c", "printf partial > \"$1\"; exec sleep 0.1", "fixture"])
+            .arg(&sample);
+        let worker = tokio::spawn(capture_media_sample_archive(
+            process,
+            root,
+            sample,
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        ));
+        drop(worker);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while directory.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("disconnected worker must finish and remove its sample");
+
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_path_buf();
+        let sample = directory.join("sample.mkv");
+        let mut process = Command::new("sh");
+        process.args(["-c", "exec sleep 30"]).kill_on_drop(true);
+        let error =
+            capture_media_sample_archive(process, root, sample, tokio::time::Instant::now())
+                .await
+                .unwrap_err();
+        assert!(error.to_string().contains("deadline expired"));
+        assert!(
+            !directory.exists(),
+            "child must be reaped before removing sample output"
+        );
     }
 
     #[test]
@@ -2210,6 +2769,25 @@ mod tests {
     }
 
     #[test]
+    fn programme_preview_seek_stays_in_the_selected_row() {
+        let start = parse_preview_start(Some("2026-10-02T12:00:00Z")).unwrap();
+        let finish = start + chrono::Duration::seconds(60);
+        let at = start + chrono::Duration::seconds(20);
+        let mut query: PlaybackPreviewQuery = PlaybackPreviewRequest::default().into();
+        assert_eq!(
+            programme_preview_time(&query, start, finish, at).unwrap(),
+            at
+        );
+        for (requested, expected) in [(-4, 0), (0, 0), (30, 30), (60, 59), (i64::MAX, 59)] {
+            query.seek_seconds = Some(requested);
+            assert_eq!(
+                (programme_preview_time(&query, start, finish, at).unwrap() - start).num_seconds(),
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn preview_start_accepts_browser_datetime_local_and_rfc3339() {
         assert_eq!(
             parse_preview_start(Some("2026-06-04T21:15"))
@@ -2224,5 +2802,7 @@ mod tests {
             "2026-06-04T19:15:30+00:00"
         );
         assert!(parse_preview_start(Some("")).is_none());
+        assert!(requested_preview_start(Some("invalid-date")).is_err());
+        assert!(requested_preview_start(Some("")).is_ok());
     }
 }

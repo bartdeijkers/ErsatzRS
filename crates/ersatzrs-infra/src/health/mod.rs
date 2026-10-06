@@ -16,6 +16,12 @@ use sqlx::{Pool, Row};
 use crate::db::{DatabaseSchemaStatus, Db};
 use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
+use checks::{
+    BlockPlayoutStateHealthCheck, ExternalJsonPlayoutStateHealthCheck, YamlPlayoutStateHealthCheck,
+};
+mod coordinator;
+
+pub use coordinator::{HealthCheckCoordinator, HealthRunError};
 
 use checks::{
     AddonListDiskUsageHealthCheck, AddonMediaListHealthCheck, AddonPlatformHealthCheck,
@@ -30,10 +36,10 @@ use checks::{
     PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
-    ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck, TsduckAvailabilityHealthCheck,
-    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
-    ZeroDurationHealthCheck,
+    ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
+    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -57,7 +63,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 44] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 48] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -93,6 +99,10 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 44] = [
     "Unavailable",
     "Empty Schedule",
     "Classic Playout State",
+    "Scripted Playout State",
+    "Block Playout State",
+    "YAML Playout State",
+    "External JSON Playout State",
     "Scan Refresh State",
     "Mirror Channels",
     "Output Dynamic Range",
@@ -170,8 +180,21 @@ impl SqlHealthCheckStore {
         let summary_json = serde_json::to_string(&summary)
             .map_err(|error| HealthCheckError::Serialization(error.to_string()))?;
 
-        upsert_config(&self.pool, CONFIG_KEY_HEALTH_RESULTS, &results_json).await?;
-        upsert_config(&self.pool, CONFIG_KEY_HEALTH_SUMMARY, &summary_json).await?;
+        let mut tx = crate::db::begin_write(&self.pool)
+            .await
+            .map_err(sqlx_error)?;
+        for (key, value) in [
+            (CONFIG_KEY_HEALTH_RESULTS, results_json),
+            (CONFIG_KEY_HEALTH_SUMMARY, summary_json),
+        ] {
+            sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+                .bind(key)
+                .bind(value)
+                .execute(&mut *tx)
+                .await
+                .map_err(sqlx_error)?;
+        }
+        tx.commit().await.map_err(sqlx_error)?;
 
         Ok(summary)
     }
@@ -270,6 +293,10 @@ fn registered_health_checks(
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(ScriptedPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(BlockPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(YamlPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(ExternalJsonPlayoutStateHealthCheck::new(pool.clone())),
         Box::new(ScanRefreshStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
@@ -489,6 +516,7 @@ async fn missing_metadata_result(
     ))
 }
 
+#[cfg(test)]
 async fn upsert_config(pool: &Pool<Db>, key: &str, value: &str) -> Result<()> {
     sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
         .bind(key)
@@ -520,6 +548,8 @@ fn runtime_issue_name(issue: &FfmpegRuntimeIssue) -> String {
         | FfmpegRuntimeIssue::RequiredDecoder { name }
         | FfmpegRuntimeIssue::RequiredHwaccel { name }
         | FfmpegRuntimeIssue::OptionalHwaccel { name } => name.clone(),
+        FfmpegRuntimeIssue::RequiredMuxer { name } => format!("muxer {name}"),
+        FfmpegRuntimeIssue::RequiredDemuxer { name } => format!("demuxer {name}"),
         FfmpegRuntimeIssue::RequiredConfigurationFlag { flag } => flag.clone(),
         FfmpegRuntimeIssue::RequiredEncoderOption { encoder, option } => {
             format!("{encoder} {option}")
@@ -772,6 +802,81 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn canvas_capability_health_reports_missing_input_and_output_support() {
+        let pool = test_pool().await;
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.issues = vec![
+            FfmpegRuntimeIssue::RequiredEncoder {
+                name: "ffv1".into(),
+            },
+            FfmpegRuntimeIssue::RequiredMuxer { name: "nut".into() },
+            FfmpegRuntimeIssue::RequiredDemuxer { name: "nut".into() },
+            FfmpegRuntimeIssue::RequiredDecoder {
+                name: "libjxl_anim".into(),
+            },
+            FfmpegRuntimeIssue::RequiredDemuxer {
+                name: "jpegxl_anim".into(),
+            },
+        ];
+        let failed = FFmpegCapabilitiesHealthCheck::new(report, pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(failed.status, HealthCheckStatus::Fail);
+        for missing in [
+            "ffv1",
+            "muxer nut",
+            "demuxer nut",
+            "libjxl_anim",
+            "demuxer jpegxl_anim",
+        ] {
+            assert!(failed.message.contains(missing), "{missing}");
+        }
+        let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(ready.status, HealthCheckStatus::NotApplicable);
+    }
+
+    #[tokio::test]
+    async fn av1_health_distinguishes_native_hls_next_and_mpegts() {
+        let pool = test_pool().await;
+        seed_hdr10_profile_and_channel(&pool, 71, "AV1 output", 4, 0, 1).await;
+        let check =
+            FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool.clone());
+        for (engine, mode, status) in [
+            (0, 1, HealthCheckStatus::Fail),
+            (0, 5, HealthCheckStatus::Fail),
+            (0, 4, HealthCheckStatus::NotApplicable),
+            (0, 2, HealthCheckStatus::NotApplicable),
+            (1, 4, HealthCheckStatus::Fail),
+        ] {
+            sqlx::query(
+                r#"UPDATE "Channel" SET "StreamingEngine"=?, "StreamingMode"=? WHERE "Id"=71"#,
+            )
+            .bind(engine)
+            .bind(mode)
+            .execute(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                check.check().await.unwrap().status,
+                status,
+                "engine={engine} mode={mode}"
+            );
+        }
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "TranscodeVideo"=0 WHERE "Id"=71"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::NotApplicable
+        );
+    }
+
+    #[tokio::test]
     async fn interlace_probe_requires_idet_only_when_enabled() {
         let pool = test_pool().await;
         let mut report = FfmpegRuntimeReport::for_tests();
@@ -997,10 +1102,7 @@ mod tests {
         crate::maintenance::run_requested_playout_build(
             &pool,
             &EntityLocker::new(),
-            PlayoutBuildRequest {
-                playout_id: 10,
-                mode: PlayoutBuildMode::Reset,
-            },
+            PlayoutBuildRequest::new(10, PlayoutBuildMode::Reset),
             now,
             None,
         )
@@ -1037,6 +1139,17 @@ mod tests {
             pool.execute(r#"UPDATE "PlayoutProgramScheduleAnchor" SET "RerunCollectionId"=NULL"#)
                 .await
                 .unwrap();
+            assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Fail);
+        } else {
+            // Leave the daily checkpoint intact: preserving the active
+            // programme specifically requires its own complete boundary.
+            pool.execute(
+                r#"DELETE FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 10
+                AND "CheckpointDate" = (SELECT "Finish" FROM "PlayoutItem"
+                    WHERE "PlayoutId" = 10 ORDER BY "Start" LIMIT 1)"#,
+            )
+            .await
+            .unwrap();
             assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Fail);
         }
     }
@@ -1872,12 +1985,6 @@ mod tests {
                    )"#
             ),
             format!(
-                r#"INSERT INTO "MediaStream" (
-                       "Id", "Index", "Codec", "MediaStreamKind", "Channels",
-                       "Default", "Forced", "MediaVersionId", "Rotation"
-                   ) VALUES ({id}, 0, 'h264', 2, 0, 1, 0, {id}, {rotation})"#
-            ),
-            format!(
                 r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
                    VALUES ({id}, '/media/portrait-{id}.mp4', 'hash-{id}')"#
             ),
@@ -1900,6 +2007,22 @@ mod tests {
                 .await
                 .expect("seed rotated playout item");
         }
+        // Use the production writer so this fixture cannot duplicate an
+        // incorrect persisted enum value from the health query.
+        let mut tx = pool.begin().await.unwrap();
+        crate::media_server::jellyfin_emby::replace_streams(
+            &mut tx,
+            id,
+            &[ersatzrs_domain::MediaStream {
+                kind: ersatzrs_domain::MediaStreamKind::Video,
+                codec: Some("h264".into()),
+                rotation: Some(rotation),
+                ..Default::default()
+            }],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
     }
 
     /// ADR 0003 / `p8c-02`: MPEG-TS cannot carry a display matrix, so a
@@ -1948,6 +2071,20 @@ mod tests {
             result.message.contains("portrait-92.mp4") && result.message.contains("270"),
             "{}",
             result.message
+        );
+        // Even a malformed audio row with rotation must not be reported.
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "MediaStreamKind" = 2 WHERE "MediaVersionId" = 92"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            super::run_source_orientation_check(&pool)
+                .await
+                .unwrap()
+                .status,
+            HealthCheckStatus::NotApplicable
         );
     }
 

@@ -118,7 +118,11 @@ pub use error::{RepositoryError, Result};
 pub use ersatzrs_domain::AddonMediaListAutoPublicationHoldReason;
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
-pub use graphics::GraphicsRepository;
+pub use graphics::{
+    parse_graphics_attachment_variables, validate_authored_graphics,
+    validate_graphics_attachment_variables, GraphicsRenderPreview, GraphicsRenderPreviewRequest,
+    GraphicsRepository, GraphicsTextPreview, GraphicsTextPreviewRequest,
+};
 pub use jellyfin::{
     JellyfinActor, JellyfinCollectionItem, JellyfinCollectionMediaItem,
     JellyfinCollectionMediaKind, JellyfinCollectionMediaPage, JellyfinCollectionPage,
@@ -150,12 +154,13 @@ pub use playout::{
     PlayoutCreateChannelAdmin, PlayoutCreateScheduleAdmin, PlayoutDateFilterAdmin,
     PlayoutDecoAdmin, PlayoutDecoGroupAdmin, PlayoutDetailAdminItem, PlayoutKindEditorAdmin,
     PlayoutListAdminRow, PlayoutNestedChildOptionAdmin, PlayoutNestedOptionAdmin,
-    PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin, SequentialPlayoutAdmin,
+    PlayoutPendingWork, PlayoutRepository, PlayoutTemplateItemAdmin, PlayoutTemplatesAdmin,
+    SequentialPlayoutAdmin,
 };
 pub use program_schedule::{
-    ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleFillerOption,
-    ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions, ScheduleLanguageOption,
-    SchedulePlaylistOption,
+    ProgramScheduleRepository, ScheduleAdminForm, ScheduleAdminRow, ScheduleDeferredChange,
+    ScheduleFillerOption, ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions,
+    ScheduleLanguageOption, SchedulePlaylistOption,
 };
 pub use saved_search::{SavedSearchAdminRow, SavedSearchRepository};
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};

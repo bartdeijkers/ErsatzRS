@@ -2,6 +2,8 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::channels::get_channel_preview_output;
 use crate::admin::server_fns::channels::{
     get_channel_preview_url, ChannelWatchAvailability, ChannelWatchData,
 };
@@ -18,6 +20,11 @@ extern "C" {
     fn preview_start(video: &web_sys::HtmlVideoElement, url: &str);
     #[wasm_bindgen(js_namespace = ErsatzRSChannelPreview, js_name = destroy)]
     fn preview_destroy(video: &web_sys::HtmlVideoElement);
+    #[wasm_bindgen(js_namespace = ErsatzRSChannelPreview, js_name = currentSegment)]
+    fn preview_current_segment(video: &web_sys::HtmlVideoElement) -> String;
+    #[wasm_bindgen(js_namespace = ErsatzRSChannelPreview, js_name = currentSegmentStart)]
+    fn preview_current_segment_start(video: &web_sys::HtmlVideoElement) -> String;
+
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -49,6 +56,74 @@ pub fn ChannelPreviewPlayer(
     #[prop(optional)] active: Option<Signal<bool>>,
 ) -> impl IntoView {
     let video_ref = NodeRef::<html::Video>::new();
+    let output_error = RwSignal::new(String::new());
+    let output_unknown = RwSignal::new(false);
+    let output_known = RwSignal::new(false);
+    #[cfg(target_arch = "wasm32")]
+    {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let polling = Arc::clone(&running);
+        leptos::task::spawn_local(async move {
+            while polling.load(Ordering::Relaxed) {
+                gloo_timers::future::TimeoutFuture::new(2_000).await;
+                if !polling.load(Ordering::Relaxed) {
+                    break;
+                }
+                if !active.is_none_or(|active| active.get_untracked()) {
+                    output_error.set(String::new());
+                    output_known.set(false);
+                    output_unknown.set(false);
+                    continue;
+                }
+                let Some(video) = video_ref.get() else {
+                    continue;
+                };
+                let segment = preview_current_segment(&video);
+                let started_at = preview_current_segment_start(&video);
+                let started_at_millis = started_at.parse::<i64>().ok();
+                if segment.is_empty() || started_at_millis.is_none() {
+                    output_error.set(String::new());
+                    output_known.set(false);
+                    output_unknown.set(video.ready_state() >= 2 && !video.ended());
+                    continue;
+                }
+                let number = data.with_untracked(|watch| watch.number.clone());
+                let result = get_channel_preview_output(
+                    number.clone(),
+                    segment.clone(),
+                    started_at_millis.unwrap_or_default(),
+                )
+                .await;
+                if !polling.load(Ordering::Relaxed) {
+                    break;
+                }
+                if preview_current_segment(&video) != segment
+                    || preview_current_segment_start(&video) != started_at
+                    || data.with_untracked(|watch| watch.number.clone()) != number
+                    || !active.is_none_or(|active| active.get_untracked())
+                {
+                    continue;
+                }
+                match result {
+                    Ok(output) => {
+                        output_known.set(output.known);
+                        output_unknown.set(!output.known);
+                        output_error.set(output.error.unwrap_or_default());
+                    }
+                    Err(_) => {
+                        output_error.set(String::new());
+                        output_known.set(false);
+                        output_unknown.set(true);
+                    }
+                }
+            }
+        });
+        on_cleanup(move || running.store(false, Ordering::Relaxed));
+    }
     let request_error = RwSignal::new(String::new());
     let request_generation = RwSignal::new(0_u64);
     let autoplayed_channel = RwSignal::new(None::<i64>);
@@ -79,6 +154,9 @@ pub fn ChannelPreviewPlayer(
             match result {
                 Ok(url) => {
                     request_error.set(String::new());
+                    output_error.set(String::new());
+                    output_known.set(false);
+                    output_unknown.set(false);
                     start_browser_player(video_ref, &url);
                 }
                 Err(_) => request_error.set(tr(TextKey::PreviewAuthorizationFailed).to_owned()),
@@ -135,6 +213,9 @@ pub fn ChannelPreviewPlayer(
             data-channel-preview
             data-align-start=align_start
             data-preview-state="idle"
+            data-preview-output=move || if !output_error.get().is_empty() {
+                "error-slate"
+            } else if output_known.get() { "stream" } else { "unknown" }
             data-message-idle=tr(TextKey::PreviewIdle)
             data-message-connecting=tr(TextKey::PreviewConnecting)
             data-message-live=tr(TextKey::PreviewLive)
@@ -173,6 +254,15 @@ pub fn ChannelPreviewPlayer(
                     let error = request_error.get();
                     if error.is_empty() { tr(TextKey::PreviewIdle).to_owned() } else { error }
                 }}
+            </p>
+            <p class=format!("{} {}", style::status, style::output_error) data-preview-output-error role="alert"
+                style:display=move || if output_error.get().is_empty() { "none" } else { "" }>
+                <strong>{tr(TextKey::PreviewErrorSlate)}</strong>
+                " "{move || output_error.get()}
+            </p>
+            <p class=style::status data-preview-output-unknown aria-live="polite"
+                style:display=move || if output_unknown.get() { "" } else { "none" }>
+                {tr(TextKey::PreviewOutputUnknown)}
             </p>
             <p class=style::derivative_note>{tr(TextKey::PreviewDerivativeNote)}</p>
 

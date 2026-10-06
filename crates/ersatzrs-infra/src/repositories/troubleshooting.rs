@@ -6,7 +6,7 @@ use ersatzrs_core::repositories::{
     TroubleshootingChannelSummaryAdmin, TroubleshootingFfmpegProfileSummaryAdmin,
     TroubleshootingOptionAdmin, TroubleshootingPreviewMediaAdmin, TroubleshootingRepository,
 };
-use ersatzrs_domain::{Channel, ChannelSubtitleMode, EntityId, StreamingMode};
+use ersatzrs_domain::{Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, EntityId};
 use serde_json::Value;
 use sqlx::{Pool, Row};
 
@@ -14,19 +14,6 @@ use crate::repositories::SqlxResultExt as _;
 
 #[derive(Clone)]
 pub struct SqliteTroubleshootingRepository(pub Pool<crate::db::Db>);
-
-fn decode_streaming_mode(value: i64) -> Result<StreamingMode> {
-    match value {
-        0 => Ok(StreamingMode::TransportStream),
-        1 => Ok(StreamingMode::HttpLiveStreamingDirect),
-        2 => Ok(StreamingMode::HttpLiveStreamingSegmenter),
-        3 => Ok(StreamingMode::TransportStreamHybrid),
-        _ => Err(RepositoryError::Decode {
-            kind: "channel streaming mode",
-            value: value.to_string(),
-        }),
-    }
-}
 
 fn decode_channel_subtitle_mode(value: i64) -> Result<ChannelSubtitleMode> {
     match value {
@@ -129,13 +116,15 @@ async fn playback_media(
              CASE
                WHEN movie."Id" IS NOT NULL THEN 'Movie'
                WHEN episode."Id" IS NOT NULL THEN 'Episode'
+               WHEN music_video."Id" IS NOT NULL THEN 'MusicVideo'
                WHEN other_video."Id" IS NOT NULL THEN 'OtherVideo'
                WHEN remote_stream."Id" IS NOT NULL THEN 'RemoteStream'
                WHEN song."Id" IS NOT NULL THEN 'Song'
                WHEN image."Id" IS NOT NULL THEN 'Image'
                ELSE 'Playback'
              END AS "Kind",
-             COALESCE(movie_meta."Title", episode_meta."Title", other_video_meta."Title",
+             COALESCE(movie_meta."Title", episode_meta."Title", music_video_meta."Title",
+                      other_video_meta."Title",
                       remote_stream_meta."Title", song_meta."Title", image_meta."Title", '') AS "Title",
              COALESCE(version."Duration", '00:00:00') AS "Duration"
            FROM "MediaItem" media
@@ -143,6 +132,9 @@ async fn playback_media(
            LEFT JOIN "MovieMetadata" movie_meta ON movie_meta."MovieId" = movie."Id"
            LEFT JOIN "Episode" episode ON episode."Id" = media."Id"
            LEFT JOIN "EpisodeMetadata" episode_meta ON episode_meta."EpisodeId" = episode."Id"
+           LEFT JOIN "MusicVideo" music_video ON music_video."Id" = media."Id"
+           LEFT JOIN "MusicVideoMetadata" music_video_meta
+             ON music_video_meta."MusicVideoId" = music_video."Id"
            LEFT JOIN "OtherVideo" other_video ON other_video."Id" = media."Id"
            LEFT JOIN "OtherVideoMetadata" other_video_meta
              ON other_video_meta."OtherVideoId" = other_video."Id"
@@ -155,6 +147,7 @@ async fn playback_media(
            LEFT JOIN "ImageMetadata" image_meta ON image_meta."ImageId" = image."Id"
            LEFT JOIN "MediaVersion" version
              ON version."MovieId" = movie."Id" OR version."EpisodeId" = episode."Id"
+             OR version."MusicVideoId" = music_video."Id"
              OR version."OtherVideoId" = other_video."Id"
              OR version."RemoteStreamId" = remote_stream."Id"
              OR version."SongId" = song."Id" OR version."ImageId" = image."Id"
@@ -533,7 +526,7 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                       "FFmpegProfileId", "WatermarkId", "StreamingMode",
                       "StreamSelector", "PreferredAudioLanguageCode",
                       "PreferredSubtitleLanguageCode",
-                      "SubtitleMode", "IsEnabled"
+                      "SubtitleMode", "IsEnabled", "MusicVideoCreditsMode", "MusicVideoCreditsTemplate"
                FROM "Channel"
                WHERE "Id" = ?"#,
         )
@@ -548,7 +541,11 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                 name: row.try_get("Name").repository()?,
                 ffmpeg_profile_id: row.try_get("FFmpegProfileId").repository()?,
                 watermark_id: row.try_get("WatermarkId").repository()?,
-                streaming_mode: decode_streaming_mode(row.try_get("StreamingMode").repository()?)?,
+                streaming_mode: super::common::decode_enum_column(
+                    "channel streaming_mode",
+                    &row,
+                    "StreamingMode",
+                )?,
                 stream_selector: row.try_get("StreamSelector").repository()?,
                 preferred_audio_language_code: row
                     .try_get("PreferredAudioLanguageCode")
@@ -559,6 +556,22 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
                 subtitle_mode: decode_channel_subtitle_mode(
                     row.try_get("SubtitleMode").repository()?,
                 )?,
+                music_video_credits_mode: match row
+                    .try_get::<i64, _>("MusicVideoCreditsMode")
+                    .repository()?
+                {
+                    0 => ChannelMusicVideoCreditsMode::None,
+                    1 => ChannelMusicVideoCreditsMode::GenerateSubtitles,
+                    value => {
+                        return Err(RepositoryError::Decode {
+                            kind: "music video credits mode",
+                            value: value.to_string(),
+                        })
+                    }
+                },
+                music_video_credits_template: row
+                    .try_get("MusicVideoCreditsTemplate")
+                    .repository()?,
                 is_enabled: row.try_get::<i64, _>("IsEnabled").repository()? != 0,
                 ..Channel::default()
             })

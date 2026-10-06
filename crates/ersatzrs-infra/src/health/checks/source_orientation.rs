@@ -4,7 +4,7 @@ use super::super::{
 };
 
 /// `MediaStreamKind` = `Video`.
-const MEDIA_STREAM_KIND_VIDEO: i32 = 2;
+const MEDIA_STREAM_KIND_VIDEO: i32 = 1;
 /// `FFmpegProfileVideoFormat` = `Copy`.
 const VIDEO_FORMAT_COPY: i32 = 99;
 /// Most an operator needs to see before the point is made.

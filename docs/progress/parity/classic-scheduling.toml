@@ -176,7 +176,7 @@ id          = 'classic-deterministic-chapter-expression-profile'
 description = 'Accepted ADR 0098 defines deterministic collation, numeric conversions, date/time literal formats and explicit resource limits for saved chapter expressions. The implementation uses pinned ICU4X 2.2.0 compiled collation data, invariant real/integer conversion and strictly validated slash/ISO date and elapsed-time literals; all-six-platform acceptance remains open.'
 discovered  = '2026-09-23'
 adr         = '0098'
-evidence    = 'Exact NCalcSync 5.12.0 probes across invariant/en-US/nl-NL/tr-TR demonstrate deployment-sensitive string comparisons and numeric/date conversions. The maintainer accepted ADR 0098 on 2026-09-23; 238 focused core/SQL tests passed, followed by 19 expression/atomic-failure tests after eager literal validation was added. Eight profile regressions passed in each of four separate language-environment processes. Dependency audit passed. Native MPEG-TS/HLS smoke and decoded Unicode-selected chapter playback pass, including persisted fractional fallback intervals. All-six-platform application evidence remains required. See ADR 0098 and UCU-02.'
+evidence    = 'Exact NCalcSync 5.12.0 probes across invariant/en-US/nl-NL/tr-TR demonstrate deployment-sensitive string comparisons and numeric/date conversions. The maintainer accepted ADR 0098 on 2026-09-23; 238 focused core/SQL tests passed, followed by 19 expression/atomic-failure tests after eager literal validation was added. Eight profile regressions passed in each of four separate language-environment processes. Dependency audit passed. Native MPEG-TS/HLS smoke and decoded Unicode-selected chapter playback pass, including persisted fractional fallback intervals. On 2026-10-01 the maintainer approved outstanding ARM/macOS application proof as explicit unverified acceptance debt under UCU-09; Linux x64 and Windows x64 checks remain required. See ADR 0098, UCU-09 and ucu-arm-macos-application-acceptance in the catch-up parity record.'
 resolved    = false
 
 [[debt]]
@@ -200,3 +200,19 @@ description = 'UCU-08 row 123 review found that Classic playlist children were s
 discovered  = '2026-09-27'
 evidence    = 'The Continue oracle covers chronological/shuffled children and parent groups at four split positions, preserving complete generated items and language settings. All 228 scheduling tests, 55 affected repository tests and strict affected Clippy pass; UCU-08 row 123 source map records review and SQLite evidence.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-row145-marathon-fallback'
+description = 'MarathonGroupBy::None selected an empty playlist instead of the upstream Random fallback.'
+discovered = '2026-09-29'
+evidence = 'The build-local schedule copy now uses Random and emits the upstream warning. All 94 Classic tests pass; the focused regression also proves serialized Continue and dated Refresh checkpoints across midnight. UCU-09 owns integrated acceptance.'
+resolved = true
+
+
+[[debt]]
+id = 'v111-classic-deferred-save-and-midnight-overlap'
+description = 'Findings 11 and 12 require deferred schedule saves with a truthful effective boundary and Classic midnight overlap prevention/repair that preserves continuation state.'
+discovered = '2026-10-04'
+resolved = true
+adr = '0110'
+evidence = 'Findings 11 and 12 are locally accepted. Canonical evidence in v111-findings-11 and v111-findings-12 covers actual fresh-process maintenance, preserved state and rotation, midnight overlap prevention, atomic rollback, Health, localization, complete Rust closeout and native/browser/bundle checks. No live repair or native package acceptance is claimed.'

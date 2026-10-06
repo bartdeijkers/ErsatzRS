@@ -80,6 +80,7 @@ pub struct AppState {
     pub database_backend: DatabaseBackend,
     pub system_startup: Arc<SystemStartup>,
     pub ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    pub health: ersatzrs_infra::health::HealthCheckCoordinator,
     pub device_uuid: Uuid,
     pub tuner_count: Arc<AtomicI32>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
@@ -145,7 +146,7 @@ impl AppState {
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(
             InMemoryHlsSessionRegistry::with_playout_updates_to(preview_hls_sessions.clone()),
         );
-        let ffmpeg_runtime = Arc::new(RwLock::new(ffmpeg_runtime));
+        let (ffmpeg_runtime, health) = health_services(&pool, ffmpeg_runtime, &system_startup);
         let next_version = Arc::new(OnceLock::new());
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
@@ -187,7 +188,7 @@ impl AppState {
                 Arc::new(NativeAdminHealthRuntime::new(
                     pool.clone(),
                     Arc::clone(&ffmpeg_runtime),
-                    system_startup.schema_status.clone(),
+                    health.clone(),
                     startup_errors,
                     startup_warnings,
                 )),
@@ -227,6 +228,7 @@ impl AppState {
             pool,
             database_backend,
             system_startup: Arc::new(system_startup),
+            health,
             ffmpeg_runtime,
             device_uuid,
             tuner_count,
@@ -293,6 +295,24 @@ fn next_engine_host(
         )
         .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
     )
+}
+
+/// Compose health consumers around the same mutable runtime report.
+fn health_services(
+    pool: &DbPool,
+    runtime: FfmpegRuntimeReport,
+    startup: &SystemStartup,
+) -> (
+    Arc<RwLock<FfmpegRuntimeReport>>,
+    ersatzrs_infra::health::HealthCheckCoordinator,
+) {
+    let runtime = Arc::new(RwLock::new(runtime));
+    let health = ersatzrs_infra::health::HealthCheckCoordinator::new(
+        pool.clone(),
+        runtime.clone(),
+        startup.schema_status.clone(),
+    );
+    (runtime, health)
 }
 
 #[cfg(test)]

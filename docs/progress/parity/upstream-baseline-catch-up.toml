@@ -1,42 +1,48 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..8bda4411 (fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..960421e8 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106']
 summary    = """
-180 rows: 135 done, 45 pending.
-99/102 Port: runtime, cache, Vulkan.
-100-101/103 N/A; 104 Covered; 105-107 Port: watermarks, images, on-demand.
-108 Port: v2.0.2 published, hashes verified, default adopted.
-109 N/A: release notes. UCU-06 Complete: local gates and
-green CI 36274614736 at 0e482f66. Rows 110/112/114 Adapt (ADRs 0095/0102/0103), 111 Port, 113 Covered, 115 N/A.
-UCU-07 Complete: CI 36321494841, b4d659eb.
-116/118/119/128 N/A; 117/120/122-124/126-127 Port; 121 Covered; 125 Adapt (0103). 129 Adapt (0104). 130-134 Port; 135 N/A. UCU-08 Complete: CI 36453480304 at dfeaf6d0.
+183/183 accepted; feature remains In progress for approved acceptance debt.
+UCU-00 through UCU-09 are Complete. Final window local gates and terminal
+green exact-SHA CI 36900396649 at b76d11c6 pass. Stable v1.1.0 package acceptance remains separate.
+UCU-09 now has native Windows application proof for Next, JavaScript selection
+and chapter expressions, including all four chapter-profile language environments.
+ARM/macOS application proof is explicit maintainer-approved unverified debt
+(2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
+136-137 Port; 138 Covered; 139 Adapt (0095/0103).
+140 Port: published v2.0.3; approved hardware debt remains unverified.
+141-142/144/152-153 N/A; AAC surround decoding is proven.
+143/145 Port: HDR/Media Info and external JSON playback/guide/fallback.
+146 Adapt (0105): graphics canvas, owned clocks/cleanup and 87 TSDuck checks.
+147-151 Port: YAML roll/graphics state, provider subtitles/availability,
+Plex folder tags, Next error cards and both-engine credits troubleshooting.
+154 Adapt (0005/0105): motion EOF/expiry/loops and preview clocks; decoded,
+argv, browser and both-engine smoke evidence is recorded in UCU-09.
+155 Port: optional Next AMF protocol; hardware acceptance remains open.
+156 Port: machine CRUD/deletion/localization; 33 focused, 15 browser, lint
+and native smoke pass.
+157 Port: native completion/sample ownership, URI redaction and smart 409;
+53 focused checks, 24 browser cases and lint pass.
+158 Covered: atomic admission, Plex fencing; Trakt retired.
+22 checks and lint pass.
+159 Port: maintenance failure isolation/retry, health and cancellation;
+24 checks and lint pass.
+160 Port: movie order/save recovery, atomic validation and legacy repair;
+13 checks, eight browser cases and strict lint pass.
+161 Covered: FFmpeg font ownership replaces shared mapper; nine checks pass.
+162 Port: fresh script choices, selection recovery and no-JS settings;
+19 checks, six browser cases, strict lint and native smoke pass.
+163 Port: shared script path validation/execution and Lua arguments;
+46 focused checks and strict lint pass.
+164 Port: dependent choices and template hydration; four browser cases pass.
+165 Covered: credits fallback and worker/graphics ownership; 18 checks pass.
+166 Covered: case-insensitive YAML discovery; three scanner checks pass.
 
-UCU-02 Complete. Rows 11-20 prove engine selection/editor, atomic publication,
-supervised lifecycle, HLS admission/cleanup, preview isolation and channel/mirror schedules.
-Decoded Linux playback preserves selected alternate audio and external subtitles;
-exact pins/silence, selected versions/files and mirror timing have regression
-coverage. Atomic publication has native Windows/NTFS proof. Media-server inputs
-use scoped paths or protected opens with current credentials, verified Plex
-failover, Range handling and redirect isolation.
-
-Row 21 is Adapt (ADR 0096), explicitly accepted by the maintainer. Shared bounded
-JavaScript movie/episode callbacks now feed native playback, troubleshooting and
-Next projection after exact pins and YAML selection. Metadata/GUID contracts,
-valid audio-only results, fallback, deadline/heap/stack limits and cancellation
-are tested. Decoded Next playback proves JavaScript can choose the non-default
-track. Native/Next HTTP smoke passes; TSDuck passes its 64 applicable checks,
-while its HLS Direct branch produced no segments and remains unproven by that run.
-The interpreter compiles for Windows MSVC/ARMv7 and linked runtime probes pass
-on native Windows and ARMv7 emulation. Full six-platform application acceptance
-remains open; ADR 0096 stays Partial and its platform evidence debt remains visible.
-
-Row 22 is Adapt (ADR 0098), with ADR 0097 primary-content preservation. Complete
-fallback intervals, chapter/version identity, persisted filler continuity,
-deterministic bounded expressions and subsecond source-offset storage pass
-focused tests and decoded production-builder playback. All-six-platform
-expression acceptance remains open in Classic scheduling debt; ADR 0098 is Partial.
+UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
+chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
+the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
 
 Row 23 is Port: version-bound image selection preserves Dutch subtitles,
 explicit off and alternate audio in decoded two-track PGS playback.
@@ -44,23 +50,75 @@ explicit off and alternate audio in decoded two-track PGS playback.
 Rows 24-25 port Burn/Convert, bounded version-bound preparation, authenticated
 WebVTT and preview captions, with browser/runtime/native smoke proof. Cache reuse,
 blank-path repair and absolute partial-extraction indices have SQL regressions.
-Rows 26-27 port permanent and wall-clock intermittent watermarks through shared
-selection. Decoded geometry, fade/hidden intervals, joined timing, audio and
-subtitles pass; Dynamic timing and merged deco fallback have regression coverage.
-Row 28 proves pad/stretch/crop scaling. Row 29 proves authenticated provider
-Convert subtitles, excludes provider EIA-608 and places watermarks inside content.
+Rows 26-27: decoded permanent/intermittent watermark geometry, fades, joined
+timing, audio/subtitles and Dynamic/deco fallback pass. Row28: pad/stretch/crop.
+Row29: authenticated provider Convert, EIA-608 exclusion and content watermark placement.
 Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
 Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
-Rows 68-71 port Plex title refresh and Classic playlist continuity. Row 75
-drops FFmpeg crop metadata workarounds; NVIDIA overlay output passes, with AMD
-live output unproven. Rows 76-77 fix Classic checkpoints and dormant anchors.
-The accepted Next RGB opacity bug remains open.
+68-71: Plex/Classic continuity. 75: NVIDIA overlay passes; AMD live unproven.
+76-77: Classic anchors/checkpoints.
+RGB opacity is proven; UCU-09 owns evidence.
 Remote Stream/add-on support now has row-39 runtime acceptance for direct,
 prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Unsupported graphics kinds/settings remain refused. Later endpoint/platform acceptance remains open under ADR 0095. Milestones own acceptance;
-refresh the ledger target each run. Teletext p9a-01 depends on ucu-09.
+explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream; p9a-01 waits for ucu-09.
 """
+
+[[debt]]
+id = 'ucu09-row181-legacy-qsv-runtime'
+description = 'Integrate the published v2.0.4 QSV and oneVPL corrections and official Next 6b49dae, then close row181 runtime acceptance. Published package integration, strict lint and integrated smoke now pass.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns published runtime commit 657482cc, exact draft/public checksum verification and passing available hardware/software checks. Next scaling, selected audio, bitmap subtitles, direct watermarks and production HTTP canvas pass; the image fixture now passes three scheduled production-route cases including local/HTTP templates, Burn/Convert, disabled watermarks and cleanup. Strict affected lint and Next HTTP smoke pass. Native Windows Next CUDA/NVENC, RGB alpha, subtitle and selected-audio output also pass. See milestone evidence and tmp/ucu09-row181/. Approved hardware debt is unchanged.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row174-subtitle-eligibility'
+description = 'Next automatic subtitle selection bypasses Use Embedded Subtitles and pre-extracted text eligibility, allowing unavailable embedded defaults to hide usable sidecars.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns full d7b265e0 audit, both-engine eligibility matrix, 308 affected regressions including corrected explicit-pin fixtures, decoded automatic sidecar Burn/Convert and explicit local/provider/direct-HTTP preparation proof. Strict lint and Next HTTP smoke pass. Source map in plans/upstream-catch-up.md.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row173-direct-watermarks'
+description = 'Plain permanent/intermittent Next watermarks still create a full graphics canvas; integrate direct media layers while retaining mixed/expression canvas semantics.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns complete c0184f00 audit, shared direct-layer integration across five callers, 249 passing regressions, three real Next decoded runtime checks, strict lint and Next HTTP smoke. Exact accepted runtime proves RGB opacity; mixed/expression graphics retain the canvas. Source map in plans/upstream-catch-up.md.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row172-jellyfin-collections'
+description = 'Jellyfin item queries can collapse collection members and projections accept wrong item types; verify season parent repair with unchanged ETag.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns full 27f9d217 review, 47 passing Jellyfin/Emby checks, final production repair regression and strict lint. Query flags and exact types prevent collection substitution; existing transactional upsert repairs season parents without changing identity or ETag. Recovery instructions are in CHANGELOG.md.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row170-vaapi-default'
+description = 'Next Auto VAAPI driver selection forces Intel iHD instead of leaving libva to select the driver for the chosen device.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns the complete e8b7bb63 audit, 14 passing configuration/protocol regressions, strict infra lint and exact e7997fa consumer/health review. Default omits the driver; explicit choices and device are retained. No AMD hardware-output claim. Source map in plans/upstream-catch-up.md.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row169-rotation'
+description = 'Plex/Jellyfin/Emby response projections omit rotation; Media Info omits persisted Rotation and Next still publishes schema 0.0.4. Complete provider-to-persistence-to-Next/UI rotation parity without double-rotating native output.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns the complete ee038ba4 audit, 163 passing regressions, decoded official-Next orientation/audio proof, two browser cases, corrected producer-backed orientation health and passing Next HTTP smoke. Source/UI map in plans/upstream-catch-up.md; native autorotation and approved hardware debt unchanged.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row167-local-paths'
+description = 'Local library admin saves accept relative/file-URI paths, decode percent names, omit cross-library conflict checks and replace cascade-parent path rows. Port the full upstream path contract, preserve unchanged media identity and show localized offending-path errors.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns full source/platform review, eleven production regressions, two native Windows probes, eight Chromium/Firefox JS/no-JS cases and strict affected lint. Saves preserve media identity, reject invalid/conflicting paths without mutation and show localized escaped correction forms. Source/UI map in plans/upstream-catch-up.md.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row164-dependent-selections'
+description = 'The row164 source audit finds Deco break content and Playout Templates retain child IDs after the selected group changes. Visible options change, but Save can persist the hidden previous choice. Clear dependent IDs/names in the form model and prove replacement persistence in both browsers.'
+discovered = '2026-09-30'
+evidence = 'UCU-09 owns the full source map, two causal browser failures and final four passing Chromium/Firefox cases. Persisted dependent choices clear and replacement saves retain date filters. Server-resolved island props and in-order SSR repair the demonstrated hydration mismatch; strict web lint and structural checks pass. Final window gates remain.'
+resolved = true
 
 [[debt]]
 id          = 'ucu-next-runtime-path-resolution'
@@ -163,12 +221,19 @@ evidence    = 'Row 24 is Port. Source map is in plans/upstream-catch-up.md; UCU-
 resolved    = true
 
 [[debt]]
+id          = 'ucu-arm-macos-application-acceptance'
+description = 'Native application acceptance for Next playback, JavaScript audio selectors and deterministic chapter expressions remains unverified on Linux ARMv7, Linux ARM64, Intel macOS and Apple Silicon macOS.'
+discovered  = '2026-10-01'
+resolved    = false
+evidence    = 'The maintainer explicitly approved ARM/macOS acceptance debt on 2026-10-01 so UCU-09 may close after its remaining gates. This applies to ADRs 0095/0096/0098 and does not claim those targets passed, alter supported platforms, waive Linux x64 or Windows x64 application checks, or replace the separate approved GPU-validation debt. UCU-09 owns current platform evidence.'
+
+[[debt]]
 id          = 'ucu-optional-next-engine-integration'
 description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. The following earlier checkpoints describe the integration sequence, not additional current blockers: ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
 
 [[debt]]
 id          = 'ucu-javascript-audio-selector-parity'
@@ -176,7 +241,7 @@ description = 'ADR 0096 implements bounded movie.js and episode.js audio selecti
 discovered  = '2026-09-23'
 resolved    = false
 adr         = '0096'
-evidence    = 'Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. Earlier checkpoints: Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
 
 [[debt]]
 id          = 'row-22-classic-fallback-padding'
@@ -197,8 +262,8 @@ resolved    = true
 id          = 'row-26-next-rgb-watermark-opacity'
 description = 'Official Next applies opacity before adding alpha to RGB watermark images, rendering a configured translucent overlay opaque. The maintainer explicitly accepts this upstream alpha-engine limitation pending a future Next fix; no source patch, host normalization or row-acceptance blocker is requested.'
 discovered  = '2026-09-23'
-resolved    = false
-evidence    = 'UCU-02 owns the row 26 checkpoint: 121 of 122 Next/audio tests and all eight selector tests pass; decoded 50-percent RGB watermark opacity fails. Independent FFmpeg bytes prove filter ordering is causal. Current public main and develop artifacts are still 946aa52. On 2026-09-23 the maintainer instructed us to ignore this defect and leave its correction to upstream. Keep the RGB fixture and recorded pixel diagnostic; assert geometry, disabled selection, subtitles and audio without claiming effective opacity parity.'
+resolved    = true
+evidence    = 'UCU-09 row173 resolves this with exact e7997fa source review and real decoded RGB opacity: 50-percent red over blue produces [127, 0, 126]. All three permanent/multiple/intermittent runtime tests pass (4a92dc71-6d00-4a2c-93d3-25bda88a0e7f), preserving geometry, audio, captions and disabled behavior. Published FFmpeg v2.0.3 and Next checksums match. Historical evidence: UCU-02 owns the row 26 checkpoint: 121 of 122 Next/audio tests and all eight selector tests pass; decoded 50-percent RGB watermark opacity fails. Independent FFmpeg bytes prove filter ordering is causal. Current public main and develop artifacts are still 946aa52. On 2026-09-23 the maintainer instructed us to ignore this defect and leave its correction to upstream. Keep the RGB fixture and recorded pixel diagnostic; assert geometry, disabled selection, subtitles and audio without claiming effective opacity parity.'
 
 [[debt]]
 id          = 'row-30-next-hybrid-convert-wrapper'
@@ -229,3 +294,47 @@ discovered  = '2026-09-26'
 resolved    = true
 adr         = '0095'
 evidence    = 'UCU-06 owns current evidence. Isolated finite media/channel previews retain selected profiles, exact versions, subtitle/audio policy, capacity and bounded ownership. Decoded official Next local, direct HTTP, prepared-artifact, ordinary producer and retained-interval previews pass. Explicit subtitle selection preserves metadata required by retained-caption provenance. Focused regressions and strict Clippy pass. The engine selector, Legacy-only fields, first Next watermark, in-page Hls.js playback, bounded completion logs and no-JS submission pass in Chromium and Firefox. All 712 web tests, strict Clippy and the matched Leptos build pass. Row 93 is Port; UCU-06 window acceptance remains open.'
+
+[[debt]]
+id = 'row-137-artwork-cache-healing'
+description = 'Port referenced-file pruning and local-image restoration for artwork cache entries. Preserve native direct-source artwork, watermarks, blur images and all shared owners.'
+discovered = '2026-09-28'
+resolved = true
+evidence = 'UCU-09 owns row137 acceptance: 15 infra/health/hourly and 10 web/manual/localization tests pass, with strict affected all-target Clippy and license checking. Paged reference retention, transactional candidate deletion, atomic cache publication, shared-owner repointing, failure retry, concurrent passes, symlink safety and direct-original unchanged-mtime recovery are verified. Window closeout and exact-SHA CI remain pending.'
+
+[[debt]]
+id = 'row-139-next-session-reporting'
+description = 'Expose live native and Next playlist-worker session reports through the authenticated machine sessions API, including nullable Next transcode cursor and current last access.'
+discovered = '2026-09-28'
+resolved = true
+adr = '0095'
+evidence = 'UCU-09 owns passing mixed-router, model and process-backed lifecycle evidence. Typed reports and authenticated GET/OpenAPI are implemented; reads preserve idle lifetime and the accepted native Next playlist bridge.'
+
+[[debt]]
+id = 'ucu09-row156-machine-api-status'
+description = 'Row156: expose the affected profile/smart-collection and empty-trash machine routes with upstream typed statuses, safe persistence/deletion and API-key enforcement. Existing application/repository operations and browser handlers must be preserved.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 owns passing typed HTTP, wire, duplicate-race, dependent-graph and auth/listener checks; matched Chromium/Firefox deletion feedback and successful refetch pass. Strict lint and native smoke pass. Source map: plans/upstream-catch-up.md, Row156. Window closeout and exact-SHA CI remain required.'
+
+[[debt]]
+id = 'ucu09-row157-troubleshooting-cleanup'
+description = 'Reconcile immediate native preview completion, bounded owned media-sample cleanup, URI credential redaction and smart-collection conflict responses. Preserve the accepted native/Next ownership architecture and existing track selection.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 owns 53 passing focused checks, matched Chromium/Firefox completion/navigation and real sample ZIP track proof, strict affected lint and progress/architecture/hydration checks. Atomic ownership, bounded cleanup and existing track selection are preserved under ADR 0095. Window closeout and exact-SHA CI remain required.'
+
+[[debt]]
+id = 'ucu09-row162-mpegts-script-catalog'
+description = 'Row162: FFmpeg settings exposes only the built-in Default script instead of the current filesystem catalog and does not reconcile removed selections. Share fresh discovery with playback and prove save/reload, invalid-file retry and fallback.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'Complete six-file upstream source map is in plans/upstream-catch-up.md. Shared fresh discovery and form-only selection recovery are implemented. All 19 focused checks pass (23c48831-fd3c-4f48-8b34-58d356944af8), with strict affected all-target Clippy, architecture and hydration lint. Published v2.0.3 executable checksums match the accepted release. The first browser run exposed forced Default labels and a no-JS Loading fallback; narrow label/in-order SSR corrections pass final strict lint and all six matched Chromium/Firefox cases. Bounded hydration readiness prevents Firefox navigation aborts without filtering errors or increasing deadlines. Native MPEG-TS/HLS smoke passes with public callback isolation. UCU-09 owns full acceptance; window gates and exact-SHA CI remain.'
+
+[[debt]]
+id = 'ucu09-row183-av1-output-policy'
+description = 'Retain native AV1 profiles with compatible-transport validation and decoded application proof under accepted ADR 0106.'
+discovered = '2026-10-01'
+adr = '0106'
+resolved = true
+evidence = 'UCU-09 owns passing Linux application playback across item boundaries, selected audio/subtitles, unchanged profile state, fMP4 playlists and HTTP 415 transport/Next refusal. Native Windows encoding, six AV1 regressions, four localized browser cases, strict workspace lint, test-closeout, web parity, both-engine smoke and 87 TSDuck checks pass. Row183 is Adapt; pin/reference advance to 960421e8. Hardware and ARM/macOS debt is unchanged.'

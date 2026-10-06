@@ -15,7 +15,8 @@ use ersatzrs_core::repositories::{
     WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
-    next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, SchedulingSmartShufflePreset,
+    next_playout_seed, PlayoutBuildMode, PlayoutBuildRequest, PlayoutPreservation,
+    SchedulingSmartShufflePreset,
 };
 use ersatzrs_domain::{
     BlockStopScheduling, ChannelWatermark, ChannelWatermarkImageSource, ChannelWatermarkMode,
@@ -109,6 +110,13 @@ pub struct FfmpegProfileAdminForm {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SaveFfmpegProfile {
     pub form: FfmpegProfileAdminForm,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SaveFfmpegProfileForApi {
+    pub form: FfmpegProfileAdminForm,
+    pub is_update: bool,
+    pub qsv_extra_hardware_frames: Option<i32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,6 +290,7 @@ pub struct BlockItemAdminForm {
     pub collection_name: String,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -713,6 +722,71 @@ pub async fn save_ffmpeg_profile(
     }
 
     let profile = normalize_ffmpeg_profile(command.form, repository).await?;
+    repository.save_admin(&profile).await.map_err(Into::into)
+}
+
+/// Validate the machine profile mutation before any write. Mixed known upstream
+/// error kinds are a bad request; operational failures retain their category.
+pub async fn save_ffmpeg_profile_for_api(
+    mut command: SaveFfmpegProfileForApi,
+    repository: &dyn FfmpegProfileRepository,
+) -> crate::Result<EntityId> {
+    command.form.name = command.form.name.trim().to_owned();
+    let form = &command.form;
+    let mut errors = Vec::new();
+    let name = form.name.trim();
+    if name.is_empty() || name.chars().count() > 50 {
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "FFmpeg profile name is invalid".into(),
+        });
+    } else if repository.name_exists(form.id, name).await? {
+        errors.push(ApplicationError::Conflict(format!(
+            "An FFmpeg profile named \"{name}\" already exists.",
+        )));
+    }
+    if form.thread_count < 0 {
+        errors.push(ApplicationError::Validation {
+            field: "thread_count",
+            message: "Thread count must be 0 or greater.".into(),
+        });
+    }
+    if !repository
+        .list_resolutions()
+        .await?
+        .iter()
+        .any(|r| r.id == form.resolution_id)
+    {
+        errors.push(ApplicationError::Validation {
+            field: "resolution_id",
+            message: "Resolution does not exist".into(),
+        });
+    }
+    if command.is_update
+        && (form.id <= 0 || repository.get_optional_admin(form.id).await?.is_none())
+    {
+        errors.push(ApplicationError::NotFound {
+            kind: "ffmpeg profile",
+            id: form.id,
+        });
+    }
+    if errors.len() == 1 {
+        return Err(errors.remove(0));
+    }
+    if !errors.is_empty() {
+        return Err(ApplicationError::Validation {
+            field: "request",
+            message: errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; "),
+        });
+    }
+    let mut profile = normalize_ffmpeg_profile(command.form, repository).await?;
+    if profile.hardware_acceleration == HardwareAccelerationKind::Qsv {
+        profile.qsv_extra_hardware_frames = command.qsv_extra_hardware_frames;
+    }
     repository.save_admin(&profile).await.map_err(Into::into)
 }
 
@@ -1901,6 +1975,10 @@ fn block_item_from_admin(form: BlockItemAdminForm) -> crate::Result<BlockItemAdm
         }
         _ => {}
     }
+    ersatzrs_core::repositories::validate_graphics_attachment_variables(
+        &form.graphics_element_ids,
+        &form.graphics_element_variables,
+    )?;
     validate_schedule_smart_shuffle(&form.smart_shuffle)?;
     let smart_shuffle = if form.inherited_legacy_smart_shuffle
         && form.smart_shuffle.preset == SchedulingSmartShufflePreset::Off
@@ -1926,6 +2004,7 @@ fn block_item_from_admin(form: BlockItemAdminForm) -> crate::Result<BlockItemAdm
         collection_name: form.collection_name,
         watermark_ids: form.watermark_ids,
         graphics_element_ids: form.graphics_element_ids,
+        graphics_element_variables: form.graphics_element_variables,
     })
 }
 
@@ -2724,32 +2803,79 @@ pub async fn save_smart_collection(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<EntityId> {
-    if command.id < 0 {
+    save_smart_collection_for_api(command, false, repository, queue, operations)
+        .await
+        .map_err(|error| match error {
+            // Browser forms retain their existing field-validation contract.
+            ApplicationError::Conflict(message) => ApplicationError::Validation {
+                field: "name",
+                message,
+            },
+            error => error,
+        })
+}
+
+pub async fn save_smart_collection_for_api(
+    command: SaveSmartCollection,
+    is_update: bool,
+    repository: &dyn CollectionRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<EntityId> {
+    if command.id < 0 && !is_update {
         return validation_error("smart_collection_id", "must be zero or greater");
     }
     let name = command.name.trim();
+    let mut errors = Vec::new();
     if name.is_empty() {
-        return validation_error("name", "Smart collection name is required");
-    }
-    if name.chars().count() > 50 {
-        return validation_error(
-            "name",
-            "Smart collection name must be 50 characters or less",
-        );
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "Smart collection name is required".into(),
+        });
+    } else if name.chars().count() > 50 {
+        errors.push(ApplicationError::Validation {
+            field: "name",
+            message: "Smart collection name must be 50 characters or less".into(),
+        });
     }
     if repository.smart_admin_name_exists(command.id, name).await? {
-        return validation_error("name", "SmartCollection name must be unique");
+        errors.push(ApplicationError::Conflict(
+            "SmartCollection name must be unique".into(),
+        ));
     }
     let query = command.query.trim();
     if query.is_empty() {
-        return validation_error("query", "Smart collection query is required");
-    }
-    ersatzrs_core::search::SearchExpression::parse_validated_user_query(query).map_err(
-        |error| ApplicationError::Validation {
+        errors.push(ApplicationError::Validation {
+            field: "query",
+            message: "Smart collection query is required".into(),
+        });
+    } else if let Err(error) =
+        ersatzrs_core::search::SearchExpression::parse_validated_user_query(query)
+    {
+        errors.push(ApplicationError::Validation {
             field: "query",
             message: error.to_string(),
-        },
-    )?;
+        });
+    }
+    if is_update && (command.id <= 0 || repository.get_smart_admin(command.id).await?.is_none()) {
+        errors.push(ApplicationError::NotFound {
+            kind: "smart collection",
+            id: command.id,
+        });
+    }
+    if errors.len() == 1 {
+        return Err(errors.remove(0));
+    }
+    if !errors.is_empty() {
+        return Err(ApplicationError::Validation {
+            field: "request",
+            message: errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; "),
+        });
+    }
     let id = repository.save_smart_admin(command.id, name, query).await?;
     if command.id > 0 {
         for playout_id in repository.playout_ids_using_smart(command.id).await? {
@@ -3155,6 +3281,11 @@ pub async fn set_collection_custom_order(
         .await?
     {
         refresh_collection_playouts(command.collection_id, repository, queue, operations).await?;
+    } else {
+        return Err(crate::ApplicationError::NotFound {
+            kind: "collection",
+            id: command.collection_id,
+        });
     }
     Ok(())
 }
@@ -3187,9 +3318,6 @@ pub async fn update_collection_custom_order(
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     validate_positive_id(command.collection_id, "collection_id")?;
-    if command.ordered_row_ids.is_empty() {
-        return Ok(());
-    }
     validate_entity_ids(&command.ordered_row_ids, "collection_item_id")?;
     let unique = command
         .ordered_row_ids
@@ -3344,11 +3472,54 @@ pub async fn replace_schedule_items(
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> crate::Result<()> {
-    validate_positive_id(command.schedule_id, "schedule_id")?;
-    if repository.get_admin(command.schedule_id).await?.is_none() {
+    let items = validated_schedule_items(command.schedule_id, command.items, repository).await?;
+    repository
+        .replace_items_admin(command.schedule_id, &items)
+        .await?;
+    refresh_schedule_playouts(command.schedule_id, repository, queue, operations).await
+}
+
+/// Save a compatible Classic edit for later continuation without queueing a build.
+pub async fn defer_schedule_items(
+    command: ReplaceScheduleItems,
+    repository: &dyn ProgramScheduleRepository,
+    operations: &OperationCoordinator,
+) -> crate::Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+    let items = validated_schedule_items(command.schedule_id, command.items, repository).await?;
+    let mut ids = repository
+        .playout_ids_using_admin(command.schedule_id)
+        .await?;
+    ids.sort_unstable();
+    ids.dedup();
+    let mut guards = Vec::with_capacity(ids.len());
+    for id in &ids {
+        let guard = operations
+            .begin(BeginOperation::new(OperationKey::PlayoutBuild(*id)))
+            .into_guard()
+            .ok_or_else(|| {
+                ApplicationError::Conflict(
+                    "Classic deferred save is busy; wait for the active playout build and retry"
+                        .into(),
+                )
+            })?;
+        guards.push(guard);
+    }
+    repository
+        .defer_items_admin(command.schedule_id, &items, &ids)
+        .await
+        .map_err(Into::into)
+}
+
+async fn validated_schedule_items(
+    schedule_id: EntityId,
+    items: Vec<ScheduleItemAdmin>,
+    repository: &dyn ProgramScheduleRepository,
+) -> crate::Result<Vec<ScheduleItemAdmin>> {
+    validate_positive_id(schedule_id, "schedule_id")?;
+    if repository.get_admin(schedule_id).await?.is_none() {
         return Err(ApplicationError::NotFound {
             kind: "program schedule",
-            id: command.schedule_id,
+            id: schedule_id,
         });
     }
 
@@ -3359,16 +3530,13 @@ pub async fn replace_schedule_items(
         .filter(|filler| filler.pad_to_nearest_minute)
         .map(|filler| filler.id)
         .collect::<std::collections::BTreeSet<_>>();
-    let mut items = command.items;
+    let mut items = items;
     for item in &mut items {
         normalize_schedule_item(item);
     }
     validate_schedule_items(&items, &padded_filler_ids)?;
     items.sort_by_key(|item| (item.index, item.id));
-    repository
-        .replace_items_admin(command.schedule_id, &items)
-        .await?;
-    refresh_schedule_playouts(command.schedule_id, repository, queue, operations).await
+    Ok(items)
 }
 
 pub async fn append_schedule_media_item(
@@ -3419,6 +3587,10 @@ fn validate_schedule_items(
 ) -> crate::Result<()> {
     let mut playback_by_key = std::collections::BTreeMap::new();
     for item in items {
+        ersatzrs_core::repositories::validate_graphics_attachment_variables(
+            &item.graphics_element_ids,
+            &item.graphics_element_variables,
+        )?;
         validate_schedule_item(item, padded_filler_ids)?;
         validate_schedule_smart_shuffle(&item.smart_shuffle)?;
         if let Some(key) = schedule_item_collection_key(item) {
@@ -4436,6 +4608,8 @@ fn validation_error<T>(field: &'static str, message: impl Into<String>) -> crate
 /// Import or refresh one add-on media list from its public URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddAddonMediaList {
+    /// Discover the first overview without publishing or acquiring media until selection is saved.
+    pub initial_selection_review: bool,
     /// Installed provider add-on identity.
     pub addon_id: String,
     /// Provider-specific public list or saved-search URL.
@@ -4749,14 +4923,17 @@ pub async fn add_addon_media_list(
         },
     )?;
     repository
-        .add_or_refresh_with_policy(
+        .add_or_refresh_with_options(
             command.addon_id.trim(),
             &source_url,
             (!folder_name.is_empty()).then_some(folder_name),
             command.content_kind_override,
             command.chapter_input.trim(),
-            command.detail_import_policy,
-            command.delivery_mode,
+            ersatzrs_core::addon_list_selection::AddonListImportOptions {
+                detail_policy: command.detail_import_policy,
+                delivery_mode: command.delivery_mode,
+                initial_selection_review: command.initial_selection_review,
+            },
         )
         .await
         .map_err(Into::into)
@@ -5859,6 +6036,60 @@ pub struct PlayoutBuildBatchOutcome {
     pub coalesced: u32,
 }
 
+/// Validate an explicit rebuild against stored scheduler identity before queueing.
+/// Rejected policies cannot claim or fail an unrelated durable scan intent.
+pub async fn rebuild_playout(
+    command: RequestPlayoutBuild,
+    repository: &dyn PlayoutRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<RequestPlayoutBuildOutcome> {
+    validate_positive_id(command.playout_id, "playout_id")?;
+    if command.preservation == PlayoutPreservation::EngineDefault {
+        return validation_error(
+            "preserve_current_programme",
+            "Choose whether to preserve the current programme",
+        );
+    }
+    let kind = repository.schedule_kind_admin(command.playout_id).await?;
+    if let Err(error) = PlayoutBuildRequest::new(command.playout_id, command.mode)
+        .with_preservation(command.preservation)
+        .validate_preservation(kind)
+    {
+        return validation_error("rebuild_mode", error.to_string());
+    }
+    Ok(request_playout_build(command, queue, operations))
+}
+
+/// Queue the legacy per-playout action using the stored scheduler identity.
+/// Classic keeps its Refresh mapping; other schedulers retain explicit Reset.
+/// Invalid, missing and unscheduled playouts never acquire queued activity.
+pub async fn reset_playout(
+    id: EntityId,
+    repository: &dyn PlayoutRepository,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<RequestPlayoutBuildOutcome> {
+    use ersatzrs_domain::PlayoutScheduleKind;
+
+    validate_positive_id(id, "playout_id")?;
+    let mode = match repository.schedule_kind_admin(id).await? {
+        PlayoutScheduleKind::Classic => PlayoutBuildMode::Refresh,
+        PlayoutScheduleKind::Block
+        | PlayoutScheduleKind::Sequential
+        | PlayoutScheduleKind::Scripted
+        | PlayoutScheduleKind::ExternalJson => PlayoutBuildMode::Reset,
+        PlayoutScheduleKind::None => {
+            return validation_error("playout_id", "Playout has no buildable scheduler");
+        }
+    };
+    Ok(request_playout_build(
+        RequestPlayoutBuild::new(id, mode),
+        queue,
+        operations,
+    ))
+}
+
 pub async fn reset_all_playouts(
     repository: &dyn PlayoutRepository,
     queue: &dyn PlayoutBuildQueue,
@@ -5933,14 +6164,7 @@ pub async fn create_playout(
             schedule_file = validate_playout_schedule_path(&command.schedule_file, schedule_kind)?;
         }
         4 => {
-            schedule_file = command.schedule_file.trim().to_owned();
-            let script = first_playout_command_token(&schedule_file);
-            if script.is_empty() || std::fs::metadata(&script).is_err() {
-                return validation_error(
-                    "schedule_file",
-                    playout_schedule_file_missing_message(schedule_kind),
-                );
-            }
+            schedule_file = validate_scripted_playout_file(&command.schedule_file)?;
         }
         _ => unreachable!("validated schedule kind"),
     }
@@ -6149,7 +6373,7 @@ fn parse_playout_create_kind(kind: &str) -> crate::Result<i32> {
 
 fn validate_playout_schedule_path(value: &str, kind: i32) -> crate::Result<String> {
     let value = value.trim();
-    if value.is_empty() || std::fs::metadata(value).is_err() {
+    if value.is_empty() || !std::path::Path::new(value).is_file() {
         return validation_error("schedule_file", playout_schedule_file_missing_message(kind));
     }
     Ok(value.to_owned())
@@ -6166,25 +6390,11 @@ fn playout_schedule_file_missing_message(kind: i32) -> &'static str {
 
 fn validate_scripted_playout_file(value: &str) -> crate::Result<String> {
     let value = value.trim();
-    let script = first_playout_command_token(value);
-    if script.is_empty() || std::fs::metadata(&script).is_err() {
+    let command = ersatzrs_core::scheduling::ScriptedScheduleCommand::parse(value);
+    if !command.is_some_and(|command| std::path::Path::new(&command.file).is_file()) {
         return validation_error("schedule_file", playout_schedule_file_missing_message(4));
     }
     Ok(value.to_owned())
-}
-
-fn first_playout_command_token(value: &str) -> String {
-    let value = value.trim();
-    if let Some(rest) = value.strip_prefix('"') {
-        rest.split_once('"')
-            .map_or_else(|| rest.to_owned(), |(token, _)| token.to_owned())
-    } else {
-        value
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    }
 }
 
 fn normalize_playout_date_filter(filter: &mut ersatzrs_core::repositories::PlayoutDateFilterAdmin) {
@@ -6210,13 +6420,26 @@ pub struct RequestPlayoutBuild {
     pub playout_id: EntityId,
     /// Existing Refresh, Reset, or Continue build semantics.
     pub mode: PlayoutBuildMode,
+    /// Preserve the automatic contract or carry an explicit operator choice.
+    pub preservation: PlayoutPreservation,
 }
 
 impl RequestPlayoutBuild {
     /// Create a playout-build application command.
     #[must_use]
     pub const fn new(playout_id: EntityId, mode: PlayoutBuildMode) -> Self {
-        Self { playout_id, mode }
+        Self {
+            playout_id,
+            mode,
+            preservation: PlayoutPreservation::EngineDefault,
+        }
+    }
+
+    /// Carry an explicit current-programme choice through queue coalescing.
+    #[must_use]
+    pub const fn with_preservation(mut self, preservation: PlayoutPreservation) -> Self {
+        self.preservation = preservation;
+        self
     }
 }
 
@@ -6440,10 +6663,8 @@ pub(crate) fn request_playout_build(
         );
     }
 
-    let request = PlayoutBuildRequest {
-        playout_id: command.playout_id,
-        mode: command.mode,
-    };
+    let request = PlayoutBuildRequest::new(command.playout_id, command.mode)
+        .with_preservation(command.preservation);
     match operations
         .playout_activity()
         .admit(request, |request| queue.enqueue(request))
@@ -8437,6 +8658,7 @@ mod tests {
         ] {
             let error = add_addon_media_list(
                 AddAddonMediaList {
+                    initial_selection_review: false,
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: source_url.to_owned(),
                     delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
@@ -8618,6 +8840,7 @@ mod tests {
         let repository = RecordingAddonMediaListRepository::default();
         add_addon_media_list(
             AddAddonMediaList {
+                initial_selection_review: false,
                 addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                 source_url: r"https://allowed.example\@evil.example/list".to_owned(),
                 delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
@@ -8652,6 +8875,7 @@ mod tests {
             let repository = RecordingAddonMediaListRepository::default();
             let error = add_addon_media_list(
                 AddAddonMediaList {
+                    initial_selection_review: false,
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: "https://example.test/episode".to_owned(),
                     delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
@@ -9422,14 +9646,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 4,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 9,
-                    mode: PlayoutBuildMode::Refresh,
-                }
+                PlayoutBuildRequest::new(4, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(9, PlayoutBuildMode::Refresh)
             ]
         );
     }
@@ -9464,6 +9682,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn smart_collection_duplicate_keeps_browser_field_validation() {
+        let repository = RecordingCollectionRepository {
+            duplicate_name: true,
+            ..RecordingCollectionRepository::default()
+        };
+        let queue = RecordingQueue::default();
+        let operations = coordinator();
+        let command = SaveSmartCollection {
+            id: 0,
+            name: "Existing".into(),
+            query: "title:synthetic".into(),
+        };
+        assert!(matches!(
+            save_smart_collection(command.clone(), &repository, &queue, &operations).await,
+            Err(crate::ApplicationError::Validation { field: "name", .. })
+        ));
+        assert!(matches!(
+            super::save_smart_collection_for_api(command, false, &repository, &queue, &operations)
+                .await,
+            Err(crate::ApplicationError::Conflict(_))
+        ));
+        assert!(repository.saved.lock().unwrap().is_empty());
+        assert!(queue.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn smart_collection_update_refreshes_each_affected_playout() {
         let repository = RecordingCollectionRepository {
             playout_ids: vec![5, 6],
@@ -9493,14 +9737,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 5,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 6,
-                    mode: PlayoutBuildMode::Refresh,
-                }
+                PlayoutBuildRequest::new(5, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(6, PlayoutBuildMode::Refresh)
             ]
         );
     }
@@ -9553,10 +9791,7 @@ mod tests {
         assert!(!saves[0].1[0].use_custom_playback_order);
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
-            [PlayoutBuildRequest {
-                playout_id: 12,
-                mode: PlayoutBuildMode::Refresh,
-            }]
+            [PlayoutBuildRequest::new(12, PlayoutBuildMode::Refresh)]
         );
     }
 
@@ -9604,10 +9839,7 @@ mod tests {
         );
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
-            [PlayoutBuildRequest {
-                playout_id: 15,
-                mode: PlayoutBuildMode::Refresh,
-            }]
+            [PlayoutBuildRequest::new(15, PlayoutBuildMode::Refresh)]
         );
     }
 
@@ -9746,14 +9978,8 @@ mod tests {
         assert_eq!(
             *queue.requests.lock().expect("request lock"),
             [
-                PlayoutBuildRequest {
-                    playout_id: 7,
-                    mode: PlayoutBuildMode::Refresh,
-                },
-                PlayoutBuildRequest {
-                    playout_id: 7,
-                    mode: PlayoutBuildMode::Reset,
-                },
+                PlayoutBuildRequest::new(7, PlayoutBuildMode::Refresh),
+                PlayoutBuildRequest::new(7, PlayoutBuildMode::Reset),
             ]
         );
     }
@@ -10396,6 +10622,7 @@ mod tests {
             collection_name: "News".to_owned(),
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: BTreeMap::default(),
         };
         let mapped = super::block_item_from_admin(valid.clone()).unwrap();
         assert_eq!(mapped.collection_type, CollectionType::SearchQuery);
@@ -10580,6 +10807,7 @@ mod tests {
             fallback_filler_id: None,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: BTreeMap::default(),
             preferred_audio_language_code: None,
             preferred_audio_title: String::new(),
             preferred_subtitle_language_code: None,

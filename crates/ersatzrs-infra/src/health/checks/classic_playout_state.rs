@@ -3,7 +3,9 @@ use super::super::{
     Result, Row,
 };
 use chrono::{Duration, Utc};
-use ersatzrs_core::scheduling::audit_classic_refresh_checkpoint;
+use ersatzrs_core::scheduling::{
+    audit_classic_refresh_checkpoint, validate_classic_timeline, PlayoutPreservation,
+};
 use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::maintenance::classic_runtime_state_is_complete;
@@ -57,7 +59,7 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
                 .try_get::<i64, _>("Id")
                 .map_err(|error| HealthCheckError::Database(error.to_string()))?;
             let now = Utc::now();
-            let reference_data = scheduling
+            let mut reference_data = scheduling
                 .classic_reference_data(playout_id, now, Duration::zero())
                 .await
                 .map_err(|error| HealthCheckError::Database(error.to_string()))?;
@@ -66,7 +68,32 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
                     .await
                     .map_err(|error| HealthCheckError::Database(error.to_string()))?;
             let refresh_audit = audit_classic_refresh_checkpoint(&reference_data, playout_id, now);
-            if runtime_complete && refresh_audit.is_complete() {
+            let preservation_ready = if reference_data
+                .existing_items
+                .iter()
+                .any(|item| item.start <= now && item.finish > now)
+            {
+                reference_data.preservation = PlayoutPreservation::KeepCurrent;
+                audit_classic_refresh_checkpoint(&reference_data, playout_id, now).is_complete()
+            } else {
+                true
+            };
+            let mut intervals = reference_data
+                .existing_items
+                .iter()
+                .map(|item| (item.start, item.finish))
+                .collect::<Vec<_>>();
+            intervals.sort_unstable();
+            let timeline_ready = validate_classic_timeline(intervals, None).is_ok();
+            let deferred_ready = crate::classic_deferred::state_is_valid(&self.pool, playout_id)
+                .await
+                .map_err(|error| HealthCheckError::Database(error.to_string()))?;
+            if runtime_complete
+                && refresh_audit.is_complete()
+                && preservation_ready
+                && timeline_ready
+                && deferred_ready
+            {
                 continue;
             }
 
@@ -91,7 +118,7 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
             self.title(),
             HealthCheckStatus::Fail,
             format!(
-                "Classic playout state is not safe to Refresh for: {}. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.",
+                "Classic playout state needs attention for: {}. Check programme times and saved continuation state. Refresh requires a verified programme boundary and complete checkpoint; unsafe requests leave published programmes unchanged.",
                 invalid.join(", ")
             ),
             format!("{} Classic playout state error(s)", invalid.len()),

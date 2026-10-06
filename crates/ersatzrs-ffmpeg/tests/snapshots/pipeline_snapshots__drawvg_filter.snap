@@ -1,5 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 2487
 expression: overlay.filter()
 ---
-drawvg=file='/tmp/ErsatzRS/lower-third.vgs':enable='between(t,0,8)'
+drawvg=file=/tmp/ErsatzRS/lower-third.vgs:enable='between(t,0,8)'

@@ -40,12 +40,7 @@ async fn load_release_notes() -> Result<String, ServerFnError> {
 
     static NOTES: OnceLock<String> = OnceLock::new();
     let notes = NOTES.get_or_init(|| {
-        let section = option_env!("GITHUB_REF_NAME")
-            .and_then(|reference| reference.strip_prefix('v'))
-            .map_or_else(
-                || latest_release_section(CHANGELOG),
-                |version| release_section(CHANGELOG, version),
-            );
+        let section = build_release_section(CHANGELOG, option_env!("GITHUB_REF_NAME"));
         section.map_or_else(String::new, render_markdown)
     });
     Ok(notes.clone())
@@ -85,13 +80,10 @@ fn release_section<'a>(changelog: &'a str, version: &str) -> Option<&'a str> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn latest_release_section(changelog: &str) -> Option<&str> {
-    let version = changelog.lines().find_map(|line| {
-        line.strip_prefix("## [")
-            .and_then(|remainder| remainder.split_once(']'))
-            .map(|(version, _)| version)
-            .filter(|version| *version != "Unreleased")
-    })?;
+fn build_release_section<'a>(changelog: &'a str, reference: Option<&str>) -> Option<&'a str> {
+    let version = reference
+        .and_then(|reference| reference.strip_prefix('v'))
+        .unwrap_or("Unreleased");
     release_section(changelog, version)
 }
 
@@ -106,7 +98,7 @@ fn render_markdown(markdown: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{latest_release_section, release_section, render_markdown};
+    use super::{build_release_section, release_section, render_markdown};
 
     #[test]
     fn release_markdown_is_rendered_and_sanitized() {
@@ -125,6 +117,16 @@ mod tests {
         assert!(!section.contains("Current"));
         assert!(!section.contains("Old"));
         assert!(release_section(changelog, "1.0.37").is_none());
-        assert_eq!(latest_release_section(changelog), Some(section));
+        assert_eq!(
+            build_release_section(changelog, Some("v1.0.37-beta")),
+            Some(section)
+        );
+        assert!(build_release_section(changelog, Some("v1.0.37")).is_none());
+        for reference in [None, Some("main"), Some("develop")] {
+            let development = build_release_section(changelog, reference).unwrap();
+            assert!(development.contains("Current"));
+            assert!(!development.contains("Installed"));
+            assert!(!development.contains("Old"));
+        }
     }
 }

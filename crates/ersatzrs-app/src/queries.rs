@@ -57,6 +57,7 @@ pub struct SeasonDetailReadModel {
 pub struct PlaybackTroubleshootingReadModel {
     pub data: ersatzrs_core::repositories::PlaybackTroubleshootingAdmin,
     pub stream_selectors: Vec<String>,
+    pub music_video_credits_templates: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,6 +273,31 @@ pub async fn list_ffmpeg_profiles(
             hardware_acceleration: hardware_acceleration_value(profile.hardware_acceleration),
         })
         .collect())
+}
+
+pub async fn list_ffmpeg_profiles_for_api(
+    repository: &dyn FfmpegProfileRepository,
+) -> Result<Vec<(ersatzrs_domain::FFmpegProfile, String)>> {
+    let resolutions: BTreeMap<_, _> = repository
+        .list_resolutions()
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.name))
+        .collect();
+    repository
+        .list()
+        .await?
+        .into_iter()
+        .map(|profile| {
+            let resolution = resolutions.get(&profile.resolution_id).cloned().ok_or(
+                ApplicationError::MissingReference {
+                    kind: "FFmpeg profile resolution",
+                    id: profile.resolution_id,
+                },
+            )?;
+            Ok((profile, resolution))
+        })
+        .collect()
 }
 
 pub async fn count_ffmpeg_profiles(repository: &dyn FfmpegProfileRepository) -> Result<u64> {
@@ -743,6 +769,7 @@ pub async fn get_block_items(
             collection_name: item.collection_name,
             watermark_ids: item.watermark_ids,
             graphics_element_ids: item.graphics_element_ids,
+            graphics_element_variables: item.graphics_element_variables,
         })
         .collect())
 }
@@ -2422,6 +2449,16 @@ mod epg_preview_query_tests {
             }
         }
 
+        async fn session_models(
+            &self,
+        ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError> {
+            if self.fail {
+                Err(ChannelRuntimeError::unavailable("injected failure"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+
         async fn stop_channel_session(&self, _number: &str) -> Result<bool, ChannelRuntimeError> {
             unimplemented!()
         }
@@ -2570,6 +2607,19 @@ pub async fn list_active_channel_numbers(runtime: &dyn ChannelRuntime) -> Result
         })
 }
 
+/// Query normal playlist-worker reports without refreshing client activity.
+pub async fn list_streaming_sessions(
+    runtime: &dyn ChannelRuntime,
+) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>> {
+    runtime
+        .session_models()
+        .await
+        .map_err(|error| ApplicationError::Unavailable {
+            operation: "list streaming sessions",
+            message: error.to_string(),
+        })
+}
+
 /// Stop one process-local channel session.
 pub async fn stop_channel_session(number: &str, runtime: &dyn ChannelRuntime) -> Result<bool> {
     let number = number.trim();
@@ -2605,6 +2655,7 @@ pub struct PreviewBlockItem {
     pub watermark_ids: Vec<EntityId>,
     /// Graphics elements attached to this unsaved item.
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_element_variables: std::collections::BTreeMap<EntityId, String>,
     /// Unsaved Smart Shuffle attachment for this item.
     pub smart_shuffle_policy: SchedulingSmartShufflePolicy,
 }
@@ -3032,6 +3083,7 @@ pub async fn preview_playlist_playout(
             disable_watermarks: false,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: std::collections::BTreeMap::new(),
         });
         included_items.push((content, collection_key, item));
     }
@@ -3342,6 +3394,7 @@ fn temporary_block_state(
                 disable_watermarks: item.disable_watermarks,
                 watermark_ids: item.watermark_ids,
                 graphics_element_ids: item.graphics_element_ids,
+                graphics_element_variables: item.graphics_element_variables,
             }
         })
         .collect::<Vec<_>>();
@@ -3763,6 +3816,7 @@ mod block_preview_tests {
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
             smart_shuffle_policy: SchedulingSmartShufflePolicy::default(),
+            graphics_element_variables: BTreeMap::default(),
         }
     }
 
@@ -3824,6 +3878,7 @@ mod block_preview_tests {
                 disable_watermarks: true,
                 watermark_ids: vec![3],
                 graphics_element_ids: vec![4],
+                graphics_element_variables: BTreeMap::default(),
                 smart_shuffle_policy: SchedulingSmartShufflePolicy::default(),
             },
         ];

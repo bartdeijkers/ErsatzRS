@@ -87,6 +87,34 @@ async fn expired_deadline_does_not_launch_or_create_output() {
 }
 
 #[tokio::test]
+async fn cancelled_extraction_never_launches_or_creates_output() {
+    let root = tempfile::tempdir().unwrap();
+    let output = root.path().join("pending");
+    for explicit in [false, true] {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        if explicit {
+            sender.send(()).unwrap();
+        } else {
+            drop(sender);
+        }
+        assert_eq!(
+            extract_cancellable(
+                &local(),
+                4,
+                "ass",
+                Path::new("missing-fixture-tool"),
+                &output,
+                Instant::now() + Duration::from_mins(1),
+                receiver,
+            )
+            .await,
+            Err(BurnError::Cancelled)
+        );
+        assert!(!output.exists());
+    }
+}
+
+#[tokio::test]
 async fn output_bounds_reject_empty_and_oversized_completed_files() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("pending");

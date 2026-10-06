@@ -72,6 +72,56 @@ fn normalize_language_input(value: &str) -> String {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum TextKey {
+    Center,
+    FilePath,
+    Format,
+    GraphicsAuthoringInvalid,
+    GraphicsAuthoringPreviewFailed,
+    GraphicsBaseStyle,
+    GraphicsDisappear,
+    GraphicsEndBehavior,
+    GraphicsEpgEntries,
+    GraphicsExport,
+    GraphicsFixedSize,
+    GraphicsFontDirectory,
+    GraphicsFontFamily,
+    GraphicsFontSize,
+    GraphicsGeometry,
+    GraphicsHold,
+    GraphicsHoldSeconds,
+    GraphicsLineHeight,
+    GraphicsLoop,
+    GraphicsLuaCommand,
+    GraphicsMissingFont,
+    GraphicsMissingMedia,
+    GraphicsMissingVariable,
+    GraphicsPixelX,
+    GraphicsPixelY,
+    GraphicsPreviewVariables,
+    GraphicsRealPreview,
+    GraphicsScaleWidth,
+    GraphicsScriptArgs,
+    GraphicsSourceContent,
+    GraphicsStartSeconds,
+    GraphicsTextAlign,
+    GraphicsTextColor,
+    GraphicsTextFit,
+    GraphicsTextWidth,
+    GraphicsWrap,
+    GraphicsYaml,
+    Left,
+    None,
+    PixelFormat,
+    ProgrammeSeekSeconds,
+    Right,
+    GraphicsDrawvgTypography,
+    GraphicsDrawtextTypography,
+    GraphicsGeometryHelp,
+    GraphicsJpegXlHelp,
+    GraphicsLuaHelp,
+    GraphicsRealPreviewHelp,
+    GraphicsYamlHelp,
+
     ItemDetailsNotRequested,
     ItemDetailsFailed,
     ItemDetailsRetry,
@@ -309,6 +359,11 @@ pub enum TextKey {
     SourceUnsupported,
     SourceTestFailed,
     SourceRevision,
+    LastSuccessfulPlayoutBuild,
+    PlayoutRefreshPending,
+    PlayoutRefreshFailed,
+    PlayoutSourceCheckPending,
+    PlayoutSourceCheckFailed,
     FirstPageComplete,
     ProviderIdentity,
     ReturnedFirstPageItems,
@@ -636,6 +691,38 @@ pub enum TextKey {
     AddonDeliveryNewVideos,
     AddonDeliveryHelp,
     AddonDeliveryUnavailable,
+    AddonSelectionInitialReview,
+    AddonSelectionInitialReviewHelp,
+    AddonSelectionReviewRequired,
+    AddonSelectionEvaluatedAt,
+    AddonSelection,
+    AddonSelectionHelp,
+    AddonSelectionEnabled,
+    AddonSelectionPause,
+    AddonSelectionAge,
+    AddonSelectionNewest,
+    AddonSelectionMinimum,
+    AddonSelectionMaximum,
+    AddonSelectionInclude,
+    AddonSelectionExclude,
+    AddonSelectionActive,
+    AddonSelectionArchived,
+    AddonSelectionPreviewHelp,
+    AddonSelectionManual,
+    AddonSelectionPinned,
+    AddonSelectionExcluded,
+    AddonSelectionAutomatic,
+    AddonSelectionCutoff,
+    AddonSelectionMissingDate,
+    AddonSelectionFutureDate,
+    AddonSelectionTooOld,
+    AddonSelectionMissingDuration,
+    AddonSelectionTooShort,
+    AddonSelectionTooLong,
+    AddonSelectionTitleNotIncluded,
+    AddonSelectionTitleExcluded,
+    AddonSelectionNewestLimit,
+    AddonSelectionInvalid,
     AddonDeliveryCutoff,
     AddonDeliveryFreshCutoff,
     AdaptiveRefreshUnavailable,
@@ -1051,6 +1138,19 @@ pub enum TextKey {
     AddGraphicsElement,
     DrawtextRendererOption,
     DrawtextSettings,
+    GraphicsMetadataRefreshSeconds,
+    GraphicsMetadataRefreshHelp,
+    GraphicsMetadataRefreshBounds,
+    ProgrammeTemplateHelp,
+    GraphicsItemVariables,
+    GraphicsItemVariablesHelp,
+    GraphicsContextPreview,
+    GraphicsContextPreviewHelp,
+    GraphicsPreviewTimeHelp,
+    GraphicsPreviewSavedHelp,
+    GraphicsPreviewAmbiguous,
+    GraphicsItemVariablesInvalid,
+
     DrawvgRendererOption,
     EditGraphicsElement,
     FontFile,
@@ -1145,6 +1245,18 @@ pub enum TextKey {
     ReadOnlyTwentyFourHourPlayoutView,
     SaveSchedule,
     SaveScheduleItems,
+    ScheduleSaveDeferred,
+    ScheduleSaveAndRefresh,
+    ScheduleDeferredHelp,
+    ScheduleDeferredPending,
+    ScheduleDeferredApplied,
+    ScheduleDeferredBoundary,
+    ScheduleDeferredLastBuild,
+    ScheduleDeferredBuildSucceeded,
+    ScheduleDeferredSaved,
+    ScheduleDeferredIncompatible,
+    ScheduleDeferredBusy,
+    ScheduleDeferredInvalidTimeline,
     SaveSmartCollection,
     Schedule,
     ScheduleActionFailed,
@@ -1414,6 +1526,8 @@ pub enum TextKey {
     TvShows,
     Ui,
     Unavailable,
+    UnavailableLocalMediaMessage,
+    UnavailableRemoteStreamsMessage,
     UseActualTimes,
     UseCustomPlaybackOrder,
     UseChaptersAsMediaItems,
@@ -1472,6 +1586,9 @@ pub enum TextKey {
     HardwareAcceleration,
     HardwareIfPossible,
     NewProfileName,
+    ProfileDeleteDefault,
+    ProfileDeleteInUse,
+    ProfileDeleteFailed,
     NoneOption,
     NumHelp,
     OptionalDisplayTitle,
@@ -1595,6 +1712,23 @@ pub enum TextKey {
     Library,
     LibraryKind,
     LibraryPaths,
+    FolderPreview,
+    FolderPreviewHelp,
+    FolderPreviewCandidates,
+    FolderPreviewPartial,
+    FolderPreviewUnavailable,
+    FolderIgnoredExtension,
+    FolderUnsupportedNesting,
+    FolderEmptyShow,
+    FolderUnreadable,
+    FolderRepeated,
+    FolderDepthLimit,
+    FolderInspected,
+    FolderExtras,
+    FolderHidden,
+    LocalLibraryPathAbsolute,
+    LocalLibraryPathExists,
+    LocalLibraryPathConflict,
     LocalLibraries,
     LocalPath,
     MediaKind,
@@ -1766,11 +1900,24 @@ pub enum TextKey {
     PreviewIdle,
     PreviewConnecting,
     PreviewLive,
+    PreviewErrorSlate,
+    PreviewOutputUnknown,
     PreviewPaused,
     PreviewRecovering,
     PreviewStopped,
     PreviewUnsupported,
     PreviewAuthorizationFailed,
+    PreviewQueued,
+    PreviewRunning,
+    PreviewCompleted,
+    PreviewCancelling,
+    PreviewProgrammeSeek,
+    PreviewProgrammeSeekHelp,
+    PreviewTimestamp,
+    PreviewAlreadyRunning,
+    PreviewCleanupUnconfirmed,
+    PreviewConfigurationInvalid,
+    PreviewStartupFailed,
     PreviewUnavailable,
     PreviewCapacityReached,
     PreviewNetworkError,
@@ -1996,6 +2143,19 @@ pub enum TextKey {
     EditPlayout,
     RefreshPlayout,
     ResetPlayout,
+    RebuildPlayout,
+    PlayoutRebuildMode,
+    ContinuePlayout,
+    PlayoutContinueHelp,
+    PlayoutRefreshHelp,
+    PlayoutResetHelp,
+    KeepCurrentProgramme,
+    KeepCurrentProgrammeHelp,
+    ReplaceCurrentProgrammeHelp,
+    QueuePlayoutBuild,
+    InvalidPlayoutBuildMode,
+    PlayoutContinueStateIncomplete,
+    PlayoutClassicTimelineRejected,
     ScheduleReset,
     SchedulePlayoutReset,
     EditExternalJsonFile,
@@ -2014,6 +2174,23 @@ pub enum TextKey {
     UnsupportedPlayoutKind,
     ClassicPlayout,
     ClassicPlayoutState,
+    ScriptedPlayoutState,
+    BlockPlayoutState,
+    YamlPlayoutState,
+    ExternalJsonPlayoutState,
+    ExternalJsonDirectHelp,
+    ExternalJsonAcceptedHelp,
+    ExternalJsonSourceHelp,
+    ExternalJsonInvalidHelp,
+    ExternalJsonSourceChangedHelp,
+    ExternalJsonNextHelp,
+    ExternalJsonExpiredHelp,
+    ExternalJsonBuildFailedHelp,
+    ExternalJsonDirect,
+    ExternalJsonControlled,
+    AcceptedRevision,
+    PlayoutContinuityUnavailable,
+    ScriptedTimelineRejected,
     ScanRefreshState,
     SubtitleCleanup,
     SubtitleCleanupMessage,
@@ -2023,6 +2200,7 @@ pub enum TextKey {
     ArtworkOrphansBrief,
     ArtworkCardinality,
     HlsLiveDelivery,
+    Av1OutputCompatibility,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -2090,6 +2268,55 @@ pub enum TextKey {
 }
 
 pub const ALL_TEXT_KEYS: &[TextKey] = &[
+    TextKey::Center,
+    TextKey::FilePath,
+    TextKey::Format,
+    TextKey::GraphicsAuthoringInvalid,
+    TextKey::GraphicsAuthoringPreviewFailed,
+    TextKey::GraphicsBaseStyle,
+    TextKey::GraphicsDisappear,
+    TextKey::GraphicsEndBehavior,
+    TextKey::GraphicsEpgEntries,
+    TextKey::GraphicsExport,
+    TextKey::GraphicsFixedSize,
+    TextKey::GraphicsFontDirectory,
+    TextKey::GraphicsFontFamily,
+    TextKey::GraphicsFontSize,
+    TextKey::GraphicsGeometry,
+    TextKey::GraphicsHold,
+    TextKey::GraphicsHoldSeconds,
+    TextKey::GraphicsLineHeight,
+    TextKey::GraphicsLoop,
+    TextKey::GraphicsLuaCommand,
+    TextKey::GraphicsMissingFont,
+    TextKey::GraphicsMissingMedia,
+    TextKey::GraphicsMissingVariable,
+    TextKey::GraphicsPixelX,
+    TextKey::GraphicsPixelY,
+    TextKey::GraphicsPreviewVariables,
+    TextKey::GraphicsRealPreview,
+    TextKey::GraphicsScaleWidth,
+    TextKey::GraphicsScriptArgs,
+    TextKey::GraphicsSourceContent,
+    TextKey::GraphicsStartSeconds,
+    TextKey::GraphicsTextAlign,
+    TextKey::GraphicsTextColor,
+    TextKey::GraphicsTextFit,
+    TextKey::GraphicsTextWidth,
+    TextKey::GraphicsWrap,
+    TextKey::GraphicsYaml,
+    TextKey::Left,
+    TextKey::None,
+    TextKey::PixelFormat,
+    TextKey::ProgrammeSeekSeconds,
+    TextKey::Right,
+    TextKey::GraphicsDrawvgTypography,
+    TextKey::GraphicsDrawtextTypography,
+    TextKey::GraphicsGeometryHelp,
+    TextKey::GraphicsJpegXlHelp,
+    TextKey::GraphicsLuaHelp,
+    TextKey::GraphicsRealPreviewHelp,
+    TextKey::GraphicsYamlHelp,
     TextKey::ItemDetailsNotRequested,
     TextKey::ItemDetailsFailed,
     TextKey::ItemDetailsRetry,
@@ -2321,6 +2548,11 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SourceUnsupported,
     TextKey::SourceTestFailed,
     TextKey::SourceRevision,
+    TextKey::LastSuccessfulPlayoutBuild,
+    TextKey::PlayoutRefreshPending,
+    TextKey::PlayoutRefreshFailed,
+    TextKey::PlayoutSourceCheckPending,
+    TextKey::PlayoutSourceCheckFailed,
     TextKey::FirstPageComplete,
     TextKey::ProviderIdentity,
     TextKey::ReturnedFirstPageItems,
@@ -2646,6 +2878,38 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonDeliveryNewVideos,
     TextKey::AddonDeliveryHelp,
     TextKey::AddonDeliveryUnavailable,
+    TextKey::AddonSelectionInitialReview,
+    TextKey::AddonSelectionInitialReviewHelp,
+    TextKey::AddonSelectionReviewRequired,
+    TextKey::AddonSelectionEvaluatedAt,
+    TextKey::AddonSelection,
+    TextKey::AddonSelectionHelp,
+    TextKey::AddonSelectionEnabled,
+    TextKey::AddonSelectionPause,
+    TextKey::AddonSelectionAge,
+    TextKey::AddonSelectionNewest,
+    TextKey::AddonSelectionMinimum,
+    TextKey::AddonSelectionMaximum,
+    TextKey::AddonSelectionInclude,
+    TextKey::AddonSelectionExclude,
+    TextKey::AddonSelectionActive,
+    TextKey::AddonSelectionArchived,
+    TextKey::AddonSelectionPreviewHelp,
+    TextKey::AddonSelectionManual,
+    TextKey::AddonSelectionPinned,
+    TextKey::AddonSelectionExcluded,
+    TextKey::AddonSelectionAutomatic,
+    TextKey::AddonSelectionCutoff,
+    TextKey::AddonSelectionMissingDate,
+    TextKey::AddonSelectionFutureDate,
+    TextKey::AddonSelectionTooOld,
+    TextKey::AddonSelectionMissingDuration,
+    TextKey::AddonSelectionTooShort,
+    TextKey::AddonSelectionTooLong,
+    TextKey::AddonSelectionTitleNotIncluded,
+    TextKey::AddonSelectionTitleExcluded,
+    TextKey::AddonSelectionNewestLimit,
+    TextKey::AddonSelectionInvalid,
     TextKey::AddonDeliveryCutoff,
     TextKey::AddonDeliveryFreshCutoff,
     TextKey::AdaptiveRefreshUnavailable,
@@ -3062,6 +3326,18 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddGraphicsElement,
     TextKey::DrawtextRendererOption,
     TextKey::DrawtextSettings,
+    TextKey::GraphicsMetadataRefreshSeconds,
+    TextKey::GraphicsMetadataRefreshHelp,
+    TextKey::GraphicsMetadataRefreshBounds,
+    TextKey::ProgrammeTemplateHelp,
+    TextKey::GraphicsItemVariables,
+    TextKey::GraphicsItemVariablesHelp,
+    TextKey::GraphicsContextPreview,
+    TextKey::GraphicsContextPreviewHelp,
+    TextKey::GraphicsPreviewTimeHelp,
+    TextKey::GraphicsPreviewSavedHelp,
+    TextKey::GraphicsPreviewAmbiguous,
+    TextKey::GraphicsItemVariablesInvalid,
     TextKey::DrawvgRendererOption,
     TextKey::EditGraphicsElement,
     TextKey::FontFile,
@@ -3151,6 +3427,18 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ReadOnlyTwentyFourHourPlayoutView,
     TextKey::SaveSchedule,
     TextKey::SaveScheduleItems,
+    TextKey::ScheduleSaveDeferred,
+    TextKey::ScheduleSaveAndRefresh,
+    TextKey::ScheduleDeferredHelp,
+    TextKey::ScheduleDeferredPending,
+    TextKey::ScheduleDeferredApplied,
+    TextKey::ScheduleDeferredBoundary,
+    TextKey::ScheduleDeferredLastBuild,
+    TextKey::ScheduleDeferredBuildSucceeded,
+    TextKey::ScheduleDeferredSaved,
+    TextKey::ScheduleDeferredIncompatible,
+    TextKey::ScheduleDeferredBusy,
+    TextKey::ScheduleDeferredInvalidTimeline,
     TextKey::SaveSmartCollection,
     TextKey::Schedule,
     TextKey::ScheduleActionFailed,
@@ -3477,6 +3765,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::HardwareAcceleration,
     TextKey::HardwareIfPossible,
     TextKey::NewProfileName,
+    TextKey::ProfileDeleteDefault,
+    TextKey::ProfileDeleteInUse,
+    TextKey::ProfileDeleteFailed,
     TextKey::NoneOption,
     TextKey::NumHelp,
     TextKey::OptionalDisplayTitle,
@@ -3600,6 +3891,23 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Library,
     TextKey::LibraryKind,
     TextKey::LibraryPaths,
+    TextKey::FolderPreview,
+    TextKey::FolderPreviewHelp,
+    TextKey::FolderPreviewCandidates,
+    TextKey::FolderPreviewPartial,
+    TextKey::FolderPreviewUnavailable,
+    TextKey::FolderIgnoredExtension,
+    TextKey::FolderUnsupportedNesting,
+    TextKey::FolderEmptyShow,
+    TextKey::FolderUnreadable,
+    TextKey::FolderRepeated,
+    TextKey::FolderDepthLimit,
+    TextKey::FolderInspected,
+    TextKey::FolderExtras,
+    TextKey::FolderHidden,
+    TextKey::LocalLibraryPathAbsolute,
+    TextKey::LocalLibraryPathExists,
+    TextKey::LocalLibraryPathConflict,
     TextKey::LocalLibraries,
     TextKey::LocalPath,
     TextKey::MediaKind,
@@ -3769,11 +4077,24 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::PreviewIdle,
     TextKey::PreviewConnecting,
     TextKey::PreviewLive,
+    TextKey::PreviewErrorSlate,
+    TextKey::PreviewOutputUnknown,
     TextKey::PreviewPaused,
     TextKey::PreviewRecovering,
     TextKey::PreviewStopped,
     TextKey::PreviewUnsupported,
     TextKey::PreviewAuthorizationFailed,
+    TextKey::PreviewQueued,
+    TextKey::PreviewRunning,
+    TextKey::PreviewCompleted,
+    TextKey::PreviewCancelling,
+    TextKey::PreviewProgrammeSeek,
+    TextKey::PreviewProgrammeSeekHelp,
+    TextKey::PreviewTimestamp,
+    TextKey::PreviewAlreadyRunning,
+    TextKey::PreviewCleanupUnconfirmed,
+    TextKey::PreviewConfigurationInvalid,
+    TextKey::PreviewStartupFailed,
     TextKey::PreviewUnavailable,
     TextKey::PreviewCapacityReached,
     TextKey::PreviewNetworkError,
@@ -3980,6 +4301,19 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::EditPlayout,
     TextKey::RefreshPlayout,
     TextKey::ResetPlayout,
+    TextKey::RebuildPlayout,
+    TextKey::PlayoutRebuildMode,
+    TextKey::ContinuePlayout,
+    TextKey::PlayoutContinueHelp,
+    TextKey::PlayoutRefreshHelp,
+    TextKey::PlayoutResetHelp,
+    TextKey::KeepCurrentProgramme,
+    TextKey::KeepCurrentProgrammeHelp,
+    TextKey::ReplaceCurrentProgrammeHelp,
+    TextKey::QueuePlayoutBuild,
+    TextKey::InvalidPlayoutBuildMode,
+    TextKey::PlayoutContinueStateIncomplete,
+    TextKey::PlayoutClassicTimelineRejected,
     TextKey::ScheduleReset,
     TextKey::SchedulePlayoutReset,
     TextKey::EditExternalJsonFile,
@@ -3998,6 +4332,23 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::UnsupportedPlayoutKind,
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
+    TextKey::ScriptedPlayoutState,
+    TextKey::BlockPlayoutState,
+    TextKey::YamlPlayoutState,
+    TextKey::ExternalJsonPlayoutState,
+    TextKey::ExternalJsonDirectHelp,
+    TextKey::ExternalJsonAcceptedHelp,
+    TextKey::ExternalJsonSourceHelp,
+    TextKey::ExternalJsonInvalidHelp,
+    TextKey::ExternalJsonSourceChangedHelp,
+    TextKey::ExternalJsonNextHelp,
+    TextKey::ExternalJsonExpiredHelp,
+    TextKey::ExternalJsonBuildFailedHelp,
+    TextKey::ExternalJsonDirect,
+    TextKey::ExternalJsonControlled,
+    TextKey::AcceptedRevision,
+    TextKey::PlayoutContinuityUnavailable,
+    TextKey::ScriptedTimelineRejected,
     TextKey::ScanRefreshState,
     TextKey::SubtitleCleanup,
     TextKey::SubtitleCleanupMessage,
@@ -4007,6 +4358,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ArtworkOrphansBrief,
     TextKey::ArtworkCardinality,
     TextKey::HlsLiveDelivery,
+    TextKey::Av1OutputCompatibility,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -4197,6 +4549,9 @@ pub fn schedule_item_fallback_label(id: i64) -> String {
 
 pub fn schedule_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
+    if message.contains("graphics attachment variables") || message.contains("graphics-variables") {
+        return tr(TextKey::GraphicsItemVariablesInvalid).to_owned();
+    }
     languages_for(use_i18n()).schedule_error_message(&message)
 }
 
@@ -4206,6 +4561,9 @@ pub fn schedule_error_text(language: UiLanguage, error: &str) -> String {
 
 pub fn scheduling_content_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
+    if message.contains("graphics attachment variables") || message.contains("graphics-variables") {
+        return tr(TextKey::GraphicsItemVariablesInvalid).to_owned();
+    }
     languages_for(use_i18n()).scheduling_content_error_message(&message)
 }
 
@@ -4232,6 +4590,8 @@ pub fn graphics_element_error_message(error: impl std::fmt::Display) -> String {
         TextKey::TextTemplateRequired
     } else if error.contains("text_too_long") {
         TextKey::TextTemplateTooLong
+    } else if error.contains("metadata_refresh_interval_out_of_range") {
+        TextKey::GraphicsMetadataRefreshBounds
     } else if error.contains("refresh_interval_out_of_range") {
         TextKey::RefreshPeriodBounds
     } else if error.contains("reload_interval_out_of_range") {
@@ -4355,11 +4715,23 @@ pub fn ffmpeg_profile_audio_format_text(language: UiLanguage, format: i32) -> St
 
 pub fn ffmpeg_profile_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
-    languages_for(use_i18n()).ffmpeg_profile_error_message(&message)
+    ffmpeg_profile_error_text(use_i18n(), &message)
 }
 
 pub fn ffmpeg_profile_error_text(language: UiLanguage, error: &str) -> String {
-    languages_for(language).ffmpeg_profile_error_message(error)
+    let key = if error.contains("ffmpeg-profile-delete-default") {
+        Some(TextKey::ProfileDeleteDefault)
+    } else if error.contains("ffmpeg-profile-delete-in-use") {
+        Some(TextKey::ProfileDeleteInUse)
+    } else if error.contains("ffmpeg-profile-delete-failed") {
+        Some(TextKey::ProfileDeleteFailed)
+    } else {
+        None
+    };
+    key.map_or_else(
+        || languages_for(language).ffmpeg_profile_error_message(error),
+        |key| text(language, key).to_owned(),
+    )
 }
 
 pub fn settings_error_text(language: UiLanguage, error: &str) -> String {
@@ -4522,9 +4894,9 @@ const SCAN_REFRESH_STATE_TITLE: &str = "Scan Refresh State";
 const ARTWORK_CARDINALITY_TITLE: &str = "Artwork Cardinality";
 const HLS_LIVE_DELIVERY_TITLE: &str = "HLS Live Delivery";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
-const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
-    "Classic playout state is not safe to Refresh for: ";
-const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str = ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str = "Classic playout state needs attention for: ";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str = ". Check programme times and saved continuation state. Refresh requires a verified programme boundary and complete checkpoint; unsafe requests leave published programmes unchanged.";
+const CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX: &str = ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
 const SCAN_REFRESH_STATE_MESSAGE_PREFIX: &str = "Scan refresh state needs attention: ";
 const SCAN_REFRESH_UNRESOLVED_RESOLUTION_SEPARATOR: &str = " unresolved impact resolution(s), ";
 const SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR: &str = " stale impact resolution(s), ";
@@ -4556,6 +4928,12 @@ pub fn health_check_title(title: &str) -> String {
 pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
+        "Scripted Playout State" => text(language, TextKey::ScriptedPlayoutState).to_owned(),
+        "Block Playout State" => text(language, TextKey::BlockPlayoutState).to_owned(),
+        "YAML Playout State" => text(language, TextKey::YamlPlayoutState).to_owned(),
+        "External JSON Playout State" => {
+            text(language, TextKey::ExternalJsonPlayoutState).to_owned()
+        }
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
         "Subtitle Cleanup" => text(language, TextKey::SubtitleCleanup).to_owned(),
         "Artwork Orphans" => text(language, TextKey::ArtworkOrphans).to_owned(),
@@ -4733,29 +5111,177 @@ fn javascript_audio_health_message(language: UiLanguage, message: &str, brief: &
         )
 }
 
+fn runtime_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+    brief: &str,
+) -> Option<&'static str> {
+    let key = match (title, message, brief) {
+        ("FFmpeg Capabilities", _, "AV1 output requires native HLS") => {
+            TextKey::Av1OutputCompatibility
+        }
+        (
+            "Next Runtime Availability",
+            "Next configuration overlay is unavailable or invalid",
+            _,
+        ) => TextKey::NextOverlayInvalid,
+        ("Next Runtime Availability", "Next configuration overlay validation is incomplete", _) => {
+            TextKey::NextOverlayIncomplete
+        }
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
+// Accept legacy cached results as well as newly generated ErsatzRS messages.
+// Match only the known health clauses; preserve sample paths and unknown prose.
+fn unavailable_health_message(language: UiLanguage, message: &str) -> Option<String> {
+    fn clause(language: UiLanguage, message: &str) -> Option<String> {
+        let (count, rest) = message.strip_prefix("There are ")?.split_once(' ')?;
+        count.parse::<u64>().ok()?;
+        let (key, items) = if let Some(items) = rest
+            .strip_prefix("items that are unavailable because ErsatzRS cannot find them on disk, including the following: ")
+            .or_else(|| rest.strip_prefix("items that are unavailable because ErsatzTV cannot find them on disk, including the following: "))
+        {
+            (TextKey::UnavailableLocalMediaMessage, items)
+        } else {
+            (TextKey::UnavailableRemoteStreamsMessage, rest.strip_prefix(
+                "Remote Streams that are unavailable because their provider reports them as not playable, including the following: ",
+            )?)
+        };
+        Some(
+            text(language, key)
+                .replace("{count}", count)
+                .replace("{items}", items),
+        )
+    }
+
+    if let Some((local, remote)) = message.rsplit_once(" There are ") {
+        let remote = format!("There are {remote}");
+        if let (Some(local), Some(remote)) = (clause(language, local), clause(language, &remote)) {
+            return Some(format!("{local} {remote}"));
+        }
+    }
+    clause(language, message)
+}
+
+pub fn external_json_help(key: TextKey) -> String {
+    external_json_help_text(use_i18n(), key)
+}
+
+fn external_json_help_text(language: UiLanguage, key: TextKey) -> String {
+    text(language, key)
+        .replace("{continue}", text(language, TextKey::ContinuePlayout))
+        .replace("{refresh}", text(language, TextKey::RefreshPlayout))
+        .replace("{reset}", text(language, TextKey::ResetPlayout))
+}
+
+fn playout_health_message(language: UiLanguage, title: &str, message: &str) -> Option<String> {
+    if title == "External JSON Playout State" {
+        return Some(
+            message
+                .lines()
+                .map(|line| {
+                    let Some((channel, reason)) = line.rsplit_once(": ") else {
+                        return line.to_owned();
+                    };
+                    let key = match reason {
+                        "Direct file updates; no accepted planning baseline." => {
+                            TextKey::ExternalJsonDirectHelp
+                        }
+                        "The source path differs from the accepted planning." => {
+                            TextKey::ExternalJsonSourceChangedHelp
+                        }
+                        "The accepted planning has no future programmes." => {
+                            TextKey::ExternalJsonExpiredHelp
+                        }
+                        "The accepted planning is invalid or unsupported." => {
+                            TextKey::ExternalJsonInvalidHelp
+                        }
+                        "Next does not consume external planning." => TextKey::ExternalJsonNextHelp,
+                        _ => return line.to_owned(),
+                    };
+                    format!("{channel}: {}", external_json_help_text(language, key))
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+    if title == "Scripted Playout State" && message.contains("Scripted timeline rejected:") {
+        let guidance = text(language, TextKey::ScriptedTimelineRejected);
+        return Some(format!("{guidance}\n{message}"));
+    }
+    let marker = match title {
+        "YAML Playout State" => ": missing or incompatible YAML boundary checkpoint;",
+        "Block Playout State" => ": missing or incompatible Block boundary checkpoint;",
+        _ => return None,
+    };
+    if !message.contains(marker) {
+        return None;
+    }
+    Some(
+        message
+            .lines()
+            .map(|line| {
+                line.split_once(marker).map_or_else(
+                    || line.to_owned(),
+                    |(channel, _)| {
+                        format!(
+                            "{channel}: {}",
+                            text(language, TextKey::PlayoutContinuityUnavailable)
+                        )
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
+fn addon_list_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<&'static str> {
+    if title != "Add-on media lists" {
+        return None;
+    }
+    let key = match message {
+        "Initial add-on selection is awaiting review" |
+        "Preview and save the list selection before its first publication or media acquisition." => TextKey::AddonSelectionReviewRequired,
+        "Automatic publication needs review" | "Automatic processing needs attention" => TextKey::AutoPublicationHeld,
+        "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation." => TextKey::PreparationProcessRecoveryRequired,
+        "Media preparation worker is unavailable. Restart the server before retrying preparation." => TextKey::PreparationWorkerUnavailable,
+        "Derived show metadata reached its size limit" |
+        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete." => TextKey::AddonDerivedMetadataLimited,
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
     message: &str,
     brief_message: &str,
 ) -> String {
+    if let Some(localized) = playout_health_message(language, title, message) {
+        return localized;
+    }
     let displayed_message = if message.is_empty() {
         brief_message
     } else {
         message
     };
-    if title == "Next Runtime Availability" {
-        let key = match displayed_message {
-            "Next configuration overlay is unavailable or invalid" => {
-                Some(TextKey::NextOverlayInvalid)
-            }
-            "Next configuration overlay validation is incomplete" => {
-                Some(TextKey::NextOverlayIncomplete)
-            }
-            _ => None,
-        };
-        if let Some(key) = key {
-            return text(language, key).to_owned();
+    if let Some(localized) =
+        runtime_health_message(language, title, displayed_message, brief_message)
+    {
+        return localized.to_owned();
+    }
+    if title == "Unavailable" {
+        if let Some(localized) = unavailable_health_message(language, displayed_message) {
+            return localized;
         }
     }
     if title == "JavaScript Audio Selection" {
@@ -4776,35 +5302,15 @@ pub fn health_check_message_text(
             return lines.join("\n");
         }
     }
-    if title == "Add-on media lists"
-        && matches!(
-            displayed_message,
-            "Automatic publication needs review" | "Automatic processing needs attention"
-        )
-    {
-        return text(language, TextKey::AutoPublicationHeld).to_owned();
-    }
-    if title == "Add-on media lists"
-        && displayed_message
-            == "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation."
-    {
-        return text(language, TextKey::PreparationProcessRecoveryRequired).to_owned();
-    }
-    if title == "Add-on media lists"
-        && displayed_message
-            == "Media preparation worker is unavailable. Restart the server before retrying preparation."
-    {
-        return text(language, TextKey::PreparationWorkerUnavailable).to_owned();
-    }
-    if title == "Add-on media lists" && matches!(displayed_message,
-        "Derived show metadata reached its size limit" |
-        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete.") {
-        return text(language, TextKey::AddonDerivedMetadataLimited).to_owned();
+    if let Some(localized) = addon_list_health_message(language, title, displayed_message) {
+        return localized.to_owned();
     }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
-        if let Some(playouts) = displayed_message
-            .strip_prefix(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX)
-            .and_then(|value| value.strip_suffix(CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX))
+        if let Some(playouts) = [
+            (CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX, CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX),
+            ("Classic playout state is not safe to Refresh for: ", CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX),
+            ("Classic playout state is not safe to Refresh or preserve the current programme for: ", CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX),
+        ].into_iter().find_map(|(prefix, suffix)| displayed_message.strip_prefix(prefix)?.strip_suffix(suffix))
         {
             return languages_for(language).classic_playout_state_message(playouts);
         }
@@ -5265,6 +5771,41 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_health_localizes_legacy_branding_without_rewriting_samples() {
+        let legacy = "There are 2 items that are unavailable because ErsatzTV cannot find them on disk, including the following: /media/ErsatzTV.mkv";
+        let current = "There are 2 items that are unavailable because ErsatzRS cannot find them on disk, including the following: /media/ErsatzTV.mkv";
+        let remote = "There are 1 Remote Streams that are unavailable because their provider reports them as not playable, including the following: streams/fixture.yml";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let translated = health_check_message_text(language, "Unavailable", current, "");
+            assert_eq!(
+                translated,
+                health_check_message_text(language, "Unavailable", legacy, "")
+            );
+            assert!(translated.contains("ErsatzRS"));
+            assert!(translated.ends_with("/media/ErsatzTV.mkv"));
+            assert!(!translated.contains("because ErsatzTV"));
+            let provider = health_check_message_text(language, "Unavailable", remote, "");
+            assert!(provider.ends_with("streams/fixture.yml"));
+            assert!(!provider.contains("ErsatzRS"));
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    "Unavailable",
+                    &format!("{legacy} {remote}"),
+                    ""
+                ),
+                format!("{translated} {provider}")
+            );
+            let unknown = "ErsatzTV is part of an unrecognized provider diagnostic";
+            assert_eq!(
+                health_check_message_text(language, "Unavailable", unknown, ""),
+                unknown
+            );
+        }
+    }
+
+    #[test]
     fn invalid_or_missing_episode_numbers_are_localized_as_unnumbered() {
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
@@ -5370,22 +5911,79 @@ mod tests {
     }
 
     #[test]
-    fn classic_playout_health_text_is_localized_for_every_language() {
-        let message = "Classic playout state is not safe to Refresh for: 50 - Health. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
+    fn programme_checkpoint_health_text_is_localized_for_every_language() {
+        for engine in ["YAML", "Block"] {
+            let title = format!("{engine} Playout State");
+            let message = format!("50 - Health (playout 88): missing or incompatible {engine} boundary checkpoint; Refresh is unsafe. Use an explicit Reset to create compatible state.");
+            for definition in crate::admin::languages::LANGUAGES {
+                let language = UiLanguage::from_config(definition.code);
+                let localized_title = health_check_title_text(language, &title);
+                let localized =
+                    health_check_message_text(language, &title, &message, "1 state error(s)");
+                assert!(localized.contains("50 - Health (playout 88)"));
+                assert!(localized.contains(text(language, TextKey::PlayoutContinuityUnavailable)));
+                if definition.code != UiLanguage::English.code() {
+                    assert_ne!(localized_title, title);
+                    assert_ne!(localized, message);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn external_json_health_guidance_uses_translated_actions_in_every_culture() {
+        let reasons = [
+            "Direct file updates; no accepted planning baseline.",
+            "The source path differs from the accepted planning.",
+            "The accepted planning has no future programmes.",
+            "The accepted planning is invalid or unsupported.",
+            "Next does not consume external planning.",
+        ];
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
-            let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
-            let localized = health_check_message_text(
-                language,
-                CLASSIC_PLAYOUT_STATE_TITLE,
-                message,
-                "1 Classic playout state error(s)",
-            );
-            assert!(!title.trim().is_empty());
-            assert!(localized.contains("50 - Health"));
-            if definition.code != UiLanguage::English.code() {
-                assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
-                assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
+            for reason in reasons {
+                let message = format!("50 - External: {reason}");
+                let localized = health_check_message_text(
+                    language,
+                    "External JSON Playout State",
+                    &message,
+                    "",
+                );
+                assert!(localized.starts_with("50 - External: "));
+                assert_ne!(localized, message);
+                assert!(!localized.contains('{'));
+            }
+            let help = external_json_help_text(language, TextKey::ExternalJsonDirectHelp);
+            assert!(help.contains(text(language, TextKey::RefreshPlayout)));
+            assert!(help.contains(text(language, TextKey::ResetPlayout)));
+            let accepted = external_json_help_text(language, TextKey::ExternalJsonAcceptedHelp);
+            assert!(accepted.contains(text(language, TextKey::ContinuePlayout)));
+            assert!(!accepted.contains('{'));
+        }
+    }
+
+    #[test]
+    fn classic_playout_health_text_is_localized_for_every_language() {
+        for message in [
+            format!("{CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX}50 - Health{CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX}"),
+            format!("Classic playout state is not safe to Refresh for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
+            format!("Classic playout state is not safe to Refresh or preserve the current programme for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
+        ] {
+            for definition in crate::admin::languages::LANGUAGES {
+                let language = UiLanguage::from_config(definition.code);
+                let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);
+                let localized = health_check_message_text(
+                    language,
+                    CLASSIC_PLAYOUT_STATE_TITLE,
+                    &message,
+                    "1 Classic playout state error(s)",
+                );
+                assert!(!title.trim().is_empty());
+                assert!(localized.contains("50 - Health"));
+                if definition.code != UiLanguage::English.code() {
+                    assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
+                    assert!(!localized.starts_with("Classic playout state"));
+                }
             }
         }
     }
@@ -5644,6 +6242,20 @@ mod tests {
     }
 
     #[test]
+    fn selection_review_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for message in ["Initial add-on selection is awaiting review",
+                "Preview and save the list selection before its first publication or media acquisition."] {
+                for (full, brief) in [(message, ""), ("", message)] {
+                    assert_eq!(health_check_message_text(language, "Add-on media lists", full, brief),
+                        text(language, TextKey::AddonSelectionReviewRequired));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn preparation_worker_unavailable_health_is_localized_for_every_language() {
         let message = "Media preparation worker is unavailable. Restart the server before retrying preparation.";
         for definition in crate::admin::languages::LANGUAGES {
@@ -5737,7 +6349,7 @@ mod tests {
 
     #[test]
     fn artwork_orphans_health_text_is_localized_for_every_language() {
-        let message = "Orphan cleanup pending: 2 actor row(s) and 3 artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and cached image files are preserved.";
+        let message = "Orphan cleanup pending: 2 actor row(s) and 3 artwork row(s). Automatic cleanup runs hourly. To request cleanup now, use POST /api/maintenance/clean_artwork. Attached records and referenced cached images are preserved.";
         let brief = "2 orphan actor row(s) and 3 orphan artwork row(s)";
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);

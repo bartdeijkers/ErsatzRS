@@ -76,6 +76,7 @@ impl JellyfinServiceTrait for JellyfinService {
             .query(&[
                 ("sortOrder", "Ascending"),
                 ("sortBy", "SortName"),
+                ("collapseBoxSetItems", "false"),
                 ("parentId", parent_id),
                 (
                     "fields",
@@ -304,6 +305,7 @@ impl JellyfinService {
             .query(&[
                 ("sortOrder", "Ascending"),
                 ("sortBy", "SortName"),
+                ("collapseBoxSetItems", "false"),
                 ("parentId", library_item_id),
                 (
                     "fields",
@@ -345,6 +347,7 @@ impl JellyfinService {
             .query(&[
                 ("sortOrder", "Ascending"),
                 ("sortBy", "SortName"),
+                ("collapseBoxSetItems", "false"),
                 ("parentId", parent_id),
                 ("fields", fields),
                 ("includeItemTypes", include_item_types),

@@ -65,10 +65,6 @@
     border-radius: var(--radius);
 }
 
-.information {
-    background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
-}
-
 .section-title {
     margin: 0;
     color: var(--color-muted);
@@ -110,6 +106,16 @@
     font-size: 0.875rem;
 }
 
+.preview-output {
+    max-width: 100%;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
 .textarea {
     min-height: 11rem;
     resize: vertical;
@@ -130,16 +136,14 @@
 }
 
 .error,
-.success,
-.message {
+.success {
     margin: 0;
     padding: 0.75rem 1rem;
     border-radius: var(--radius);
     font-size: 0.875rem;
 }
 
-.error,
-.message {
+.error {
     border: 1px solid color-mix(in srgb, var(--color-danger) 65%, var(--color-border));
     color: var(--color-danger);
 }

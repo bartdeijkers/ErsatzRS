@@ -161,6 +161,8 @@ pub struct ScheduleItemForm {
     pub watermark_ids: Vec<i64>,
     #[serde(default)]
     pub graphics_element_ids: Vec<i64>,
+    #[serde(default)]
+    pub graphics_element_variables: std::collections::BTreeMap<i64, String>,
     pub preferred_audio_language_code: Option<String>,
     pub preferred_audio_title: String,
     pub preferred_subtitle_language_code: Option<String>,
@@ -210,6 +212,7 @@ impl Default for ScheduleItemForm {
             fallback_filler_id: None,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: std::collections::BTreeMap::new(),
             preferred_audio_language_code: None,
             preferred_audio_title: String::new(),
             preferred_subtitle_language_code: None,
@@ -388,6 +391,7 @@ pub(crate) fn schedule_item_from_admin(
         fallback_filler_id: item.fallback_filler_id,
         watermark_ids: item.watermark_ids,
         graphics_element_ids: item.graphics_element_ids,
+        graphics_element_variables: item.graphics_element_variables,
         preferred_audio_language_code: item.preferred_audio_language_code,
         preferred_audio_title: item.preferred_audio_title,
         preferred_subtitle_language_code: item.preferred_subtitle_language_code,
@@ -447,6 +451,7 @@ pub(crate) fn schedule_item_into_admin(
         fallback_filler_id: item.fallback_filler_id,
         watermark_ids: item.watermark_ids,
         graphics_element_ids: item.graphics_element_ids,
+        graphics_element_variables: item.graphics_element_variables,
         preferred_audio_language_code: item.preferred_audio_language_code,
         preferred_audio_title: item.preferred_audio_title,
         preferred_subtitle_language_code: item.preferred_subtitle_language_code,
@@ -517,8 +522,38 @@ pub(crate) fn schedule_options_from_admin(
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScheduleDeferredChange {
+    pub playout_id: i64,
+    pub channel_name: String,
+    pub saved_at: chrono::DateTime<chrono::Utc>,
+    pub effective_after: Option<chrono::DateTime<chrono::Utc>>,
+    pub applied_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_build: Option<chrono::DateTime<chrono::Utc>>,
+    pub build_succeeded: Option<bool>,
+    pub build_message: Option<String>,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_core::repositories::ScheduleDeferredChange> for ScheduleDeferredChange {
+    fn from(value: ersatzrs_core::repositories::ScheduleDeferredChange) -> Self {
+        Self {
+            playout_id: value.playout_id,
+            channel_name: value.channel_name,
+            saved_at: value.saved_at,
+            effective_after: value.effective_after,
+            applied_from: value.applied_from,
+            last_build: value.last_build,
+            build_succeeded: value.build_succeeded,
+            build_message: value.build_message,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ScheduleItemsPageData {
+    #[serde(default)]
+    pub deferred_changes: Vec<ScheduleDeferredChange>,
     pub schedule: ScheduleForm,
     pub items: Vec<ScheduleItemForm>,
     pub options: ScheduleItemsEditorOptions,
@@ -662,6 +697,14 @@ pub async fn get_schedule_items_page(
         .map(schedule_options_from_admin)
         .map_err(ServerFnError::new)?;
     Ok(Some(ScheduleItemsPageData {
+        deferred_changes: state
+            .application
+            .schedule_deferred_changes(id)
+            .await
+            .map_err(ServerFnError::new)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         schedule,
         items,
         options,
@@ -684,6 +727,36 @@ pub async fn replace_schedule_items(
             items: items.into_iter().map(schedule_item_into_admin).collect(),
         })
         .await
+        .map_err(ServerFnError::new)
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn defer_schedule_items(
+    schedule_id: i64,
+    items: Vec<ScheduleItemForm>,
+) -> Result<Vec<ScheduleDeferredChange>, ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    state
+        .application
+        .defer_schedule_items(ersatzrs_app::commands::ReplaceScheduleItems {
+            schedule_id,
+            items: items.into_iter().map(schedule_item_into_admin).collect(),
+        })
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
+        .map_err(ServerFnError::new)
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn get_schedule_deferred_changes(
+    schedule_id: i64,
+) -> Result<Vec<ScheduleDeferredChange>, ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    state
+        .application
+        .schedule_deferred_changes(schedule_id)
+        .await
+        .map(|rows| rows.into_iter().map(Into::into).collect())
         .map_err(ServerFnError::new)
 }
 
@@ -1430,6 +1503,7 @@ pub async fn list_schedule_items_with_pool(
                 graphics_element_ids: parse_id_list(
                     row.try_get("GraphicsElementIds").unwrap_or(None),
                 ),
+                graphics_element_variables: std::collections::BTreeMap::default(),
                 preferred_audio_language_code: row
                     .try_get("PreferredAudioLanguageCode")
                     .ok()

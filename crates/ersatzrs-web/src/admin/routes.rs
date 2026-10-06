@@ -177,7 +177,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=GraphicsElementEditorPage
             />
 
-            <Route path=StaticSegment("playouts") view=PlayoutsPage/>
+            <Route path=StaticSegment("playouts") view=PlayoutsPage ssr=SsrMode::InOrder/>
             <Route
                 path=(StaticSegment("playouts"), StaticSegment("add"))
                 view=PlayoutEditorPage
@@ -213,6 +213,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("playouts"), ParamSegment("id"), StaticSegment("templates"))
                 view=PlayoutTemplatesEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route path=StaticSegment("blocks") view=BlocksPage/>
             <Route path=StaticSegment("decos") view=DecosPage/>
@@ -246,6 +247,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("settings"), StaticSegment("ffmpeg"))
                 view=FfmpegSettingsPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("settings"), StaticSegment("logging"))
@@ -654,6 +656,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("add"),
                 )
                 view=LocalLibraryEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(
@@ -664,6 +667,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("edit"),
                 )
                 view=LocalLibraryEditorPage
+                ssr=SsrMode::InOrder
             />
 
             <Route

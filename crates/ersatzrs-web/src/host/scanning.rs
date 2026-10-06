@@ -71,6 +71,30 @@ impl NativeScanRuntime {
 
 #[async_trait]
 impl ScanRuntime for NativeScanRuntime {
+    async fn preview_television_folders(
+        &self,
+        paths: Vec<String>,
+    ) -> Result<Vec<ersatzrs_core::television_discovery::TelevisionFolderPreview>, ScanRuntimeError>
+    {
+        static CAPACITY: std::sync::OnceLock<Arc<tokio::sync::Semaphore>> =
+            std::sync::OnceLock::new();
+        let permit = CAPACITY
+            .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(2)))
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ScanRuntimeError::new("Folder preview capacity is busy"))?;
+        let task = tokio::task::spawn_blocking(move || {
+            // An OS filesystem call cannot be cancelled. Keep the slot owned
+            // by the worker even if its HTTP reader times out or disconnects.
+            let _permit = permit;
+            ersatzrs_scanner::local_television::discovery::preview_television_folders(&paths)
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(3), task)
+            .await
+            .map_err(|_| ScanRuntimeError::new("Folder preview timed out"))?
+            .map_err(|_| ScanRuntimeError::new("Folder preview worker failed"))
+    }
+
     async fn interrupted_scan_library_ids(&self) -> Result<Vec<EntityId>, ScanRuntimeError> {
         ersatzrs_infra::scan_refresh::interrupted_resolutions(&self.pool)
             .await
@@ -84,6 +108,9 @@ impl ScanRuntime for NativeScanRuntime {
     }
 
     async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        ersatzrs_infra::scripted_dependencies::resolve_pending(&self.pool, chrono::Utc::now())
+            .await
+            .map_err(scan_error)?;
         ersatzrs_infra::provider_collection_refresh::resolve_pending(&self.pool)
             .await
             .map_err(scan_error)?;
@@ -102,6 +129,9 @@ impl ScanRuntime for NativeScanRuntime {
     }
 
     async fn pending_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        ersatzrs_infra::scripted_dependencies::resolve_pending(&self.pool, chrono::Utc::now())
+            .await
+            .map_err(scan_error)?;
         ersatzrs_infra::provider_collection_refresh::resolve_pending(&self.pool)
             .await
             .map_err(scan_error)?;

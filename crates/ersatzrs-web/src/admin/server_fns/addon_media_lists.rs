@@ -334,6 +334,7 @@ mod lifecycle_transport {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListPublicationBlockerKind {
+    SelectionReviewRequired,
     OverviewIncomplete,
     PublicationInProgress,
     RecoveryRequired,
@@ -633,6 +634,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationBlocker>
         Self {
             item_id: value.item_id,
             kind: match value.kind {
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::SelectionReviewRequired => AddonMediaListPublicationBlockerKind::SelectionReviewRequired,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::OverviewIncomplete => AddonMediaListPublicationBlockerKind::OverviewIncomplete,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PublicationInProgress => AddonMediaListPublicationBlockerKind::PublicationInProgress,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::RecoveryRequired => AddonMediaListPublicationBlockerKind::RecoveryRequired,
@@ -682,6 +684,8 @@ pub struct AddonMediaListRow {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListForm {
+    #[serde(default)]
+    pub selection: ersatzrs_domain::AddonListSelectionState,
     #[serde(default)]
     pub delivery_mode: AddonMediaListDeliveryMode,
     #[serde(default)]
@@ -1407,6 +1411,7 @@ pub async fn get_addon_media_list_form(
         .map_err(ServerFnError::new)
         .map(|form| {
             form.map(|form| AddonMediaListForm {
+                selection: form.selection,
                 delivery_mode: form.delivery_mode,
                 delivery_cutoff_at: form.delivery_cutoff_at,
                 auto_publication_hold: form.auto_publication_hold.map(Into::into),
@@ -2109,6 +2114,7 @@ pub async fn add_addon_media_list(
     load_item_details: bool,
     refresh_cadence: AddonMediaListRefreshCadence,
     delivery_mode: AddonMediaListDeliveryMode,
+    initial_selection_review: Option<bool>,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2127,6 +2133,7 @@ pub async fn add_addon_media_list(
         },
         refresh_cadence,
         delivery_mode,
+        initial_selection_review.unwrap_or(false),
     )
     .await
     .map_err(ServerFnError::new)?;
@@ -2476,6 +2483,7 @@ pub async fn add_addon_media_list_with_state(
     detail_import_policy: AddonMediaListDetailPolicy,
     refresh_cadence: AddonMediaListRefreshCadence,
     delivery_mode: AddonMediaListDeliveryMode,
+    initial_selection_review: bool,
 ) -> ersatzrs_app::Result<i64> {
     // An omitted choice is resolved from the URL rather than rejected, so the
     // operator only has to name an add-on when nothing claims the host.
@@ -2513,6 +2521,7 @@ pub async fn add_addon_media_list_with_state(
     let list_id = state
         .application
         .add_addon_media_list(ersatzrs_app::commands::AddAddonMediaList {
+            initial_selection_review,
             delivery_mode,
             addon_id,
             source_url,

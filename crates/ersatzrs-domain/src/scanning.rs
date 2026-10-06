@@ -36,6 +36,8 @@ pub enum ScanPlayoutRefreshReason {
     ProviderCollectionChanged,
     /// Plex network membership changed searchable show or episode metadata.
     ProviderNetworkChanged,
+    /// A successful scan changed an actual Scripted library/tag selection.
+    ScriptedSourceChanged,
     /// Coalesced native provider and remote-stream dependency changes.
     ContentMembershipMixed,
 }
@@ -53,6 +55,7 @@ impl ScanPlayoutRefreshReason {
             Self::RemoteStreamMembershipMixed => "remote-stream-membership-mixed",
             Self::ProviderCollectionChanged => "provider-collection-changed",
             Self::ProviderNetworkChanged => "provider-network-changed",
+            Self::ScriptedSourceChanged => "scripted-source-changed",
             Self::ContentMembershipMixed => "content-membership-mixed",
         }
     }
@@ -71,6 +74,7 @@ impl ScanPlayoutRefreshReason {
             "remote-stream-membership-mixed" => Some(Self::RemoteStreamMembershipMixed),
             "provider-collection-changed" => Some(Self::ProviderCollectionChanged),
             "provider-network-changed" => Some(Self::ProviderNetworkChanged),
+            "scripted-source-changed" => Some(Self::ScriptedSourceChanged),
             "content-membership-mixed" => Some(Self::ContentMembershipMixed),
             _ => None,
         }
@@ -86,11 +90,13 @@ impl ScanPlayoutRefreshReason {
             self,
             Self::ProviderCollectionChanged
                 | Self::ProviderNetworkChanged
+                | Self::ScriptedSourceChanged
                 | Self::ContentMembershipMixed
         ) || matches!(
             other,
             Self::ProviderCollectionChanged
                 | Self::ProviderNetworkChanged
+                | Self::ScriptedSourceChanged
                 | Self::ContentMembershipMixed
         ) {
             Self::ContentMembershipMixed

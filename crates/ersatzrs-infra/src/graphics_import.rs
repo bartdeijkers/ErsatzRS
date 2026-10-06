@@ -30,28 +30,142 @@ pub fn graphics_element_from_yaml(
     yaml: &str,
 ) -> Result<GraphicsElement> {
     let path = path.into();
-    match kind {
+    let (yaml, shared) = extract_shared_fields(yaml)?;
+    let mut element = match kind {
         GraphicsElementKind::Image => {
-            let element: ImageYaml = deserialize_yaml(yaml)?;
-            Ok(element.into_graphics_element(id, path))
+            let element: ImageYaml = deserialize_yaml(&yaml)?;
+            element.into_graphics_element(id, path)
         }
         GraphicsElementKind::Text => {
-            let element: TextYaml = deserialize_yaml(yaml)?;
-            Ok(element.into_graphics_element(id, path))
+            let element: TextYaml = deserialize_yaml(&yaml)?;
+            element.into_graphics_element(id, path)
         }
         GraphicsElementKind::Subtitle => {
-            let element: SubtitleYaml = deserialize_yaml(yaml)?;
-            Ok(element.into_graphics_element(id, path))
+            let element: SubtitleYaml = deserialize_yaml(&yaml)?;
+            element.into_graphics_element(id, path)
         }
         GraphicsElementKind::Motion => {
-            let element: MotionYaml = deserialize_yaml(yaml)?;
-            Ok(element.into_graphics_element(id, path))
+            let element: MotionYaml = deserialize_yaml(&yaml)?;
+            element.into_graphics_element(id, path)
         }
         GraphicsElementKind::Script => {
-            let element: ScriptYaml = deserialize_yaml(yaml)?;
-            Ok(element.into_graphics_element(id, path))
+            let element: ScriptYaml = deserialize_yaml(&yaml)?;
+            element.into_graphics_element(id, path)
+        }
+    };
+    if let serde_json::Value::Object(mut value) =
+        serde_json::to_value(&element).map_err(yaml_error)?
+    {
+        value.extend(shared);
+        element = serde_json::from_value(serde_json::Value::Object(value)).map_err(yaml_error)?;
+    }
+    Ok(element)
+}
+
+/// Export the native flat YAML shape using the same parser on reimport.
+///
+/// # Errors
+/// Returns serialization errors or invalid authored values.
+pub fn graphics_element_to_yaml(element: &GraphicsElement) -> Result<String> {
+    ersatzrs_core::repositories::validate_authored_graphics(element)?;
+    let mut value = serde_json::to_value(element).map_err(yaml_error)?;
+    let fields = value
+        .as_object_mut()
+        .ok_or_else(|| yaml_error("invalid graphics object"))?;
+    for key in ["id", "kind", "path"] {
+        fields.remove(key);
+    }
+    let config = fields
+        .remove("config")
+        .ok_or_else(|| yaml_error("missing config"))?;
+    if let serde_json::Value::Object(mut config) = config {
+        config.remove("kind");
+        fields.extend(config);
+    }
+    serde_yaml::to_string(&value).map_err(yaml_error)
+}
+
+fn yaml_error(error: impl std::fmt::Display) -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "graphics element yaml",
+        value: error.to_string(),
+    }
+}
+
+fn extract_shared_fields(
+    yaml: &str,
+) -> Result<(String, serde_json::Map<String, serde_json::Value>)> {
+    if yaml.len() > 256 * 1024 || yaml.contains('\0') {
+        return Err(yaml_error("graphics-authoring-invalid"));
+    }
+    let mut value: serde_yaml::Value = serde_yaml::from_str(yaml).map_err(yaml_error)?;
+    let fields = value
+        .as_mapping_mut()
+        .ok_or_else(|| yaml_error("expected a YAML mapping"))?;
+    if let Some(styles) = fields.get(serde_yaml::Value::String("styles".into())) {
+        let template = serde_yaml::to_value(StyleDefinition::default()).map_err(yaml_error)?;
+        for style in styles
+            .as_sequence()
+            .ok_or_else(|| yaml_error("expected styles sequence"))?
+        {
+            reject_unknown_nested_fields(style, &template)?;
         }
     }
+    if let Some(drawtext) = fields.get(serde_yaml::Value::String("drawtext".into())) {
+        let template = serde_yaml::to_value(ersatzrs_domain::DrawtextGraphicsConfig {
+            metadata_refresh_interval_seconds: Some(0),
+            ..Default::default()
+        })
+        .map_err(yaml_error)?;
+        reject_unknown_nested_fields(drawtext, &template)?;
+    }
+    let mut shared = serde_json::Map::new();
+    for (key, alias) in [
+        ("z_index", "zIndex"),
+        ("epg_entries", "epgEntries"),
+        ("opacity_percent", "opacityPercent"),
+        ("opacity_expression", "opacityExpression"),
+        ("location", "location"),
+        ("location_x", "locationX"),
+        ("location_y", "locationY"),
+        ("horizontal_margin_percent", "horizontalMarginPercent"),
+        ("vertical_margin_percent", "verticalMarginPercent"),
+        ("scale", "scale"),
+        ("scale_width_percent", "scaleWidthPercent"),
+        ("place_within_source_content", "placeWithinSourceContent"),
+    ] {
+        let canonical = serde_yaml::Value::String(key.into());
+        let alternate = serde_yaml::Value::String(alias.into());
+        let raw = fields.remove(&canonical);
+        let alternate = if key == alias {
+            None
+        } else {
+            fields.remove(&alternate)
+        };
+        if raw.is_some() && alternate.is_some() {
+            return Err(yaml_error("duplicate graphics field"));
+        }
+        if let Some(raw) = raw.or(alternate) {
+            shared.insert(key.into(), serde_json::to_value(raw).map_err(yaml_error)?);
+        }
+    }
+    Ok((serde_yaml::to_string(&value).map_err(yaml_error)?, shared))
+}
+
+fn reject_unknown_nested_fields(
+    value: &serde_yaml::Value,
+    template: &serde_yaml::Value,
+) -> Result<()> {
+    let supplied = value
+        .as_mapping()
+        .ok_or_else(|| yaml_error("expected graphics settings mapping"))?;
+    let known = template
+        .as_mapping()
+        .ok_or_else(|| yaml_error("invalid graphics settings shape"))?;
+    if supplied.keys().any(|key| !known.contains_key(key)) {
+        return Err(yaml_error("unknown graphics settings field"));
+    }
+    Ok(())
 }
 
 /// Parse and upsert one YAML document through the graphics repository.

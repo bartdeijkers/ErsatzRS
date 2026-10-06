@@ -14,6 +14,7 @@ use super::super::{
 use leptos::prelude::*;
 mod bulk;
 mod detail;
+mod selection;
 mod settings;
 use super::{Draft, Submission, FORM};
 use detail::{activity, artwork, item};
@@ -179,6 +180,7 @@ fn retained_edits(w: &Workspace) -> bool {
                     || name.starts_with("option_") && name != "option_targets"
                     || name.starts_with("season_")
                     || name.starts_with("episode_")
+                    || name.starts_with("selection_") && name != "selection_item_id"
                     || name.starts_with("included_")
                     || name.starts_with("content_kind_")
                     || matches!(
@@ -202,6 +204,7 @@ fn retained_edits(w: &Workspace) -> bool {
 
 fn baseline(name: &str, displayed: &str) -> AnyView {
     let persistent = name.starts_with("option_")
+        || name.starts_with("selection_") && name != "selection_item_id"
         || name.starts_with("metadata_")
         || name.starts_with("season_")
         || name.starts_with("episode_")

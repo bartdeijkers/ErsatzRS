@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "preservation_tests.rs"]
+mod preservation_tests;
+
 #[test]
 fn sequence_shuffle_preserves_nested_instruction_slots() {
     let member = |content: &str| YamlInstruction {
@@ -2275,3 +2278,6 @@ playout:
         "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
     }));
 }
+
+#[path = "ambient_state_tests.rs"]
+mod ambient_state;

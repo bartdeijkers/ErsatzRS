@@ -186,7 +186,7 @@ impl CommandGenerator {
             }
         }
 
-        let mut included_paths = Vec::<String>::new();
+        let mut included_sources = Vec::new();
         let same_audio_and_video = same_audio_and_video(inputs);
 
         for kind in [
@@ -205,20 +205,20 @@ impl CommandGenerator {
 
                 let should_include = match kind {
                     InputKind::Audio => {
-                        !included_paths.contains(&input.path) || is_intel_vaapi_or_qsv
+                        !included_sources.contains(&input.source_key()) || is_intel_vaapi_or_qsv
                     }
                     InputKind::Watermark | InputKind::GraphicsImage | InputKind::Subtitle => {
-                        !included_paths.contains(&input.path)
+                        !included_sources.contains(&input.source_key())
                     }
                     InputKind::Video | InputKind::Concat | InputKind::Graphics => true,
                 };
 
                 if should_include {
-                    included_paths.push(input.path.clone());
+                    included_sources.push(input.source_key());
                     if kind == InputKind::Video && same_audio_and_video && !is_intel_vaapi_or_qsv {
                         for audio_input in inputs.iter().filter(|audio_input| {
                             audio_input.kind == InputKind::Audio
-                                && audio_input.path == input.path
+                                && audio_input.source_key() == input.source_key()
                                 && !audio_input.input_options.is_empty()
                         }) {
                             arguments.extend(shared_video_audio_input_options(audio_input));
@@ -276,11 +276,11 @@ fn same_audio_and_video(inputs: &[InputFile]) -> bool {
     let video_path = inputs
         .iter()
         .find(|input| input.kind == InputKind::Video)
-        .map(|input| &input.path);
+        .map(InputFile::source_key);
     let audio_path = inputs
         .iter()
         .find(|input| input.kind == InputKind::Audio)
-        .map(|input| &input.path);
+        .map(InputFile::source_key);
     video_path.is_some() && video_path == audio_path
 }
 
@@ -304,6 +304,28 @@ fn shared_video_audio_input_options(input: &InputFile) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canvas_input_identity_preserves_single_open_for_native_audio_video() {
+        let video = InputFile::video("pipe:0").with_input_options(["-f", "mpegts"]);
+        let mut audio = InputFile::audio("pipe:0").with_input_options(["-c:a", "aac_latm"]);
+        audio.streams[0].index = 1;
+        let inputs = [video, audio];
+        let complex = crate::ComplexFilter::build(&inputs, crate::FilterChain::default(), false);
+        assert_eq!(complex.video_label, "0:0");
+        assert_eq!(complex.audio_label, "0:1");
+        let arguments = CommandGenerator::generate_arguments(&inputs, &[], false);
+        assert_eq!(
+            arguments
+                .iter()
+                .filter(|argument| *argument == "-i")
+                .count(),
+            1
+        );
+        assert!(arguments
+            .windows(2)
+            .any(|pair| pair == ["-c:a", "aac_latm"]));
+    }
 
     #[test]
     fn mpegts_segmenter_wrapper_uses_cbr_muxrate_for_pcr_stability() {

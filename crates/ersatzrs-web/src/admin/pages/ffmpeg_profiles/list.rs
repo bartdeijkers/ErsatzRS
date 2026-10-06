@@ -1,7 +1,8 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{
-    ffmpeg_profile_audio_format_label, ffmpeg_profile_video_format_label, tr, TextKey,
+    ffmpeg_profile_audio_format_text, ffmpeg_profile_error_text, ffmpeg_profile_video_format_text,
+    provide_i18n_context, text, tr, use_i18n, TextKey,
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
     count_ffmpeg_profiles, delete_ffmpeg_profile, list_ffmpeg_profile_rows, FfmpegProfileListRow,
@@ -9,7 +10,7 @@ use crate::admin::server_fns::ffmpeg_profiles::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
-    toast::{load_or_notify, use_toast},
+    toast::{load_or_notify, use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/ffmpeg_profiles/list.module.css");
@@ -23,6 +24,8 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
 
 #[island]
 fn FfmpegProfilesListIsland() -> impl IntoView {
+    provide_i18n_context();
+    let language = use_i18n();
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
     let load_toast = use_toast();
 
@@ -46,12 +49,20 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
     let delete_target: RwSignal<Option<FfmpegProfileListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
 
-    Effect::new(move |_| {
-        if matches!(delete_action.value().get(), Some(Ok(()))) {
+    Effect::new(move |_| match delete_action.value().get() {
+        Some(Ok(())) => {
             rows_resource.refetch();
             count_resource.refetch();
             delete_open.set(false);
         }
+        Some(Err(error)) => {
+            load_toast.push(
+                ffmpeg_profile_error_text(language, &error.to_string()),
+                ToastSeverity::Error,
+            );
+            delete_open.set(false);
+        }
+        None => {}
     });
 
     let columns: Vec<Column<FfmpegProfileListRow>> = vec![
@@ -63,12 +74,13 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
             let r = p.resolution.clone();
             view! { <span class=style::cell_muted>{r}</span> }.into_any()
         }),
-        Column::new(tr(TextKey::VideoFormat), |p: &FfmpegProfileListRow| {
-            let v = ffmpeg_profile_video_format_label(p.video_format, p.hardware_acceleration);
+        Column::new(tr(TextKey::VideoFormat), move |p: &FfmpegProfileListRow| {
+            let v =
+                ffmpeg_profile_video_format_text(language, p.video_format, p.hardware_acceleration);
             view! { <span class=style::cell_muted>{v}</span> }.into_any()
         }),
-        Column::new(tr(TextKey::AudioFormat), |p: &FfmpegProfileListRow| {
-            let a = ffmpeg_profile_audio_format_label(p.audio_format);
+        Column::new(tr(TextKey::AudioFormat), move |p: &FfmpegProfileListRow| {
+            let a = ffmpeg_profile_audio_format_text(language, p.audio_format);
             view! { <span class=style::cell_muted>{a}</span> }.into_any()
         }),
     ];
@@ -78,7 +90,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
         let p_clone = p.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>{tr(TextKey::Edit)}</a>
+                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>{text(language, TextKey::Edit)}</a>
                 <button
                     class=style::row_btn_delete
                     on:click=move |_| {
@@ -86,7 +98,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
                         delete_open.set(true);
                     }
                 >
-                    {tr(TextKey::Delete)}
+                    {text(language, TextKey::Delete)}
                 </button>
             </div>
         }

@@ -27,7 +27,9 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{media_browser_error_message, text, tr, use_i18n, TextKey, UiLanguage};
+use crate::admin::i18n::{
+    media_browser_error_text, provide_i18n_context, text, tr, use_i18n, TextKey, UiLanguage,
+};
 use crate::admin::server_fns::media_browser::{
     get_collection_detail, localize_episode_display_text, remove_items_from_collection,
     set_collection_use_custom_order, update_collection_custom_order, CollectionDetail,
@@ -108,15 +110,22 @@ fn load_collection_detail_initial(id: i64) -> Result<Option<CollectionDetail>, S
 
 #[island]
 fn CollectionDetailIsland(initial_detail: CollectionDetail) -> impl IntoView {
+    provide_i18n_context();
     let id = initial_detail.id;
     // Refresh tick — bumped after every successful mutation so the resource
     // re-runs and the grid reflects the new state.
     let refresh: RwSignal<u32> = RwSignal::new(0);
     let current_detail = RwSignal::new(initial_detail);
+    let loading_detail = RwSignal::new(false);
     let load_toast = use_toast();
     let data: LocalResource<Option<CollectionDetail>> = LocalResource::new(move || {
         let _ = refresh.get();
-        async move { load_or_notify(get_collection_detail(id).await, load_toast) }
+        async move {
+            loading_detail.set(true);
+            let result = load_or_notify(get_collection_detail(id).await, load_toast);
+            loading_detail.set(false);
+            result
+        }
     });
 
     Effect::new(move |_| {
@@ -132,6 +141,7 @@ fn CollectionDetailIsland(initial_detail: CollectionDetail) -> impl IntoView {
                     id=id
                     detail=current_detail.get()
                     refresh=refresh
+                    loading_detail=loading_detail
                 />
             }}
         </div>
@@ -146,6 +156,7 @@ fn CollectionDetailView(
     id: i64,
     detail: CollectionDetail,
     refresh: RwSignal<u32>,
+    loading_detail: RwSignal<bool>,
 ) -> impl IntoView {
     // ── Custom-order toggle ────────────────────────────────────────────
     let use_custom_order = RwSignal::new(detail.use_custom_playback_order);
@@ -169,6 +180,8 @@ fn CollectionDetailView(
         items.iter().all(|i| i.kind == "movie") && !items.is_empty()
     };
 
+    let language = use_i18n();
+
     // ── Toast ───────────────────────────────────────────────────────────
     let toast = use_toast();
 
@@ -182,7 +195,10 @@ fn CollectionDetailView(
         if let Some(res) = toggle_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push(tr(TextKey::PlaybackOrderUpdated), ToastSeverity::Success);
+                    toast.push(
+                        text(language, TextKey::PlaybackOrderUpdated),
+                        ToastSeverity::Success,
+                    );
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => {
@@ -191,8 +207,8 @@ fn CollectionDetailView(
                     toast.push(
                         format!(
                             "{}: {}",
-                            tr(TextKey::PlaybackOrderUpdateFailed),
-                            media_browser_error_message(e)
+                            text(language, TextKey::PlaybackOrderUpdateFailed),
+                            media_browser_error_text(language, &e.to_string())
                         ),
                         ToastSeverity::Error,
                     );
@@ -210,15 +226,18 @@ fn CollectionDetailView(
         if let Some(res) = remove_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push(tr(TextKey::RemovedFromCollection), ToastSeverity::Success);
+                    toast.push(
+                        text(language, TextKey::RemovedFromCollection),
+                        ToastSeverity::Success,
+                    );
                     selected.update(HashSet::clear);
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => toast.push(
                     format!(
                         "{}: {}",
-                        tr(TextKey::RemoveFailed),
-                        media_browser_error_message(e)
+                        text(language, TextKey::RemoveFailed),
+                        media_browser_error_text(language, &e.to_string())
                     ),
                     ToastSeverity::Error,
                 ),
@@ -231,13 +250,23 @@ fn CollectionDetailView(
         async move { update_collection_custom_order(id, order).await }
     });
 
+    let saving_order = Signal::derive(move || {
+        loading_detail.get() || toggle_action.pending().get() || reorder_action.pending().get()
+    });
+    let can_reorder = Signal::derive(move || {
+        supports_custom_order
+            && use_custom_order.get()
+            && !saving_order.get()
+            && selected_count.get() == 0
+    });
+
     Effect::new(move |_| {
         if let Some(Err(e)) = reorder_action.value().get() {
             toast.push(
                 format!(
                     "{}: {}",
-                    tr(TextKey::ReorderFailed),
-                    media_browser_error_message(e)
+                    text(language, TextKey::ReorderFailed),
+                    media_browser_error_text(language, &e.to_string())
                 ),
                 ToastSeverity::Error,
             );
@@ -247,6 +276,9 @@ fn CollectionDetailView(
 
     // ── Callbacks ───────────────────────────────────────────────────────
     let on_toggle = Callback::new(move |new_value: bool| {
+        if saving_order.get_untracked() {
+            return;
+        }
         use_custom_order.set(new_value);
         toggle_action.dispatch(new_value);
     });
@@ -266,35 +298,12 @@ fn CollectionDetailView(
         selected.update(HashSet::clear);
     });
 
-    // Move an item up or down within `items_signal`. We persist the new
-    // ordering across ALL items; ErsatzTV's `UpdateCollectionCustomOrder`
-    // only writes the indices that changed, but writing all of them is
-    // idempotent and keeps the index sequence dense.
-    let on_move = Callback::new(move |(row_id, direction): (i64, i32)| {
-        items_signal.update(|items| {
-            let Some(pos) = items.iter().position(|i| i.collection_item_id == row_id) else {
-                return;
-            };
-            let new_pos = if direction < 0 {
-                pos.saturating_sub(1)
-            } else {
-                (pos + 1).min(items.len().saturating_sub(1))
-            };
-            if new_pos != pos {
-                items.swap(pos, new_pos);
-            }
-        });
-        let order: Vec<i64> = items_signal.with_untracked(|items| {
-            items
-                .iter()
-                .filter(|i| i.kind == "movie")
-                .map(|i| i.collection_item_id)
-                .collect()
-        });
-        reorder_action.dispatch(order);
-    });
-
+    // Poster drag and keyboard moves share the current displayed row order.
+    // Row identities retain distinct playback overrides under ADR 0048.
     let on_reorder = Callback::new(move |order: Vec<i64>| {
+        if !can_reorder.get_untracked() {
+            return;
+        }
         items_signal.update(|items| {
             for (idx, row_id) in order.iter().enumerate() {
                 if let Some(item) = items
@@ -306,6 +315,34 @@ fn CollectionDetailView(
             }
         });
         reorder_action.dispatch(order);
+    });
+
+    let on_move = Callback::new(move |(row_id, direction): (i64, i32)| {
+        if !can_reorder.get_untracked() {
+            return;
+        }
+        let mut movies = items_signal.with_untracked(|items| {
+            items
+                .iter()
+                .filter(|item| item.kind == "movie")
+                .map(|item| (item.collection_item_id, item.custom_index))
+                .collect::<Vec<_>>()
+        });
+        movies.sort_by_key(|(_, index)| *index);
+        let mut order: Vec<i64> = movies.into_iter().map(|(id, _)| id).collect();
+        let Some(pos) = order.iter().position(|id| *id == row_id) else {
+            return;
+        };
+        let next = if direction < 0 {
+            pos.saturating_sub(1)
+        } else {
+            (pos + 1).min(order.len().saturating_sub(1))
+        };
+        if next == pos {
+            return;
+        }
+        order.swap(pos, next);
+        on_reorder.run(order);
     });
 
     let section_links = section_links(&detail.items);
@@ -320,6 +357,7 @@ fn CollectionDetailView(
             supports_custom_order=supports_custom_order
             use_custom_order=use_custom_order
             on_toggle=on_toggle
+            saving_order=saving_order
         />
 
         // ── Selection bar (visible when ≥1 selected) — always rendered
@@ -338,6 +376,7 @@ fn CollectionDetailView(
                 selected=selected
                 use_custom_order=use_custom_order
                 supports_custom_order=supports_custom_order
+                can_reorder=can_reorder
                 on_remove_one=on_remove_one
                 on_move=on_move
                 on_reorder=on_reorder
@@ -370,6 +409,7 @@ fn Header(
     supports_custom_order: bool,
     use_custom_order: RwSignal<bool>,
     on_toggle: Callback<bool>,
+    saving_order: Signal<bool>,
 ) -> impl IntoView {
     view! {
         <div
@@ -406,6 +446,7 @@ fn Header(
                     <input
                         type="checkbox"
                         prop:checked=move || use_custom_order.get()
+                        disabled=move || saving_order.get()
                         on:change=move |e| on_toggle.run(event_target_checked(&e))
                     />
                     {tr(TextKey::UseCustomPlaybackOrder)}
@@ -496,6 +537,7 @@ fn CardGrid(
     selected: RwSignal<HashSet<i64>>,
     use_custom_order: RwSignal<bool>,
     supports_custom_order: bool,
+    can_reorder: Signal<bool>,
     on_remove_one: Callback<i64>,
     on_move: Callback<(i64, i32)>,
     on_reorder: Callback<Vec<i64>>,
@@ -546,6 +588,7 @@ fn CardGrid(
                                     card=card
                                     selected=selected
                                     show_move=show_move_for_section
+                                    can_reorder=can_reorder
                                     can_move_up=can_move_up
                                     can_move_down=can_move_down
                                     on_remove_one=on_remove_one
@@ -568,6 +611,7 @@ fn SelectableCollectionCard(
     card: CollectionItemCard,
     selected: RwSignal<HashSet<i64>>,
     show_move: bool,
+    can_reorder: Signal<bool>,
     can_move_up: bool,
     can_move_down: bool,
     on_remove_one: Callback<i64>,
@@ -606,6 +650,10 @@ fn SelectableCollectionCard(
 
     let drop_order = section_order.clone();
     let on_card_drop = move || {
+        if !can_reorder.get_untracked() {
+            dragged_item.set(None);
+            return;
+        }
         let Some(source_id) = dragged_item.get_untracked() else {
             return;
         };
@@ -631,7 +679,7 @@ fn SelectableCollectionCard(
             <div class=card_style::poster>
                 {match artwork {
                     Some(url) => view! {
-                        <img src=url loading="lazy" class=card_style::poster_img alt=title_for_alt/>
+                        <img src=url loading="lazy" draggable="false" class=card_style::poster_img alt=title_for_alt/>
                     }.into_any(),
                     None => view! {
                         <div class=card_style::poster_placeholder>"🎬"</div>
@@ -653,20 +701,21 @@ fn SelectableCollectionCard(
     view! {
         <div
             class=wrap_class
-            draggable=if show_move { "true" } else { "false" }
+            data-collection-item-id=item_id
+            draggable=move || if show_move && can_reorder.get() { "true" } else { "false" }
             on:dragstart=move |_| {
-                if show_move {
+                if show_move && can_reorder.get_untracked() {
                     dragged_item.set(Some(item_id));
                 }
             }
             on:dragend=move |_| dragged_item.set(None)
             on:dragover=move |event| {
-                if show_move {
+                if show_move && can_reorder.get_untracked() {
                     event.prevent_default();
                 }
             }
             on:drop=move |event| {
-                if show_move {
+                if show_move && can_reorder.get_untracked() {
                     event.prevent_default();
                     on_card_drop();
                 }
@@ -715,7 +764,7 @@ fn SelectableCollectionCard(
                     class=style::card_btn
                     aria-label=tr(TextKey::MoveUp)
                     title=tr(TextKey::MoveUp)
-                    disabled=!can_move_up
+                    disabled=move || !can_move_up || !can_reorder.get()
                     on:click=move |e| {
                         e.stop_propagation();
                         e.prevent_default();
@@ -728,7 +777,7 @@ fn SelectableCollectionCard(
                     class=style::card_btn
                     aria-label=tr(TextKey::MoveDown)
                     title=tr(TextKey::MoveDown)
-                    disabled=!can_move_down
+                    disabled=move || !can_move_down || !can_reorder.get()
                     on:click=move |e| {
                         e.stop_propagation();
                         e.prevent_default();
@@ -808,6 +857,34 @@ fn subtitle_mode_label(mode: i32) -> Option<&'static str> {
 mod episode_subtitle_tests {
     use super::collection_item_subtitle;
     use crate::admin::i18n::UiLanguage;
+
+    #[test]
+    fn collection_order_validation_is_localized_for_all_cultures() {
+        use crate::admin::i18n::media_browser_error_text;
+
+        for code in [
+            "en-us", "nl", "de-de", "fr-fr", "it-it", "pl", "pt-br", "es-es", "es-419",
+        ] {
+            let language = UiLanguage::from_config(code);
+            let membership = "error running server function: invalid collection_item_id: Collection does not contain the selected item.";
+            let missing = "error running server function: collection with id 3160 not found";
+            assert!(
+                !media_browser_error_text(language, membership).contains("collection_item_id"),
+                "{code}"
+            );
+            assert!(
+                !media_browser_error_text(language, missing).contains("3160"),
+                "{code}"
+            );
+        }
+        assert_eq!(
+            media_browser_error_text(
+                UiLanguage::Dutch,
+                "Collection does not contain the selected item."
+            ),
+            "De collectie bevat het geselecteerde item niet."
+        );
+    }
 
     #[test]
     fn collection_episode_zero_sentinel_uses_the_active_language() {

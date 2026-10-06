@@ -2,10 +2,18 @@ feature    = 'Block scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
 status     = 'Ported'
-adr        = []
+adr        = ['0110']
 summary    = '''
 Implemented: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`. UCU-05 row 79 fixes nonpositive default-filler loops and expired-row gap detection; Reset replaces filler/history at the UTC boundary and repositions retained primary content safely. Scheduler shutdown cancels Block filler generation without persisting partial output.
 '''
+
+[[debt]]
+id = 'v111-block-programme-preservation'
+description = 'Finding 06 requires explicit Block rebuild choices that retain the published programme and resume source rotation. Ordered history restoration, release-date sorting and checkpointed randomized restoration are implemented locally. Explicit preservation and localized boundary-readiness Health now pass focused core and production SQLite restart tests; decoded native/Next handover now passes, including reversible Next cancellation/retry.'
+discovered = '2026-10-04'
+resolved = true
+adr = '0110'
+evidence = 'v111-findings-06 owns implementation and acceptance. BlockPlayoutBuilder.GetEnumerator and BlockPlayoutEnumerator are the source baseline. Causal regressions reproduced ordered and shuffled blocks repeatedly selecting the first item. Corrected core and production-builder SQLite close/reopen paths preserve all five source orders and full generated item settings. Versioned history checkpoints retain seeded/random progress and reconcile changed shuffled membership; incompatible state refuses publication. Explicit Refresh/Reset now preserve current rows/settings/history, restore boundary source state and isolate fresh Reset rotation across SQLite restart. Corrupt state refuses publication and Health reports failure/recovery in all nine cultures. The owning milestone records 56 focused checks. Decoded native and Next Block handover passes in b1444bbf-55e5-456f-b744-e92fba1e39e7: complete retained programmes, full two-second new opening and old/new audio; Next also restores exact SQL/manifest after post-replacement cancellation and retries without restarting playback. v111-findings-06 records full closeout and platform limits.'
 
 [[debt]]
 id          = 'block-reset-filler-and-build-cancellation'

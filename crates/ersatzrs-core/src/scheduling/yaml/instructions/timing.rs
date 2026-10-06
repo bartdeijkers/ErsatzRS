@@ -109,7 +109,7 @@ fn local_clock_target(
         .map(|time| time.with_timezone(&Utc))
 }
 
-fn schedule_until(
+pub(super) fn schedule_until(
     context: &mut YamlContext,
     instruction: &YamlInstruction,
     definition: &YamlPlayoutDefinition,
@@ -119,6 +119,7 @@ fn schedule_until(
         return Ok(());
     };
     while context.current_time < target {
+        let before = context.current_time;
         let Some((media_item, history_context)) = context.current_media_for_content(content) else {
             if schedule_fallback_item(context, instruction, target) {
                 continue;
@@ -149,6 +150,12 @@ fn schedule_until(
             };
             context.gaps.push(gap);
             context.current_time = target;
+        }
+        if context.current_time > before && context.current_time < target {
+            context.capture_checkpoint(
+                definition,
+                Some(super::super::checkpoints::PendingInstruction::Until(target)),
+            )?;
         }
     }
     Ok(())

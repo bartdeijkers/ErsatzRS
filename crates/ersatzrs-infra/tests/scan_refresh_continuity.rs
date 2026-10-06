@@ -3,8 +3,12 @@ mod common;
 #[path = "scan_refresh_continuity/provider_collections.rs"]
 mod provider_collections;
 
+#[path = "scan_refresh_continuity/classic_midnight.rs"]
+mod classic_midnight;
 #[path = "scan_refresh_continuity/collection_identity.rs"]
 mod collection_identity;
+#[path = "scan_refresh_continuity/deferred_save.rs"]
+mod deferred_save;
 #[path = "scan_refresh_continuity/fixed_start_clock.rs"]
 mod fixed_start_clock;
 
@@ -364,7 +368,7 @@ async fn run_classic_build(
         run_requested_playout_build(
             pool,
             &EntityLocker::new(),
-            PlayoutBuildRequest { playout_id, mode },
+            PlayoutBuildRequest::new(playout_id, mode),
             now,
             None,
         )
@@ -947,10 +951,7 @@ async fn assert_legacy_playlist_refusal(mode: PlayoutBuildMode) {
     let error = run_requested_playout_build(
         &pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, mode),
         start,
         None,
     )
@@ -1792,10 +1793,7 @@ async fn assert_yaml_legacy_history_refusal(pool: &SqlitePool, start: DateTime<U
     let error = run_requested_playout_build(
         pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, PlayoutBuildMode::Refresh),
         start,
         None,
     )
@@ -1819,10 +1817,7 @@ async fn assert_yaml_legacy_history_refusal(pool: &SqlitePool, start: DateTime<U
     run_requested_playout_build(
         pool,
         &EntityLocker::new(),
-        PlayoutBuildRequest {
-            playout_id: RELATED_PLAYOUT_ID,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset),
         start,
         None,
     )

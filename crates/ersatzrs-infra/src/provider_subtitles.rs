@@ -9,6 +9,9 @@ use url::Url;
 
 use crate::{db::DbPool, repositories::SqlxResultExt as _};
 
+#[path = "provider_subtitles_plex.rs"]
+mod plex;
+
 const MAX_BYTES: usize = 32 * 1024 * 1024;
 
 /// Bounded provider response ready for a playback-owned subtitle artifact.
@@ -18,7 +21,7 @@ pub struct ProviderSubtitleContent {
 }
 
 /// Prepare a provider sidecar as a complete local playback artifact.
-/// Existing local/Plex/embedded paths are returned unchanged. Stored provider
+/// Existing local/embedded paths are returned unchanged. Stored provider
 /// rows retain their original identity; only the returned playback value changes.
 ///
 /// # Errors
@@ -30,7 +33,13 @@ pub async fn prepare(
 ) -> Result<crate::playback::PlaybackSubtitle> {
     let original = binding(pool, subtitle.id).await?;
     if original.as_ref().is_some_and(|binding| {
-        binding.stream_index != subtitle.stream_index || binding.source_id != subtitle.path
+        binding.stream_index != subtitle.stream_index
+            || binding.source_id
+                != if binding.kind == RemoteMediaSourceKind::Plex {
+                    subtitle.path.as_deref().and_then(plex::stream_path)
+                } else {
+                    subtitle.path.clone()
+                }
     }) {
         return Err(unavailable());
     }
@@ -85,7 +94,7 @@ pub async fn prepare(
 
 /// Retrieve an external subtitle using its owning server's current credentials.
 /// Redirects are refused; credentials never enter the URL or returned errors.
-/// Local, Plex and embedded/generated subtitles return `None`.
+/// Local and embedded/generated subtitles return `None`.
 ///
 /// # Errors
 /// Fails closed on invalid ownership, authentication, HTTP failure, responses
@@ -143,7 +152,10 @@ async fn fetch_inner(pool: &DbPool, subtitle_id: i64) -> Result<Option<ProviderS
             .map_err(|_| unavailable())?;
             (config.address, "X-Emby-Token", credential)
         }
-        RemoteMediaSourceKind::Plex => return Err(unavailable()),
+        RemoteMediaSourceKind::Plex => {
+            let config = plex::connection(pool, binding.media_source_id).await?;
+            (config.uri, "X-Plex-Token", config.token)
+        }
     };
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -204,6 +216,12 @@ impl ProviderSubtitleBinding {
         {
             return Err(unavailable());
         }
+        if self.kind == RemoteMediaSourceKind::Plex {
+            let path = self.source_id.as_deref().ok_or_else(unavailable)?;
+            let path = plex::stream_path(path).ok_or_else(unavailable)?;
+            url.set_path(&path);
+            return Ok(url);
+        }
         let source = match self.kind {
             RemoteMediaSourceKind::Jellyfin => &self.item_id,
             RemoteMediaSourceKind::Emby => self.source_id.as_ref().ok_or_else(unavailable)?,
@@ -231,12 +249,15 @@ impl ProviderSubtitleBinding {
     }
 }
 
-/// Find a sidecar's owning Jellyfin/Emby server and provider item identity.
-/// Local files, Plex and embedded/generated subtitles keep their existing paths.
+/// Find a sidecar's owning Plex/Jellyfin/Emby server and provider item identity.
+/// Local files and embedded/generated subtitles keep their existing paths.
 ///
 /// # Errors
 /// Returns a redacted error for missing or ambiguous provider ownership.
 pub async fn binding(pool: &DbPool, subtitle_id: i64) -> Result<Option<ProviderSubtitleBinding>> {
+    if let Some(binding) = plex::binding(pool, subtitle_id).await? {
+        return Ok(Some(binding));
+    }
     let rows = sqlx::query(
         r#"
         WITH Owner AS (

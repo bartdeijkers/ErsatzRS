@@ -1,5 +1,5 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -324,6 +324,288 @@ INSERT INTO "Channel" (
 `);
   return { id, name, number };
 }
+
+function seedProgrammeGraphics(testInfo: TestInfo, anchor: Date) {
+  const clip = makeCalibrationClip(testInfo, 'color=c=black:size=640x360:rate=30');
+  const channels = [20, 21, 22].map((ordinal) => seedChannel(testInfo, clip, ordinal));
+  const channel = channels[0];
+  const graphicId = channel.id + 400;
+  const template = '{{ headline }}|{{ CurrentProgramme.Title | default("", true) }}|'
+    + '{{ NextProgramme.Title | default("", true) }}|'
+    + '{{ ContinuingProgramme.Title | default("", true) }}|{{ Epg[0].Title }}';
+  const config = JSON.stringify({ kind: 'text', renderer: 'drawtext', text: template,
+    drawtext: { font_file: null, refresh_interval_milliseconds: 250,
+      reload_interval_frames: 1, metadata_refresh_interval_seconds: 5 },
+    base_style: 'proof', styles: [{ name: 'proof', font_size: 84, text_color: '#ffffff' }] });
+  const titles = ['FIRST PROGRAMME', 'SECOND PROGRAMME', 'JUNCTION'];
+  const segments = [
+    [0, 5, 1, 1, 2, 0], [5, 25, 1, 0, 0, 0], [25, 30, 1, 2, 2, 0],
+    [30, 50, 1, 0, 0, 20], [50, 55, 1, 3, 2, 0],
+    [55, 60, 2, 1, 2, 0], [60, 80, 2, 0, 1, 0],
+  ];
+  sqlite(`
+${channels.map((row, index) => `UPDATE "MovieMetadata" SET "Title"=${sqlString(titles[index])}
+  WHERE "MovieId"=${row.id + 103};`).join('\n')}
+DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${channel.id + 1};
+DELETE FROM "PlayoutGap" WHERE "PlayoutId"=${channel.id + 1};
+DELETE FROM "PlayoutItemGraphicsElement" WHERE "GraphicsElementId"=${graphicId};
+DELETE FROM "GraphicsElement" WHERE "Id"=${graphicId};
+UPDATE "FFmpegProfile" SET "HardwareAcceleration"=0, "VideoPreset"='ultrafast'
+  WHERE "Id"=${channel.id + 200};
+INSERT INTO "GraphicsElement" ("Id", "Name", "Kind", "Config", "EpgEntries")
+VALUES (${graphicId}, 'Programme context proof', 1, ${sqlString(config)}, 8);
+${segments.map(([begin, end, group, filler, media, source], index) => `
+INSERT INTO "PlayoutItem" ("Id", "PlayoutId", "MediaItemId", "Start", "Finish",
+  "InPoint", "OutPoint", "GuideGroup", "FillerKind", "DisableWatermarks")
+VALUES (${channel.id + 600 + index}, ${channel.id + 1}, ${channels[media].id + 103},
+  '${dbTime(new Date(anchor.getTime() + begin * 1000)).replace(/\.000$/, '')}',
+  '${dbTime(new Date(anchor.getTime() + end * 1000)).replace(/\.000$/, '')}',
+  '00:00:${source.toString().padStart(2, '0')}',
+  '00:00:${(source + end - begin).toString().padStart(2, '0')}', ${group}, ${filler}, 0);
+INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId", "Variables")
+VALUES (${channel.id + 600 + index}, ${graphicId}, '{"headline":"EXPLICIT"}');
+`).join('\n')}
+`);
+  return { channel, graphicId, template };
+}
+
+function programmeTimeline(playoutId: number): string {
+  return sqlite(`SELECT json_group_array(json_object('id', pi."Id", 'start', pi."Start",
+    'finish', pi."Finish", 'in', pi."InPoint", 'out', pi."OutPoint", 'media', pi."MediaItemId",
+    'variables', pg."Variables")) FROM "PlayoutItem" pi
+    LEFT JOIN "PlayoutItemGraphicsElement" pg ON pg."PlayoutItemId"=pi."Id"
+    WHERE pi."PlayoutId"=${playoutId} ORDER BY pi."Start", pi."Id";`);
+}
+
+function recordProgrammeBroadcast(testInfo: TestInfo, number: string) {
+  const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
+    ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
+  const path = testInfo.outputPath('iptv-programme-transition.mkv');
+  const base = process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409';
+  const child = spawn(ffmpeg, ['-v', 'error', '-y', '-analyzeduration', '1000000',
+    '-probesize', '1000000', '-rw_timeout', '15000000', '-i',
+    `${base}/iptv/channel/${number}.ts?mode=ts`, '-t', '30', '-c', 'copy', path]);
+  let stderr = '';
+  child.stderr.on('data', (data: Buffer) => { stderr = (stderr + data.toString()).slice(-65536); });
+  const timer = setTimeout(() => {
+    stderr += '\nProgramme capture exceeded its 45-second deadline.';
+    child.kill('SIGKILL');
+  }, 45_000);
+  const result = new Promise<number | null>((resolve) => {
+    child.on('error', (error) => { stderr += error.message; clearTimeout(timer); resolve(null); });
+    child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
+  });
+  return {
+    async decode() {
+      expect(await result, stderr).toBe(0);
+      execFileSync(ffmpeg, ['-v', 'error', '-i', path, '-f', 'null', '-'], { timeout: 20_000 });
+      for (const [time, label] of [['0.5', 'first'], ['26', 'second']]) {
+        const framePath = testInfo.outputPath(`iptv-${label}-programme.png`);
+        execFileSync(ffmpeg, ['-v', 'error', '-y', '-ss', time, '-i', path,
+          '-frames:v', '1', framePath], { timeout: 15_000 });
+        expect(existsSync(framePath), `${label} regular IPTV frame was not decoded`).toBe(true);
+      }
+    },
+    async stop() { child.kill('SIGTERM'); await result; },
+  };
+}
+
+test.describe('finding 04 programme graphics acceptance', () => {
+  test.skip(!dbPath, 'Requires a disposable migrated database');
+
+  test('historical editor preview preserves split programmes, defaults and raw Epg', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    await forceEnglish(page);
+    const anchor = new Date('2026-04-15T10:00:00Z');
+    const { channel, graphicId, template } = seedProgrammeGraphics(testInfo, anchor);
+    const before = programmeTimeline(channel.id + 1);
+    const errors: string[] = [];
+    page.on('pageerror', (error) => {
+      // Firefox cancels the old document's requests during the intentional reload.
+      if (error.name !== 'AbortError' || !/operation was aborted/i.test(error.message)) {
+        errors.push(error.message);
+      }
+    });
+    await page.goto(`/graphics-elements/${graphicId}`);
+    await waitForHydration(page);
+    const preview = page.locator('[data-graphics-context-preview]').filter({ visible: true });
+    await preview.locator('[data-graphics-preview-channel]').selectOption(channel.id.toString());
+    for (const [seconds, expected] of [
+      [1, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||JUNCTION'],
+      [10, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||FIRST PROGRAMME'],
+      [26, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION'],
+      [52, 'EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME||JUNCTION'],
+      [56, 'EXPLICIT|SECOND PROGRAMME|||JUNCTION'],
+      [65, 'EXPLICIT|SECOND PROGRAMME|||SECOND PROGRAMME'],
+    ] as const) {
+      await preview.locator('[data-graphics-preview-time]').fill(
+        new Date(anchor.getTime() + seconds * 1000).toISOString());
+      await preview.locator('[data-graphics-preview-submit]').click();
+      await expect(preview.locator('[data-graphics-preview-text]')).toHaveText(expected);
+      await expect(preview.locator('[data-graphics-preview-error]')).toBeHidden();
+    }
+    await page.locator('[data-graphics-element-renderer-select]').filter({ visible: true }).selectOption('drawvg');
+    await preview.locator('[data-graphics-preview-time]').fill('2026-04-15T12:00:26+02:00');
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    const editor = page.locator('[data-graphics-element-editor]').filter({ visible: true });
+    await editor.locator('[data-graphics-element-text]').fill(`DRAFT|${template}`);
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('DRAFT|EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    await editor.locator('[data-graphics-element-text]').fill(template);
+    await expect(editor.locator('[data-graphics-metadata-refresh]')).toHaveValue('5');
+    await expect(editor.locator('[name="preview_channel"]')).toHaveValue(channel.id.toString());
+    await expect(editor.locator('[name="preview_time"]')).toHaveValue('2026-04-15T12:00:26+02:00');
+    await editor.locator('[name="preview_width"]').fill('320');
+    await editor.locator('[name="preview_height"]').fill('180');
+    // Render the changing programme itself, rather than clipping both images to
+    // the identical explicit prefix at the saved 84-pixel type size.
+    await editor.locator('[data-graphics-element-text]').fill('{{ CurrentProgramme.Title | default("", true) }}');
+    await editor.locator('[name="font_size"]').fill('14');
+    const nativeOutputs: string[] = [];
+    for (const seconds of [10, 65]) {
+      await editor.locator('[name="preview_time"]').fill(new Date(anchor.getTime() + seconds * 1000).toISOString());
+      const rendered = page.waitForResponse(response => response.url().includes('/admin-api/graphics-elements/author')
+        && response.request().postData()?.includes('intent=preview') === true, { timeout: 15000 });
+      await editor.locator('[data-graphics-render-submit]').click();
+      const response = await rendered;
+      expect(response.status()).toBe(200);
+      const freshSource = (await response.text()).match(/src="(data:image\/png;base64,[^"]+)"/)?.[1];
+      expect(freshSource).toBeTruthy();
+      const image = page.frameLocator('[data-graphics-render-frame]').locator('[data-graphics-render-output]');
+      await expect(image).toHaveAttribute('src', freshSource!);
+      await expect(image).toBeVisible();
+      const source = (await image.getAttribute('src'))!;
+      const png = Buffer.from(source.split(',')[1], 'base64');
+      const pngPath = testInfo.outputPath(`historical-native-${seconds}.png`);
+      writeFileSync(pngPath, png);
+      const decoded = execFileSync(process.env.ErsatzRS_FFMPEG__PATH ?? 'ffmpeg', ['-v', 'error', '-i', pngPath, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', 'pipe:1'], { timeout: 15000 });
+      expect(decoded.length).toBe(320 * 180 * 4);
+      expect(decoded.some((value, index) => index % 4 === 3 && value > 0)).toBe(true);
+      nativeOutputs.push(source);
+    }
+    expect(nativeOutputs[0]).not.toBe(nativeOutputs[1]);
+    await editor.locator('[data-graphics-element-text]').fill(template);
+    await editor.locator('[name="font_size"]').fill('84');
+    await editor.locator('[name="preview_time"]').fill('2026-04-15T12:00:26+02:00');
+    await editor.locator('[data-save-graphics-element]').click();
+    await expect(page).toHaveURL(new RegExp(`/graphics-elements/${graphicId}\\?saved=1$`));
+    expect(sqlite(`SELECT json_extract("Config", '$.drawtext.metadata_refresh_interval_seconds')
+      FROM "GraphicsElement" WHERE "Id"=${graphicId};`)).toBe('5');
+    await page.request.post('/admin-api/settings/ui/save', {
+      form: { is_dark_mode: 'true', language: 'nl' }, maxRedirects: 0,
+    });
+    await page.reload();
+    await waitForHydration(page);
+    await expect(preview.locator('h2')).toHaveText('Voorbeeld van programmatekst');
+    await preview.locator('[data-graphics-preview-channel]').selectOption(channel.id.toString());
+    await preview.locator('[data-graphics-preview-time]').fill('2026-04-15T12:00:26+02:00');
+    await preview.locator('[data-graphics-preview-submit]').click();
+    await expect(preview.locator('[data-graphics-preview-text]'))
+      .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const navigation = page.getByRole('button', { name: 'Navigatie omschakelen' });
+    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(() => page.locator('[data-nav-drawer]')
+      .evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await preview.screenshot({ path: testInfo.outputPath('historical-editor-mobile.png') });
+    const context = await browser.newContext({ baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409', javaScriptEnabled: false });
+    try {
+      const noScript = await context.newPage();
+      await noScript.goto(`/graphics-elements/${graphicId}?preview_channel=${channel.id}&preview_time=2026-04-15T10%3A00%3A26Z`);
+      await expect(noScript.locator('[data-graphics-preview-text]').filter({ visible: true }))
+        .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
+      const nativeEditor = noScript.locator('[data-graphics-element-editor]').filter({ visible: true });
+      await expect(nativeEditor.locator('[name="preview_channel"]')).toHaveValue(channel.id.toString());
+      await expect(nativeEditor.locator('[name="preview_time"]')).toHaveValue('2026-04-15T10:00:26Z');
+      await nativeEditor.locator('[data-save-graphics-element]').click();
+      await expect(noScript).toHaveURL(new RegExp(`/graphics-elements/${graphicId}\\?saved=1$`));
+
+    } finally { await context.close(); }
+    expect(programmeTimeline(channel.id + 1)).toBe(before);
+    expect(errors).toEqual([]);
+  });
+
+  test('decodes native programme titles across a served transition', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await forceEnglish(page);
+    const anchor = new Date(Date.now() - 2000);
+    const { channel, graphicId } = seedProgrammeGraphics(testInfo, anchor);
+    // Two complete occurrences make the broadcast boundary independent of the
+    // editor's historical fixture. The black source contains no glyphs.
+    const first = channel.id + 601;
+    const second = channel.id + 606;
+    sqlite(`
+DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${channel.id + 1} AND "Id" NOT IN (${first}, ${second});
+UPDATE "PlayoutItem" SET "Start"='${dbTime(anchor)}',
+  "Finish"='${dbTime(new Date(anchor.getTime() + 24000))}', "InPoint"='00:00:00', "OutPoint"='00:00:24'
+  WHERE "Id"=${first};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(anchor.getTime() + 24000))}',
+  "Finish"='${dbTime(new Date(anchor.getTime() + 70000))}', "InPoint"='00:00:00', "OutPoint"='00:00:46'
+  WHERE "Id"=${second};
+UPDATE "GraphicsElement" SET "Config"=json_set("Config", '$.text',
+  'ON AIR {{ CurrentProgramme.Title | default("", true) }}') WHERE "Id"=${graphicId};
+`);
+    const before = programmeTimeline(channel.id + 1);
+    const limitKey = 'ffmpeg.segmenter.active_transcode_limit';
+    const originalLimit = sqlite(`SELECT quote("Value") FROM "ConfigElement" WHERE "Key"='${limitKey}';`);
+    // Each of the two native outputs needs capacity for its boundary handover.
+    sqlite(`UPDATE "ConfigElement" SET "Value"='4' WHERE "Key"='${limitKey}';`);
+    const root = page.locator('.channel-watch-js [data-channel-preview]');
+    const video = root.locator('video');
+    const frame = () => video.evaluate((element: HTMLVideoElement) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640; canvas.height = 360;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(element, 0, 0, 640, 360);
+      const pixels = context.getImageData(0, 0, 640, 360).data;
+      let white = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] > 180 && pixels[i + 1] > 180 && pixels[i + 2] > 180) white++;
+      }
+      return { white, png: canvas.toDataURL('image/png'), time: element.currentTime };
+    });
+    let recording: ReturnType<typeof recordProgrammeBroadcast> | undefined;
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState),
+        { timeout: 45_000 }).toBeGreaterThanOrEqual(2);
+      await expect.poll(async () => (await frame()).white).toBeGreaterThan(100);
+      const initial = await frame();
+      recording = recordProgrammeBroadcast(testInfo, channel.number);
+      writeFileSync(testInfo.outputPath('served-first-programme.png'), Buffer.from(initial.png.split(',')[1], 'base64'));
+      await expect.poll(async () => Math.abs((await frame()).white - initial.white),
+        { timeout: 60_000 }).toBeGreaterThan(150);
+      const next = await frame();
+      writeFileSync(testInfo.outputPath('served-second-programme.png'), Buffer.from(next.png.split(',')[1], 'base64'));
+      expect(next.time).toBeGreaterThan(initial.time + 2);
+      expect(next.white).toBeGreaterThan(100);
+      await recording.decode();
+      expect(programmeTimeline(channel.id + 1)).toBe(before);
+      writeFileSync(testInfo.outputPath('served-transition.json'), JSON.stringify({
+        expectedTitles: ['FIRST PROGRAMME', 'SECOND PROGRAMME'],
+        first: { whitePixels: initial.white, decodedTime: initial.time },
+        second: { whitePixels: next.white, decodedTime: next.time }, timelinePreserved: true,
+        regularIptvCaptureSeconds: 30, regularIptvFullyDecoded: true,
+      }, null, 2));
+    } finally {
+      try {
+        await recording?.stop();
+        if (await root.getByRole('button', { name: 'Stop Preview', exact: true }).isVisible()) {
+          await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+          await stopFixtureTranscode(page, channel.number);
+        }
+      } finally {
+        sqlite(`UPDATE "ConfigElement" SET "Value"=${originalLimit} WHERE "Key"='${limitKey}';`);
+      }
+    }
+  });
+});
 
 function programmeStartMinutes(title: string): number {
   const match = title.match(/·\s*(\d{2}):(\d{2})/);
@@ -950,6 +1232,71 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     expect(errors).toEqual([]);
   });
 
+  test('shows the real transcode error when decoded preview video is an error slate', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const clipPath = makeCalibrationClip(testInfo, 'color=c=blue:s=640x360:r=30');
+    const channel = seedChannel(testInfo, clipPath, 5);
+    const elementId = channel.id + 500;
+    const config = JSON.stringify({ kind: 'script', command: "return 'deliberately_invalid_vgs_command'", args: [] });
+    sqlite(`
+      INSERT INTO "GraphicsElement" ("Id", "Kind", "Name", "Config")
+      VALUES (${elementId}, 4, 'Synthetic invalid drawvg', ${sqlString(config)});
+      INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId")
+      SELECT "Id", ${elementId} FROM "PlayoutItem" WHERE "PlayoutId" = ${channel.id + 1};
+    `);
+    await forceEnglish(page);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (/failed_to_cast_marker_node|hydration/i.test(message.text()) && message.type() === 'error') errors.push(message.text());
+    });
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      const root = page.locator('[data-channel-preview]');
+      await expect(root).toHaveAttribute('data-preview-state', 'live', { timeout: 60_000 });
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 20_000 });
+      const warning = root.locator('[data-preview-output-error]');
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText('Error slate: programme playback failed.');
+      await expect(warning).toContainText(/drawvg|deliberately_invalid_vgs_command|Invalid argument/i);
+      await expect(root.locator('[data-preview-output-unknown]')).not.toBeVisible();
+      expect(await root.locator('video').evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
+      // Decode/playback success is intentionally simultaneous with a failed programme.
+      await warning.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath('channel-error-slate.png'), fullPage: true, animations: 'disabled' });
+      const statusRoute = '**/admin-api/get_channel_preview_output*';
+      await page.route(statusRoute, route => route.abort());
+      await expect(root).toHaveAttribute('data-preview-output', 'unknown', { timeout: 10_000 });
+      await expect(root.locator('[data-preview-output-unknown]')).toBeVisible();
+      await expect(warning).not.toBeVisible();
+      await page.unroute(statusRoute);
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 10_000 });
+      await page.request.post('/admin-api/settings/ui/save', {
+        form: { is_dark_mode: 'true', language: 'nl' }, maxRedirects: 0,
+      });
+      await page.reload();
+      await waitForHydration(page);
+      await expect(root).toHaveAttribute('data-preview-output', 'error-slate', { timeout: 30_000 });
+      await expect(warning).toContainText('Foutbeeld: het programma kan niet worden afgespeeld.');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect.poll(() => warning.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 0 && rect.right <= window.innerWidth
+          && document.documentElement.scrollWidth <= window.innerWidth;
+      })).toBe(true);
+      await warning.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath('channel-error-slate-mobile.png'), fullPage: true, animations: 'disabled' });
+      expect(errors).toEqual([]);
+    } finally {
+      await forceEnglish(page);
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await page.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+      await stopFixtureTranscode(page, channel.number);
+    }
+  });
+
   test('plays a real H.264/AAC preview derivative through Hls.js', async ({
     page,
   }, testInfo) => {
@@ -976,47 +1323,217 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
       }
     });
 
-    await page.goto(`/channels/${channel.id}/watch`);
-    await waitForHydration(page);
-    await page.evaluate(() => {
-      const root = document.querySelector('[data-channel-preview]');
-      (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates = [];
-      root?.addEventListener('ersatzrs-preview-state', ((event: CustomEvent) => {
-        if (['network', 'media', 'unsupported'].includes(event.detail.state)) {
-          (window as Window & { __previewFatalStates: unknown[] }).__previewFatalStates.push(
-            event.detail,
-          );
-        }
-      }) as EventListener);
-    });
-
     const previewRoot = page.locator('[data-channel-preview]');
-    const video = previewRoot.locator('video');
-    await expect(video).toHaveAttribute('autoplay', '');
-    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
-    await expect(previewRoot).toHaveAttribute('data-preview-engine', 'hlsjs', {
-      timeout: 30_000,
-    });
-    await expect
-      .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), {
-        timeout: 60_000,
-      })
-      .toBeGreaterThanOrEqual(2);
-    const startTime = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
-    await expect
-      .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime), {
-        timeout: 20_000,
-      })
-      .toBeGreaterThanOrEqual(startTime + 2);
-    await expect(previewRoot).toHaveAttribute('data-preview-state', 'live');
-    expect(previewRequests.variant).toBeGreaterThan(0);
-    expect(previewRequests.segments).toBeGreaterThan(0);
-    expect(
-      await page.evaluate(
-        () =>
-          (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates ?? [],
-      ),
-    ).toEqual([]);
-    expect(fatalErrors).toEqual([]);
+    try {
+      await page.goto(`/channels/${channel.id}/watch`);
+      await waitForHydration(page);
+      await page.evaluate(() => {
+        const root = document.querySelector('[data-channel-preview]');
+        (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates = [];
+        root?.addEventListener('ersatzrs-preview-state', ((event: CustomEvent) => {
+          if (['network', 'media', 'unsupported'].includes(event.detail.state)) {
+            (window as Window & { __previewFatalStates: unknown[] }).__previewFatalStates.push(
+              event.detail,
+            );
+          }
+        }) as EventListener);
+      });
+
+      const video = previewRoot.locator('video');
+      await expect(video).toHaveAttribute('autoplay', '');
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true);
+      await expect(previewRoot).toHaveAttribute('data-preview-engine', 'hlsjs', {
+        timeout: 30_000,
+      });
+      await expect
+        .poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), {
+          timeout: 60_000,
+        })
+        .toBeGreaterThanOrEqual(2);
+      const startTime = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
+      await expect
+        .poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime), {
+          timeout: 20_000,
+        })
+        .toBeGreaterThanOrEqual(startTime + 2);
+      await expect(previewRoot).toHaveAttribute('data-preview-state', 'live');
+      await expect(previewRoot).toHaveAttribute('data-preview-output', 'stream', { timeout: 15_000 });
+      await expect(previewRoot.locator('[data-preview-output-error]')).not.toBeVisible();
+      expect(previewRequests.variant).toBeGreaterThan(0);
+      expect(previewRequests.segments).toBeGreaterThan(0);
+      expect(
+        await page.evaluate(
+          () =>
+            (window as Window & { __previewFatalStates?: unknown[] }).__previewFatalStates ?? [],
+        ),
+      ).toEqual([]);
+      expect(fatalErrors).toEqual([]);
+    } finally {
+      await previewRoot.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+      await stopFixtureTranscode(page, channel.number);
+    }
   });
+});
+
+async function captureJpegXlStream(ffmpeg: string, url: string, output: string) {
+  const started = Date.now();
+  const samples: { wallSeconds: number; mediaSeconds: number }[] = [];
+  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', '0.1',
+    '-progress', 'pipe:1', '-analyzeduration', '1000000', '-probesize', '1000000',
+    '-rw_timeout', '15000000', '-i', url, '-t', '8', '-c', 'copy', output],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+  let pending = '', stderr = '', expired = false;
+  child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (data: string) => {
+    pending += data;
+    let newline: number;
+    while ((newline = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+      if (line.startsWith('out_time_us=')) {
+        const mediaSeconds = Number(line.slice('out_time_us='.length)) / 1_000_000;
+        if (Number.isFinite(mediaSeconds) && mediaSeconds > 0) {
+          samples.push({ wallSeconds: (Date.now() - started) / 1000, mediaSeconds });
+        }
+      }
+    }
+    if (pending.length > 65536 || samples.length > 512) child.kill('SIGKILL');
+  });
+  child.stderr.on('data', (data: string) => { stderr = (stderr + data).slice(-65536); });
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => { expired = true; child.kill('SIGKILL'); }, 15000);
+    child.once('error', (error) => { clearTimeout(timer); reject(error); });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (expired) reject(new Error('native served JPEG XL capture exceeded 15 seconds'));
+      else if (code !== 0) reject(new Error(`native capture exited ${code}: ${stderr}`));
+      else resolve();
+    });
+  });
+  return { wallSeconds: (Date.now() - started) / 1000, samples };
+}
+
+test('finding 09 decodes compact JPEG XL in a full native broadcast graph', async ({ page }, testInfo) => {
+  test.skip(!dbPath, 'Requires an isolated migrated database');
+  test.setTimeout(120_000);
+  const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? 'ffmpeg';
+  const clip = testInfo.outputPath('jxl-programme-1080p.mp4');
+  const animation = testInfo.outputPath('compact-alpha-animation.jxl');
+  // Real 1080p H.264/AAC decoding and three full-frame alpha carriers exercise
+  // the complete production graph, including the area that made geq expensive.
+  execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i',
+    'testsrc2=s=1920x1080:r=25,drawbox=x=0:y=0:w=300:h=150:color=black:t=fill',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '15',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', clip],
+    { timeout: 15000 });
+  execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i',
+    'color=c=black@0:s=1920x1080:r=25:duration=1,format=rgba', '-vf',
+    "drawtext=fontfile=assets/fonts/Roboto-Regular.ttf:text='%{n}':x=30:y=30:fontsize=90:fontcolor=white,colorchannelmixer=aa=0.5",
+    '-c:v', 'libjxl_anim', '-effort', '1', '-distance', '0', '-f', 'image2pipe', animation],
+    { timeout: 15000 });
+  const channel = seedChannel(testInfo, clip, 29);
+  const anchor = new Date(Date.now() - 2450);
+  const playout = channel.id + 1;
+  const graphic = channel.id + 500;
+  const config = JSON.stringify({ kind: 'motion', video_path: animation,
+    start_seconds: 0, hold_seconds: 0, end_behavior: 'Loop' });
+  sqlite(`
+INSERT INTO "Resolution" ("Id","Width","Height","Name") VALUES (${channel.id + 201},1920,1080,'JPEG XL proof');
+UPDATE "Channel" SET "StreamingMode"=1 WHERE "Id"=${channel.id};
+UPDATE "FFmpegProfile" SET "ResolutionId"=${channel.id + 201},"HardwareAcceleration"=0,"VideoPreset"='ultrafast',"VideoBitrate"=8000,"NormalizeFramerate"=1
+ WHERE "Id"=${channel.id + 200};
+UPDATE "MediaVersion" SET "Width"=1920,"Height"=1080,"RFrameRate"='25/1',"Duration"='00:00:15' WHERE "Id"=${channel.id + 105};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(anchor)}',"Finish"='${dbTime(new Date(anchor.getTime()+60000))}',"InPoint"='00:00:00',"OutPoint"='00:01:00' WHERE "Id"=${channel.id + 2};
+UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(anchor.getTime()+60000))}',"Finish"='${dbTime(new Date(anchor.getTime()+120000))}' WHERE "Id"=${channel.id + 3};
+${[0,1,2].map((index) => `
+INSERT INTO "GraphicsElement" ("Id","Name","Kind","Config","Location","HorizontalMarginPercent","VerticalMarginPercent","OpacityExpression","ZIndex")
+ VALUES (${graphic+index},'Native JXL carrier ${index}',3,${sqlString(config)},0,0,0,'content_seconds < 7.5',${index});
+INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") VALUES (${channel.id+2},${graphic+index});`).join('\n')}
+`);
+  await page.goto(`/channels/${channel.id}`);
+  await expect(page.locator('input[name="name"]')).toHaveValue(channel.name);
+  // The existing MPEG troubleshooting report identifies the exact private
+  // HTTP producer used by ordinary IPTV. Keep public playback proof too: its
+  // wrapper deliberately paces delivery at 1x and cannot measure spare capacity.
+  const diagnostic = await page.request.get(`/system/troubleshooting/mpeg?channel=${channel.number}&mode=internal-legacy&duration=1`);
+  expect(diagnostic.ok()).toBe(true);
+  const producerUrl = (await diagnostic.text()).match(/http:\/\/127\.0\.0\.1:\d+\/ffmpeg\/stream\/\d+/)?.[0];
+  expect(producerUrl, 'existing native MPEG report must expose its real sample URL').toBeTruthy();
+  const base = process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409';
+  for (const [label, url] of [
+    ['producer', producerUrl!],
+    ['iptv', `${base}/iptv/channel/${channel.number}.ts?mode=ts-legacy`],
+  ]) {
+    const actualAnchor = new Date(Date.now() - 2450);
+    sqlite(`UPDATE "PlayoutItem" SET "Start"='${dbTime(actualAnchor)}',"Finish"='${dbTime(new Date(actualAnchor.getTime()+60000))}' WHERE "Id"=${channel.id+2};
+  UPDATE "PlayoutItem" SET "Start"='${dbTime(new Date(actualAnchor.getTime()+60000))}',"Finish"='${dbTime(new Date(actualAnchor.getTime()+120000))}' WHERE "Id"=${channel.id+3};`);
+    const before = programmeTimeline(playout);
+    const capture = testInfo.outputPath(`served-jxl-${label}-1080p.mkv`);
+    const { wallSeconds, samples } = await captureJpegXlStream(
+      ffmpeg, url, capture,
+    );
+    writeFileSync(testInfo.outputPath(`served-jxl-${label}-progress.json`), JSON.stringify(samples, null, 2));
+    execFileSync(ffmpeg, ['-v', 'error', '-i', capture, '-f', 'null', '-'], { timeout: 15000 });
+    const frames = execFileSync(ffmpeg, ['-v', 'error', '-i', capture,
+      '-vf', 'crop=300:150:0:0', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'],
+      { timeout: 15000, maxBuffer: 64*1024*1024 });
+    const frameBytes = 300*150*3;
+    expect(frames.length % frameBytes).toBe(0);
+    const count = frames.length / frameBytes;
+    expect(count).toBeGreaterThanOrEqual(195);
+    const peaks: number[] = [], white: number[] = [];
+    for (let index=0; index<count; index++) {
+      const data = frames.subarray(index*frameBytes,(index+1)*frameBytes);
+      let peak=0, bright=0;
+      for (let pixel=0;pixel<data.length;pixel+=3) { peak=Math.max(peak,data[pixel]); if(data[pixel]>170&&data[pixel+1]>170&&data[pixel+2]>170) bright++; }
+      peaks.push(peak); white.push(bright);
+    }
+    const sourceFrames = execFileSync(ffmpeg,['-v','error','-i',animation,
+      '-vf','crop=300:150:0:0','-pix_fmt','rgba','-f','rawvideo','pipe:1'],{timeout:15000,maxBuffer:8*1024*1024});
+    expect(sourceFrames.length).toBe(25*300*150*4);
+    const scores = Array.from({length:25},(_,frame) => {
+      let error=0;
+      for(let pixel=0;pixel<300*150;pixel++) {
+        const sourcePixel=frame*300*150*4+pixel*4;
+        const alpha=sourceFrames[sourcePixel+3]/255;
+        const predicted=sourceFrames[sourcePixel]*(1-Math.pow(1-alpha,3));
+        error+=Math.abs(frames[pixel*3]-predicted);
+      }
+      return error/(300*150);
+    });
+    const firstSourceFrame = scores.indexOf(Math.min(...scores));
+    expect(firstSourceFrame, 'ordinary native playback must join the running JXL phase instead of restarting frame zero').not.toBe(0);
+    expect(firstSourceFrame).toBeGreaterThanOrEqual(10);
+    expect(Math.min(...scores), 'decoded served glyph must match an actual source animation frame').toBeLessThan(5);
+    expect(Math.max(...peaks.slice(0,40))).toBeGreaterThan(180);
+    expect(Math.max(...peaks.slice(0,40))).toBeLessThan(250);
+    expect(new Set(white.slice(0,40)).size).toBeGreaterThan(5);
+    expect(Math.max(...peaks.slice(-40))).toBeLessThan(35);
+    // Measure live delivery while all three carriers are active. The total
+    // request time separately includes bounded probes and legacy demuxer startup;
+    // it is startup latency, not the running graph's sustainable throughput.
+    const activeSamples = samples.filter((sample) => sample.mediaSeconds >= 0.5 && sample.mediaSeconds <= 4.5);
+    expect(activeSamples.length).toBeGreaterThanOrEqual(6);
+    const firstSample = activeSamples[0], lastSample = activeSamples.at(-1)!;
+    const measuredMediaSeconds = lastSample.mediaSeconds - firstSample.mediaSeconds;
+    expect(measuredMediaSeconds).toBeGreaterThanOrEqual(2.5);
+    const speed = measuredMediaSeconds / (lastSample.wallSeconds - firstSample.wallSeconds);
+    if (label === 'producer') {
+      expect(speed, 'actual full native HTTP graph capacity with all three carriers active').toBeGreaterThanOrEqual(1);
+    } else {
+      // The public wrapper uses -readrate 1.0. At 25 fps, reported media progress
+      // is quantized to 40 ms; require realtime delivery within one output frame.
+      expect(measuredMediaSeconds + 1 / 25).toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
+    }
+    expect(programmeTimeline(playout)).toBe(before);
+    for(const [time,state] of [['0.4','visible'],['7.2','clear']]) {
+      const image = testInfo.outputPath(`served-jxl-${label}-${state}.png`);
+      execFileSync(ffmpeg,['-v','error','-y','-ss',time,'-i',capture,'-frames:v','1',image],{timeout:15000});
+      expect(existsSync(image)).toBe(true);
+    }
+    writeFileSync(testInfo.outputPath(`served-jxl-${label}-proof.json`),JSON.stringify({
+      route:label, resolution:'1920x1080', carriers:3, sourceFormat:'compact JPEG XL', requestedJoinSeconds:2.45,
+      decodedFrames:count, wallSeconds, coldRequestMediaRatio:(count/25)/wallSeconds,
+      initialMediaLatencySeconds:samples[0]?.wallSeconds, measuredMediaSeconds, completeGraphSpeed:speed, progress:samples, firstSourceFrame, sourceFrameScores:scores, firstPeaks:peaks.slice(0,40),
+      lastPeaks:peaks.slice(-40), timelinePreserved:true },null,2));
+  }
 });

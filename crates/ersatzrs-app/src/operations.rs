@@ -602,6 +602,79 @@ mod tests {
     }
 
     #[test]
+    fn cloned_coordinators_admit_one_external_owner_under_contention() {
+        use std::sync::{Arc, Barrier};
+
+        for provider in ["Plex", "Jellyfin", "Emby"] {
+            let coordinator =
+                OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+            let key = OperationKey::ExternalCollections {
+                provider: provider.into(),
+                media_source_id: 3,
+            };
+            let start = Arc::new(Barrier::new(8));
+            let attempted = Arc::new(Barrier::new(8));
+            let guards = std::thread::scope(|scope| {
+                let threads: Vec<_> = (0..8)
+                    .map(|_| {
+                        let coordinator = coordinator.clone();
+                        let key = key.clone();
+                        let start = Arc::clone(&start);
+                        let attempted = Arc::clone(&attempted);
+                        scope.spawn(move || {
+                            start.wait();
+                            let guard = coordinator.begin(BeginOperation::new(key)).into_guard();
+                            // All contenders must attempt admission while the winner
+                            // still owns its guard, without relying on a timed sleep.
+                            attempted.wait();
+                            guard
+                        })
+                    })
+                    .collect();
+                threads
+                    .into_iter()
+                    .filter_map(|thread| thread.join().unwrap())
+                    .collect::<Vec<_>>()
+            });
+            assert_eq!(
+                guards.len(),
+                1,
+                "{provider}: only one caller may be admitted"
+            );
+            assert_eq!(
+                coordinator.status(GetOperationStatus::new(key.clone())),
+                OperationStatus::Running
+            );
+            assert!(matches!(
+                coordinator.begin(BeginOperation::new(key.clone())),
+                BeginOperationOutcome::AlreadyRunning
+            ));
+            let independent = OperationKey::ExternalCollections {
+                provider: provider.into(),
+                media_source_id: 4,
+            };
+            let independent_owner = coordinator
+                .begin(BeginOperation::new(independent))
+                .into_guard()
+                .unwrap();
+            drop(independent_owner);
+            assert_eq!(
+                coordinator.status(GetOperationStatus::new(key.clone())),
+                OperationStatus::Running
+            );
+            drop(guards);
+            assert_eq!(
+                coordinator.status(GetOperationStatus::new(key.clone())),
+                OperationStatus::Idle
+            );
+            assert!(coordinator
+                .begin(BeginOperation::new(key))
+                .into_guard()
+                .is_some());
+        }
+    }
+
+    #[test]
     fn external_operation_guard_releases_shared_key() {
         let coordinator =
             OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());

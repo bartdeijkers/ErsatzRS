@@ -1,4 +1,12 @@
+#[path = "maintenance/classic_preservation.rs"]
+mod classic_preservation;
 mod common;
+#[path = "maintenance/next_publication.rs"]
+mod next_publication;
+#[path = "maintenance/producer_handover.rs"]
+mod producer_handover;
+#[path = "maintenance/yaml_preservation.rs"]
+mod yaml_preservation;
 
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +37,14 @@ struct FakeHlsRegistry {
 
 #[async_trait]
 impl HlsSessionRegistry for FakeHlsRegistry {
+    async fn publish_playout_update(
+        &self,
+        channel_number: &str,
+        _deadline: std::time::Instant,
+    ) -> Result<bool, ersatzrs_core::hls::HlsPublicationError> {
+        Ok(self.playout_updated(channel_number).await)
+    }
+
     async fn try_get(&self, _channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
         None
     }
@@ -83,6 +99,85 @@ impl ScheduledLibraryScanRequester for FakeLibraryScanRequester {
             .push(library_id);
         self.outcome.clone()
     }
+}
+
+#[tokio::test]
+async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
+    use ersatzrs_core::health::HealthCheckStatus;
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::health::{HealthCheckCoordinator, SqlHealthCheckStore};
+    use ersatzrs_infra::maintenance::{run_maintenance_once_cancellable, MaintenanceExecution};
+    use tokio::sync::RwLock;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (7136);
+        INSERT INTO "Library" ("Id", "MediaSourceId", "MediaKind", "Name")
+        VALUES (7136, 7136, 1, 'Synthetic health cache');
+        INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (7136, 7136, '/synthetic');
+        INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (7136, 7136, 0);"#,
+    )
+    .await
+    .unwrap();
+    let health = HealthCheckCoordinator::new(
+        pool.clone(),
+        Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
+        DatabaseSchemaStatus::default(),
+    );
+    let before = health.run(false).await.unwrap();
+    pool.execute(r#"UPDATE "MediaItem" SET "State" = 1 WHERE "Id" = 7136"#)
+        .await
+        .unwrap();
+    let report = run_maintenance_once_cancellable(
+        pool.clone(),
+        &CacheCleanupConfig::default(),
+        None,
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: None,
+            health: Some(&health),
+            artwork: None,
+            next: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.health_summary, Some(before.summary));
+    let rows = SqlHealthCheckStore::new(pool.clone())
+        .load_results()
+        .await
+        .unwrap();
+    assert_eq!(
+        rows, before.results,
+        "maintenance must reuse the host's completed run"
+    );
+    let refreshed = health.run(true).await.unwrap();
+    let missing = refreshed
+        .results
+        .iter()
+        .find(|row| row.title == "File Not Found")
+        .unwrap();
+    assert_eq!(missing.status, HealthCheckStatus::Warning);
+    let report = run_maintenance_once_cancellable(
+        pool,
+        &CacheCleanupConfig::default(),
+        None,
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: None,
+            health: Some(&health),
+            artwork: None,
+            next: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(report.health_summary, Some(refreshed.summary));
+    health.shutdown().await;
 }
 
 #[tokio::test]
@@ -313,10 +408,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let skipped = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 78,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(78, PlayoutBuildMode::Refresh),
         Utc::now(),
         None,
     )
@@ -337,10 +429,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 78,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(78, PlayoutBuildMode::Reset),
         Utc::now(),
         Some(hls_registry.as_ref()),
     )
@@ -395,10 +484,7 @@ async fn reset_build_regenerates_playout_seed() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 79,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(79, PlayoutBuildMode::Reset),
         Utc::now(),
         None,
     )
@@ -430,10 +516,7 @@ async fn refresh_and_continue_builds_preserve_playout_seed() {
         run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 80,
-                mode,
-            },
+            PlayoutBuildRequest::new(80, mode),
             Utc::now(),
             None,
         )
@@ -476,10 +559,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -502,10 +582,7 @@ async fn continue_notifies_only_dependent_next_channels_after_extending_persiste
         assert!(run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode: PlayoutBuildMode::Continue,
-            },
+            PlayoutBuildRequest::new(88, PlayoutBuildMode::Continue),
             continuation,
             Some(&registry)
         )
@@ -556,10 +633,7 @@ async fn cancelled_build_worker_preserves_timeline_and_releases_lock() {
     seed_refresh_rebuild_fixture(&pool, &repos).await;
     let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
     let locker = EntityLocker::new();
-    let request = PlayoutBuildRequest {
-        playout_id: 88,
-        mode: PlayoutBuildMode::Reset,
-    };
+    let request = PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset);
     run_requested_playout_build(&pool, &locker, request, now, None)
         .await
         .unwrap();
@@ -659,10 +733,7 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let built = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -682,10 +753,7 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
     let refreshed = run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Refresh),
         now,
         None,
     )
@@ -719,10 +787,7 @@ async fn reset_and_refresh_preserve_timeline_when_filter_empties_required_source
         run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode: PlayoutBuildMode::Reset,
-            },
+            PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
             start,
             None,
         )
@@ -749,10 +814,7 @@ async fn reset_and_refresh_preserve_timeline_when_filter_empties_required_source
         let error = run_requested_playout_build(
             &pool,
             &locker,
-            PlayoutBuildRequest {
-                playout_id: 88,
-                mode,
-            },
+            PlayoutBuildRequest::new(88, mode),
             start + Duration::minutes(1),
             None,
         )
@@ -795,10 +857,7 @@ async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         start,
         None,
     )
@@ -812,10 +871,7 @@ async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Refresh,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Refresh),
         start + Duration::minutes(1),
         None,
     )
@@ -857,10 +913,7 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -916,10 +969,7 @@ async fn startup_repair_refuses_legacy_state_without_clearing_the_window() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -992,10 +1042,7 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Reset,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Reset),
         now,
         None,
     )
@@ -1021,10 +1068,7 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     run_requested_playout_build(
         &pool,
         &locker,
-        PlayoutBuildRequest {
-            playout_id: 88,
-            mode: PlayoutBuildMode::Continue,
-        },
+        PlayoutBuildRequest::new(88, PlayoutBuildMode::Continue),
         now + Duration::minutes(1),
         Some(hls_registry.as_ref()),
     )
@@ -1341,14 +1385,27 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let pool = common::test_db().await;
     let cache = CacheCleanupConfig::default();
     let locker = EntityLocker::new();
+    let root = tempfile::tempdir().unwrap();
+    let artwork = ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance::new(
+        pool.clone(),
+        root.path().to_owned(),
+    );
+    let folder = root.path().join("artwork/posters");
+    std::fs::create_dir_all(&folder).unwrap();
+    let stale = folder.join("AABB");
+    std::fs::write(&stale, b"stale").unwrap();
     let run = || {
-        run_maintenance_once(
+        ersatzrs_infra::maintenance::run_maintenance_once_cancellable(
             pool.clone(),
             &cache,
             None,
             &locker,
             DatabaseSchemaStatus::default(),
             None,
+            ersatzrs_infra::maintenance::MaintenanceExecution {
+                artwork: Some(&artwork),
+                ..Default::default()
+            },
         )
     };
     sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('orphan')"#)
@@ -1358,12 +1415,15 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let first = run().await.unwrap();
     assert!(first.loops_ran.artwork_cleanup());
     assert_eq!(first.artwork_cleanup.actors_deleted, 1);
+    assert!(!stale.exists());
+    std::fs::write(&stale, b"later-stale").unwrap();
     sqlx::query(r#"INSERT INTO "Actor" ("Name") VALUES ('later orphan')"#)
         .execute(&pool)
         .await
         .unwrap();
     let second = run().await.unwrap();
     assert!(!second.loops_ran.artwork_cleanup());
+    assert!(stale.exists());
     sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = 'maintenance.loop.artwork_cleanup.last_run'"#)
         .bind((Utc::now() - Duration::hours(2)).to_rfc3339())
         .execute(&pool).await.unwrap();
@@ -1377,6 +1437,7 @@ async fn orphan_artwork_maintenance_runs_on_startup_hourly_and_retries_failure()
     let retry = run().await.unwrap();
     assert!(retry.loops_ran.artwork_cleanup());
     assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
+    assert!(!stale.exists());
 }
 
 #[tokio::test]
@@ -1420,4 +1481,219 @@ async fn orphan_subtitle_maintenance_runs_on_startup_hourly_and_retries_failure(
     let retry = run().await.unwrap();
     assert!(retry.loops_ran.subtitle_cleanup());
     assert_eq!(retry.subtitles_deleted, 1);
+}
+
+#[tokio::test]
+async fn maintenance_failure_preserves_later_jobs_and_retries_without_repeating_success() {
+    use ersatzrs_infra::maintenance::load_loop_last_run;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "Subtitle" ("SubtitleKind","StreamIndex","Default","Forced","DateAdded","DateUpdated")
+        VALUES (0,0,0,0,'2026-09-30','2026-09-30');
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');
+        CREATE TRIGGER "FailSubtitleCleanup" BEFORE DELETE ON "Subtitle"
+        BEGIN SELECT RAISE(ABORT, 'synthetic cleanup failure'); END;"#,
+    )
+    .await
+    .unwrap();
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+        )
+    };
+    assert!(
+        run().await.is_err(),
+        "the caller must still observe failure"
+    );
+    assert!(load_loop_last_run(&pool, "subtitle_cleanup")
+        .await
+        .unwrap()
+        .is_none());
+    let artwork_run = load_loop_last_run(&pool, "artwork_cleanup").await.unwrap();
+    assert!(
+        artwork_run.is_some(),
+        "an early failure must not skip artwork cleanup"
+    );
+    assert!(load_loop_last_run(&pool, "search_index")
+        .await
+        .unwrap()
+        .is_some());
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 0);
+    pool.execute(
+        r#"DROP TRIGGER "FailSubtitleCleanup";
+        INSERT INTO "Actor" ("Name") VALUES ('later synthetic orphan');"#,
+    )
+    .await
+    .unwrap();
+    let retry = run().await.unwrap();
+    assert_eq!(retry.subtitles_deleted, 1);
+    assert!(
+        !retry.loops_ran.artwork_cleanup(),
+        "successful jobs retain their cadence"
+    );
+    assert_eq!(
+        load_loop_last_run(&pool, "artwork_cleanup").await.unwrap(),
+        artwork_run
+    );
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 1);
+}
+
+#[tokio::test]
+async fn maintenance_cadence_failure_keeps_first_error_and_runs_health() {
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::health::HealthCheckCoordinator;
+    use ersatzrs_infra::maintenance::{
+        load_loop_last_run, run_maintenance_once_cancellable, MaintenanceExecution,
+    };
+    use tokio::sync::RwLock;
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"CREATE TRIGGER "FailPlayoutCadence" BEFORE INSERT ON "ConfigElement"
+        WHEN NEW."Key" = 'maintenance.loop.playout.last_run'
+        BEGIN SELECT RAISE(ABORT, 'synthetic cadence failure'); END;
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');
+        CREATE TRIGGER "FailActorCleanup" BEFORE DELETE ON "Actor"
+        BEGIN SELECT RAISE(ABORT, 'synthetic later failure'); END;"#,
+    )
+    .await
+    .unwrap();
+    let health = HealthCheckCoordinator::new(
+        pool.clone(),
+        Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),
+        DatabaseSchemaStatus::default(),
+    );
+    let cache = CacheCleanupConfig::default();
+    let locker = EntityLocker::new();
+    let run = || {
+        run_maintenance_once_cancellable(
+            pool.clone(),
+            &cache,
+            None,
+            &locker,
+            DatabaseSchemaStatus::default(),
+            None,
+            MaintenanceExecution {
+                health: Some(&health),
+                ..Default::default()
+            },
+        )
+    };
+    let error = run().await.unwrap_err().to_string();
+    assert!(
+        error.contains("synthetic cadence failure"),
+        "retain the first error: {error}"
+    );
+    assert!(load_loop_last_run(&pool, "playout")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(load_loop_last_run(&pool, "artwork_cleanup")
+        .await
+        .unwrap()
+        .is_none());
+    assert!(load_loop_last_run(&pool, "search_index")
+        .await
+        .unwrap()
+        .is_some());
+    let summary: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = 'health.summary'"#)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+    assert!(
+        summary.is_some(),
+        "health must run after failed maintenance jobs"
+    );
+    pool.execute(r#"DROP TRIGGER "FailPlayoutCadence"; DROP TRIGGER "FailActorCleanup";"#)
+        .await
+        .unwrap();
+    let retry = run().await.unwrap();
+    assert!(retry.loops_ran.playout());
+    assert_eq!(retry.artwork_cleanup.actors_deleted, 1);
+    assert!(!retry.loops_ran.search_index());
+    health.shutdown().await;
+}
+
+#[tokio::test]
+async fn maintenance_cancellation_stops_before_independent_later_jobs() {
+    use ersatzrs_core::scheduling::SchedulingError;
+    use ersatzrs_infra::maintenance::{
+        load_loop_last_run, run_maintenance_once_cancellable, MaintenanceError,
+        MaintenanceExecution, PlayoutBuildCancellation,
+    };
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct CancellingRequester(Arc<AtomicBool>);
+    #[async_trait]
+    impl ScheduledLibraryScanRequester for CancellingRequester {
+        async fn request_scheduled_library_scan(&self, _: i64) -> ScheduledScanRequestOutcome {
+            self.0.store(true, Ordering::SeqCst);
+            ScheduledScanRequestOutcome::Accepted
+        }
+    }
+
+    let pool = common::test_db().await;
+    pool.execute(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('scanner.library_refresh_interval', '1');
+        INSERT INTO "MediaSource" ("Id") VALUES (3159);
+        INSERT INTO "Library" ("Id", "MediaSourceId", "MediaKind", "Name")
+        VALUES (3159, 3159, 0, 'Synthetic cancellation');
+        INSERT INTO "Actor" ("Name") VALUES ('synthetic orphan');"#,
+    )
+    .await
+    .unwrap();
+    let requester = CancellingRequester(Arc::default());
+    let signal = requester.0.clone();
+    let cancelled: PlayoutBuildCancellation = Arc::new(move || signal.load(Ordering::SeqCst));
+    let result = run_maintenance_once_cancellable(
+        pool.clone(),
+        &CacheCleanupConfig::default(),
+        Some(&requester),
+        &EntityLocker::new(),
+        DatabaseSchemaStatus::default(),
+        None,
+        MaintenanceExecution {
+            cancelled: Some(&cancelled),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(MaintenanceError::Scheduling(SchedulingError::Cancelled))
+    ));
+    for name in [
+        "provider_poll",
+        "subtitle_cleanup",
+        "artwork_cleanup",
+        "cache_cleanup",
+        "search_index",
+    ] {
+        assert!(
+            load_loop_last_run(&pool, name).await.unwrap().is_none(),
+            "cancelled before {name}"
+        );
+    }
+    let actors: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Actor""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(actors, 1);
 }

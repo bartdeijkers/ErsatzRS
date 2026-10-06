@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
 use ersatzrs_core::hls::HlsSessionRegistry;
@@ -22,7 +22,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::cache_cleanup::{
     clean_caches, CacheCleanupConfig, CacheCleanupError, CacheCleanupReport,
@@ -31,6 +31,10 @@ use crate::db::{DatabaseSchemaStatus, Db};
 use crate::health::{run_and_persist_health_checks, PersistedHealthCheckRun};
 use crate::repositories::common::{decode_datetime, decode_enum_column, encode_datetime};
 use crate::repositories::{SqlitePlayoutRepository, SqliteSchedulingContentRepository};
+
+mod external_json;
+mod handover;
+mod publication;
 
 const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
 const CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD: &str = "playout.days_to_build";
@@ -43,6 +47,7 @@ const SEARCH_INDEX_DISPATCH_KEY: &str = "maintenance.search_index.last_dispatch"
 const SEARCH_INDEX_COUNT_KEY: &str = "maintenance.search_index.dispatched_media_items";
 const DEFAULT_PLAYOUT_DAYS_TO_BUILD: i64 = 2;
 const DAILY_REBUILD_TOLERANCE: Duration = Duration::minutes(5);
+const PLAYOUT_PUBLICATION_OPERATION: &str = "playout session publication";
 
 /// One complete scheduler pass summary.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -159,6 +164,9 @@ pub enum MaintenanceError {
     /// Cache cleanup failed.
     #[error(transparent)]
     Cache(#[from] CacheCleanupError),
+    /// Artwork cache pruning or restoration failed.
+    #[error(transparent)]
+    ArtworkCache(#[from] crate::artwork_cache_maintenance::ArtworkCacheError),
     /// Health check persistence failed.
     #[error(transparent)]
     Health(#[from] ersatzrs_core::health::HealthCheckError),
@@ -173,6 +181,14 @@ pub enum MaintenanceError {
 /// Owner-supplied cancellation signal shared with the synchronous build worker.
 pub type PlayoutBuildCancellation = Arc<dyn Fn() -> bool + Send + Sync>;
 
+/// Shared playback owners and cancellation for one scheduling operation.
+#[derive(Clone, Copy, Default)]
+pub struct PlayoutExecution<'a> {
+    pub hls_sessions: Option<&'a dyn HlsSessionRegistry>,
+    pub next: Option<&'a Arc<crate::next_engine::host::NextHost>>,
+    pub cancelled: Option<&'a PlayoutBuildCancellation>,
+}
+
 /// Result alias for maintenance operations.
 pub type Result<T> = std::result::Result<T, MaintenanceError>;
 
@@ -181,9 +197,11 @@ pub type Result<T> = std::result::Result<T, MaintenanceError>;
 ///
 /// # Errors
 ///
-/// Returns an error when database access, cache cleanup, or health persistence
-/// fails. Individual playout build failures are recorded in
-/// `PlayoutBuildStatus` and counted in the returned report.
+/// Returns the first operational error after independent tasks have run. Failed
+/// tasks keep their previous cadence timestamp and are retried on the next pass.
+/// Cancellation stops the pass before another task starts. Individual playout
+/// build failures are recorded in `PlayoutBuildStatus` and counted in the
+/// returned report.
 pub async fn run_maintenance_once(
     pool: Pool<Db>,
     cache_config: &CacheCleanupConfig,
@@ -199,9 +217,18 @@ pub async fn run_maintenance_once(
         locker,
         schema_status,
         hls_sessions,
-        None,
+        MaintenanceExecution::default(),
     )
     .await
+}
+
+/// Shared services and cancellation for one maintenance pass.
+#[derive(Default)]
+pub struct MaintenanceExecution<'a> {
+    pub next: Option<&'a Arc<crate::next_engine::host::NextHost>>,
+    pub cancelled: Option<&'a PlayoutBuildCancellation>,
+    pub health: Option<&'a crate::health::HealthCheckCoordinator>,
+    pub artwork: Option<&'a crate::artwork_cache_maintenance::ArtworkCacheMaintenance>,
 }
 
 /// Cancellation-aware variant of [`run_maintenance_once`].
@@ -215,73 +242,202 @@ pub async fn run_maintenance_once_cancellable(
     locker: &EntityLocker,
     schema_status: DatabaseSchemaStatus,
     hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
-    cancelled: Option<&PlayoutBuildCancellation>,
+    execution: MaintenanceExecution<'_>,
 ) -> Result<MaintenancePassReport> {
-    if cancelled.is_some_and(|check| check()) {
-        return Err(SchedulingError::Cancelled.into());
-    }
+    let MaintenanceExecution {
+        next,
+        cancelled,
+        health,
+        artwork,
+    } = execution;
     let now = Utc::now();
-    let library_refresh_interval = load_library_refresh_interval(&pool).await?;
     let mut report = MaintenancePassReport::default();
+    let mut tasks = MaintenanceTasks {
+        cancelled,
+        first_error: None,
+    };
 
-    if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
-        let playout_report =
-            build_due_playouts(&pool, locker, now, hls_sessions.as_deref(), cancelled).await?;
-        report.playouts_built = playout_report.built;
-        report.playouts_skipped_locked = playout_report.skipped_locked;
-        report.playouts_failed = playout_report.failed;
-        report.playouts_reset = playout_report.reset_queued;
-        report.loops_ran.set(MaintenanceLoopFlags::PLAYOUT);
-        record_loop_run(&pool, "playout", now).await?;
-    }
-
-    if cancelled.is_some_and(|check| check()) {
-        return Err(SchedulingError::Cancelled.into());
-    }
-
-    if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
-        let library_report =
-            dispatch_due_library_refreshes(&pool, library_refresh_interval, library_scans, now)
+    tasks
+        .run("playout", async {
+            if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
+                let playout_report = Box::pin(build_due_playouts(
+                    &pool,
+                    locker,
+                    now,
+                    PlayoutExecution {
+                        hls_sessions: hls_sessions.as_deref(),
+                        next,
+                        cancelled,
+                    },
+                ))
                 .await?;
-        report.libraries_dispatched = library_report.completed;
-        report.libraries_failed = library_report.failed;
-        report.loops_ran.set(MaintenanceLoopFlags::LIBRARY_REFRESH);
-        record_loop_run(&pool, "library_refresh", now).await?;
+                report.playouts_built = playout_report.built;
+                report.playouts_skipped_locked = playout_report.skipped_locked;
+                report.playouts_failed = playout_report.failed;
+                report.playouts_reset = playout_report.reset_queued;
+                record_loop_run(&pool, "playout", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::PLAYOUT);
+            }
+            Ok(())
+        })
+        .await?;
+
+    tasks
+        .run("library_refresh", async {
+            let library_refresh_interval = load_library_refresh_interval(&pool).await?;
+            if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
+                let library_report = dispatch_due_library_refreshes(
+                    &pool,
+                    library_refresh_interval,
+                    library_scans,
+                    now,
+                )
+                .await?;
+                report.libraries_dispatched = library_report.completed;
+                report.libraries_failed = library_report.failed;
+                record_loop_run(&pool, "library_refresh", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::LIBRARY_REFRESH);
+            }
+            Ok(())
+        })
+        .await?;
+
+    tasks
+        .run("provider_poll", async {
+            if loop_due(&pool, "provider_poll", PROVIDER_POLL_INTERVAL, now).await? {
+                let provider_report = poll_provider_connectivity(&pool).await?;
+                report.providers_polled = provider_report.polled;
+                report.providers_reachable = provider_report.reachable;
+                record_loop_run(&pool, "provider_poll", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
+            }
+            Ok(())
+        })
+        .await?;
+
+    run_cleanup_loops(&pool, cache_config, now, artwork, &mut report, &mut tasks).await?;
+    tasks
+        .run(
+            "health",
+            run_automatic_health(pool.clone(), schema_status, health, &mut report),
+        )
+        .await?;
+    match tasks.first_error {
+        Some(error) => Err(error),
+        None => Ok(report),
+    }
+}
+
+// A failure in one sequential maintenance task must not starve unrelated work.
+// Keep the first failure for the caller; cancellation remains an immediate exit.
+struct MaintenanceTasks<'a> {
+    cancelled: Option<&'a PlayoutBuildCancellation>,
+    first_error: Option<MaintenanceError>,
+}
+
+impl MaintenanceTasks<'_> {
+    async fn run(
+        &mut self,
+        name: &'static str,
+        work: impl Future<Output = Result<()>>,
+    ) -> Result<()> {
+        self.check_cancelled()?;
+        let result = work.await;
+        self.check_cancelled()?;
+        match result {
+            Err(error @ MaintenanceError::Scheduling(SchedulingError::Cancelled)) => {
+                return Err(error)
+            }
+            Err(error) => {
+                error!(task = name, %error, "scheduler maintenance task failed");
+                self.first_error.get_or_insert(error);
+            }
+            Ok(()) => {}
+        }
+        Ok(())
     }
 
-    if loop_due(&pool, "provider_poll", PROVIDER_POLL_INTERVAL, now).await? {
-        let provider_report = poll_provider_connectivity(&pool).await?;
-        report.providers_polled = provider_report.polled;
-        report.providers_reachable = provider_report.reachable;
-        report.loops_ran.set(MaintenanceLoopFlags::PROVIDER_POLL);
-        record_loop_run(&pool, "provider_poll", now).await?;
+    fn check_cancelled(&self) -> Result<()> {
+        if self.cancelled.is_some_and(|check| check()) {
+            return Err(SchedulingError::Cancelled.into());
+        }
+        Ok(())
     }
+}
 
-    if loop_due(&pool, "subtitle_cleanup", SUBTITLE_CLEANUP_INTERVAL, now).await? {
-        report.subtitles_deleted =
-            crate::subtitle_cleanup::clean_orphaned_subtitles(&pool, 100_000).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::SUBTITLE_CLEANUP);
-        record_loop_run(&pool, "subtitle_cleanup", now).await?;
-    }
+async fn run_cleanup_loops(
+    pool: &Pool<Db>,
+    cache_config: &CacheCleanupConfig,
+    now: DateTime<Utc>,
+    artwork: Option<&crate::artwork_cache_maintenance::ArtworkCacheMaintenance>,
+    report: &mut MaintenancePassReport,
+    tasks: &mut MaintenanceTasks<'_>,
+) -> Result<()> {
+    tasks
+        .run("subtitle_cleanup", async {
+            if loop_due(pool, "subtitle_cleanup", SUBTITLE_CLEANUP_INTERVAL, now).await? {
+                report.subtitles_deleted =
+                    crate::subtitle_cleanup::clean_orphaned_subtitles(pool, 100_000).await?;
+                record_loop_run(pool, "subtitle_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::SUBTITLE_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
-        report.artwork_cleanup =
-            crate::artwork_cleanup::clean_orphaned_artwork(&pool, 100_000).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
-        record_loop_run(&pool, "artwork_cleanup", now).await?;
-    }
+    tasks
+        .run("artwork_cleanup", async {
+            if loop_due(pool, "artwork_cleanup", ARTWORK_CLEANUP_INTERVAL, now).await? {
+                report.artwork_cleanup = if let Some(artwork) = artwork {
+                    artwork.run(100_000).await?.database
+                } else {
+                    crate::artwork_cleanup::clean_orphaned_artwork(pool, 100_000).await?
+                };
+                record_loop_run(pool, "artwork_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::ARTWORK_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {
-        report.cache_cleanup =
-            clean_caches(cache_config, &channel_guide_keepers(&pool).await?).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::CACHE_CLEANUP);
-        record_loop_run(&pool, "cache_cleanup", now).await?;
-    }
+    tasks
+        .run("cache_cleanup", async {
+            if loop_due(pool, "cache_cleanup", CACHE_CLEANUP_INTERVAL, now).await? {
+                report.cache_cleanup =
+                    clean_caches(cache_config, &channel_guide_keepers(pool).await?).await?;
+                record_loop_run(pool, "cache_cleanup", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::CACHE_CLEANUP);
+            }
+            Ok(())
+        })
+        .await?;
 
-    if loop_due(&pool, "search_index", SEARCH_INDEX_REBUILD_INTERVAL, now).await? {
-        report.search_index_dispatched = dispatch_search_index_rebuild(&pool, now).await?;
-        report.loops_ran.set(MaintenanceLoopFlags::SEARCH_INDEX);
-        record_loop_run(&pool, "search_index", now).await?;
+    tasks
+        .run("search_index", async {
+            if loop_due(pool, "search_index", SEARCH_INDEX_REBUILD_INTERVAL, now).await? {
+                report.search_index_dispatched = dispatch_search_index_rebuild(pool, now).await?;
+                record_loop_run(pool, "search_index", now).await?;
+                report.loops_ran.set(MaintenanceLoopFlags::SEARCH_INDEX);
+            }
+            Ok(())
+        })
+        .await?;
+
+    Ok(())
+}
+
+async fn run_automatic_health(
+    pool: Pool<Db>,
+    schema_status: DatabaseSchemaStatus,
+    health: Option<&crate::health::HealthCheckCoordinator>,
+    report: &mut MaintenancePassReport,
+) -> Result<()> {
+    if let Some(health) = health {
+        match health.run(false).await {
+            Ok(run) => report.health_summary = Some(run.summary),
+            Err(error) => warn!(%error, "automatic health run did not complete"),
+        }
+        return Ok(());
     }
 
     let ffmpeg_check_config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(
@@ -298,7 +454,7 @@ pub async fn run_maintenance_once_cancellable(
         }
     }
 
-    Ok(report)
+    Ok(())
 }
 
 /// Load the last successful loop timestamp from `ConfigElement`.
@@ -386,7 +542,33 @@ pub async fn run_requested_playout_build_cancellable(
     hls_sessions: Option<&dyn HlsSessionRegistry>,
     cancelled: Option<&PlayoutBuildCancellation>,
 ) -> Result<bool> {
-    let Some(_guard) = PlayoutLockGuard::try_acquire(locker, request.playout_id) else {
+    run_requested_playout_build_with_execution(
+        pool,
+        locker,
+        request,
+        now,
+        PlayoutExecution {
+            hls_sessions,
+            cancelled,
+            next: None,
+        },
+    )
+    .await
+}
+
+/// Build using the host's shared Next publishers as well as native sessions.
+///
+/// # Errors
+/// Returns loading, scheduling, preparation, publication or status errors.
+pub async fn run_requested_playout_build_with_execution(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    request: PlayoutBuildRequest,
+    now: DateTime<Utc>,
+    execution: PlayoutExecution<'_>,
+) -> Result<bool> {
+    let started = std::time::Instant::now();
+    let Some(mut guard) = PlayoutLockGuard::try_acquire(locker, request.playout_id) else {
         return Ok(false);
     };
 
@@ -399,16 +581,7 @@ pub async fn run_requested_playout_build_cancellable(
         None
     };
 
-    match build_playout(
-        pool,
-        request.playout_id,
-        request.mode,
-        now,
-        hls_sessions,
-        cancelled,
-    )
-    .await
-    {
+    match build_playout(pool, request, now, execution, started, &mut guard).await {
         Ok(()) => {
             if let Some(generation) = refresh_generation {
                 crate::scan_refresh::complete_refresh(pool, request.playout_id, generation).await?;
@@ -418,8 +591,57 @@ pub async fn run_requested_playout_build_cancellable(
         Err(error) => {
             let message = error.to_string();
             if let Some(generation) = refresh_generation {
-                crate::scan_refresh::fail_refresh(pool, request.playout_id, generation, &message)
+                if matches!(
+                    &error,
+                    MaintenanceError::Repository(RepositoryError::Unavailable {
+                        operation: crate::scripted_dependencies::PUBLICATION_OPERATION,
+                        ..
+                    })
+                ) {
+                    crate::scan_refresh::defer_refresh(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        Utc::now(),
+                    )
                     .await?;
+                } else if matches!(
+                    &error,
+                    MaintenanceError::Repository(RepositoryError::Unavailable {
+                        operation: SqlitePlayoutRepository::PRESERVATION_PUBLICATION_OPERATION,
+                        ..
+                    })
+                ) {
+                    crate::scan_refresh::defer_boundary_refresh(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        Utc::now(),
+                    )
+                    .await?;
+                } else if matches!(
+                    &error,
+                    MaintenanceError::Repository(RepositoryError::Unavailable {
+                        operation: PLAYOUT_PUBLICATION_OPERATION,
+                        ..
+                    }) | MaintenanceError::Scheduling(SchedulingError::Cancelled)
+                ) {
+                    crate::scan_refresh::defer_session_publication(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        Utc::now(),
+                    )
+                    .await?;
+                } else {
+                    crate::scan_refresh::fail_refresh(
+                        pool,
+                        request.playout_id,
+                        generation,
+                        &message,
+                    )
+                    .await?;
+                }
             }
             let repository = SqlitePlayoutRepository(pool.clone());
             repository
@@ -451,6 +673,29 @@ pub async fn repair_invalid_classic_playouts(
     locker: &EntityLocker,
     now: DateTime<Utc>,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
+) -> Result<u32> {
+    repair_invalid_classic_playouts_with_execution(
+        pool,
+        locker,
+        now,
+        PlayoutExecution {
+            hls_sessions,
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// Repair invalid state with the same playback owners as normal builds.
+///
+/// # Errors
+/// Returns auditing or failure-status errors; individual repairs retain their
+/// ordinary error reporting and do not abort unrelated repairs.
+pub async fn repair_invalid_classic_playouts_with_execution(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    now: DateTime<Utc>,
+    execution: PlayoutExecution<'_>,
 ) -> Result<u32> {
     let rows = sqlx::query(
         r#"SELECT "p"."Id", "p"."ScheduleKind"
@@ -504,7 +749,7 @@ pub async fn repair_invalid_classic_playouts(
             continue;
         }
 
-        let Some(_guard) = PlayoutLockGuard::try_acquire(locker, playout_id) else {
+        let Some(mut guard) = PlayoutLockGuard::try_acquire(locker, playout_id) else {
             debug!(
                 playout_id,
                 "Classic runtime-state repair skipped because playout is locked"
@@ -517,11 +762,11 @@ pub async fn repair_invalid_classic_playouts(
         );
         if let Err(error) = build_playout(
             pool,
-            playout_id,
-            PlayoutBuildMode::Refresh,
+            PlayoutBuildRequest::new(playout_id, PlayoutBuildMode::Refresh),
             now,
-            hls_sessions,
-            None,
+            execution,
+            std::time::Instant::now(),
+            &mut guard,
         )
         .await
         {
@@ -559,8 +804,7 @@ async fn build_due_playouts(
     pool: &Pool<Db>,
     locker: &EntityLocker,
     now: DateTime<Utc>,
-    hls_sessions: Option<&dyn HlsSessionRegistry>,
-    cancelled: Option<&PlayoutBuildCancellation>,
+    execution: PlayoutExecution<'_>,
 ) -> Result<PlayoutBuildReport> {
     let cutoff = encode_datetime(now - PLAYOUT_BUILD_INTERVAL);
     let rows = sqlx::query(
@@ -592,13 +836,13 @@ async fn build_due_playouts(
 
     let mut report = PlayoutBuildReport::default();
     for entry in due {
-        if cancelled.is_some_and(|check| check()) {
+        if execution.cancelled.is_some_and(|check| check()) {
             return Err(SchedulingError::Cancelled.into());
         }
         // Mirror `EntityLocker.LockPlayout` from
         // `ErsatzTV.Infrastructure.Locking.EntityLocker`: skip silently when
         // another worker already owns this playout's lock.
-        let Some(_guard) = PlayoutLockGuard::try_acquire(locker, entry.playout_id) else {
+        let Some(mut guard) = PlayoutLockGuard::try_acquire(locker, entry.playout_id) else {
             report.skipped_locked += 1;
             continue;
         };
@@ -610,7 +854,16 @@ async fn build_due_playouts(
             PlayoutBuildMode::Continue
         };
 
-        match build_playout(pool, entry.playout_id, mode, now, hls_sessions, cancelled).await {
+        match build_playout(
+            pool,
+            PlayoutBuildRequest::new(entry.playout_id, mode),
+            now,
+            execution,
+            std::time::Instant::now(),
+            &mut guard,
+        )
+        .await
+        {
             Ok(()) => report.built += 1,
             Err(error) => {
                 report.failed += 1;
@@ -693,7 +946,8 @@ async fn load_scheduling_reference_data(
             let (definition_policies, definition_legacy_policy) = playout
                 .schedule_file
                 .as_deref()
-                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(ersatzrs_core::scheduling::ScriptedScheduleCommand::parse)
+                .and_then(|command| std::fs::read_to_string(command.file).ok())
                 .and_then(|script| {
                     ersatzrs_core::scheduling::ScriptedSchedulingEngine::smart_shuffle_policies_from_script(
                         &script,
@@ -712,43 +966,74 @@ async fn load_scheduling_reference_data(
 
 async fn build_playout(
     pool: &Pool<Db>,
-    playout_id: EntityId,
-    mut mode: PlayoutBuildMode,
+    mut build_request: PlayoutBuildRequest,
     now: DateTime<Utc>,
-    hls_sessions: Option<&dyn HlsSessionRegistry>,
-    cancelled: Option<&PlayoutBuildCancellation>,
+    execution: PlayoutExecution<'_>,
+    started: std::time::Instant,
+    guard: &mut PlayoutLockGuard,
 ) -> Result<()> {
+    let hls_sessions = execution.hls_sessions;
+    let cancelled = execution.cancelled;
+    let playout_id = build_request.playout_id;
     if cancelled.is_some_and(|check| check()) {
         return Err(SchedulingError::Cancelled.into());
     }
     let repository = SqlitePlayoutRepository(pool.clone());
+    // Capture before reading scheduling inputs, including the absence of work.
+    // The write transaction rejects changes that arrive while Lua/engines run.
+    let publication_guard = crate::scan_refresh::publication_guard(pool, playout_id).await?;
     let mut playout = repository.get_with_anchor(playout_id).await?;
+    build_request.validate_preservation(playout.schedule_kind)?;
     if playout.schedule_kind == PlayoutScheduleKind::None {
+        return Ok(());
+    }
+    if playout.schedule_kind == PlayoutScheduleKind::ExternalJson
+        && external_json::build(
+            pool,
+            &playout,
+            external_json::Attempt {
+                request: build_request,
+                now,
+                started,
+            },
+            hls_sessions,
+            cancelled,
+            guard,
+        )
+        .await?
+    {
         return Ok(());
     }
     // Mirror ErsatzTV's `ResetPlayout(): playout.Seed = new Random().Next()`.
     // Without this, a Reset reshuffles from the same seed the playout has had
     // since creation, so every rebuild reproduces the identical schedule-item
     // and collection shuffle order forever.
-    if mode == PlayoutBuildMode::Reset {
+    if build_request.mode == PlayoutBuildMode::Reset {
         playout.seed = ersatzrs_core::scheduling::next_playout_seed();
     }
-    let days = load_playout_days_to_build(pool).await?;
-    let window = Duration::days(days);
-    let finish = now + window;
+    let finish = now + Duration::days(load_playout_days_to_build(pool).await?);
 
     let max_playout_offset = load_max_mirror_playout_offset(pool, playout.channel_id).await?;
     let mut reference_data =
         load_scheduling_reference_data(pool, &playout, now, max_playout_offset).await?;
     reference_data.max_playout_offset = max_playout_offset;
+    reference_data.preservation = build_request.preservation;
+    let handover = if (hls_sessions.is_some() || execution.next.is_some())
+        && handover::preserves_programmes(build_request, playout.schedule_kind)
+    {
+        Some(handover::Window::load(pool, playout.channel_id, now).await?)
+    } else {
+        None
+    };
+    reference_data.preservation_not_before = handover.map(|window| window.not_before);
     let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
     reference_data.channel_playout_mode = channel_info.playout_mode;
 
-    mode = safe_classic_build_mode(
+    build_request.mode = safe_classic_build_mode(
         pool,
         playout.id,
         playout.schedule_kind,
-        mode,
+        build_request.mode,
         now,
         &reference_data,
     )
@@ -758,45 +1043,106 @@ async fn build_playout(
         playout: playout.clone(),
         start: now,
         finish,
-        mode,
+        mode: build_request.mode,
         reference_data,
     };
-    let result = generate_playout(pool, request, cancelled).await?;
-    log_build_warnings(playout_id, &result);
-    let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
-        || (mode != PlayoutBuildMode::Continue
-            && channel_info.playout_mode == ChannelPlayoutMode::OnDemand);
-    repository
-        .apply_build_result(&result, &playout, max_playout_offset)
-        .await?;
-    repository
+    let mut result = generate_playout(pool, request, cancelled).await?;
+    result.publication_guard = Some(publication_guard);
+    let publication_clock = match handover {
+        Some(window) => window.publication_clock(&result, now)?,
+        None => result.retain_through,
+    };
+    result.publication_deadline = publication_deadline(publication_clock, now, started)?;
+    let published_next = Box::pin(publication::publish_build(
+        &repository,
+        &result,
+        &playout,
+        max_playout_offset,
+        execution,
+        now,
+        guard.hold_finalization(),
+    ))
+    .await?;
+    // Native Continue reads appended rows directly and must not restart playback.
+    // Next owns a published snapshot, including when only a mirror uses Next.
+    // Permit snapshot readers without admitting another builder before this
+    // attempt's acknowledgements, status and durable intent are settled.
+    guard.allow_publication_reads();
+    finish_built_playout(
+        pool,
+        &playout,
+        build_request,
+        now,
+        &result,
+        channel_info.playout_mode,
+        publication::Notifications {
+            sessions: hls_sessions,
+            published_next: &published_next,
+        },
+    )
+    .await
+}
+
+async fn finish_built_playout(
+    pool: &Pool<Db>,
+    playout: &ersatzrs_domain::Playout,
+    request: PlayoutBuildRequest,
+    now: DateTime<Utc>,
+    result: &SchedulingResult,
+    playout_mode: ChannelPlayoutMode,
+    notifications: publication::Notifications<'_>,
+) -> Result<()> {
+    let should_notify_segmenter = scheduling_result_has_persisted_changes(result)
+        || (request.mode != PlayoutBuildMode::Continue
+            && playout_mode == ChannelPlayoutMode::OnDemand);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let deadline = result
+        .publication_deadline
+        .map_or(deadline, |seam| seam.min(deadline));
+    notify_playout_channels(
+        pool,
+        playout.channel_id,
+        !should_notify_segmenter
+            || request.mode == PlayoutBuildMode::Continue
+            || ((playout.schedule_kind == PlayoutScheduleKind::Scripted
+                || request.preservation
+                    == ersatzrs_core::scheduling::PlayoutPreservation::KeepCurrent)
+                && result.retain_through.is_some_and(|boundary| boundary > now)),
+        notifications.sessions,
+        deadline,
+        notifications.published_next,
+    )
+    .await?;
+    SqlitePlayoutRepository(pool.clone())
         .upsert_build_status(&PlayoutBuildStatus {
-            playout_id,
+            playout_id: playout.id,
             last_build: now,
             success: true,
             message: None,
         })
         .await?;
-    if let Err(error) = crate::subtitles::extract_embedded_playout_subtitles(pool, playout_id).await
-    {
-        warn!(
-            playout_id,
-            %error,
-            "embedded subtitle extraction failed after playout build"
-        );
-    }
-    // Native Continue reads appended rows directly and must not restart playback.
-    // Next owns a published snapshot, including when only a mirror uses Next.
-    if should_notify_segmenter {
-        notify_playout_channels(
-            pool,
-            playout.channel_id,
-            mode == PlayoutBuildMode::Continue,
-            hls_sessions,
-        )
-        .await?;
-    }
     Ok(())
+}
+
+fn publication_deadline(
+    boundary: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    started: std::time::Instant,
+) -> std::result::Result<Option<std::time::Instant>, SchedulingError> {
+    boundary
+        .filter(|boundary| *boundary > now)
+        .map(|boundary| {
+            (boundary - now)
+                .to_std()
+                .ok()
+                .and_then(|remaining| started.checked_add(remaining))
+                .ok_or_else(|| {
+                    SchedulingError::InvalidRebuild(
+                        "programme boundary exceeds the supported publication deadline".into(),
+                    )
+                })
+        })
+        .transpose()
 }
 
 async fn safe_classic_build_mode(
@@ -819,6 +1165,12 @@ async fn safe_classic_build_mode(
         || classic_runtime_state_is_complete(pool, playout_id, reference_data).await?
     {
         return Ok(requested_mode);
+    }
+
+    if reference_data.preservation == ersatzrs_core::scheduling::PlayoutPreservation::KeepCurrent {
+        return Err(SchedulingError::InvalidRebuild(
+            "Classic Continue refused because saved continuation state is incomplete. Choose an explicit preserving Refresh or Reset instead.".into(),
+        ).into());
     }
 
     require_safe_classic_refresh(pool, playout_id, now, reference_data).await?;
@@ -950,12 +1302,30 @@ async fn notify_playout_channels(
     source_channel_id: EntityId,
     next_only: bool,
     hls_sessions: Option<&dyn HlsSessionRegistry>,
+    deadline: std::time::Instant,
+    published_next: &[i64],
 ) -> Result<()> {
     if let Some(registry) = hls_sessions {
-        for number in
-            load_playout_dependent_channel_numbers(pool, source_channel_id, next_only).await?
-        {
-            registry.playout_updated(&number).await;
+        let numbers = load_playout_dependent_channel_numbers(
+            pool,
+            source_channel_id,
+            next_only,
+            published_next,
+        )
+        .await?;
+        let results = futures_util::future::join_all(numbers.iter().map(|number| async move {
+            tokio::time::timeout_at(
+                deadline.into(),
+                registry.publish_playout_update(number, deadline),
+            )
+            .await
+            .unwrap_or(Err(ersatzrs_core::hls::HlsPublicationError::TimedOut))
+        }))
+        .await;
+        for result in results {
+            result.map_err(|error| {
+                RepositoryError::unavailable(PLAYOUT_PUBLICATION_OPERATION, error.to_string())
+            })?;
         }
     }
     Ok(())
@@ -965,9 +1335,10 @@ async fn load_playout_dependent_channel_numbers(
     pool: &Pool<Db>,
     source_channel_id: EntityId,
     next_only: bool,
+    published_next: &[i64],
 ) -> Result<Vec<String>> {
-    Ok(sqlx::query_scalar::<_, Option<String>>(
-        r#"SELECT "Number" FROM "Channel"
+    Ok(sqlx::query_as::<_, (i64, Option<String>)>(
+        r#"SELECT "Id", "Number" FROM "Channel"
            WHERE ("Id" = ?
               OR ("PlayoutSource" = 1 AND "MirrorSourceChannelId" = ?))
              AND (? = 0 OR "StreamingEngine" = ?)
@@ -980,7 +1351,8 @@ async fn load_playout_dependent_channel_numbers(
     .fetch_all(pool)
     .await?
     .into_iter()
-    .flatten()
+    .filter(|(id, _)| !published_next.contains(id))
+    .filter_map(|(_, number)| number)
     .collect())
 }
 

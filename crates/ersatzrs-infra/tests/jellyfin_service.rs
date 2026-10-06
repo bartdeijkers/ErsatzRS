@@ -76,6 +76,7 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-variants")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 3,
@@ -83,6 +84,7 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
                     {
                         "Name": "Movie",
                         "Id": "movie-primary",
+                        "Type": "Movie",
                         "Etag": "movie-primary-etag",
                         "Path": "/srv/media/Movie.mkv",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -92,6 +94,7 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
                     {
                         "Name": "Movie (Director's Cut)",
                         "Id": "movie-directors-cut",
+                        "Type": "Movie",
                         "Etag": "movie-directors-cut-etag",
                         "Path": "/srv/media/Movie (Director's Cut).mkv",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -101,6 +104,7 @@ async fn jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions()
                     {
                         "Name": "Making Of",
                         "Id": "movie-featurette",
+                        "Type": "Movie",
                         "Etag": "movie-featurette-etag",
                         "Path": "/srv/media/Movie/Featurettes/Making Of.mkv",
                         "Tags": ["Featurette"],
@@ -174,6 +178,7 @@ async fn jellyfin_sync_pages_movie_library_beyond_first_result_window() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie")
                 .query_param("startIndex", "0")
                 .query_param("limit", "100");
@@ -189,6 +194,7 @@ async fn jellyfin_sync_pages_movie_library_beyond_first_result_window() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie")
                 .query_param("startIndex", "100")
                 .query_param("limit", "100");
@@ -229,6 +235,7 @@ async fn jellyfin_sync_skips_unchanged_movie_etag_before_playback_lookup() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(movie_page_json(
                 1,
@@ -272,6 +279,7 @@ async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(movie_page_json(
                 1,
@@ -390,6 +398,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-shows")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Series");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -397,6 +406,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
                     {
                         "Name": "Example Show",
                         "Id": "show-1",
+                        "Type": "Series",
                         "Etag": "show-etag",
                         "DateCreated": "2026-04-17T10:00:00Z",
                         "Overview": "An example series.",
@@ -426,6 +436,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "show-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Season");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -433,6 +444,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
                     {
                         "Name": "Season 1",
                         "Id": "season-1",
+                        "Type": "Season",
                         "Etag": "season-etag",
                         "IndexNumber": 1,
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -453,6 +465,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "season-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Episode");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -460,6 +473,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
                     {
                         "Name": "Pilot",
                         "Id": "episode-1",
+                        "Type": "Episode",
                         "Etag": "episode-etag",
                         "Path": "/srv/media/show/s01e01.mkv",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -711,72 +725,7 @@ async fn update_episode_subtitles_adds_resets_and_removes_rows() {
 #[tokio::test]
 async fn jellyfin_single_show_sync_targets_one_show_and_honors_episode_etags() {
     let server = MockServer::start_async().await;
-    let single_show = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "library-shows")
-                .query_param("includeItemTypes", "Series")
-                .query_param("ids", "show-target")
-                .query_param("recursive", "false")
-                .query_param("limit", "1");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    {
-                        "Name": "Target Show",
-                        "Id": "show-target",
-                        "Etag": "show-target-etag",
-                        "DateCreated": "2026-05-20T10:00:00Z",
-                        "ProductionYear": 2026
-                    }
-                ]
-            }));
-        })
-        .await;
-    let seasons = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "show-target")
-                .query_param("includeItemTypes", "Season");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    {
-                        "Name": "Season 1",
-                        "Id": "season-target",
-                        "Etag": "season-target-etag",
-                        "IndexNumber": 1,
-                        "DateCreated": "2026-05-20T10:00:00Z"
-                    }
-                ]
-            }));
-        })
-        .await;
-    let episodes = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "season-target")
-                .query_param("includeItemTypes", "Episode");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    {
-                        "Name": "Pilot",
-                        "Id": "episode-target",
-                        "Etag": "episode-target-etag",
-                        "Path": "/srv/media/show/target.mkv",
-                        "DateCreated": "2026-05-20T10:00:00Z",
-                        "RunTimeTicks": 1_800_000_000,
-                        "LocationType": "FileSystem",
-                        "IndexNumber": 1
-                    }
-                ]
-            }));
-        })
-        .await;
+    let (single_show, seasons, episodes) = mock_target_show_pages(&server).await;
     let playback = mock_jellyfin_playback(&server, "episode-target").await;
 
     let pool = common::test_db().await;
@@ -799,6 +748,17 @@ async fn jellyfin_single_show_sync_targets_one_show_and_honors_episode_etags() {
         .await
         .unwrap();
 
+    let original_season: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "JellyfinSeason" WHERE "ItemId" = 'season-target'"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(r#"UPDATE "Season" SET "ShowId" = 11 WHERE "Id" = ?"#)
+        .bind(original_season)
+        .execute(&pool)
+        .await
+        .unwrap();
+
     let original_episode = common::displace_episode_season(&pool).await;
 
     let shallow_synced = sync_jellyfin_show_by_id(&pool, 1, 10, false, None)
@@ -809,6 +769,14 @@ async fn jellyfin_single_show_sync_targets_one_show_and_honors_episode_etags() {
     // PlaybackInfo is NOT called again.
     assert_eq!(shallow_synced, 1);
     common::assert_episode_parent(&pool, original_episode).await;
+    let repaired: (i64, i64, String) = sqlx::query_as(r#"SELECT s."Id", s."ShowId", j."Etag" FROM "Season" s JOIN "JellyfinSeason" j ON j."Id" = s."Id" WHERE j."ItemId" = 'season-target'"#)
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        repaired,
+        (original_season, 10, "season-target-etag".to_owned())
+    );
+    assert_eq!(count(&pool, "JellyfinSeason").await, 1);
+    assert_eq!(count(&pool, "JellyfinEpisode").await, 1);
     assert_eq!(media_file_path(&pool).await, "/srv/media/show/kept.mkv");
 
     let deep_synced = sync_jellyfin_show_by_id(&pool, 1, 10, true, None)
@@ -824,6 +792,82 @@ async fn jellyfin_single_show_sync_targets_one_show_and_honors_episode_etags() {
     // PlaybackInfo: 2 calls (initial sync + deep), skipped on the shallow
     // re-run thanks to the etag match.
     assert_eq!(playback.calls_async().await, 2);
+}
+
+async fn mock_target_show_pages(server: &MockServer) -> (Mock<'_>, Mock<'_>, Mock<'_>) {
+    let single_show = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-shows")
+                .query_param("collapseBoxSetItems", "false")
+                .query_param("includeItemTypes", "Series")
+                .query_param("ids", "show-target")
+                .query_param("recursive", "false")
+                .query_param("limit", "1");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Target Show",
+                        "Id": "show-target",
+                        "Type": "Series",
+                        "Etag": "show-target-etag",
+                        "DateCreated": "2026-05-20T10:00:00Z",
+                        "ProductionYear": 2026
+                    }
+                ]
+            }));
+        })
+        .await;
+    let seasons = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "show-target")
+                .query_param("collapseBoxSetItems", "false")
+                .query_param("includeItemTypes", "Season");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Season 1",
+                        "Id": "season-target",
+                        "Type": "Season",
+                        "Etag": "season-target-etag",
+                        "IndexNumber": 1,
+                        "DateCreated": "2026-05-20T10:00:00Z"
+                    }
+                ]
+            }));
+        })
+        .await;
+    let episodes = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "season-target")
+                .query_param("collapseBoxSetItems", "false")
+                .query_param("includeItemTypes", "Episode");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Pilot",
+                        "Id": "episode-target",
+                        "Type": "Episode",
+                        "Etag": "episode-target-etag",
+                        "Path": "/srv/media/show/target.mkv",
+                        "DateCreated": "2026-05-20T10:00:00Z",
+                        "RunTimeTicks": 1_800_000_000,
+                        "LocationType": "FileSystem",
+                        "IndexNumber": 1
+                    }
+                ]
+            }));
+        })
+        .await;
+    (single_show, seasons, episodes)
 }
 
 async fn seed_jellyfin_show_scan_config(pool: &SqlitePool, base_url: &str) {
@@ -914,6 +958,7 @@ async fn mock_movie(server: &MockServer) {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -921,6 +966,7 @@ async fn mock_movie(server: &MockServer) {
                     {
                         "Name": "Big Buck Bunny",
                         "Id": "movie-1",
+                        "Type": "Movie",
                         "Etag": "etag-1",
                         "Path": "/srv/media/bbb.mp4",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -972,6 +1018,7 @@ async fn mock_detailed_movie_items(server: &MockServer) -> Mock<'_> {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -979,6 +1026,7 @@ async fn mock_detailed_movie_items(server: &MockServer) -> Mock<'_> {
                     {
                         "Name": "Big Buck Bunny",
                         "Id": "movie-1",
+                        "Type": "Movie",
                         "Etag": "etag-1",
                         "Path": "/srv/media/bbb.mp4",
                         "DateCreated": "2026-04-17T10:00:00Z",
@@ -1096,6 +1144,7 @@ fn movie_page_json(total_record_count: i32, item_id: &str, path: &str) -> serde_
             {
                 "Name": item_id,
                 "Id": item_id,
+                "Type": "Movie",
                 "Etag": format!("{item_id}-etag"),
                 "Path": path,
                 "DateCreated": "2026-04-17T10:00:00Z",
@@ -1538,11 +1587,12 @@ async fn mock_jellyfin_collection_pages(
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "collections-root")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "BoxSet");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
                 "Items": [
-                    { "Name": "Favorites", "Id": "collection-1", "Etag": "collection-etag" }
+                    { "Name": "Favorites", "Id": "collection-1", "Type": "BoxSet", "Etag": "collection-etag" }
                 ]
             }));
         })
@@ -1552,6 +1602,7 @@ async fn mock_jellyfin_collection_pages(
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "collection-1")
+                .query_param("collapseBoxSetItems", "false")
                 .query_param("includeItemTypes", "Movie,Series,Season,Episode");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,

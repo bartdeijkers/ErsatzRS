@@ -52,6 +52,7 @@ fn basic_chronological_block_matches_ersatztv_fixture() {
                 disable_watermarks: true,
                 watermark_ids: Vec::new(),
                 graphics_element_ids: vec![77],
+                graphics_element_variables: std::collections::BTreeMap::new(),
             },
         ],
         deco: None,
@@ -287,6 +288,7 @@ fn block_item(
         disable_watermarks: false,
         watermark_ids: Vec::new(),
         graphics_element_ids: Vec::new(),
+        graphics_element_variables: std::collections::BTreeMap::new(),
     }
 }
 

@@ -220,6 +220,9 @@ pub async fn probe_hardware_graph(
 ) -> HardwareGraphProbe {
     let mut command = tokio::process::Command::new(ffmpeg_path);
     command.args(operation.probe_arguments());
+    // Timeout or caller cancellation drops output's child handle. Terminate
+    // the directly spawned FFmpeg process instead of leaving the probe alive.
+    command.kill_on_drop(true);
     command.stdin(std::process::Stdio::null());
     command.stdout(std::process::Stdio::null());
     command.stderr(std::process::Stdio::piped());
@@ -754,7 +757,10 @@ mod tests {
 
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("hanging-ffmpeg");
-        std::fs::write(&path, "#!/bin/sh\nsleep 600\n").expect("write script");
+        // Replace the shell with the fake executable so the fixture owns one
+        // process, just like the directly spawned FFmpeg binary.
+        std::fs::write(&path, "#!/bin/sh\necho $$ > \"$0.pid\"\nexec sleep 600\n")
+            .expect("write script");
         let mut permissions = std::fs::metadata(&path).expect("metadata").permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&path, permissions).expect("chmod");
@@ -768,6 +774,30 @@ mod tests {
 
         assert!(!outcome.is_proven());
         assert!(outcome.denial().is_some(), "a timeout is persistable");
+        let pid = std::fs::read_to_string(path.with_extension("pid")).expect("child PID");
+        let exited = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let running = tokio::process::Command::new("kill")
+                    .args(["-0", pid.trim()])
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .await
+                    .expect("inspect fixture process")
+                    .success();
+                if !running {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await;
+        if exited.is_err() {
+            let _ = tokio::process::Command::new("kill")
+                .args(["-KILL", pid.trim()])
+                .status()
+                .await;
+        }
+        assert!(exited.is_ok(), "timed-out probe must terminate its child");
     }
 
     // Only used by the SQLite-backed lifecycle tests below.

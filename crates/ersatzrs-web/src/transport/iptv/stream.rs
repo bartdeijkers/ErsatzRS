@@ -1,3 +1,6 @@
+#[path = "stream_external.rs"]
+mod external;
+
 #[cfg(test)]
 use std::process::Stdio;
 use std::{
@@ -44,6 +47,7 @@ use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls_worker::{
     build_mpeg_ts_slate_command, MpegTsSlateCommandRequest, ALL_STREAMS_IN_USE_SLATE_MESSAGE,
 };
+use ersatzrs_infra::mpegts_scripts::{MpegTsScript, MpegTsScriptDefinition};
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
@@ -69,7 +73,6 @@ use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
     ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
-use serde::Deserialize;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
 #[cfg(test)]
@@ -93,22 +96,6 @@ const MPEG_TS_HLS_RECLAIM_WATCH_WINDOW: Duration = Duration::from_secs(30);
 const MPEG_TS_HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(5);
 const MPEG_TS_HLS_RECLAIM_GRACE: Duration = Duration::from_secs(6);
 const MPEG_TS_HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct MpegTsScriptDefinition {
-    name: String,
-    #[serde(default)]
-    linux_script: Option<String>,
-    #[serde(default)]
-    windows_script: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MpegTsScript {
-    id: String,
-    folder: PathBuf,
-    definition: MpegTsScriptDefinition,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MpegTsScriptRenderData {
@@ -142,6 +129,19 @@ pub async fn serve_transport_stream(
     let Some(mode) = channel_transport_stream_mode(query.mode.as_deref(), &channel) else {
         return StatusCode::NOT_FOUND.into_response();
     };
+
+    if !matches!(mode, TransportStreamMode::RedirectToHls) {
+        if let Err(response) = super::validate_profile_output(
+            state,
+            channel.id,
+            OutputFormat::MpegTs,
+            tokio::time::Instant::now() + Duration::from_secs(20),
+        )
+        .await
+        {
+            return response;
+        }
+    }
 
     match mode {
         TransportStreamMode::RedirectToHls => {
@@ -212,9 +212,12 @@ pub async fn serve_concat_playlist(
     {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => {
-            tracing::debug!(%error, channel_number, "channel not found for concat playlist");
+        Err(ersatzrs_core::repositories::RepositoryError::NotFound { .. }) => {
             return StatusCode::NOT_FOUND.into_response();
+        }
+        Err(_) => {
+            tracing::error!("concat channel lookup failed");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
     let mode = query
@@ -276,6 +279,14 @@ async fn serve_channel_stream_with_channel(
 ) -> Response {
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
         return StatusCode::NOT_FOUND.into_response();
+    }
+
+    if effective_streaming_mode != StreamingMode::HttpLiveStreamingDirect {
+        if let Err(response) =
+            super::validate_profile_output(state, channel.id, output_format, deadline).await
+        {
+            return response;
+        }
     }
 
     serve_channel_stream_admitted(
@@ -540,7 +551,7 @@ async fn serve_channel_stream_admitted_inner(
     let now = Utc::now();
     let active = tokio::time::timeout_at(
         startup_deadline,
-        load_active_media_path(&state.pool, channel.id, now),
+        external::load(state, channel.id, now, startup_deadline),
     )
     .await;
     let Ok(active) = active else {
@@ -558,6 +569,15 @@ async fn serve_channel_stream_admitted_inner(
                 "no active playout item; returning 503"
             );
             return (StatusCode::SERVICE_UNAVAILABLE, "no active playout item").into_response();
+        }
+        Err(
+            error @ RepositoryError::Unavailable {
+                operation: "external JSON playback",
+                ..
+            },
+        ) => {
+            tracing::warn!(%error, channel_id = channel.id, "external JSON programme is unavailable");
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
         Err(error) => {
             tracing::error!(%error, channel_number = %channel.number, "failed to load active playout item");
@@ -582,23 +602,34 @@ async fn serve_channel_stream_admitted_inner(
         );
     }
 
-    let replacements =
+    let replacements = if active.external.is_some() {
+        Vec::new()
+    } else {
         match load_required_path_replacements(state, &channel, "MPEG-TS stream").await {
             Ok(replacements) => replacements,
             Err(response) => return response,
-        };
-
-    let resolved = if active.remote_stream.is_some() || replacements.is_empty() {
-        active.media_path.clone()
-    } else {
-        replace_path(&replacements, &active.media_path, PathPlatform::Unix)
+        }
     };
 
-    let source_stream = match load_source_video_stream_by_index(
-        &state.pool,
-        active.media_version_id,
-        active.video_stream_index,
-    )
+    let resolved =
+        if active.external.is_some() || active.remote_stream.is_some() || replacements.is_empty() {
+            active.media_path.clone()
+        } else {
+            replace_path(&replacements, &active.media_path, PathPlatform::Unix)
+        };
+
+    let source_stream = match async {
+        if let Some(media) = &active.external {
+            ersatzrs_infra::playback::source_video_stream_from_probe(&media.probe)
+        } else {
+            load_source_video_stream_by_index(
+                &state.pool,
+                active.media_version_id,
+                active.video_stream_index,
+            )
+            .await
+        }
+    }
     .await
     {
         Ok(stream) => stream,
@@ -613,20 +644,27 @@ async fn serve_channel_stream_admitted_inner(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    let mut source_audio_streams =
-        match load_source_audio_streams(&state.pool, active.media_version_id).await {
-            Ok(streams) => streams,
-            Err(error) => {
-                tracing::error!(
-                    %error,
-                    channel_id = channel.id,
-                    channel_number = %channel.number,
-                    media_version_id = active.media_version_id,
-                    "failed to load source audio metadata; refusing to build FFmpeg command"
-                );
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let mut source_audio_streams = match async {
+        if let Some(media) = &active.external {
+            ersatzrs_infra::playback::source_audio_streams_from_probe(&media.probe)
+        } else {
+            load_source_audio_streams(&state.pool, active.media_version_id).await
+        }
+    }
+    .await
+    {
+        Ok(streams) => streams,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                media_version_id = active.media_version_id,
+                "failed to load source audio metadata; refusing to build FFmpeg command"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     if let Some(stream_index) = active.audio_stream_index {
         let pinned_index = usize::try_from(stream_index).ok();
         if pinned_index.is_none_or(|index| {
@@ -712,6 +750,17 @@ async fn serve_channel_stream_admitted_inner(
                 return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
             }
         }
+    } else if active.external.is_some() {
+        ersatzrs_infra::playback::enrich_transient_source_video_stream_for_playback(
+            &state.pool,
+            source_stream,
+            &resolved,
+            active.content_duration.unwrap_or_default(),
+            playback_profile.profile.deinterlace_video == Some(true),
+            effective_acceleration,
+            startup_deadline,
+        )
+        .await
     } else {
         enrich_source_video_stream_for_playback(
             &state.pool,
@@ -782,14 +831,31 @@ async fn serve_channel_stream_admitted_inner(
     let custom_selection = if active.has_pinned_stream_selection {
         None
     } else {
-        match select_channel_custom_streams(
-            &state.pool,
-            active.media_version_id,
-            active.media_item_id,
-            &channel,
-            content_start_time,
-            effective_streaming_mode,
-        )
+        match async {
+            if let Some(media) = &active.external {
+                if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom {
+                    return Ok(None);
+                }
+                media
+                    .tracks()
+                    .select_custom(
+                        &channel,
+                        content_start_time,
+                        external::policy(&state.pool, effective_streaming_mode, media).await?,
+                    )
+                    .await
+            } else {
+                select_channel_custom_streams(
+                    &state.pool,
+                    active.media_version_id,
+                    active.media_item_id,
+                    &channel,
+                    content_start_time,
+                    effective_streaming_mode,
+                )
+                .await
+            }
+        }
         .await
         {
             Ok(selection) => selection,
@@ -815,23 +881,37 @@ async fn serve_channel_stream_admitted_inner(
             .and_then(|selection| selection.audio_stream_index)
             .is_none()
     {
-        ersatzrs_infra::audio_script::select(
-            &state.pool,
-            &channel,
-            active.media_item_id,
-            active.media_version_id,
-            ersatzrs_infra::audio_script::AudioScriptPreferences {
-                language: preferred_audio_language.as_deref(),
-                title: preferred_audio_title,
-                streaming_mode: effective_streaming_mode,
-            },
-            if interval_source.is_some() {
-                &previous_audio_streams
-            } else {
-                &source_audio_streams
-            },
-        )
-        .await
+        if let Some(media) = &active.external {
+            ersatzrs_infra::audio_script::transient::select(
+                &channel,
+                media.audio_metadata(),
+                ersatzrs_infra::audio_script::AudioScriptPreferences {
+                    language: preferred_audio_language.as_deref(),
+                    title: preferred_audio_title,
+                    streaming_mode: effective_streaming_mode,
+                },
+                &media.tracks(),
+            )
+            .await
+        } else {
+            ersatzrs_infra::audio_script::select(
+                &state.pool,
+                &channel,
+                active.media_item_id,
+                active.media_version_id,
+                ersatzrs_infra::audio_script::AudioScriptPreferences {
+                    language: preferred_audio_language.as_deref(),
+                    title: preferred_audio_title,
+                    streaming_mode: effective_streaming_mode,
+                },
+                if interval_source.is_some() {
+                    &previous_audio_streams
+                } else {
+                    &source_audio_streams
+                },
+            )
+            .await
+        }
     } else {
         None
     };
@@ -921,16 +1001,31 @@ async fn serve_channel_stream_admitted_inner(
     } else if let Some(selection) = custom_selection {
         selection.subtitle
     } else {
-        match select_channel_playback_subtitle(
-            &state.pool,
-            active.media_item_id,
-            &preferred_subtitle_languages,
-            subtitle_mode,
-            effective_streaming_mode,
-            &channel,
-            &playback_profile.resolution,
-            start_seconds,
-        )
+        match async {
+            if let Some(media) = &active.external {
+                media
+                    .tracks()
+                    .select_subtitle(
+                        &state.pool,
+                        &preferred_subtitle_languages,
+                        subtitle_mode,
+                        external::policy(&state.pool, effective_streaming_mode, media).await?,
+                    )
+                    .await
+            } else {
+                select_channel_playback_subtitle(
+                    &state.pool,
+                    active.media_item_id,
+                    &preferred_subtitle_languages,
+                    subtitle_mode,
+                    effective_streaming_mode,
+                    &channel,
+                    &playback_profile.resolution,
+                    start_seconds,
+                )
+                .await
+            }
+        }
         .await
         {
             Ok(subtitle) => subtitle,
@@ -949,7 +1044,30 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     };
+    let mut external_subtitle_owner = None;
     let subtitle = match subtitle {
+        Some(selected) if active.external.is_some() => {
+            let media = active.external.as_ref().expect("external binding checked");
+            match external::prepare_subtitle(
+                &state.pool,
+                media,
+                &resolved,
+                selected,
+                effective_streaming_mode,
+                startup_deadline,
+            )
+            .await
+            {
+                Ok((subtitle, owner)) => {
+                    external_subtitle_owner = owner;
+                    Some(subtitle)
+                }
+                Err(error) => {
+                    tracing::warn!(channel_id = channel.id, %error, "external subtitle preparation failed");
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+            }
+        }
         Some(selected) => {
             let Ok(Ok(prepared)) = tokio::time::timeout_at(
                 startup_deadline,
@@ -1017,7 +1135,11 @@ async fn serve_channel_stream_admitted_inner(
         audio_selection,
     );
     let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-        subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
+        if active.external.is_some() {
+            external::subtitle_input(subtitle, &resolved, output_format, effective_streaming_mode)
+        } else {
+            subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
+        }
     });
     if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
         tracing::error!(
@@ -1036,13 +1158,29 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
     };
-    let watermark_inputs = match select_playback_watermarks(
-        &state.pool,
-        &channel,
-        active.playout_item_id,
-        active.disable_watermarks,
-        now,
-    )
+    let watermark_inputs = match async {
+        if let Some(media) = &active.external {
+            if channel.streaming_mode == StreamingMode::HttpLiveStreamingDirect {
+                return Ok(Vec::new());
+            }
+            ersatzrs_infra::playback::select_fallback_watermarks(
+                &state.pool,
+                &channel,
+                &external::decoration_item(media),
+                now,
+            )
+            .await
+        } else {
+            select_playback_watermarks(
+                &state.pool,
+                &channel,
+                active.playout_item_id,
+                active.disable_watermarks,
+                now,
+            )
+            .await
+        }
+    }
     .await
     {
         Ok(watermarks) => {
@@ -1087,12 +1225,18 @@ async fn serve_channel_stream_admitted_inner(
     };
     let mut graphics_cleanup_dirs = Vec::new();
     let mut dynamic_text_controllers = Vec::new();
-    let graphics_overlays = match select_playback_graphics(
-        &state.pool,
-        &channel,
-        active.playout_item_id,
-        now,
-    )
+    let graphics_overlays = match async {
+        if let Some(media) = &active.external {
+            ersatzrs_infra::playback::select_fallback_graphics(
+                &state.pool,
+                &external::decoration_item(media),
+                now,
+            )
+            .await
+        } else {
+            select_playback_graphics(&state.pool, &channel, active.playout_item_id, now).await
+        }
+    }
     .await
     {
         Ok(graphics) => {
@@ -1106,11 +1250,21 @@ async fn serve_channel_stream_admitted_inner(
             let start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
             let graphics_context = PlaybackGraphicsRenderContext {
                 channel_id: channel.id,
+                render_time: now,
+                playout_item_id: Some(active.playout_item_id),
                 channel_number: channel.number.clone(),
-                media_item_id: active.media_item_id,
+                media: active.external.as_ref().map_or_else(
+                    || {
+                        ersatzrs_infra::graphics_template::GraphicsMedia::Persisted(
+                            active.media_item_id,
+                        )
+                    },
+                    |media| media.graphics_media(),
+                ),
                 media_path: resolved.clone(),
                 channel_start_time: start_time,
                 content_start_time: start_time,
+                content_finish_time: parse_sqlite_utc_timestamp(&active.playout_finish),
                 stream_seek_seconds: start_position.as_secs_f64(),
                 duration_seconds: active
                     .program_duration()
@@ -1118,7 +1272,8 @@ async fn serve_channel_stream_admitted_inner(
                 frame_size,
                 square_pixel_frame_size,
                 frame_rate: target_frame_rate
-                    .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+                    .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate))
+                    .map(Into::into),
             };
             let rendered = if let Some(cancellation) = retained_cancellation.as_mut() {
                 let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -1436,6 +1591,7 @@ async fn serve_channel_stream_admitted_inner(
                     slate_runtime_capabilities,
                     Some(retry),
                     remote_stream.clone(),
+                    external_subtitle_owner,
                 )
                 .await;
             }
@@ -1504,6 +1660,7 @@ async fn serve_channel_stream_admitted_inner(
         Some(retry),
         remote_stream,
         retained_playback.map(|playback| playback.prepared),
+        external_subtitle_owner,
         retained_output
             .as_ref()
             .map(|output| (output.terminal.clone(), output.completed.clone())),
@@ -1670,6 +1827,7 @@ async fn serve_segmenter_wrapper_stream(
                 runtime_capabilities,
                 None,
                 None,
+                None,
             )
             .await;
         }
@@ -1797,6 +1955,7 @@ async fn serve_legacy_concat_stream(state: &AppState, channel: &Channel) -> Resp
                 target_frame_rate,
                 metadata,
                 runtime_capabilities,
+                None,
                 None,
                 None,
             )
@@ -1955,6 +2114,7 @@ async fn mpeg_ts_capacity_wait_response(
     runtime_capabilities: FfmpegCapabilityReport,
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
+    subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
 ) -> Response {
     let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
     let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
@@ -1995,6 +2155,7 @@ async fn mpeg_ts_capacity_wait_response(
         state.pool.clone(),
         retry,
         remote_stream,
+        subtitle_owner,
     );
     let mut response = body.into_response();
     response
@@ -2157,36 +2318,11 @@ fn mpegts_script_id_eq(left: &str, right: &str) -> bool {
 }
 
 async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Option<MpegTsScript> {
-    let mut entries = tokio::fs::read_dir(&root).await.ok()?;
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let Ok(file_type) = entry.file_type().await else {
-            continue;
-        };
-        if !file_type.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().into_owned();
-        if !mpegts_script_id_eq(&id, script_id) {
-            continue;
-        }
-        let folder = entry.path();
-        let yaml = tokio::fs::read_to_string(folder.join("mpegts.yml"))
-            .await
-            .ok()?;
-        let definition = match serde_yaml::from_str::<MpegTsScriptDefinition>(&yaml) {
-            Ok(definition) => definition,
-            Err(error) => {
-                tracing::warn!(%error, script_id, "failed to parse MPEG-TS script YAML definition");
-                return None;
-            }
-        };
-        return Some(MpegTsScript {
-            id,
-            folder,
-            definition,
-        });
-    }
-    None
+    ersatzrs_infra::mpegts_scripts::discover_in(root)
+        .await
+        .ok()?
+        .into_iter()
+        .find(|script| mpegts_script_id_eq(&script.id, script_id))
 }
 
 async fn render_mpegts_script_command(
@@ -2282,8 +2418,10 @@ enum StreamSpawnError {
     MissingStdout,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct ActivePlayoutItem {
+    pub(crate) external:
+        Option<Arc<ersatzrs_infra::external_json::playback::ResolvedExternalMedia>>,
     pub(crate) playout_item_id: i64,
     pub(crate) media_path: String,
     pub(crate) media_item_id: i64,
@@ -2499,6 +2637,7 @@ pub(crate) async fn load_active_media_path(
     };
 
     Ok(Some(ActivePlayoutItem {
+        external: None,
         playout_item_id: decode_active_item_column(&row, "PlayoutItemId")?,
         media_path,
         media_item_id: decode_active_item_column(&row, "MediaItemId")?,
@@ -3461,6 +3600,7 @@ async fn spawn_stream_body(
         remote_stream,
         None,
         None,
+        None,
     )
     .await
 }
@@ -3476,6 +3616,7 @@ async fn spawn_stream_body_with_prepared_input(
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
     prepared: Option<PreparedRemoteStreamInput>,
+    subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
 ) -> Result<Body, StreamSpawnError> {
     let mut child = match prepared {
@@ -3504,6 +3645,7 @@ async fn spawn_stream_body_with_prepared_input(
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
+        let _subtitle_owner = subtitle_owner;
         let _capacity_reservation = capacity_reservation;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
@@ -3549,6 +3691,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     pool: DbPool,
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
+    subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
 ) -> Body {
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
@@ -3557,6 +3700,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
+        let _subtitle_owner = subtitle_owner;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
         loop {
@@ -5127,6 +5271,7 @@ mod tests {
         out_point: Duration,
     ) -> ActivePlayoutItem {
         ActivePlayoutItem {
+            external: None,
             playout_item_id: 1,
             media_path: "/media/calibration-1.mp4".to_owned(),
             media_item_id: 10,
@@ -5427,6 +5572,36 @@ mod tests {
             rendered,
             r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -muxrate 9830400 -pcr_period 20 -metadata service_name="Channel One""#
         );
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_missing_platform_name_or_file_returns_fallback_error() {
+        let root = tempfile::tempdir().unwrap();
+        let data = MpegTsScriptRenderData {
+            hls_url: "http://127.0.0.1/test.m3u8".into(),
+            channel_name: "Synthetic channel".into(),
+            ffmpeg_path: "ffmpeg".into(),
+            muxrate_bps: 12_000_000,
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+        };
+        for name in [None, Some(" ".into()), Some("missing-script".into())] {
+            let script = MpegTsScript {
+                id: "custom".into(),
+                folder: root.path().to_owned(),
+                definition: MpegTsScriptDefinition {
+                    name: "Custom".into(),
+                    linux_script: name.clone(),
+                    windows_script: name,
+                },
+            };
+            assert_eq!(
+                render_mpegts_script_command(&script, &data)
+                    .await
+                    .unwrap_err()
+                    .kind(),
+                std::io::ErrorKind::NotFound,
+            );
+        }
     }
 
     #[test]
@@ -5847,6 +6022,7 @@ mod tests {
             pool,
             None,
             None,
+            None,
         );
         let release = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -5921,6 +6097,7 @@ mod tests {
             pool,
             None,
             None,
+            None,
         );
 
         let bytes = axum::body::to_bytes(body, 64 * 1024)
@@ -5950,6 +6127,33 @@ mod tests {
         // and removes the session registration.
         let registry: Arc<dyn HlsSessionRegistry> =
             Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.srt");
+        std::fs::write(&source, "1\n00:00:00,000 --> 00:00:30,000\nFixture\n").unwrap();
+        let subtitle =
+            ersatzrs_infra::playback::transient::TransientPlaybackTracks::from_streams(&[
+                ersatzrs_domain::MediaStream {
+                    kind: ersatzrs_domain::MediaStreamKind::Subtitle,
+                    codec: Some("subrip".into()),
+                    ..Default::default()
+                },
+            ])
+            .subtitles
+            .remove(0);
+        let owner = ersatzrs_infra::external_json::subtitles::PreparedSubtitle::extract(
+            ersatzrs_infra::next_engine::protocol::Source::Local {
+                path: source.to_str().unwrap().into(),
+                probe_hint: None,
+                in_point_ms: None,
+                out_point_ms: None,
+            },
+            subtitle,
+            ersatzrs_ffmpeg::ffmpeg_path().into(),
+            tokio::time::Instant::now() + Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        let artifact_path = PathBuf::from(owner.subtitle().path.as_ref().unwrap());
         let command = FfmpegCommand {
             executable: ersatzrs_ffmpeg::ffmpeg_path(),
             arguments: [
@@ -5971,7 +6175,7 @@ mod tests {
             environment: Vec::new(),
         };
 
-        let body = spawn_stream_body(
+        let body = spawn_stream_body_with_prepared_input(
             &command,
             Vec::new(),
             Vec::new(),
@@ -5979,6 +6183,9 @@ mod tests {
             Arc::clone(&registry),
             None,
             None,
+            None,
+            None,
+            Some(owner),
             None,
         )
         .await
@@ -5998,11 +6205,15 @@ mod tests {
             registry.try_get("97").await.is_none(),
             "a direct stream must not occupy the HLS worker slot"
         );
+        assert!(
+            artifact_path.exists(),
+            "stream supervisor must retain subtitle ownership"
+        );
         drop(body);
 
         // The supervisor kills ffmpeg on disposal and removes the session.
         let removed_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-        while registry.is_active("97").await {
+        while registry.is_active("97").await || artifact_path.exists() {
             assert!(
                 tokio::time::Instant::now() < removed_deadline,
                 "session was not torn down after the body was dropped"

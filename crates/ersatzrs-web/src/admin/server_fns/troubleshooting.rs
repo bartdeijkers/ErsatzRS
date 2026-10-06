@@ -80,6 +80,7 @@ pub struct PlaybackTroubleshootingContext {
     pub selected_ffmpeg_profile_id: i64,
     pub ffmpeg_profiles: Vec<PlaybackTroubleshootingOption>,
     pub stream_selectors: Vec<String>,
+    pub music_video_credits_templates: Vec<String>,
     pub subtitles: Vec<PlaybackTroubleshootingSubtitle>,
     pub watermarks: Vec<PlaybackTroubleshootingOption>,
     pub graphics_elements: Vec<PlaybackTroubleshootingOption>,
@@ -301,6 +302,48 @@ pub async fn list_block_playout_history(
         .collect()
 }
 
+/// Shared SSR/WASM view of an owned ephemeral preview; no native runtime types cross the island boundary.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct OwnedPreviewView {
+    pub id: String,
+    pub state: String,
+    pub ready: bool,
+    pub cleanup_confirmed: bool,
+    pub playlist_url: String,
+    pub selected_at: String,
+    pub error_code: String,
+    pub return_url: String,
+    pub log: String,
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn load_owned_preview_status(
+    id: String,
+) -> Result<Option<OwnedPreviewView>, ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    let status = state.application.playback_preview_status(id).await?;
+    Ok(status.map(|status| OwnedPreviewView {
+        id: status.id,
+        state: match status.state {
+            ersatzrs_app::PlaybackPreviewState::Queued => "queued",
+            ersatzrs_app::PlaybackPreviewState::Running => "running",
+            ersatzrs_app::PlaybackPreviewState::Completed => "completed",
+            ersatzrs_app::PlaybackPreviewState::Failed => "failed",
+            ersatzrs_app::PlaybackPreviewState::Cancelling => "cancelling",
+            ersatzrs_app::PlaybackPreviewState::Cancelled => "cancelled",
+        }
+        .into(),
+        ready: status.ready,
+        cleanup_confirmed: status.cleanup_confirmed,
+        playlist_url: status.playlist_url,
+        selected_at: status.selected_at.unwrap_or(status.created_at),
+        error_code: status.error_code.unwrap_or_default(),
+        return_url: status.return_url,
+        log: status.log.map(|log| log.text).unwrap_or_default(),
+    }))
+}
+
 #[server(prefix = "/admin-api")]
 pub async fn load_playback_troubleshooting_context(
     media_item_id: i64,
@@ -369,7 +412,7 @@ pub async fn load_troubleshooting_report_with_state(
     )?;
     let health = state
         .application
-        .run_admin_health_checks()
+        .run_admin_health_checks(true)
         .await?
         .results
         .into_iter()
@@ -1265,11 +1308,45 @@ fn troubleshooting_environment_from(
             let value = if is_sensitive_environment_key(&key) {
                 "<redacted>".to_owned()
             } else {
-                value
+                redact_environment_uri(value)
             };
             (key, value)
         })
         .collect()
+}
+
+#[cfg(feature = "ssr")]
+fn redact_environment_uri(value: String) -> String {
+    let Ok(mut uri) = reqwest::Url::parse(&value) else {
+        return value;
+    };
+    if !uri.has_host() {
+        return value;
+    }
+    let has_user_info = !uri.username().is_empty() || uri.password().is_some();
+    let query: Vec<_> = uri
+        .query_pairs()
+        .map(|(key, value)| {
+            let value = if is_sensitive_environment_key(&key) {
+                "<redacted>".into()
+            } else {
+                value
+            };
+            (key.into_owned(), value.into_owned())
+        })
+        .collect();
+    let has_sensitive_query = uri
+        .query_pairs()
+        .any(|(key, _)| is_sensitive_environment_key(&key));
+    if !has_user_info && !has_sensitive_query {
+        return value;
+    }
+    let _ = uri.set_username("");
+    let _ = uri.set_password(None);
+    if has_sensitive_query {
+        uri.query_pairs_mut().clear().extend_pairs(query);
+    }
+    uri.into()
 }
 
 #[cfg(feature = "ssr")]
@@ -1891,6 +1968,7 @@ fn playback_context_from_admin(
             selected_ffmpeg_profile_id: default_profile_id,
             ffmpeg_profiles,
             stream_selectors: read.stream_selectors,
+            music_video_credits_templates: read.music_video_credits_templates,
             subtitles: read
                 .data
                 .subtitles
@@ -1924,6 +2002,7 @@ fn playback_context_from_admin(
             selected_ffmpeg_profile_id: channel.ffmpeg_profile_id,
             ffmpeg_profiles,
             stream_selectors: read.stream_selectors,
+            music_video_credits_templates: read.music_video_credits_templates,
             subtitles: Vec::new(),
             watermarks,
             graphics_elements,
@@ -1934,6 +2013,7 @@ fn playback_context_from_admin(
         mode: PlaybackTroubleshootingMode::Missing,
         ffmpeg_profiles,
         stream_selectors: read.stream_selectors,
+        music_video_credits_templates: read.music_video_credits_templates,
         watermarks,
         graphics_elements,
         ..PlaybackTroubleshootingContext::default()
@@ -1989,6 +2069,9 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             ffmpeg_profiles,
             stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
                 .await,
+            music_video_credits_templates:
+                ersatzrs_infra::music_video_credits::list_music_video_credit_template_names()
+                    .await?,
             subtitles,
             watermarks,
             graphics_elements,
@@ -2013,6 +2096,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
             ffmpeg_profiles,
             stream_selectors: ersatzrs_infra::file_system_layout::list_channel_stream_selectors()
                 .await,
+            music_video_credits_templates: Vec::new(),
             subtitles: Vec::new(),
             watermarks,
             graphics_elements,
@@ -2059,6 +2143,7 @@ async fn load_playback_media_item_row(
               CASE
                 WHEN movie."Id" IS NOT NULL THEN 'Movie'
                 WHEN episode."Id" IS NOT NULL THEN 'Episode'
+                WHEN music_video."Id" IS NOT NULL THEN 'MusicVideo'
                 WHEN other_video."Id" IS NOT NULL THEN 'OtherVideo'
                 WHEN remote_stream."Id" IS NOT NULL THEN 'RemoteStream'
                 WHEN song."Id" IS NOT NULL THEN 'Song'
@@ -2068,6 +2153,7 @@ async fn load_playback_media_item_row(
               COALESCE(
                 movie_meta."Title",
                 episode_meta."Title",
+                music_video_meta."Title",
                 other_video_meta."Title",
                 remote_stream_meta."Title",
                 song_meta."Title",
@@ -2080,6 +2166,8 @@ async fn load_playback_media_item_row(
            LEFT JOIN "MovieMetadata" movie_meta ON movie_meta."MovieId" = movie."Id"
            LEFT JOIN "Episode" episode ON episode."Id" = mi."Id"
            LEFT JOIN "EpisodeMetadata" episode_meta ON episode_meta."EpisodeId" = episode."Id"
+           LEFT JOIN "MusicVideo" music_video ON music_video."Id" = mi."Id"
+           LEFT JOIN "MusicVideoMetadata" music_video_meta ON music_video_meta."MusicVideoId" = music_video."Id"
            LEFT JOIN "OtherVideo" other_video ON other_video."Id" = mi."Id"
            LEFT JOIN "OtherVideoMetadata" other_video_meta ON other_video_meta."OtherVideoId" = other_video."Id"
            LEFT JOIN "RemoteStream" remote_stream ON remote_stream."Id" = mi."Id"
@@ -2091,6 +2179,7 @@ async fn load_playback_media_item_row(
            LEFT JOIN "MediaVersion" mv
                   ON mv."MovieId" = movie."Id"
                   OR mv."EpisodeId" = episode."Id"
+                  OR mv."MusicVideoId" = music_video."Id"
                   OR mv."OtherVideoId" = other_video."Id"
                   OR mv."RemoteStreamId" = remote_stream."Id"
                   OR mv."SongId" = song."Id"
@@ -2441,6 +2530,27 @@ mod tests {
         assert!(stability.contains("\"packet_count\": 10"));
         assert!(temp.path().join("commands.json").exists());
         assert!(!temp.path().join("sample.ts").exists());
+    }
+
+    #[test]
+    fn troubleshooting_environment_removes_uri_credentials() {
+        let environment = troubleshooting_environment_from([
+            (
+                "ERSATZRS_TEST_URI".into(),
+                "https://fixture-user:fixture-password@example.invalid/search?token=fixture-token&index=media".into(),
+            ),
+            ("ERSATZRS_TEST_PATH".into(), "relative/path with spaces".into()),
+        ]);
+        let uri = &environment["ERSATZRS_TEST_URI"];
+        for credential in ["fixture-user", "fixture-password", "fixture-token"] {
+            assert!(!uri.contains(credential), "synthetic credential leaked");
+        }
+        assert!(uri.contains("example.invalid/search"));
+        assert!(uri.contains("index=media"));
+        assert_eq!(
+            environment["ERSATZRS_TEST_PATH"],
+            "relative/path with spaces"
+        );
     }
 
     #[test]

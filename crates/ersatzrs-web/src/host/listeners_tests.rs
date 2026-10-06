@@ -81,6 +81,9 @@ async fn actual_ipv4_and_ipv6_listeners_isolate_routes_and_shut_down_together() 
                     (internal, "/healthz", 404),
                     (internal, "/lineup_status.json", 404),
                     (internal, "/ffmpeg/next-media/1/2/3", 401),
+                    (streaming, "/ffmpeg/external-media/1/2", 404),
+                    (admin, "/ffmpeg/external-media/1/2", 404),
+                    (internal, "/ffmpeg/external-media/1/2", 401),
                 ] {
                     let response = client
                         .get(format!("http://{listener}{path}"))

@@ -37,7 +37,21 @@ pub fn PlayoutTemplatesEditorPage() -> impl IntoView {
     let playout_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
 
-    view! { <TemplatesIsland playout_id=playout_id()/> }
+    let playout_id = playout_id();
+    // Resolve the form before emitting the island so hydration starts with the
+    // same concrete editor instead of replaying its asynchronous empty branch.
+    let content = Suspend::new(async move {
+        admin_result_view(
+            get_playout_templates(playout_id).await,
+            |maybe| match maybe {
+                Some(form) => view! { <TemplatesIsland form/> }.into_any(),
+                None => {
+                    view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any()
+                }
+            },
+        )
+    });
+    view! { {content} }
 }
 
 #[island]
@@ -57,19 +71,8 @@ fn AlternateSchedulesIsland(playout_id: i64) -> impl IntoView {
 }
 
 #[island]
-fn TemplatesIsland(playout_id: i64) -> impl IntoView {
-    let form = Resource::new_blocking(move || playout_id, get_playout_templates);
-
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || form.get().map(|result| admin_result_view(result, |maybe| {
-                match maybe {
-                    Some(form) => view! { <TemplatesFormView form=form/> }.into_any(),
-                    None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
-                }
-            }))}
-        </Suspense>
-    }
+fn TemplatesIsland(form: PlayoutTemplatesForm) -> impl IntoView {
+    view! { <TemplatesFormView form/> }
 }
 
 #[component]
@@ -405,6 +408,10 @@ fn template_editor(
 ) -> impl IntoView {
     let selected_group = RwSignal::new(item.template_group_id);
     let selected_deco_group = RwSignal::new(item.deco_template_group_id.unwrap_or(0));
+    let template_id = item.template_id;
+    let template_group_id = item.template_group_id;
+    let deco_template_id = item.deco_template_id.unwrap_or(0);
+    let deco_template_group_id = item.deco_template_group_id.unwrap_or(0);
     let templates_for_change = templates.clone();
     let templates_for_options = templates.clone();
     let deco_templates_for_change = deco_templates.clone();
@@ -416,9 +423,15 @@ fn template_editor(
         <div class=style::field_grid>
             <label class=style::label for="template-group">{tr(TextKey::TemplateGroup)}</label>
             <select id="template-group" class=style::select prop:value=move || selected_group.get().to_string() on:change=move |event| {
-                selected_group.set(event_target_value(&event).parse::<i64>().unwrap_or(0));
+                let group_id = event_target_value(&event).parse::<i64>().unwrap_or(0);
+                selected_group.set(group_id);
+                update_selected(items, selected, move |row: &mut PlayoutTemplateItemForm| {
+                    row.template_group_id = group_id;
+                    row.template_id = 0;
+                    row.template_name.clear();
+                });
             }>
-                {template_groups.iter().map(|group| view! { <option value=group.id.to_string()>{group.name.clone()}</option> }).collect_view()}
+                {template_groups.iter().map(|group| view! { <option value=group.id.to_string() selected=group.id == template_group_id>{group.name.clone()}</option> }).collect_view()}
             </select>
             <label class=style::label for="template">{tr(TextKey::Template)}</label>
             <select id="template" class=style::select prop:value=item.template_id.to_string() on:change=move |event| {
@@ -432,15 +445,21 @@ fn template_editor(
                     }
                 });
             }>
-                <option value="0">{tr(TextKey::SelectValue)}</option>
-                {move || templates_for_options.iter().filter(|template| template.group_id == selected_group.get()).map(|template| view! { <option value=template.id.to_string()>{template.name.clone()}</option> }).collect_view()}
+                <option value="0" selected=template_id == 0>{tr(TextKey::SelectValue)}</option>
+                {move || templates_for_options.iter().filter(|template| template.group_id == selected_group.get()).map(|template| view! { <option value=template.id.to_string() selected=template.id == template_id>{template.name.clone()}</option> }).collect_view()}
             </select>
             <label class=style::label for="deco-template-group">{tr(TextKey::DecoTemplateGroup)}</label>
             <select id="deco-template-group" class=style::select prop:value=move || selected_deco_group.get().to_string() on:change=move |event| {
-                selected_deco_group.set(event_target_value(&event).parse::<i64>().unwrap_or(0));
+                let group_id = event_target_value(&event).parse::<i64>().unwrap_or(0);
+                selected_deco_group.set(group_id);
+                update_selected(items, selected, move |row: &mut PlayoutTemplateItemForm| {
+                    row.deco_template_group_id = (group_id > 0).then_some(group_id);
+                    row.deco_template_id = None;
+                    row.deco_template_name = None;
+                });
             }>
-                <option value="0">{tr(TextKey::SelectValue)}</option>
-                {deco_template_groups.iter().map(|group| view! { <option value=group.id.to_string()>{group.name.clone()}</option> }).collect_view()}
+                <option value="0" selected=deco_template_group_id == 0>{tr(TextKey::SelectValue)}</option>
+                {deco_template_groups.iter().map(|group| view! { <option value=group.id.to_string() selected=group.id == deco_template_group_id>{group.name.clone()}</option> }).collect_view()}
             </select>
             <label class=style::label for="deco-template">{tr(TextKey::DecoTemplate)}</label>
             <select id="deco-template" class=style::select prop:value=item.deco_template_id.unwrap_or(0).to_string() on:change=move |event| {
@@ -452,8 +471,8 @@ fn template_editor(
                     row.deco_template_name = template.as_ref().map(|template| template.name.clone());
                 });
             }>
-                <option value="0">{tr(TextKey::SelectValue)}</option>
-                {move || deco_templates_for_options.iter().filter(|template| template.group_id == selected_deco_group.get()).map(|template| view! { <option value=template.id.to_string()>{template.name.clone()}</option> }).collect_view()}
+                <option value="0" selected=deco_template_id == 0>{tr(TextKey::SelectValue)}</option>
+                {move || deco_templates_for_options.iter().filter(|template| template.group_id == selected_deco_group.get()).map(|template| view! { <option value=template.id.to_string() selected=template.id == deco_template_id>{template.name.clone()}</option> }).collect_view()}
             </select>
             {date_filter_editor(item.date_filter, move |filter| {
                 update_selected(items, selected, move |row: &mut PlayoutTemplateItemForm| row.date_filter = filter.clone());

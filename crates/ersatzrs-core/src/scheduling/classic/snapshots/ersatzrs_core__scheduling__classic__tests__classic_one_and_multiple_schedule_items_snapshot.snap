@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-core/src/scheduling/classic/mod.rs
-assertion_line: 3149
+assertion_line: 3848
 expression: snapshot(&result)
 ---
 {
@@ -13,7 +13,11 @@ expression: snapshot(&result)
     "next_start": "2026-04-26T07:05:00Z"
   },
   "classic_checkpoints": [
-    "2026-04-26T06:00:00Z"
+    "2026-04-26T06:00:00Z",
+    "2026-04-26T06:20:00Z",
+    "2026-04-26T06:30:00Z",
+    "2026-04-26T06:40:00Z",
+    "2026-04-26T07:05:00Z"
   ],
   "items": [
     {
@@ -65,6 +69,46 @@ expression: snapshot(&result)
       "anchor_date": "2026-04-26T06:00:00Z",
       "collection_id": 2,
       "index": 0
+    },
+    {
+      "anchor_date": "2026-04-26T06:20:00Z",
+      "collection_id": 1,
+      "index": 1
+    },
+    {
+      "anchor_date": "2026-04-26T06:20:00Z",
+      "collection_id": 2,
+      "index": 0
+    },
+    {
+      "anchor_date": "2026-04-26T06:30:00Z",
+      "collection_id": 1,
+      "index": 1
+    },
+    {
+      "anchor_date": "2026-04-26T06:30:00Z",
+      "collection_id": 2,
+      "index": 1
+    },
+    {
+      "anchor_date": "2026-04-26T06:40:00Z",
+      "collection_id": 1,
+      "index": 1
+    },
+    {
+      "anchor_date": "2026-04-26T06:40:00Z",
+      "collection_id": 2,
+      "index": 2
+    },
+    {
+      "anchor_date": "2026-04-26T07:05:00Z",
+      "collection_id": 1,
+      "index": 0
+    },
+    {
+      "anchor_date": "2026-04-26T07:05:00Z",
+      "collection_id": 2,
+      "index": 2
     }
   ],
   "warnings": []

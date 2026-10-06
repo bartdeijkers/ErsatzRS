@@ -850,13 +850,16 @@ impl SqliteSchedulingContentRepository {
     ) -> Result<SchedulingReferenceData> {
         use ersatzrs_core::scheduling::YamlPlayoutEngine;
 
-        let definition = YamlPlayoutEngine::definition_from_str(yaml_content).map_err(|e| {
-            ersatzrs_core::repositories::RepositoryError::Decode {
-                kind: "yaml",
-                value: e.to_string(),
-            }
+        let definition = YamlPlayoutEngine::definition_for_playout(&ersatzrs_domain::Playout {
+            schedule_file: Some(yaml_content.to_owned()),
+            ..ersatzrs_domain::Playout::default()
+        })
+        .map_err(|e| ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "yaml",
+            value: e.to_string(),
         })?;
 
+        let graphics_ids_by_path = self.yaml_graphics_ids(&definition).await?;
         let mut media_by_key = BTreeMap::new();
         for item in &definition.content {
             let source = item.source();
@@ -881,6 +884,8 @@ impl SqliteSchedulingContentRepository {
             .with_configured_playout_options(SchedulingReferenceData {
                 media_by_key,
                 playlist_items_by_key,
+                graphics_ids_by_path,
+                existing_yaml_checkpoints: self.yaml_checkpoints(playout_id).await?,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
                 max_playout_offset,
@@ -910,6 +915,43 @@ impl SqliteSchedulingContentRepository {
         }
         self.with_smart_shuffle_policies(reference_data, legacy_policy, policies, target_ids)
             .await
+    }
+
+    async fn yaml_graphics_ids(
+        &self,
+        definition: &ersatzrs_core::scheduling::YamlPlayoutDefinition,
+    ) -> Result<BTreeMap<String, EntityId>> {
+        let mut graphics_ids_by_path = BTreeMap::new();
+        let graphics_paths = definition
+            .reset
+            .iter()
+            .chain(&definition.playout)
+            .chain(
+                definition
+                    .sequence
+                    .iter()
+                    .flat_map(|sequence| &sequence.items),
+            )
+            .chain(
+                definition
+                    .schedules
+                    .iter()
+                    .flat_map(|schedule| &schedule.playout),
+            )
+            .flat_map(|instruction| {
+                [
+                    instruction.graphics_on.as_deref(),
+                    instruction.graphics_off.as_deref(),
+                ]
+            })
+            .flatten()
+            .collect::<BTreeSet<_>>();
+        for path in graphics_paths {
+            if let Some(id) = self.graphics_element_id_by_path(path).await? {
+                graphics_ids_by_path.insert(path.to_owned(), id);
+            }
+        }
+        Ok(graphics_ids_by_path)
     }
 
     /// Load only persisted playout-wide config reference data.
@@ -942,6 +984,8 @@ impl SqliteSchedulingContentRepository {
         let mut reference_data = self.configured_playout_options().await?;
         reference_data.existing_items = self.playout_items(playout_id).await?;
         reference_data.existing_history = self.playout_history(playout_id).await?;
+        reference_data.existing_scripted_checkpoints =
+            self.scripted_checkpoints(playout_id).await?;
         let legacy_policy = if let Some(policy) = definition_legacy_policy {
             policy
         } else {
@@ -3333,6 +3377,12 @@ impl SqliteSchedulingContentRepository {
                     id,
                 )
                 .await?,
+                graphics_element_variables: super::graphics_attachments::load(
+                    &self.0,
+                    super::graphics_attachments::Owner::Block,
+                    id,
+                )
+                .await?,
             });
         }
 
@@ -3677,6 +3727,58 @@ impl SqliteSchedulingContentRepository {
                             .repository()?
                             .unwrap_or_default(),
                     },
+                })
+            })
+            .collect()
+    }
+
+    async fn scripted_checkpoints(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<ersatzrs_domain::PlayoutScriptedCheckpoint>> {
+        let rows = sqlx::query(
+            r#"SELECT "PlayoutId", "CheckpointDate", "Context" FROM "PlayoutScriptedCheckpoint"
+               WHERE "PlayoutId" = ? ORDER BY "CheckpointDate""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ersatzrs_domain::PlayoutScriptedCheckpoint {
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    checkpoint_date: decode_datetime(
+                        "scripted checkpoint date",
+                        row.try_get("CheckpointDate").repository()?,
+                    )?,
+                    context: row.try_get("Context").repository()?,
+                })
+            })
+            .collect()
+    }
+
+    async fn yaml_checkpoints(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<ersatzrs_domain::PlayoutYamlCheckpoint>> {
+        let rows = sqlx::query(
+            r#"SELECT "PlayoutId", "CheckpointDate", "Context" FROM "PlayoutYamlCheckpoint"
+               WHERE "PlayoutId" = ? ORDER BY "CheckpointDate""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter()
+            .map(|row| {
+                Ok(ersatzrs_domain::PlayoutYamlCheckpoint {
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    checkpoint_date: decode_datetime(
+                        "yaml checkpoint date",
+                        row.try_get("CheckpointDate").repository()?,
+                    )?,
+                    context: row.try_get("Context").repository()?,
                 })
             })
             .collect()

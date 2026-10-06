@@ -210,3 +210,151 @@ scale_width_percent: 15
     };
     assert_eq!(loop_config.end_behavior, MotionEndBehavior::Loop);
 }
+
+#[tokio::test]
+async fn authored_graphics_all_kinds_roundtrip_yaml_and_sql_without_losing_shared_values() {
+    use ersatzrs_domain::{ScriptGraphicsConfig, TextFit};
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool);
+    let configs = [
+        GraphicsElementConfig::Image(ImageGraphicsConfig {
+            image: Some("graphics/logo.png".into()),
+        }),
+        GraphicsElementConfig::Text(TextGraphicsConfig {
+            text: Some("Long Épisode title".into()),
+            fit: TextFit::Wrap,
+            width_percent: Some(70.0),
+            ..Default::default()
+        }),
+        GraphicsElementConfig::Subtitle(SubtitleGraphicsConfig {
+            template: Some("graphics/title.ass".into()),
+        }),
+        GraphicsElementConfig::Motion(MotionGraphicsConfig {
+            video_path: Some("graphics/motion.nut".into()),
+            start_seconds: Some(1.25),
+            hold_seconds: Some(2.5),
+            end_behavior: MotionEndBehavior::Hold,
+        }),
+        GraphicsElementConfig::Script(ScriptGraphicsConfig {
+            command: Some("return 'setcolor red\\nrect 0 0 20 20\\nfill'".into()),
+            args: vec!["one".into()],
+            format: Some("Raw".into()),
+            ..Default::default()
+        }),
+    ];
+    for config in configs {
+        let element = GraphicsElement {
+            name: format!("Author {:?}", config.kind()),
+            kind: config.kind(),
+            config,
+            location: WatermarkLocation::TopLeft,
+            location_x: Some(32.5),
+            location_y: Some(40.0),
+            opacity_percent: Some(72),
+            opacity_expression: Some("between(t,1,3)".into()),
+            z_index: 4,
+            epg_entries: 12,
+            horizontal_margin_percent: Some(2.0),
+            vertical_margin_percent: Some(3.0),
+            scale: true,
+            scale_width_percent: Some(37.5),
+            place_within_source_content: true,
+            ..Default::default()
+        };
+        let id = repos.graphics.create_element(&element).await.unwrap();
+        let saved = repos.graphics.get_element(id).await.unwrap();
+        let yaml = repos.graphics.export_yaml(&saved).await.unwrap();
+        let mut parsed = repos.graphics.parse_yaml(saved.kind, &yaml).await.unwrap();
+        parsed.id = id;
+        parsed.path = saved.path.clone();
+        assert_eq!(parsed, saved);
+        parsed.name.push_str(" edited");
+        repos.graphics.upsert_element(&parsed).await.unwrap();
+        assert_eq!(repos.graphics.get_element(id).await.unwrap(), parsed);
+    }
+    assert_eq!(repos.graphics.list_elements().await.unwrap().len(), 5);
+    for yaml in [
+        "name: Typo\ntext: Title\ndrawtext:\n  wrong_font_file: font.ttf",
+        "name: Typo\ntext: Title\nstyles:\n  - font_szie: 32",
+    ] {
+        assert!(repos
+            .graphics
+            .parse_yaml(GraphicsElementKind::Text, yaml)
+            .await
+            .is_err());
+    }
+    for yaml in [
+        "name: Typo\nimage: logo.png\nunknown: true",
+        "name: Duplicate\nimage: logo.png\nz_index: 1\nzIndex: 2",
+        "[]",
+    ] {
+        assert!(repos
+            .graphics
+            .parse_yaml(GraphicsElementKind::Image, yaml)
+            .await
+            .is_err());
+    }
+}
+
+#[tokio::test]
+async fn authored_graphics_validation_rejects_missing_inputs_before_any_publication() {
+    use ersatzrs_core::repositories::GraphicsRenderPreviewRequest;
+    use ersatzrs_domain::{ScriptGraphicsConfig, TextGraphicsRenderer};
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool);
+    let mut request = GraphicsRenderPreviewRequest {
+        element: GraphicsElement {
+            name: "Validate draft".into(),
+            kind: GraphicsElementKind::Text,
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some("{{ Unknown }}".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        channel_id: None,
+        render_time: common::fixed_time(),
+        seek_seconds: 0.0,
+        width: 320,
+        height: 180,
+        variables: None,
+    };
+    assert!(repos
+        .graphics
+        .validate_authoring(&request)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("missing-variable"));
+    request.variables = Some(r#"{"Unknown":"Actual override"}"#.into());
+    repos.graphics.validate_authoring(&request).await.unwrap();
+    if let GraphicsElementConfig::Text(config) = &mut request.element.config {
+        config.renderer = TextGraphicsRenderer::Drawtext;
+        config.drawtext.font_file = Some("missing/font.ttf".into());
+    }
+    assert!(repos
+        .graphics
+        .validate_authoring(&request)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("missing-font"));
+    request.element.kind = GraphicsElementKind::Image;
+    request.element.config = GraphicsElementConfig::Image(ImageGraphicsConfig {
+        image: Some("missing/image.png".into()),
+    });
+    assert!(repos
+        .graphics
+        .validate_authoring(&request)
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("missing-media"));
+    request.element.kind = GraphicsElementKind::Script;
+    request.element.config = GraphicsElementConfig::Script(ScriptGraphicsConfig {
+        command: Some("while true do end".into()),
+        ..Default::default()
+    });
+    assert!(repos.graphics.validate_authoring(&request).await.is_err());
+    assert!(repos.graphics.list_elements().await.unwrap().is_empty());
+}

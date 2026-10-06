@@ -197,6 +197,7 @@ async fn block_admin_repository_round_trips_and_copies_complete_item_graph() {
                 collection_name: "News".to_owned(),
                 watermark_ids: vec![501],
                 graphics_element_ids: vec![601],
+                graphics_element_variables: [(601, r#"{"label":"Block label"}"#.to_owned())].into(),
             }],
         )
         .await
@@ -207,6 +208,10 @@ async fn block_admin_repository_round_trips_and_copies_complete_item_graph() {
     assert_eq!(loaded[0].smart_shuffle, Some(policy.clone()));
     assert_eq!(loaded[0].watermark_ids, vec![501]);
     assert_eq!(loaded[0].graphics_element_ids, vec![601]);
+    assert_eq!(
+        loaded[0].graphics_element_variables[&601],
+        r#"{"label":"Block label"}"#
+    );
     assert!(loaded[0].include_in_program_guide);
     assert!(loaded[0].disable_watermarks);
 
@@ -220,6 +225,10 @@ async fn block_admin_repository_round_trips_and_copies_complete_item_graph() {
     assert_eq!(copied[0].smart_shuffle, Some(policy));
     assert_eq!(copied[0].watermark_ids, vec![501]);
     assert_eq!(copied[0].graphics_element_ids, vec![601]);
+    assert_eq!(
+        copied[0].graphics_element_variables,
+        loaded[0].graphics_element_variables
+    );
 
     repos.block.delete_admin(block_id).await.unwrap();
     assert!(repos.block.delete_admin(block_id).await.is_err());

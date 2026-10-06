@@ -1,3 +1,5 @@
+mod deferred;
+
 use crate::repositories::SqlxResultExt as _;
 use std::collections::BTreeSet;
 
@@ -371,6 +373,22 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
             .execute(&mut *tx)
             .await
             .repository()?;
+        crate::classic_deferred::clear_schedule(&mut tx, id).await?;
+        // Deleting the primary schedule cascades its playouts, including any
+        // receipts belonging to their alternate schedules.
+        let deleted_playouts: Vec<EntityId> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Playout" WHERE "ProgramScheduleId"=?"#)
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await
+                .repository()?;
+        for playout_id in deleted_playouts {
+            sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key"=?"#)
+                .bind(crate::classic_deferred::key(playout_id))
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
         sqlx::query(r#"DELETE FROM "ProgramSchedule" WHERE "Id" = ?"#)
             .bind(id)
             .execute(&mut *tx)
@@ -384,13 +402,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn playout_ids_using_admin(&self, id: EntityId) -> Result<Vec<EntityId>> {
-        sqlx::query_scalar(
-            r#"SELECT "Id" FROM "Playout" WHERE "ProgramScheduleId" = ? ORDER BY "Id""#,
-        )
-        .bind(id)
-        .fetch_all(&self.0)
-        .await
-        .repository()
+        crate::classic_deferred::playout_ids(&self.0, id).await
     }
 
     async fn list_items_admin(&self, id: EntityId) -> Result<Vec<ScheduleItemAdmin>> {
@@ -407,6 +419,22 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         items: &[ScheduleItemAdmin],
     ) -> Result<()> {
         replace_schedule_items_admin(&self.0, schedule_id, items).await
+    }
+
+    async fn defer_items_admin(
+        &self,
+        schedule_id: EntityId,
+        items: &[ScheduleItemAdmin],
+        locked_playouts: &[EntityId],
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        deferred::save(&self.0, schedule_id, items, locked_playouts).await
+    }
+
+    async fn deferred_changes_admin(
+        &self,
+        schedule_id: EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        crate::classic_deferred::list(&self.0, schedule_id).await
     }
 
     async fn append_one_item_admin(
@@ -568,8 +596,8 @@ async fn copy_schedule_item_relations(
            SELECT ?, "WatermarkId" FROM "ProgramScheduleItemWatermark"
            WHERE "ProgramScheduleItemId" = ?"#,
         r#"INSERT INTO "ProgramScheduleItemGraphicsElement"
-               ("ProgramScheduleItemId", "GraphicsElementId")
-           SELECT ?, "GraphicsElementId" FROM "ProgramScheduleItemGraphicsElement"
+               ("ProgramScheduleItemId", "GraphicsElementId", "Variables")
+           SELECT ?, "GraphicsElementId", "Variables" FROM "ProgramScheduleItemGraphicsElement"
            WHERE "ProgramScheduleItemId" = ?"#,
     ] {
         sqlx::query(sql)
@@ -582,9 +610,17 @@ async fn copy_schedule_item_relations(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 async fn list_schedule_items_admin(
     pool: &Pool<Db>,
+    schedule_id: EntityId,
+) -> Result<Vec<ScheduleItemAdmin>> {
+    let mut connection = pool.acquire().await.repository()?;
+    list_schedule_items_admin_on_connection(&mut connection, schedule_id).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn list_schedule_items_admin_on_connection(
+    connection: &mut sqlx::SqliteConnection,
     schedule_id: EntityId,
 ) -> Result<Vec<ScheduleItemAdmin>> {
     let rows = sqlx::query(
@@ -641,28 +677,34 @@ async fn list_schedule_items_admin(
            ORDER BY "psi"."Index", "psi"."Id""#,
     )
     .bind(schedule_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await
     .repository()?;
     let legacy_policy = load_schedule_policy(
-        pool,
+        &mut *connection,
         &legacy_program_schedule_cooldown_config_key(schedule_id),
     )
     .await?;
     let mut items = Vec::with_capacity(rows.len());
     for row in &rows {
         let id: EntityId = row.try_get("Id").repository()?;
-        let explicit_policy =
-            load_schedule_policy(pool, &program_schedule_item_smart_shuffle_config_key(id)).await?;
+        let explicit_policy = load_schedule_policy(
+            &mut *connection,
+            &program_schedule_item_smart_shuffle_config_key(id),
+        )
+        .await?;
         let inherited_legacy_smart_shuffle = explicit_policy.is_none() && legacy_policy.is_some();
         let smart_shuffle = explicit_policy
             .or_else(|| legacy_policy.clone())
             .unwrap_or_default();
-        items.push(map_schedule_item_admin(
-            row,
-            smart_shuffle,
-            inherited_legacy_smart_shuffle,
-        )?);
+        let mut item = map_schedule_item_admin(row, smart_shuffle, inherited_legacy_smart_shuffle)?;
+        item.graphics_element_variables = super::graphics_attachments::load_on_connection(
+            connection,
+            super::graphics_attachments::Owner::Schedule,
+            item.id,
+        )
+        .await?;
+        items.push(item);
     }
     Ok(items)
 }
@@ -764,6 +806,7 @@ fn map_schedule_item_admin(
                 .repository()?
                 .as_deref(),
         )?,
+        graphics_element_variables: std::collections::BTreeMap::new(),
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
         preferred_audio_title: row
             .try_get::<Option<String>, _>("PreferredAudioTitle")
@@ -799,8 +842,8 @@ fn decode_schedule_pinned_stream_selection(
     }
 }
 
-async fn load_schedule_policy(
-    pool: &Pool<Db>,
+async fn load_schedule_policy<'e>(
+    pool: impl sqlx::Executor<'e, Database = Db>,
     key: &str,
 ) -> Result<Option<SchedulingSmartShufflePolicy>> {
     sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
@@ -1218,23 +1261,21 @@ async fn replace_schedule_items_admin(
             .await
             .repository()?;
         }
-        for graphics_element_id in &item.graphics_element_ids {
-            sqlx::query(
-                r#"INSERT INTO "ProgramScheduleItemGraphicsElement"
-                       ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
-            )
-            .bind(new_item_id)
-            .bind(graphics_element_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
+        super::graphics_attachments::replace(
+            &mut tx,
+            super::graphics_attachments::Owner::Schedule,
+            new_item_id,
+            &item.graphics_element_ids,
+            &item.graphics_element_variables,
+        )
+        .await?;
     }
     sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
         .bind(legacy_program_schedule_cooldown_config_key(schedule_id))
         .execute(&mut *tx)
         .await
         .repository()?;
+    crate::classic_deferred::clear_schedule(&mut tx, schedule_id).await?;
     tx.commit().await.repository()
 }
 
@@ -1498,12 +1539,22 @@ async fn upsert_program_schedule_item(
         &item.watermark_ids,
     )
     .await?;
-    replace_ids(
+    let variables = item
+        .graphics_elements
+        .iter()
+        .filter_map(|attachment| {
+            attachment
+                .variables
+                .as_ref()
+                .map(|variables| (attachment.graphics_element_id, variables.clone()))
+        })
+        .collect();
+    super::graphics_attachments::replace(
         tx,
-        r#"DELETE FROM "ProgramScheduleItemGraphicsElement" WHERE "ProgramScheduleItemId" = ?"#,
-        r#"REPLACE INTO "ProgramScheduleItemGraphicsElement" ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
+        super::graphics_attachments::Owner::Schedule,
         item.id,
         &item.graphics_element_ids,
+        &variables,
     )
     .await?;
 
@@ -1725,6 +1776,9 @@ async fn map_program_schedule_item(
             id,
         )
         .await?,
+        graphics_elements: super::graphics_attachments::load(pool, super::graphics_attachments::Owner::Schedule, id).await?.into_iter().map(|(graphics_element_id, variables)| ersatzrs_domain::ProgramScheduleItemGraphicsElement {
+            program_schedule_item_id: id, graphics_element_id, variables: Some(variables),
+        }).collect(),
     })
 }
 

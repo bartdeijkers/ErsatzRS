@@ -50,8 +50,8 @@ async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert
     ] {
         sqlx::query(sql).execute(pool).await.unwrap();
     }
-    // Both modes start with unextracted embedded metadata. Burn must use the
-    // production demand-time callback and extract the selected original stream.
+    // Explicit embedded selection exercises demand-time preparation. Automatic
+    // selection requires an extracted artifact before preference ranking.
     let path = (!embedded).then_some("fixture.nl.srt");
     sqlx::query(r#"INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated")
         VALUES (20,?,'Dutch',?,'subrip',1,0,0,'nld',?,?,'2026-09-23','2026-09-23')"#)
@@ -68,12 +68,12 @@ async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert
     item.in_point = chrono::Duration::seconds(5);
     item.out_point = chrono::Duration::seconds(55);
     item.finish = item.start + chrono::Duration::seconds(50);
-    if off {
+    if off || embedded {
         item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
             media_version_id: 100,
             video_stream_index: 0,
             audio_stream_index: Some(2),
-            subtitle_stream_index: None,
+            subtitle_stream_index: (!off).then_some(3),
         });
     }
     crate::repositories::make_repositories(pool.clone())
@@ -81,6 +81,33 @@ async fn configure_text_tracks(pool: &crate::db::DbPool, embedded: bool, convert
         .upsert_item(&item)
         .await
         .unwrap();
+}
+
+// Automatic selection needs the same extracted source artifact a completed
+// scan supplies; an explicit playout pin does not carry into fallback items.
+async fn prepare_automatic_text_tracks(
+    pool: &crate::db::DbPool,
+    ffmpeg: &Path,
+    clip: &Path,
+    root: &Path,
+) {
+    let extracted = root.join("extracted.nl.srt");
+    let mut command = Command::new(ffmpeg);
+    command
+        .args(["-v", "error", "-nostdin", "-y", "-i"])
+        .arg(clip)
+        .args(["-map", "0:3", "-c:s", "srt"])
+        .arg(&extracted);
+    tool(command).await;
+    let updated = sqlx::query(
+        r#"UPDATE "Subtitle" SET "IsExtracted"=1,"Path"=?
+           WHERE "SubtitleKind"=0 AND "StreamIndex"=3"#,
+    )
+    .bind(extracted.to_str().unwrap())
+    .execute(pool)
+    .await
+    .unwrap();
+    assert_eq!(updated.rows_affected(), 1);
 }
 
 async fn assert_text_video_and_audio(ffmpeg: &Path, segment: &Path, burned: bool) {
@@ -316,7 +343,9 @@ async fn callback_connection(
                         socket.shutdown().await.unwrap();
                         return;
                     }
-                    let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap()
+                    let parts: Vec<_> = target.strip_prefix("/ffmpeg/next-item/").unwrap_or_else(|| {
+                        panic!("unexpected fixture callback path: {}", target.split('?').next().unwrap())
+                    })
                         .split('/').collect();
                     assert_eq!(parts.len(), 4);
                     let now = chrono::DateTime::parse_from_rfc3339(header("x-etv-now").unwrap())
@@ -334,9 +363,7 @@ async fn callback_connection(
                     ("401 Unauthorized", Vec::new())
                 };
                 let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
-                socket.write_all(response.as_bytes()).await.unwrap();
-                socket.write_all(&body).await.unwrap();
-                socket.shutdown().await.unwrap();
+                write_callback_response(&mut socket, response.as_bytes(), &body).await;
             }).await.unwrap();
 }
 
@@ -399,7 +426,7 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
         (true, true, true),
     ] {
         let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
-        configure_text_tracks(&pool, embedded, convert, off).await;
+        configure_competing_text_tracks(&pool, embedded, convert, off).await;
         if prepared_artifact {
             prepared_artifact_runtime::publish_fixture(&pool, &clip).await;
         }
@@ -517,5 +544,45 @@ mod retained_callback_runtime;
 #[path = "ordinary_callback_runtime_tests.rs"]
 mod ordinary_callback_runtime;
 
+#[path = "remote_subtitle_runtime_helpers.rs"]
+mod remote_subtitle_runtime_helpers;
+
 #[path = "direct_remote_runtime_tests.rs"]
 mod direct_remote_runtime;
+
+async fn configure_competing_text_tracks(
+    pool: &crate::db::DbPool,
+    embedded: bool,
+    convert: bool,
+    off: bool,
+) {
+    configure_text_tracks(pool, embedded, convert, off).await;
+    if embedded {
+        return;
+    }
+    // An unextracted default used to outrank this usable sidecar and
+    // disappear at publication. Decode Burn/Convert to prove fallback.
+    sqlx::raw_sql(r#"UPDATE "Subtitle" SET "Default"=0;
+        INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","DateAdded","DateUpdated")
+        VALUES (20,0,3,'subrip',1,0,0,'nld',0,'2026-09-23','2026-09-23');"#)
+        .execute(pool).await.unwrap();
+}
+
+async fn write_callback_response(socket: &mut tokio::net::TcpStream, header: &[u8], body: &[u8]) {
+    let result: std::io::Result<()> = async {
+        socket.write_all(header).await?;
+        socket.write_all(body).await?;
+        socket.shutdown().await
+    }
+    .await;
+    if let Err(error) = result {
+        // Next may stop reading once its chunk/session is cancelled.
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+            ),
+            "callback response transport: {error}"
+        );
+    }
+}

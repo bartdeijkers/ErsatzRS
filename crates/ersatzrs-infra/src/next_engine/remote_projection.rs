@@ -147,10 +147,12 @@ pub(crate) async fn materialize_prepared(
         &context.resolution,
         selection::AudioDirective::Published(audio),
         &context.origin,
+        false,
     ))
     .await?;
     concrete.item.watermark = projected.projection.item.watermark.take();
     concrete.item.graphics = std::mem::take(&mut projected.projection.item.graphics);
+    concrete.canvas = projected.projection.canvas.take();
     let current = Box::pin(context.origin.snapshot(
         pool,
         locker,
@@ -246,6 +248,7 @@ pub(super) async fn project_publishable_for_origin(
                 media_file_id: media.media_file_id,
                 path: media.path.clone(),
                 remote_stream_id: media.remote_stream_id,
+                candidate_overlays: media.candidate_overlays.clone(),
             },
             max_height: u32::try_from(resolution.height).ok(),
         })
@@ -404,23 +407,17 @@ pub(super) async fn project_for_origin(
     }
     let (publication, liveness, prepared, retained) = publication_binding(pool, &binding).await?;
     let source = selection_source(&binding, media, liveness, prepared)?;
-    let mut projection =
-        project_selection(pool, channel, media, source, resolution, audio, &origin).await?;
+    let mut projection = project_selection(
+        pool, channel, media, source, resolution, audio, &origin, prepared,
+    )
+    .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
     let (graphics, watermarks) = match &origin {
-        Origin::Persisted => (
-            playback::select_playback_graphics(pool, channel, media.item.id, selection_time)
-                .await?,
-            playback::select_playback_watermarks(
-                pool,
-                channel,
-                media.item.id,
-                media.item.disable_watermarks,
-                selection_time,
-            )
-            .await?,
-        ),
+        Origin::Persisted => {
+            let (watermarks, graphics) = media.overlays(pool, channel).await?;
+            (graphics, watermarks)
+        }
         Origin::Fallback(_) => (
             playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
             playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
@@ -431,12 +428,12 @@ pub(super) async fn project_for_origin(
             context.watermarks(pool).await?,
         ),
     };
-    projection.item.graphics = super::graphics::project(
+    projection.canvas = super::graphics::project(
         pool,
         channel,
         media,
         resolution,
-        &projection.item,
+        &mut projection.item,
         &watermarks,
         &graphics,
     )
@@ -451,7 +448,7 @@ pub(super) async fn project_for_origin(
             .ok_or_else(unavailable)?,
     };
     let descriptor = digest(&json!({
-        "binding":material, "item":media.item, "selection":projection.item,
+        "binding":material, "item":media.item, "selection":projection.item, "canvas": projection.canvas,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
         "audio_script":script, "audio_language":preferences.default_audio_language,
         "subtitle_language":preferences.default_subtitle_language,
@@ -464,6 +461,7 @@ pub(super) async fn project_for_origin(
             media_file_id: media.media_file_id,
             path: media.path.clone(),
             remote_stream_id: media.remote_stream_id,
+            candidate_overlays: media.candidate_overlays.clone(),
         },
         projection,
         identity: Identity {
@@ -488,34 +486,27 @@ async fn project_selection(
     resolution: &Resolution,
     audio: selection::AudioDirective,
     origin: &Origin,
+    source_pending: bool,
 ) -> Result<selection::DeferredProjection> {
-    if let Origin::Troubleshooting(context) = origin {
-        selection::project_troubleshooting_item_with_audio(
-            pool,
-            selection::TroubleshootingSelection {
-                channel,
-                item: &media.item,
-                media_version_id: media.media_version_id,
-                source,
-                resolution,
-                subtitle_id: context.subtitle_id,
-                diagnostics: context.diagnostics.clone(),
-            },
-            audio,
-        )
-        .await
-    } else {
-        selection::project_deferred_item_with_audio(
-            pool,
+    let (subtitle_id, diagnostics) = match origin {
+        Origin::Troubleshooting(context) => (context.subtitle_id, context.diagnostics.clone()),
+        Origin::Persisted | Origin::Fallback(_) => (None, None),
+    };
+    selection::project_troubleshooting_item_with_audio(
+        pool,
+        selection::TroubleshootingSelection {
             channel,
-            &media.item,
-            media.media_version_id,
+            item: &media.item,
+            media_version_id: media.media_version_id,
             source,
             resolution,
-            audio,
-        )
-        .await
-    }
+            subtitle_id,
+            diagnostics,
+            source_pending,
+        },
+        audio,
+    )
+    .await
 }
 
 async fn load_binding(pool: &DbPool, id: i64) -> Result<Binding> {

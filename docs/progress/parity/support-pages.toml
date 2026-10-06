@@ -2,7 +2,7 @@ feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
 status     = 'In progress'
-adr        = ['0013', '0089']
+adr        = ['0013', '0076', '0089', '0095', '0107']
 summary    = '''
 Upstream catch-up row 1 (1e5c0b12, PR #2842) was Covered when upstream removed
 release notes. Row 65 (3e1918c9, PR #2942) restores a release-notes card on
@@ -34,7 +34,10 @@ artifacts, and keeps raw `.ts` samples only when the user opts in. Playback
 troubleshooting archives and media samples have real download side effects, and
 the generated troubleshooting HLS session route serves the produced playlist
 and segments. UCU-06 row 93 adds Legacy/Next controls, shared Hls.js playback,
-completion logs and in-order SSR for the no-JS GET form; Chromium and Firefox
+completion logs and in-order SSR for the no-JS GET form. UCU-09 row151 adds a
+music-only credits template selector, seek-correct generated ASS and exact
+template copies in both-engine diagnostic archives, preserving audio and
+persisted channel/playout state. Chromium and Firefox
 prove both engines, reports and narrow layouts. Visible labels/statuses use the shared persisted-language i18n
 layer for `en-us`, `pl`, `pt-br`, and `nl`; focused Rust and e2e tests cover the
 health/logs/troubleshooting/sequential/block/playback route family.
@@ -46,6 +49,12 @@ across `/system/*`), and `/system/health`, `/system/logs`, and
 `SystemRouteTabs` / `SystemPageLayout`, mirroring the existing Settings route
 tabs. The health warning/error badge moved from the group header onto the
 Support link and is now visible regardless of drawer scroll position.
+Findings 07/08 for v1.1.1 add shared persisted-mode decoding and owned transient
+preview states with POST Play/Stop, generation-fenced HLS output and explicit
+UTC/programme seek. Both corrections are accepted locally. The feature remains
+In progress until the integrated v1.1.1 web parity closeout; remaining channel
+setup findings and release acceptance are not implied by these focused proofs.
+
 '''
 
 [[debt]]
@@ -77,3 +86,25 @@ description = 'ADR 0089 removed Logs and Troubleshooting from the navigation dra
 discovered  = '2026-09-09'
 evidence    = 'Fixed 2026-09-09: `SystemPageLayout` now wraps all eight system pages — `HealthPage`, `LogsPage`, `TroubleshootingPage`, `MpegTroubleshootingPage`, `SequentialScheduleValidationPage`, `BlockPlayoutTroubleshootingPage`, `BlockPlayoutHistoryPage`, and `PlaybackTroubleshootingPage`. Against the running dev host every one of the eight `/system/*` routes serves exactly one `data-system-route-tabs` strip with exactly one `aria-current="page"`, and `/system/troubleshooting/*` holds the Troubleshooting tab. Covered by `troubleshooting_detail_keeps_the_troubleshooting_tab_selected` and the `one drawer Support link drives the system route tabs` case in `tests/e2e/support-pages.spec.ts`.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-row151'
+description = 'Playback troubleshooting does not yet have accepted music-video credits template selection and both-engine runtime/archive proof for upstream row151.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'Resolved by UCU-09 row151: 762 web checks, generated/native argv, seek/audio/subtitle precedence, archives and persisted-state guards pass; strict lint and web parity pass. All 14 Chromium/Firefox cases and two final no-JS 320px screenshot cases pass, with both engines decoding credits after seek. Native/official Next smoke passes. The owning milestone records exact runs, source review and artifact checksums.'
+
+[[debt]]
+id = 'troubleshooting-persisted-streaming-modes'
+description = 'Diagnostic channel playback used a zero-based decoder instead of the shared persisted StreamingMode contract, rejecting HLS Segmenter value 4 and Hybrid value 5 before FFmpeg started and misinterpreting other values. Startup failures had no actionable form status.'
+discovered = '2026-10-02'
+resolved = true
+evidence = 'Resolved under v111-findings-07, which owns exact commands and acceptance evidence. One shared persisted decoder serves live and preview reads. Migrated SQLite roundtrips all four modes and rejects invalid values; nine focused web tests and four matched Chromium/Firefox cases pass, including successful actual FFmpeg playback in all modes, unchanged channel/timeline rows and safe localized startup failures. Strict affected-crate Clippy, hydration lint, formatting and lint-allow policy pass. Owned cancellation is accepted separately under v111-findings-08.'
+
+[[debt]]
+id = 'owned-cancellable-troubleshooting-previews'
+description = 'Diagnostic playback has no owned preview ID, explicit lifecycle status or server-side Stop action; destroying the browser player leaves the producer running until its deadline. Add programme-relative seek and timezone-aware timestamps while retaining live-producer isolation and cleanup guarantees.'
+discovered = '2026-10-02'
+resolved = true
+adr = '0107'
+evidence = 'Resolved under v111-findings-08 and ADR 0107: owned bounded IDs, safe lifecycle status, process-tree/controller/session cleanup, charged quarantine, fenced HLS files, UTC/programme seek and SSR/enhanced Stop. Forty focused Rust checks and real Chromium/Firefox native/Next controls/render, matched-bundle and lost-response checks pass; strict affected lint, hydration lint and ordinary live playback/lifecycle smoke pass. The milestone owns exact commands and artifact references. Integrated v1.1.1 web parity closeout remains pending.'

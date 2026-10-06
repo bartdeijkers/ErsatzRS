@@ -5017,3 +5017,176 @@ async fn uploaded_parent_artwork_is_role_correct_and_preserves_operator_replacem
         operator_poster
     );
 }
+
+async fn save_selection(
+    pool: &SqlitePool,
+    policy: ersatzrs_core::addon_list_selection::AddonListSelectionPolicy,
+) -> ersatzrs_core::repositories::Result<i32> {
+    use ersatzrs_core::{
+        addon_list_selection::AddonListSelectionSettings,
+        repositories::{AddonMediaListEditorSave, AddonMediaListEditorSettings},
+    };
+    let repositories = make_repositories(pool.clone());
+    let form = repositories
+        .addon_media_lists
+        .get_admin_form(LIST_ID)
+        .await?
+        .expect("fixture list");
+    repositories
+        .addon_media_lists
+        .save_editor_task(&AddonMediaListEditorSave {
+            list_id: LIST_ID,
+            expected_revision: form.draft_revision,
+            playback_baseline: None,
+            metadata: None,
+            settings: Some(AddonMediaListEditorSettings {
+                selection: Some(AddonListSelectionSettings {
+                    policy: Some(policy),
+                    refresh_paused: false,
+                }),
+                refresh_cadence: form.refresh_cadence,
+                refresh_publication_policy: form.refresh_publication_policy,
+                detail_policy: form.detail_import_policy,
+                generate_playlist: form.generate_playlist,
+                presentation_kind: form.presentation_kind,
+            }),
+            delivery_mode: None,
+            disk_warning_gb: None,
+            options: None,
+            items: Vec::new(),
+        })
+        .await
+}
+
+async fn selection_retained_file_fixture(
+    pool: &SqlitePool,
+    directory: &TempDir,
+    external: &TempDir,
+) -> (PathBuf, PathBuf, Vec<u8>) {
+    let artifact_path = directory.path().join("processed-archive.mkv");
+    fs::write(&artifact_path, b"owned prepared fixture payload").unwrap();
+    sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","RelativePath","ByteLength","Sha256","CreatedAt","UpdatedAt")
+        VALUES (1,11,'archive-fixture',1,2,'processed-archive.mkv',30,?,'2026-10-05T00:00:00Z','2026-10-05T00:00:00Z')"#)
+        .bind("a".repeat(64)).execute(pool).await.unwrap();
+    let source = external.path().join("archive-source.strm");
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path"=? WHERE "MediaVersionId"=11"#)
+        .bind(source.to_string_lossy().as_ref())
+        .execute(pool)
+        .await
+        .unwrap();
+    fs::write(&source, b"preserved external source").unwrap();
+    let source_bytes = fs::read(&source).unwrap();
+    (artifact_path, source, source_bytes)
+}
+
+#[tokio::test]
+async fn selection_publication_archives_sources_and_preserves_owned_artifacts_on_failure() {
+    use ersatzrs_core::addon_list_selection::AddonListSelectionPolicy;
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let (artifact_path, source, source_bytes) =
+        selection_retained_file_fixture(&pool, &directory, &external).await;
+    save_selection(
+        &pool,
+        AddonListSelectionPolicy {
+            exclude_terms: vec!["second".into()],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id"=11"#
+        )
+        .await,
+        1
+    );
+    repositories
+        .addon_media_lists
+        .publish(LIST_ID)
+        .await
+        .unwrap();
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode""#).await,
+        2
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id"=11"#
+        )
+        .await,
+        0
+    );
+    assert_eq!(scalar::<i64>(&pool,r#"SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "AddonMediaListItemId"=11 AND "State"=2"#).await,1);
+    assert_eq!(
+        fs::read(&artifact_path).unwrap(),
+        b"owned prepared fixture payload"
+    );
+    assert_eq!(fs::read(&source).unwrap(), source_bytes);
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "RemoteStream" WHERE "Id"=111"#
+        )
+        .await,
+        1
+    );
+    assert_invalid_selection_preserves_publication(&pool).await;
+    assert_eq!(
+        fs::read(&artifact_path).unwrap(),
+        b"owned prepared fixture payload"
+    );
+    assert_eq!(fs::read(&source).unwrap(), source_bytes);
+}
+
+async fn assert_invalid_selection_preserves_publication(pool: &SqlitePool) {
+    use ersatzrs_core::addon_list_selection::AddonListSelectionPolicy;
+    let published = scalar::<i64>(
+        pool,
+        r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=1"#,
+    )
+    .await;
+    let state: Vec<(i64, bool, bool)> = sqlx::query_as(
+        r#"SELECT "Id","Included","Published" FROM "AddonMediaListItem" ORDER BY "Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert!(save_selection(
+        pool,
+        AddonListSelectionPolicy {
+            newest_count: Some(0),
+            ..Default::default()
+        }
+    )
+    .await
+    .is_err());
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=1"#
+        )
+        .await,
+        published
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (i64, bool, bool)>(
+            r#"SELECT "Id","Included","Published" FROM "AddonMediaListItem" ORDER BY "Id""#
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap(),
+        state
+    );
+}

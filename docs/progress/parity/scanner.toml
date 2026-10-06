@@ -2,7 +2,7 @@ feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
 status     = 'In progress'
-adr        = ['0057', '0060', '0062']
+adr        = ['0057', '0060', '0062', '0108']
 
 summary    = '''
 Local filesystem scanning dispatches by `Library.MediaKind` for movies, other
@@ -69,6 +69,15 @@ ETags, reconciliation, remote playback, people, GUIDs, artwork, and streams.
 Reopened 2026-09-02: scan persistence still crosses the documented
 infrastructure boundary.
 '''
+
+[[debt]]
+id          = 'windows-local-tv-case-alias-identity'
+description = 'Case-only Windows directory changes can create duplicate folder and episode registrations, producing a Local television identity warning that a full scan does not resolve.'
+discovered  = '2026-10-02'
+resolved    = false
+adr         = '0060'
+evidence    = 'Headed Playwright on the native Windows installation reproduced one show/season conflict after a successful full scan. Eight episode pairs identify the same files ignoring case. Native filesystem checks confirmed two folder aliases. A backed-up scoped transaction merged the aliases and relinked eight media files; protected media, stream, collection, playlist and scheduling tables remained unchanged. Explicit browser refresh reports Pass, including after a second successful full scan. All 22 focused folder/television tests, strict scanner Clippy, formatting and diff checks pass. With the application stopped, a verified backup and isolated repair/rollback tests preceded removal of eight unreferenced duplicate episode registrations. Original IDs and current path spelling were retained; 188 other tables, including scheduling/checkpoints and stream pins, stayed byte-equivalent at the row level. Independent post-repair checks report 32 unique episodes, no physical-file duplicates or television provenance conflicts, integrity_check ok and zero foreign-key violations.'
+resolution  = 'Local source reconciliation and alias lookup cover idempotency, rollback, distinct/missing directories, image-duration safety and stream/reference retention. The preventive source change is scheduled for v1.1.1 and has not been deployed to the native Windows installation. The affected native database now has no legacy duplicate episodes after a guarded offline repair. Automatic reference-aware legacy episode merging remains outside this preventive fix.'
 
 [[debt]]
 id          = 'addon-publication-stale-generated-scan-work'
@@ -149,3 +158,25 @@ description = 'UCU-08 row134: Plex/Jellyfin/Emby unchanged-etag episodes skip se
 discovered = '2026-09-28'
 resolved = true
 evidence = 'All three provider parent failures reproduced (65a1691f). Library-scoped identity-preserving repair now precedes unchanged-etag skips; Emby excludes mismatched SeasonId while continuing past fully filtered pages. Ten focused tests pass (2abae677), including library isolation/idempotency and unchanged file/playback lookup assertions. Strict infra lint, matched Leptos build, four Chromium/Firefox cases and substantive review pass. Source map and ucu-08 own evidence; row134 is Port.'
+
+[[debt]]
+id = 'ucu09-row145-plex-json-array-casing'
+description = 'Plex metadata decoding expected only lowercase media/part/stream, omitting the capitalized arrays in the official PMS JSON schema.'
+discovered = '2026-09-29'
+evidence = 'Serde now accepts canonical Media/Part/Stream plus lowercase aliases. The external-programme HTTP fixture proves video/audio/subtitle metadata survives canonical casing; existing Plex movie/show/collection scanner fixtures retain their snapshots. UCU-09 owns evidence and integrated acceptance.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row149'
+description = 'Plex Other Video scans previously discarded server library locations and omitted folder-derived tags. Row149 restores portable server-path parsing and scoped refresh of existing items without replacing other tag owners.'
+discovered = '2026-09-30'
+resolved = true
+evidence = 'UCU-09 records the upstream 4fffa955 source map, failing regression, 54 passing scoped checks and final six-test folder-tag acceptance. Native migration/restart, tag ownership and stable IDs, subtitles, search visibility, pagination, root changes and rollback pass, as does strict infra/scanner/web lint. The provider metadata correction adds no platform or runtime requirement.'
+
+[[debt]]
+id = 'v111-television-discovery-preview'
+description = 'Finding 03 requires broader television container candidates, discovery diagnostics and a bounded pre-save folder preview without changing source files or confusing extras with programmes.'
+discovered = '2026-10-02'
+adr = '0108'
+resolved = true
+evidence = 'Milestone v111-findings-03 owns completed local acceptance: shared expanded discovery, explicit diagnostics, bounded read-only nine-language SSR preview, native MPEG/TS upgrade/rescan and identity/track preservation, API and Chromium/Firefox JS/no-JS proof, plus strict lint and structural checks.'

@@ -6,6 +6,28 @@ pub(in crate::scheduling::scripted) fn register(
 ) -> Result<(), mlua::Error> {
     let globals = lua.globals();
 
+    // Immutable invocation context; retain user-supplied arg positions.
+    {
+        let s = Rc::clone(state);
+        globals.set(
+            "build_mode",
+            lua.create_function(move |_, ()| {
+                Ok(match s.borrow().mode {
+                    crate::scheduling::PlayoutBuildMode::Continue => "continue",
+                    crate::scheduling::PlayoutBuildMode::Refresh => "refresh",
+                    crate::scheduling::PlayoutBuildMode::Reset => "reset",
+                })
+            })?,
+        )?;
+    }
+    {
+        let s = Rc::clone(state);
+        globals.set(
+            "start_time",
+            lua.create_function(move |_, ()| Ok(s.borrow().start.to_rfc3339()))?,
+        )?;
+    }
+
     // is_done()  →  bool
     {
         let s = Rc::clone(state);

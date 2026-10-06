@@ -504,6 +504,7 @@ pub async fn sync_jellyfin_show_by_id(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
     Ok(synced)
 }
 
@@ -827,7 +828,7 @@ pub async fn sync_library_by_id_with_progress(
             })?;
 
     let service = JellyfinService::new();
-    if kind == LibraryMediaKind::Shows {
+    let synced = if kind == LibraryMediaKind::Shows {
         sync_jellyfin_show_library_with_progress(
             pool,
             &service,
@@ -851,7 +852,9 @@ pub async fn sync_library_by_id_with_progress(
             progress,
         )
         .await
-    }
+    }?;
+    crate::scripted_dependencies::record_successful_scan(pool, library_id).await?;
+    Ok(synced)
 }
 
 /// Sync Jellyfin collections for every library on `media_source_id` that has

@@ -8,8 +8,9 @@ use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
-    repair_invalid_classic_playouts, run_maintenance_once_cancellable,
-    run_requested_playout_build_cancellable, MaintenancePassReport, PlayoutBuildCancellation,
+    repair_invalid_classic_playouts_with_execution, run_maintenance_once_cancellable,
+    run_requested_playout_build_with_execution, MaintenanceExecution, MaintenancePassReport,
+    PlayoutBuildCancellation, PlayoutExecution,
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
@@ -29,6 +30,10 @@ pub struct SchedulerOptions {
     pub channel_guide_dir: Option<PathBuf>,
     /// Shared application command boundary for periodic library scans.
     pub application: Option<Arc<ersatzrs_app::ApplicationServices>>,
+    /// Host-owned health runs shared with admin readers and refreshes.
+    pub health: Option<ersatzrs_infra::health::HealthCheckCoordinator>,
+    /// Shared manual/hourly artwork cache maintenance.
+    pub artwork: Option<ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::UnboundedReceiver<PlayoutBuildRequest>>,
     /// Shared activity registry used by the web host to distinguish accepted
@@ -37,6 +42,8 @@ pub struct SchedulerOptions {
     /// Optional live HLS session registry supplied by the web host so playout
     /// rebuilds can notify active segmenter workers.
     pub hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
+    /// Shared Next publishers used to prepare files before scheduling commit.
+    pub next: Option<Arc<ersatzrs_infra::next_engine::host::NextHost>>,
     /// Shared playout lock registry. When provided, the scheduler reuses this
     /// `EntityLocker` instead of constructing its own so the web host can poll
     /// playout lock state for the playouts-page build spinner. Mirrors
@@ -66,16 +73,18 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         transcode_dir,
         channel_guide_dir,
         application,
+        health,
+        artwork,
         mut build_requests,
         build_activity,
         hls_sessions,
+        next,
         locker,
         shutdown,
     } = options;
 
     let (shutdown, _signals) = scheduler_shutdown(shutdown);
-    let build_token = shutdown.clone();
-    let cancelled: PlayoutBuildCancellation = Arc::new(move || build_token.is_cancelled());
+    let cancelled = build_cancellation(shutdown.clone());
 
     let startup = db::bootstrap_media_server_database().await?;
     let cache_config = CacheCleanupConfig::from_paths(transcode_dir, channel_guide_dir);
@@ -84,7 +93,12 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     // one, reuse it so the admin UI can observe playout lock state.
     let locker = locker.unwrap_or_default();
 
-    repair_classic_playouts_on_startup(&startup.pool, &locker, hls_sessions.as_deref()).await?;
+    let execution = PlayoutExecution {
+        hls_sessions: hls_sessions.as_deref(),
+        next: next.as_ref(),
+        cancelled: Some(&cancelled),
+    };
+    repair_classic_playouts_on_startup(&startup.pool, &locker, execution).await?;
 
     // The web host completes interrupted scan replay and refresh admission
     // before starting background workers. Do not repeat that check here: a
@@ -100,7 +114,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
             &locker,
             startup.schema_status,
             hls_sessions.clone(),
-            Some(&cancelled),
+            maintenance_execution(execution, health.as_ref(), artwork.as_ref()),
         )
         .await?;
         log_report(&report);
@@ -128,7 +142,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     &locker,
                     startup.schema_status.clone(),
                     hls_sessions.clone(),
-                    Some(&cancelled),
+                    maintenance_execution(execution, health.as_ref(), artwork.as_ref()),
                 )
                 .await
                 {
@@ -141,40 +155,71 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     build_requests = None;
                     continue;
                 };
-                let (request, _activity_guard) = if let Some(activity) = &build_activity {
-                    let (request, guard) = activity.start_guard(request);
-                    (request, Some(guard))
-                } else {
-                    (request, None)
-                };
-                let playout_id = request.playout_id;
-                let mode = request.mode;
-                match run_requested_playout_build_cancellable(
-                    &startup.pool,
-                    &locker,
-                    request,
-                    chrono::Utc::now(),
-                    hls_sessions.as_deref(),
-                    Some(&cancelled),
-                )
-                .await
-                {
-                    Ok(true) => info!(playout_id, ?mode, "requested playout build complete"),
-                    Ok(false) => info!(playout_id, ?mode, "requested playout build skipped because playout is locked"),
-                    Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),
-                }
+                run_queued_build(&startup.pool, &locker, request, build_activity.as_ref(), execution).await;
             }
         }
+    }
+}
+
+async fn run_queued_build(
+    pool: &db::DbPool,
+    locker: &EntityLocker,
+    request: PlayoutBuildRequest,
+    build_activity: Option<&PlayoutBuildActivity>,
+    execution: PlayoutExecution<'_>,
+) {
+    let (request, _activity_guard) = if let Some(activity) = build_activity {
+        let (request, guard) = activity.start_guard(request);
+        (request, Some(guard))
+    } else {
+        (request, None)
+    };
+    let playout_id = request.playout_id;
+    let mode = request.mode;
+    match run_requested_playout_build_with_execution(
+        pool,
+        locker,
+        request,
+        chrono::Utc::now(),
+        execution,
+    )
+    .await
+    {
+        Ok(true) => info!(playout_id, ?mode, "requested playout build complete"),
+        Ok(false) => info!(
+            playout_id,
+            ?mode,
+            "requested playout build skipped because playout is locked"
+        ),
+        Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),
+    }
+}
+
+fn build_cancellation(token: CancellationToken) -> PlayoutBuildCancellation {
+    Arc::new(move || token.is_cancelled())
+}
+
+fn maintenance_execution<'a>(
+    execution: PlayoutExecution<'a>,
+    health: Option<&'a ersatzrs_infra::health::HealthCheckCoordinator>,
+    artwork: Option<&'a ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance>,
+) -> MaintenanceExecution<'a> {
+    MaintenanceExecution {
+        next: execution.next,
+        cancelled: execution.cancelled,
+        health,
+        artwork,
     }
 }
 
 async fn repair_classic_playouts_on_startup(
     pool: &ersatzrs_infra::db::DbPool,
     locker: &EntityLocker,
-    hls_sessions: Option<&dyn HlsSessionRegistry>,
+    execution: PlayoutExecution<'_>,
 ) -> anyhow::Result<()> {
     let repaired =
-        repair_invalid_classic_playouts(pool, locker, chrono::Utc::now(), hls_sessions).await?;
+        repair_invalid_classic_playouts_with_execution(pool, locker, chrono::Utc::now(), execution)
+            .await?;
     if repaired > 0 {
         info!(
             repaired,

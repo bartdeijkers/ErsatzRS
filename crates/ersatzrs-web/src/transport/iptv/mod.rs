@@ -3,6 +3,7 @@ pub mod guide;
 pub mod hls;
 pub mod identifier;
 pub mod logos;
+pub mod next_canvas;
 pub mod next_media;
 pub mod next_subtitles;
 pub mod playlist;
@@ -51,4 +52,31 @@ pub async fn get_internal_stream(
     Path(channel_number): Path<String>,
 ) -> Response {
     stream::serve_internal_legacy_stream(&state, &channel_number).await
+}
+
+/// Refuse an incompatible configured output before any worker or wrapper starts.
+/// The command builder separately guards copied AV1 discovered from source metadata.
+async fn validate_profile_output(
+    state: &AppState,
+    channel_id: i64,
+    format: ersatzrs_ffmpeg::OutputFormat,
+    deadline: tokio::time::Instant,
+) -> Result<(), Response> {
+    let profile = tokio::time::timeout_at(
+        deadline,
+        ersatzrs_infra::playback::load_channel_playback_profile(&state.pool, channel_id),
+    )
+    .await;
+    match profile {
+        Ok(Ok(Some(profile))) => {
+            if ersatzrs_ffmpeg::profile_encodes_av1(&profile.profile) {
+                if let Some(reason) = ersatzrs_ffmpeg::av1_output_error(format) {
+                    return Err((StatusCode::UNSUPPORTED_MEDIA_TYPE, reason).into_response());
+                }
+            }
+            Ok(())
+        }
+        Ok(Ok(None) | Err(_)) => Err(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE.into_response()),
+    }
 }

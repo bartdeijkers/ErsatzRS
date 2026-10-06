@@ -259,6 +259,8 @@ pub async fn run() {
             artwork_cleanup_rx,
             application: app_state.application.clone(),
             hls_sessions: app_state.hls_sessions.clone(),
+            next: app_state.next_engine.clone(),
+            health: app_state.health.clone(),
         },
         shutdown.clone(),
     );

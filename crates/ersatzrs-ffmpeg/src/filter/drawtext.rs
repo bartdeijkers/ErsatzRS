@@ -1,3 +1,4 @@
+use super::escaping::{escape_filtergraph_option, escape_filtergraph_path};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 
@@ -420,30 +421,11 @@ fn push_optional_value(options: &mut Vec<String>, name: &str, value: Option<&str
 }
 
 fn push_path(options: &mut Vec<String>, name: &str, path: &Path) {
-    push_value(options, name, &path.to_string_lossy().replace('\\', "/"));
+    options.push(format!("{name}={}", escape_filtergraph_path(path)));
 }
 
 fn push_value(options: &mut Vec<String>, name: &str, value: &str) {
     options.push(format!("{name}={}", escape_filtergraph_option(value)));
-}
-
-fn escape_filtergraph_option(value: &str) -> String {
-    // FFmpeg applies the option parser first (`\\`, `'`, `:` are special),
-    // then the containing filtergraph parser (`\\`, `'`, `[]`, `,`, `;`).
-    // Escape each layer independently so the inner layer still receives its
-    // required escapes after the outer layer consumes one level.
-    escape_chars(&escape_chars(value, "\\':"), "\\'[],;")
-}
-
-fn escape_chars(value: &str, special: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        if special.contains(character) {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
 }
 
 #[cfg(test)]

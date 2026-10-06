@@ -109,7 +109,7 @@ async fn sync_cast(
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
                 "Items": [{
-                    "Id": item_id, "Name": "Synthetic title", "Etag": "unchanged-etag",
+                    "Id": item_id, "Type": if show { "Series" } else { "Movie" }, "Name": "Synthetic title", "Etag": "unchanged-etag",
                     "Path": format!("synthetic/movie-{library}.mkv"), "LocationType": "FileSystem",
                     "DateCreated": "2026-04-17T10:00:00Z", "RunTimeTicks": 120_000_000,
                     "People": people

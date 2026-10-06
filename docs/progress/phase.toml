@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-09: reconcile the remaining upstream tail'
+current_focus = 'All channel setup findings locally accepted for v1.1.1; release and deployment gates remain separate'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,11 +61,182 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-02: The maintainer authorized all channel setup solutions for
+v1.1.1, each in a separate commit with a changelog entry. After each completed
+milestone, reread the entire maintainer findings.md before starting the next
+milestone and reconcile any additions or changes. Milestones
+v111-findings-01 through -12 and -09b retain the complete requirements and exclusions.
+Finding 06 is locally accepted: explicit stored-kind actions preserve complete
+programmes and source rotation for every scheduler; relevant successful scans
+adapt Scripted futures through bounded durable work with localized status.
+Native/Next decoded handovers cover all four internal schedulers; External JSON
+has native decoded adoption proof. Next cancellation/retry preserves SQL/files
+and running playback. Full workspace closeout, strict lint, HTTP smokes,
+TSDuck, dependency audit and final matched Leptos bundle checks pass.
+Canonical acceptance and platform limits live in v111-findings-06 and ADR 0110.
+Native Windows held-handle testing and packaged/platform release acceptance are
+not claimed. Finding 12 is also locally accepted: Classic overlap rejection,
+verified-prefix repair, full midnight Continue/restart/filler evidence, Health
+and localized browser guidance. Canonical acceptance lives in v111-findings-12.
+Finding 11 is locally accepted with natural fresh-process maintenance, atomic
+receipt/timeline rollback, complete Rust closeout and native/browser/bundle proof.
+Canonical acceptance lives in v111-findings-11. Resumed on explicit instruction
+on 2026-10-05 after rereading the full findings document. Finding 05 is locally
+accepted: shared path escaping and truthful native preview segment provenance,
+with Windows render and final worker/browser/matched-bundle proof. Canonical
+acceptance lives in v111-findings-05 and ADR 0111. Finding 04 is locally accepted
+with shared guide projection, historical/DST and filler context, actual database
+refresh/cancellation, override propagation and fresh-process Continue preservation,
+historical browser previews, decoded HLS/regular-IPTV transitions and final gates.
+Canonical acceptance lives in v111-findings-04 and ADR 0112. Finding 01 is locally
+accepted: saved rolling selection and reasons, optional first-review hold, durable
+worker acquisition/retry, archive preservation, SQLite restart and all localized
+admin paths. Full Rust tests, lint, browser/runtime and matched-bundle gates pass.
+Canonical acceptance lives in v111-findings-01 and ADR 0113. Finding 02 is locally
+accepted: typed five-kind authoring, strict YAML, missing-input preflight, actual
+native previews and accurate renderer capabilities. Native closeout, 18 complete
+Chromium/Firefox cases, all cultures/hydrated/no-JS, historical/real-font rendering,
+transport and paired-bundle gates pass. Canonical acceptance lives in
+v111-findings-02 and ADR 0114. Finding 09 is locally accepted: decoded JPEG XL
+repeat/phase/alpha, actual native producer throughput, eight editor cases and
+two real producer/public IPTV cases pass alongside complete native, transport,
+parity and paired-bundle gates. Canonical acceptance lives in v111-findings-09
+and ADR 0115. Finding 09b is locally accepted: native exact Image/Motion pixel
+placement, preserved alpha/timing/YAML and independent real-font heading/title
+rendering, eight complete browser cases, 3868 native tests plus doctests and all
+transport/parity/final paired-bundle gates pass. Canonical acceptance lives in
+v111-findings-09b and ADR 0114. All twelve numbered findings plus the separate
+09b solution are locally accepted, each with its own commit and changelog entry.
+Re-read the complete findings document after the final commit; any new additions
+retain the agreed per-solution delivery rule. Deployment, CI and release gates
+remain separate.
+No publication is authorized.
+The full findings document was reread on 2026-10-04;
+its Windows activation additions for Findings 2, 4 and 9 remain in scope, including
+variable refresh semantics, Motion phase and native alpha throughput. New
+Findings 11 (deferred Classic save) and 12 (midnight overlap) have separate
+milestones; reuse the existing finding 06 day-seam correction where applicable.
+Findings 03, 04, 05, 06, 07, 08, 10, 11 and 12 are locally accepted.
+Finding 10 adds persisted-tail
+Scripted continuation, atomic timeline validation and observable rejection, with
+SQL restart/automatic-build, Health, browser and native playback proof. Finding 03 adds shared television
+discovery, MPEG/TS recognition and bounded localized folder preview with native
+rescan/identity and JS/no-JS browser proof. Findings 07/08 retain shared-decoder
+and owned preview lifecycle proof, including native/Next playback and cleanup.
+Selection, typed authoring/preview, programme metadata and animated JPEG XL
+are locally accepted, including exact Motion placement and final
+roundtrip/typography under finding 09b.
+Finding 09 also includes separate Motion YAML/alpha/location and native
+text-fit/font-metrics correction (milestone v111-findings-09b). Re-read the maintainer findings document after every milestone before
+selecting the next solution, as explicitly requested on 2026-10-02. Existing release/publication gates are
+separate; this corrective scope does not publish a release.
+
+2026-10-02: Native Windows local-TV folder aliases were repaired transactionally;
+headed browser health remains Pass after a repeated full scan. The preventive
+scanner correction is verified locally and scheduled for v1.1.1; matched native
+package deployment remains pending. The subsequent authorized offline repair
+removed eight unreferenced duplicate episodes after backup and rollback validation;
+original IDs, stream selections and all scheduling/checkpoint rows are preserved.
+Remaining preventive deployment belongs to scanner debt
+windows-local-tv-case-alias-identity.
+
+2026-10-01: UCU-00 through UCU-09 are Complete at accepted candidate b76d11c6
+with terminal green CI 36900396649. The upstream tip, pin and final ledger row
+remain 960421e8; all 183 rows are accounted for. Preserve all approved acceptance
+debt. Finish stable v1.1.0: push the final documentation/closeout candidate,
+obtain exact-SHA pre-tag CI, build draft archives and Docker, verify exact
+packages, then publish the accepted assets. No application release exists yet.
+
+Earlier release-preparation checkpoints:
+2026-10-01: checkpoint a3641579 has terminal green CI 36860667159, including
+both browsers, Rust and Next runtime gates. FFmpeg v2.0.5 is public with verified
+public archive hashes, reusing the exact v2.0.4 x64/Windows bytes and adding the
+accepted ARM packages. Official add-ons v0.11.6 is public at cb8fcd9 after green
+Windows/Linux CI; its public ZIP matches the CI artifact. The original release
+attachment failed because its job lacked a repository context. Repair 968e088
+passed actionlint; recovery workflow 36867295964 is terminal green and the final
+public archive still matches the accepted hash. Application version 1.1.0 and
+runtime v2.0.5 integration at 8dc0a3fb has terminal green CI 36866880141. Update installed yt-dlp to 0.11.6
+before upgrading the host. The maintainer accepted ADR 0100's ARMv7 source-build exception. The pinned,
+unmodified source builds with Rust 1.97.1 on Bookworm and passes emulated
+video/audio decoding with the published ARMv7 FFmpeg runtime. The approved dependency snapshot next-4ad282f is published with verified
+unchanged official archives and the accepted ARMv7 executable. All downloaded
+hashes match; host provisioning and x64/ARMv7 Docker staging pass. The private
+repository uses host GitHub authentication; no credentials enter Docker.
+Finish exact-candidate CI and draft package acceptance before publication.
+Keep application v1.1.0 unpublished
+until the final candidate and release gates pass. Native ARM/macOS acceptance
+debt remains unchanged.
+
 2026-09-28: UCU-08 is Complete. Rows116-135, all local window gates and
 terminal green CI 36453480304 at dfeaf6d0 satisfy acceptance. Browser reports
 confirm Chromium257/Firefox233 passes with no unexpected or flaky results.
-Continue UCU-09 at row136 after refreshing upstream; append any new tail rows.
-The current 180-row ledger has 45 pending rows. Preserve accepted architecture,
+UCU-09 rows136-137 are Port; row138 is Covered; row139 is Adapt.
+Its milestone owns the evidence.
+Row140 audit found missing vpp_qsv padding options in the published v2.0.2 runtime.
+The maintainer approved an expanded separate runtime update including librsvg
+on 2026-09-28. Linux/Windows v2.0.3 packages are published and their public
+checksums verified; UCU-09 owns the release and runtime evidence. The managed
+runtime default is updated locally, with native/Next integration smoke passing.
+The maintainer explicitly approved Intel QSV, AMD AMF and native Linux NVIDIA
+interop acceptance debt; those paths remain unverified. Row140 is Port; rows141-142 are N/A bookkeeping; row143 ports HDR
+refresh and Media Info with runtime/browser proof. Row144 is N/A release notes. Row145 is Port: marathon fallback, external JSON guide and transient native
+playback, private Plex relay, audio/subtitle selection and owned preparation.
+Native MPEG-TS, HLS MPEG-TS/fMP4, guide HTTP, strict lint, smoke and TSDuck
+acceptance pass. Upstream does not integrate external JSON with Next; the source
+audit corrected that earlier scope error. Row146 is Adapt under accepted ADR 0105:
+all-kind canvas delivery, programme/chunk/session clocks, preview geometry,
+alpha, audio/subtitles and owned cleanup pass HTTP/official Next proof. Native
+smoke, all 87 TSDuck checks and strict lint pass. Row147 ports YAML roll/graphics
+state and production graphics reference loading: 78 YAML checks, six final
+checks, SQLite midnight/restart proof, lint and smoke pass. Row148 is Port:
+provider ownership/caption eligibility, automatic sidecar availability, exact
+pins, prepared-media resolution, music-video metadata and seek handling pass
+focused checks, decoded native/Next proof, strict lint and native smoke.
+Valid HTTP(S) schemes are normalized for FFmpeg. Row149 ports Plex Other Video
+folder tags with portable server paths, scoped migration, repeat/restart identity,
+independent tag ownership, subtitle retention, search visibility and rollback
+proof. Focused checks and strict lint pass. Row150 enables Next fallback error
+cards: wire/overlay compatibility, decoded gap/failed-media Burn/Convert and
+explicit-off cases, ordinary audio/subtitles, host smoke and lint pass.
+Row151 ports music-video credits troubleshooting: both-engine seek/archive,
+audio/subtitle precedence, 762 web checks, strict lint, Chromium/Firefox/no-JS
+geometry and native/Next smoke pass. Row152 is N/A: upstream AMF release notes,
+with approved hardware debt unchanged. Row153 is N/A: NuGet dependency bumps;
+AAC surround is already covered, with native argv/runtime proof. Row154 adapts
+motion EOF/expiry/loop boundaries and preview clocks under ADRs 0005/0105;
+75 focused checks, native argv, 18 browser cases, lint and both smoke paths pass.
+Row155 ports the optional Next AMF adapter field; 14 protocol/config checks,
+strict lint and both package checksums pass. Automatic selection is unchanged;
+approved AMD hardware debt remains. Row156 ports typed machine CRUD and trash
+errors, guarded profile deletion and localized island callbacks. All 33 focused
+checks, strict lint, 15 browser cases and native smoke pass. Row157 ports
+immediate native completion, owned sample cleanup, URI redaction and smart
+conflicts: 53 focused checks, 24 browser cases and strict lint pass. Row158 is
+Covered: atomic provider admission and fenced Plex identity; 22 checks and lint
+pass, with native Trakt deliberately retired. Row159 ports maintenance failure
+isolation: 24 SQLite/continuity checks and strict lint pass. Row160 ports movie
+ordering, atomic membership validation and scoped legacy repair: 13 focused checks,
+eight browser cases and strict lint pass. Row161 covers font-cache concurrency
+through existing FFmpeg ownership; nine focused checks pass. Row162 ports fresh
+MPEG-TS script choices, selection recovery and complete no-JS FFmpeg settings:
+19 focused checks, six browser cases, strict lint and native smoke pass. Row163 ports
+shared script validation/execution and arguments: 46 checks and strict lint pass. Row164 ports dependent selection clearing, saved option
+display and stable template hydration: four browser cases and strict lint pass. Row165 covers credits fallback, HLS
+diagnostics and graphics/process ownership: 18 checks and strict lint pass. Row166 covers case-insensitive remote YAML
+discovery: three scanner checks and strict lint pass. Row167 ports native path validation, transactional overlap checks,
+identity-preserving saves and localized correction forms: eleven production checks,
+two native Windows probes, eight browser cases and strict affected lint pass.
+Row168 is N/A: upstream release heading/date/links only. Row169 ports provider
+rotation, Media Info and Next schema 0.0.5; 163 regressions, decoded Next rotation,
+two browser cases, corrected orientation health and Next HTTP smoke pass. Row170 ports Default VAAPI driver omission; 14 config/protocol
+checks, strict lint and exact Next consumer review pass. Row171 is Covered under ADRs 0005/0105: shared libass and encoded canvas
+replace the Skia subtitle bitmap loop; focused projection passes. Row172 ports Jellyfin query/type guards and proves unchanged-ETag season
+parent repair; 47 checks and strict lint pass. Row173 ports direct plain watermark layers and verifies RGB opacity;
+249 regressions, three runtime checks, strict lint and Next smoke pass. Row174 ports both-engine automatic subtitle eligibility; affected checks,
+decoded sidecar/preparation proof, strict lint and Next smoke pass. Row175 ports CRLF batch checkout rules; isolated checkout proof passes. Row176 ports Windows oneVPL packaging; seven offline tests and native ZIP/startup proof pass. Row177 adapts immutable FFmpeg delivery under ADRs 0008/0063; package hashes and 13 runtime tests pass. Row178 is N/A (upstream Docker quoting). Row179 is N/A (upstream develop-release tooling). Row180 ports development release notes; focused tests, strict lint and two browser checks pass. Row181 adapts the published v2.0.4 runtime and official Next 6b49dae; exact public hashes, available runtime proofs, strict lint and Next HTTP smoke pass. Row182 ports MPEG-2 with eight-bit projection, health and HLS signaling; focused and decoded Linux/Windows checks and workspace Clippy pass. All 182 rows are accepted locally. Finish final window gates and resolve the recorded platform acceptance;
+UCU-09 window gates, push and exact-SHA CI remain.
+The current 182-row ledger has 2 pending rows. Preserve accepted architecture,
 subtitle/audio parity, existing platform support and pinned FFmpeg artifacts.
 
 2026-09-26: UCU-05 is Complete: local gates and terminal green exact-SHA CI

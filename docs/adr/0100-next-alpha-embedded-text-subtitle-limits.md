@@ -7,6 +7,9 @@ Accepted 2026-09-23
 The maintainer selected the official Next build and explicitly accepted the
 embedded text subtitle cases described below as temporary alpha limitations.
 
+Packaging amendment accepted 2026-10-01: build ARMv7 Next from the pinned,
+unmodified upstream source because no official ARMv7 executable is published.
+
 ## Implementation
 
 Partial — the refusal contract is implemented: unavailable selections are
@@ -71,8 +74,9 @@ this audit does not process their ledger rows or advance the upstream pin.
 
 ## Decision
 
-Keep the official Next artifact. Accept the following unresolved capabilities
-as visible upstream alpha limitations for row 39:
+Keep the official Next artifact on platforms where it is published. Accept the
+following unresolved capabilities as visible upstream alpha limitations for
+row 39:
 
 1. Embedded text subtitles in live Next inputs where Burn or Convert cannot
    honor the selected captions under the official engine contract.
@@ -90,6 +94,33 @@ This exception does not waive image subtitle support, external sidecar timing,
 prepared artifact captions, retained-interval subtitle mapping, alternate audio,
 source cancellation, HTTP lifecycle checks or supported-platform acceptance.
 Those remain part of the existing requirements.
+
+### ARMv7 packaging exception
+
+For ARMv7, build upstream revision
+`4ad282fae7f49d488aa40e5b6bb092dbe9c4018f` without source or lockfile changes.
+Verify the source archive and lockfile checksums before building with Rust
+1.97.1 and a Debian Bookworm ARM hard-float compiler. Require the executable
+to remain compatible with GLIBC 2.36. Retain its license, source revision,
+compiler identity, build command and payload hashes in `origin.json`.
+
+The recipe produces the accepted ARMv7 artifact; release archives and Docker
+images reuse that checksum-pinned binary. Packaging
+must identify this as a source build rather than an official downloaded asset.
+Other platforms continue using their verified official artifacts. A new source
+revision requires the existing source review, runtime acceptance and CI gates.
+Emulated startup and decoded playback checks are distinct from the approved,
+still-unverified native ARM application and hardware acceptance.
+
+### Preserving accepted dependency artifacts
+
+The maintainer approved the immutable `next-4ad282f` dependency snapshot on
+2026-10-01 after upstream deleted the accepted `develop` downloads. Preserve
+all five official archives byte-for-byte from upstream CI 36832767332, alongside
+the accepted ARMv7 build, checksums, license and provenance. Pin archive and
+license hashes in the staging code. Private-repository access uses the existing
+host GitHub CLI login or CI token; Docker consumes host-staged files without
+credentials. Do not replace this snapshot when upstream advances.
 
 ## Consequences
 

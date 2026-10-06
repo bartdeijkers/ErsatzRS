@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ersatzrs_app::artwork_cleanup::{ArtworkCleanupQueue, ArtworkCleanupRequest};
-use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -30,7 +30,7 @@ impl ArtworkCleanupQueue for TokioArtworkCleanupQueue {
 }
 
 pub async fn run_artwork_cleanup_worker(
-    pool: DbPool,
+    maintenance: ArtworkCacheMaintenance,
     mut receiver: mpsc::Receiver<ArtworkCleanupRequest>,
     shutdown: CancellationToken,
 ) {
@@ -46,11 +46,10 @@ pub async fn run_artwork_cleanup_worker(
         tokio::select! {
             biased;
             () = shutdown.cancelled() => break,
-            result = ersatzrs_infra::artwork_cleanup::clean_orphaned_artwork(&pool, request.limit) => {
+            result = maintenance.run(request.limit) => {
                 match result {
-                    Ok(report) => tracing::info!(
-                        actors_deleted = report.actors_deleted,
-                        artwork_deleted = report.artwork_deleted,
+                    Ok(report) => tracing::debug!(
+                        ?report,
                         "completed manual orphaned artwork cleanup"
                     ),
                     Err(error) => tracing::warn!(%error, "manual orphaned artwork cleanup failed"),
@@ -104,7 +103,9 @@ mod tests {
             .await
             .unwrap();
         let shutdown = CancellationToken::new();
-        let worker = run_artwork_cleanup_worker(pool.clone(), receiver, shutdown.clone());
+        let root = tempfile::tempdir().unwrap();
+        let maintenance = ArtworkCacheMaintenance::new(pool.clone(), root.path().to_owned());
+        let worker = run_artwork_cleanup_worker(maintenance, receiver, shutdown.clone());
         tokio::pin!(worker);
         assert!(futures_util::poll!(&mut worker).is_pending());
         shutdown.cancel();
@@ -127,9 +128,11 @@ mod tests {
         let shutdown = CancellationToken::new();
         shutdown.cancel();
         let pool = ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let maintenance = ArtworkCacheMaintenance::new(pool, root.path().to_owned());
         tokio::time::timeout(
             Duration::from_secs(1),
-            run_artwork_cleanup_worker(pool, receiver, shutdown),
+            run_artwork_cleanup_worker(maintenance, receiver, shutdown),
         )
         .await
         .unwrap();

@@ -6,7 +6,9 @@ async fn build_gaps_follow_final_items_and_roll_back_with_them() {
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 1).await;
     common::seed_media_graph(&pool).await;
-    pool.execute(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, 'Classic', 42), (2, 1, 'Classic', 42);
+    // Exercise the shared gap projection with deliberately overlapping input.
+    // Classic and Scripted reject that input before this projection is reached.
+    pool.execute(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, 'Block', 42), (2, 1, 'Block', 42);
         INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish") VALUES (1, '2026-01-01 00:00:00', '2026-01-02 00:00:00'), (1, '2026-01-01 00:00:00', '2026-01-02 00:00:00'), (2, '2026-01-01 00:00:00', '2026-01-02 00:00:00');"#).await.unwrap();
     let start = common::fixed_time();
     let item = |begin, end| ersatzrs_domain::PlayoutItem {

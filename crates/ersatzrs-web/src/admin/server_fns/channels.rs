@@ -512,6 +512,34 @@ pub async fn get_channel_watch_data(id: i64) -> Result<ChannelWatchData, ServerF
     ))
 }
 
+/// Read-only native segment provenance, independent of media decoder success.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ChannelPreviewOutput {
+    pub known: bool,
+    pub error: Option<String>,
+}
+
+/// Poll only the isolated preview worker; never start or touch it.
+#[server(prefix = "/admin-api")]
+pub async fn get_channel_preview_output(
+    number: String,
+    segment: String,
+    started_at_millis: i64,
+) -> Result<ChannelPreviewOutput, ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    let output = state
+        .application
+        .preview_segment_output(&number, &segment, started_at_millis)
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(output.map_or_else(ChannelPreviewOutput::default, |output| {
+        ChannelPreviewOutput {
+            known: true,
+            error: output.error,
+        }
+    }))
+}
+
 /// Loads the enabled, EPG-visible channel lanes for the global preview route.
 #[server(prefix = "/admin-api")]
 pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {

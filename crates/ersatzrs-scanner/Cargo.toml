@@ -10,10 +10,10 @@ anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.4.0" }
-ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
-ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
-ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
-ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
+ersatzrs-core = { path = "../ersatzrs-core", version = "1.1.0" }
+ersatzrs-domain = { path = "../ersatzrs-domain", version = "1.1.0" }
+ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "1.1.0" }
+ersatzrs-infra = { path = "../ersatzrs-infra", version = "1.1.0" }
 futures-util = "0.3"
 md-5 = "0.11"
 quick-xml = { workspace = true }

@@ -297,6 +297,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn credits_blank_template_names_render_builtin_with_persisted_metadata() {
+        let (pool, _, mut channel, item) = fixture().await;
+        let resolution = Resolution {
+            width: 320,
+            height: 180,
+            ..Default::default()
+        };
+        let expected_template = include_str!("../../../../assets/templates/_default.ass.sbntxt");
+        let mut expected_ass = None;
+        for name in [Some("_default.ass"), None, Some(""), Some(" \t\n ")] {
+            channel.music_video_credits_template = name.map(str::to_owned);
+            let (ass, template) = crate::music_video_credits::render_music_video_credits_artifact(
+                &pool,
+                item.media_item_id,
+                &channel,
+                &resolution,
+                60,
+            )
+            .await
+            .unwrap()
+            .expect("music video credits");
+            assert_eq!(template, expected_template, "template name: {name:?}");
+            assert!(ass.contains("Credit Song"));
+            assert!(ass.contains("Solo Artist"));
+            assert!(ass.contains("PlayResX: 320"));
+            if let Some(expected) = &expected_ass {
+                assert_eq!(&ass, expected, "template name: {name:?}");
+            } else {
+                expected_ass = Some(ass);
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn credits_render_requires_live_session_and_exact_item_binding() {
         let (pool, locker, channel, item) = fixture().await;
         let root = tempfile::tempdir().unwrap();
@@ -305,6 +339,7 @@ mod tests {
         host.dynamic_contexts.lock().await.insert(
             instance,
             host::DynamicContext {
+                started_at: chrono::Utc::now(),
                 request: host::NextStart {
                     channel_id: channel.id,
                     preview: false,

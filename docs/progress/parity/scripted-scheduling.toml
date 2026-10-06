@@ -2,11 +2,27 @@ feature    = 'Scripted scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/ScriptedScheduling/`'
 rs_target  = '`crates/ersatzrs-core`'
 status     = 'Ported'
-adr        = []
+adr        = ['0109', '0110']
 summary    = '''
 Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`. Lua resolves database sources and overlays through the awaited scheduling worker; playlist continuation restores persisted parent and every child position.
+Continue starts at the persisted future tail and restores history at that cursor; Lua exposes build_mode() and immutable start_time(). Invalid intervals, ordering, overlaps and conflicting continuation state are rejected before atomic publication, with Activity, Health and retained-timeline feedback. Versioned boundary checkpoints support preserved-programme Refresh and Health readiness locally; runtime source dependencies and bounded successful-scan admission also pass local checks. Candidate source revalidation and managed-library guards retain deferred Refresh work with durable backoff. Explicit controls and live handover acceptance remain owned by v111-findings-06 and the scripted-continuity-safe-adaptation debt in playout-rebuild-on-impacting-changes.
 Continuous scripted builds remove played items older than the build start minus four hours, preserving the existing mirror-offset retention window. On-demand scripted builds defer played-item cleanup to the checkpoint-based time shifter.
 '''
+
+[[debt]]
+id          = 'scripted-automatic-continuation-tail'
+description = 'Finding 10: automatic Continue starts inside the published horizon and restores history at the request clock. Restore the persisted tail, expose build-mode context, validate publication atomically, and surface rejection in Activity, Health and the admin timeline preview.'
+discovered  = '2026-10-02'
+evidence    = 'v111-findings-10: causal request-clock regression, 47 focused checks plus three supplementary checks, production automatic 48-hour continuation after SQLite restart, invalid-candidate rollback with other-channel/overlay preservation, Health failure/recovery, two Chromium/Firefox cases including no-JS visibility and live recovery, strict lint, smoke, 87 TSDuck checks and bundle consistency all pass. Canonical details are in the milestone.'
+adr         = '0109'
+resolved    = true
+
+[[debt]]
+id          = 'scripted-command-validation-execution'
+description = 'UCU-09 row 163: production creation accepts quoted script commands while execution and policy loading read the complete string as a filename. File validation also accepts directories. Unify path and argument handling across validation and execution, preserving the in-process Lua engine.'
+discovered  = '2026-09-30'
+evidence    = 'UCU-09 row 163: three causal production failures corrected; 46 scripted checks pass (fa43ae73-139d-41e5-88f3-ec76c2fda5ec), including real SQLite validation/no-reset effects, quoted execution/arguments, invalid waits and existing restart/source-resolution coverage. Strict lint and structural checks pass; detailed evidence is in the milestone.'
+resolved    = true
 
 [[debt]]
 id          = 'scripted-playlist-child-history-continuation'

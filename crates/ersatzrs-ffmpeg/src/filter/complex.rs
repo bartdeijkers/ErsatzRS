@@ -65,26 +65,27 @@ impl ComplexFilter {
 
 struct ComplexFilterBuilder<'a> {
     inputs: &'a [InputFile],
-    distinct_paths: Vec<String>,
+    distinct_sources: Vec<(&'a str, usize)>,
 }
 
 impl<'a> ComplexFilterBuilder<'a> {
     fn new(inputs: &'a [InputFile], is_intel_vaapi_or_qsv: bool) -> Self {
-        let mut distinct_paths = Vec::new();
+        let mut distinct_sources = Vec::new();
         for kind in input_kind_order() {
             for input in inputs.iter().filter(|input| input.kind == kind) {
                 match input.kind {
                     InputKind::Audio
-                        if distinct_paths.contains(&input.path) && is_intel_vaapi_or_qsv =>
+                        if distinct_sources.contains(&input.source_key())
+                            && is_intel_vaapi_or_qsv =>
                     {
-                        distinct_paths.push(input.path.clone());
+                        distinct_sources.push(input.source_key());
                     }
                     InputKind::Subtitle if !input.is_image_based_subtitle => {}
                     InputKind::Video | InputKind::Concat | InputKind::Graphics => {
-                        distinct_paths.push(input.path.clone());
+                        distinct_sources.push(input.source_key());
                     }
-                    _ if !distinct_paths.contains(&input.path) => {
-                        distinct_paths.push(input.path.clone());
+                    _ if !distinct_sources.contains(&input.source_key()) => {
+                        distinct_sources.push(input.source_key());
                     }
                     _ => {}
                 }
@@ -93,7 +94,7 @@ impl<'a> ComplexFilterBuilder<'a> {
 
         Self {
             inputs,
-            distinct_paths,
+            distinct_sources,
         }
     }
 
@@ -316,14 +317,14 @@ impl<'a> ComplexFilterBuilder<'a> {
 
     fn input_index(&self, input: &InputFile, last: bool) -> usize {
         if last {
-            self.distinct_paths
+            self.distinct_sources
                 .iter()
-                .rposition(|path| path == &input.path)
+                .rposition(|source| *source == input.source_key())
                 .unwrap_or_default()
         } else {
-            self.distinct_paths
+            self.distinct_sources
                 .iter()
-                .position(|path| path == &input.path)
+                .position(|source| *source == input.source_key())
                 .unwrap_or_default()
         }
     }

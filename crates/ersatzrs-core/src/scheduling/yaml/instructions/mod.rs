@@ -167,6 +167,27 @@ pub(super) fn dispatch_instruction(
     }
 }
 
+pub(super) fn resume_instruction(
+    context: &mut YamlContext,
+    instruction: &YamlInstruction,
+    definition: &YamlPlayoutDefinition,
+    pending: super::checkpoints::PendingInstruction,
+) -> Result<(), SchedulingError> {
+    match pending {
+        super::checkpoints::PendingInstruction::Count(count) => {
+            let content = instruction
+                .content
+                .as_deref()
+                .or(instruction.all.as_deref())
+                .ok_or(SchedulingError::UnsupportedYamlInstruction)?;
+            content::schedule_count(context, instruction, definition, content, count)
+        }
+        super::checkpoints::PendingInstruction::Until(target) => {
+            timing::schedule_until(context, instruction, definition, target)
+        }
+    }
+}
+
 fn execute_sequence(
     context: &mut YamlContext,
     definition: &YamlPlayoutDefinition,

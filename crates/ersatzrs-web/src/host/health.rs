@@ -5,14 +5,15 @@ use ersatzrs_app::{
     AdminFfmpegRuntimeRead, AdminHealthRead, AdminHealthRuntime, AdminHealthRuntimeError,
 };
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
-use ersatzrs_infra::db::{DatabaseSchemaStatus, DbPool};
+use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::health::HealthCheckCoordinator;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct NativeAdminHealthRuntime {
     pool: DbPool,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
-    schema_status: DatabaseSchemaStatus,
+    health: HealthCheckCoordinator,
     startup_errors: u32,
     startup_warnings: u32,
 }
@@ -22,14 +23,14 @@ impl NativeAdminHealthRuntime {
     pub fn new(
         pool: DbPool,
         ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
-        schema_status: DatabaseSchemaStatus,
+        health: HealthCheckCoordinator,
         startup_errors: u32,
         startup_warnings: u32,
     ) -> Self {
         Self {
             pool,
             ffmpeg_runtime,
-            schema_status,
+            health,
             startup_errors,
             startup_warnings,
         }
@@ -72,15 +73,15 @@ impl AdminHealthRuntime for NativeAdminHealthRuntime {
         ))
     }
 
-    async fn run_health_checks(&self) -> Result<AdminHealthRead, AdminHealthRuntimeError> {
-        let runtime = self.ffmpeg_runtime.read().await.clone();
-        let run = ersatzrs_infra::health::run_and_persist_health_checks(
-            self.pool.clone(),
-            runtime,
-            self.schema_status.clone(),
-        )
-        .await
-        .map_err(|error| AdminHealthRuntimeError::new(error.to_string()))?;
+    async fn run_health_checks(
+        &self,
+        refresh: bool,
+    ) -> Result<AdminHealthRead, AdminHealthRuntimeError> {
+        let run = self
+            .health
+            .run(refresh)
+            .await
+            .map_err(|error| AdminHealthRuntimeError::new(error.to_string()))?;
         Ok(AdminHealthRead {
             summary: run.summary,
             results: run.results,

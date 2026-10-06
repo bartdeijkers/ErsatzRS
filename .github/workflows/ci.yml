@@ -317,7 +317,7 @@ jobs:
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: "8"
-      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.2
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.5
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -345,6 +345,8 @@ jobs:
             cargo install cargo-nextest --version 0.9.140 --locked
           fi
       - name: Stage Next and validated FFmpeg runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/next-engine/next-runtime.log
           cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json

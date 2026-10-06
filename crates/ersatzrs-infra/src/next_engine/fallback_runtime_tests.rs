@@ -257,6 +257,16 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
     } else {
         configure_text_tracks(&pool, source != FallbackSource::DirectLive, convert, false).await;
     }
+    if matches!(
+        source,
+        FallbackSource::Local
+            | FallbackSource::Leading
+            | FallbackSource::Prepared
+            | FallbackSource::Direct
+            | FallbackSource::Provider(_)
+    ) {
+        prepare_automatic_text_tracks(&pool, &ffmpeg, &clip, root.path()).await;
+    }
     if source == FallbackSource::Credits {
         credits_runtime_tests::configure_credits(&pool, convert).await;
         // Native closing credits begin duration minus 16 seconds; keep them
@@ -284,7 +294,8 @@ async fn fallback_case(source: FallbackSource, convert: bool) {
             source == FallbackSource::OrdinaryLive,
         )
         .await;
-        ordinary_callback_runtime::configure_sidecar(&pool, root.path(), Some(convert), true).await;
+        remote_subtitle_runtime_helpers::configure_sidecar(&pool, root.path(), Some(convert), true)
+            .await;
     }
     #[cfg(unix)]
     if source == FallbackSource::Retained {

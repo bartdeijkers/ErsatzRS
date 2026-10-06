@@ -175,6 +175,26 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
+        sqlx::query(
+            r#"UPDATE "FFmpegProfile" SET "VideoFormat"=3, "BitDepth"=1, "VideoBitrate"=2000"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::Pass,
+            "MPEG-2 with a ten-bit preference is projected to supported eight-bit output"
+        );
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "VideoBitrate"=0"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::Fail,
+            "health must reject MPEG-2 without the bitrate required by Next"
+        );
     }
 
     #[tokio::test]

@@ -72,6 +72,8 @@ pub async fn save_addon_media_list_disk_warning_form(
 #[derive(Debug, Deserialize)]
 pub struct AddonMediaListAddForm {
     #[serde(default)]
+    initial_selection_review: bool,
+    #[serde(default)]
     delivery_mode: AddonMediaListDeliveryMode,
     #[serde(default)]
     addon_id: String,
@@ -82,8 +84,10 @@ pub struct AddonMediaListAddForm {
     content_kind_override: AddonMediaListContentKind,
     #[serde(default)]
     chapter_input: String,
-    #[serde(default = "default_true")]
-    load_item_details: bool,
+    #[serde(default)]
+    load_item_details: Option<bool>,
+    #[serde(default)]
+    load_item_details_present: bool,
     #[serde(default)]
     presentation_kind: AddonMediaListPresentationKind,
     #[serde(default = "default_refresh_cadence")]
@@ -92,8 +96,17 @@ pub struct AddonMediaListAddForm {
     generate_playlist: bool,
 }
 
-const fn default_true() -> bool {
-    true
+impl AddonMediaListAddForm {
+    fn detail_policy(&self) -> AddonMediaListDetailPolicy {
+        if self
+            .load_item_details
+            .unwrap_or(!self.load_item_details_present)
+        {
+            AddonMediaListDetailPolicy::Automatic
+        } else {
+            AddonMediaListDetailPolicy::ManualOnly
+        }
+    }
 }
 
 const fn default_refresh_cadence() -> AddonMediaListRefreshCadence {
@@ -368,6 +381,7 @@ pub async fn add_addon_media_list_form(
     State(state): State<AppState>,
     Form(input): Form<AddonMediaListAddForm>,
 ) -> Redirect {
+    let detail_policy = input.detail_policy();
     let result = add_addon_media_list_with_state(
         &state,
         input.addon_id,
@@ -375,13 +389,10 @@ pub async fn add_addon_media_list_form(
         input.folder_name,
         input.content_kind_override,
         input.chapter_input.clone(),
-        if input.load_item_details {
-            AddonMediaListDetailPolicy::Automatic
-        } else {
-            AddonMediaListDetailPolicy::ManualOnly
-        },
+        detail_policy,
         input.refresh_cadence,
         input.delivery_mode,
+        input.initial_selection_review,
     )
     .await;
     match result {
@@ -396,11 +407,7 @@ pub async fn add_addon_media_list_form(
                     generate_playlist: input.generate_playlist,
                     content_kind_override: presentation_content_kind(input.presentation_kind),
                     chapter_input: input.chapter_input,
-                    detail_import_policy: if input.load_item_details {
-                        AddonMediaListDetailPolicy::Automatic
-                    } else {
-                        AddonMediaListDetailPolicy::ManualOnly
-                    },
+                    detail_import_policy: detail_policy,
                 })
                 .await;
             let presentation = state
@@ -459,6 +466,7 @@ pub async fn save_addon_media_list_form(
         }
     };
     let form = AddonMediaListForm {
+        selection: current.selection.clone(),
         delivery_mode: input.delivery_mode.unwrap_or(current.delivery_mode),
         delivery_cutoff_at: current.delivery_cutoff_at,
         auto_publication_hold: current.auto_publication_hold.map(Into::into),
@@ -1266,6 +1274,30 @@ mod tests {
     }
 
     #[test]
+    fn selection_add_form_preserves_unchecked_manual_details_and_legacy_defaults() {
+        let source = "source_url=https%3A%2F%2Fexample.invalid%2Flist";
+        for (suffix, expected) in [
+            ("", AddonMediaListDetailPolicy::Automatic),
+            (
+                "&load_item_details_present=true",
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+            (
+                "&load_item_details_present=true&load_item_details=true",
+                AddonMediaListDetailPolicy::Automatic,
+            ),
+            (
+                "&load_item_details=false",
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+        ] {
+            let form: AddonMediaListAddForm =
+                serde_urlencoded::from_str(&format!("{source}{suffix}")).unwrap();
+            assert_eq!(form.detail_policy(), expected);
+        }
+    }
+
+    #[test]
     fn import_form_carries_every_visible_source_setting() {
         let body = Bytes::from_static(
             b"addon_id=org.example.list&source_url=https%3A%2F%2Fexample.invalid%2Flist&folder_name=Watchlist&presentation_kind=movies&refresh_cadence=monthly&generate_playlist=true&load_item_details=true",
@@ -1278,7 +1310,7 @@ mod tests {
             AddonMediaListRefreshCadence::Monthly
         );
         assert!(parsed.generate_playlist);
-        assert!(parsed.load_item_details);
+        assert_eq!(parsed.load_item_details, Some(true));
         assert_eq!(
             parsed.presentation_kind,
             AddonMediaListPresentationKind::Movies

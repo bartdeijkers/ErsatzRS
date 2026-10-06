@@ -8,6 +8,10 @@
 //!   names (`MediaItem_Duration`, `Epg`, `Channel_StartTime`, etc.).
 use crate::repositories::SqlxResultExt as _;
 
+#[path = "graphics_template_external.rs"]
+mod external;
+pub(crate) use external::media as external_media;
+
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -19,13 +23,28 @@ use crate::db::{DbPool, DbRow};
 use crate::repositories::common::{decode_datetime, encode_datetime};
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum GraphicsMedia {
+    /// Resolve library metadata when preparing graphics.
+    Persisted(i64),
+    /// Retain the selected programme's metadata without a library lookup.
+    Transient(Map<String, Value>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct GraphicsTemplateContext {
     pub channel_id: i64,
     pub channel_number: String,
-    pub media_item_id: i64,
+    /// Broadcast instant being rendered, independent of source `InPoint` seek.
+    pub render_time: DateTime<Utc>,
+    /// Source playout attachment identity, when this render belongs to a row.
+    pub playout_item_id: Option<i64>,
+    pub media: GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
+    /// Scheduled finish, independent of the current rendering chunk.
+    /// None retains the duration-derived stop for inputs without a known finish.
+    pub content_finish_time: Option<DateTime<Utc>>,
     pub stream_seek_seconds: f64,
     pub duration_seconds: f64,
     pub frame_width: u32,
@@ -50,7 +69,11 @@ pub async fn graphics_template_variables(
 ) -> Result<Value> {
     let mut root = Map::new();
     insert_common_variables(&mut root, context);
-    if let Some(media) = load_media_item_template_data(pool, context).await? {
+    let media = match &context.media {
+        GraphicsMedia::Persisted(id) => load_media_item_template_data(pool, *id).await?,
+        GraphicsMedia::Transient(data) => Some(data.clone()),
+    };
+    if let Some(media) = media {
         merge_object(&mut root, media);
     }
     if epg_entries > 0 {
@@ -59,10 +82,111 @@ pub async fn graphics_template_variables(
             Value::Array(load_epg_template_data(pool, context, epg_entries).await?),
         );
     }
+    programme_variables(pool, context, &mut root).await?;
     if let Some(overrides) = parse_variable_overrides(per_item_variables)? {
         merge_object(&mut root, overrides);
     }
     Ok(Value::Object(root))
+}
+
+async fn programme_variables(
+    pool: &DbPool,
+    context: &GraphicsTemplateContext,
+    root: &mut Map<String, Value>,
+) -> Result<()> {
+    use ersatzrs_core::programme::{select_programmes, ProgrammeClock};
+    let clock = ProgrammeClock::system().map_err(programme_clock_error)?;
+    let (start, finish) = clock
+        .day_bounds(context.render_time)
+        .map_err(programme_clock_error)?;
+    root.insert(
+        "Programme_RenderTime".into(),
+        Value::String(context.render_time.to_rfc3339()),
+    );
+    root.insert(
+        "Programme_LocalTime".into(),
+        Value::String(
+            clock
+                .local_time(context.render_time)
+                .map_err(programme_clock_error)?,
+        ),
+    );
+    let items = if context.channel_id > 0 {
+        crate::xmltv::load_channel_programmes(
+            pool,
+            context.channel_id,
+            start,
+            finish + chrono::Duration::days(1),
+        )
+        .await
+        .repository()?
+    } else {
+        Vec::new()
+    };
+    let selected = select_programmes(&items, context.render_time, finish, 32);
+    root.insert(
+        "Programme_ContextAmbiguous".into(),
+        Value::Bool(selected.ambiguous),
+    );
+    for (name, item) in [
+        ("CurrentProgramme", selected.current),
+        ("NextProgramme", selected.next),
+        ("ContinuingProgramme", selected.continuing),
+    ] {
+        root.insert(
+            name.into(),
+            item.map(|item| programme_value(item, &clock))
+                .transpose()?
+                .unwrap_or(Value::Null),
+        );
+    }
+    root.insert(
+        "LaterToday".into(),
+        Value::Array(
+            selected
+                .later_today
+                .into_iter()
+                .map(|item| programme_value(item, &clock))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .filter(|value| !value.is_null())
+                .collect(),
+        ),
+    );
+    Ok(())
+}
+
+fn programme_clock_error(error: impl std::fmt::Display) -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "graphics programme clock",
+        value: error.to_string(),
+    }
+}
+
+fn programme_value(
+    occurrence: &ersatzrs_core::programme::ProgrammeOccurrence,
+    clock: &ersatzrs_core::programme::ProgrammeClock,
+) -> Result<Value> {
+    let programme = &occurrence.programme;
+    let title = programme
+        .custom_title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or(&programme.title);
+    if title.trim().is_empty() || programme.start >= programme.stop {
+        return Ok(Value::Null);
+    }
+    Ok(serde_json::json!({
+        "Title": title,
+        "SubTitle": programme.content.sub_title,
+        "Description": programme.content.description,
+        "Start": programme.start.to_rfc3339(),
+        "Stop": programme.stop.to_rfc3339(),
+        "LocalStart": clock.local_time(programme.start).map_err(programme_clock_error)?,
+        "LocalStop": clock.local_time(programme.stop).map_err(programme_clock_error)?,
+        "PlayoutId": occurrence.playout_id,
+        "FirstItemId": occurrence.first_item_id,
+    }))
 }
 
 /// Render `{{ ... }}` graphics placeholders from a variable map.
@@ -117,6 +241,29 @@ pub fn scalar_template_variables(variables: &Value) -> BTreeMap<String, String> 
     result
 }
 
+/// Resolve ASS contents with the same strict programme-variable parser as text
+/// and paths, before the native libass renderer consumes the source.
+pub(crate) async fn render_subtitle_graphics_source(
+    path: &str,
+    variables: &Value,
+) -> Result<String> {
+    use tokio::io::AsyncReadExt as _;
+    let error = |_| RepositoryError::Decode {
+        kind: "graphics subtitle template",
+        value: "source is missing, unreadable or outside the 256 KiB limit".into(),
+    };
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(error)?
+        .take(256 * 1024 + 1);
+    let mut source = String::new();
+    file.read_to_string(&mut source).await.map_err(error)?;
+    if source.len() > 256 * 1024 {
+        return Err(error(std::io::Error::from(std::io::ErrorKind::InvalidData)));
+    }
+    render_graphics_template(&source, variables)
+}
+
 fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemplateContext) {
     root.insert(
         "Resolution".to_owned(),
@@ -141,6 +288,10 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
         Value::String(context.channel_start_time.to_rfc3339()),
     );
     root.insert(
+        "MediaItem_SeekSeconds".to_owned(),
+        number_value(context.stream_seek_seconds),
+    );
+    root.insert(
         "MediaItem_StreamSeek".to_owned(),
         duration_value(context.stream_seek_seconds),
     );
@@ -151,7 +302,12 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
     root.insert(
         "MediaItem_Stop".to_owned(),
         Value::String(
-            (context.content_start_time + duration_millis(context.duration_seconds)).to_rfc3339(),
+            context
+                .content_finish_time
+                .unwrap_or_else(|| {
+                    context.content_start_time + duration_millis(context.duration_seconds)
+                })
+                .to_rfc3339(),
         ),
     );
     root.insert(
@@ -166,7 +322,7 @@ fn insert_common_variables(root: &mut Map<String, Value>, context: &GraphicsTemp
 
 async fn load_media_item_template_data(
     pool: &DbPool,
-    context: &GraphicsTemplateContext,
+    media_item_id: i64,
 ) -> Result<Option<Map<String, Value>>> {
     let row = sqlx::query(
         r#"SELECT mv."Width", mv."Height", mv."Duration",
@@ -206,10 +362,10 @@ async fn load_media_item_template_data(
                OR mv."SongId" = mi."Id"
                OR mv."ImageId" = mi."Id"
            WHERE mi."Id" = ?
-           ORDER BY mv."Id", mm."Id", em."Id", mvm."Id", ovm."Id", rsm."Id", sm."Id"
+           ORDER BY mv."Id", mm."Id", em."Id", mvm."Id", ovm."Id", rsm."Id", sm."Id", smd."Id", amd."Id"
            LIMIT 1"#,
     )
-    .bind(context.media_item_id)
+    .bind(media_item_id)
     .fetch_optional(pool)
     .await.repository()?;
 
@@ -291,6 +447,9 @@ async fn load_epg_template_data(
     context: &GraphicsTemplateContext,
     count: usize,
 ) -> Result<Vec<Value>> {
+    if matches!(context.media, GraphicsMedia::Transient(_)) {
+        return external::epg(pool, context, count).await;
+    }
     let rows = sqlx::query(
         r#"SELECT pi."Start", pi."Finish",
                   COALESCE(pi."CustomTitle", mm."Title", em."Title", mvm."Title", ovm."Title", rsm."Title", sm."Title", '') AS "Title"
@@ -339,6 +498,27 @@ async fn load_epg_template_data(
     Ok(result)
 }
 
+/// Apply editor-only overrides after persisted occurrence overrides, as playback
+/// applies occurrence overrides after its native variable map.
+pub(crate) fn combine_variable_overrides(
+    saved: Option<&str>,
+    draft: Option<&str>,
+) -> Result<Option<String>> {
+    let mut combined = parse_variable_overrides(saved)?.unwrap_or_default();
+    if let Some(draft) = parse_variable_overrides(draft)? {
+        merge_object(&mut combined, draft);
+    }
+    if combined.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(&combined)
+        .map(Some)
+        .map_err(|_| RepositoryError::Decode {
+            kind: "graphics element variables",
+            value: "could not serialize preview overrides".into(),
+        })
+}
+
 fn parse_variable_overrides(value: Option<&str>) -> Result<Option<Map<String, Value>>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -364,6 +544,73 @@ fn merge_object(target: &mut Map<String, Value>, source: Map<String, Value>) {
 }
 
 fn render_expression(expression: &str, variables: &Value) -> Result<String> {
+    if let Some((path, filter)) = expression.split_once('|') {
+        // Keep historical path/arithmetic semantics. Only bounded scalar
+        // defaults opt into the existing parser, never an ad-hoc quote parser.
+        if expression.len() > 1024
+            || !filter.trim().starts_with("default(")
+            || !filter.trim().ends_with(')')
+            || resolve_path(path.trim(), variables)
+                .is_some_and(|value| value.is_array() || value.is_object())
+        {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "expected a scalar path and default(value, true)".into(),
+            });
+        }
+        let mut environment = crate::minijinja_compat::environment();
+        environment.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
+        let arguments = filter
+            .trim()
+            .strip_prefix("default(")
+            .and_then(|value| value.strip_suffix(')'))
+            .unwrap_or_default();
+        let arguments: Vec<Value> =
+            serde_json::from_str(&format!("[{arguments}]")).map_err(|_| {
+                RepositoryError::Decode {
+                    kind: "graphics template default",
+                    value: "default requires a JSON scalar literal, optionally followed by , true"
+                        .into(),
+                }
+            })?;
+        if arguments.is_empty()
+            || arguments.len() > 2
+            || arguments
+                .get(1)
+                .is_some_and(|value| value != &Value::Bool(true))
+        {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default accepts one scalar and optional true".into(),
+            });
+        }
+        let fallback = &arguments[0];
+        if fallback.is_object() || fallback.is_array() || fallback.is_null() {
+            return Err(RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default requires a non-null scalar literal".into(),
+            });
+        }
+        let source = format!("value | default({fallback}, true)");
+        let input = serde_json::json!({"value": resolve_path(path.trim(), variables).unwrap_or(&Value::Null)});
+        let value = environment
+            .compile_expression(&source)
+            .and_then(|expression| expression.eval(input))
+            .map_err(|error| RepositoryError::Decode {
+                kind: "graphics template default",
+                value: error.to_string(),
+            })?;
+        let value = serde_json::to_value(value).map_err(|error| RepositoryError::Decode {
+            kind: "graphics template default",
+            value: error.to_string(),
+        })?;
+        return value_to_template_string(&value)
+            .filter(|value| value.len() <= 64 * 1024)
+            .ok_or_else(|| RepositoryError::Decode {
+                kind: "graphics template default",
+                value: "default result must be a bounded scalar".into(),
+            });
+    }
     if contains_numeric_operator(expression) {
         let value = eval_numeric_expression(expression, variables)?;
         return Ok(format_number(value));
@@ -555,5 +802,38 @@ mod tests {
         let value =
             evaluate_graphics_number("MediaItem_Duration.TotalSeconds - 5", &variables).unwrap();
         assert!((value - 115.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn scalar_defaults_suppress_missing_null_and_empty_programme_labels() {
+        let variables =
+            json!({"CurrentProgramme": null, "Empty": "", "NextProgramme": {"Title": "Film"}});
+        for (expression, expected) in [
+            (r#"{{ CurrentProgramme.Title | default("", true) }}"#, ""),
+            (r#"{{ LaterToday[0].Title | default("",true) }}"#, ""),
+            (r#"{{ Empty | default("fallback") }}"#, "fallback"),
+            (r#"{{ NextProgramme.Title | default("", true) }}"#, "Film"),
+            (
+                r#"{{ Missing | default("quote: \" / slash: \\", true) }}"#,
+                "quote: \" / slash: \\",
+            ),
+        ] {
+            assert_eq!(
+                render_graphics_template(expression, &variables).unwrap(),
+                expected
+            );
+        }
+        for expression in [
+            "{{ NextProgramme }}",
+            r#"{{ NextProgramme | default("", true) }}"#,
+            r#"{{ Missing | default("x" * 10000000) }}"#,
+            r#"{{ Missing | default(["array"]) }}"#,
+            r#"{{ Missing | default("", false) }}"#,
+        ] {
+            assert!(
+                render_graphics_template(expression, &variables).is_err(),
+                "{expression}"
+            );
+        }
     }
 }

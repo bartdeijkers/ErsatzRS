@@ -932,6 +932,8 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
 
     FfmpegCapabilityReport {
         runtime_identity: None,
+        muxers: BTreeSet::from(["nut".to_owned()]),
+        demuxers: BTreeSet::from(["nut".to_owned()]),
         filters: BTreeSet::from([
             "scale_cuda".to_owned(),
             "yadif_cuda".to_owned(),

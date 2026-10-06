@@ -4,6 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
 status     = 'Ported'
 adr        = ['0048', '0056', '0062']
 summary    = '''
+UCU-09 row169 exposes persisted Rotation in Media Info; two Chromium/Firefox cases and production serialization checks pass. The milestone owns evidence.
+
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
 
 Closed 2026-07-01 for the movie-detail extras regression: `/media/movies/:id` now renders linked extras with the same episode-style row treatment as TV extras and exposes Add To Collection, Add To Playlist, Show Media Info, and Troubleshoot Playback actions. Movie detail also keeps its localized labels and shared modal/action plumbing.

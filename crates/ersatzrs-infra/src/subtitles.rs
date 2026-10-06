@@ -512,7 +512,10 @@ fn strip_prefix_ci<'a>(line: &'a str, prefix: &str) -> Option<&'a str> {
 /// Rebase an independently readable text artifact without filesystem work or fallback.
 /// SRT/WebVTT preserve millisecond timing; ASS retains its native centisecond precision.
 /// `None` means every parsed cue ended before the requested join.
-pub(crate) fn rebase_text_cues_milliseconds(
+///
+/// # Errors
+/// Returns oversized, invalid or malformed standalone subtitle content.
+pub fn rebase_text_cues_milliseconds(
     bytes: Vec<u8>,
     format: SubtitleTextFormat,
     seek_milliseconds: u64,

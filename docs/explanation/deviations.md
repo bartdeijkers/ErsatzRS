@@ -3,6 +3,14 @@
 ErsatzRS preserves ErsatzTV behavior by default. Deliberate deviations must be
 listed here and backed by ADRs.
 
+## Television folder preview
+
+ADR [0108](../adr/0108-preview-television-folder-discovery.md) records bounded,
+read-only preview of the scanner's television discovery, explicit layout
+diagnostics and portable media-container candidates. The owning milestone
+tracks implementation and acceptance; source media and library state are never
+published by preview.
+
 ## HTTP callback listener partition
 
 ADR [0102](../adr/0102-isolate-http-listener-route-surfaces.md) records the

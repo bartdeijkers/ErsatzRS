@@ -1,6 +1,12 @@
-//! Shared helpers for building `FFmpeg` playback pipelines from persisted media
-//! metadata, used by both the MPEG-TS and HLS transcode paths.
+//! Shared helpers for building `FFmpeg` playback pipelines from persisted and
+//! transient media metadata, used by the MPEG-TS, HLS and Next paths.
+
+#[path = "playback_candidate.rs"]
+mod candidate;
+#[path = "playback_transient.rs"]
+pub mod transient;
 use crate::repositories::SqlxResultExt as _;
+pub(crate) use candidate::CandidateOverlayContext;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -164,15 +170,20 @@ pub struct ResolvedPlaybackGraphicsElement {
 pub struct PlaybackGraphicsRenderContext {
     pub channel_id: i64,
     pub channel_number: String,
-    pub media_item_id: i64,
+    pub render_time: DateTime<Utc>,
+    pub playout_item_id: Option<i64>,
+    pub media: crate::graphics_template::GraphicsMedia,
     pub media_path: String,
     pub channel_start_time: DateTime<Utc>,
     pub content_start_time: DateTime<Utc>,
+    /// Scheduled finish, independent of the current rendering chunk.
+    /// None retains the duration-derived stop for inputs without a known finish.
+    pub content_finish_time: Option<DateTime<Utc>>,
     pub stream_seek_seconds: f64,
     pub duration_seconds: f64,
     pub frame_size: FrameSize,
     pub square_pixel_frame_size: FrameSize,
-    pub frame_rate: Option<FrameRate>,
+    pub frame_rate: Option<ersatzrs_ffmpeg::GraphicsFrameRate>,
 }
 
 /// Rendered `FFmpeg` overlays and the live text controllers they depend on.
@@ -741,6 +752,49 @@ pub async fn enrich_source_video_stream_for_playback(
     Some(stream)
 }
 
+/// Preserve native interlace and QSV profile-count safeguards for transient
+/// media without reading or writing a library identity. Optional probes share
+/// the caller's startup deadline, capped at ten seconds. Probe failures preserve
+/// existing container metadata and use redacted diagnostics.
+pub async fn enrich_transient_source_video_stream_for_playback(
+    pool: &DbPool,
+    source_stream: Option<SourceVideoStream>,
+    media_path: &str,
+    duration: Duration,
+    deinterlace: bool,
+    acceleration: HardwareAccelerationKind,
+    deadline: tokio::time::Instant,
+) -> Option<SourceVideoStream> {
+    let mut stream = source_stream?;
+    let deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(10));
+    crate::interlace_probe::enrich_transient(
+        pool,
+        media_path,
+        duration,
+        deinterlace,
+        &mut stream,
+        deadline,
+    )
+    .await;
+    if should_probe_h264_profile_count(&stream, acceleration)
+        && tokio::time::Instant::now() < deadline
+    {
+        if let Ok(Ok(count)) = tokio::time::timeout_at(
+            deadline,
+            trace_headers_profile_count(&ffmpeg_path(), media_path),
+        )
+        .await
+        {
+            stream.has_multiple_profiles = count > 1;
+        } else {
+            tracing::info!(
+                "transient H.264 profile-count probe unavailable; preserving source flags"
+            );
+        }
+    }
+    Some(stream)
+}
+
 fn should_probe_h264_profile_count(
     stream: &SourceVideoStream,
     acceleration: HardwareAccelerationKind,
@@ -1178,6 +1232,22 @@ pub async fn load_subtitles_for_media_item(
         .collect()
 }
 
+/// Load playback candidates without provider captions unsupported by the streaming path.
+/// Metadata readers keep using `load_subtitles_for_media_item` to retain all tracks.
+/// This mirrors the shared streaming/troubleshooting provider rule upstream.
+///
+/// # Errors
+/// Returns database errors from subtitle or provider classification queries.
+pub async fn load_playback_subtitle_candidates(
+    pool: &DbPool,
+    media_item_id: i64,
+) -> Result<Vec<PlaybackSubtitle>> {
+    let mut subtitles = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+    subtitles.retain(|subtitle| provider_subtitle_supported(subtitle, media_server));
+    Ok(subtitles)
+}
+
 /// Filter embedded metadata against the resolved file before preference ranking.
 /// External/generated subtitles are separate sources and remain available.
 async fn load_subtitles_for_media_version(
@@ -1363,6 +1433,36 @@ async fn select_custom_playback_streams_inner(
     engine: SubtitleSelectionEngine,
     context: CustomSelectionContext<'_>,
 ) -> Result<Option<CustomStreamSelection>> {
+    let Some(selector) = load_custom_stream_selector(channel, context.diagnostics).await? else {
+        return Ok(None);
+    };
+
+    let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
+    let mut subtitles = if let Some(candidates) = context.subtitles {
+        candidates.to_vec()
+    } else if engine == SubtitleSelectionEngine::Next {
+        load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
+    } else {
+        load_subtitles_for_media_item(pool, media_item_id).await?
+    };
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+    transient::retain_playable_subtitles(&mut subtitles, streaming_mode, engine, media_server);
+
+    Ok(select_custom_stream_candidates(
+        selector,
+        &audio_streams,
+        &mut subtitles,
+        context.subtitles.is_some(),
+        channel,
+        content_start_time,
+        context.diagnostics,
+    ))
+}
+
+async fn load_custom_stream_selector(
+    channel: &Channel,
+    diagnostics: Option<&crate::next_engine::diagnostics::SelectionLog>,
+) -> Result<Option<StreamSelector>> {
     let Some(selector) = channel
         .stream_selector
         .as_deref()
@@ -1379,7 +1479,7 @@ async fn select_custom_playback_streams_inner(
     let yaml = match tokio::fs::read_to_string(&selector_path).await {
         Ok(yaml) => yaml,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(log) = context.diagnostics {
+            if let Some(log) = diagnostics {
                 log.debug("Custom selector file is absent; using normal stream preferences");
             }
             return Ok(None);
@@ -1391,49 +1491,12 @@ async fn select_custom_playback_streams_inner(
             });
         }
     };
-    let selector: StreamSelector =
-        serde_yaml::from_str(&yaml).map_err(|error| RepositoryError::Decode {
+    serde_yaml::from_str(&yaml)
+        .map(Some)
+        .map_err(|error| RepositoryError::Decode {
             kind: "channel stream selector",
             value: error.to_string(),
-        })?;
-
-    let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = if let Some(candidates) = context.subtitles {
-        candidates.to_vec()
-    } else if engine == SubtitleSelectionEngine::Next {
-        load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
-    } else {
-        load_subtitles_for_media_item(pool, media_item_id).await?
-    };
-    if engine == SubtitleSelectionEngine::Native
-        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
-    {
-        subtitles.retain(|subtitle| {
-            if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
-                return true;
-            }
-            subtitle.is_extracted
-                && subtitle
-                    .path
-                    .as_deref()
-                    .is_some_and(|path| !path.trim().is_empty())
-        });
-    }
-
-    if engine == SubtitleSelectionEngine::Next {
-        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
-        subtitles.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
-    }
-
-    Ok(select_custom_stream_candidates(
-        selector,
-        &audio_streams,
-        &mut subtitles,
-        context.subtitles.is_some(),
-        channel,
-        content_start_time,
-        context.diagnostics,
-    ))
+        })
 }
 
 fn select_custom_stream_candidates(
@@ -1772,8 +1835,10 @@ fn content_matches_condition(
 
 /// Engine-specific subtitle eligibility; native extraction restrictions stay local.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum SubtitleSelectionEngine {
+pub enum SubtitleSelectionEngine {
+    /// Native `FFmpeg` playback, including direct and transcoded HLS.
     Native,
+    /// The optional Next runtime, which reads embedded text directly.
     Next,
 }
 
@@ -1821,32 +1886,27 @@ async fn select_playback_subtitle_inner(
     } else {
         load_subtitles_for_media_item(pool, media_item_id).await?
     };
-    if engine == SubtitleSelectionEngine::Native && !use_embedded_subtitles(pool).await? {
+    if !use_embedded_subtitles(pool).await? {
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
 
-    if engine == SubtitleSelectionEngine::Native
-        && streaming_mode != StreamingMode::HttpLiveStreamingDirect
-    {
-        candidates.retain(|subtitle| {
-            if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
-                return true;
-            }
-            subtitle.is_extracted
-                && subtitle
-                    .path
-                    .as_deref()
-                    .is_some_and(|path| !path.trim().is_empty())
-        });
-    }
+    let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+    transient::retain_playable_subtitles(&mut candidates, streaming_mode, engine, media_server);
 
-    if engine == SubtitleSelectionEngine::Next {
-        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
-        candidates.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
-    }
+    Ok(select_subtitle_preferences(
+        &candidates,
+        preferred_languages,
+        subtitle_mode,
+    ))
+}
 
+fn select_subtitle_preferences(
+    candidates: &[PlaybackSubtitle],
+    preferred_languages: &[String],
+    subtitle_mode: ChannelSubtitleMode,
+) -> Option<PlaybackSubtitle> {
     if preferred_languages.is_empty() {
-        return Ok(select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned());
+        return select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned();
     }
 
     for language in preferred_languages {
@@ -1858,11 +1918,11 @@ async fn select_playback_subtitle_inner(
             subtitle_mode,
         );
         if let Some(selected) = selected {
-            return Ok(Some(selected.clone()));
+            return Some(selected.clone());
         }
     }
 
-    Ok(None)
+    None
 }
 
 /// Resolve an exact persisted subtitle stream without preference fallback.
@@ -1985,6 +2045,19 @@ async fn select_pinned_playback_subtitle_inner(
             "media version {media_version_id} has no compatible subtitle row for stream {stream_index}"
         ),
     })?;
+    validate_pinned_subtitle_support(pool, media_item_id, &subtitle, streaming_mode, engine)
+        .await?;
+    Ok(subtitle)
+}
+
+async fn validate_pinned_subtitle_support(
+    pool: &DbPool,
+    media_item_id: i64,
+    subtitle: &PlaybackSubtitle,
+    streaming_mode: StreamingMode,
+    engine: SubtitleSelectionEngine,
+) -> Result<()> {
+    let stream_index = subtitle.stream_index;
     if engine == SubtitleSelectionEngine::Native
         && streaming_mode != StreamingMode::HttpLiveStreamingDirect
         && subtitle.subtitle_kind == subtitle_kind::EMBEDDED
@@ -2002,9 +2075,20 @@ async fn select_pinned_playback_subtitle_inner(
             ),
         });
     }
+    if engine == SubtitleSelectionEngine::Native
+        && !provider_subtitle_supported(
+            subtitle,
+            is_media_server_subtitle_item(pool, media_item_id).await?,
+        )
+    {
+        return Err(RepositoryError::unavailable(
+            "pinned subtitle stream",
+            "selected provider caption is unsupported",
+        ));
+    }
     if engine == SubtitleSelectionEngine::Next
         && !next_subtitle_supported(
-            &subtitle,
+            subtitle,
             is_media_server_subtitle_item(pool, media_item_id).await?,
         )
     {
@@ -2013,12 +2097,16 @@ async fn select_pinned_playback_subtitle_inner(
             value: "selected subtitle is unsupported by Next".to_owned(),
         });
     }
-    Ok(subtitle)
+    Ok(())
+}
+
+fn provider_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> bool {
+    !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
 }
 
 fn next_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> bool {
     (!subtitle.is_image() || subtitle.subtitle_kind == subtitle_kind::EMBEDDED)
-        && !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
+        && provider_subtitle_supported(subtitle, media_server)
 }
 
 /// Resolve a troubleshooting selection by row identity against the exact media version.
@@ -2058,6 +2146,7 @@ async fn is_media_server_subtitle_item(pool: &DbPool, media_item_id: i64) -> Res
     sqlx::query_scalar(
         r#"SELECT EXISTS(SELECT 1 FROM "PlexMovie" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "PlexEpisode" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "PlexOtherVideo" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "JellyfinMovie" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "JellyfinEpisode" WHERE "Id"=?1)
             OR EXISTS(SELECT 1 FROM "EmbyMovie" WHERE "Id"=?1)
@@ -2181,11 +2270,14 @@ pub async fn select_playback_watermarks(
     }
 
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
-    select_context_watermarks(pool, channel, context, Some(playout_item_id), now).await
+    select_context_watermarks(pool, channel, context, Some(playout_item_id), now, None).await
 }
 
-/// Select decoration and channel watermarks for an ephemeral fallback item.
-pub(crate) async fn select_fallback_watermarks(
+/// Select decoration and channel watermarks for an ephemeral item.
+///
+/// # Errors
+/// Returns errors reading playout and decoration settings.
+pub async fn select_fallback_watermarks(
     pool: &DbPool,
     channel: &Channel,
     item: &ersatzrs_domain::PlayoutItem,
@@ -2206,7 +2298,7 @@ pub(crate) async fn select_fallback_watermarks(
         filler_kind: item.filler_kind,
         playout_deco_id,
     };
-    select_context_watermarks(pool, channel, context, None, now).await
+    select_context_watermarks(pool, channel, context, None, now, None).await
 }
 
 async fn select_context_watermarks(
@@ -2215,10 +2307,18 @@ async fn select_context_watermarks(
     context: PlaybackWatermarkContext,
     playout_item_id: Option<i64>,
     now: DateTime<Utc>,
+    candidate: Option<&CandidateOverlayContext>,
 ) -> Result<Vec<ResolvedPlaybackWatermark>> {
     let mut watermark_ids = Vec::new();
 
-    if let Some(template_deco) = load_active_template_deco(pool, context.playout_id, now).await? {
+    let template_deco = match candidate {
+        Some(inputs) => match inputs.template_deco_id {
+            Some(id) => Some(load_playback_deco(pool, id).await?),
+            None => None,
+        },
+        None => load_active_template_deco(pool, context.playout_id, now).await?,
+    };
+    if let Some(template_deco) = template_deco {
         if apply_deco_watermarks(&template_deco, context.filler_kind, &mut watermark_ids) {
             return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
         }
@@ -2231,9 +2331,10 @@ async fn select_context_watermarks(
         }
     }
 
-    let item_ids = match playout_item_id {
-        Some(id) => load_playout_item_watermark_ids(pool, id).await?,
-        None => Vec::new(),
+    let item_ids = match (candidate, playout_item_id) {
+        (Some(inputs), _) => inputs.watermark_ids.clone(),
+        (None, Some(id)) => load_playout_item_watermark_ids(pool, id).await?,
+        (None, None) => Vec::new(),
     };
     if !item_ids.is_empty() {
         watermark_ids.extend(item_ids);
@@ -2261,10 +2362,14 @@ pub async fn select_playback_graphics(
     now: DateTime<Utc>,
 ) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let context = load_playback_watermark_context(pool, playout_item_id).await?;
-    select_context_graphics(pool, context, Some(playout_item_id), now).await
+    select_context_graphics(pool, context, Some(playout_item_id), now, None).await
 }
 
-pub(crate) async fn select_fallback_graphics(
+/// Select graphics for an ephemeral item without looking up an item row.
+///
+/// # Errors
+/// Returns errors reading playout and decoration settings.
+pub async fn select_fallback_graphics(
     pool: &DbPool,
     item: &ersatzrs_domain::PlayoutItem,
     now: DateTime<Utc>,
@@ -2285,6 +2390,7 @@ pub(crate) async fn select_fallback_graphics(
         },
         None,
         now,
+        None,
     )
     .await
 }
@@ -2294,12 +2400,18 @@ async fn select_context_graphics(
     context: PlaybackWatermarkContext,
     playout_item_id: Option<i64>,
     now: DateTime<Utc>,
+    candidate: Option<&CandidateOverlayContext>,
 ) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
     let mut graphics = Vec::new();
 
-    if let Some(template_deco) =
-        load_active_template_graphics_deco(pool, context.playout_id, now).await?
-    {
+    let template_deco = match candidate {
+        Some(inputs) => match inputs.template_deco_id {
+            Some(id) => Some(load_playback_graphics_deco(pool, id).await?),
+            None => None,
+        },
+        None => load_active_template_graphics_deco(pool, context.playout_id, now).await?,
+    };
+    if let Some(template_deco) = template_deco {
         if apply_deco_graphics(&template_deco, context.filler_kind, &mut graphics) {
             return resolve_playback_graphics(pool, graphics).await;
         }
@@ -2312,8 +2424,10 @@ async fn select_context_graphics(
         }
     }
 
-    if let Some(id) = playout_item_id {
-        graphics.extend(load_playout_item_graphics(pool, id).await?);
+    match (candidate, playout_item_id) {
+        (Some(inputs), _) => graphics.extend(inputs.graphics.clone()),
+        (None, Some(id)) => graphics.extend(load_playout_item_graphics(pool, id).await?),
+        (None, None) => {}
     }
     resolve_playback_graphics(pool, graphics).await
 }
@@ -2333,8 +2447,49 @@ pub async fn render_playback_graphics_overlays(
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
 ) -> Result<PlaybackGraphicsArtifacts> {
-    render_playback_graphics_overlays_inner(pool, graphics, context, output_dir.as_ref(), None)
-        .await
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid graphics offset"))?;
+    render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        None,
+        offset,
+        None,
+    )
+    .await
+}
+
+/// Render a media troubleshooting preview after joining its programme clock.
+/// Sources carry their own phase; frame filters retain zero-based output PTS.
+///
+/// # Errors
+/// Returns invalid timing, database/template or rendering errors.
+pub async fn render_playback_preview_graphics_overlays(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid preview offset"))?;
+    let mut artifacts = render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        None,
+        offset,
+        None,
+    )
+    .await?;
+    artifacts.overlays = artifacts
+        .overlays
+        .into_iter()
+        .map(|overlay| overlay.with_programme_offset(offset))
+        .collect();
+    Ok(artifacts)
 }
 
 /// Render overlays within the caller's shared playback startup deadline.
@@ -2353,6 +2508,8 @@ pub async fn render_playback_graphics_overlays_cancellable(
     deadline: tokio::time::Instant,
     cancellation: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid graphics offset"))?;
     let mut startup = GraphicsStartupBudget {
         deadline,
         cancellation,
@@ -2363,6 +2520,40 @@ pub async fn render_playback_graphics_overlays_cancellable(
         context,
         output_dir.as_ref(),
         Some(&mut startup),
+        offset,
+        None,
+    )
+    .await
+}
+
+/// Render programme-relative source phases for an independent Next canvas chunk.
+/// Cancellation still waits for probes and controllers before releasing assets.
+///
+/// # Errors
+/// Returns invalid timing, rendering, database, cancellation or deadline errors.
+pub async fn render_playback_canvas_overlays_cancellable(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+    output_duration: Duration,
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let offset = Duration::try_from_secs_f64(context.stream_seek_seconds)
+        .map_err(|_| graphics_startup_error("invalid canvas offset"))?;
+    let mut startup = GraphicsStartupBudget {
+        deadline,
+        cancellation,
+    };
+    render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        Some(&mut startup),
+        offset,
+        Some(output_duration),
     )
     .await
 }
@@ -2415,6 +2606,8 @@ async fn render_playback_graphics_overlays_inner(
     context: &PlaybackGraphicsRenderContext,
     output_dir: &Path,
     mut startup: Option<&mut GraphicsStartupBudget>,
+    stream_offset: Duration,
+    output_duration: Option<Duration>,
 ) -> Result<PlaybackGraphicsArtifacts> {
     let output_dir = output_dir.to_path_buf();
     let renderer = GraphicsTemplateRenderer::new(&output_dir);
@@ -2427,18 +2620,27 @@ async fn render_playback_graphics_overlays_inner(
             let variable_context = GraphicsTemplateContext {
                 channel_id: context.channel_id,
                 channel_number: context.channel_number.clone(),
-                media_item_id: context.media_item_id,
+                render_time: context.render_time,
+                playout_item_id: context.playout_item_id,
+                media: context.media.clone(),
                 media_path: context.media_path.clone(),
                 channel_start_time: context.channel_start_time,
                 content_start_time: context.content_start_time,
+                content_finish_time: context.content_finish_time,
                 stream_seek_seconds: context.stream_seek_seconds,
                 duration_seconds: context.duration_seconds,
                 frame_width: context.frame_size.width,
                 frame_height: context.frame_size.height,
                 scaled_frame_width: context.square_pixel_frame_size.width,
                 scaled_frame_height: context.square_pixel_frame_size.height,
-                r_frame_rate: context.frame_rate.map(FrameRate::r_frame_rate),
-                frame_rate: context.frame_rate.map(FrameRate::parsed),
+                r_frame_rate: context
+                    .frame_rate
+                    .as_ref()
+                    .map(ersatzrs_ffmpeg::GraphicsFrameRate::r_frame_rate),
+                frame_rate: context
+                    .frame_rate
+                    .as_ref()
+                    .map(ersatzrs_ffmpeg::GraphicsFrameRate::parsed),
             };
             let variables = graphics_template_variables(
                 pool,
@@ -2450,11 +2652,18 @@ async fn render_playback_graphics_overlays_inner(
                 Some(startup) => startup.child_free(variables).await??,
                 None => variables.await?,
             };
-            let element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let mut element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let subtitle = resolve_subtitle_graphics_source(&mut element, &variables, &output_dir);
+            match startup.as_deref_mut() {
+                Some(startup) => startup.child_free(subtitle).await??,
+                None => subtitle.await?,
+            }
             let render_context = graphics_render_context_with_motion_probe(
                 context,
                 &element,
                 startup.as_deref_mut(),
+                stream_offset,
+                output_duration,
             )
             .await?;
             let drawtext_config = match &element.config {
@@ -2482,6 +2691,26 @@ async fn render_playback_graphics_overlays_inner(
                     refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
                     playback_offset_seconds: context.stream_seek_seconds,
                     playback_duration_seconds: context.duration_seconds,
+                    broadcast_start_time: Some(context.render_time),
+                    metadata_refresh: config
+                        .drawtext
+                        .metadata_refresh_interval_seconds
+                        .filter(|seconds| *seconds > 0)
+                        .map(
+                            |interval_seconds| crate::dynamic_text::DynamicTextMetadataRefresh {
+                                interval_seconds,
+                                source: std::sync::Arc::new(
+                                    crate::graphics_metadata_refresh::GraphicsMetadataRefresh {
+                                        pool: pool.clone(),
+                                        context: variable_context.clone(),
+                                        element_id: element.id,
+                                        epg_entries: usize::try_from(element.epg_entries.max(0))
+                                            .unwrap_or_default(),
+                                        startup_overrides: resolved.variables.clone(),
+                                    },
+                                ),
+                            },
+                        ),
                 });
                 let controller = match startup.as_deref_mut() {
                     Some(startup) => startup.child_free(controller).await?,
@@ -2554,14 +2783,58 @@ async fn render_playback_graphics_overlays_inner(
 async fn graphics_render_context_with_motion_probe(
     context: &PlaybackGraphicsRenderContext,
     element: &GraphicsElement,
-    startup: Option<&mut GraphicsStartupBudget>,
+    mut startup: Option<&mut GraphicsStartupBudget>,
+    stream_offset: Duration,
+    output_duration: Option<Duration>,
 ) -> Result<GraphicsRenderContext> {
     let render_context =
-        GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size);
+        GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size)
+            .with_stream_offset(stream_offset)
+            .with_stream_duration(
+                output_duration.unwrap_or(
+                    Duration::try_from_secs_f64(context.duration_seconds)
+                        .map_err(|_| graphics_startup_error("invalid graphics duration"))?,
+                ),
+            );
+    let image_path = match &element.config {
+        GraphicsElementConfig::Image(config) => config.image.as_deref(),
+        GraphicsElementConfig::Motion(config) => config.video_path.as_deref(),
+        _ => None,
+    };
+    if let Some(path) =
+        image_path.filter(|path| ersatzrs_ffmpeg::image_file_is_jpeg_xl(Path::new(path)))
+    {
+        let extractor = FfprobeExtractor::new(ffprobe_path());
+        let (cancel, cancellation) = tokio::sync::oneshot::channel();
+        let deadline = startup.as_ref().map_or_else(
+            || tokio::time::Instant::now() + Duration::from_secs(15),
+            |budget| budget.deadline,
+        );
+        let probe = extractor.jpeg_xl_timing_cancellable(path, deadline, cancellation);
+        tokio::pin!(probe);
+        let timing = if let Some(startup) = startup.as_deref_mut() {
+            startup.check()?;
+            tokio::select! {
+                biased;
+                _ = &mut startup.cancellation => {
+                    let _ = cancel.send(());
+                    let _ = probe.await;
+                    return Err(graphics_startup_error("cancelled"));
+                }
+                result = &mut probe => result,
+            }
+        } else {
+            let result = probe.await;
+            drop(cancel);
+            result
+        };
+        let timing = timing.map_err(|_| graphics_startup_error("JPEG XL timing unavailable"))?;
+        return Ok(render_context.with_jpeg_xl_timing(element.id, timing));
+    }
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return Ok(render_context);
     };
-    if config.end_behavior != MotionEndBehavior::Hold {
+    if config.end_behavior != MotionEndBehavior::Hold && stream_offset.is_zero() {
         return Ok(render_context);
     }
     let Some(video_path) = config
@@ -2633,6 +2906,29 @@ async fn graphics_motion_probe_cancellable(
         }
         result => Ok(result),
     }
+}
+
+async fn resolve_subtitle_graphics_source(
+    element: &mut GraphicsElement,
+    variables: &serde_json::Value,
+    directory: &Path,
+) -> Result<()> {
+    let GraphicsElementConfig::Subtitle(config) = &mut element.config else {
+        return Ok(());
+    };
+    let Some(path) = config.template.as_deref() else {
+        return Ok(());
+    };
+    let source = crate::graphics_template::render_subtitle_graphics_source(path, variables).await?;
+    tokio::fs::create_dir_all(directory)
+        .await
+        .map_err(|_| graphics_startup_error("subtitle directory unavailable"))?;
+    let rendered = directory.join(format!("{}-resolved-template.ass", element.id));
+    tokio::fs::write(&rendered, source)
+        .await
+        .map_err(|_| graphics_startup_error("subtitle source unavailable"))?;
+    config.template = Some(rendered.to_string_lossy().into_owned());
+    Ok(())
 }
 
 pub(crate) fn render_graphics_element_templates(
@@ -3063,7 +3359,10 @@ pub fn watermark_fade_points_for_program(
     points
 }
 
-async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) -> Result<Vec<i64>> {
+async fn load_playout_item_watermark_ids<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
+    playout_item_id: i64,
+) -> Result<Vec<i64>> {
     let rows = sqlx::query(
         r#"SELECT "WatermarkId"
            FROM "PlayoutItemWatermark"
@@ -3071,7 +3370,7 @@ async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) ->
            ORDER BY "WatermarkId""#,
     )
     .bind(playout_item_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 
@@ -3080,8 +3379,8 @@ async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) ->
         .collect()
 }
 
-async fn load_playback_watermark_context(
-    pool: &DbPool,
+async fn load_playback_watermark_context<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_item_id: i64,
 ) -> Result<PlaybackWatermarkContext> {
     let row = sqlx::query(
@@ -3091,7 +3390,7 @@ async fn load_playback_watermark_context(
            WHERE "pi"."Id" = ?"#,
     )
     .bind(playout_item_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
     .repository()?;
     Ok(PlaybackWatermarkContext {
@@ -3183,7 +3482,17 @@ pub(crate) async fn active_template_deco_id(
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<i64>> {
-    let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
+    let mut connection = pool.acquire().await.repository()?;
+    active_template_deco_id_from_connection(&mut connection, playout_id, now).await
+}
+
+async fn active_template_deco_id_from_connection(
+    connection: &mut sqlx::SqliteConnection,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<i64>> {
+    let Some(deco_template_id) =
+        active_playout_template_deco_id(&mut *connection, playout_id, now).await?
     else {
         return Ok(None);
     };
@@ -3196,7 +3505,7 @@ pub(crate) async fn active_template_deco_id(
            ORDER BY "dti"."StartTime", "dti"."Id""#,
     )
     .bind(deco_template_id)
-    .fetch_all(pool)
+    .fetch_all(connection)
     .await
     .repository()?;
 
@@ -3222,8 +3531,8 @@ async fn load_active_template_graphics_deco(
     }
 }
 
-async fn active_playout_template_deco_id(
-    pool: &DbPool,
+async fn active_playout_template_deco_id<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<i64>> {
@@ -3236,7 +3545,7 @@ async fn active_playout_template_deco_id(
            ORDER BY "Index", "TemplateId""#,
     )
     .bind(playout_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 
@@ -3248,8 +3557,8 @@ async fn active_playout_template_deco_id(
     Ok(None)
 }
 
-async fn load_playout_item_graphics(
-    pool: &DbPool,
+async fn load_playout_item_graphics<'e>(
+    executor: impl sqlx::Executor<'e, Database = crate::db::Db>,
     playout_item_id: i64,
 ) -> Result<Vec<(i64, Option<String>)>> {
     let rows = sqlx::query(
@@ -3259,7 +3568,7 @@ async fn load_playout_item_graphics(
            ORDER BY "GraphicsElementId""#,
     )
     .bind(playout_item_id)
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
     .repository()?;
 
@@ -3626,6 +3935,12 @@ pub fn subtitle_input_for_stream(
     Some(input)
 }
 
+/// Recognize absolute HTTP(S) sidecars using URI scheme semantics, including case.
+pub(crate) fn subtitle_is_http(path: &str) -> bool {
+    url::Url::parse(path)
+        .is_ok_and(|uri| matches!(uri.scheme(), "http" | "https") && uri.host_str().is_some())
+}
+
 fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<String> {
     let path = subtitle.path.as_deref()?.trim();
     if path.is_empty() {
@@ -3639,8 +3954,9 @@ fn subtitle_text_path(subtitle: &PlaybackSubtitle, media_path: &str) -> Option<S
                 .into_owned(),
         );
     }
-    if path.starts_with("http://") || path.starts_with("https://") {
-        return Some(path.to_owned());
+    if subtitle_is_http(path) {
+        // FFmpeg protocol names are case-sensitive even though URI schemes are not.
+        return url::Url::parse(path).ok().map(|uri| uri.to_string());
     }
 
     let candidate = PathBuf::from(path);
@@ -3820,17 +4136,24 @@ fn derive_color_params(
 }
 
 #[cfg(test)]
+#[path = "playback_transient_probe_tests.rs"]
+mod transient_probe_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn graphics_startup_context() -> PlaybackGraphicsRenderContext {
         PlaybackGraphicsRenderContext {
             channel_id: 1,
+            render_time: Utc::now(),
+            playout_item_id: None,
             channel_number: "1".to_owned(),
-            media_item_id: 1,
+            media: crate::graphics_template::GraphicsMedia::Persisted(1),
             media_path: "synthetic-media.mkv".to_owned(),
             channel_start_time: Utc::now(),
             content_start_time: Utc::now(),
+            content_finish_time: None,
             stream_seek_seconds: 0.0,
             duration_seconds: 60.0,
             frame_size: FrameSize::new(1920, 1080),

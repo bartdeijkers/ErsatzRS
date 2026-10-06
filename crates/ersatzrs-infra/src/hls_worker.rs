@@ -1,3 +1,8 @@
+mod output_status;
+
+#[path = "hls_worker_external.rs"]
+mod external;
+
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -79,7 +84,7 @@ const PLAYLIST_DELETE_INTERVAL_MS: i64 = 30_000;
 const PLAYLIST_FILTER_BEFORE_SECONDS: i64 = 30;
 const SEGMENT_CLEANUP_INTERVAL: Duration = Duration::from_secs(5);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
-const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
+use ersatzrs_core::hls::HLS_WORK_AHEAD_BUFFER_SECONDS;
 const HLS_REALTIME_BUFFER_SECONDS: i64 = 30;
 const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
 const HLS_REMOTE_INITIAL_BURST_SECONDS: u64 = HLS_WORK_AHEAD_TRANSCODE_SECONDS;
@@ -457,10 +462,15 @@ pub struct HlsSessionWorker {
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
+    media_relay: std::sync::OnceLock<Arc<crate::next_engine::media::MediaRelay>>,
+    output_status: std::sync::Mutex<output_status::SegmentOutputs>,
+    output_error: std::sync::Mutex<Option<String>>,
     startup: std::sync::Mutex<HlsStartupReadiness>,
     startup_minimum_segments: std::sync::atomic::AtomicUsize,
     startup_changed: Notify,
     last_access_ms: Arc<AtomicI64>,
+    started_at_ms: AtomicI64,
+    transcoded_until_ms: AtomicI64,
     last_delete_ms: Arc<AtomicI64>,
     working_dir_ready: AtomicBool,
     state: AtomicI32,
@@ -514,10 +524,15 @@ impl HlsSessionWorker {
             output_format,
             path_replacements,
             ffmpeg_runtime,
+            media_relay: std::sync::OnceLock::new(),
+            output_status: std::sync::Mutex::default(),
+            output_error: std::sync::Mutex::default(),
             startup: std::sync::Mutex::new(HlsStartupReadiness::Legacy),
             startup_minimum_segments: std::sync::atomic::AtomicUsize::new(3),
             startup_changed: Notify::new(),
             last_access_ms: Arc::new(AtomicI64::new(0)),
+            started_at_ms: AtomicI64::new(Utc::now().timestamp_millis()),
+            transcoded_until_ms: AtomicI64::new(i64::MIN),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             working_dir_ready: AtomicBool::new(false),
             state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
@@ -530,6 +545,11 @@ impl HlsSessionWorker {
             cancel: Arc::new(Notify::new()),
             reclaim_transcode: Arc::new(Notify::new()),
         })
+    }
+
+    fn report_transcoded_until(&self, until: DateTime<Utc>) {
+        self.transcoded_until_ms
+            .store(until.timestamp_millis(), Ordering::Relaxed);
     }
 
     fn session_state(&self) -> HlsSessionState {
@@ -578,6 +598,12 @@ impl HlsSessionWorker {
     ) -> RepositoryResult<T> {
         tokio::select! {
             biased;
+            () = self.cancel.notified() => {
+                // Reads can repeatedly fail before a transcode process exists.
+                // Consume cancellation here and stop the retry loop as well.
+                self.set_startup_readiness(HlsStartupReadiness::Failed);
+                Err(RepositoryError::Conflict("HLS startup cancelled".into()))
+            },
             () = self.wait_startup_deadline() => Err(RepositoryError::Conflict("HLS startup deadline expired".into())),
             result = read => result,
         }
@@ -661,8 +687,12 @@ impl HlsSessionWorker {
         self.touch();
 
         let mut is_first = true;
-        let mut last_playout_item_id = None::<i64>;
-        let mut transcoded_until = Utc::now();
+        let mut last_playout_item_id = None::<(i64, DateTime<Utc>)>;
+        let channel_start_time = Utc::now();
+        self.started_at_ms
+            .store(channel_start_time.timestamp_millis(), Ordering::Relaxed);
+        let mut transcoded_until = channel_start_time;
+        self.report_transcoded_until(transcoded_until);
         let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
         let mut learned_decode_retry_used = false;
@@ -775,7 +805,7 @@ impl HlsSessionWorker {
                 )
             {
                 match self
-                    .startup_read(load_active_hls_item(
+                    .startup_read(external::retained(
                         &pool,
                         self.channel_id,
                         &self.path_replacements,
@@ -783,14 +813,8 @@ impl HlsSessionWorker {
                     ))
                     .await
                 {
-                    Ok(Some(active)) => {
+                    Ok(Some(retained)) => {
                         startup_classified = true;
-                        let retained = active.remote_stream.as_ref().is_some_and(|stream| {
-                            matches!(
-                                stream.source,
-                                crate::remote_stream::RemoteStreamSource::RetainedIntervals(_)
-                            )
-                        });
                         if !retained {
                             self.set_startup_readiness(HlsStartupReadiness::Legacy);
                         }
@@ -907,7 +931,7 @@ impl HlsSessionWorker {
                 // Frozen interval startup includes admission wait, but never
                 // starts a resolver or capacity-slate encoder without capacity.
                 let retained_wait = self
-                    .startup_read(load_active_hls_item(
+                    .startup_read(external::retained(
                         &pool,
                         self.channel_id,
                         &self.path_replacements,
@@ -916,14 +940,7 @@ impl HlsSessionWorker {
                     .await
                     .ok()
                     .flatten()
-                    .is_some_and(|active| {
-                        active.remote_stream.is_some_and(|stream| {
-                            matches!(
-                                stream.source,
-                                crate::remote_stream::RemoteStreamSource::RetainedIntervals(_)
-                            )
-                        })
-                    });
+                    .unwrap_or(false);
                 if let Some(reclaim) = request_active_transcode_reclaim(
                     &self.channel_number,
                     HLS_ACTIVE_WATCH_WINDOW,
@@ -1083,6 +1100,7 @@ impl HlsSessionWorker {
                     HlsProcessOutcome::Success => {
                         self.set_admission_status(HlsAdmissionStatus::Waiting);
                         transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.report_transcoded_until(transcoded_until);
                         self.set_session_state(next_hls_session_state(
                             self.session_state(),
                             true,
@@ -1113,12 +1131,13 @@ impl HlsSessionWorker {
             }
 
             let active = match self
-                .startup_read(load_active_hls_item(
+                .startup_read(Box::pin(external::load(
+                    &self,
                     &pool,
                     self.channel_id,
                     &self.path_replacements,
                     decision.request_time,
-                ))
+                )))
                 .await
             {
                 Ok(Some(active)) => active,
@@ -1166,11 +1185,18 @@ impl HlsSessionWorker {
             }
 
             let source_stream = match self
-                .startup_read(load_source_video_stream_by_index(
-                    &pool,
-                    active.media_version_id,
-                    active.video_stream_index,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::source_video_stream_from_probe(&media.probe)
+                    } else {
+                        load_source_video_stream_by_index(
+                            &pool,
+                            active.media_version_id,
+                            active.video_stream_index,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(stream) => stream,
@@ -1187,7 +1213,13 @@ impl HlsSessionWorker {
                 }
             };
             let source_audio_streams = match self
-                .startup_read(load_source_audio_streams(&pool, active.media_version_id))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::source_audio_streams_from_probe(&media.probe)
+                    } else {
+                        load_source_audio_streams(&pool, active.media_version_id).await
+                    }
+                })
                 .await
             {
                 Ok(streams) => streams,
@@ -1394,6 +1426,16 @@ impl HlsSessionWorker {
             }
             let source_stream = if interval_playback.is_some() {
                 source_stream
+            } else if active.external.is_some() {
+                tokio::select! {
+                    biased;
+                    () = self.cancel.notified() => break,
+                    stream = crate::playback::enrich_transient_source_video_stream_for_playback(
+                        &pool, source_stream, &active.media_path, active.content_duration.unwrap_or_default(),
+                        playback_profile.profile.deinterlace_video == Some(true),
+                        playback_profile.profile.hardware_acceleration, external::deadline(&self),
+                    ) => stream,
+                }
             } else {
                 tokio::select! {
                     biased;
@@ -1458,14 +1500,7 @@ impl HlsSessionWorker {
                 None
             } else {
                 match self
-                    .startup_read(select_channel_custom_streams(
-                        &pool,
-                        active.media_version_id,
-                        active.media_item_id,
-                        &channel_for_streams,
-                        active.playout_start,
-                        StreamingMode::HttpLiveStreamingSegmenter,
-                    ))
+                    .startup_read(external::custom(&pool, &active, &channel_for_streams))
                     .await
                 {
                     Ok(selection) => selection,
@@ -1492,23 +1527,37 @@ impl HlsSessionWorker {
                     .and_then(|selection| selection.audio_stream_index)
                     .is_none()
             {
-                crate::audio_script::select(
-                    &pool,
-                    &channel_for_streams,
-                    active.media_item_id,
-                    active.media_version_id,
-                    crate::audio_script::AudioScriptPreferences {
-                        language: preferred_audio_language.as_deref(),
-                        title: preferred_audio_title,
-                        streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
-                    },
-                    if interval_playback.is_some() {
-                        &previous_audio_streams
-                    } else {
-                        &source_audio_streams
-                    },
-                )
-                .await
+                if let Some(media) = &active.external {
+                    crate::audio_script::transient::select(
+                        &channel_for_streams,
+                        media.audio_metadata(),
+                        crate::audio_script::AudioScriptPreferences {
+                            language: preferred_audio_language.as_deref(),
+                            title: preferred_audio_title,
+                            streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                        },
+                        &media.tracks(),
+                    )
+                    .await
+                } else {
+                    crate::audio_script::select(
+                        &pool,
+                        &channel_for_streams,
+                        active.media_item_id,
+                        active.media_version_id,
+                        crate::audio_script::AudioScriptPreferences {
+                            language: preferred_audio_language.as_deref(),
+                            title: preferred_audio_title,
+                            streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                        },
+                        if interval_playback.is_some() {
+                            &previous_audio_streams
+                        } else {
+                            &source_audio_streams
+                        },
+                    )
+                    .await
+                }
             } else {
                 None
             };
@@ -1603,12 +1652,11 @@ impl HlsSessionWorker {
                 selection.subtitle
             } else {
                 match self
-                    .startup_read(select_channel_playback_subtitle(
+                    .startup_read(external::subtitle(
                         &pool,
-                        active.media_item_id,
+                        &active,
                         &preferred_subtitle_languages,
                         subtitle_mode,
-                        StreamingMode::HttpLiveStreamingSegmenter,
                         &channel_for_streams,
                         &playback_profile.resolution,
                         start_seconds,
@@ -1632,6 +1680,30 @@ impl HlsSessionWorker {
                     }
                 }
             };
+            // Keep the owner until the encoder is supervised to completion.
+            let (subtitle, _external_subtitle_owner) =
+                if let (Some(media), Some(selected)) = (&active.external, subtitle.as_ref()) {
+                    if let Ok((selected, owner)) = crate::external_json::native::prepare_subtitle(
+                        &pool,
+                        media,
+                        &active.media_path,
+                        selected.clone(),
+                        StreamingMode::HttpLiveStreamingSegmenter,
+                        external::deadline(&self),
+                    )
+                    .await
+                    {
+                        (Some(selected), owner)
+                    } else {
+                        tracing::warn!(
+                            channel_id = self.channel_id,
+                            "external HLS subtitle preparation failed"
+                        );
+                        break;
+                    }
+                } else {
+                    (subtitle, None)
+                };
             let mut retained_subtitle_input = None;
             let retained_subtitle_verified =
                 if let (
@@ -1669,7 +1741,12 @@ impl HlsSessionWorker {
                 break;
             }
             let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-                subtitle_input_for_stream(
+                let input = if active.external.is_some() {
+                    crate::external_json::native::subtitle_input
+                } else {
+                    subtitle_input_for_stream
+                };
+                input(
                     subtitle,
                     &active.media_path,
                     self.output_format,
@@ -1709,13 +1786,26 @@ impl HlsSessionWorker {
                 ..Channel::default()
             };
             let watermark_inputs = match self
-                .startup_read(select_playback_watermarks(
-                    &pool,
-                    &watermark_channel,
-                    active.playout_item_id,
-                    active.disable_watermarks,
-                    now,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::select_fallback_watermarks(
+                            &pool,
+                            &watermark_channel,
+                            &crate::external_json::native::decoration_item(media),
+                            now,
+                        )
+                        .await
+                    } else {
+                        select_playback_watermarks(
+                            &pool,
+                            &watermark_channel,
+                            active.playout_item_id,
+                            active.disable_watermarks,
+                            now,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(watermarks) => {
@@ -1764,12 +1854,24 @@ impl HlsSessionWorker {
             let mut graphics_cleanup_dir = None;
             let mut dynamic_text_controllers = Vec::new();
             let graphics_overlays = match self
-                .startup_read(select_playback_graphics(
-                    &pool,
-                    &watermark_channel,
-                    active.playout_item_id,
-                    now,
-                ))
+                .startup_read(async {
+                    if let Some(media) = &active.external {
+                        crate::playback::select_fallback_graphics(
+                            &pool,
+                            &crate::external_json::native::decoration_item(media),
+                            now,
+                        )
+                        .await
+                    } else {
+                        select_playback_graphics(
+                            &pool,
+                            &watermark_channel,
+                            active.playout_item_id,
+                            now,
+                        )
+                        .await
+                    }
+                })
                 .await
             {
                 Ok(graphics) => {
@@ -1789,20 +1891,36 @@ impl HlsSessionWorker {
                             &graphics,
                             &PlaybackGraphicsRenderContext {
                                 channel_id: self.channel_id,
+                                render_time: if decision.start_at_zero {
+                                    active.playout_start
+                                } else {
+                                    decision.request_time
+                                },
+                                playout_item_id: Some(active.playout_item_id),
                                 channel_number: self.channel_number.clone(),
-                                media_item_id: active.media_item_id,
+                                media: active.external.as_ref().map_or_else(
+                                    || {
+                                        crate::graphics_template::GraphicsMedia::Persisted(
+                                            active.media_item_id,
+                                        )
+                                    },
+                                    |media| media.graphics_media(),
+                                ),
                                 media_path: active.media_path.clone(),
-                                channel_start_time: active.playout_start,
+                                channel_start_time,
                                 content_start_time: active.playout_start,
+                                content_finish_time: active.playout_finish,
                                 stream_seek_seconds: start_position.as_secs_f64(),
                                 duration_seconds: active
                                     .program_duration
                                     .map_or(0.0, |duration| duration.as_secs_f64()),
                                 frame_size,
                                 square_pixel_frame_size,
-                                frame_rate: target_frame_rate.or_else(|| {
-                                    source_stream.as_ref().and_then(|stream| stream.frame_rate)
-                                }),
+                                frame_rate: target_frame_rate
+                                    .or_else(|| {
+                                        source_stream.as_ref().and_then(|stream| stream.frame_rate)
+                                    })
+                                    .map(Into::into),
                             },
                             output_dir,
                             interval_startup.map(|(_, deadline)| deadline),
@@ -1845,7 +1963,7 @@ impl HlsSessionWorker {
                 .next_output_ts_offset(is_first, next_mpegts_output_ts_offset)
                 .await;
             let append_requires_discontinuity =
-                last_playout_item_id != Some(active.playout_item_id);
+                last_playout_item_id != Some((active.playout_item_id, active.playout_start));
             let discontinuity = hls_output_discontinuity(
                 self.output_format,
                 is_first,
@@ -1857,7 +1975,7 @@ impl HlsSessionWorker {
                 decision.request_time,
                 start_position,
                 active.content_duration,
-                active.playout_start,
+                channel_start_time,
             );
             let media_input = interval_playback.as_ref().map_or_else(
                 || {
@@ -2053,6 +2171,7 @@ impl HlsSessionWorker {
                     self.set_admission_status(HlsAdmissionStatus::Waiting);
                     if let Some(duration) = duration {
                         transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.report_transcoded_until(transcoded_until);
                         self.set_session_state(next_hls_session_state(
                             self.session_state(),
                             item_complete(&active, transcoded_until),
@@ -2063,7 +2182,7 @@ impl HlsSessionWorker {
                             next_mpegts_output_ts_offset,
                             duration,
                         );
-                        last_playout_item_id = Some(active.playout_item_id);
+                        last_playout_item_id = Some((active.playout_item_id, active.playout_start));
                     }
                 }
                 HlsProcessOutcome::Failed(error_message) => {
@@ -2201,6 +2320,14 @@ impl HlsSessionWorker {
                             "hls playlist not ready to trim before error fallback append"
                         );
                     }
+                    if let Ok(mut output_error) = self.output_error.lock() {
+                        *output_error = Some(
+                            crate::remote_stream::sanitize_remote_stream_diagnostic(&error_message)
+                                .chars()
+                                .take(4096)
+                                .collect(),
+                        );
+                    }
                     match self
                         .run_hls_process(
                             error_command,
@@ -2223,6 +2350,7 @@ impl HlsSessionWorker {
                                     next_mpegts_output_ts_offset,
                                 );
                             transcoded_until = next_cursor;
+                            self.report_transcoded_until(transcoded_until);
                             interval_startup = None;
                             startup_attempt_started_at = None;
                             self.set_session_state(next_state);
@@ -2382,6 +2510,9 @@ impl HlsSessionWorker {
             );
         }
 
+        if let Ok(mut output_error) = self.output_error.lock() {
+            *output_error = Some(ALL_STREAMS_IN_USE_SLATE_MESSAGE.to_owned());
+        }
         self.run_hls_process(
             command,
             cleanup_interval,
@@ -2502,8 +2633,49 @@ impl HlsSessionWorker {
         Err(interrupted)
     }
 
-    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Preserve the existing process boundary while tracking per-segment output provenance"
+    )]
     async fn run_hls_process_with_remote(
+        &self,
+        command: FfmpegCommand,
+        cleanup_interval: &mut tokio::time::Interval,
+        idle_timeout: Option<Duration>,
+        watch_idle_timeout: Option<Duration>,
+        remote_stream: Option<ResolvedRemoteStream>,
+        retained: Option<RetainedHlsProcess>,
+        capacity: HlsProcessCapacity<'_>,
+    ) -> HlsProcessOutcome {
+        let baseline = playlist_segment_uris(&self.working_dir).await.ok();
+        let error = self
+            .output_error
+            .lock()
+            .ok()
+            .and_then(|mut error| error.take());
+        if let Ok(mut outputs) = self.output_status.lock() {
+            outputs.begin(baseline, error);
+        }
+        let outcome = self
+            .run_hls_process_with_remote_inner(
+                command,
+                cleanup_interval,
+                idle_timeout,
+                watch_idle_timeout,
+                remote_stream,
+                retained,
+                capacity,
+            )
+            .await;
+        let segments = playlist_segment_uris(&self.working_dir).await.ok();
+        if let Ok(mut outputs) = self.output_status.lock() {
+            outputs.finish(segments.as_ref());
+        }
+        outcome
+    }
+
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)] // Preserve the existing process state machine behind the provenance wrapper.
+    async fn run_hls_process_with_remote_inner(
         &self,
         command: FfmpegCommand,
         cleanup_interval: &mut tokio::time::Interval,
@@ -3363,6 +3535,46 @@ fn apply_hls_software_video_fallback(playback_profile: &mut PlaybackProfile) {
 
 #[async_trait]
 impl HlsSessionHandle for HlsSessionWorker {
+    async fn segment_output(
+        &self,
+        segment: &str,
+        started_at_millis: i64,
+    ) -> Option<ersatzrs_core::hls::HlsSegmentOutput> {
+        let playlist = tokio::fs::read_to_string(self.working_dir.join("live.m3u8"))
+            .await
+            .ok()?;
+        if !playlist.contains("#EXT-X-PROGRAM-DATE-TIME:") {
+            return None;
+        }
+        // Public playlists use the saved timeline anchor rather than FFmpeg's
+        // spawn clock. Reuse that projection without trimming/writing media.
+        let playlist_start = *self.playlist_start.lock().await;
+        let segments = parsed_playlist_segments_from(&playlist, playlist_start);
+        if !segments.iter().any(|entry| {
+            entry.uri == segment && entry.start_time.timestamp_millis() == started_at_millis
+        }) {
+            return None;
+        }
+        let served = segments.into_iter().map(|entry| entry.uri).collect();
+        self.output_status.lock().ok()?.get(segment, &served)
+    }
+
+    fn session_model(&self) -> Option<ersatzrs_core::hls::HlsSessionModel> {
+        Some(ersatzrs_core::hls::HlsSessionModel {
+            started_at: DateTime::from_timestamp_millis(
+                self.started_at_ms.load(Ordering::Relaxed),
+            )?,
+            channel_number: self.channel_number.clone(),
+            state: format!("{:?}", self.session_state()),
+            transcoded_until: DateTime::from_timestamp_millis(
+                self.transcoded_until_ms.load(Ordering::Relaxed),
+            ),
+            last_access: DateTime::from_timestamp_millis(
+                self.last_access_ms.load(Ordering::Relaxed),
+            )?,
+        })
+    }
+
     fn startup_readiness(&self) -> HlsStartupReadiness {
         self.startup
             .lock()
@@ -5104,7 +5316,14 @@ async fn hls_delivery_segments(working_dir: &Path) -> io::Result<Vec<HlsDelivery
 }
 
 fn parsed_playlist_segments(playlist: &str) -> Vec<PlaylistSegment> {
-    parse_playlist(playlist, Utc::now(), false)
+    parsed_playlist_segments_from(playlist, Utc::now())
+}
+
+fn parsed_playlist_segments_from(
+    playlist: &str,
+    playlist_start: DateTime<Utc>,
+) -> Vec<PlaylistSegment> {
+    parse_playlist(playlist, playlist_start, false)
         .map(|parsed| {
             parsed
                 .items
@@ -5606,6 +5825,7 @@ async fn load_active_hls_item_with_artifact_root(
             "ChannelMusicVideoCreditsTemplate",
         )?,
         remote_stream,
+        external: None,
     }))
 }
 
@@ -5664,7 +5884,7 @@ fn decode_hls_bool(row: &crate::db::DbRow, column: &'static str) -> RepositoryRe
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ActiveHlsItem {
     media_path: String,
     playout_item_id: i64,
@@ -5695,6 +5915,7 @@ struct ActiveHlsItem {
     channel_music_video_credits_mode: ChannelMusicVideoCreditsMode,
     channel_music_video_credits_template: Option<String>,
     remote_stream: Option<ResolvedRemoteStream>,
+    external: Option<Arc<crate::external_json::playback::ResolvedExternalMedia>>,
 }
 
 impl ActiveHlsItem {
@@ -7132,6 +7353,111 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn segment_output_rejects_reused_names_and_missing_programme_date_time() {
+        let root = tempfile::tempdir().unwrap();
+        let worker = HlsSessionWorker::new(
+            "native-test".into(),
+            1,
+            root.path().into(),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        worker
+            .output_status
+            .lock()
+            .unwrap()
+            .begin(Some(HashSet::new()), Some("drawvg failed".into()));
+        let header = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4.004,\n";
+        let time = DateTime::from_timestamp_millis(1_634_389_200_142).unwrap();
+        *worker.playlist_start.lock().await = time;
+        let producer_time = time + chrono::Duration::hours(1);
+        let original = format!(
+            "{header}#EXT-X-PROGRAM-DATE-TIME:{}\nlive000000.ts\n#EXTINF:4.004,\n#EXT-X-PROGRAM-DATE-TIME:{}\nlive000001.ts\n",
+            producer_time.to_rfc3339(),
+            (producer_time + chrono::Duration::milliseconds(4_004)).to_rfc3339()
+        );
+        tokio::fs::write(root.path().join("live.m3u8"), &original)
+            .await
+            .unwrap();
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis())
+            .await
+            .unwrap()
+            .error
+            .is_some());
+        assert!(worker
+            .segment_output("live000001.ts", time.timestamp_millis() + 4_004)
+            .await
+            .unwrap()
+            .error
+            .is_some());
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis() - 1)
+            .await
+            .is_none());
+        assert!(worker
+            .segment_output("live000000.ts", producer_time.timestamp_millis())
+            .await
+            .is_none());
+        assert_eq!(
+            tokio::fs::read_to_string(root.path().join("live.m3u8"))
+                .await
+                .unwrap(),
+            original
+        );
+        assert_eq!(*worker.playlist_start.lock().await, time);
+        assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 0);
+        tokio::fs::write(
+            root.path().join("live.m3u8"),
+            format!("{header}live000000.ts\n"),
+        )
+        .await
+        .unwrap();
+        assert!(worker
+            .segment_output("live000000.ts", time.timestamp_millis())
+            .await
+            .is_none());
+    }
+
+    #[test]
+    fn session_model_reports_native_state_cursor_and_last_access_without_touching() {
+        let root = tempfile::tempdir().unwrap();
+        let worker = HlsSessionWorker::new(
+            "native-test".into(),
+            1,
+            root.path().into(),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        worker.last_access_ms.store(1_000, Ordering::Relaxed);
+        worker.started_at_ms.store(500, Ordering::Relaxed);
+        assert!(worker.session_model().unwrap().transcoded_until.is_none());
+        let until = DateTime::from_timestamp_millis(9_000).unwrap();
+        worker.report_transcoded_until(until);
+        worker.set_session_state(HlsSessionState::ZeroAndWorkAhead);
+        let report = worker.session_model().unwrap();
+        assert_eq!(report.channel_number, "native-test");
+        assert_eq!(report.state, "ZeroAndWorkAhead");
+        assert_eq!(report.transcoded_until, Some(until));
+        assert_eq!(report.last_access.timestamp_millis(), 1_000);
+        assert_eq!(report.started_at.timestamp_millis(), 500);
+        assert_eq!(
+            serde_json::to_value(&report).unwrap()["startedAt"],
+            serde_json::to_value(report.started_at).unwrap()
+        );
+        assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 1_000);
+        worker.touch();
+        assert!(worker.session_model().unwrap().last_access > report.last_access);
+        worker.report_transcoded_until(until + chrono::TimeDelta::seconds(30));
+        assert_eq!(
+            worker.session_model().unwrap().started_at,
+            report.started_at
+        );
+    }
+
+    #[tokio::test]
     async fn cancel_signals_worker_run_loop() {
         let worker = HlsSessionWorker::new(
             "42".to_string(),
@@ -7149,6 +7475,41 @@ mod tests {
         timeout(Duration::from_millis(250), worker.cancel.notified())
             .await
             .expect("worker run loop observes the cancellation signal");
+    }
+
+    #[tokio::test]
+    async fn cancellation_stops_startup_reads_before_a_process_exists() {
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-cancel-read"),
+            OutputFormat::Hls,
+            Vec::new(),
+            test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+        );
+        let read = worker.startup_read(std::future::pending::<RepositoryResult<()>>());
+        tokio::pin!(read);
+        assert!(timeout(Duration::from_millis(10), &mut read).await.is_err());
+        worker.cancel().await;
+        assert!(timeout(Duration::from_millis(250), read)
+            .await
+            .expect("cancel interrupts the pending source lookup")
+            .is_err());
+        assert!(matches!(
+            worker.startup_readiness(),
+            HlsStartupReadiness::Failed
+        ));
+
+        // A stored cancel permit must also beat an immediately failing source
+        // read; otherwise the surrounding error/retry loop can continue forever.
+        worker.cancel().await;
+        let error = worker
+            .startup_read(async {
+                Err::<(), _>(RepositoryError::Conflict("source unavailable".into()))
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("HLS startup cancelled"));
     }
 
     #[tokio::test]
@@ -10666,6 +11027,7 @@ mod tests {
             channel_music_video_credits_mode: ChannelMusicVideoCreditsMode::None,
             channel_music_video_credits_template: None,
             remote_stream: None,
+            external: None,
         }
     }
 

@@ -33,21 +33,21 @@ urlencoding = "2"
 gloo-timers = { version = "0.4", features = ["futures"] }
 stylance = "0.8"
 ersatzrs-addon-contract = { path = "../ersatzrs-addon-contract", version = "0.4.0" }
-ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
+ersatzrs-domain = { path = "../ersatzrs-domain", version = "1.1.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 icu_casemap = { version = "=2.2.0", default-features = false, features = ["compiled_data"] }
 serde_urlencoded = "0.7"
 async-trait = "0.1"
-ersatzrs-app = { path = "../ersatzrs-app", version = "0.1.0" }
-ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
-ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
-ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
-ersatzrs-platform = { path = "../ersatzrs-platform", version = "0.1.0" }
-ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "0.1.0" }
-ersatzrs-scheduler = { path = "../ersatzrs-scheduler", version = "0.1.0" }
+ersatzrs-app = { path = "../ersatzrs-app", version = "1.1.0" }
+ersatzrs-core = { path = "../ersatzrs-core", version = "1.1.0" }
+ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "1.1.0" }
+ersatzrs-infra = { path = "../ersatzrs-infra", version = "1.1.0" }
+ersatzrs-platform = { path = "../ersatzrs-platform", version = "1.1.0" }
+ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "1.1.0" }
+ersatzrs-scheduler = { path = "../ersatzrs-scheduler", version = "1.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "signal", "sync", "time"] }
-tokio-util = { version = "0.7", features = ["io"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
 # Keep axum aligned with leptos_axum and enable Multipart extraction for image upload routes.
 axum = { version = "0.8", features = ["multipart"] }
 tower = { version = "0.5", features = ["util"] }

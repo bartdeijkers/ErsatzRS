@@ -47,6 +47,21 @@ pub trait ChannelRuntime: Send + Sync {
     /// Return channel numbers with an active streaming session.
     async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError>;
 
+    /// Snapshot normal playlist workers without extending their lifetime.
+    async fn session_models(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError>;
+
+    /// Read output provenance from the isolated browser-preview worker.
+    async fn preview_segment_output(
+        &self,
+        _number: &str,
+        _segment: &str,
+        _started_at_millis: i64,
+    ) -> Result<Option<ersatzrs_core::hls::HlsSegmentOutput>, ChannelRuntimeError> {
+        Ok(None)
+    }
+
     /// Stop one channel streaming session, returning whether it existed.
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError>;
 
@@ -228,6 +243,16 @@ pub struct ScanRuntimeReport {
 /// Native scanner execution supplied by the composition root.
 #[async_trait]
 pub trait ScanRuntime: Send + Sync {
+    /// Read-only, bounded folder discovery before a local television library is
+    /// saved. The native adapter must retain capacity for timed-out workers.
+    async fn preview_television_folders(
+        &self,
+        _paths: Vec<String>,
+    ) -> Result<Vec<ersatzrs_core::television_discovery::TelevisionFolderPreview>, ScanRuntimeError>
+    {
+        Err(ScanRuntimeError::new("Folder preview is unavailable"))
+    }
+
     /// Return Local libraries whose interrupted scan markers need replay.
     async fn interrupted_scan_library_ids(&self) -> Result<Vec<EntityId>, ScanRuntimeError> {
         Ok(Vec::new())
@@ -316,17 +341,47 @@ impl AdminHealthRuntimeError {
 #[async_trait]
 pub trait AdminHealthRuntime: Send + Sync {
     async fn issue_counts(&self) -> Result<(u32, u32), AdminHealthRuntimeError>;
-    async fn run_health_checks(&self) -> Result<AdminHealthRead, AdminHealthRuntimeError>;
+    /// Read completed cached checks, or request a fresh run when `refresh` is true.
+    /// Concurrent requests may join one run; dropping a reader does not cancel it.
+    async fn run_health_checks(
+        &self,
+        refresh: bool,
+    ) -> Result<AdminHealthRead, AdminHealthRuntimeError>;
     async fn ffmpeg_runtime(&self) -> AdminFfmpegRuntimeRead;
 }
 
 #[async_trait]
 pub trait AdminTroubleshootingRuntime: Send + Sync {
     async fn list_stream_selectors(&self) -> Result<Vec<String>, AdminTroubleshootingRuntimeError>;
+    /// List bundled and operator music-video credits templates for previews.
+    async fn list_music_video_credits_templates(
+        &self,
+    ) -> Result<Vec<String>, AdminTroubleshootingRuntimeError>;
     async fn start_playback_preview(
         &self,
         request: PlaybackPreviewRequest,
     ) -> Result<(), AdminTroubleshootingRuntimeError>;
+    /// Admit one ephemeral preview and return its owned ID without waiting for `FFmpeg`.
+    async fn queue_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> Result<PlaybackPreviewStatus, AdminTroubleshootingRuntimeError>;
+    /// Read one owned preview; old IDs never observe a replacement's output.
+    async fn playback_preview_status(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError>;
+    /// Request cancellation of this ID only. Terminal states imply completed cleanup.
+    async fn stop_playback_preview(
+        &self,
+        id: String,
+    ) -> Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError>;
+    /// Read a bounded, safe HLS member from the current owned preview.
+    async fn playback_preview_file(
+        &self,
+        id: String,
+        filename: String,
+    ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
     async fn build_troubleshooting_archive(
         &self,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
@@ -337,6 +392,45 @@ pub trait AdminTroubleshootingRuntime: Send + Sync {
         &self,
         media_item_id: EntityId,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError>;
+}
+
+/// Observable diagnostic lifecycle, independent of live channel producers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackPreviewState {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelling,
+    Cancelled,
+}
+
+impl PlaybackPreviewState {
+    /// Terminal states follow cleanup attempts; check `cleanup_confirmed` before reusing capacity.
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+}
+
+/// Bounded ephemeral preview state returned to authenticated administration.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackPreviewStatus {
+    pub id: String,
+    pub state: PlaybackPreviewState,
+    pub ready: bool,
+    /// False after unconfirmed cleanup: new work remains fenced until restart.
+    pub cleanup_confirmed: bool,
+    pub playlist_url: String,
+    /// UTC RFC 3339 instant, suitable for display in the operator's timezone.
+    pub selected_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    /// Stable safe startup/lifecycle code; never raw provider/process errors.
+    pub error_code: Option<String>,
+    pub return_url: String,
+    pub log: Option<PlaybackPreviewLog>,
 }
 
 /// Completed preview diagnostics, read under the preview's output ownership.
@@ -734,6 +828,7 @@ pub struct PlaybackPreviewRequest {
     pub stream_selector: Option<String>,
     pub preferred_audio_title: Option<String>,
     pub subtitle_id: Option<EntityId>,
+    pub music_video_credits_template: Option<String>,
     pub seek_seconds: Option<i64>,
     pub start: Option<String>,
 }

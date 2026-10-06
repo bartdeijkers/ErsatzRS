@@ -39,6 +39,28 @@ impl ChannelRuntime for NativeChannelRuntime {
         Ok(active)
     }
 
+    async fn session_models(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, ChannelRuntimeError> {
+        Ok(self.hls_sessions.session_models().await)
+    }
+
+    async fn preview_segment_output(
+        &self,
+        number: &str,
+        segment: &str,
+        started_at_millis: i64,
+    ) -> Result<Option<ersatzrs_core::hls::HlsSegmentOutput>, ChannelRuntimeError> {
+        let Some(worker) = self.preview_hls_sessions.try_get(number).await else {
+            return Ok(None);
+        };
+        let output = worker.segment_output(segment, started_at_millis).await;
+        let current = self.preview_hls_sessions.try_get(number).await;
+        Ok(current
+            .filter(|current| Arc::ptr_eq(current, &worker))
+            .and(output))
+    }
+
     async fn stop_channel_session(&self, number: &str) -> Result<bool, ChannelRuntimeError> {
         let (normal, preview) = tokio::join!(
             self.hls_sessions.stop_channel(number),
@@ -63,5 +85,129 @@ impl ChannelRuntime for NativeChannelRuntime {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ersatzrs_core::hls::{HlsSegmentOutput, HlsSessionHandle};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Notify;
+
+    struct PreviewWorker {
+        touches: AtomicUsize,
+        entered: Notify,
+        release: Option<Arc<Notify>>,
+    }
+
+    #[async_trait]
+    impl HlsSessionHandle for PreviewWorker {
+        fn channel_number(&self) -> &'static str {
+            "synthetic"
+        }
+        fn touch(&self) {
+            self.touches.fetch_add(1, Ordering::Relaxed);
+        }
+        async fn trim_playlist(&self) -> Option<String> {
+            None
+        }
+        async fn cancel(&self) {
+            panic!("status reads must not cancel")
+        }
+        fn playout_updated(&self) {
+            panic!("status reads must not rebuild")
+        }
+        async fn segment_output(
+            &self,
+            segment: &str,
+            _started_at_millis: i64,
+        ) -> Option<HlsSegmentOutput> {
+            self.entered.notify_one();
+            if let Some(release) = &self.release {
+                release.notified().await;
+            }
+            (segment == "slate.ts").then(|| HlsSegmentOutput {
+                error: Some("synthetic drawvg failure".into()),
+            })
+        }
+    }
+
+    fn worker(release: Option<Arc<Notify>>) -> Arc<PreviewWorker> {
+        Arc::new(PreviewWorker {
+            touches: AtomicUsize::new(0),
+            entered: Notify::new(),
+            release,
+        })
+    }
+
+    #[tokio::test]
+    async fn preview_segment_status_uses_only_preview_registry_without_touching() {
+        let state = crate::host::state::AppState::for_tests(
+            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
+        );
+        let runtime = NativeChannelRuntime::new(
+            state.pool,
+            state.hls_sessions.clone(),
+            state.preview_hls_sessions.clone(),
+        );
+        let normal = worker(None);
+        state.hls_sessions.insert(normal.clone()).await;
+        assert!(runtime
+            .preview_segment_output("synthetic", "slate.ts", 0)
+            .await
+            .unwrap()
+            .is_none());
+        let preview = worker(None);
+        state.preview_hls_sessions.insert(preview.clone()).await;
+        assert!(runtime
+            .preview_segment_output("synthetic", "slate.ts", 0)
+            .await
+            .unwrap()
+            .unwrap()
+            .error
+            .is_some());
+        assert!(runtime
+            .preview_segment_output("synthetic", "unknown.ts", 0)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(normal.touches.load(Ordering::Relaxed), 0);
+        assert_eq!(preview.touches.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn replaced_preview_worker_cannot_return_its_stale_error() {
+        let state = crate::host::state::AppState::for_tests(
+            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
+        );
+        let runtime = NativeChannelRuntime::new(
+            state.pool,
+            state.hls_sessions,
+            state.preview_hls_sessions.clone(),
+        );
+        let release = Arc::new(Notify::new());
+        let old = worker(Some(release.clone()));
+        state.preview_hls_sessions.insert(old.clone()).await;
+        let read = tokio::spawn(async move {
+            runtime
+                .preview_segment_output("synthetic", "slate.ts", 0)
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), old.entered.notified())
+            .await
+            .unwrap();
+        state.preview_hls_sessions.remove("synthetic").await;
+        state.preview_hls_sessions.insert(worker(None)).await;
+        release.notify_one();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(5), read)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(old.touches.load(Ordering::Relaxed), 0);
     }
 }

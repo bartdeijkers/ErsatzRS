@@ -10,21 +10,21 @@ use crate::admin::i18n::{
     TextKey,
 };
 use crate::admin::server_fns::schedules::{
-    copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
-    get_schedules_page_size, list_schedules, replace_schedule_items, save_schedule,
-    save_schedules_detail_page_size, FillerOption, PlaylistOption, ScheduleForm, ScheduleItemForm,
-    ScheduleItemListRow, ScheduleItemOption, ScheduleItemsEditorOptions, ScheduleItemsPageData,
-    ScheduleLanguageOption, ScheduleListRow, SmartShuffleForm, COLLECTION_TYPE_ARTIST,
-    COLLECTION_TYPE_COLLECTION, COLLECTION_TYPE_MULTI_COLLECTION, COLLECTION_TYPE_PLAYLIST,
-    COLLECTION_TYPE_RERUN_FIRST_RUN, COLLECTION_TYPE_RERUN_RERUN, COLLECTION_TYPE_SEARCH_QUERY,
-    COLLECTION_TYPE_SMART_COLLECTION, COLLECTION_TYPE_TELEVISION_SEASON,
-    COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE, MARATHON_GROUP_BY_NONE,
-    MULTIPLE_MODE_COLLECTION_SIZE, MULTIPLE_MODE_COUNT, MULTIPLE_MODE_MULTI_EPISODE_GROUP_SIZE,
-    MULTIPLE_MODE_PLAYLIST_ITEM_SIZE, PLAYBACK_ORDER_CHRONOLOGICAL, PLAYBACK_ORDER_MARATHON,
-    PLAYBACK_ORDER_NONE, PLAYBACK_ORDER_RANDOM, PLAYBACK_ORDER_SEASON_EPISODE,
-    PLAYBACK_ORDER_SHUFFLE, PLAYBACK_ORDER_SHUFFLE_IN_ORDER, PLAYOUT_MODE_DURATION,
-    PLAYOUT_MODE_FLOOD, PLAYOUT_MODE_MULTIPLE, PLAYOUT_MODE_ONE, START_TYPE_DYNAMIC,
-    START_TYPE_FIXED,
+    copy_schedule, defer_schedule_items, delete_schedule, get_schedule_form,
+    get_schedule_items_page, get_schedules_page_size, list_schedules, replace_schedule_items,
+    save_schedule, save_schedules_detail_page_size, FillerOption, PlaylistOption, ScheduleForm,
+    ScheduleItemForm, ScheduleItemListRow, ScheduleItemOption, ScheduleItemsEditorOptions,
+    ScheduleItemsPageData, ScheduleLanguageOption, ScheduleListRow, SmartShuffleForm,
+    COLLECTION_TYPE_ARTIST, COLLECTION_TYPE_COLLECTION, COLLECTION_TYPE_MULTI_COLLECTION,
+    COLLECTION_TYPE_PLAYLIST, COLLECTION_TYPE_RERUN_FIRST_RUN, COLLECTION_TYPE_RERUN_RERUN,
+    COLLECTION_TYPE_SEARCH_QUERY, COLLECTION_TYPE_SMART_COLLECTION,
+    COLLECTION_TYPE_TELEVISION_SEASON, COLLECTION_TYPE_TELEVISION_SHOW, FILL_WITH_GROUP_MODE_NONE,
+    MARATHON_GROUP_BY_NONE, MULTIPLE_MODE_COLLECTION_SIZE, MULTIPLE_MODE_COUNT,
+    MULTIPLE_MODE_MULTI_EPISODE_GROUP_SIZE, MULTIPLE_MODE_PLAYLIST_ITEM_SIZE,
+    PLAYBACK_ORDER_CHRONOLOGICAL, PLAYBACK_ORDER_MARATHON, PLAYBACK_ORDER_NONE,
+    PLAYBACK_ORDER_RANDOM, PLAYBACK_ORDER_SEASON_EPISODE, PLAYBACK_ORDER_SHUFFLE,
+    PLAYBACK_ORDER_SHUFFLE_IN_ORDER, PLAYOUT_MODE_DURATION, PLAYOUT_MODE_FLOOD,
+    PLAYOUT_MODE_MULTIPLE, PLAYOUT_MODE_ONE, START_TYPE_DYNAMIC, START_TYPE_FIXED,
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -680,7 +680,7 @@ fn schedule_items_fallback_html(
     }
 
     format!(
-        r#"<div class="{page}"><div class="{action_bar}"><div class="{action_row}"><div class="{grow}">{name}</div><button type="submit" form="schedule-items-fallback-form" class="{btn_primary}" name="action" value="save">{save_schedule_items}</button><button type="submit" form="schedule-items-fallback-form" class="{btn_default}" name="action" value="add">{add_schedule_item}</button><a href="/schedules" class="{btn_default}">{back}</a></div></div><section class="{content}"><h1 class="{page_title}">{schedule_items}</h1><div class="{divider}"></div><p class="{error}" style="display:{error_display}">{action_failed}</p><form id="schedule-items-fallback-form" method="post" action="/admin-api/schedules/items/save" class="{fallback_form}"><input type="hidden" name="schedule_id" value="{id}"><div class="{table_wrap}"><table><thead><tr><th>{start}</th><th>{collection_label}</th><th>{playback}</th><th>{playout}</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">{add_schedule_item}</h2><div class="{editor_form}">{add_fields}</div></form></section></div>"#,
+        r#"<div class="{page}"><div class="{action_bar}"><div class="{action_row}"><div class="{grow}">{name}</div><button type="submit" form="schedule-items-fallback-form" class="{btn_primary}" name="action" value="save">{save_schedule_items}</button><button type="submit" form="schedule-items-fallback-form" class="{btn_default}" name="action" value="save-deferred">{save_deferred}</button><button type="submit" form="schedule-items-fallback-form" class="{btn_default}" name="action" value="add">{add_schedule_item}</button><a href="/schedules" class="{btn_default}">{back}</a></div></div><section class="{content}"><h1 class="{page_title}">{schedule_items}</h1><div class="{divider}"></div><p>{deferred_help}</p><div data-testid="schedule-deferred-status">{deferred_status}</div><p class="{error}" style="display:{error_display}">{action_failed}</p><form id="schedule-items-fallback-form" method="post" action="/admin-api/schedules/items/save" class="{fallback_form}"><input type="hidden" name="schedule_id" value="{id}"><div class="{table_wrap}"><table><thead><tr><th>{start}</th><th>{collection_label}</th><th>{playback}</th><th>{playout}</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">{add_schedule_item}</h2><div class="{editor_form}">{add_fields}</div></form></section></div>"#,
         page = style::page,
         action_bar = style::action_bar,
         action_row = style::action_row,
@@ -693,11 +693,19 @@ fn schedule_items_fallback_html(
         divider = style::divider,
         error = style::error,
         error_display = if initial_error.is_empty() { "none" } else { "" },
-        save_schedule_items = tr(TextKey::SaveScheduleItems),
+        save_schedule_items = tr(TextKey::ScheduleSaveAndRefresh),
+        save_deferred = tr(TextKey::ScheduleSaveDeferred),
+        deferred_help = escape_html(tr(TextKey::ScheduleDeferredHelp)),
+        deferred_status = deferred_status_html(&data.deferred_changes),
         add_schedule_item = tr(TextKey::AddScheduleItem),
         back = tr(TextKey::Back),
         schedule_items = tr(TextKey::ScheduleItems),
-        action_failed = tr(TextKey::ScheduleItemActionFailed),
+        action_failed = match initial_error {
+            "defer-incompatible" => tr(TextKey::ScheduleDeferredIncompatible),
+            "defer-busy" => tr(TextKey::ScheduleDeferredBusy),
+            "defer-timeline" => tr(TextKey::ScheduleDeferredInvalidTimeline),
+            _ => tr(TextKey::ScheduleItemActionFailed),
+        },
         start = tr(TextKey::Start),
         collection_label = tr(TextKey::Collection),
         playback = tr(TextKey::Playback),
@@ -742,6 +750,13 @@ fn load_schedule_items_no_script_data(id: i64) -> Result<Option<ScheduleItemsPag
                         .await
                         .map(schedule_options_from_admin)?;
                     Ok(Some(ScheduleItemsPageData {
+                        deferred_changes: state
+                            .application
+                            .schedule_deferred_changes(id)
+                            .await?
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
                         schedule,
                         items,
                         options,
@@ -990,6 +1005,17 @@ fn schedule_item_hidden_fields_html(item: &ScheduleItemForm) -> String {
             &item.index.to_string(),
         ));
     }
+    let _ = write!(
+        fields,
+        r#"<details><summary>{label}</summary><label class="{field}"><span>{label}</span><textarea class="{textarea}" name="item_graphics_element_variables" rows="4" maxlength="262144" data-graphics-item-variables-map>{value}</textarea></label><p>{help}</p></details>"#,
+        label = escape_html(tr(TextKey::GraphicsItemVariables)),
+        field = style::field,
+        textarea = style::textarea,
+        value = escape_html(&super::graphics_variables::variables_json(
+            &item.graphics_element_variables
+        )),
+        help = escape_html(tr(TextKey::GraphicsItemVariablesHelp)),
+    );
     fields
 }
 
@@ -1080,6 +1106,60 @@ fn escape_html(value: &str) -> String {
         .replace('"', "&quot;")
 }
 
+fn deferred_status_html(
+    rows: &[crate::admin::server_fns::schedules::ScheduleDeferredChange],
+) -> String {
+    fn timestamp(value: Option<chrono::DateTime<chrono::Utc>>) -> String {
+        value.map_or_else(
+            || tr(TextKey::NotAvailable).to_owned(),
+            |value| value.format("%Y-%m-%d %H:%M:%S%.f UTC").to_string(),
+        )
+    }
+    let mut html = String::new();
+    for row in rows {
+        let state = row.applied_from.map_or_else(
+            || tr(TextKey::ScheduleDeferredPending).to_owned(),
+            |from| {
+                format!(
+                    "{} {}",
+                    tr(TextKey::ScheduleDeferredApplied),
+                    timestamp(Some(from))
+                )
+            },
+        );
+        let outcome = match row.build_succeeded {
+            Some(true) => tr(TextKey::ScheduleDeferredBuildSucceeded),
+            Some(false) => tr(TextKey::Failed),
+            None => tr(TextKey::NotAvailable),
+        };
+        let _ = write!(
+            html,
+            "<p><strong>{}</strong>: {}<br>{}: {}<br>{}: {} — {}</p>",
+            escape_html(&row.channel_name),
+            escape_html(&state),
+            tr(TextKey::ScheduleDeferredBoundary),
+            timestamp(row.effective_after),
+            tr(TextKey::ScheduleDeferredLastBuild),
+            timestamp(row.last_build),
+            outcome
+        );
+    }
+    html
+}
+
+fn deferred_save_error(error: ServerFnError) -> String {
+    let message = error.to_string();
+    if message.contains("Classic deferred save is busy") {
+        tr(TextKey::ScheduleDeferredBusy).to_owned()
+    } else if message.contains("Classic deferred save cannot change") {
+        tr(TextKey::ScheduleDeferredIncompatible).to_owned()
+    } else if message.contains("Classic deferred save requires a valid published timeline") {
+        tr(TextKey::ScheduleDeferredInvalidTimeline).to_owned()
+    } else {
+        schedule_error_message(error)
+    }
+}
+
 #[island]
 fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> impl IntoView {
     let schedule_name = RwSignal::new(
@@ -1105,6 +1185,46 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
             .map(|data| data.options.clone())
             .unwrap_or_default(),
     );
+    let deferred_changes = RwSignal::new(
+        initial_data
+            .as_ref()
+            .map(|data| data.deferred_changes.clone())
+            .unwrap_or_default(),
+    );
+    let deferred_saved = RwSignal::new(false);
+    let deferred_poll_failed = RwSignal::new(false);
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use crate::admin::server_fns::schedules::get_schedule_deferred_changes;
+            use std::sync::{
+                atomic::{AtomicBool, Ordering},
+                Arc,
+            };
+            let alive = Arc::new(AtomicBool::new(true));
+            let cleanup = alive.clone();
+            on_cleanup(move || cleanup.store(false, Ordering::Relaxed));
+            leptos::task::spawn_local(async move {
+                while alive.load(Ordering::Relaxed) {
+                    gloo_timers::future::TimeoutFuture::new(5_000).await;
+                    if !alive.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let result = get_schedule_deferred_changes(id).await;
+                    if !alive.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    match result {
+                        Ok(rows) => {
+                            deferred_poll_failed.set(false);
+                            deferred_changes.set(rows);
+                        }
+                        Err(_) => deferred_poll_failed.set(true),
+                    }
+                }
+            });
+        }
+    });
     let selected = RwSignal::new(None::<usize>);
     let error = RwSignal::new(String::new());
     let loaded = RwSignal::new(true);
@@ -1122,6 +1242,7 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                     shuffle_schedule_items.set(data.schedule.shuffle_schedule_items);
                     items.set(data.items);
                     options.set(data.options);
+                    deferred_changes.set(data.deferred_changes);
                     selected.set(None);
                 }
                 Ok(None) => {
@@ -1148,9 +1269,30 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
             match result {
                 Ok(()) => {
                     error.set(String::new());
+                    deferred_saved.set(false);
                     data.refetch();
                 }
                 Err(err) => error.set(schedule_error_message(err)),
+            }
+        }
+    });
+
+    let deferred_action = Action::new(|(schedule_id, items): &(i64, Vec<ScheduleItemForm>)| {
+        defer_schedule_items(*schedule_id, items.clone())
+    });
+    Effect::new(move |_| {
+        if let Some(result) = deferred_action.value().get() {
+            match result {
+                Ok(rows) => {
+                    error.set(String::new());
+                    deferred_changes.set(rows);
+                    deferred_saved.set(true);
+                    data.refetch();
+                }
+                Err(err) => {
+                    deferred_saved.set(false);
+                    error.set(deferred_save_error(err));
+                }
             }
         }
     });
@@ -1218,9 +1360,12 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
                             })
                         }).unwrap_or_else(|| schedule_name.get())}
                     </div>
-                    <button type="button" class=style::btn_primary on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
+                    <button type="button" class=style::btn_primary disabled=move || save_action.pending().get() || deferred_action.pending().get() on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                        <span>{tr(TextKey::SaveScheduleItems)}</span>
+                        <span>{tr(TextKey::ScheduleSaveAndRefresh)}</span>
+                    </button>
+                    <button type="button" class=style::btn_default disabled=move || save_action.pending().get() || deferred_action.pending().get() on:click=move |_| { deferred_action.dispatch((id, items.get_untracked())); }>
+                        {tr(TextKey::ScheduleSaveDeferred)}
                     </button>
                     <button type="button" class=style::btn_default on:click=add_item>
                         <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
@@ -1232,6 +1377,10 @@ fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> 
             <section class=style::content>
                 <h1 class=style::page_title>{tr(TextKey::ScheduleItems)}</h1>
                 <div class=style::divider/>
+                <p>{tr(TextKey::ScheduleDeferredHelp)}</p>
+                <p role="status" style:display=move || if deferred_saved.get() { "" } else { "none" }>{tr(TextKey::ScheduleDeferredSaved)}</p>
+                <div data-testid="schedule-deferred-status" aria-live="polite" inner_html=move || deferred_status_html(&deferred_changes.get())></div>
+                <p class=style::error aria-live="polite" style:display=move || if deferred_poll_failed.get() { "" } else { "none" }>{tr(TextKey::ErrorOccurred)}</p>
                 <p class=style::error style:display=move || if error.get().is_empty() { "none" } else { "" }>
                     {move || error.get()}
                 </p>
@@ -1469,8 +1618,21 @@ fn schedule_item_editor(
                 update_item(items, index, |item| item.watermark_ids = values);
             })}
             {multi_select_i64(tr(TextKey::GraphicsElements), &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
-                update_item(items, index, |item| item.graphics_element_ids = values);
+                update_item(items, index, |item| {
+                    item.graphics_element_variables.retain(|id, _| values.contains(id));
+                    item.graphics_element_ids = values;
+                });
             })}
+            {super::graphics_variables::variables_editor(
+                &item.graphics_element_ids,
+                options.graphics_elements.iter().map(|option| (option.id, option.name.clone())).collect(),
+                &item.graphics_element_variables,
+                (style::field, style::textarea),
+                move |id, value| update_item(items, index, |item| {
+                    if value.trim().is_empty() { item.graphics_element_variables.remove(&id); }
+                    else { item.graphics_element_variables.insert(id, value); }
+                }),
+            )}
             {language_picker(tr(TextKey::PreferredAudioLanguage), item.preferred_audio_language_code.clone(), options.languages.clone(), move |value| {
                 update_item(items, index, |item| item.preferred_audio_language_code = blank_to_none(&value));
             })}

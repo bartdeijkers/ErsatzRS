@@ -8,6 +8,10 @@ Accepted (2026-09-23; maintainer approval)
 
 Partial
 
+On 2026-10-01 the maintainer approved explicit unverified ARM/macOS application
+acceptance debt for UCU-09. Linux x64 and Windows x64 application checks remain
+required; see `ucu-arm-macos-application-acceptance` in the catch-up parity record.
+
 The shared adapter is integrated into native HLS/MPEG-TS playback, previews and
 Next projection. Each invocation owns a fresh runtime; globals do not carry
 over between selections. Raw HLS Direct retains all audio and bypasses the hook
@@ -16,8 +20,11 @@ when no effective language/title preference requests selection. `rquickjs` 0.14.
 and decoded Next selection pass. The Rust/C dependency builds with Windows
 MSVC and ARMv7 GNU. A linked interpreter probe also verifies callback, heap-limit
 and interrupt behavior on native Windows and under ARMv7 user emulation.
-Full native execution across all six supported platforms
-remains an acceptance item; these dependency builds do not establish it.
+UCU-09 now also verifies native Windows application callbacks, metadata,
+resource limits and decoded Next non-default audio with retained subtitles.
+These application fixtures pass using the production adapter and verified
+Next/FFmpeg packages. ARM/macOS application acceptance remains unverified under
+the explicit maintainer-approved debt above.
 See UCU-02 evidence and the [selector reference](../reference/javascript-audio-selectors.md).
 
 ## Context

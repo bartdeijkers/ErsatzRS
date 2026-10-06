@@ -324,6 +324,7 @@ async fn admit_saved_changes(pool: &DbPool, now: DateTime<Utc>) -> Result<()> {
         JOIN "AddonMediaListLibrary" AS "library" ON "library"."AddonMediaListId" = "list"."Id"
         LEFT JOIN "AddonMediaListAutoPublication" AS "pending" ON "pending"."AddonMediaListId" = "list"."Id"
         WHERE "list"."RefreshPublicationPolicy" = 2 AND "list"."ReviewState" <> 3
+          AND NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection" WHERE "selection"."AddonMediaListId"="list"."Id" AND "selection"."ReviewRequired"=1)
           AND ("list"."PublicationJournalJson" IS NULL OR TRIM("list"."PublicationJournalJson") = '')
           AND ("pending"."AddonMediaListId" IS NULL OR "pending"."DraftRevision" <> "list"."DraftRevision"
                OR "pending"."PublishedRevision" <> "list"."PublishedRevision")
@@ -343,6 +344,7 @@ async fn admit_saved_changes(pool: &DbPool, now: DateTime<Utc>) -> Result<()> {
         RETURNING "AddonMediaListId""#)
         .bind(&now).bind(&now).fetch_optional(pool).await.repository()?;
     if let Some(list_id) = admitted {
+        crate::addon_list_selection::queue_missing_facts(pool, list_id).await?;
         crate::addon_media_list_import::AddonMediaListImportCoordinator::new(pool.clone())
             .authorize_after_publish(list_id)
             .await?;
@@ -357,10 +359,11 @@ async fn admit_saved_changes(pool: &DbPool, now: DateTime<Utc>) -> Result<()> {
 /// Returns database/validation errors without losing the pending assessment.
 #[allow(clippy::too_many_lines)] // Keep the fenced assessment and its transaction exits together.
 pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
+    crate::addon_list_selection::reassess_due(pool, now).await?;
     admit_saved_changes(pool, now).await?;
     let row = sqlx::query(
         r#"SELECT "AddonMediaListId" FROM "AddonMediaListAutoPublication"
-           WHERE ("State" IN ('ready', 'preparing')
+           WHERE NOT EXISTS (SELECT 1 FROM "AddonMediaListSelection" AS "selection" WHERE "selection"."AddonMediaListId"="AddonMediaListAutoPublication"."AddonMediaListId" AND "selection"."ReviewRequired"=1) AND ("State" IN ('ready', 'preparing')
               OR ("State" = 'queued' AND EXISTS (SELECT 1 FROM "ManagedLibraryOperation"
                   WHERE "Id" = "AddonMediaListAutoPublication"."OperationId" AND ("State" = 4 OR
                       ("State" = 3 AND EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
@@ -382,6 +385,7 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
     };
     let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
     let repository = SqliteAddonMediaListRepository(pool.clone());
+    crate::addon_list_selection::queue_missing_facts(pool, list_id).await?;
     let readiness = repository.publication_readiness(list_id).await;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     let row = sqlx::query(
@@ -914,6 +918,49 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "queued");
+    }
+
+    #[tokio::test]
+    async fn initial_selection_review_holds_first_publication_and_acquisition_until_saved() {
+        use ersatzrs_core::addon_list_selection::{
+            AddonListSelectionPolicy, AddonListSelectionSettings,
+        };
+        use ersatzrs_core::repositories::AddonMediaListRepository as _;
+        let pool = fixture().await;
+        sqlx::raw_sql(r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,"PublishedRevision"=0,"ReviewState"=1;
+            UPDATE "AddonMediaListItem" SET "Published"=0;"#).execute(&pool).await.unwrap();
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        crate::addon_list_selection::request_review_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert!(!process_one(&pool, Utc::now()).await.unwrap());
+        let repo = SqliteAddonMediaListRepository(pool.clone());
+        let readiness = repo.publication_readiness(1).await.unwrap();
+        assert!(readiness.blockers.iter().any(|b| b.kind==ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::SelectionReviewRequired));
+        assert!(repo.prepare_publication_media(1, 1).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "AddonMediaListPublicationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        crate::addon_list_selection::save_in_tx(
+            &mut tx,
+            1,
+            &AddonListSelectionSettings {
+                policy: Some(AddonListSelectionPolicy::default()),
+                refresh_paused: false,
+            },
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
         assert!(process_one(&pool, Utc::now()).await.unwrap());
         assert_eq!(state(&pool).await, "queued");
     }

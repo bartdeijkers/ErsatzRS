@@ -1,6 +1,7 @@
 pub mod block_editor;
 pub mod blocks;
 pub mod decos;
+mod graphics_variables;
 pub mod playout_editor;
 pub mod playout_kind_editor;
 pub mod playout_nested_editor;

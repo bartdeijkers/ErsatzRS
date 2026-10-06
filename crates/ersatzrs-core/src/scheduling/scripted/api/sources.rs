@@ -149,6 +149,7 @@ pub(in crate::scheduling::scripted) fn register(
                             PlaylistEnumerator::new(children).with_child_shuffle_seed(st.seed);
                         playlist.apply_history(&st.collect_playlist_history(&history_key));
                         st.playlist_history_keys.insert(key.clone(), history_key);
+                        st.restore_playlist_source(&key, &mut playlist);
                         st.playlist_enumerators.insert(key, playlist);
                     } else {
                         let items = st.source_media(&source)?;
@@ -179,8 +180,9 @@ pub(in crate::scheduling::scripted) fn register(
                     .get(&key)
                     .cloned()
                     .unwrap_or_default();
-                st.enumerators
-                    .insert(key.clone(), MediaEnumerator::new(&key, items));
+                let mut enumerator = MediaEnumerator::new(&key, items);
+                st.apply_history(&key, &mut enumerator, PlaybackOrder::None);
+                st.enumerators.insert(key, enumerator);
                 Ok(())
             })?,
         )?;
@@ -266,7 +268,8 @@ pub(in crate::scheduling::scripted) fn register(
                     }
 
                     st.playlist_history_keys.insert(key.clone(), history_key);
-                    st.playlist_enumerators.insert(key, playlist);
+                    st.restore_playlist_source(&key, &mut playlist);
+                        st.playlist_enumerators.insert(key, playlist);
                     Ok(())
                 },
             )?,
@@ -325,6 +328,7 @@ pub(in crate::scheduling::scripted) fn register(
                 }
 
                 st.playlist_history_keys.insert(key.clone(), history_key);
+                st.restore_playlist_source(&key, &mut playlist);
                 st.playlist_enumerators.insert(key, playlist);
                 Ok(())
             })?,

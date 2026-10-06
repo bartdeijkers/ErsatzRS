@@ -26,6 +26,9 @@ async fn fixture() -> (
         .execute(&pool)
         .await
         .unwrap();
+    // These identity tests exercise preparation of an explicitly selected track.
+    sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=1,"SubtitleStreamIndex"=4"#)
+        .execute(&pool).await.unwrap();
     channel.streaming_engine = StreamingEngine::Next;
     channel.subtitle_mode = ChannelSubtitleMode::Default;
     channel.preferred_subtitle_language_code = Some("eng".into());
@@ -230,7 +233,7 @@ async fn watermark_changes_fence_dynamic_publication_without_discarding_subtitle
 }
 
 #[tokio::test]
-async fn image_templates_use_bound_source_geometry_and_item_variables() {
+async fn canvas_projection_defers_mutable_templates_without_invalidating_subtitle_cache() {
     use ersatzrs_core::repositories::GraphicsRepository as _;
     use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig, ImageGraphicsConfig};
     let (pool, locker, _channel, start, _file) = fixture().await;
@@ -246,12 +249,20 @@ async fn image_templates_use_bound_source_geometry_and_item_variables() {
     sqlx::query(r#"INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId","Variables") VALUES (1,?,'{"FixtureRoot":"synthetic"}')"#)
         .bind(id).execute(&pool).await.unwrap();
     let first = snapshot(&pool, &locker, start).await;
-    let graphics = serde_json::to_value(&first.projection.item.graphics).unwrap();
-    assert_eq!(graphics[0]["source"]["path"], "synthetic/320-240-180.png");
+    let canvas = serde_json::to_value(&first.projection.canvas).unwrap();
+    assert_eq!(canvas["hint"]["video"][0]["width"], 320);
+    assert_eq!(canvas["hint"]["video"][0]["pix_fmt"], "bgra");
+    assert!(!canvas.to_string().contains("FixtureRoot"));
+    assert!(first.projection.item.graphics.is_empty());
     assert!(first.projection.pending_burn.is_some());
     sqlx::query(r#"UPDATE "PlayoutItemGraphicsElement" SET "Variables"='{"FixtureRoot":"changed"}' WHERE "PlayoutItemId"=1"#)
         .execute(&pool).await.unwrap();
     let changed = snapshot(&pool, &locker, start).await;
     assert_ne!(first.identity.descriptor, changed.identity.descriptor);
+    assert_eq!(
+        serde_json::to_value(&first.projection.canvas).unwrap(),
+        serde_json::to_value(&changed.projection.canvas).unwrap(),
+        "canvas occurrence stays stable while persisted item changes still fence track preparation"
+    );
     assert_eq!(first.identity.cache_key, changed.identity.cache_key);
 }

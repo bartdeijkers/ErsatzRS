@@ -32,7 +32,7 @@ impl Provider {
             else { when.method(GET).path("/Items").query_param("parentId", "4").query_param("includeItemTypes", "BoxSet"); }
             then.status(200).json_body(if plex {
                 json!({"MediaContainer": {"totalSize": 1, "Metadata": [{"ratingKey": "900", "title": "Provider collection", "librarySectionId": 4}]}})
-            } else { json!({"TotalRecordCount": 1, "Items": [{"Id": "900", "Name": "Provider collection"}]}) });
+            } else { json!({"TotalRecordCount": 1, "Items": [{"Id": "900", "Type": "BoxSet", "Name": "Provider collection"}]}) });
         }).await;
         let items = server.mock_async(|when, then| {
             if plex { when.method(GET).path("/library/collections/900/children"); }

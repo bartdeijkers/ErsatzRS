@@ -991,3 +991,11 @@ description = 'P2 (official yt-dlp add-on): the selected item thumbnail is maxre
 discovered  = '2026-09-18'
 resolved    = false
 evidence    = 'Windows dogfood: 14 published Best of the Worst items; maxresdefault.webp returns HTTP 404 while hqdefault.jpg returns 200 for every sampled id. Correction belongs in the official add-ons repository: choose an existing thumbnail from the yt-dlp thumbnails list or fall back to a smaller size.'
+
+[[debt]]
+id          = 'v111-selective-list-ingestion'
+description = 'Finding 01: saved rolling selection, manual decisions, preview, archive preservation and polling pause/resume.'
+discovered  = '2026-10-02'
+resolved    = true
+adr         = '0113'
+evidence    = 'Locally accepted in v111-findings-01 with ADR 0113: real SQLite upgrade/restart/retry, 3853 native tests and doctests, strict workspace lint, eight localized browser flows, real-worker decode/archive/failure preservation, smoke, web parity and final matched bundle. Packaged/platform deployment and publication are not claimed.'

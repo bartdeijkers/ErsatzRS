@@ -3,13 +3,22 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.3";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<Fallback>,
     pub playout: PlayoutFolder,
     pub ffmpeg: Ffmpeg,
     pub normalization: Normalization,
+}
+
+/// Emergency fallback card policy; ordinary subtitle selection is independent.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct Fallback {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_error: Option<bool>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -98,9 +107,13 @@ pub struct Video {
     pub buffer_kbps: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accel: Option<Acceleration>,
+    /// Windows adapter index. Omission keeps Next's automatic AMD selection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amf_device: Option<u32>,
     pub filters: VideoFilters,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_device: Option<String>,
+    /// Omission lets libva choose the driver for the selected VAAPI device.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_driver: Option<VaapiDriver>,
 }
@@ -136,6 +149,7 @@ pub enum AudioFormat {
 pub enum VideoFormat {
     H264,
     Hevc,
+    Mpeg2Video,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -189,10 +203,20 @@ pub struct PlayoutItem {
     pub graphics: Vec<Watermark>,
 }
 
+/// Official Next layer semantics: canvas sources already have output geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphicsLayerKind {
+    Media,
+    Canvas,
+}
+
 /// A single image/video overlay, always visible unless periodic timing is set.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Watermark {
     pub source: Source,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<GraphicsLayerKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing: Option<WatermarkTiming>,
     #[serde(skip_serializing_if = "Option::is_none")]

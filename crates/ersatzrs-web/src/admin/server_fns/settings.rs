@@ -377,7 +377,7 @@ async fn load_ffmpeg_settings_with_capabilities(
         .await
         .map_err(ServerFnError::new)?;
     let app_form = model.form;
-    let form = FfmpegSettingsForm {
+    let mut form = FfmpegSettingsForm {
         ffmpeg_path: app_form.ffmpeg_path,
         ffprobe_path: app_form.ffprobe_path,
         default_ffmpeg_profile_id: app_form.default_ffmpeg_profile_id,
@@ -398,6 +398,20 @@ async fn load_ffmpeg_settings_with_capabilities(
         default_mpeg_ts_script: app_form.default_mpeg_ts_script,
     };
 
+    let scripts = ersatzrs_infra::mpegts_scripts::discover_in(
+        &ersatzrs_infra::file_system_layout::mpegts_scripts_folder(),
+    )
+    .await
+    .map_err(ServerFnError::new)?;
+    let mpeg_ts_scripts = scripts
+        .into_iter()
+        .map(|script| SelectOption {
+            value: script.id,
+            label: script.definition.name,
+        })
+        .collect::<Vec<_>>();
+    reconcile_mpeg_ts_script_selection(&mut form.default_mpeg_ts_script, &mpeg_ts_scripts);
+
     let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
     let ffprobe_resolved = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
     let active_transcode_capacity =
@@ -415,12 +429,23 @@ async fn load_ffmpeg_settings_with_capabilities(
             .collect(),
         watermarks: settings_select_options(model.watermarks),
         fallback_fillers: settings_select_options(model.fallback_fillers),
-        mpeg_ts_scripts: vec![SelectOption {
-            value: "default".to_owned(),
-            label: "Default".to_owned(),
-        }],
+        mpeg_ts_scripts,
         custom_resolutions: settings_select_options(model.custom_resolutions),
     })
+}
+
+#[cfg(feature = "ssr")]
+fn reconcile_mpeg_ts_script_selection(selected: &mut String, scripts: &[SelectOption]) {
+    if scripts.iter().any(|script| script.value == *selected) {
+        return;
+    }
+    if let Some(script) = scripts
+        .iter()
+        .find(|script| script.value.eq_ignore_ascii_case("default"))
+        .or_else(|| scripts.first())
+    {
+        selected.clone_from(&script.value);
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -775,6 +800,32 @@ mod tests {
         ersatzrs_infra::db::init(&database_url)
             .await
             .expect("initialize test database")
+    }
+
+    #[test]
+    fn mpegts_script_selection_preserves_valid_and_recovers_missing_without_persistence() {
+        let scripts = vec![
+            SelectOption {
+                value: "custom".into(),
+                label: "A custom script".into(),
+            },
+            SelectOption {
+                value: "DeFaUlT".into(),
+                label: "Default".into(),
+            },
+        ];
+        let mut selected = "custom".to_owned();
+        reconcile_mpeg_ts_script_selection(&mut selected, &scripts);
+        assert_eq!(selected, "custom");
+        selected = "removed".into();
+        reconcile_mpeg_ts_script_selection(&mut selected, &scripts);
+        assert_eq!(selected, "DeFaUlT");
+        selected = "removed".into();
+        reconcile_mpeg_ts_script_selection(&mut selected, &scripts[..1]);
+        assert_eq!(selected, "custom");
+        selected = "removed".into();
+        reconcile_mpeg_ts_script_selection(&mut selected, &[]);
+        assert_eq!(selected, "removed");
     }
 
     #[tokio::test]

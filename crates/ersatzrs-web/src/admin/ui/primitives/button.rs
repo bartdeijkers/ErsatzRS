@@ -14,7 +14,8 @@ pub enum ButtonVariant {
     Danger,
 }
 
-fn btn_class(variant: ButtonVariant) -> &'static str {
+/// Reuse the standard button appearance for native submit buttons.
+pub(crate) fn btn_class(variant: ButtonVariant) -> &'static str {
     match variant {
         ButtonVariant::Primary => style::btn_primary,
         ButtonVariant::Secondary => style::btn_secondary,

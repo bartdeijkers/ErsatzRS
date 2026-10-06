@@ -110,9 +110,10 @@ fn effective_bandwidth(spec: &ChannelStreamingSpec) -> i64 {
 
 fn codec_inf(spec: &ChannelStreamingSpec) -> String {
     let video_codec = match spec.video_format {
-        FFmpegProfileVideoFormat::Av1 => "av01.0.01M.08",
         FFmpegProfileVideoFormat::Hevc => "hvc1.1.6.L93.B0",
         FFmpegProfileVideoFormat::H264 => "avc1.4D4028",
+        // AV1 level, tier and bit depth cannot be inferred from this projection.
+        // Omit CODECS rather than advertising a guessed stream (ADR 0106).
         _ => "",
     };
     let audio_codec = match spec.audio_format {
@@ -121,24 +122,36 @@ fn codec_inf(spec: &ChannelStreamingSpec) -> String {
         _ => "",
     };
 
-    let mut codecs = Vec::new();
-    if !video_codec.is_empty() {
-        codecs.push(video_codec);
-    }
-    if !audio_codec.is_empty() {
-        codecs.push(audio_codec);
-    }
-
-    if codecs.is_empty() {
+    if video_codec.is_empty() || audio_codec.is_empty() {
         String::new()
     } else {
-        format!(",CODECS=\"{}\"", codecs.join(","))
+        format!(",CODECS=\"{video_codec},{audio_codec}\"")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codec_attribute_requires_both_audio_and_video_identifiers() {
+        let mut spec = h264_aac_1080p();
+        assert_eq!(codec_inf(&spec), ",CODECS=\"avc1.4D4028,mp4a.40.2\"");
+        spec.video_format = FFmpegProfileVideoFormat::Mpeg2Video;
+        assert!(
+            codec_inf(&spec).is_empty(),
+            "MPEG-2 must not advertise audio-only CODECS"
+        );
+        spec.video_format = FFmpegProfileVideoFormat::H264;
+        spec.audio_format = FFmpegProfileAudioFormat::Copy;
+        assert!(
+            codec_inf(&spec).is_empty(),
+            "unknown audio must not advertise video-only CODECS"
+        );
+        spec.video_format = FFmpegProfileVideoFormat::Hevc;
+        spec.audio_format = FFmpegProfileAudioFormat::Ac3;
+        assert_eq!(codec_inf(&spec), ",CODECS=\"hvc1.1.6.L93.B0,ac-3\"");
+    }
 
     #[test]
     fn next_conversion_links_selected_rendition_for_channel_and_preview() {
@@ -175,6 +188,21 @@ mod tests {
             with_next_subtitles(master.clone(), &channel, false, &token),
             master
         );
+    }
+
+    #[test]
+    fn av1_variant_omits_unproven_level_and_bit_depth() {
+        let mut spec = h264_aac_1080p();
+        spec.video_format = FFmpegProfileVideoFormat::Av1;
+        let playlist = build_multi_variant_playlist(
+            "http",
+            "example.test",
+            "1",
+            Some(&spec),
+            &AccessToken::default(),
+        );
+        assert!(!playlist.contains("CODECS="));
+        assert!(playlist.contains("RESOLUTION=1920x1080"));
     }
 
     fn h264_aac_1080p() -> ChannelStreamingSpec {

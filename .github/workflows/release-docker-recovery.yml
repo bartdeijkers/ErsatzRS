@@ -1,0 +1,138 @@
+name: Recover release Docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing unpublished stable release tag
+        required: true
+        type: string
+      source_sha:
+        description: Full application commit already accepted by CI
+        required: true
+        type: string
+      assets_run:
+        description: Release run containing the matching successful web-assets job
+        required: true
+        type: string
+
+permissions:
+  # GitHub only exposes draft releases to callers with repository push access.
+  contents: write
+  actions: read
+  packages: write
+
+concurrency:
+  group: release-docker-recovery-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Recover tagged application image
+    runs-on: [self-hosted, ersatzrs-linux-release]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Retain corrected build recipe
+        shell: bash
+        run: cp Dockerfile.release "$RUNNER_TEMP/Dockerfile.release.recovery"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 1
+      - name: Verify source, draft and accepted CI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ASSETS_RUN: ${{ inputs.assets_run }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ASSETS_RUN" =~ ^[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python3 - <<'PY'
+          import json, os, subprocess
+          def gh(*args):
+              return json.loads(subprocess.check_output(['gh', *args], text=True))
+          release = gh('release', 'view', os.environ['TAG'], '--json', 'isDraft,isPrerelease')
+          if not release['isDraft'] or release['isPrerelease']:
+              raise SystemExit('Recovery requires an unpublished stable draft')
+          endpoint = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['ASSETS_RUN']}"
+          asset_run = gh('api', endpoint)
+          expected = {'head_sha': os.environ['SOURCE_SHA'], 'head_branch': os.environ['TAG'],
+                      'status': 'completed', 'path': '.github/workflows/release.yml'}
+          if any(asset_run.get(key) != value for key, value in expected.items()):
+              raise SystemExit('Web-assets run does not match the completed tagged release')
+          asset_jobs = gh('api', endpoint + '/jobs?per_page=100')['jobs']
+          if not any(job['name'] == 'Build web assets' and job['conclusion'] == 'success'
+                     for job in asset_jobs):
+              raise SystemExit('Matching web-assets job did not succeed')
+          required = {'Format', 'Clippy', 'Test', 'Playwright E2E (chromium)',
+                      'Playwright E2E (firefox)', 'Cargo deny', 'Documentation links',
+                      'Commit lint', 'Next engine'}
+          runs = gh('run', 'list', '--workflow', 'ci.yml', '--commit', os.environ['SOURCE_SHA'],
+                    '--limit', '100', '--json', 'databaseId,headSha,status,conclusion')
+          for run in runs:
+              if run['status'] != 'completed' or run['conclusion'] != 'success':
+                  continue
+              jobs = gh('run', 'view', str(run['databaseId']), '--json', 'jobs')['jobs']
+              passed = {j['name'] for j in jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
+              if required <= passed:
+                  print('Accepted source CI:', run['databaseId'])
+                  break
+          else:
+              raise SystemExit('No complete successful source CI gate found')
+          PY
+          cp "$RUNNER_TEMP/Dockerfile.release.recovery" Dockerfile.release
+          test "$(git diff --name-only)" = Dockerfile.release
+          git diff -- Dockerfile.release > recipe.patch
+          echo "REGISTRY_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "VERSION=$TAG" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-assets
+          path: release-web-assets
+          run-id: ${{ inputs.assets_run }}
+          github-token: ${{ github.token }}
+      - name: Stage pinned Next snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download next-4ad282f --repo "$GITHUB_REPOSITORY" --dir .next-snapshot
+      - name: Build and push corrected image
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          files: docker-bake.hcl
+          targets: ersatzrs-release
+          push: true
+          set: |
+            ersatzrs-release.labels.org.opencontainers.image.revision=${{ inputs.source_sha }}
+            ersatzrs-release.labels.io.ersatzrs.build-recipe-revision=${{ github.sha }}
+      - name: Publish and verify channel manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$REGISTRY_IMAGE:$VERSION" > manifest.txt
+          grep -q 'linux/amd64' manifest.txt
+          grep -q 'linux/arm64' manifest.txt
+          grep -q 'linux/arm/v7' manifest.txt
+          docker buildx imagetools create -t "$REGISTRY_IMAGE:latest" "$REGISTRY_IMAGE:$VERSION"
+          docker buildx imagetools inspect "$REGISTRY_IMAGE:latest" > channel-manifest.txt
+          test "$(awk '/^Digest:/ {print $2}' manifest.txt)" = "$(awk '/^Digest:/ {print $2}' channel-manifest.txt)"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docker-recovery-evidence
+          path: |
+            recipe.patch
+            manifest.txt
+            channel-manifest.txt

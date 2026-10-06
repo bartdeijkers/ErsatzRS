@@ -47,7 +47,7 @@ fn from_timestamp_ticks(ticks: i64) -> Result<DateTime<Utc>> {
 
 pub(super) struct Occurrence {
     gap: Gap,
-    item: PlayoutItem,
+    pub(super) item: PlayoutItem,
     audio: Option<usize>,
     descriptor: String,
     concrete: Option<protocol::PlayoutItem>,
@@ -249,7 +249,12 @@ impl NextHost {
             {
                 return Err(unavailable());
             }
-            return dynamic_item::resolve_at(concrete, now).map_err(|_| unavailable());
+            let mut resolved =
+                dynamic_item::resolve_at(concrete, now).map_err(|_| unavailable())?;
+            if let Some(canvas) = &projected.snapshot.projection.canvas {
+                resolved.graphics = vec![canvas.publish(&self.media, Some(instance), now)?];
+            }
+            return Ok(resolved);
         }
         Box::pin(self.prepare_fallback(
             projected,
@@ -303,6 +308,9 @@ impl NextHost {
         {
             return Err(unavailable());
         }
+        snapshot
+            .projection
+            .publish_graphics(&self.media, Some(instance), now)?;
         if let Some(context) = snapshot.retained_remote.take() {
             return Box::pin(
                 self.resolve_retained(snapshot, context, request, instance, audio, now, deadline),
@@ -514,12 +522,12 @@ impl NextHost {
                 stream_index: Some(0),
             });
         }
-        projected.item.graphics = super::graphics::project(
+        projected.canvas = super::graphics::project(
             &self.pool,
             channel,
             &media,
             &profile.resolution,
-            &projected.item,
+            &mut projected.item,
             &watermarks,
             &graphics,
         )

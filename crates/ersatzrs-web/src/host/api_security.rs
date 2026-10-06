@@ -12,15 +12,35 @@ use ersatzrs_infra::api_security::ApiKey;
 const API_KEY_HEADER: &str = "x-ers-api-key";
 
 pub(crate) async fn openapi() -> axum::Json<serde_json::Value> {
-    axum::Json(serde_json::json!({
+    let mut document = serde_json::json!({
         "openapi": "3.1.0",
         "info": {"title": "ErsatzRS machine API", "version": env!("CARGO_PKG_VERSION")},
         "components": {"securitySchemes": {"ApiKey": {
             "type": "apiKey", "in": "header", "name": "X-Ers-Api-Key",
             "description": "API key from api-secrets.json in the application state directory"
+        }}, "schemas": {"HlsSessionModel": {
+            "type": "object",
+            "required": ["channelNumber", "state", "transcodedUntil", "lastAccess"],
+            "properties": {
+                "channelNumber": {"type": "string"},
+                "state": {"type": "string", "description": "Native worker state or next"},
+                "transcodedUntil": {"type": ["null", "string"], "format": "date-time",
+                    "description": "Host transcode cursor; null for Next or before native startup"},
+                "lastAccess": {"type": "string", "format": "date-time"}
+            }
         }}},
         "security": [{"ApiKey": []}],
         "paths": {
+            "/api/sessions": {"get": {
+                "operationId": "getSessions", "summary": "List live playlist-worker sessions",
+                "responses": {
+                    "200": {"description": "Current native and Next workers",
+                        "content": {"application/json": {"schema": {"type": "array",
+                            "items": {"$ref": "#/components/schemas/HlsSessionModel"}}}}},
+                    "401": {"description": "Missing or invalid API key"},
+                    "503": {"description": "Session reporting unavailable"}
+                }
+            }},
             "/api/maintenance/clean_artwork": {"post": {
                 "operationId": "cleanArtwork",
                 "summary": "Queue orphan artwork cleanup",
@@ -42,7 +62,218 @@ pub(crate) async fn openapi() -> axum::Json<serde_json::Value> {
                 }
             }}
         }
-    }))
+    });
+    describe_machine_mutations(&mut document);
+    axum::Json(document)
+}
+
+fn describe_machine_mutations(document: &mut serde_json::Value) {
+    use serde_json::json;
+    for (path, method, operation, schema, codes) in [
+        (
+            "/api/ffmpeg/profiles",
+            "get",
+            "GetFFmpegProfiles",
+            None,
+            &[500][..],
+        ),
+        (
+            "/api/ffmpeg/profiles/new",
+            "post",
+            "CreateFFmpegProfile",
+            Some("FfmpegProfileMutation"),
+            &[400, 409, 500][..],
+        ),
+        (
+            "/api/ffmpeg/profiles/update",
+            "put",
+            "UpdateFFmpegProfile",
+            Some("FfmpegProfileMutation"),
+            &[400, 404, 409, 500][..],
+        ),
+        (
+            "/api/ffmpeg/delete/{id}",
+            "delete",
+            "DeleteFFmpegProfile",
+            None,
+            &[400, 404, 409, 500][..],
+        ),
+        (
+            "/api/collections/smart",
+            "get",
+            "GetSmartCollections",
+            None,
+            &[500][..],
+        ),
+        (
+            "/api/collections/smart/new",
+            "post",
+            "CreateSmartCollection",
+            Some("SmartCollectionMutation"),
+            &[400, 409, 500][..],
+        ),
+        (
+            "/api/collections/smart/update",
+            "put",
+            "UpdateSmartCollection",
+            Some("SmartCollectionMutation"),
+            &[400, 404, 409, 500][..],
+        ),
+        (
+            "/api/collections/smart/delete/{id}",
+            "delete",
+            "DeleteSmartCollection",
+            None,
+            &[404, 500][..],
+        ),
+        (
+            "/api/maintenance/empty_trash",
+            "post",
+            "EmptyTrash",
+            None,
+            &[500][..],
+        ),
+    ] {
+        let mut entry = json!({"operationId":operation,"responses":{
+            "200":{"description":"Operation completed"},
+            "401":{"description":"Missing or invalid API key"}
+        }});
+        for code in codes {
+            let description = match code {
+                400 => "Invalid request or mixed validation errors",
+                404 => "Requested record does not exist",
+                409 => "Mutation conflicts with current state",
+                _ => "Operation failed",
+            };
+            entry["responses"][code.to_string()] = json!({"description":description});
+        }
+        if path.contains("{id}") {
+            entry["parameters"] = json!([{"name":"id","in":"path","required":true,
+                "schema":{"type":"integer","format":"int64"}}]);
+        }
+        if let Some(schema) = schema {
+            entry["requestBody"] = json!({"required":true,"content":{"application/json":{
+                "schema":{"$ref":format!("#/components/schemas/{schema}")}
+            }}});
+        }
+        document["paths"][path][method] = entry;
+    }
+    describe_machine_mutation_schemas(document);
+}
+
+fn describe_machine_mutation_schemas(document: &mut serde_json::Value) {
+    use serde_json::{json, Value};
+    let mut properties = serde_json::Map::new();
+    for name in [
+        "name",
+        "vaapiDisplay",
+        "vaapiDevice",
+        "videoProfile",
+        "videoPreset",
+    ] {
+        properties.insert(
+            name.into(),
+            if name == "name" {
+                json!({"type":"string","maxLength":50})
+            } else {
+                json!({"type":["string","null"]})
+            },
+        );
+    }
+    for name in [
+        "ffmpegProfileId",
+        "resolutionId",
+        "threadCount",
+        "videoBitrate",
+        "videoBufferSize",
+        "audioBitrate",
+        "audioBufferSize",
+        "audioChannels",
+        "audioSampleRate",
+    ] {
+        properties.insert(name.into(), json!({"type":"integer"}));
+    }
+    properties.insert(
+        "qsvExtraHardwareFrames".into(),
+        json!({"type":["integer","null"]}),
+    );
+    properties.insert("targetLoudness".into(), json!({"type":["number","null"]}));
+    for name in [
+        "normalizeAudio",
+        "normalizeVideo",
+        "allowBFrames",
+        "normalizeFramerate",
+        "normalizeColors",
+        "deinterlaceVideo",
+    ] {
+        properties.insert(name.into(), json!({"type":"boolean"}));
+    }
+    add_profile_enum_schemas(&mut properties);
+    document["components"]["schemas"]["FfmpegProfileMutation"] = json!({
+        "type":"object","required":["name","resolutionId"],"properties":Value::Object(properties),
+        "description":"Accepts upstream NormalizeAudio/Video and ErsatzRS TranscodeAudio/Video names. Updates preserve ErsatzRS-only HDR and tune values. ffmpegProfileId selects the update record."
+    });
+    document["components"]["schemas"]["SmartCollectionMutation"] = json!({"type":"object",
+        "required":["name","query"],"properties":{"id":{"type":"integer"},
+            "name":{"type":"string","maxLength":50},"query":{"type":"string"}}
+    });
+}
+
+fn add_profile_enum_schemas(properties: &mut serde_json::Map<String, serde_json::Value>) {
+    use serde_json::json;
+    for (name, names, numbers) in [
+        (
+            "hardwareAcceleration",
+            vec![
+                "None",
+                "Qsv",
+                "Nvenc",
+                "Vaapi",
+                "VideoToolbox",
+                "Amf",
+                "V4l2m2m",
+                "Rkmpp",
+            ],
+            vec![0, 1, 2, 3, 4, 5, 6, 7],
+        ),
+        (
+            "vaapiDriver",
+            vec!["Default", "iHD", "i965", "RadeonSI", "Nouveau"],
+            vec![0, 1, 2, 3, 4],
+        ),
+        (
+            "scalingBehavior",
+            vec!["ScaleAndPad", "Stretch", "Crop"],
+            vec![0, 1, 2],
+        ),
+        (
+            "padMode",
+            vec!["HardwareIfPossible", "Software"],
+            vec![0, 1],
+        ),
+        (
+            "videoFormat",
+            vec!["None", "H264", "Hevc", "Mpeg2Video", "Av1", "Copy"],
+            vec![0, 1, 2, 3, 4, 99],
+        ),
+        ("bitDepth", vec!["EightBit", "TenBit"], vec![0, 1]),
+        (
+            "tonemapAlgorithm",
+            vec!["Linear", "Clip", "Gamma", "Reinhard", "Mobius", "Hable"],
+            vec![0, 1, 2, 3, 4, 5],
+        ),
+        (
+            "audioFormat",
+            vec!["None", "Aac", "Ac3", "AacLatm", "Copy"],
+            vec![0, 1, 2, 3, 99],
+        ),
+        ("normalizeLoudnessMode", vec!["Off", "LoudNorm"], vec![0, 1]),
+    ] {
+        properties.insert(
+            name.into(),
+            json!({"oneOf":[{"type":"string","enum":names},{"type":"integer","enum":numbers}]}),
+        );
+    }
 }
 
 pub(crate) async fn authenticate(

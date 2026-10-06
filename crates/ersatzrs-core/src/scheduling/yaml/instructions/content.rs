@@ -21,10 +21,7 @@ pub(super) fn handle_all(
         return Ok(());
     };
     let count = context.content_len(content);
-    for _ in 0..count {
-        schedule_next_with_rolls(context, instruction, definition, content)?;
-    }
-    Ok(())
+    schedule_count(context, instruction, definition, content, count)
 }
 
 pub(super) fn handle_count(
@@ -47,8 +44,27 @@ pub(super) fn handle_count(
         .as_deref()
         .map(|expr| eval_count_expression(expr, enumerator_len, seed))
         .unwrap_or_default();
-    for _ in 0..count {
+    schedule_count(context, instruction, definition, content, count)
+}
+
+pub(super) fn schedule_count(
+    context: &mut YamlContext,
+    instruction: &YamlInstruction,
+    definition: &YamlPlayoutDefinition,
+    content: &str,
+    count: usize,
+) -> Result<(), SchedulingError> {
+    for index in 0..count {
+        let before_items = context.added_items.len();
         schedule_next_with_rolls(context, instruction, definition, content)?;
+        if index + 1 < count && context.added_items.len() > before_items {
+            context.capture_checkpoint(
+                definition,
+                Some(super::super::checkpoints::PendingInstruction::Count(
+                    count - index - 1,
+                )),
+            )?;
+        }
     }
     Ok(())
 }

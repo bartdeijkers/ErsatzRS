@@ -137,6 +137,48 @@ automatic landing removal and hydration before asserting the exact item IDs,
 order and title. Do not restore a manual navigation that hides a broken import
 completion transition.
 
+## Drawvg path and preview slate proof
+
+Finding 05 uses `native_drawvg_paths_render_complete_marker_frames` in
+`ersatzrs-ffmpeg/tests/drawvg_paths.rs` with `FFMPEG_PATH` and explicit ignored-test
+selection for generated-path rendering. The Windows gate is
+`scripts/e2e/windows-drawvg-paths.ps1` (PowerShell 7): prepare an owned temporary
+root, emit filters with the `drawvg-paths` example, then render all six manifest
+cases and check complete red/blue/white pixels. It also proves following native
+Drawtext with a real font and a text-file reload path. No server/database is used.
+
+The `channel-watch.spec.ts` real error-slate case injects invalid synthetic VGS
+through a disposable graphics attachment. It requires actual Hls.js playback and
+the matching segment's original redacted failure, plus responsive warning layout.
+An interrupted status request must show unknown output and recover afterwards.
+The ordinary real derivative case requires ordinary output without that warning.
+Backend regressions preserve buffered slate provenance across subsequent encoder
+success, match served playlist times from the saved anchor independently of the
+current clock, reject stale replacement-worker reads and verify read-only polling.
+
+## Programme-aware graphics proof
+
+Finding 04 uses `ersatzrs-core::programme_tests` for scheduler-specific grouping,
+split films, filler boundaries, occurrence identity, missing/overlapping context
+and local-day/DST selection. `ersatzrs-infra/tests/graphics_programme_context.rs`
+checks actual historical repository previews, raw Epg compatibility, explicit
+overrides, long split programmes and real database refresh for source/mirror
+controllers. Dynamic-text tests prove bounded reads, cancellation and retention
+of the last good file. Schedule-copy, migration-upgrade, Block continuation and
+the deferred-save fresh-process maintenance fixtures preserve attachment values
+and the published programme prefix.
+
+Run the `finding 04 programme graphics acceptance` cases in
+`tests/e2e/channel-watch.spec.ts` against the runner's disposable database.
+Historical cases cover draft/saved text, both renderers, English/Dutch, mobile
+and no-JavaScript operation. The live cases require decoded Hls.js pixels and a
+bounded 30-second capture of the regular IPTV endpoint, full audio/video decode,
+programme frames on both sides of the boundary and an unchanged stored timeline.
+Inspect the saved programme frames alongside `served-transition.json`; a pixel
+change alone does not identify the displayed title. The fixture reserves four
+bounded transcode slots for both outputs and their boundary handovers, then
+restores the setting. The transport-integrity gate remains a separate check.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that
@@ -347,6 +389,20 @@ This split keeps the porter's edit loop short — full-workspace gates and
 hydration-asset rebuilds happen once at commit time, not on every iteration.
 
 ## Admin UI E2E
+
+Run `schedule-deferred-save.spec.ts` for Classic deferred item saves through
+hydrated and no-JavaScript editors, retained horizons, pending/build status,
+incompatible-edit rejection and preservation of unsaved fields during polling.
+The infrastructure natural-maintenance restart regression supplies the actual
+future-application proof; the browser fixture deliberately retains a distant horizon.
+
+Run `local-library-paths.spec.ts` for local-library validation feedback, draft
+correction, localized errors, literal percent paths and unchanged scanned-media
+identity. It exercises Chromium and Firefox with JavaScript enabled and disabled.
+
+Run `dependent-group-selections.spec.ts` for Deco and Playout Templates group
+changes. It verifies cleared child IDs, replacement save/reload persistence and
+retained date filters in Chromium and Firefox, using the wrapper's isolated database.
 
 Scripted admin parity checks live under `tests/e2e/`. CI runs the full
 configured Playwright suite by default through:

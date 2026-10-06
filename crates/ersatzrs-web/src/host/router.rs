@@ -1,7 +1,7 @@
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::{
@@ -80,6 +80,40 @@ pub fn build_app(app_state: AppState) -> Router {
         Router::new()
             .route("/healthz", get(super::bootstrap::healthz))
             .route("/api/openapi.json", get(super::api_security::openapi))
+            .route("/api/ffmpeg/profiles", get(api::machine_profiles::list))
+            .route(
+                "/api/ffmpeg/profiles/new",
+                post(api::machine_profiles::create),
+            )
+            .route(
+                "/api/ffmpeg/profiles/update",
+                put(api::machine_profiles::update),
+            )
+            .route(
+                "/api/ffmpeg/delete/{id}",
+                delete(api::machine_profiles::delete),
+            )
+            .route(
+                "/api/collections/smart",
+                get(api::machine_collections::list),
+            )
+            .route(
+                "/api/collections/smart/new",
+                post(api::machine_collections::create),
+            )
+            .route(
+                "/api/collections/smart/update",
+                put(api::machine_collections::update),
+            )
+            .route(
+                "/api/collections/smart/delete/{id}",
+                delete(api::machine_collections::delete),
+            )
+            .route(
+                "/api/maintenance/empty_trash",
+                post(api::maintenance::empty_trash),
+            )
+            .route("/api/sessions", get(api::sessions::list_sessions))
             .route(
                 "/changelog.md",
                 get(crate::admin::release_notes::full_changelog),
@@ -87,6 +121,14 @@ pub fn build_app(app_state: AppState) -> Router {
             .route(
                 "/api/maintenance/clean_artwork",
                 post(api::maintenance::clean_artwork),
+            )
+            .route(
+                "/admin-api/graphics-elements/author",
+                post(crate::api::graphics_elements::author),
+            )
+            .route(
+                "/admin-api/system/health/refresh",
+                post(api::maintenance::refresh_health),
             )
             .route(
                 "/admin-api/addons/package",
@@ -493,6 +535,30 @@ pub fn build_app(app_state: AppState) -> Router {
                 get(api::media_actions::media_info),
             )
             .route(
+                "/api/troubleshoot/playback/previews",
+                post(api::troubleshooting::queue_preview),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}",
+                get(api::troubleshooting::owned_preview_status),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}/stop",
+                post(api::troubleshooting::stop_owned_preview),
+            )
+            .route(
+                "/api/troubleshoot/playback/previews/{id}/files/{filename}",
+                get(api::troubleshooting::owned_preview_file),
+            )
+            .route(
+                "/admin-api/troubleshoot/playback/start",
+                post(api::troubleshooting::start_preview_form),
+            )
+            .route(
+                "/admin-api/troubleshoot/playback/{id}/stop",
+                post(api::troubleshooting::stop_preview_form),
+            )
+            .route(
                 "/api/troubleshoot/playback/archive",
                 get(api::troubleshooting::playback_archive),
             )
@@ -647,6 +713,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
 pub(crate) fn build_internal_app(app_state: AppState) -> Router {
     Router::new()
         .route(
+            "/ffmpeg/external-media/{source}/{expires}",
+            get(iptv::next_media::get_external_media),
+        )
+        .route(
             "/ffmpeg/next-fallback/{channel}/{start}/{finish}",
             get(iptv::next_media::get_fallback),
         )
@@ -658,6 +728,7 @@ pub(crate) fn build_internal_app(app_state: AppState) -> Router {
             "/ffmpeg/next-prepared/{instance}/{transfer}",
             get(iptv::next_media::get_prepared),
         )
+        .route("/ffmpeg/next-canvas", get(iptv::next_canvas::get_canvas))
         .route(
             "/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}",
             get(iptv::next_media::get_item),

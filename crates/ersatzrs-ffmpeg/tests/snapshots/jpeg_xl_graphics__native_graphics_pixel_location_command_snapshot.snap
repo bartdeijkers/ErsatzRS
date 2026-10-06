@@ -1,0 +1,10 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/jpeg_xl_graphics.rs
+assertion_line: 481
+expression: "commands.join(\"\\n\\n\")"
+---
+image=true
+-nostdin -hide_banner -nostats -loglevel error -f lavfi -readrate 1 -i color=c=black@0.0:s=160x120:r=5/1,format=bgra -f concat -safe 0 -protocol_whitelist file -i <graphics>/9-jpeg-xl.ffconcat -filter_complex [1:0]settb=AVTB,trim=start=0.4,setpts=PTS-0.4/TB,format=yuva420p|yuva444p|yuva422p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(alpha(X,Y)*((0.5+(0*(0.4+T)))),0,255)'[gi0];[0:0][gi0]overlay=x=31:y=43:format=rgb[vge0];[vge0]format=bgra[vpf] -map [vpf] -t 00:00:00.4000000 -an -c:v ffv1 -level 3 -slices 16 -slicecrc 0 -pix_fmt bgra -f nut pipe:1
+
+image=false
+-nostdin -hide_banner -nostats -loglevel error -f lavfi -readrate 1 -i color=c=black@0.0:s=160x120:r=5/1,format=bgra -f concat -safe 0 -protocol_whitelist file -i <graphics>/9-jpeg-xl.ffconcat -filter_complex [1:0]settb=AVTB,trim=start=0.4,setpts=PTS-0.4/TB,format=yuva420p|yuva444p|yuva422p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(alpha(X,Y)*((0.5+(0*(0.6+T)))),0,255)'[gi0];[0:0][gi0]overlay=x=31:y=43:format=rgb:enable='gte((t+0.6),0.2)'[vge0];[vge0]format=bgra[vpf] -map [vpf] -t 00:00:00.4000000 -an -c:v ffv1 -level 3 -slices 16 -slicecrc 0 -pix_fmt bgra -f nut pipe:1

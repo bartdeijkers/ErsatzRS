@@ -155,7 +155,28 @@ async fn item_preferences_and_relative_sidecars_preserve_indices_and_seek() {
         preferred_subtitle_language_code: Some("nld".to_owned()),
         ..item()
     };
-    let projected = project(&pool, &channel, &item).await.unwrap();
+    let root = tempfile::tempdir().unwrap();
+    tokio::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:01,000 --> 00:00:02,000\nCaption\n",
+    )
+    .await
+    .unwrap();
+    let projected = project_item(
+        &pool,
+        &channel,
+        &item,
+        100,
+        wire::Source::Local {
+            path: root.path().join("fixture.mkv").to_str().unwrap().to_owned(),
+            probe_hint: None,
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        &Resolution::default(),
+    )
+    .await
+    .unwrap();
     let value = serde_json::to_value(projected).unwrap();
     assert!(value.get("source").is_none());
     assert_eq!(value["tracks"]["audio"]["stream_index"], 2);
@@ -163,10 +184,7 @@ async fn item_preferences_and_relative_sidecars_preserve_indices_and_seek() {
     assert_eq!(value["tracks"]["subtitle"]["stream_index"], 0);
     assert_eq!(
         value["tracks"]["subtitle"]["source"]["path"],
-        std::path::Path::new("media")
-            .join("fixture.nl.srt")
-            .to_str()
-            .unwrap()
+        root.path().join("fixture.nl.srt").to_str().unwrap()
     );
     for kind in ["video", "audio", "subtitle"] {
         assert_eq!(value["tracks"][kind]["source"]["in_point_ms"], 1000);
@@ -706,7 +724,7 @@ async fn unextracted_text_fixture() -> DbPool {
 }
 
 #[tokio::test]
-async fn next_embedded_text_bypasses_native_enable_and_extraction_restrictions() {
+async fn next_automatic_embedded_text_respects_settings_while_explicit_pins_remain_exact() {
     let pool = unextracted_text_fixture().await;
     let channel = Channel {
         next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
@@ -714,12 +732,13 @@ async fn next_embedded_text_bypasses_native_enable_and_extraction_restrictions()
         subtitle_mode: ChannelSubtitleMode::Default,
         ..Default::default()
     };
-    let projected = project(&pool, &channel, &item()).await.unwrap();
-    let track = projected.tracks.unwrap().subtitle.unwrap();
-    assert_eq!(track.stream_index, Some(4));
-    assert!(
-        matches!(track.source, Some(wire::Source::Local { path, .. }) if path == "media/fixture.mkv")
-    );
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
     assert!(crate::playback::select_playback_subtitle(
         &pool,
         10,
@@ -745,6 +764,13 @@ async fn next_embedded_text_bypasses_native_enable_and_extraction_restrictions()
     .await
     .unwrap()
     .is_none());
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
     let mut pinned = item();
     pinned.pinned_stream_selection = Some(PinnedStreamSelection {
         media_version_id: 100,
@@ -795,6 +821,13 @@ async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity()
         subtitle_mode: ChannelSubtitleMode::Default,
         ..Default::default()
     };
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(4),
+    });
     let source = wire::Source::Http {
         probe_hint: None,
         is_live: None,
@@ -811,7 +844,7 @@ async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity()
     let projected = project_item(
         &pool,
         &channel,
-        &item(),
+        &pinned,
         100,
         source,
         &Resolution::default(),
@@ -827,17 +860,11 @@ async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity()
         .execute(&pool)
         .await
         .unwrap();
-    assert!(project(&pool, &channel, &item())
-        .await
-        .unwrap()
-        .tracks
-        .unwrap()
-        .subtitle
-        .is_none());
+    assert!(project(&pool, &channel, &pinned).await.is_err());
 }
 
 #[tokio::test]
-async fn next_custom_embedded_text_is_available_without_extraction_and_native_is_unchanged() {
+async fn next_custom_selection_excludes_unextracted_text_like_native() {
     use std::io::Write as _;
     let pool = unextracted_text_fixture().await;
     let folder = crate::file_system_layout::channel_stream_selectors_folder();
@@ -866,17 +893,13 @@ async fn next_custom_embedded_text_is_available_without_extraction_and_native_is
         subtitle_mode: ChannelSubtitleMode::Default,
         ..Default::default()
     };
-    assert_eq!(
-        project(&pool, &channel, &item())
-            .await
-            .unwrap()
-            .tracks
-            .unwrap()
-            .subtitle
-            .unwrap()
-            .stream_index,
-        Some(4)
-    );
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
     assert!(crate::playback::select_custom_playback_streams(
         &pool,
         100,
@@ -928,7 +951,14 @@ async fn next_burn_rejects_unextracted_embedded_text_before_publication() {
         subtitle_mode: ChannelSubtitleMode::Default,
         ..Default::default()
     };
-    let error = project(&pool, &channel, &item()).await.err().unwrap();
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(4),
+    });
+    let error = project(&pool, &channel, &pinned).await.err().unwrap();
     assert!(error.to_string().contains("require an extracted sidecar"));
     assert!(!error.to_string().contains("media/"));
 }
@@ -1121,3 +1151,6 @@ fn local_source_seek_preserves_milliseconds_and_open_ended_intervals() {
         }
     }
 }
+
+#[path = "subtitle_availability_tests.rs"]
+mod subtitle_availability_tests;

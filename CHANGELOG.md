@@ -13,7 +13,127 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the dependency rollup while preserving the current Unicode case-mapping
+  dependency and workspace integration.
+
+### Fixed
+
+- Apply exact Image/Motion pixel placement in native rendering and previews,
+  overriding anchors, percentage margins and source-content padding. Preserve
+  authored Motion alpha/timing through YAML and show long titles with independent
+  heading/title fonts and truthful fixed-size text behavior.
+
+- Play compact animated JPEG XL graphics with decoded duration, bounded native
+  repeat and programme-relative phase seeking. Preserve source alpha, evaluate
+  constant and Boolean opacity without per-pixel processing, and apply Motion
+  timing to regular playback as well as previews. Support JPEG XL uploads and
+  native Image/Motion previews with localized animation guidance.
+
+- Author every native graphics kind with placement, timing, layering and guide
+  controls; validate YAML and missing fonts, media and variables before saving.
+  Preview unsaved definitions through the real native canvas and explain each
+  text renderer's font and width behavior. Resolve subtitle programme variables
+  through the shared parser, bound native Lua drawing and include PNG encoding
+  in runtime health checks.
+
+- Select add-on list items with saved rolling age, newest-count, duration and
+  title filters, manual pins and exclusions, and an accepted/rejected preview.
+  Keep archived media and the last complete publication while the existing
+  durable workers apply the selection; pause polling without losing its cadence.
+
+- Resolve native graphics programme labels through the same scheduler-specific
+  guide grouping as XMLTV, including split films, filler, historical timestamps
+  and local calendar days across DST. Provide bounded defaults and a channel-aware
+  text preview; keep raw Epg templates compatible. Carry explicit item variables
+  through Classic and Block schedules, copies and continuation, and offer bounded
+  opt-in Drawtext metadata refresh separate from clock updates and file reload.
+
+- Escape generated drawvg file paths through both FFmpeg parsers, including
+  Windows drive letters, separators, spaces and quotes. Channel previews now
+  identify error-slate segments and show the original redacted transcode failure,
+  even while the browser successfully decodes the replacement video.
+
+- Let Classic schedule items save compatible filler, graphics, guide and track
+  changes for the next automatic extension without replacing published programmes
+  or resetting rotation. Show the retained horizon and persisted application/build
+  status; reject incompatible source/order edits and concurrent builds safely.
+
+- Reject overlapping, backward or non-positive Classic programme timelines
+  before publication, including unsafe Continue boundaries and anchors. Report
+  existing overlaps in Health and show localized rejection guidance. Allow a
+  verified programme-preserving Refresh to repair an invalid future while
+  retaining current programmes, guide settings and consumed history; refuse
+  ambiguous retained programmes without changing published state.
+
+- Offer explicit Extend, Refresh and Reset playout actions with programme
+  preservation enabled by default. Validate the stored scheduler kind, retain
+  complete programmes beyond producer buffering and leading mirrors, and restore
+  Classic, Scripted, YAML and Block source rotation after refresh or restart.
+  Reset can start a fresh future rotation without changing retained programmes;
+  incomplete or incompatible continuation state fails safely with localized
+  Health guidance. Correct Block source repetition and Classic midnight rewinds.
+- Automatically adapt Scripted playouts after successful scans change their
+  actual library/tag selections, including previously empty selections. Ignore
+  unchanged or unrelated sources; coalesce work, reject stale candidates and
+  retain bounded retries across failures, cancellation and restart. Show source
+  revision, pending work, failures and the last successful build in the admin UI.
+- Preserve accepted Next playback during rebuild preparation and recoverable
+  publication failures. Stage complete audio/subtitle/graphics projections for
+  active channels, mirrors and previews before committing a preserving build;
+  restore previous files when finalization fails or is cancelled. Enforce the
+  safe publication deadline, retry transient file contention and report failed
+  recovery without acknowledging success. Persistent storage failure can still
+  require recovery; database/file publication is not a single atomic operation.
+  Fix leading-mirror schedule reads and cancellation before HLS playback starts.
+- Add explicit External JSON adoption controls and retain accepted planning
+  across restart or source-file loss. Playback and guide use the same revision;
+  Extend only appends, preserving actions retain prefetched programmes and
+  reject invalid, stale or expired candidates without changing authored clocks.
+  Show adoption status and localized recovery guidance. Existing direct-file
+  readers remain compatible until explicit adoption.
+
+- Continue Scripted playouts from the persisted future timeline and restore
+  series history at that cursor. Expose Lua build context, reject backward or
+  overlapping candidates before atomic publication, and show failures in
+  Activity, Health and the retained timeline preview.
+
+- Discover MPEG, transport-stream and other supported video-container candidates
+  in local television libraries. Preview folder counts, ignored extensions,
+  unsupported nesting and empty shows before saving, with bounded read-only
+  inspection and localized diagnostics; retain episode/extra separation.
+
+- Own diagnostic previews with separate IDs and visible lifecycle states. Stop
+  cancels and reaps the process tree and graphics controllers before releasing
+  capacity; stale preview links cannot play a replacement. Preserve the finite
+  deadline and live-channel isolation, and support programme-relative seeking
+  with explicit UTC timestamps and server-rendered Play/Stop forms.
+
+- Support diagnostic playback for all channel delivery modes, including HLS
+  Segmenter, through the shared persisted-mode decoder. Show localized,
+  actionable startup failures without exposing private runtime details.
+
+- Identify ErsatzRS correctly in unavailable-media health warnings and localize
+  known disk/provider diagnostics, including cached messages using the old name.
+- Reconcile Windows local-TV folder aliases after case-only directory changes,
+  clearing false `Local television identity` warnings while preserving media IDs,
+  stream selections and scheduling references. Reuse the existing episode
+  when a changed path spelling still identifies the same file.
+- Include the add-on contract and platform crates in Docker dependency-cache
+  stages so release images can build the complete workspace. Add Docker-only
+  recovery that preserves the accepted application tag and web bundle while
+  recording the corrected build recipe.
+- Allow Docker recovery to inspect unpublished drafts and validate release
+  evidence with Python on runners without `jq`.
+
+## [1.1.0] - 2026-10-01
+
 ### Security
+
+- Add expiring, source-bound media-part tickets on the private callback listener
+  for external JSON playback integration, without publishing Plex credentials.
+  Resolve current credentials at each open and preserve byte-range requests.
 
 - Disable HDHomeRun HTTP endpoints and UDP discovery while IPTV JWT protection
   is enabled. Explain the inactive settings in the selected UI language and
@@ -50,6 +170,168 @@ release section when tagging a release.
   Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
+
+- Select managed FFmpeg packages by the complete platform suffix so 32-bit ARM
+  installations cannot download the ARM64 executable from a mixed release.
+
+- Restore shared browser-test language and theme after localization checks, and
+  keep manually seeded playback fixtures independent of the external JSON engine.
+  Wait for hydrated pages before subsequent test navigation, preserving Firefox
+  page-error checks.
+
+- Run Next CI against the validated FFmpeg v2.0.5 release and supply the
+  packaged executable to the graphics-canvas runtime test. Keep fallback and
+  on-demand subtitle fixtures eligible under the extracted-text selection
+  contract, without bypassing the playback assertions.
+
+- Preserve AV1 profiles and use fMP4 for native AV1 HLS output. Reject AV1
+  MPEG-TS output before startup and report incompatible channel settings in
+  health checks; Next continues to reject AV1 (ADR 0106). Software SVT-AV1
+  uses compatible target-bitrate rate control instead of unsupported CBR flags.
+
+- Stop FFmpeg hardware-capability probe processes when the check times out or
+  is cancelled, preventing abandoned probes from accumulating.
+
+- Restore Windows compilation of Next subtitle runtime tests by sharing the
+  portable caption helpers outside the Unix-only producer fixtures.
+
+- Show this build's unreleased changelog on development home and health pages;
+  tagged releases continue to show their exact version's notes.
+
+- Include Next's Windows oneVPL DLL and license beside its executable in both
+  release packaging paths, rejecting archives with missing companions.
+
+- Check out Windows batch scripts with CRLF line endings, including the bundled
+  MPEG-TS script, while retaining LF for shell scripts.
+
+- Respect Use Embedded Subtitles for Next automatic selection and skip embedded
+  text without a usable extracted path before choosing subtitle preferences.
+
+- Publish plain Next watermarks as direct media layers, avoiding a graphics
+  canvas when no graphics elements or opacity expressions require it. The pinned
+  Next runtime now also applies configured opacity correctly to RGB images.
+
+- Keep Jellyfin collection members as their real media types during scans by
+  disabling collection collapsing and rejecting unexpected response types. For
+  affected show libraries, scan again, empty the trash to remove bogus collection
+  shows, then deep scan collections to restore collection search results.
+
+- Let libva select the Next VAAPI driver when the profile uses Default, instead
+  of forcing Intel iHD on AMD devices. Explicit driver and device choices remain.
+
+- Preserve Plex, Jellyfin and Emby video rotation metadata, expose it in Media Info,
+  and publish Next playouts using the rotation-aware 0.0.5 schema. Correct the
+  orientation health check so copied rotated video is reported.
+
+- Require absolute filesystem paths for local libraries, keep percent characters
+  literal, and reject overlaps with other libraries while retaining the Images /
+  Other Videos exception. Show localized offending-path errors with correction
+  inputs retained. Saving unchanged paths preserves their scanned media.
+
+- Clear dependent playlist and template selections when changing groups in
+  Deco and Playout Templates editors, so hidden previous choices cannot be saved.
+  Show persisted template selections correctly when opening the editor.
+  Resolve the Playout Templates form before hydration so its controls attach reliably.
+
+- Validate schedule files before saving or queuing a playout build, rejecting
+  empty paths and directories. Use the same quoted script path during validation,
+  policy loading and execution, and pass supplied arguments to Lua's `arg` table.
+
+- Discover current MPEG-TS scripts in FFmpeg settings and recover missing selections
+  to Default or the first available script. Settings and stream startup share fresh
+  definitions, so edits, removals and corrected invalid files take effect on reload.
+  Preserve operator-defined script names and render the FFmpeg settings form
+  completely when JavaScript is disabled.
+
+- Keep movie collection poster and keyboard ordering consistent, prevent
+  overlapping order saves and restore rejected orders. Reject stale or foreign
+  collection rows atomically and repair legacy non-movie custom-order settings
+  while retaining memberships and audio/subtitle overrides.
+
+- Continue independent scheduler maintenance after a job fails, while reporting
+  the failure and retaining its cadence for retry. Stop before starting another
+  maintenance job when shutdown is requested.
+
+- Return typed errors from authenticated FFmpeg-profile, smart-collection and
+  empty-trash machine APIs: invalid requests use 400, missing records 404,
+  profile and smart-collection conflicts 409 and operational failures 500.
+  Prevent profile deletion from removing dependent channels or playouts, and show localized feedback
+  when the default or an in-use profile cannot be deleted. Keep loaded profile
+  row actions and format labels in the selected UI language.
+
+- End troubleshooting readiness promptly when native playback exits, retaining
+  completed diagnostics and process-owned cleanup. Bound media-sample capture
+  and remove temporary samples after failures or disconnected requests. Remove
+  URI credentials from exported environment diagnostics.
+
+- Recover the last motion-graphics frame when seeking near EOF and stop Hold
+  at its exact expiry, including zero hold time. Anchor media troubleshooting
+  graphics at the selected seek in both engines and expose the numeric
+  `MediaItem_SeekSeconds` template variable while preserving subtitle and audio
+  timing.
+
+- Restore Plex Other Video folder tags across Windows, UNC and Unix server
+  paths. Refresh existing items on their next scan while preserving subtitles,
+  labels and independently owned collection tags.
+
+- Omit unavailable automatic Next sidecars while preserving errors for exact
+  selections. Validate prepared-media sidecars against the materialized file,
+  retain valid remote sources, normalize HTTP(S) schemes for FFmpeg and preserve
+  subtitle seek offsets.
+
+- Exclude unsupported media-server closed captions before subtitle selection in
+  native playback, Next and troubleshooting, including Plex Other Videos. Keep
+  local captions and stored metadata intact, and reject unsupported pinned tracks.
+
+- Fetch Plex sidecar subtitles, including Other Videos, through their current
+  owning server with header authentication. Prepare bounded local artifacts
+  instead of forwarding persisted token-bearing URLs to playback.
+
+- Preserve YAML post-roll, mid-roll and graphics settings across Continue builds
+  and restarts, including graphics variables and explicitly cleared settings.
+  Resolve graphics paths in SQL-backed YAML builds, including imported sequences
+  and named schedules.
+
+- Advance timed graphics and watermark selection with each Next channel-preview
+  chunk, including mirrored historical previews, while keeping the selected
+  programme and media version unchanged.
+
+- Keep motion graphics visible on the first Next canvas frame when a chunk
+  starts between source frames. Normalize the sought motion timestamps before
+  compositing, preserving delayed starts and loop/hold/disappear timing.
+
+- Keep graphics template programme stop times tied to the scheduled finish,
+  independently of seek offsets and rendering chunk durations, including
+  mirrored and preview playback.
+
+- Decode Plex metadata using the documented `Media`, `Part` and `Stream` array
+  names while retaining compatibility with lowercase responses.
+
+- Restore random fallback with an explicit warning when a Classic marathon has
+  no grouping mode, preserving normal Random continuation and track preferences.
+- Read external JSON programme metadata directly for XMLTV, including mirror
+  offsets and minimum guide duration, with explicit invalid-start-time errors.
+
+- Refresh unchanged local PQ/HLG media once so stored HDR/Dolby Vision metadata
+  is populated, and expose Dolby Vision profile and HDR10 metadata presence in
+  Media Info JSON while preserving non-video field omission.
+
+
+- Expose native and Next playlist-worker reports through authenticated
+  `GET /api/sessions`, including last access and a nullable transcode cursor.
+  Next reports `state: "next"`; reading session reports does not keep streams
+  alive. Document the response and API-key requirement in OpenAPI.
+
+- Hourly and manual artwork cleanup remove unreferenced cached images and restore
+  missing cache entries from local image sources, updating all shared references.
+  Preserve original artwork, referenced blur images and uploaded watermarks/logos;
+  failed repairs remain eligible for the next pass.
+
+- Share health checks across page visits and scheduled maintenance, cache complete
+  results for five minutes, and add a localized Refresh action with a no-JavaScript
+  fallback. Leaving the page no longer cancels checks for other readers. Bound
+  check execution and persist results and warning/error counts together so a
+  failed run or write retains the previous complete snapshot.
 
 - Provider episode scans repair changed season membership even when metadata is
   unchanged, exclude Emby specials from unrelated seasons, and retain valid
@@ -161,9 +443,6 @@ release section when tagging a release.
   valid NVENC frame dimensions, and download Vulkan frames in their actual
   pixel format before conversion.
   Remove the obsolete MySQL feature from the alternate Docker build command.
-- Use ErsatzRS-ffmpeg v2.0.2 for fresh managed runtime installs and Next CI, including the
-  Windows Vulkan/CUDA external-memory export correction and smooth audio/video
-  pacing across sparse subtitle gaps.
 - Probe NVIDIA Vulkan HDR support with the same CUDA transfer used by playback,
   avoiding false capability failures from an unsupported direct mapping.
   Recheck cached results from the old probe when the server starts.
@@ -304,7 +583,89 @@ release section when tagging a release.
 - Match configured MPEG-TS script IDs without regard to case, including Unicode
   letters, and use the lowercase built-in default in troubleshooting (upstream PR #2916).
 
+- Preserve clean EOF for Next's one-shot producer HTTP streams by retaining
+  FFmpeg's chunked-reader state, while keeping reconnection disabled. The
+  separate Next CI check now covers full-frame decoding through the production
+  HTTP response.
+
+- Initialize rawvideo pixel-format metadata while probing a retained producer's
+  bounded NUT prefix, so Next can consume that same producer without reopening it
+  or rejecting otherwise valid media as incomplete.
+
+- Bind Next playback callbacks to their originating normal or preview session,
+  preserving each session's tools and path replacements and rejecting callbacks
+  from stopped or replaced instances. Retained-source preflight also observes
+  cancellation and deadlines while waiting for database or sidecar preparation.
+- Make the synthetic add-on option test provider consume runtime requests before
+  replying on Unix and Windows, preventing a process-input race in browser tests.
+
+- Clean orphaned actor and artwork database records at startup and hourly, with
+  a bounded manual cleanup API, while retaining referenced images and artwork
+  files (upstream PR #2885).
+
+- Preserve merged deco watermarks when combining them with item, channel or
+  global watermarks, including a merged watermark with no fallback selection.
+
+- Repair empty or whitespace-only embedded-subtitle cache references while
+  reusing completed cached tracks (upstream PR #2873). Partial extraction retains
+  each subtitle's absolute stream index, preserving the selected language.
+
+- Select Next embedded subtitles from the resolved media version before applying
+  language, forced/default or custom-selector preferences, so stale metadata
+  cannot hide a valid image track (upstream PR #2868).
+
+- Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
+  final clip instead of stretching one item. Preserve subsecond source positions
+  when saving clips, so a short final fallback cannot collapse to zero length.
+  Honor chapter-as-media filler
+  offsets and titles (upstream PR #2867). Place mid-roll filler between source
+  chapters, keep post-roll after the final chapter, and align padding to clock
+  boundaries. Preserve chapter identity and track preferences across filler
+  membership changes and database restarts; honor exact media-version pins.
+  Keep pre/post-roll padding expressions effective when mid-roll selects no
+  chapter points. Refuse destructive Refresh when older filler checkpoints
+  cannot establish identity. Evaluate chapter expressions consistently across host
+  languages with ICU Unicode comparison, invariant numbers and explicit date/time
+  formats. Reject invalid literals and expressions above 64 KiB or 32 nesting
+  levels without replacing the existing playout (ADRs 0097 and 0098).
+
+- Preserve negative mirror playout offsets through channel repository upsert,
+  keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
+
+- Render channel add/edit forms in order so they remain usable with JavaScript
+  disabled, including engine selection and server-side mode normalization.
+
+- Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
+  following the repository-link correction in ErsatzTV PR #2848.
+
 ### Added
+
+- Support MPEG-2 video output with the Next engine, using 8-bit output and an
+  explicit positive video bitrate. Preserve selected audio and subtitles;
+  omit the HLS `CODECS` attribute when either codec identifier is unknown.
+- Playback troubleshooting adds a music-video credits template selector for both
+  engines and includes the template and generated ASS in diagnostic downloads.
+
+- Show Next emergency playback and schedule-gap reasons on fallback video by
+  default, including when subtitles normally use Convert mode. Channel
+  configuration overlays can explicitly disable the error card.
+
+- Add shared track selection for transient external programmes, preserving
+  language preferences, custom YAML rules, JavaScript audio metadata and
+  engine-specific subtitle eligibility without requiring library records.
+  Carry transient programme metadata into graphics and dynamic text, and derive
+  graphics EPG variables from the selected channel's external timeline.
+  Prepare selected embedded text and Plex sidecar subtitles with bounded work,
+  cancellation cleanup and temporary files owned by the playback caller.
+  Connect native stream preparation to these bindings, return unavailable-programme
+  responses for missing Plex prerequisites, and retain subtitle ownership through
+  stream cleanup. Preserve optional interlace sampling and mixed H.264 profile
+  detection for transient native inputs without creating library records.
+  Native remote HTTP playback, XMLTV and MPEG-TS/fMP4 HLS are verified on Linux.
+  HLS retains transient subtitle files through encoder completion and programme
+  identity across transitions. Native streaming smoke and TSDuck checks pass;
+  external JSON playback follows upstream native-engine support.
+
 - Render image graphics in Next alongside ordered watermarks, using shared
   template and decoration selections. Allow graphics selections in Next
   playback troubleshooting, including the form without JavaScript.
@@ -375,8 +736,6 @@ release section when tagging a release.
 - Display one permanent or intermittent watermark with the optional Next engine,
   preserving selected placement, actual or scaled size and margins, and forwarding configured
   opacity (upstream PR #2878), including demand-time embedded subtitle Burn.
-  Next currently renders RGB images without an alpha channel fully opaque;
-  this accepted upstream limitation awaits a future Next fix.
   Intermittent overlays follow wall-clock cycles with the configured visible
   duration and Next's default one-second fades (upstream PR #2879); invalid
   timing is rejected instead of becoming a permanent overlay.
@@ -384,6 +743,52 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Preserve the accepted Next dependency in a checksum-pinned snapshot, so
+  upstream replacement of its develop release cannot change or break packaging.
+  Reuse the tested ARMv7 executable across archives and Docker images.
+- Stage stable application archives in an unpublished draft until package
+  acceptance is complete, then publish the verified bytes.
+
+- Build the missing ARMv7 Next executable from pinned, unmodified upstream
+  source for release archives and Docker images, with checksum-verified source
+  and retained compiler provenance. Keep the Bookworm GLIBC 2.36 baseline and
+  distinguish this build from official upstream binary downloads (ADR 0100).
+
+- Report the stable application version as 1.1.0 in diagnostics, provider
+  requests and add-on compatibility checks. Update the official yt-dlp add-on
+  to 0.11.6 before upgrading the host; older packages only declare support for
+  the development host version.
+
+- Pin the accepted Next source revision during archive and Docker staging,
+  rejecting upstream development-release drift after candidate CI has passed.
+
+- Match Next's optional AMF adapter-index protocol, validating its unsigned
+  range while retaining automatic device selection in generated profiles.
+  AMD hardware playback remains explicitly unverified.
+
+- Include a stable `startedAt` clock in native and Next session reports, and use
+  that session clock for graphics independently of programme changes.
+
+- Render every graphics kind in Next playback through a private authenticated
+  FFmpeg canvas (ADR 0105), including scripts, both text renderers, images,
+  motion and subtitle graphics. Preserve transparency, layer order, programme
+  timing, content-box geometry, selected audio and ordinary subtitles across
+  scheduled, dynamic, remote, fallback, mirror and preview playback.
+  Session-bound callbacks validate programme identity and observe current
+  graphics edits; disconnect and stop reap producers and generated artifacts.
+  Check FFV1 encoding/decoding, NUT input/output support and canvas timing
+  filters at startup and report missing support through FFmpeg health checks.
+
+- Use the checksum-verified ErsatzRS-ffmpeg v2.0.5 release by default. It adds
+  Linux ARMv7 and ARM64 packages and retains the exact v2.0.4 Linux x64 and
+  Windows packages. ARMv7 requires GLIBC 2.36 (Debian Bookworm or newer).
+  The runtime includes
+  SVG decoding with correct translucent overlays and the upstream QSV/AMF
+  runtime patches, including legacy Intel decoder-pool retention, D3D11 frame
+  transfers and oneVPL device discovery. Preserve existing codecs and subtitle/audio playback;
+  Intel QSV, AMD AMF and native Linux NVIDIA interop validation remain
+  explicitly approved hardware acceptance debt.
 
 - Add Legacy/Next engine selection to playback troubleshooting, including
   engine-specific controls and in-page preview playback while retaining the
@@ -454,13 +859,13 @@ release section when tagging a release.
   capability-protected internal media route when Next opens remote media,
   retaining byte-range responses without buffering whole media files.
   Verify Plex identity before failover and preserve media redirects without
-  forwarding credentials across origins. Graphics projection and full platform
-  playback acceptance remain open. Add bounded JavaScript movie/episode audio
+  forwarding credentials across origins. Add bounded JavaScript movie/episode audio
   selectors shared by native playback and Next, with upstream callback metadata,
   authoritative stream pins, YAML precedence, safe fallback and redacted health
   reporting. CLR interop is unavailable; execution uses time, heap and stack
-  limits under accepted ADR 0096 (upstream PR #2866). All-platform acceptance
-  remains open.
+  limits under accepted ADR 0096 (upstream PR #2866). ARM and macOS application
+  acceptance remains explicit maintainer-approved debt; these platforms have
+  not been marked verified.
   Publish continued schedules to active Next channels and mirrors while preserving
   native playback continuity (upstream PR #2854). Verify existing mirror offsets,
   channel-update propagation and bundled runtime discovery against upstream PR #2855.
@@ -480,87 +885,15 @@ release section when tagging a release.
   markers distinguish retained changes from saved data.
 - Accept editable numbering reviews: Apply saves the current Items task,
   including edits made after the proposal; Cancel restores the pre-proposal draft.
-- Align Windows beta acceptance with ADR 0066's installed add-on entrypoints;
-  retain midpoint seeking, output, failure diagnostics and package identity gates.
-- Verify the yt-dlp 0.11.4 Windows batch-error correction in the installed
-  provider, preserving settings and enabled state. Complete AMM-N-03 with the
-  accepted Windows v1.0.37-beta archive and identical verified public download.
-- Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
-  upstream commit each run (162 commits at bootstrap) and milestone gates before
-  teletext. Keep the current parity pin unchanged during
-  bootstrap. Revise ADR 0095 after rejection of its native-only proposal;
-  accept Next as an optional second engine alongside the native pipeline.
-  Engine integration and playback acceptance remain open. Defer the first
-  consolidated upstream catch-up CI checkpoint until after UCU-03 smoke,
-  retaining local acceptance gates for UCU-01 and UCU-02.
-  Complete UCU-00 bootstrap acceptance after AMM-N-03, then reconcile the
-  upstream Legacy rename (ErsatzTV PR #2842) with source evidence and advance
-  the parity pin through reviewed steps, including the .NET-only dependency
-  maintenance in ErsatzTV PR #2849.
-  Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
-  prerequisite for the first upstream step.
+- Reconcile 183 upstream commits through `960421e8`, with accepted architectural
+  decisions for the optional Next engine, graphics canvas, management boundaries
+  and retained AV1 support. Preserve case-insensitive `.yml`/`.yaml` Remote Stream
+  discovery, blank credits-template fallback and streaming process cleanup.
 
 - Keep detailed future work in `plans/`, completion history and evidence in
   progress TOMLs, and reusable design artifacts under documentation. Milestones
   may omit a standalone plan; supplied plan links are still validated. The
   generated Clippy ledger now lives under `docs/reference/`.
-
-### Fixed
-
-- Preserve clean EOF for Next's one-shot producer HTTP streams by retaining
-  FFmpeg's chunked-reader state, while keeping reconnection disabled. The
-  separate Next CI check now covers full-frame decoding through the production
-  HTTP response.
-
-- Initialize rawvideo pixel-format metadata while probing a retained producer's
-  bounded NUT prefix, so Next can consume that same producer without reopening it
-  or rejecting otherwise valid media as incomplete.
-
-- Bind Next playback callbacks to their originating normal or preview session,
-  preserving each session's tools and path replacements and rejecting callbacks
-  from stopped or replaced instances. Retained-source preflight also observes
-  cancellation and deadlines while waiting for database or sidecar preparation.
-- Make the synthetic add-on option test provider consume runtime requests before
-  replying on Unix and Windows, preventing a process-input race in browser tests.
-
-- Clean orphaned actor and artwork database records at startup and hourly, with
-  a bounded manual cleanup API, while retaining referenced images and artwork
-  files (upstream PR #2885).
-
-- Preserve merged deco watermarks when combining them with item, channel or
-  global watermarks, including a merged watermark with no fallback selection.
-
-- Repair empty or whitespace-only embedded-subtitle cache references while
-  reusing completed cached tracks (upstream PR #2873). Partial extraction retains
-  each subtitle's absolute stream index, preserving the selected language.
-
-- Select Next embedded subtitles from the resolved media version before applying
-  language, forced/default or custom-selector preferences, so stale metadata
-  cannot hide a valid image track (upstream PR #2868).
-
-- Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
-  final clip instead of stretching one item. Preserve subsecond source positions
-  when saving clips, so a short final fallback cannot collapse to zero length.
-  Honor chapter-as-media filler
-  offsets and titles (upstream PR #2867). Place mid-roll filler between source
-  chapters, keep post-roll after the final chapter, and align padding to clock
-  boundaries. Preserve chapter identity and track preferences across filler
-  membership changes and database restarts; honor exact media-version pins.
-  Keep pre/post-roll padding expressions effective when mid-roll selects no
-  chapter points. Refuse destructive Refresh when older filler checkpoints
-  cannot establish identity. Evaluate chapter expressions consistently across host
-  languages with ICU Unicode comparison, invariant numbers and explicit date/time
-  formats. Reject invalid literals and expressions above 64 KiB or 32 nesting
-  levels without replacing the existing playout (ADRs 0097 and 0098).
-
-- Preserve negative mirror playout offsets through channel repository upsert,
-  keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
-
-- Render channel add/edit forms in order so they remain usable with JavaScript
-  disabled, including engine selection and server-side mode normalization.
-
-- Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
-  following the repository-link correction in ErsatzTV PR #2848.
 
 ## [1.0.37-beta] - 2026-09-22
 
@@ -3654,7 +3987,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
 [1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta
 [1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta
 [1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta

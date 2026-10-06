@@ -18,6 +18,7 @@ async fn real_next_on_demand_resume_keeps_viewer_position_audio_and_subtitles() 
     };
     let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
     configure_text_tracks(&pool, true, false, false).await;
+    prepare_automatic_text_tracks(&pool, &ffmpeg, &clip, root.path()).await;
     seed_on_demand(&pool).await;
     let host = Arc::new(host::NextHost::new(
         pool.clone(),

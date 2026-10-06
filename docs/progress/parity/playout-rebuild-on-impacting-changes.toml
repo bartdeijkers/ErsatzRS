@@ -2,26 +2,62 @@ feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
 status     = 'In progress'
-adr        = ['0020']
+adr        = ['0020', '0110']
 summary    = '''
-Proposed by ADR 0020: rebuild the impacted playouts whenever a change can alter
-what a playout's items should contain, so already-scheduled `PlayoutItem` rows
-pick up new settings instead of only being appended past. Playout items bake a
-snapshot of settings at build time (subtitle mode, preferred subtitle/audio
-language and title, watermark/graphics/deco, filler, resolved media), and stream
-generation reads item overrides before falling back to channel settings.
+ADR 0020 rebuilds impacted playouts so existing items can adopt changed
+subtitle/audio preferences, watermarks/graphics/deco, filler and resolved media.
+Playback reads each item's captured settings before falling back to the channel.
 Channel edits enqueue no playout build, matching ErsatzTV's
 `UpdateChannelHandler`; explicit per-playout and Reset All requests are queued
 reliably and expose queued/building activity to the admin UI. The classic engine now consumes
 `request.mode`, so classic `Refresh` clears and rebuilds the window the way
 ErsatzTV `RefreshPlayout` does.
 
-Reopened 2026-08-23; Classic continuity was completed by crf-01 on 2026-08-24.
+Classic continuity was completed by crf-01 on 2026-08-24.
 Content-triggered Refresh now requires and restores a complete production
 checkpoint, so it cannot silently rewind deterministic scheduling, and unsafe
 legacy state is refused before rows are cleared. Remote Stream scan impact is
 still selected globally instead of from actual schedule/library dependencies,
 so crf-02 remains open to prevent unrelated rebuild requests.
+
+Finding 06 also corrects Next refresh-failure handling: retain the running
+producer and retry its snapshot publication with bounded attempts and backoff.
+Fresh snapshot acknowledgements now gate build success and durable Refresh completion;
+publication readers share the committed build phase without admitting another
+builder. All four internal schedulers now retain complete programmes beyond a
+conservative prefetch horizon, including configured leading mirrors, and use an
+earlier publication deadline. Decoded native/Next handover now passes for Classic
+Scripted, Block and YAML synthetic programmes, including full openings and
+old/new audio. Accepted local evidence and platform limits live in v111-findings-06.
+Internal schedulers expose localized explicit Continue/Refresh/Reset controls
+with preservation enabled by default. Matched Chromium/Firefox checks cover exact
+requests, cancellation and responsive English/Dutch rendering, plus existing
+status polling, no-JS status and list/detail workflows.
+Explicit Classic Continue refuses incomplete saved state instead of silently
+promoting to Refresh; admission, preservation and translation checks pass.
+External JSON candidate reconciliation now preserves absolute programme clocks
+and validates append-only or programme-preserving changes against an accepted
+baseline. Snapshot persistence and playback/guide consumption have migration,
+restart, source-loss, revision/deadline and invalid-document proof. Worker
+adoption covers append-only continuation, leading mirrors and retry notification.
+Operator controls and localized Health recovery are implemented;
+19 focused checks, strict infra/web all-target Clippy and 14 matched
+Chromium/Firefox cases pass. Native External JSON handover also passes decoded
+opening and audio checks without retiming or materialized rows. Source-read cancellation has lookup and whole-worker proof.
+Cancelled Next writes now recheck ownership after serialization and flush;
+15 focused checks retain the old manifest and admission through cleanup.
+Scheduler deadlines now reach the final replacement check; 41 focused checks
+cover expiry during projection/serialization, earliest-deadline coalescing and
+fresh-request recovery. SQL preparation now keeps candidates private until commit,
+with rollback/reopen proof. Next staging has source/mirror and timeout proof.
+Candidate overlays preserve variables/template precedence. Shared full-host
+preparation has selected audio/subtitle/canvas proof and coalesces live/preview
+owners with mirror/timeout coverage. Reversible finalization before SQL commit
+has partial-file, cancellation and storage-failure proof. Next Scripted recovery
+passes decoded opening/audio proof after cancellation and retry; Block/YAML
+recovery also passes. Workspace closeout, strict lint, HTTP smokes, TSDuck,
+dependency audit and matched bundle verification pass. The broader feature
+remains in progress only for the existing crf-02 dependency-selection scope.
 '''
 
 [[debt]]
@@ -55,3 +91,12 @@ description = 'Clicking "Reset Playout" rewrites all items in the build window, 
 discovered  = '2026-07-01'
 evidence    = 'Source review against pinned `Playouts.razor`: ErsatzTV maps classic Reset Playout to `PlayoutBuildMode.Refresh` and all other per-row resets to `Reset`; ErsatzRS now centralizes and tests the same mapping, and Reset All skips ExternalJson/None while mapping classic to `Refresh` and block/sequential/scripted to `Reset`. The maintenance regression `requested_classic_refresh_rewrites_near_term_playout_items` proves the queued classic Refresh clears stale near-term rows and rebuilds them with updated item-level playback data. Verification commands are intentionally deferred until after gap 3 per the sequential goal.'
 resolved    = true
+
+
+[[debt]]
+id = 'scripted-continuity-safe-adaptation'
+description = 'Finding 06 requires explicit validated rebuild modes with preserve-current-programme, Scripted source dependencies, durable scan-triggered refresh, generation fencing and operator revision/build feedback.'
+discovered = '2026-10-02'
+evidence = 'v111-findings-06 owns implementation and acceptance. Stored-kind admission, refresh-intent publication fencing, versioned boundary restoration, atomic checkpoints/Health readiness and runtime source capture pass focused regressions. Successful-scan dependency admission now passes restart, concurrent sweep, no-change/library isolation, bounded retry and real local FFprobe scan checks. Candidate revalidation now fences unprocessed receipts and active managed-library work, with durable retry for transient publication races. Operator revision/build/pending/failure feedback passes four SQL/migration/restart regressions and matched Chromium/Firefox no-JS, polling, localization and desktop/mobile checks. Explicit choices now survive queue coalescing and validate stored kind before admission. Scripted Reset preserves the current group and starts fresh future rotation; SQLite restart and later Refresh preserve that choice, retained history and attachments. Classic preservation now restores complete programme-boundary checkpoints, retains current settings/history through SQLite restart, and exposes missing boundary state in Health. A demonstrated Classic midnight overlap is corrected. YAML explicit Reset now preserves programmes and starts fresh rotation through SQLite restart; archived sources cannot restore old positions, and overlapping rewind is refused before writes. YAML Refresh now restores complete instruction/source checkpoints with unchanged-future, SQLite restart and legacy-upgrade coverage; Health recovery guidance is localized in all nine cultures. Block explicit preservation now passes production SQLite reopen, unchanged rotation/current settings and Health failure/Reset recovery checks. Preserving candidates now carry a monotonic publication deadline; expiry preserves state and durable retry, including database-writer contention. Explicit internal-scheduler actions now pass 27 focused server/state/localization checks and 12 matched Chromium/Firefox cases, including exact requests, cancellation, no-JS status, polling and responsive English/Dutch controls. Island language context is restored during hydration. Native/Next decoded handover passes for Classic and Scripted. External JSON actions have database, localized browser and native decoded handover proof. Next Scripted cancellation after manifest replacement now restores accepted SQL/files and retries without restarting playback, with complete decoded opening/audio proof. Final workspace/runtime gates pass. Native Windows held-handle execution is unrun and no packaged/platform release acceptance is claimed. Native/Next Block and YAML now also have decoded handover proof, with reversible Next cancellation/retry. v111-findings-06 owns the focused evidence.'
+adr = '0110'
+resolved = true

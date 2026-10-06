@@ -544,7 +544,7 @@ SELECT "Id" || '|' || "Number" FROM "Channel" WHERE "Name" = 'nsf live';
     await expect(playlist.locator(`option[value="${playlistId}"]`)).toHaveCount(1);
     await playlist.selectOption(String(playlistId));
     await scheduleItemSelect(page, 'Playout Mode').selectOption('1');
-    await page.getByRole('button', { name: /save schedule items/i }).click();
+    await page.getByRole('button', { name: /save and refresh/i }).click();
     await expect(page.locator('tbody tr')).toHaveCount(1);
     await expect
       .poll(() =>

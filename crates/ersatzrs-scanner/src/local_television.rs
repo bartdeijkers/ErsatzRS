@@ -17,7 +17,7 @@
 //! After all shows are processed, stale `LibraryFolder` rows are cleaned,
 //! mirroring ErsatzTV's `CleanEtagsForLibraryPath`.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -25,9 +25,7 @@ use chrono::Utc;
 use ersatzrs_core::metadata_facets::{
     normalize_content_ratings, normalize_language_codes, preferred_facet_values, union_facet_values,
 };
-use ersatzrs_domain::{
-    classify_extra_directory_name, classify_extra_video, ExtraVideoClassification,
-};
+use ersatzrs_domain::ExtraVideoClassification;
 use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
@@ -45,7 +43,9 @@ use crate::{
     EmbeddedFacets, LocalLibraryPath, Result, ScannerError,
 };
 
-const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];
+pub mod discovery;
+
+use discovery::collect_show_work;
 pub(crate) const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
 const SQLITE_LOCK_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000, 8_000];
 
@@ -181,180 +181,6 @@ fn episode_facet_values(scan: &LocalEpisodeScan) -> EpisodeFacetValues {
         tags,
         languages,
     }
-}
-
-/// Walk the library root and enumerate all show/season/episode work units.
-///
-/// The plan refers to this as "pre-enumerate so the progress fraction is
-/// truthful" — same model as the existing local scanner.
-fn collect_show_work(root: &str) -> Vec<ShowWork> {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return Vec::new();
-    };
-    let mut show_folders: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
-    show_folders.sort();
-
-    let mut shows = Vec::new();
-    for show_folder in show_folders {
-        if !show_folder.is_dir() {
-            continue;
-        }
-        if file_name_starts_with_dot(&show_folder) {
-            continue;
-        }
-
-        let Ok(show_entries) = std::fs::read_dir(&show_folder) else {
-            continue;
-        };
-        let mut show_children: Vec<PathBuf> =
-            show_entries.flatten().map(|entry| entry.path()).collect();
-        show_children.sort();
-
-        let mut seasons = Vec::new();
-        let mut show_extra_files = Vec::new();
-        for child in show_children {
-            if child.is_file() {
-                if is_video_file(&child) {
-                    if let Some(extra) = classify_extra_video(Path::new(root), &child) {
-                        show_extra_files.push(ExtraVideoWork { path: child, extra });
-                    }
-                }
-                continue;
-            }
-            if !child.is_dir() || file_name_starts_with_dot(&child) {
-                continue;
-            }
-            if child
-                .file_name()
-                .and_then(|name| name.to_str())
-                .and_then(classify_extra_directory_name)
-                .is_some()
-            {
-                show_extra_files.extend(collect_extra_video_files(Path::new(root), &child));
-                continue;
-            }
-            let Some(season_number) = parse_season_number_for_folder(&child) else {
-                continue;
-            };
-
-            let (mut episode_files, mut extra_files) =
-                collect_episode_and_extra_files(Path::new(root), &child);
-            episode_files.sort();
-            extra_files.sort_by(|left, right| left.path.cmp(&right.path));
-            if episode_files.is_empty() && extra_files.is_empty() {
-                continue;
-            }
-
-            seasons.push(SeasonWork {
-                folder: child,
-                season_number,
-                episode_files,
-                extra_files,
-            });
-        }
-
-        show_extra_files.sort_by(|left, right| left.path.cmp(&right.path));
-        if seasons.is_empty() && show_extra_files.is_empty() {
-            continue;
-        }
-
-        shows.push(ShowWork {
-            folder: show_folder,
-            seasons,
-            extra_files: show_extra_files,
-        });
-    }
-
-    shows
-}
-
-fn file_name_starts_with_dot(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with('.'))
-}
-
-fn collect_episode_and_extra_files(
-    library_root: &Path,
-    root: &Path,
-) -> (Vec<PathBuf>, Vec<ExtraVideoWork>) {
-    let mut episode_files = Vec::new();
-    let mut extra_files = Vec::new();
-    let mut queue = VecDeque::from([root.to_path_buf()]);
-    while let Some(path) = queue.pop_front() {
-        let Ok(entries) = std::fs::read_dir(&path) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .and_then(classify_extra_directory_name)
-                    .is_some()
-                {
-                    extra_files.extend(collect_extra_video_files(library_root, &path));
-                    continue;
-                }
-                queue.push_back(path);
-                continue;
-            }
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("._"))
-            {
-                continue;
-            }
-            if is_video_file(&path) {
-                if let Some(extra) = classify_extra_video(library_root, &path) {
-                    extra_files.push(ExtraVideoWork { path, extra });
-                } else {
-                    episode_files.push(path);
-                }
-            }
-        }
-    }
-    (episode_files, extra_files)
-}
-
-fn collect_extra_video_files(library_root: &Path, root: &Path) -> Vec<ExtraVideoWork> {
-    let mut files = Vec::new();
-    let mut queue = VecDeque::from([root.to_path_buf()]);
-    while let Some(path) = queue.pop_front() {
-        let Ok(entries) = std::fs::read_dir(&path) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                queue.push_back(path);
-            } else if is_video_file(&path) {
-                if let Some(extra) = classify_extra_video(library_root, &path) {
-                    files.push(ExtraVideoWork { path, extra });
-                }
-            }
-        }
-    }
-    files
-}
-
-fn is_video_file(path: &Path) -> bool {
-    if path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("._"))
-    {
-        return false;
-    }
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(str::to_ascii_lowercase);
-    extension
-        .as_deref()
-        .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext))
 }
 
 /// Parse a season number from a folder name. Mirrors
@@ -1396,7 +1222,27 @@ pub(crate) async fn sync_local_show_library(
     extractor: &FfprobeExtractor,
     mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
-    let shows = collect_show_work(&library_path.path)
+    let repaired_aliases =
+        library_folder::reconcile_television_folder_aliases(pool, library_path.id).await?;
+    if repaired_aliases != 0 {
+        info!(
+            library_path_id = library_path.id,
+            repaired_aliases, "reconciled case-only local television folder aliases"
+        );
+    }
+    let (shows, discovery) = discovery::collect_show_work_with_report(&library_path.path);
+    info!(
+        library_path_id = library_path.id,
+        inspected_entries = discovery.inspected_entries,
+        shows = discovery.shows,
+        seasons = discovery.seasons,
+        episodes = discovery.episodes,
+        extras = discovery.extras,
+        hidden_entries = discovery.hidden_entries,
+        issues = ?discovery.issue_counts,
+        "television discovery completed"
+    );
+    let shows = shows
         .into_iter()
         .map(|show| {
             let descriptor = describe_show(&show);
@@ -1466,7 +1312,13 @@ pub(crate) async fn sync_local_show_library(
                 continue;
             };
 
-            let current_etag = crate::folder_etag::folder_etag_with_subfolders(&season.folder);
+            // Previously cached folders may already contain the newly supported
+            // MPEG/TS files. Invalidate the old discovery contract once, even
+            // when no source mtime changed; subsequent scans keep the fast path.
+            let current_etag = format!(
+                "tv-discovery-v2:{}",
+                crate::folder_etag::folder_etag_with_subfolders(&season.folder)
+            );
             let etag_match = season_etag_match(
                 season_folder.etag.as_deref(),
                 &current_etag,
@@ -2122,6 +1974,46 @@ async fn probe_local_episode(
     })
 }
 
+async fn find_existing_local_episode(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+    path: &str,
+    hash: &str,
+    case_insensitive: bool,
+) -> Result<Option<sqlx::sqlite::SqliteRow>> {
+    let exact = sqlx::query(
+        r#"SELECT mf."Id" AS "MediaFileId", mf."MediaVersionId", mv."EpisodeId" AS "MediaItemId"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           JOIN "MediaItem" mi ON mi."Id" = mv."EpisodeId"
+           WHERE mf."PathHash" = ? AND mi."LibraryPathId" = ?
+           ORDER BY mf."Id" LIMIT 1"#,
+    )
+    .bind(hash)
+    .bind(library_path_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if exact.is_some() || !case_insensitive {
+        return Ok(exact);
+    }
+    let aliases = sqlx::query(
+        r#"SELECT mf."Id" AS "MediaFileId", mf."MediaVersionId", mv."EpisodeId" AS "MediaItemId", mf."Path"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           JOIN "MediaItem" mi ON mi."Id" = mv."EpisodeId"
+           WHERE mi."LibraryPathId" = ? AND mf."Path" = ? COLLATE NOCASE
+           ORDER BY mf."Id""#,
+    )
+    .bind(library_path_id)
+    .bind(path)
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(aliases.into_iter().find(|row| {
+        row.get::<Option<String>, _>("Path")
+            .is_some_and(|stored| library_folder::same_local_path(&stored, path))
+    }))
+}
+
 #[allow(clippy::too_many_lines)]
 async fn sync_local_episode_once(
     pool: &DbPool,
@@ -2135,15 +2027,13 @@ async fn sync_local_episode_once(
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let now = encode_datetime(Utc::now());
 
-    let existing = sqlx::query(
-        r#"SELECT "mf"."MediaVersionId",
-                  "mv"."EpisodeId" AS "MediaItemId"
-           FROM "MediaFile" AS "mf"
-           JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
-           WHERE "mf"."PathHash" = ?"#,
+    let existing = find_existing_local_episode(
+        &mut tx,
+        library_path.id,
+        &scan.path_text,
+        &scan.hash,
+        library_folder::case_insensitive_paths(),
     )
-    .bind(&scan.hash)
-    .fetch_optional(&mut *tx)
     .await?;
 
     let (episode_id, version_id) = if let Some(row) = existing {
@@ -2151,6 +2041,12 @@ async fn sync_local_episode_once(
             .get::<Option<i64>, _>("MediaItemId")
             .ok_or_else(|| ScannerError::Sqlx(sqlx::Error::RowNotFound))?;
         let version_id: i64 = row.get("MediaVersionId");
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ?, "PathHash" = ? WHERE "Id" = ?"#)
+            .bind(&scan.path_text)
+            .bind(&scan.hash)
+            .bind(row.get::<i64, _>("MediaFileId"))
+            .execute(&mut *tx)
+            .await?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
             .bind(episode_id)
@@ -2529,6 +2425,60 @@ mod tests {
             .await
             .expect("run migrations");
         pool
+    }
+
+    #[tokio::test]
+    async fn case_alias_episode_lookup_preserves_identity_and_library_scope() {
+        let pool = reconciliation_test_db().await;
+        seed_merged_kids_in_the_hall(&pool).await;
+        let (_root, lower, upper) = library_folder::tests::case_alias_fixture();
+        let lower_file = lower.join("Season 01").join("e01.mkv");
+        let upper_file = upper.join("Season 01").join("e01.mkv");
+        std::fs::write(&lower_file, b"synthetic fixture").unwrap();
+        let lower_text = lower_file.to_string_lossy();
+        let upper_text = upper_file.to_string_lossy();
+        sqlx::query(
+            r#"UPDATE "MediaFile" SET "Path" = ?, "PathHash" = ? WHERE "MediaVersionId" = 11000"#,
+        )
+        .bind(lower_text.as_ref())
+        .bind(path_hash(&lower_text))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let matched =
+            find_existing_local_episode(&mut tx, 1, &upper_text, &path_hash(&upper_text), true)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(matched.get::<i64, _>("MediaItemId"), 1000);
+        assert_eq!(matched.get::<i64, _>("MediaVersionId"), 11000);
+        assert!(find_existing_local_episode(
+            &mut tx,
+            1,
+            &upper_text,
+            &path_hash(&upper_text),
+            false
+        )
+        .await
+        .unwrap()
+        .is_none());
+        assert!(find_existing_local_episode(
+            &mut tx,
+            2,
+            &upper_text,
+            &path_hash(&upper_text),
+            true
+        )
+        .await
+        .unwrap()
+        .is_none());
+        let exact =
+            find_existing_local_episode(&mut tx, 1, &lower_text, &path_hash(&lower_text), false)
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(exact.get::<i64, _>("MediaItemId"), 1000);
     }
 
     #[allow(clippy::too_many_lines)]

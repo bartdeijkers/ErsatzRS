@@ -21,8 +21,13 @@ use crate::{db::DbPool, repositories::SqlxResultExt as _};
 pub const ACCESS_HEADER: &str = "x-ersatzrs-next-media";
 /// Identifies one admitted Next process, including concurrent browser previews.
 pub const SESSION_HEADER: &str = "x-ersatzrs-next-session";
+/// Integrity of the occurrence carried by a private canvas request.
+pub const CANVAS_HEADER: &str = "x-ersatzrs-next-canvas";
 pub(super) const SESSION_ENV: &str = "ERSATZRS_NEXT_SESSION";
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[path = "external_media.rs"]
+mod external;
 
 /// One process-local capability. Its published URLs contain only binding IDs;
 /// provider credentials are read when media is opened, never put in the URL.
@@ -101,6 +106,86 @@ impl MediaRelay {
             in_point_ms: None,
             out_point_ms: None,
         })
+    }
+
+    /// Publish one expiring graphics occurrence. Next supplies its process
+    /// session header at playback time; the callback must validate that exact
+    /// active session and re-read the current occurrence before rendering.
+    /// # Errors
+    /// Refuses an unconfigured listener or invalid occurrence interval.
+    pub fn canvas_source(
+        &self,
+        binding: &super::canvas::CanvasBinding,
+        probe_hint: super::protocol::ProbeHint,
+    ) -> Result<Source> {
+        if binding.finish <= binding.start
+            || binding.expires <= binding.start
+            || binding.in_point_ms < 0
+            || binding.out_point_ms < 0
+        {
+            return Err(unavailable("invalid canvas binding"));
+        }
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        let encoded =
+            serde_json::to_string(binding).map_err(|_| unavailable("invalid canvas binding"))?;
+        let mut uri = url::Url::parse(&format!("http://{address}/ffmpeg/next-canvas"))
+            .map_err(|_| unavailable("invalid canvas listener"))?;
+        uri.query_pairs_mut().append_pair("binding", &encoded);
+        Ok(Source::Http {
+            uri: uri.to_string(),
+            probe_hint: Some(probe_hint),
+            is_live: Some(false),
+            headers: vec![
+                format!("{ACCESS_HEADER}: {}", self.capability),
+                format!(
+                    "{SESSION_HEADER}: {}",
+                    binding.session.map_or_else(
+                        || format!("{{{{{SESSION_ENV}}}}}"),
+                        |session| session.to_string()
+                    )
+                ),
+                format!("{CANVAS_HEADER}: {}", self.canvas_ticket(binding)?),
+            ],
+            user_agent: None,
+            keep_alive: Some(true),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(20_000_000),
+            in_point_ms: None,
+            out_point_ms: None,
+        })
+    }
+
+    /// Authenticate expiry and occurrence integrity before any database work.
+    /// This does not replace active-session or current-item validation.
+    #[must_use]
+    pub fn authorized_canvas(
+        &self,
+        binding: &super::canvas::CanvasBinding,
+        ticket: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> bool {
+        binding.expires > now
+            && self
+                .canvas_ticket(binding)
+                .is_ok_and(|expected| expected.as_bytes().ct_eq(ticket.as_bytes()).into())
+    }
+
+    fn canvas_ticket(&self, binding: &super::canvas::CanvasBinding) -> Result<String> {
+        let encoded =
+            serde_json::to_vec(binding).map_err(|_| unavailable("invalid canvas binding"))?;
+        let mut digest = Sha256::new();
+        digest.update(b"ersatzrs-next-canvas-v1");
+        digest.update(self.capability.as_bytes());
+        digest.update(encoded);
+        let mut ticket = String::with_capacity(64);
+        for byte in digest.finalize() {
+            write!(ticket, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        Ok(ticket)
     }
 
     pub(super) fn dynamic_source(
@@ -302,6 +387,7 @@ impl MediaRelay {
             media_file_id: file_id,
             path: row.try_get("Path").repository()?,
             remote_stream_id: None,
+            candidate_overlays: None,
         };
         let plex = self
             .plex
@@ -319,8 +405,11 @@ impl MediaRelay {
         let Source::Http { uri, headers, .. } = resolved else {
             return Err(unavailable("HTTP media source is unavailable"));
         };
-        let client = self
-            .client
+        open_http(self.http_client()?, &uri, &headers, range).await
+    }
+
+    fn http_client(&self) -> Result<&Client> {
+        self.client
             .get_or_init(|| {
                 Client::builder()
                     .redirect(reqwest::redirect::Policy::none())
@@ -330,8 +419,7 @@ impl MediaRelay {
                     .ok()
             })
             .as_ref()
-            .ok_or_else(|| unavailable("media HTTP client unavailable"))?;
-        open_http(client, &uri, &headers, range).await
+            .ok_or_else(|| unavailable("media HTTP client unavailable"))
     }
 }
 

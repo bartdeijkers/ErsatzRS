@@ -31,12 +31,18 @@ pub(super) struct Origin {
 }
 
 impl Origin {
+    pub(super) fn image_url(&self) -> String {
+        format!("{}/image.ppm", self.base)
+    }
+
     pub async fn start(fixture: &Fixture, mode: Mode) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         fixture.state.next_engine.media.configure(address).unwrap();
         let base = format!("http://{address}");
-        install_remote(&fixture.state.pool, &format!("{base}/source.mkv")).await;
+        if mode != Mode::Local {
+            install_remote(&fixture.state.pool, &format!("{base}/source.mkv")).await;
+        }
         let artifact = match mode {
             Mode::Prepared => Some(prepared::install(fixture).await),
             #[cfg(unix)]
@@ -48,6 +54,14 @@ impl Origin {
         };
         let captured = Arc::new(tokio::sync::Mutex::new(None));
         let app = Router::new()
+            .route_service(
+                "/image.ppm",
+                tower_http::services::ServeFile::new(fixture.root.path().join("green.ppm")),
+            )
+            .route(
+                "/ffmpeg/next-canvas",
+                get(crate::transport::iptv::next_canvas::get_canvas),
+            )
             .route(
                 "/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}",
                 get(crate::transport::iptv::next_media::get_item),
@@ -93,7 +107,14 @@ impl Origin {
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response.status(),
+            if captured.path.starts_with("/ffmpeg/next-canvas?") {
+                StatusCode::GONE
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+        );
         let _ = self.cancel.take().unwrap().send(());
         tokio::time::timeout(Duration::from_secs(5), &mut self.task)
             .await
@@ -187,9 +208,11 @@ async fn capture(
     request: axum::extract::Request,
     next: middleware::Next,
 ) -> axum::response::Response {
-    if request.uri().path().starts_with("/ffmpeg/next-item/") {
+    if request.uri().path().starts_with("/ffmpeg/next-item/")
+        || request.uri().path() == "/ffmpeg/next-canvas"
+    {
         *captured.lock().await = Some(Captured {
-            path: request.uri().path().into(),
+            path: request.uri().path_and_query().unwrap().as_str().into(),
             headers: request.headers().clone(),
         });
     }

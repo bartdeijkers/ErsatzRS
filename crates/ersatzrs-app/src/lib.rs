@@ -24,12 +24,12 @@ pub use ports::{
     AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
     AvailableAddonRead, BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError,
     InstalledAddonRead, MediaSourceRuntime, MediaSourceRuntimeError, PlaybackPreviewLog,
-    PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError, PlexPinFlow,
-    RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
-    RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
-    RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
-    ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
-    SourceAddonRouting, WindowsStartupStatus,
+    PlaybackPreviewRequest, PlaybackPreviewState, PlaybackPreviewStatus, PlayoutBuildQueue,
+    PlayoutBuildQueueError, PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit,
+    RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime,
+    RemoteStreamPlaylistRuntimeError, RemoteStreamPlaylistTroubleshootingRead, ScanRuntime,
+    ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths,
+    SettingsRuntime, SettingsRuntimeError, SourceAddonRouting, WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -347,6 +347,30 @@ impl ApplicationServices {
     /// List active channel streaming sessions.
     pub async fn list_active_channel_numbers(&self) -> Result<Vec<String>> {
         queries::list_active_channel_numbers(self.ports.channel_runtime()).await
+    }
+
+    /// Snapshot normal playlist-worker state for machine clients.
+    pub async fn list_streaming_sessions(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>> {
+        queries::list_streaming_sessions(self.ports.channel_runtime()).await
+    }
+
+    /// Read browser-preview output without extending or starting a session.
+    pub async fn preview_segment_output(
+        &self,
+        number: &str,
+        segment: &str,
+        started_at_millis: i64,
+    ) -> Result<Option<ersatzrs_core::hls::HlsSegmentOutput>> {
+        self.ports
+            .channel_runtime()
+            .preview_segment_output(number, segment, started_at_millis)
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "read preview segment output",
+                message: error.to_string(),
+            })
     }
 
     /// Stop one active channel streaming session.
@@ -965,6 +989,21 @@ impl ApplicationServices {
         id: i64,
     ) -> Result<Option<commands::FfmpegProfileAdminForm>> {
         queries::get_ffmpeg_profile(id, self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Read all machine profile records with their required resolution names.
+    pub async fn list_ffmpeg_profiles_for_api(
+        &self,
+    ) -> Result<Vec<(ersatzrs_domain::FFmpegProfile, String)>> {
+        queries::list_ffmpeg_profiles_for_api(self.ports.ffmpeg_profiles()).await
+    }
+
+    /// Validate upstream machine mutation categories before persisting a profile.
+    pub async fn save_ffmpeg_profile_for_api(
+        &self,
+        command: commands::SaveFfmpegProfileForApi,
+    ) -> Result<i64> {
+        commands::save_ffmpeg_profile_for_api(command, self.ports.ffmpeg_profiles()).await
     }
 
     /// Validate and persist one `FFmpeg` profile.
@@ -1650,6 +1689,22 @@ impl ApplicationServices {
         .await
     }
 
+    /// Validate a machine smart-collection mutation without treating missing updates as creates.
+    pub async fn save_smart_collection_for_api(
+        &self,
+        command: commands::SaveSmartCollection,
+        is_update: bool,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_smart_collection_for_api(
+            command,
+            is_update,
+            self.ports.collections(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
     /// Delete one smart collection.
     pub async fn delete_smart_collection(
         &self,
@@ -1860,6 +1915,26 @@ impl ApplicationServices {
             &self.operations,
         )
         .await
+    }
+
+    /// Persist compatible schedule edits for the next continuation, without a rebuild.
+    pub async fn defer_schedule_items(
+        &self,
+        command: commands::ReplaceScheduleItems,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        commands::defer_schedule_items(command, self.ports.program_schedules(), &self.operations)
+            .await
+    }
+
+    pub async fn schedule_deferred_changes(
+        &self,
+        schedule_id: ersatzrs_domain::EntityId,
+    ) -> Result<Vec<ersatzrs_core::repositories::ScheduleDeferredChange>> {
+        self.ports
+            .program_schedules()
+            .deferred_changes_admin(schedule_id)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn append_schedule_media_item(
@@ -2112,10 +2187,10 @@ impl ApplicationServices {
             })
     }
 
-    pub async fn run_admin_health_checks(&self) -> Result<AdminHealthRead> {
+    pub async fn run_admin_health_checks(&self, refresh: bool) -> Result<AdminHealthRead> {
         self.ports
             .admin_health_runtime()
-            .run_health_checks()
+            .run_health_checks(refresh)
             .await
             .map_err(|error| ApplicationError::Unavailable {
                 operation: "run admin health checks",
@@ -2179,9 +2254,19 @@ impl ApplicationServices {
                 operation: "load playback stream selectors",
                 message: error.to_string(),
             })?;
+        let music_video_credits_templates = self
+            .ports
+            .troubleshooting_runtime()
+            .list_music_video_credits_templates()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "load playback music-video credits templates",
+                message: error.to_string(),
+            })?;
         Ok(queries::PlaybackTroubleshootingReadModel {
             data,
             stream_selectors,
+            music_video_credits_templates,
         })
     }
 
@@ -2223,6 +2308,51 @@ impl ApplicationServices {
         self.ports
             .troubleshooting_runtime()
             .start_playback_preview(request)
+            .await
+    }
+
+    /// Queue a bounded ephemeral diagnostic preview without holding the request.
+    pub async fn queue_playback_preview(
+        &self,
+        request: PlaybackPreviewRequest,
+    ) -> std::result::Result<PlaybackPreviewStatus, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .queue_playback_preview(request)
+            .await
+    }
+
+    /// Read the lifecycle and diagnostics belonging to one preview ID.
+    pub async fn playback_preview_status(
+        &self,
+        id: String,
+    ) -> std::result::Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .playback_preview_status(id)
+            .await
+    }
+
+    /// Cancel one owned preview without touching live channel producers.
+    pub async fn stop_playback_preview(
+        &self,
+        id: String,
+    ) -> std::result::Result<Option<PlaybackPreviewStatus>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .stop_playback_preview(id)
+            .await
+    }
+
+    /// Read a safe HLS member under the current preview generation fence.
+    pub async fn playback_preview_file(
+        &self,
+        id: String,
+        filename: String,
+    ) -> std::result::Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.ports
+            .troubleshooting_runtime()
+            .playback_preview_file(id, filename)
             .await
     }
 
@@ -2341,6 +2471,41 @@ impl ApplicationServices {
             .map_err(Into::into)
     }
 
+    /// Preview a draft television library without saving it or starting a scan.
+    /// Limits apply before the native filesystem worker is admitted.
+    ///
+    /// # Errors
+    /// Rejects other media kinds, missing/oversized paths, and worker saturation
+    /// or timeouts. A partial inventory is returned explicitly as truncated.
+    pub async fn preview_television_library(
+        &self,
+        library: &ersatzrs_core::repositories::LocalLibraryAdmin,
+    ) -> std::result::Result<
+        Vec<ersatzrs_core::television_discovery::TelevisionFolderPreview>,
+        ScanRuntimeError,
+    > {
+        if library.media_kind != 2 || library.paths.is_empty() || library.paths.len() > 8 {
+            return Err(ScanRuntimeError::new(
+                "Preview requires a television library with one to eight paths",
+            ));
+        }
+        let mut paths = Vec::with_capacity(library.paths.len());
+        for path in &library.paths {
+            if path.path.len() > 4096
+                || !ersatzrs_core::local_library_paths::is_fully_qualified(&path.path)
+            {
+                return Err(ScanRuntimeError::new(
+                    "Preview requires absolute filesystem paths",
+                ));
+            }
+            paths.push(path.path.clone());
+        }
+        self.ports
+            .scan_runtime()
+            .preview_television_folders(paths)
+            .await
+    }
+
     pub async fn save_local_library(
         &self,
         mut library: ersatzrs_core::repositories::LocalLibraryAdmin,
@@ -2361,30 +2526,23 @@ impl ApplicationServices {
         let mut seen = std::collections::HashSet::new();
         let mut paths = Vec::new();
         for path in library.paths {
-            let trimmed = path.path.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let uri_path = trimmed
-                .strip_prefix("file://localhost")
-                .or_else(|| trimmed.strip_prefix("file://"))
-                .unwrap_or(trimmed);
-            let decoded = urlencoding::decode(uri_path)
-                .map_or_else(|_| uri_path.to_owned(), std::borrow::Cow::into_owned);
-            let path_buf = std::path::Path::new(&decoded);
-            let normalized =
-                dunce::canonicalize(path_buf).unwrap_or_else(|_| path_buf.to_path_buf());
-            let normalized = normalized
-                .to_string_lossy()
-                .trim_end_matches(['/', '\\'])
-                .to_owned();
-            if !std::path::Path::new(&normalized).is_dir() {
+            if !ersatzrs_core::local_library_paths::is_fully_qualified(&path.path) {
                 return Err(ApplicationError::Validation {
-                    field: "path",
-                    message: format!("does not exist: {normalized}"),
+                    field: "library_path_absolute",
+                    message: path.path,
                 });
             }
-            if !normalized.is_empty() && seen.insert(normalized.clone()) {
+            let normalized =
+                ersatzrs_core::local_library_paths::normalize(&path.path).ok_or_else(|| {
+                    ApplicationError::Validation {
+                        field: "library_path_absolute",
+                        message: path.path.clone(),
+                    }
+                })?;
+            let normalized = normalized.to_string_lossy().into_owned();
+            if seen.insert(ersatzrs_core::local_library_paths::comparison_key(
+                &normalized,
+            )) {
                 paths.push(ersatzrs_core::repositories::LocalLibraryPathAdmin {
                     id: path.id,
                     path: normalized,
@@ -2909,6 +3067,31 @@ impl ApplicationServices {
 
     pub async fn delete_playout(&self, command: commands::DeletePlayout) -> Result<()> {
         commands::delete_playout(command, self.ports.playouts()).await
+    }
+
+    /// Validate an explicit rebuild mode and preservation choice against stored state.
+    pub async fn rebuild_playout(
+        &self,
+        command: commands::RequestPlayoutBuild,
+    ) -> Result<commands::RequestPlayoutBuildOutcome> {
+        commands::rebuild_playout(
+            command,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Queue the existing reset action after loading the stored scheduler kind.
+    pub async fn reset_playout(&self, id: i64) -> Result<commands::RequestPlayoutBuildOutcome> {
+        commands::reset_playout(
+            id,
+            self.ports.playouts(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
     }
 
     pub async fn reset_all_playouts(&self) -> Result<commands::PlayoutBuildBatchOutcome> {
