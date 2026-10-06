@@ -36,6 +36,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Use hardware VAAPI padding only with the compatible Intel iHD driver,
+  preserving effective color tags and range. Keep NV12/P010 depth during
+  software fallback and subsequent subtitle/graphics composition; hardware
+  execution remains explicitly unverified (ADR 0117).
+
 - Use the selected content stream's duration when scanning media, excluding
   attached artwork and preserving audio/subtitle metadata. For Matroska/WebM,
   use a valid shorter stream duration tag when FFmpeg has copied a longer

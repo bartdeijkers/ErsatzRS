@@ -208,6 +208,32 @@ pub fn pad_filter(current: &FrameState, padded_size: FrameSize) -> String {
     )
 }
 
+/// Download the concrete VAAPI surface before software padding.
+///
+/// `vaapi` is an opaque hardware format, not a valid software transfer format.
+/// Ten-bit surfaces transfer as P010; `FFmpeg`'s software pad supports that
+/// layout directly, avoiding a color conversion before padding.
+#[must_use]
+pub fn pad_vaapi_software_filter(
+    current: &FrameState,
+    padded_size: FrameSize,
+    ten_bit: bool,
+) -> String {
+    let pad = format!(
+        "pad={}:{}:-1:-1:color=black",
+        padded_size.width, padded_size.height
+    );
+    if current.frame_data_location == FrameDataLocation::Hardware {
+        if ten_bit {
+            format!("hwdownload,format=p010le,{pad}")
+        } else {
+            format!("hwdownload,format=nv12,{pad}")
+        }
+    } else {
+        pad
+    }
+}
+
 #[must_use]
 pub fn pad_vaapi_filter(current: &FrameState, padded_size: FrameSize) -> String {
     let pad = format!(

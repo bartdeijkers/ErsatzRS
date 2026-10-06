@@ -56,7 +56,9 @@ the failure is in Next's input lifetime, not the ErsatzRS hint or FFmpeg build.
 The runtime was built from e88b2d7. A later 2026-10-06 source audit found
 upstream 0362692, which corrects VAAPI padding and color-state handling. It
 does not change image repeat recognition or live RTSP buffering. The reviewed successor package adoption is recorded above; native VAAPI
-padding and ordered row207 application acceptance remain pending.
+padding now has independently reviewed native graph corrections and software
+range/depth proof. Ordered row207 acceptance and VAAPI hardware execution
+remain pending; no additional FFmpeg binary amendment is established.
 
 Next's still-image loop recognizes PNG, JPEG, BMP and TIFF. WebP and GIF may
 contain animation, so adding them to the single-frame loop would risk freezing

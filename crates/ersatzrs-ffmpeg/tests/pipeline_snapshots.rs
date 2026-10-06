@@ -585,9 +585,7 @@ fn vaapi_pipeline_profile_pad_uploads_after_software_pad() {
     let command = pipeline.command(&request.inputs);
     let graph = pipeline.filter_graph.expect("filter graph");
     let pad_index = graph.find("pad=1920:1080").expect("software pad");
-    let upload_index = graph
-        .find("format=nv12|p010le|vaapi,hwupload")
-        .expect("vaapi upload");
+    let upload_index = graph.find("format=nv12,hwupload").expect("vaapi upload");
 
     assert!(
         pad_index < upload_index,
@@ -603,6 +601,7 @@ fn vaapi_pipeline_profile_hardware_pad_uses_pad_vaapi_snapshot() {
         video_format: FFmpegProfileVideoFormat::H264,
         audio_format: FFmpegProfileAudioFormat::Aac,
         pad_mode: FilterMode::HardwareIfPossible,
+        vaapi_driver: VaapiDriver::IHD,
         ..FFmpegProfile::default()
     };
     let resolution = Resolution {
@@ -632,6 +631,291 @@ fn vaapi_pipeline_profile_hardware_pad_uses_pad_vaapi_snapshot() {
         "hardware padding should avoid software pad: {graph}"
     );
     insta::assert_snapshot!(graph);
+}
+
+fn vaapi_padding_request(
+    driver: VaapiDriver,
+    bit_depth: FFmpegProfileBitDepth,
+    output_dynamic_range: OutputDynamicRange,
+    color_params: SourceColorParams,
+) -> PipelineRequest {
+    let mut source = source_1080p(SourceVideoCodec::Hevc, 1440, 1080);
+    source.color_params = color_params;
+    source.pixel_format = Some(if bit_depth == FFmpegProfileBitDepth::TenBit {
+        PixelFormat::Yuv420P10Le
+    } else {
+        PixelFormat::Yuv420P
+    });
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::Hevc,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        pad_mode: FilterMode::HardwareIfPossible,
+        vaapi_driver: driver,
+        bit_depth,
+        output_dynamic_range,
+        normalize_colors: false,
+        ..FFmpegProfile::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &Resolution {
+            width: 1920,
+            height: 1080,
+            ..Resolution::default()
+        },
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+    PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source)
+}
+
+fn vaapi_padding_graph(
+    driver: VaapiDriver,
+    bit_depth: FFmpegProfileBitDepth,
+    output_dynamic_range: OutputDynamicRange,
+    color_params: SourceColorParams,
+) -> String {
+    VaapiPipelineBuilder
+        .build(vaapi_padding_request(
+            driver,
+            bit_depth,
+            output_dynamic_range,
+            color_params,
+        ))
+        .filter_graph
+        .expect("filter graph")
+}
+
+#[test]
+fn vaapi_padding_driver_and_depth_fallback_snapshot() {
+    let mut graphs = Vec::new();
+    for driver in [
+        VaapiDriver::Auto,
+        VaapiDriver::I965,
+        VaapiDriver::RadeonSI,
+        VaapiDriver::Nouveau,
+    ] {
+        for depth in [
+            FFmpegProfileBitDepth::EightBit,
+            FFmpegProfileBitDepth::TenBit,
+        ] {
+            let graph = vaapi_padding_graph(
+                driver,
+                depth,
+                OutputDynamicRange::SdrBt709,
+                SourceColorParams::default(),
+            );
+            assert!(!graph.contains("pad_vaapi="), "{graph}");
+            assert!(graph.contains("pad=1920:1080"), "{graph}");
+            let transfer = if depth == FFmpegProfileBitDepth::TenBit {
+                "hwdownload,format=p010le,pad=1920:1080:-1:-1:color=black,format=p010le,hwupload"
+            } else {
+                "hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload"
+            };
+            assert!(
+                graph.contains(transfer),
+                "correct download/pad/upload order: {graph}"
+            );
+            graphs.push(format!("{driver:?} {depth:?}: {graph}"));
+        }
+    }
+    insta::assert_snapshot!(graphs.join("\n"));
+}
+
+#[test]
+fn vaapi_padding_effective_color_snapshot() {
+    let mut graphs = Vec::new();
+    for (name, primaries, transfer, matrix) in [
+        (
+            "bt2020 limited",
+            Some("bt2020"),
+            Some("bt2020-10"),
+            "bt2020nc",
+        ),
+        ("bt2020 full", Some("bt2020"), Some("bt2020-12"), "bt2020c"),
+        ("unspecified", None, Some("reserved"), "bt2020nc"),
+        ("unrecognized", Some("bt2020"), Some("pq"), "bt2020nc"),
+    ] {
+        let graph = vaapi_padding_graph(
+            VaapiDriver::IHD,
+            FFmpegProfileBitDepth::TenBit,
+            OutputDynamicRange::SdrBt709,
+            SourceColorParams {
+                color_range: Some(if name == "bt2020 full" { "pc" } else { "tv" }.to_owned()),
+                color_primaries: primaries.map(str::to_owned),
+                color_transfer: transfer.map(str::to_owned),
+                color_space: Some(matrix.to_owned()),
+                ..SourceColorParams::default()
+            },
+        );
+        if name == "unrecognized" {
+            assert!(
+                !graph.contains("pad_vaapi="),
+                "invalid tags must use software padding: {graph}"
+            );
+        } else {
+            assert!(graph.contains("colorspace=bt709,pad_vaapi="), "{graph}");
+            let restore_primaries = primaries.unwrap_or("unknown");
+            let restore_transfer = if transfer == Some("reserved") {
+                "unknown"
+            } else {
+                transfer.unwrap_or("unknown")
+            };
+            assert!(graph.contains(&format!("setparams=color_primaries={restore_primaries}:color_trc={restore_transfer}:colorspace={matrix}")), "{graph}");
+            assert!(
+                !graph.contains("range="),
+                "padding must preserve frame range: {graph}"
+            );
+        }
+        graphs.push(format!("{name}: {graph}"));
+    }
+    for transfer in ["bt709", "arib-std-b67", "smpte2084"] {
+        let graph = vaapi_padding_graph(
+            VaapiDriver::IHD,
+            FFmpegProfileBitDepth::TenBit,
+            OutputDynamicRange::Hdr10Bt2020Pq,
+            SourceColorParams {
+                color_range: Some("tv".to_owned()),
+                color_primaries: Some(
+                    if transfer == "bt709" {
+                        "bt709"
+                    } else {
+                        "bt2020"
+                    }
+                    .to_owned(),
+                ),
+                color_transfer: Some(transfer.to_owned()),
+                color_space: Some(
+                    if transfer == "bt709" {
+                        "bt709"
+                    } else {
+                        "bt2020nc"
+                    }
+                    .to_owned(),
+                ),
+                is_hdr: transfer != "bt709",
+                ..SourceColorParams::default()
+            },
+        );
+        assert!(
+            !graph.contains("_vaapi="),
+            "unproven HDR10 backend must keep software fallback: {graph}"
+        );
+        assert!(graph.contains("setparams=range=tv:colorspace=bt2020nc:color_trc=smpte2084:color_primaries=bt2020,pad=1920:1080"), "padding preserves effective HDR10: {graph}");
+        graphs.push(format!("HDR10 from {transfer}: {graph}"));
+    }
+    insta::assert_snapshot!(graphs.join("\n"));
+}
+
+#[test]
+fn vaapi_padding_tonemapped_frames_keep_bt709() {
+    let graph = vaapi_padding_graph(
+        VaapiDriver::IHD,
+        FFmpegProfileBitDepth::EightBit,
+        OutputDynamicRange::SdrBt709,
+        SourceColorParams {
+            color_range: Some("tv".to_owned()),
+            color_primaries: Some("bt2020".to_owned()),
+            color_transfer: Some("smpte2084".to_owned()),
+            color_space: Some("bt2020nc".to_owned()),
+            is_hdr: true,
+            ..SourceColorParams::default()
+        },
+    );
+    assert!(graph.contains("tonemap_opencl="), "{graph}");
+    assert!(
+        !graph.contains("pad_vaapi="),
+        "tonemap preserves the software pad fallback: {graph}"
+    );
+    assert!(
+        !graph.contains("setparams=color_primaries=bt2020"),
+        "do not restore pre-tonemap tags: {graph}"
+    );
+    insta::assert_snapshot!(graph);
+}
+
+#[test]
+fn vaapi_ten_bit_hardware_padding_composition_downloads_p010_snapshot() {
+    let mut graphs = Vec::new();
+    for composition in ["subtitle", "drawtext", "positioned image"] {
+        let mut request = vaapi_padding_request(
+            VaapiDriver::IHD,
+            FFmpegProfileBitDepth::TenBit,
+            OutputDynamicRange::SdrBt709,
+            SourceColorParams {
+                color_range: Some("pc".to_owned()),
+                color_space: Some("bt2020nc".to_owned()),
+                color_primaries: Some("bt2020".to_owned()),
+                color_transfer: Some("bt2020-10".to_owned()),
+                ..SourceColorParams::default()
+            },
+        );
+        match composition {
+            "subtitle" => request.inputs.push(InputFile::text_subtitle(
+                "/fixtures/subtitles/international.srt",
+                ersatzrs_ffmpeg::SubtitleMethod::Burn,
+            )),
+            "drawtext" => request
+                .graphics_overlays
+                .push(GraphicsPipelineOverlay::drawtext(
+                    1,
+                    DrawtextFilterBuilder::new(
+                        DrawtextTextSource::inline("International caption"),
+                        DrawtextFont::file("/assets/fonts/Roboto-Regular.ttf"),
+                    )
+                    .font_size("24")
+                    .position("64", "64")
+                    .build(),
+                )),
+            _ => request
+                .graphics_overlays
+                .push(GraphicsPipelineOverlay::native_image(
+                    1,
+                    InputFile::graphics_image("/fixtures/graphics/logo.png"),
+                    WatermarkOverlay {
+                        horizontal_margin_percent: 2.0,
+                        ..WatermarkOverlay::default()
+                    },
+                )),
+        }
+        let pipeline = VaapiPipelineBuilder.build(request.clone());
+        let command = pipeline.command(&request.inputs);
+        let graph = pipeline.filter_graph.expect("filter graph");
+        let restore = graph.find("pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black,setparams=color_primaries=bt2020:color_trc=bt2020-10:colorspace=bt2020nc")
+            .expect("padding restores effective color before composition");
+        let download = graph
+            .find("hwdownload,format=vaapi|p010le")
+            .expect("download must allow the actual P010 hardware surface");
+        assert!(restore < download, "{graph}");
+        assert!(
+            !graph.contains("hwdownload,format=yuv420p10le"),
+            "hardware transfer cannot request planar format: {graph}"
+        );
+        assert!(
+            !graph.contains("hwdownload,format=nv12"),
+            "ten-bit composition must not reduce depth: {graph}"
+        );
+        assert!(
+            !graph.contains("range="),
+            "padding/composition must preserve full range: {graph}"
+        );
+        assert!(
+            graph.contains("format=nv12|p010le|vaapi,hwupload"),
+            "composition must restore encoder surface: {graph}"
+        );
+        if composition == "positioned image" {
+            // FFmpeg overlay's numeric value 1 selects yuv420p10.
+            assert!(
+                graph.contains(":format=1"),
+                "overlay must retain desired ten-bit depth: {graph}"
+            );
+        }
+        assert!(command.arguments.join(" ").contains("-codec:v hevc_vaapi"));
+        graphs.push(format!("{composition}: {graph}"));
+    }
+    insta::assert_snapshot!(graphs.join("\n"));
 }
 
 #[test]

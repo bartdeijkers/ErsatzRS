@@ -86,7 +86,7 @@ id = 'ucu09-row207-vaapi-padding'
 adr = '0117'
 description = 'Adopt upstream Next VAAPI padding correction and repair native driver eligibility, color-state preservation and padding fallback without assuming that every VAAPI driver honors black padding.'
 discovered = '2026-10-06'
-evidence = 'Next0362692 gates pad_vaapi to compatible Intel iHD and restores BT.2020 tags around padding. Native apply_pad_filter currently selects pad_vaapi without those guards. Source matching establishes a credible green-padding path; native capability/filter, HDR/range/depth and upload regressions remain required. Existing hardware acceptance debt is unchanged; no additional FFmpeg binary patch or row207 acceptance is claimed.'
+evidence = 'Next0362692 and the native pipeline now gate hardware padding to explicit compatible Intel iHD, restore effective BT.2020 tags without changing range, and retain software fallback for other drivers/HDR tonemapping. NV12/P010 transfers preserve depth through subtitle/graphics composition. Twenty-one focused VAAPI checks, four reviewed snapshots, strict affected lint and four decoded software range/depth cases pass; independent review finds no concrete source/graph regression. UCU-09 owns exact evidence. VAAPI hardware execution remains unverified; no additional FFmpeg binary patch or ordered row207 acceptance is claimed.'
 resolved = false
 
 [[debt]]

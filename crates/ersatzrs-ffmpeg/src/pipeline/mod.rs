@@ -14,24 +14,24 @@ use crate::{
     hdr10_output_support, hide_banner, hlg_to_hdr10_cuda_filter, hlg_to_hdr10_filter,
     loglevel_error, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_autoscale, no_b_frames,
     no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats, normalize_loudness_filter,
-    pad_filter, pad_vaapi_filter, pipe_output, preserve_hdr10_filter, progress_to_stdout,
-    realtime_filter, reset_pts_filter, scale_subtitle_image_filter, sdr_to_hdr10_cuda_filter,
-    sdr_to_hdr10_filter, select_forced_software_video_decoder, select_software_video_decoder,
-    select_video_decoder, standard_format_flags, still_image_loop_filter,
-    strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
-    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
-    tonemap_filter_for, unknown_source_scale_filter, vaapi_subtitle_pixel_format_filter,
-    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
-    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
-    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
-    ComplexFilter, ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling,
-    FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain,
-    FrameRate, FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory,
-    HardwareGraphOperation, Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile,
-    InputKind, MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat,
-    SourceColorTags, SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod,
-    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
-    NVENC_HDR_DEVICE_PREFIX,
+    pad_filter, pad_vaapi_filter, pad_vaapi_software_filter, pipe_output, preserve_hdr10_filter,
+    progress_to_stdout, realtime_filter, reset_pts_filter, scale_subtitle_image_filter,
+    sdr_to_hdr10_cuda_filter, sdr_to_hdr10_filter, select_forced_software_video_decoder,
+    select_software_video_decoder, select_video_decoder, standard_format_flags,
+    still_image_loop_filter, strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter,
+    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
+    subtitles_filter, time_limit, tonemap_filter_for, unknown_source_scale_filter,
+    vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
+    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
+    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
+    ContentLightLevel, DolbyVisionConfiguration, DolbyVisionHandling, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FilterChain, FrameRate, FrameSize,
+    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, HardwareGraphOperation,
+    Hdr10OutputSupport, IncompleteDolbyVisionMetadata, InputFile, InputKind,
+    MasteringDisplayMetadata, MpegTsMuxingOptions, PipelineStep, PixelFormat, SourceColorTags,
+    SourceTransferKind, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
+    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay, NVENC_HDR_DEVICE_PREFIX,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -2510,13 +2510,21 @@ fn apply_pad_filter(
     target_state: &mut FrameState,
     filter_chain: &mut FilterChain,
 ) {
-    let use_vaapi_pad = acceleration == HardwareAccelerationKind::Vaapi
+    let vaapi_pad = (acceleration == HardwareAccelerationKind::Vaapi
+        && request.desired.vaapi_driver.as_deref() == Some("iHD")
         && request.desired.pad_mode == FilterMode::HardwareIfPossible
-        && !used_hdr_tonemap;
-    if use_vaapi_pad {
-        filter_chain
-            .video
-            .push(pad_vaapi_filter(target_state, request.desired.frame_size));
+        && !used_hdr_tonemap)
+        .then(|| vaapi_pad_with_effective_color(request, target_state))
+        .flatten();
+    let use_vaapi_pad = vaapi_pad.is_some();
+    if let Some(pad) = vaapi_pad {
+        filter_chain.video.push(pad);
+    } else if acceleration == HardwareAccelerationKind::Vaapi {
+        filter_chain.video.push(pad_vaapi_software_filter(
+            target_state,
+            request.desired.frame_size,
+            request.desired.bit_depth == FFmpegProfileBitDepth::TenBit,
+        ));
     } else {
         filter_chain
             .video
@@ -2528,14 +2536,118 @@ fn apply_pad_filter(
         target_state.frame_data_location = crate::FrameDataLocation::Hardware;
         target_state.pixel_format = match request.desired.bit_depth {
             FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
-            FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
+            // Keep the existing VAAPI/P010 marker: a later software caption
+            // or graphics download must not request planar ten-bit transfer.
+            FFmpegProfileBitDepth::TenBit => PixelFormat::Vaapi,
         };
     } else {
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
     }
     if profile_5_operation(request).is_none() {
-        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+        if acceleration == HardwareAccelerationKind::Vaapi {
+            upload_vaapi_frames(request.desired.bit_depth, target_state, filter_chain);
+        } else {
+            upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+        }
+    }
+}
+
+fn upload_vaapi_frames(
+    bit_depth: FFmpegProfileBitDepth,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if target_state.frame_data_location == crate::FrameDataLocation::Software {
+        filter_chain.video.push(format!(
+            "format={},hwupload",
+            hardware_surface_format(bit_depth)
+        ));
+        target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+        target_state.pixel_format = PixelFormat::Vaapi;
+    }
+}
+
+fn vaapi_pad_with_effective_color(
+    request: &PipelineRequest,
+    current: &FrameState,
+) -> Option<String> {
+    let pad = pad_vaapi_filter(current, request.desired.frame_size);
+    // ADR 0117: iHD padding rejects BT.2020-tagged frames. Temporarily retag
+    // metadata, then restore the effective color without changing range/pixels.
+    // HDR10 conversion has already replaced source SDR/HLG tags with PQ.
+    let hdr10 = request.desired.produces_hdr10();
+    let source = request.source_video_stream.as_ref();
+    let matrix = if hdr10 {
+        "bt2020nc"
+    } else if current.colors_are_bt709 {
+        "bt709"
+    } else {
+        source.map_or("", |source| {
+            trimmed_tag(source.color_params.color_space.as_deref())
+        })
+    };
+    if !matches!(matrix, "bt2020nc" | "bt2020c") {
+        return Some(pad);
+    }
+    let (primaries, transfer) = if hdr10 {
+        ("bt2020", "smpte2084")
+    } else {
+        let color = &source?.color_params;
+        (
+            vaapi_restore_color_tag(
+                color.color_primaries.as_deref(),
+                &[
+                    "bt709",
+                    "bt470m",
+                    "bt470bg",
+                    "smpte170m",
+                    "smpte240m",
+                    "film",
+                    "bt2020",
+                    "smpte428",
+                    "smpte431",
+                    "smpte432",
+                    "jedec-p22",
+                    "ebu3213",
+                    "vgamut",
+                ],
+            )?,
+            vaapi_restore_color_tag(
+                color.color_transfer.as_deref(),
+                &[
+                    "bt709",
+                    "bt470m",
+                    "bt470bg",
+                    "smpte170m",
+                    "smpte240m",
+                    "linear",
+                    "log100",
+                    "log316",
+                    "iec61966-2-4",
+                    "bt1361e",
+                    "iec61966-2-1",
+                    "bt2020-10",
+                    "bt2020-12",
+                    "smpte2084",
+                    "smpte428",
+                    "arib-std-b67",
+                    "vlog",
+                ],
+            )?,
+        )
+    };
+    Some(format!(
+        "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,{pad},\
+         setparams=color_primaries={primaries}:color_trc={transfer}:colorspace={matrix}"
+    ))
+}
+
+fn vaapi_restore_color_tag<'a>(value: Option<&'a str>, accepted: &[&str]) -> Option<&'a str> {
+    match value.map(str::trim) {
+        None | Some("" | "unknown" | "unspecified" | "reserved") => Some("unknown"),
+        Some(value) if accepted.contains(&value) => Some(value),
+        _ => None,
     }
 }
 

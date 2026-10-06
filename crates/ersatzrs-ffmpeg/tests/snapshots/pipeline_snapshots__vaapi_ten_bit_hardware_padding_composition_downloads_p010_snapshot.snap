@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 918
+expression: "graphs.join(\"\\n\")"
+---
+subtitle: [0:0]scale_vaapi=format=p010le,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black,setparams=color_primaries=bt2020:color_trc=bt2020-10:colorspace=bt2020nc,hwdownload,format=vaapi|p010le,subtitles=/fixtures/subtitles/international.srt,format=nv12|p010le|vaapi,hwupload[v];[1:1]aresample=async=1,apad[a]
+drawtext: [0:0]scale_vaapi=format=p010le,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black,setparams=color_primaries=bt2020:color_trc=bt2020-10:colorspace=bt2020nc,hwdownload,format=vaapi|p010le[v];[v]drawtext=fontfile=/assets/fonts/Roboto-Regular.ttf:text=International caption:expansion=normal:fontsize=24:x=64:y=64[vge0];[vge0]format=nv12|p010le|vaapi,hwupload[vpf];[1:1]aresample=async=1,apad[a]
+positioned image: [0:0]scale_vaapi=format=p010le,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black,setparams=color_primaries=bt2020:color_trc=bt2020-10:colorspace=bt2020nc,hwdownload,format=vaapi|p010le[v];[2:0]scale=192:-1[gi0];[v][gi0]overlay=x=W-w-38:y=H-h-22:format=1[vge0];[vge0]format=nv12|p010le|vaapi,hwupload[vpf];[1:1]aresample=async=1,apad[a]

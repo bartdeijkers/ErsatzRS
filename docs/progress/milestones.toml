@@ -11588,6 +11588,19 @@ SHA/subject rows match the fixed v26.11.1 ancestry. Row186 is Adapt (ADR0117),
 186/208 accepted with22 pending. Pin/ledger land together; then align the clean
 upstream checkout. Row187 block scheduling/history is next. Rows194/207,
 final application window gates and terminal exact-SHA CI remain open.
+Row207 native prerequisite subsequently passes21 focused VAAPI checks
+(3d271cad-7ee3-4d31-9ad0-f02d93446311), strict all-target FFmpeg crate Clippy,
+format and four reviewed snapshots. Hardware padding requires explicit Intel
+iHD; other drivers and HDR tonemapping use software fallback. Effective color
+metadata/range survive retagging, and hardware NV12/P010 transfers preserve
+depth through subtitle/graphics composition. Four exact v2.0.6 decoded software
+cases prove8/10-bit tv/pc black luma16/0/64/0, unchanged center pixels,32x16
+geometry and correct tags. Canonical proof:
+tmp/ucu09-row207/native-padding-software-proof.json. Independent review finds
+no concrete graph/state regression. These checks execute no VAAPI device,
+hardware transfer or pad_vaapi; approved hardware debt remains unchanged and
+row207 is not accepted early.
+
 Fourteen verified obsolete local duplicate Next files were removed, reclaiming
 121186613 logical bytes; current packages, rollback, recovery and warm caches
 remain. All three GitHub dependency releases retain live references, so none
