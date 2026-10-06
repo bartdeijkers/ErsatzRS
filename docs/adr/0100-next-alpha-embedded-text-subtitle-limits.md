@@ -112,6 +112,9 @@ revision requires the existing source review, runtime acceptance and CI gates.
 Emulated startup and decoded playback checks are distinct from the approved,
 still-unverified native ARM application and hardware acceptance.
 
+The temporary live RTSP buffering patch and its mandatory retirement are the
+scoped exception accepted in [ADR 0116](0116-temporarily-bound-next-live-rtsp-buffering.md).
+
 ### Preserving accepted dependency artifacts
 
 The maintainer approved the immutable `next-4ad282f` dependency snapshot on

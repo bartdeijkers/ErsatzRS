@@ -1,0 +1,108 @@
+--- a/crates/ffpipeline/src/pipeline.rs
++++ b/crates/ffpipeline/src/pipeline.rs
+@@ -367,6 +367,15 @@
+         output_settings: OutputSettings,
+     ) -> Result<Pipeline, FFPipelineError> {
+         let mut final_output_settings = output_settings;
++
++        // A live RTSP reader cannot work ahead to fill the default ten-second
++        // shortest queue. Keep EOF handling while bounding its startup latency.
++        let shortest_buffer = (final_output_settings.is_live
++            && matches!(
++                &input_settings.video_input.input_source,
++                InputSource::Rtsp(_)
++            ))
++        .then_some(Duration::from_millis(500));
+ 
+         if let Some(accel) = &final_output_settings.accel
+             && accel
+@@ -1004,7 +1013,7 @@
+                 OutputOption::DoNotMapMetadata,
+                 OutputOption::Duration(duration),
+                 // apad does not end; stop at the end of video
+-                OutputOption::Shortest(None),
++                OutputOption::Shortest(shortest_buffer),
+                 OutputOption::TsOffset(pts_offset),
+                 OutputOption::VideoTrackTimeScale(90_000),
+                 OutputOption::FrameRate(output_frame_rate),
+@@ -2170,6 +2179,80 @@
+         args.windows(2)
+             .find(|a| a[0] == "-shortest_buf_duration")
+             .map(|a| a[1].as_ref())
++    }
++
++    #[test]
++    fn live_rtsp_bounds_shortest_buffer_without_changing_other_sources() {
++        use crate::input::{HttpInputOptions, HttpInputSource, RtspInputOptions, RtspInputSource};
++
++        for (source, live, expected) in [
++            (
++                InputSource::Rtsp(RtspInputSource {
++                    uri: "rtsp://example.test/source".to_owned(),
++                    options: RtspInputOptions::default(),
++                }),
++                true,
++                Some("0.500"),
++            ),
++            (
++                InputSource::Rtsp(RtspInputSource {
++                    uri: "rtsp://example.test/source".to_owned(),
++                    options: RtspInputOptions::default(),
++                }),
++                false,
++                None,
++            ),
++            (
++                InputSource::Local(crate::input::LocalInputSource {
++                    path: "fixture.mkv".to_owned(),
++                }),
++                true,
++                None,
++            ),
++            (
++                InputSource::Http(HttpInputSource {
++                    uri: "https://example.test/source".to_owned(),
++                    options: HttpInputOptions::default(),
++                }),
++                true,
++                None,
++            ),
++        ] {
++            let mut input = multichannel_ac3_input("fixture.mkv");
++            input.video_input.input_source = source.clone();
++            input.audio_input.input_source = source;
++            let mut output = stereo_output();
++            output.is_live = live;
++            let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
++            pipeline.optimize();
++            let args = pipeline.args();
++            assert_eq!(shortest_buf_duration(&args), expected, "{args:?}");
++        }
++    }
++
++    #[test]
++    fn live_rtsp_audio_copy_still_omits_shortest() {
++        use crate::input::{RtspInputOptions, RtspInputSource};
++
++        let mut input = multichannel_ac3_input("fixture.mkv");
++        let source = InputSource::Rtsp(RtspInputSource {
++            uri: "rtsp://example.test/source".to_owned(),
++            options: RtspInputOptions::default(),
++        });
++        input.video_input.input_source = source.clone();
++        input.audio_input.input_source = source;
++        let mut output = stereo_output();
++        output.is_live = true;
++        output.audio.copy = Some(crate::output_settings::CopyPolicy::default());
++        let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
++        pipeline.optimize();
++        let args = pipeline.args();
++        assert!(
++            !args
++                .iter()
++                .any(|arg| arg == "-shortest" || arg == "-shortest_buf_duration"),
++            "{args:?}"
++        );
+     }
+ 
+     #[test]

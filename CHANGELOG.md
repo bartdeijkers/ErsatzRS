@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare a checksum-verified Next source distribution with a temporary live RTSP
+  buffering correction (ADR 0116). Every revision update requires an upstream
+  regression review; remove the patch when an equivalent upstream fix passes.
+  Candidate artifacts remain separate from production runtime adoption.
+
 ### Fixed
 
 - Apply exact Image/Motion pixel placement in native rendering and previews,

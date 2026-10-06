@@ -1,0 +1,98 @@
+name: Next source candidate (macOS)
+
+# Linux and Windows candidates can be built and exercised on the maintainer's
+# host. These two runners provide the missing macOS build environments. This
+# workflow uploads candidates only; it cannot publish a dependency release.
+on:
+  push:
+    branches: [build/next-rtsp-candidate]
+    paths:
+      - .github/workflows/next-source-candidate.yml
+      - scripts/release/next-patches/**
+      - scripts/release/prepare-next-source.py
+      - scripts/release/package-next-source.py
+      - scripts/release/test-prepare-next-source.py
+      - scripts/release/test-package-next-source.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: next-source-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Next ${{ matrix.rid }} source candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            rid: osx-x64
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            rid: osx-arm64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: ${{ matrix.target }}
+      - name: Check source and package guards
+        run: |
+          python3 scripts/release/test-prepare-next-source.py
+          python3 scripts/release/test-package-next-source.py
+      - name: Prepare exact reviewed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision=$(python3 -c 'import json; print(json.load(open("scripts/release/next-patches/manifest.json"))["upstream_revision"])')
+          curl --fail --location --retry 3 --output next-source.tar.gz "https://codeload.github.com/ErsatzTV/next/tar.gz/$revision"
+          python3 scripts/release/prepare-next-source.py --source-archive next-source.tar.gz --output .next-source
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .next-source
+          prefix-key: next-adr0116-${{ matrix.rid }}
+          cache-bin: false
+      - name: Build reviewed source and check native startup
+        shell: bash
+        working-directory: .next-source
+        env:
+          NEXT_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])')
+          export ETV_VERSION
+          cargo build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel
+          python3 -c 'import hashlib,json; assert hashlib.sha256(open("Cargo.lock","rb").read()).hexdigest() == json.load(open("ersatzrs-source.json"))["cargo_lock_sha256"]'
+          mkdir ../next-payload
+          cp "target/$NEXT_TARGET/release/ersatztv-channel" LICENSE ../next-payload/
+          strip ../next-payload/ersatztv-channel
+          codesign --force --sign - ../next-payload/ersatztv-channel
+          codesign --verify --strict ../next-payload/ersatztv-channel
+          ../next-payload/ersatztv-channel --version | tee ../next-version.txt
+          test "$(cat ../next-version.txt)" = "ersatztv-channel $ETV_VERSION"
+      - name: Package exact payload with provenance
+        shell: bash
+        env:
+          NEXT_RID: ${{ matrix.rid }}
+        run: |
+          python3 scripts/release/package-next-source.py --payload next-payload \
+            --source-provenance .next-source/ersatzrs-source.json --rid "$NEXT_RID" \
+            --output packages --rustc "$(rustc --version)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-source-candidate-${{ matrix.rid }}
+          path: |
+            packages/
+            next-version.txt
+            .next-source/ersatzrs-source.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

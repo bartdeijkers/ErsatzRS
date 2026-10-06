@@ -702,6 +702,54 @@ Current playback acceptance and approved platform debt are recorded in the
 [structured progress records](docs/progress/README.md); a successful artifact
 staging test does not prove playback acceptance.
 
+### Temporary Next source correction (ADR 0116)
+
+The row 184 candidate uses a narrowly scoped live RTSP buffering patch. It is
+not yet the production snapshot described above. Prepare its exact reviewed
+source with:
+
+```sh
+python3 scripts/release/prepare-next-source.py \
+  --source-archive tmp/next-source.tar.gz --output tmp/next-reviewed-source
+python3 scripts/release/test-prepare-next-source.py
+python3 scripts/release/test-package-next-source.py
+```
+
+The source archive must match `scripts/release/next-patches/manifest.json`.
+Preparation checks the source archive, Cargo.lock and each patch SHA-256,
+applies patches without fuzzy context fallback, and writes
+`ersatzrs-source.json`. Build all platform packages from this same source with
+the recorded distribution version; preserve source/patch provenance, licenses
+and Windows companions. A prepared source tree alone does not prove package
+or playback acceptance.
+
+Package the built executable and license directory with
+`scripts/release/package-next-source.py`; supply the generated source provenance,
+RID and build's exact `rustc --version`. It verifies licenses, patch provenance
+and Windows companions, records each payload hash, and refuses to overwrite an
+existing archive. The candidate macOS workflow builds both supported targets
+and uploads artifacts without publishing a release. macOS binaries receive an
+ad-hoc signature for loader integrity; rebuilt executables do not inherit the
+upstream publisher's signing/notarization identity.
+
+For every Next revision update, first prepare the comparison with
+`--unpatched` and run the existing
+`real_next_direct_http_and_rtsp_preserve_audio_and_source_clock` and
+`real_next_rtsp_handoff_preserves_tracks_and_stops_padded_audio_at_video_eof`
+application regressions. Review the upstream diff and run compatibility
+acceptance. When an equivalent upstream correction passes, remove the patch
+from the build and manifest, return to verified official artifacts where
+available, and resolve ADR 0116's retirement debt. Retain the regression tests.
+If upstream still fails, record the new unpatched evidence and explicitly
+review the patch for that revision; changing the source pin alone is rejected.
+
+For package cleanup, retain the accepted snapshot, current candidate and any
+artifacts required by release recovery or the chosen rollback. Check references
+and active processes first; verify duplicate payload hashes before deleting
+their local copies. Remove a published dependency snapshot only after no
+retained consumer requires it. Test logs and provenance remain useful even
+after obsolete binaries are removed.
+
 ## Intel container userspace verification
 
 The Docker `intel-media` stage builds the matched, checksum-pinned sources in

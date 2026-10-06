@@ -2,7 +2,7 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..960421e8 (fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106']
+adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116']
 summary    = """
 183/183 accepted; feature remains In progress for approved acceptance debt.
 UCU-00 through UCU-09 are Complete. Final window local gates and terminal
@@ -338,3 +338,11 @@ discovered = '2026-10-01'
 adr = '0106'
 resolved = true
 evidence = 'UCU-09 owns passing Linux application playback across item boundaries, selected audio/subtitles, unchanged profile state, fMP4 playlists and HTTP 415 transport/Next refusal. Native Windows encoding, six AV1 regressions, four localized browser cases, strict workspace lint, test-closeout, web parity, both-engine smoke and 87 TSDuck checks pass. Row183 is Adapt; pin/reference advance to 960421e8. Hardware and ARM/macOS debt is unchanged.'
+
+[[debt]]
+id = 'ucu-next-rtsp-patch-retirement'
+description = 'At every Next update, verify the unpatched candidate against live RTSP startup and EOF/handoff acceptance; remove the temporary buffer patch and return to official artifacts when an equivalent upstream correction passes.'
+discovered = '2026-10-06'
+adr = '0116'
+evidence = 'Explicit maintainer condition attached to patch approval. Source/patch manifests must reject unreviewed revisions; keep the regression tests after retirement. UCU-09 owns implementation and current runtime acceptance; ADR 0116 owns the removal contract.'
+resolved = false
