@@ -85,16 +85,22 @@ pub(crate) async fn project_snapshot(
         .await;
     }
     let selection_time = schedule_snapshot.context.source_time(media.item.start)?;
-    let watermarks = playback::select_playback_watermarks(
-        pool,
-        &channel,
-        media.item.id,
-        media.item.disable_watermarks,
-        selection_time,
-    )
-    .await?;
-    let graphics =
-        playback::select_playback_graphics(pool, &channel, media.item.id, selection_time).await?;
+    let (watermarks, graphics) = if super::graphics::enabled(&profile) {
+        let watermarks = playback::select_playback_watermarks(
+            pool,
+            &channel,
+            media.item.id,
+            media.item.disable_watermarks,
+            selection_time,
+        )
+        .await?;
+        let graphics =
+            playback::select_playback_graphics(pool, &channel, media.item.id, selection_time)
+                .await?;
+        (watermarks, graphics)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let source = source::resolve_published(pool, media, replacements, Some(relay)).await?;
     let mut projection = selection::project_deferred_item_with_audio(
         pool,
@@ -111,7 +117,7 @@ pub(crate) async fn project_snapshot(
         pool,
         &channel,
         media,
-        &profile.resolution,
+        &profile,
         &mut projection.item,
         &watermarks,
         &graphics,

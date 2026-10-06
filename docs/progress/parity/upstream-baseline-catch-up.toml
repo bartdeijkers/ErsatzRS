@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116']
 summary    = """
-184/206 accepted; rows 185-206 remain pending at fetched tip d55be01f.
+185/206 accepted; rows 186-206 remain pending at fetched tip d55be01f.
 Row184 copy/fallback and RTSP acceptance passes with the published six-platform
 next-e88b2d7-ersatzrs.1 snapshot. ADR 0116 requires patch retirement when an
 upstream equivalent passes. Linux/Windows application, HTTP, 83 TSDuck checks,
@@ -65,6 +65,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
 """
+
+[[debt]]
+id = 'ucu09-row185-copy-projection'
+description = 'Match upstream copy-mode cleanup: refresh affected Next projections after profile copy/resolution changes, suppress copied-video overlays, and omit fixed HLS resolution.'
+discovered = '2026-10-06'
+evidence = 'UCU-09 owns row185 acceptance: editor/API notifications preserve schedules, every projection path skips copied-video overlays, normal/preview Next playlists omit fixed resolution, decoded copy/non-copy graphics and Convert HTTP lifecycle pass. Focused regressions, architecture lint and strict affected Clippy pass; baseline advances to e1d2cac0.'
+resolved = true
 
 [[debt]]
 id = 'ucu-next-rtsp-patch-retirement'

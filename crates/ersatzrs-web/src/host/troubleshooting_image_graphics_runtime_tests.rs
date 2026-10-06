@@ -11,11 +11,17 @@ use ersatzrs_domain::{
 #[ignore = "requires official Next and FFmpeg; scheduled image templates through production HTTP canvas"]
 async fn real_next_image_graphics_preserve_templates_dynamic_tracks_and_disabled_watermarks() {
     for (burn, disabled) in [(false, false), (true, false), (true, true)] {
-        run_case(burn, disabled).await;
+        run_case(burn, disabled, false).await;
     }
 }
 
-async fn run_case(burn: bool, disabled: bool) {
+#[tokio::test]
+#[ignore = "requires accepted Next and FFmpeg; production copy projection with configured overlays"]
+async fn real_next_copied_video_omits_graphics_and_preserves_selected_tracks() {
+    run_case(false, false, true).await;
+}
+
+async fn run_case(burn: bool, disabled: bool, copy: bool) {
     let fixture = Fixture::new().await;
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -26,6 +32,14 @@ async fn run_case(burn: bool, disabled: bool) {
         runtime.ffprobe.path = ffprobe.to_str().unwrap().into();
     }
     seed(&fixture, &ffmpeg, burn, disabled).await;
+    if copy {
+        sqlx::query(r#"INSERT INTO "Resolution" ("Id","Name","Width","Height") VALUES (999,'Copy fallback',640,360)"#)
+            .execute(&fixture.state.pool).await.unwrap();
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "VideoFormat"=99,"AudioFormat"=99,"ResolutionId"=999 WHERE "Id"=1"#)
+            .execute(&fixture.state.pool)
+            .await
+            .unwrap();
+    }
     let origin = remote_runtime::Origin::start(&fixture, remote_runtime::Mode::Local).await;
     if burn {
         sqlx::query(
@@ -82,28 +96,35 @@ async fn run_case(burn: bool, disabled: bool) {
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
         })
         .unwrap();
-    assert_picture(&ffmpeg, &folder.join(segment), burn, disabled).await;
+    assert_picture(&ffmpeg, &folder.join(segment), burn, disabled, copy).await;
     if burn {
         assert_decoded_tracks(&ffmpeg, &folder.join(segment)).await;
     } else {
         assert_decoded_audio(&ffmpeg, &folder.join(segment)).await;
-        // The converted rendition must retain the selected embedded Dutch cue.
-        let mut entries = tokio::fs::read_dir(&folder).await.unwrap();
-        let mut found = false;
-        while let Some(entry) = entries.next_entry().await.unwrap() {
-            if entry.path().extension().is_some_and(|ext| ext == "vtt") {
-                found |= tokio::fs::read_to_string(entry.path())
-                    .await
-                    .unwrap()
-                    .contains("Dutch image proof");
-            }
-        }
-        assert!(found, "Convert must publish the selected Dutch cue");
+        assert_converted_caption(&folder).await;
     }
     assert!(registry.stop_channel("1").await);
     task.await.unwrap();
-    origin.verify_revoked_and_stop().await;
+    if copy {
+        origin.verify_unused_and_stop().await;
+    } else {
+        origin.verify_revoked_and_stop().await;
+    }
     assert!(!folder.exists());
+}
+
+async fn assert_converted_caption(folder: &FsPath) {
+    let mut entries = tokio::fs::read_dir(folder).await.unwrap();
+    let mut found = false;
+    while let Some(entry) = entries.next_entry().await.unwrap() {
+        if entry.path().extension().is_some_and(|ext| ext == "vtt") {
+            found |= tokio::fs::read_to_string(entry.path())
+                .await
+                .unwrap()
+                .contains("Dutch image proof");
+        }
+    }
+    assert!(found, "Convert must publish the selected Dutch cue");
 }
 
 async fn seed(fixture: &Fixture, ffmpeg: &FsPath, burn: bool, disabled: bool) {
@@ -212,7 +233,7 @@ async fn generate_source(fixture: &Fixture, ffmpeg: &FsPath) {
     tokio::fs::rename(&muxed, &clip).await.unwrap();
 }
 
-async fn assert_picture(ffmpeg: &FsPath, segment: &FsPath, burn: bool, disabled: bool) {
+async fn assert_picture(ffmpeg: &FsPath, segment: &FsPath, burn: bool, disabled: bool, copy: bool) {
     let mut decode = Command::new(ffmpeg);
     decode
         .args(["-v", "error", "-nostdin", "-i"])
@@ -231,18 +252,23 @@ async fn assert_picture(ffmpeg: &FsPath, segment: &FsPath, burn: bool, disabled:
     let pixels = output(decode).await;
     assert_eq!(pixels.len(), 320 * 180 * 3);
     let top = &pixels[..320 * 120 * 3];
-    assert!(
-        top.chunks_exact(3)
-            .filter(|p| p[1] > 180 && p[0] < 40 && p[2] < 40)
-            .count()
-            > 800,
-        "templated image must remain visible when watermarks are disabled"
-    );
+    let green = top
+        .chunks_exact(3)
+        .filter(|p| p[1] > 180 && p[0] < 40 && p[2] < 40)
+        .count();
+    if copy {
+        assert_eq!(green, 0, "copied video must omit configured graphics");
+    } else {
+        assert!(
+            green > 800,
+            "templated image must remain visible when watermarks are disabled"
+        );
+    }
     let red = top
         .chunks_exact(3)
         .filter(|p| p[0] > 180 && p[1] < 40 && p[2] < 40)
         .count();
-    if disabled {
+    if disabled || copy {
         assert_eq!(red, 0);
     } else {
         assert!(red > 800, "watermark missing");

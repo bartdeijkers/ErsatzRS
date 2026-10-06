@@ -413,26 +413,36 @@ pub(super) async fn project_for_origin(
     .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
-    let (graphics, watermarks) = match &origin {
-        Origin::Persisted => {
-            let (watermarks, graphics) = media.overlays(pool, channel).await?;
-            (graphics, watermarks)
+    let profile = match &origin {
+        Origin::Troubleshooting(context) => context.profile.clone(),
+        _ => playback::load_channel_playback_profile(pool, channel.id)
+            .await?
+            .ok_or_else(unavailable)?,
+    };
+    let (graphics, watermarks) = if super::graphics::enabled(&profile) {
+        match &origin {
+            Origin::Persisted => {
+                let (watermarks, graphics) = media.overlays(pool, channel).await?;
+                (graphics, watermarks)
+            }
+            Origin::Fallback(_) => (
+                playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
+                playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
+                    .await?,
+            ),
+            Origin::Troubleshooting(context) => (
+                context.graphics(pool).await?,
+                context.watermarks(pool).await?,
+            ),
         }
-        Origin::Fallback(_) => (
-            playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
-            playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
-                .await?,
-        ),
-        Origin::Troubleshooting(context) => (
-            context.graphics(pool).await?,
-            context.watermarks(pool).await?,
-        ),
+    } else {
+        (Vec::new(), Vec::new())
     };
     projection.canvas = super::graphics::project(
         pool,
         channel,
         media,
-        resolution,
+        &profile,
         &mut projection.item,
         &watermarks,
         &graphics,
@@ -441,12 +451,6 @@ pub(super) async fn project_for_origin(
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
-    let profile = match &origin {
-        Origin::Troubleshooting(context) => context.profile.clone(),
-        _ => playback::load_channel_playback_profile(pool, channel.id)
-            .await?
-            .ok_or_else(unavailable)?,
-    };
     let descriptor = digest(&json!({
         "binding":material, "item":media.item, "selection":projection.item, "canvas": projection.canvas,
         "channel":channel, "resolution":resolution, "profile":profile.profile,

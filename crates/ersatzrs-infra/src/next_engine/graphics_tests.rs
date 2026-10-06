@@ -1,5 +1,61 @@
 use super::*;
-use ersatzrs_domain::{GraphicsElement, GraphicsElementConfig};
+use ersatzrs_domain::{FFmpegProfile, GraphicsElement, GraphicsElementConfig, Resolution};
+
+#[tokio::test]
+async fn copy_profile_omits_watermarks_and_canvas_without_loading_video() {
+    let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;
+    let media = super::super::schedule::bind_media(&pool, super::super::selection::tests::item())
+        .await
+        .unwrap();
+    let profile = playback::PlaybackProfile {
+        profile: FFmpegProfile {
+            video_format: FFmpegProfileVideoFormat::Copy,
+            ..FFmpegProfile::default()
+        },
+        resolution: Resolution {
+            width: 640,
+            height: 360,
+            ..Resolution::default()
+        },
+    };
+    let watermarks = plain_watermark_fixture();
+    let graphics = [ResolvedPlaybackGraphicsElement {
+        element: GraphicsElement::default(),
+        variables: None,
+    }];
+    let mut item = protocol::PlayoutItem {
+        id: "copy".into(),
+        start: media.item.start,
+        finish: media.item.finish,
+        source: None,
+        tracks: None,
+        watermark: None,
+        graphics: Vec::new(),
+    };
+    pool.close().await;
+    let (fallback_watermarks, fallback_graphics) =
+        select_fallback(&pool, &channel, &media.item, &profile)
+            .await
+            .unwrap();
+    assert!(fallback_watermarks.is_empty());
+    assert!(fallback_graphics.is_empty());
+    for selected in [&[][..], &graphics[..]] {
+        assert!(project(
+            &pool,
+            &channel,
+            &media,
+            &profile,
+            &mut item,
+            &watermarks,
+            selected
+        )
+        .await
+        .unwrap()
+        .is_none());
+        assert!(item.graphics.is_empty());
+        assert!(item.watermark.is_none());
+    }
+}
 
 #[tokio::test]
 async fn canvas_projection_supports_every_kind_and_issues_scoped_nonprobing_sources() {
@@ -8,10 +64,13 @@ async fn canvas_projection_supports_every_kind_and_issues_scoped_nonprobing_sour
         super::super::schedule::bind_media(&pool, super::super::selection::tests::item())
             .await
             .unwrap();
-    let resolution = Resolution {
-        width: 640,
-        height: 360,
-        ..Resolution::default()
+    let profile = playback::PlaybackProfile {
+        profile: FFmpegProfile::default(),
+        resolution: Resolution {
+            width: 640,
+            height: 360,
+            ..Resolution::default()
+        },
     };
     let mut item = protocol::PlayoutItem {
         id: "fixture".into(),
@@ -25,7 +84,7 @@ async fn canvas_projection_supports_every_kind_and_issues_scoped_nonprobing_sour
     let relay = MediaRelay::new();
     relay.configure("127.0.0.1:18419".parse().unwrap()).unwrap();
     assert!(
-        project(&pool, &channel, &media, &resolution, &mut item, &[], &[])
+        project(&pool, &channel, &media, &profile, &mut item, &[], &[])
             .await
             .unwrap()
             .is_none()
@@ -45,18 +104,10 @@ async fn canvas_projection_supports_every_kind_and_issues_scoped_nonprobing_sour
             },
             variables: None,
         }];
-        let plan = project(
-            &pool,
-            &channel,
-            &media,
-            &resolution,
-            &mut item,
-            &[],
-            &graphics,
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let plan = project(&pool, &channel, &media, &profile, &mut item, &[], &graphics)
+            .await
+            .unwrap()
+            .unwrap();
         assert_published_plan(&plan, &relay, item.start);
     }
     media.item.id = 0;
@@ -64,18 +115,10 @@ async fn canvas_projection_supports_every_kind_and_issues_scoped_nonprobing_sour
         element: GraphicsElement::default(),
         variables: None,
     }];
-    let plan = project(
-        &pool,
-        &channel,
-        &media,
-        &resolution,
-        &mut item,
-        &[],
-        &graphics,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let plan = project(&pool, &channel, &media, &profile, &mut item, &[], &graphics)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(plan.publish(&relay, None, item.start).is_err());
     assert!(plan
         .publish(&relay, Some(uuid::Uuid::new_v4()), item.finish)
@@ -149,10 +192,13 @@ async fn plain_watermarks_bypass_canvas_but_mixed_and_expression_layers_do_not()
     let media = super::super::schedule::bind_media(&pool, super::super::selection::tests::item())
         .await
         .unwrap();
-    let resolution = Resolution {
-        width: 640,
-        height: 360,
-        ..Default::default()
+    let profile = playback::PlaybackProfile {
+        profile: FFmpegProfile::default(),
+        resolution: Resolution {
+            width: 640,
+            height: 360,
+            ..Resolution::default()
+        },
     };
     let mut item = protocol::PlayoutItem {
         id: "fixture".into(),
@@ -168,7 +214,7 @@ async fn plain_watermarks_bypass_canvas_but_mixed_and_expression_layers_do_not()
         &pool,
         &channel,
         &media,
-        &resolution,
+        &profile,
         &mut item,
         &watermarks,
         &[]
@@ -209,7 +255,7 @@ async fn plain_watermarks_bypass_canvas_but_mixed_and_expression_layers_do_not()
         &pool,
         &channel,
         &media,
-        &resolution,
+        &profile,
         &mut item,
         &watermarks,
         &graphics
@@ -222,7 +268,7 @@ async fn plain_watermarks_bypass_canvas_but_mixed_and_expression_layers_do_not()
         &pool,
         &channel,
         &media,
-        &resolution,
+        &profile,
         &mut item,
         &watermarks,
         &[]

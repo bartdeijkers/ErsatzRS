@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Refresh Next projections after profile copy/resolution changes, omit graphics
+  from copied video and stop advertising a fixed copied-video HLS resolution.
+
 - Pin a temporary, revision-verified Next source correction for live RTSP
   startup buffering (ADR 0116). It preserves padded-audio termination and
   requires removal when an equivalent upstream correction passes acceptance;

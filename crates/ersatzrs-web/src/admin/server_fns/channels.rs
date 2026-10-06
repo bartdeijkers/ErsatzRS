@@ -862,6 +862,9 @@ mod tests {
     #[derive(Default)]
     struct UpdateObserver(std::sync::atomic::AtomicUsize);
 
+    #[path = "channel_profile_tests.rs"]
+    mod profile_tests;
+
     #[async_trait::async_trait]
     impl ersatzrs_core::hls::HlsSessionHandle for UpdateObserver {
         fn channel_number(&self) -> &'static str {
@@ -899,6 +902,16 @@ mod tests {
             .await
             .unwrap();
         repos
+            .ffmpeg_profile
+            .upsert(&ersatzrs_domain::FFmpegProfile {
+                id: 2,
+                name: "replacement".into(),
+                resolution_id: 1,
+                ..ersatzrs_domain::FFmpegProfile::default()
+            })
+            .await
+            .unwrap();
+        repos
             .channel
             .upsert(&ersatzrs_domain::Channel {
                 id: 1,
@@ -930,7 +943,7 @@ mod tests {
                 number: "1".to_owned(),
                 name: "Channel 1".to_owned(),
                 group: "ErsatzRS".to_owned(),
-                ffmpeg_profile_id: 1,
+                ffmpeg_profile_id: 2,
                 streaming_mode: 5,
                 streaming_engine: 1,
                 next_engine_text_subtitle_mode: 1,
@@ -946,6 +959,7 @@ mod tests {
         assert_eq!(saved_id, 1);
         assert!(playout_build_rx.try_recv().is_err());
         let saved = repos.channel.get_with_profile(1).await.unwrap();
+        assert_eq!(saved.ffmpeg_profile_id, 2);
         assert!(!saved.show_in_epg);
         assert_eq!(
             saved.streaming_engine,

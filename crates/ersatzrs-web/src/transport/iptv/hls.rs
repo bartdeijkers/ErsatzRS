@@ -991,8 +991,14 @@ async fn serve_hls_segmenter_playlist(
         }
     }
 
-    let body =
-        build_multi_variant_playlist(&scheme, &host, channel_number, spec.as_ref(), access_token);
+    let body = build_multi_variant_playlist(
+        &scheme,
+        &host,
+        channel_number,
+        spec.as_ref(),
+        channel.streaming_engine,
+        access_token,
+    );
     hls_response(with_next_subtitles(body, channel, false, access_token))
 }
 
@@ -1139,6 +1145,7 @@ pub async fn get_preview_master_playlist(
             &request_host(&headers),
             &channel.number,
             spec.as_ref(),
+            channel.streaming_engine,
             &access_token,
         ),
         &channel,

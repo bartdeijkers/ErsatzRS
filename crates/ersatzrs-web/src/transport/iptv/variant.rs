@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use ersatzrs_domain::{FFmpegProfileAudioFormat, FFmpegProfileVideoFormat};
+use ersatzrs_domain::{FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingEngine};
 
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::streaming_specs::ChannelStreamingSpec;
@@ -16,13 +16,14 @@ pub fn build_multi_variant_playlist(
     host: &str,
     channel_number: &str,
     spec: Option<&ChannelStreamingSpec>,
+    engine: StreamingEngine,
     access_token: &AccessToken,
 ) -> String {
     let variant_url = format!(
         "{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8{}",
         access_token.query()
     );
-    build_variant_playlist(&variant_url, spec)
+    build_variant_playlist(&variant_url, spec, engine)
 }
 
 /// Build the isolated browser-preview master playlist.
@@ -32,24 +33,35 @@ pub fn build_preview_variant_playlist(
     host: &str,
     channel_number: &str,
     spec: Option<&ChannelStreamingSpec>,
+    engine: StreamingEngine,
     access_token: &AccessToken,
 ) -> String {
     let variant_url = format!(
         "{scheme}://{host}/iptv/preview/{channel_number}/hls.m3u8{}",
         access_token.query()
     );
-    build_variant_playlist(&variant_url, spec)
+    build_variant_playlist(&variant_url, spec, engine)
 }
 
-fn build_variant_playlist(variant_url: &str, spec: Option<&ChannelStreamingSpec>) -> String {
+fn build_variant_playlist(
+    variant_url: &str,
+    spec: Option<&ChannelStreamingSpec>,
+    engine: StreamingEngine,
+) -> String {
     let (resolution, bitrate) = match spec {
         Some(spec) => {
             let codecs = codec_inf(spec);
-            let resolution = format!(
-                ",RESOLUTION={width}x{height}{codecs}",
-                width = spec.width,
-                height = spec.height,
-            );
+            let resolution = if engine == StreamingEngine::Next
+                && spec.video_format == FFmpegProfileVideoFormat::Copy
+            {
+                codecs
+            } else {
+                format!(
+                    ",RESOLUTION={width}x{height}{codecs}",
+                    width = spec.width,
+                    height = spec.height,
+                )
+            };
             (resolution, effective_bandwidth(spec))
         }
         None => (String::new(), 10_000_000),
@@ -134,6 +146,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn copied_video_omits_fixed_resolution_in_normal_and_preview_playlists() {
+        let mut spec = h264_aac_1080p();
+        spec.video_format = FFmpegProfileVideoFormat::Copy;
+        for preview in [false, true] {
+            let build = if preview {
+                build_preview_variant_playlist
+            } else {
+                build_multi_variant_playlist
+            };
+            let playlist = build(
+                "http",
+                "example.test",
+                "1",
+                Some(&spec),
+                StreamingEngine::Next,
+                &AccessToken::default(),
+            );
+            assert!(!playlist.contains("RESOLUTION="));
+            assert!(!playlist.contains("CODECS="));
+            assert!(playlist.contains("BANDWIDTH="));
+            assert!(playlist.contains(if preview {
+                "/iptv/preview/1/"
+            } else {
+                "/iptv/session/1/"
+            }));
+            let native = build(
+                "http",
+                "example.test",
+                "1",
+                Some(&spec),
+                StreamingEngine::Legacy,
+                &AccessToken::default(),
+            );
+            assert!(
+                native.contains("RESOLUTION=1920x1080"),
+                "preserve the native playlist contract"
+            );
+        }
+    }
+
+    #[test]
     fn codec_attribute_requires_both_audio_and_video_identifiers() {
         let mut spec = h264_aac_1080p();
         assert_eq!(codec_inf(&spec), ",CODECS=\"avc1.4D4028,mp4a.40.2\"");
@@ -164,7 +217,14 @@ mod tests {
             ..Default::default()
         };
         let token = AccessToken::new(Some("synthetic-token"));
-        let master = build_multi_variant_playlist("http", "example.test", "42", None, &token);
+        let master = build_multi_variant_playlist(
+            "http",
+            "example.test",
+            "42",
+            None,
+            StreamingEngine::Legacy,
+            &token,
+        );
         for (preview, scope) in [(false, "session"), (true, "preview")] {
             let converted = with_next_subtitles(master.clone(), &channel, preview, &token);
             assert!(converted.contains("#EXT-X-VERSION:6\n"));
@@ -199,6 +259,7 @@ mod tests {
             "example.test",
             "1",
             Some(&spec),
+            StreamingEngine::Legacy,
             &AccessToken::default(),
         );
         assert!(!playlist.contains("CODECS="));
@@ -223,6 +284,7 @@ mod tests {
             "example.test:8080",
             "1",
             Some(&h264_aac_1080p()),
+            StreamingEngine::Legacy,
             &AccessToken::default(),
         );
         insta::assert_snapshot!("variant_h264_aac_1080p", output);
@@ -243,6 +305,7 @@ mod tests {
             "example.test",
             "42",
             Some(&spec),
+            StreamingEngine::Legacy,
             &AccessToken::new(Some("abc123")),
         );
         insta::assert_snapshot!("variant_hevc_ac3_720p_token", output);
@@ -255,6 +318,7 @@ mod tests {
             "example.test:8080",
             "99",
             None,
+            StreamingEngine::Legacy,
             &AccessToken::default(),
         );
         insta::assert_snapshot!("variant_no_spec", output);
@@ -267,6 +331,7 @@ mod tests {
             "example.test",
             "42",
             Some(&h264_aac_1080p()),
+            StreamingEngine::Legacy,
             &AccessToken::new(Some("preview-token")),
         );
         assert!(output.contains("CODECS=\"avc1.4D4028,mp4a.40.2\""));

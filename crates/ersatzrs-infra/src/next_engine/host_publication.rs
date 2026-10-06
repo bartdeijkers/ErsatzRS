@@ -247,7 +247,11 @@ impl NextHost {
             let source =
                 source::resolve_published(&self.pool, &media, replacements, Some(&self.media))
                     .await?;
-            let (watermarks, graphics) = media.overlays(&self.pool, &channel).await?;
+            let (watermarks, graphics) = if super::super::graphics::enabled(&profile) {
+                media.overlays(&self.pool, &channel).await?
+            } else {
+                (Vec::new(), Vec::new())
+            };
             let mut projection = selection::project_deferred_item(
                 &self.pool,
                 &channel,
@@ -269,7 +273,7 @@ impl NextHost {
                 &self.pool,
                 &channel,
                 &media,
-                &profile.resolution,
+                &profile,
                 &mut projection.item,
                 &watermarks,
                 &graphics,

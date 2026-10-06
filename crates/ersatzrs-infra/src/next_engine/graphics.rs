@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, TimeDelta, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
-use ersatzrs_domain::{Channel, ChannelWatermarkMode, Resolution};
+use ersatzrs_domain::{Channel, ChannelWatermarkMode, FFmpegProfileVideoFormat};
 use serde::Serialize;
 
 use crate::{
@@ -18,6 +18,30 @@ use super::{canvas::CanvasBinding, media::MediaRelay, protocol, schedule::Schedu
 pub(crate) struct CanvasProjection {
     binding: CanvasBinding,
     hint: protocol::ProbeHint,
+}
+
+pub(super) fn enabled(profile: &playback::PlaybackProfile) -> bool {
+    profile.profile.video_format != FFmpegProfileVideoFormat::Copy
+}
+
+pub(super) async fn select_fallback(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &ersatzrs_domain::PlayoutItem,
+    profile: &playback::PlaybackProfile,
+) -> Result<(
+    Vec<ResolvedPlaybackWatermark>,
+    Vec<ResolvedPlaybackGraphicsElement>,
+)> {
+    if !enabled(profile) {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
+        .source_time(item.start)?;
+    Ok((
+        playback::select_fallback_watermarks(pool, channel, item, selection_time).await?,
+        playback::select_fallback_graphics(pool, item, selection_time).await?,
+    ))
 }
 
 impl CanvasProjection {
@@ -57,11 +81,19 @@ pub(super) async fn project(
     pool: &DbPool,
     channel: &Channel,
     media: &ScheduledMedia,
-    resolution: &Resolution,
+    profile: &playback::PlaybackProfile,
     projected: &mut protocol::PlayoutItem,
     watermarks: &[ResolvedPlaybackWatermark],
     graphics: &[ResolvedPlaybackGraphicsElement],
 ) -> Result<Option<Box<CanvasProjection>>> {
+    // Upstream PlayoutItemConverter never overlays copied video: an overlay
+    // would force Next to transcode every item despite the selected copy mode.
+    if !enabled(profile) {
+        projected.graphics.clear();
+        projected.watermark = None;
+        return Ok(None);
+    }
+    let resolution = &profile.resolution;
     if graphics.is_empty()
         && !watermarks
             .iter()

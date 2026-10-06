@@ -11422,11 +11422,32 @@ and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 evidence = """
 2026-10-06 reopened under the existing latest-tip acceptance clause: fetched
 origin/main is d55be01f1b7d8e72e68445ab9d2022421a86518d. Rows 184-206 are
-pending at reopening; row 184 is now accepted and rows 185-206 remain.
+pending at reopening; rows 184-185 are now accepted and rows 186-206 remain.
 Earlier acceptance and approved platform debt are unchanged.
 Pending rows 193/194 were reversed in the ledger and have been corrected to
 upstream history order. Pin, last accepted row and upstream checkout HEAD
-now agree at aad7bdc4. Next action: process row 185 copy-mode cleanup.
+now agree at e1d2cac0. Next action: process row 186 image/remote durations and probe hints.
+Row 185 is accepted as Port. Profile editor/API
+saves notify referencing Next channels after copy-mode or resolution changes;
+channel profile reassignment uses the existing notification path. Normal and
+preview consumers update without scheduling rebuilds. Tests preserve the full
+PlayoutItem vector and seed. Copy-mode projections skip watermark/graphics
+selection across host, dynamic, fallback, remote and troubleshooting paths;
+normal/preview Next playlists omit fixed copied-video resolution. Native
+playlist behavior is preserved.
+Eighteen focused checks and 63 affected projection regressions pass. Published
+Next e88b2d7-ersatzrs.1 with the verified existing FFmpeg runtime passes decoded
+copied video with configured overlays: source 320x180 dimensions, no image or
+watermark, selected Dutch 880 Hz audio and converted Dutch captions. The three
+existing non-copy graphics cases also pass (6aa1e7b4-1904-4fa7-8a79-d23659bc3eaa).
+Architecture lint and strict all-target affected Clippy pass. The extracted
+fallback selector passes 17 final regressions (1034648e-2fc0-4851-8303-063ee9eeff90).
+Production Convert HTTP smoke passes decoded audio/captions, normal and preview
+HLS, wrapper restart and idle cleanup. Codex source/failure-path review passes.
+Evidence: tmp/ucu09-row185/. Pin and upstream HEAD advance to e1d2cac0:
+185/206 accepted, 21 pending. No intermediate application CI; the final window
+and release gates remain open. Existing approved platform debt is unchanged.
+
 The following chronology retains rejected candidate evidence before correction.
 Row 184 partial implementation: schema 0.1.0, independent audio/video modes,
 AAC/H.264 fallback and copy-audio loudness suppression. Eleven conversion

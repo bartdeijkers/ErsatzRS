@@ -67,6 +67,12 @@ pub trait ChannelRuntime: Send + Sync {
 
     /// Admit background subtitle extraction for saved channel playouts.
     fn request_subtitle_extraction(&self, playout_ids: Vec<EntityId>);
+
+    /// Republish active consumers of a changed profile without rebuilding schedules.
+    async fn refresh_profile_playouts(
+        &self,
+        profile_id: EntityId,
+    ) -> Result<(), ChannelRuntimeError>;
 }
 
 /// Failure returned by process-local settings effects.

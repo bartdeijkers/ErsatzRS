@@ -94,6 +94,18 @@ impl Origin {
         }
     }
 
+    pub async fn verify_unused_and_stop(mut self) {
+        assert!(
+            self.captured.lock().await.is_none(),
+            "copied local video must not request a graphics callback"
+        );
+        let _ = self.cancel.take().unwrap().send(());
+        tokio::time::timeout(Duration::from_secs(5), &mut self.task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
     pub async fn verify_revoked_and_stop(mut self) {
         let captured = self
             .captured

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `aad7bdc4092be027435a94624fbf5002f37caf5d` |
-| **Commit subject** | `feat: use next copy mode when normalization is disabled (#3049)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/aad7bdc4092be027435a94624fbf5002f37caf5d |
+| **Pinned commit** | `e1d2cac0ff78f2c4cf0739c384fa1b3f00221e15` |
+| **Commit subject** | `fix: cleanup for next copy mode (#3050)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e1d2cac0ff78f2c4cf0739c384fa1b3f00221e15 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

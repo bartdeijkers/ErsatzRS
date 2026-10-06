@@ -359,13 +359,19 @@ impl NextHost {
         )
         .await?;
         let context = Context::new(request);
-        let watermarks = context.watermarks(&self.pool).await?;
-        let graphics = context.graphics(&self.pool).await?;
+        let (watermarks, graphics) = if super::graphics::enabled(request.profile) {
+            (
+                context.watermarks(&self.pool).await?,
+                context.graphics(&self.pool).await?,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
         projection.canvas = super::graphics::project(
             &self.pool,
             request.channel,
             request.media,
-            &request.profile.resolution,
+            request.profile,
             &mut projection.item,
             &watermarks,
             &graphics,

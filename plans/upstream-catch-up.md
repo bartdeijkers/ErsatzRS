@@ -1,5 +1,38 @@
 # Upstream ErsatzTV catch-up
 
+## Row 185 source map and acceptance
+
+Active slice: `e1d2cac0`, copy-mode cleanup. The outcome is faithful copied
+video without unwanted graphics/transcoding or incorrect fixed resolution,
+with fresh Next projections after relevant profile edits. No scheduler reset,
+new settings, runtime rebuild or later ledger row is included.
+
+- Upstream handlers: `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`
+  and `FFmpegProfiles/Commands/UpdateFFmpegProfileHandler.cs`.
+- Upstream playlist: `Streaming/Commands/StartFFmpegNextSessionHandler.cs`.
+- Upstream projection/tests: `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Scheduling/PlayoutItemConverter.cs`
+  and `ErsatzTV.Infrastructure.Tests/Scheduling/PlayoutItemConverterTests.cs`.
+- Rust channel saves already notify normal/preview Next consumers without
+  rebuilding persisted playouts (`admin/server_fns/channels.rs`). Prove a
+  profile reassignment through that existing route.
+- Rust profile commands in `ersatzrs-app` must notify through the existing
+  channel runtime port after a copy-video or resolution change; the native
+  host selects only channels referencing the saved profile. Both editor and
+  machine API paths require the same behavior.
+- Rust `next_engine/graphics.rs` must suppress overlays using the effective
+  playback profile across host, dynamic, fallback, remote and troubleshooting
+  projection. Preserve subtitle/audio selection and non-copy rendering.
+- Rust `transport/iptv/variant.rs` must omit fixed RESOLUTION for copied video.
+
+Acceptance: focused save/notification and unchanged-schedule tests, complete
+projection-path coverage, normal/preview playlist tests, decoded published
+Next copy output with configured graphics, strict affected lint and production
+HTTP smoke. Reuse row184 artifact and compatibility evidence where unchanged.
+Row185 is accepted as Port. Focused notification/projection/playlist checks,
+decoded copy and normal-graphics playback, strict affected lint and production
+Convert HTTP smoke pass. UCU-09 owns the evidence in `docs/progress/milestones.toml`.
+The baseline advances to `e1d2cac0`; row186 is next.
+
 ## Row 184 source map and acceptance preparation
 
 The 2026-10-06 Codex review starts with upstream `aad7bdc4` and preserves
@@ -5313,7 +5346,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 182 | `b6666882` | feat: enable mpeg2video when using next engine (#3047) | Port | Next protocol/config, profile health and HLS variants | `feat(next): support MPEG-2 output` | ucu-09; 13 config/health and six playlist checks, decoded Linux/Windows MPEG-2 with selected audio/subtitles and alpha, preserved H.264 scaling, strict workspace Clippy. Eight-bit projection and required bitrate match Next; incomplete CODECS omitted. |
 | 183 | `960421e8` | fix: remove av1 from ui (#3048) | Adapt | Native pipeline, HLS routing and output health | `fix(ffmpeg): retain compatible native AV1 output` | ucu-09; accepted ADR 0106 preserves AV1 with automatic fMP4, explicit TS/Next rejection and localized guidance. Decoded Linux application and Windows runtime proof, six AV1 regressions, four browser cases, workspace/parity gates, both-engine smoke and 87 TSDuck checks pass. |
 | 184 | `aad7bdc4` | feat: use next copy mode when normalization is disabled (#3049) | Adapt (ADR 0116) | upstream-baseline-catch-up | `feat(infra): support Next copy mode with verified runtime` | ucu-09; versioned independent copy/transcode mapping, codec fallback, overlay health upgrade, six-platform patched snapshot with mandatory upstream retirement. 328 Linux compatibility, decoded RTSP handoff/EOF, six Windows application, Burn/Convert HTTP, 83 TSDuck checks, strict lint and published artifact identity pass. Candidate build CI 37503854054 green; application window CI remains pending. |
-| 185 | `e1d2cac0` | fix: cleanup for next copy mode (#3050) | | | | ucu-09; provisional: Port, four parts: an FFmpeg profile change on a channel counts as a playout change; an FFmpeg profile save resyncs Next playouts when the video copy flag or the resolution changes; the multi-variant playlist omits RESOLUTION for copied video, which ErsatzRS always emits (`crates/ersatzrs-web/src/transport/iptv/variant.rs:49`); and Next skips watermark and graphics overlay on copied video to match the legacy engine. Depends on row 184. Claude 2026-10-04 triage. |
+| 185 | `e1d2cac0` | fix: cleanup for next copy mode (#3050) | Port | Next projection, profile commands and HLS playlists | `fix(next): preserve copy mode across profile and overlay changes` | ucu-09; editor/API and channel-profile saves notify normal/preview without scheduling changes; copied video skips overlays and Next playlists omit fixed resolution. 18 focused, 63 projection and 17 final fallback checks, decoded copy/non-copy graphics, strict affected lint and Convert HTTP lifecycle pass. |
 | 186 | `b4a7efe2` | fix: image and remote stream durations using next engine (#3051) | | | | ucu-09; provisional: Port. Introduces one duration-for-playout rule using image metadata duration and the RemoteStream fallback instead of the head version duration (troubleshooting seek and clamp, PlayoutBuilder chapter item, dynamic playout items, Next probe hint), plus a `format_name` hint for still images and AVI so Next stops assuming mpegts. ErsatzRS already sets probe hint `format_name` on some paths (`next_engine/probe_hint.rs:54`, `:113`), so the audit must separate that from the duration gap. Claude 2026-10-04 triage. |
 | 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | | | | ucu-09; provisional: Port, partly covered; highest-value row of this batch because it is native scheduling correctness. (a) Enumerators must not see history queued for removal: ErsatzRS filters this for break content (`crates/ersatzrs-core/src/scheduling/block.rs:1386`) while block item enumerators consume no history at all, so this needs an architecture check rather than a 1:1 port. (b) Removing every history row at a removed item's start is already covered by the set-based `history_to_remove_for_items` (`block.rs:984`). (c) Dropping orphaned history at or after the requested start has no counterpart; `cleanup_history` (`scheduling/mod.rs:1252`) only prunes old rows per key. Claude 2026-10-04 triage. |
 | 188 | `26755a16` | update changelog for most recent next build | | | | ucu-09; provisional: N/A (one upstream CHANGELOG line for a Next build; no product behavior). Claude 2026-10-04 triage. |

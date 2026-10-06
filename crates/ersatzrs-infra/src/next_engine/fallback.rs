@@ -477,11 +477,8 @@ impl NextHost {
         let source =
             source::resolve_published(&self.pool, &media, &request.replacements, Some(&self.media))
                 .await?;
-        let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
-            .source_time(item.start)?;
-        let watermarks =
-            playback::select_fallback_watermarks(&self.pool, channel, item, selection_time).await?;
-        let graphics = playback::select_fallback_graphics(&self.pool, item, selection_time).await?;
+        let (watermarks, graphics) =
+            super::graphics::select_fallback(&self.pool, channel, item, &profile).await?;
         let mut projected = selection::project_deferred_item_with_audio(
             &self.pool,
             channel,
@@ -526,7 +523,7 @@ impl NextHost {
             &self.pool,
             channel,
             &media,
-            &profile.resolution,
+            &profile,
             &mut projected.item,
             &watermarks,
             &graphics,
