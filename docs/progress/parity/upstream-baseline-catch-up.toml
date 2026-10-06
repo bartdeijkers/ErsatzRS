@@ -4,11 +4,11 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-187/208 in-scope rows accepted; rows188-208 remain pending through v26.11.1.
+188/208 in-scope rows accepted; rows189-208 remain pending through v26.11.1.
 Rows209 onward are later work and do not reopen UCU-09.
 ADR 0117 accepts qualifying Next corrections.
-Six packages pin next-0362692-ersatzrs.1; unpatched upstream still fails both
-local regressions. ADRs 0116/0117 require independent patch retirement. Linux/Windows compatibility
+Six packages pin Next0362692 with the QSV fix; unpatched upstream still fails
+both local regressions. ADRs 0116/0117 require independent patch retirement. Linux/Windows compatibility
 and macOS package CI pass. Row186 production HTTP playback, selected audio/
 captions, preview, reconnect and idle cleanup pass; application window CI remains open.
 UCU-00 through UCU-08 are Complete; UCU-09 remains open through its fixed v26.11.1

@@ -11421,6 +11421,26 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row188 accepted as N/A. Upstream26755a1664e505adecc6900a69a8b956d53c6601
+adds one changelog line announcing the QSV loudness/canvas memory correction;
+no source/dependency/package contract changes. Exact pinned Next0362692 already
+includes initial separate audio input fix978d216eaeb62c64679ab54b0405959d7fb964e5,
+fixed-pool shortest buffering4c6db09c8fdd8f06debb2daaabeb078a07720d6b and generalized
+loudnorm handlinge88b2d7e445308f33996bbb12474949c2e31f348 in
+crates/ffpipeline/src/pipeline.rs. All are verified ancestors; package source,
+patch and archive checksums prove inclusion for allsix published RIDs. Existing
+244-test source run6755b72d-cc5b-455f-be21-39b966907bcb includes passing QSV
+fixed/dynamic-pool loudnorm, audio-input separation and shortest-buffer argument
+regressions; relevant inputs/code are unchanged, so evidence is reused.
+Independent substantive review finds no further runtime correction/build gap.
+Canonical proof: tmp/ucu09-row188/source-proof.json and row186 package provenance.
+Intel QSV execution remains approved explicit unverified hardware debt. Curated
+changelog now mentions the included QSV correction and removes stale row186
+image-package/runtime-pending notes. All208 ordered SHA/subjects and fixed
+v26.11.1 ancestry are reverified; baseline/ledger land together and the clean
+checkout follows. 188/208 accepted,20 pending; continue row189 songs/Next.
+No intermediate application CI or milestone/release completion is claimed.
+
 2026-10-07 row187 accepted as Port: original requested-clock future orphan
 history is filtered before programme-preservation checkpoint restoration, then
 rechecked against retained starts after change detection. Every duplicate at a

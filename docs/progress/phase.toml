@@ -61,7 +61,7 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row187 accepted; complete rows188-208 through upstream v26.11.1
+2026-10-07 UCU-09 boundary: row188 accepted; complete rows189-208 through upstream v26.11.1
 (46118d43); rows209 onward are separate post-release work and cannot reopen
 this milestone. ADR 0117 is accepted for necessary Next corrections, packages
 and mandatory retirement. Row186's candidate static WebP and complete GIF
@@ -70,7 +70,9 @@ with the explicit condition to update ErsatzRS-ffmpeg to v2.0.6. All four correc
 packages are now published after terminal green exact-commit package CI37539516801
 at b221a3d; published asset digests match the tested archives. Managed runtime integration and all six reviewed
 Next packages are verified and pinned; production HTTP smoke passes. Row187
-Block history/cursor cleanup and SQLite restart proof pass. Continue row188,
+Block history/cursor cleanup and SQLite restart proof pass. Row188 is a
+documentation-only Next QSV announcement already included in the pinned runtime;
+hardware execution remains unverified. Continue row189 songs/Next integration,
 retaining reviewed native VAAPI padding and
 Matroska content-duration prerequisites for ordered rows207 and 194. Then finish
 ordered acceptance and

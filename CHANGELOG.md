@@ -16,8 +16,9 @@ release section when tagging a release.
 ### Changed
 
 - Update the optional Next engine to the reviewed six-platform
-  `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding fixes,
-  complete GIF/WebP programme repetition and bounded live RTSP buffering.
+  `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding and
+  legacy QSV loudness/canvas memory fixes, complete GIF/WebP programme repetition
+  and bounded live RTSP buffering.
   Pin exact source, patch and archive checksums, preserve licenses and platform
   companions, and retain independent removal requirements for both local
   corrections (ADR 0117). Available Linux/Windows application checks and macOS
@@ -55,11 +56,11 @@ release section when tagging a release.
 - Hold static WebP and repeat complete GIF/WebP animations for the scheduled
   duration in Next. Preserve fractional seeking, local/HTTP image handoff and
   live-input EOF, with decoded Linux/Windows and production HTTP regression proof.
-  Replacement packages and finite animated-WebP acceptance remain pending.
 
 - Use image metadata and remote-stream fallback durations consistently for
   scheduling, troubleshooting and Next input hints; identify BMP, TIFF, WebP,
-  GIF and AVI inputs explicitly. Runtime acceptance is in progress.
+  GIF and AVI inputs explicitly. Decoded playback and production HTTP lifecycle
+  checks pass with the published runtime.
 
 - Refresh Next projections after profile copy/resolution changes, omit graphics
   from copied video and stop advertising a fixed copied-video HLS resolution.

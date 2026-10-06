@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `e18b4a07ea20f7b3501643d9a9fb0f325d770ff4` |
-| **Commit subject** | `fix: block playout skips and repeats (#3052)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e18b4a07ea20f7b3501643d9a9fb0f325d770ff4 |
+| **Pinned commit** | `26755a1664e505adecc6900a69a8b956d53c6601` |
+| **Commit subject** | `update changelog for most recent next build` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/26755a1664e505adecc6900a69a8b956d53c6601 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -61,7 +61,7 @@ The daily routine must **not** advance this pin on its own.
 
 The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
 `v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
-There are **187 accepted and 21 pending in-scope rows**. This supersedes the
+There are **188 accepted and 20 pending in-scope rows**. This supersedes the
 2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.
