@@ -57,6 +57,12 @@ release section when tagging a release.
 - Reopen upstream catch-up for 23 newer ErsatzTV commits and correct pending
   ledger ordering while preserving the previously accepted baseline.
 
+- Restore complete Chromium and Firefox CI coverage by isolating saved add-on
+  selection policies, following the current playout update dialog, checking
+  native graphics placement controls, and releasing test-owned preview sessions.
+  Snapshot each matched server/site bundle so concurrent local builds cannot
+  remove hydration assets from a running suite.
+
 - Apply exact Image/Motion pixel placement in native rendering and previews,
   overriding anchors, percentage margins and source-content padding. Preserve
   authored Motion alpha/timing through YAML and show long titles with independent

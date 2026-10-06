@@ -89,9 +89,12 @@ async function expectStepScrollsTimeline(page: Page, button: string): Promise<vo
     .toBeGreaterThan(before);
 }
 
-async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<void> {
+async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<string> {
   const workingDirectory = join(tmpdir(), 'ersatzrs-hls-preview', channelNumber);
-  expect(existsSync(workingDirectory)).toBe(true);
+  await expect.poll(() => existsSync(workingDirectory)).toBe(true);
+  const preview = page.locator('.channel-watch-js [data-channel-preview]');
+  const stopPreview = preview.getByRole('button', { name: 'Stop Preview', exact: true });
+  if (await stopPreview.isVisible()) await stopPreview.click();
   // Stop Preview releases the browser, while the server keeps its idle lease.
   // Explicitly stop this fixture through the real administration action so the
   // next browser's channel does not wait behind the previous fixture's lease.
@@ -109,9 +112,9 @@ async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<
   // shutdown and proves this fixture no longer occupies a transcode slot.
   await expect.poll(() => existsSync(workingDirectory)).toBe(false);
   await expect(dialog).not.toBeVisible();
-  const preview = page.locator('.channel-watch-js [data-channel-preview]');
   await expect(preview).toHaveAttribute('data-preview-state', 'stopped');
   await expect(preview.locator('video')).not.toHaveAttribute('src');
+  return response.url();
 }
 
 function makeCalibrationClip(
@@ -507,7 +510,7 @@ test.describe('finding 04 programme graphics acceptance', () => {
       .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
     await page.setViewportSize({ width: 390, height: 844 });
     const navigation = page.getByRole('button', { name: 'Navigatie omschakelen' });
-    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await page.keyboard.press('Escape');
     await expect(navigation).toHaveAttribute('aria-expanded', 'false');
     await expect.poll(() => page.locator('[data-nav-drawer]')
       .evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
@@ -824,6 +827,14 @@ test.describe('channel preview modal and watch route', () => {
     );
     await page.getByRole('button', { name: 'Open Full Player' }).click();
     await expect(page).toHaveURL(new RegExp(`/channels/${second.id}/watch$`));
+    await waitForHydration(page);
+    const stopUrl = await stopFixtureTranscode(page, second.number);
+    // The first modal can also have acquired a lease before its delayed
+    // projection resolves. Cancel only these two channels owned by this test.
+    const firstStopped = await page.request.post(stopUrl, { form: { number: first.number } });
+    expect(firstStopped.ok()).toBe(true);
+    await expect.poll(() => existsSync(join(tmpdir(), 'ersatzrs-hls-preview', first.number)))
+      .toBe(false);
   });
 
   for (const failure of [
@@ -973,6 +984,8 @@ WHERE "Id" = ${source.id + 3};
     await expect(page.getByRole('heading', { name: new RegExp(mirror.name) })).toBeVisible();
     await expect(page.getByRole('gridcell').filter({ hasText: 'E2E Preview Programme' }).first())
       .toBeVisible();
+
+    await stopFixtureTranscode(page, mirror.number);
 
     await page.goto('/epg');
     await waitForHydration(page);

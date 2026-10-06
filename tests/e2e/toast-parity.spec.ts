@@ -74,7 +74,10 @@ async function openPlayoutsAndRefresh(page: Page, channelName: string) {
   await waitForHydration(page);
   const row = page.getByRole('row').filter({ hasText: channelName });
   await expect(row).toBeVisible();
-  await row.getByRole('button', { name: 'Refresh Playout' }).click();
+  await row.getByRole('button', { name: 'Update Playout' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Update Playout', exact: true });
+  await expect(dialog.getByLabel('Action', { exact: true })).toHaveValue('refresh');
+  await dialog.getByRole('button', { name: 'Queue update' }).click();
   const toast = page.locator('[data-toast-severity="success"]').filter({
     hasText: 'Playout rebuild queued',
   });
@@ -199,7 +202,9 @@ test.describe('MudBlazor 8.15 toast parity', () => {
     });
     await expect(toast).toHaveAttribute('data-toast-paused', 'false');
 
-    await row.getByRole('button', { name: 'Refresh Playout' }).click();
+    await row.getByRole('button', { name: 'Update Playout' }).click();
+    await page.getByRole('dialog', { name: 'Update Playout', exact: true })
+      .getByRole('button', { name: 'Queue update' }).click();
     await expect(page.getByText('Playout rebuild queued', { exact: true })).toHaveCount(1);
     await page.screenshot({
       path: testInfo.outputPath('toast-parity-light-mobile.png'),
