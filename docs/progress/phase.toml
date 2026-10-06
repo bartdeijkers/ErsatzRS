@@ -61,6 +61,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-06 UCU-09 boundary: complete rows186-208 through upstream v26.11.1
+(46118d43); rows209 onward are separate post-release work and cannot reopen
+this milestone. ADR 0117 is accepted for necessary Next corrections, packages
+and mandatory retirement. Finish row186, then ordered acceptance and final
+local gates, push and terminal green exact-SHA CI. Preserve other work below.
+
 2026-10-02: The maintainer authorized all channel setup solutions for
 v1.1.1, each in a separate commit with a changelog entry. After each completed
 milestone, reread the entire maintainer findings.md before starting the next

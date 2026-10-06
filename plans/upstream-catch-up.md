@@ -1,5 +1,15 @@
 # Upstream ErsatzTV catch-up
 
+## Accepted release boundary
+
+On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
+`46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
+verified). Rows1-185 are accepted; rows186-208 are the 23 remaining in-scope
+rows. Rows209 onward remain recorded as later work and do not block or reopen
+UCU-09. Existing row acceptance, final local gates, push and terminal green
+exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
+Next corrections and their verified packages, with mandatory upstream retirement.
+
 ## Row 186 source map and acceptance
 
 Active slice: `b4a7efe2`, image/remote-stream playout duration and Next input
@@ -7,7 +17,9 @@ hints. Use image metadata duration (15 seconds when unset), otherwise the
 selected/head media version duration, with RemoteStream.Duration as the fallback
 only for a zero version duration. Preserve fractional image duration, explicit
 track pins, finite/live source policy and ordinary video behavior. No schedule
-reset, data migration, runtime rebuild or later ledger row is included.
+reset, data migration or later ledger row is included. The accepted ADR 0117
+now authorizes the necessary Next runtime correction and verified replacement
+packages; reuse the existing FFmpeg runtime.
 
 - Upstream: `MediaItemExtensions`, troubleshooting preparation, chapterless
   filler conversion in `PlayoutBuilder`, `DynamicPlayoutItemService`, and
@@ -252,12 +264,12 @@ remain. See `post-publication-cleanup.json`.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
-- Refresh the target from upstream at the start of every run and append newly
-  observed commits. The target is the latest fetched tip for that run, not a
-  permanent cutoff. A bootstrap still processes no upstream commit.
+- Refresh upstream refs and verify the fixed v26.11.1 release target. Newly
+  observed post-release commits remain outside UCU-09. A bootstrap still
+  processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **183**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **185**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)

@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Use one accepted approval policy for temporary Next compatibility corrections
+  during upstream catch-up (ADR 0117), retaining verified package provenance,
+  acceptance gates and mandatory removal when upstream fixes each defect.
+  Close UCU-09 at upstream v26.11.1; later releases are separate work.
+
 ### Fixed
 
 - Use image metadata and remote-stream fallback durations consistently for

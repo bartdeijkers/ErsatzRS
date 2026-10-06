@@ -59,12 +59,12 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `d55be01f1b7d8e72e68445ab9d2022421a86518d` (verified 2026-10-06),
-currently **206 commits** beyond the initial pin, with 184 accepted and 22 pending. Per the maintainer's
-2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
-commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
-`495e3799` cutoff no longer limits scope. The latest fetched tip is the run's
-target. Refreshing the target never advances the parity pin.
+The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
+`v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
+There are **185 accepted and 23 pending in-scope rows**. This supersedes the
+2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
+retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
+Fetching refs never advances the parity pin.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

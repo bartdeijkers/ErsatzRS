@@ -11386,16 +11386,18 @@ row136 after refreshing upstream. No new release is implied.
 [[milestone]]
 id         = 'ucu-09'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
-title      = 'Reconcile upstream through the latest fetched tip'
+title      = 'Reconcile upstream through release v26.11.1'
 status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through d55be01f (latest fetched tip) in order,
+Maintainer-approved scope (2026-10-06): process every ledger row through
+upstream v26.11.1 at 46118d43313b7828780fbfcfb46e980390ea8b0d (row208) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
-Append newly fetched upstream commits to the ucu-09 tail; no unapproved
-deferrals are included. Maintainer-approved exception (2026-09-28): Intel QSV,
+Later commits/releases do not extend or reopen UCU-09; keep them recorded as
+post-v26.11.1 work outside this milestone. No unapproved in-scope deferrals
+are included. Maintainer-approved exception (2026-09-28): Intel QSV,
 AMD AMF and native Linux NVIDIA interop hardware validation may remain explicit
 unverified acceptance debt after the exact runtime is published and integrated.
 This does not waive software/runtime checks available on the current machine.
@@ -11411,15 +11413,32 @@ TSDuck passes if the pipeline changed. After local acceptance, push to remote
 main and require terminal green exact-SHA CI under the maintainer authorization
 for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
-Every row through the latest fetched upstream tip is justified (162 at the
-2026-09-19 bootstrap).
-Refresh upstream before claiming completion; new rows reopen this tail while
-preserving earlier evidence. ADR 0095 has a final maintainer disposition with
+Every row through the verified v26.11.1 tag is justified (208 rows).
+Verify that release tag before claiming completion; later upstream commits
+do not change this fixed boundary. ADR 0095 has a final maintainer disposition with
 accurate Implementation — Accepted, or rejected/withdrawn with every row that
 cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-06 maintainer accepts consolidated ADR 0117 and fixes the UCU-09
+boundary at upstream v26.11.1. Remote and local tag verification agree at
+46118d43313b7828780fbfcfb46e980390ea8b0d, ledger row208: 185 accepted,
+23 in-scope rows remain (186-208). Rows209 onward remain recorded as later work;
+they neither block nor reopen UCU-09. Existing closeout/push/exact-SHA CI gates
+and approved platform debt remain. Next action: implement and verify row186's
+Next image correction under ADR 0117, then continue in order to row208.
+The earlier chronology below retains its original fetched-tip counts and
+proposal status as history; this accepted scope and decision supersede them.
+The accepted image correction now has a finite-loop diagnostic: the existing
+FFmpeg package decodes all four animated WebP frames, but ignore_loop=0 honors
+the fixture's one-play limit. Generic stream_loop=1 also yields only four
+frames with a demuxer rewind warning; forcing image2 fails decoding and is
+rejected. Retained evidence: tmp/ucu09-row186/animation-audit/finite-loop-results.json.
+Native infinite-loop success alone is insufficient for row186 acceptance.
+Continue the bounded replay investigation before selecting the Next patch;
+no new FFmpeg build or acceptance exception is claimed.
+
 2026-10-06 reopened under the existing latest-tip acceptance clause: fetched
 origin/main is d55be01f1b7d8e72e68445ab9d2022421a86518d. Rows 184-206 are
 pending at reopening; rows 184-185 are now accepted and rows 186-206 remain.
@@ -11463,14 +11482,45 @@ Single-frame WebP/GIF fail: their hints are correct and FFmpeg decodes the
 source, but Next ends the image input and displays its early-EOF error card.
 The retained WebP capture and decoded frame prove the failure, rather than a
 codec-name-only assertion (tmp/ucu09-row186/runtime-third.log and webp-output.png).
-An upstream Next fetch still returns e88b2d7. Proposed ADR 0117 requests a
-separate minimal repeat-input correction that preserves animation and must be
-retired after equivalent upstream acceptance. The maintainer decision is pending;
+The initial upstream Next fetch returned e88b2d7. ADR 0117 initially proposed a
+separate repeat-input correction; the consolidated proposal below now governs
+the requested approval scope. The maintainer decision is pending;
 no new runtime build/publication has started. Row185 remains the accepted pin.
 Strict infrastructure all-target Clippy, architecture/progress validation and
 production Convert HTTP smoke pass, including decoded audio/captions, normal
 and preview HLS, wrapper restart and idle cleanup. This is an application
 checkpoint only; WebP/GIF runtime acceptance and ADR 0117 remain open.
+
+Independent animation audit with the existing FFmpeg package decodes four
+distinct frames for synthetic GIF and animated WebP. Bounded six-second output
+contains the expected 12-frame sequence, including the expected half-second seek
+offset: GIF uses stream_loop with ignore_loop=1; animated WebP uses its native
+ignore_loop=0 option. Generic stream_loop on animated WebP times out in repeated
+EOF/flush handling; it is not a viable common option. Infinite embedded loops
+are proven here, not finite-loop or Next application acceptance. Evidence:
+tmp/ucu09-row186/animation-audit/. No patch, new build or publication started;
+ADR 0117 remains Proposed and row186 remains open.
+
+At the maintainer's request, ADR 0117 is consolidated into one proposed policy
+for demonstrated Next compatibility corrections needed by UCU-09, with one
+implementation/build/publication approval and independent mandatory patch
+retirement. New product/architecture decisions and weakened acceptance remain
+outside that scope. The new path is
+docs/adr/0117-temporary-next-compatibility-corrections.md. No acceptance is inferred.
+Read-only forward source audit of rows186-206 identifies existing Next support
+for separate song audio/video, output frame rate and bounded troubleshooting;
+the subtitle eligibility, stale stream URLs and folder cases are application
+integration concerns. No additional local Next defect is confirmed by this
+source audit; runtime acceptance remains necessary and rows remain pending.
+The latest Next remote now resolves to 03626929089a438245cfc77cbedda6e92d98dc9f,
+one commit beyond e88b2d7: VAAPI green padding correction, driver capability
+guard and color-state tracking. Source was fetched and reviewed without moving
+the checkout or package pin. It does not correct image repetition or the live
+RTSP buffer. Upstream adoption and runtime regression checks remain pending;
+no duplicate patch or build was started. Source references: Next commits
+ac4925f (frame rate), b7cefaa (troubleshooting), 0362692 (padding), and ErsatzTV
+481840fb (songs), 432f107e/33cabcf1 (preview), df6ae228 (frame rate),
+39c1811f/897a6ef9/9e537c1b (application integration).
 
 The following chronology retains rejected candidate evidence before correction.
 Row 184 partial implementation: schema 0.1.0, independent audio/video modes,

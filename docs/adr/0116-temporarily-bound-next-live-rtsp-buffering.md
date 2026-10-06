@@ -2,8 +2,10 @@
 
 ## Status
 
-Accepted 2026-10-06. The maintainer approved the scoped patch and rebuilt
-packages, with mandatory removal when upstream provides an equivalent fix.
+Superseded by ADR 0117 for correction approval scope (2026-10-06). The
+maintainer originally accepted the scoped RTSP patch and rebuilt packages.
+Its behavior, evidence, package retention and mandatory upstream-removal
+requirements remain applicable under the consolidated policy.
 
 ## Implementation
 
