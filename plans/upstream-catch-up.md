@@ -3,9 +3,9 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-05): `897a6ef936c23fedc3a29111c0cc04625eefbec1`
-  — fix: coerce next channels to supported streaming modes (#3062).
-- Ledger: **198 commits**, **15 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-10-06): `d55be01f1b7d8e72e68445ab9d2022421a86518d`
+  — docs: tweak changelog.
+- Ledger: **206 commits**, **23 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -30,6 +30,10 @@
   A later 2026-10-05 refresh appends the Windows artifact size build change,
   unextracted text subtitles on Next and streaming-mode coercion as pending rows
   196-198; all 195 existing SHA/subject pairs remain an exact prefix.
+  The 2026-10-06 refresh appends the Next output frame rate, Next by default,
+  Next channel troubleshooting, tag-triggered releases, upstream release
+  v26.11.0, Windows Next playout folders and two changelog commits as pending
+  rows 199-206; all 198 existing SHA/subject pairs remain an exact prefix.
   Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
@@ -5170,3 +5174,11 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |
 | 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | | | | ucu-09; provisional: Covered, pending a focused check. Upstream drops the Next exemption in `CustomStreamSelector`, so an embedded text subtitle that has not been extracted is ignored for Next too, exactly as for the legacy engine. ErsatzRS selection and extraction carry no engine-specific exemption (`crates/ersatzrs-infra/src/subtitles.rs:1448` re-extracts on any missing cache file regardless of engine), and row 174 already applied automatic eligibility to both engines, so the audit only has to prove an unextracted embedded text track is skipped rather than selected. Claude 2026-10-05 triage. |
 | 198 | `897a6ef9` | fix: coerce next channels to supported streaming modes (#3062) | | | | ucu-09; provisional: Port. Cached lineup and playlist URLs still carry legacy modes, so upstream coerces `ts-legacy` to `ts` and any non-segmenter playlist mode to `segmenter` for channels on the Next engine, logging the substitution. ErsatzRS refuses instead of coercing: the legacy transport path returns 404 for a Next channel (`crates/ersatzrs-web/src/transport/iptv/stream.rs:280`) while the HLS path branches to the Next handler (`transport/iptv/hls.rs:751`), so a client holding an older URL loses the channel. Claude 2026-10-05 triage. |
+| 199 | `df6ae228` | feat: next output frame rate (#3063) | | | | ucu-09; provisional: Port (channel config schema 0.1.1). Adds an output `frame_rate` to the Next video section, derived from the channel framerate and normalization setting, with a strict converter that rejects decimals, zero and anything above 240 and keeps exact NTSC fractions. ErsatzRS only carries `frame_rate` as a source probe hint (`crates/ersatzrs-infra/src/next_engine/protocol.rs:368`); the channel config's video section has no output frame rate at all, so this depends on the row 184 schema work. Claude 2026-10-06 triage. |
+| 200 | `a3bbf89d` | feat: next engine by default (#3064) | | | | ucu-09; provisional: Adapt under ADR 0095, and deliberately not in full. A migration flips every existing channel to the Next engine and rewrites unsupported streaming modes, new channels default to Next, and legacy-only options are hidden. ErsatzRS keeps the native pipeline primary with Next as an accepted optional second engine, so neither the migration nor the default may be copied; the portable half is the editor hiding options that do not apply to the selected engine. A maintainer decision is needed before any default changes. Claude 2026-10-06 triage. |
+| 201 | `33cabcf1` | fix: next channel troubleshooting (#3065) | | | | ucu-09; provisional: Port. Troubleshooting builds a dedicated Next process over a fixed 30-second window instead of reusing the legacy playout-item path, and the channel framerate query gains an ignore-profile mode so an un-normalized profile still yields a rate. ErsatzRS varies only the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:110`), so this lands on the same surface as pending row 194 and should be audited with it. Claude 2026-10-06 triage. |
+| 202 | `6c7c4e69` | build: release from a pushed tag (#3066) | | | | ucu-09; provisional: N/A (upstream-only release workflow: a prep-release script and a tag-triggered publish). ErsatzRS already releases from a pushed tag with its own CI, as rows 179 and 191 recorded. Claude 2026-10-06 triage. |
+| 203 | `4c03f347` | docs: prep for release v26.11.0 | | | | ucu-09; provisional: N/A (upstream CHANGELOG heading and date for v26.11.0; no source change). Marks the upstream release boundary after the Next-by-default batch, like row 168. Claude 2026-10-06 triage. |
+| 204 | `9e537c1b` | fix: next playout folders on windows (#3067) | | | | ucu-09; provisional: Covered, pending one check. Upstream hardens its `current` junction scheme: removal is guarded, failures no longer throw, and non-Windows hosts get a temporary link replaced atomically. ErsatzRS passes the per-channel playout folder to the engine directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link, so the junction failure mode does not exist; the audit only has to confirm the folder swap is atomic. Claude 2026-10-06 triage. |
+| 205 | `2d79d196` | docs: update changelog for next fix | | | | ucu-09; provisional: N/A (one upstream CHANGELOG line for row 204). Claude 2026-10-06 triage. |
+| 206 | `d55be01f` | docs: tweak changelog | | | | ucu-09; provisional: N/A (upstream CHANGELOG wording only). Claude 2026-10-06 triage. |
