@@ -146,6 +146,20 @@ fn video_slices(bytes: &[u8]) -> Vec<&[u8]> {
     slices
 }
 
+async fn assert_copied_video(ffmpeg: &Path, source: &Path, output: &Path) {
+    let source_video = elementary(ffmpeg, source, "0:v:0", "h264").await;
+    let copied_video = elementary(ffmpeg, output, "0:v:0", "h264").await;
+    let source_slices = video_slices(&source_video);
+    let copied_slices = video_slices(&copied_video);
+    assert!(copied_slices.len() >= 20);
+    assert!(
+        copied_slices
+            .iter()
+            .all(|slice| source_slices.contains(slice)),
+        "H.264 coded slices must be copied unchanged"
+    );
+}
+
 #[tokio::test]
 #[ignore = "requires real Next and FFmpeg 9; compares compressed selected-stream payloads"]
 async fn real_next_copies_selected_payloads_without_applying_fallback_normalization() {
@@ -178,17 +192,7 @@ async fn real_next_copies_selected_payloads_without_applying_fallback_normalizat
             .all(|frame| source_frames.contains(frame)),
         "AAC payloads must match the selected alternate track exactly"
     );
-    let source_video = elementary(&ffmpeg, &clip, "0:v:0", "h264").await;
-    let copied_video = elementary(&ffmpeg, &saved, "0:v:0", "h264").await;
-    let source_slices = video_slices(&source_video);
-    let copied_slices = video_slices(&copied_video);
-    assert!(copied_slices.len() >= 20);
-    assert!(
-        copied_slices
-            .iter()
-            .all(|slice| source_slices.contains(slice)),
-        "H.264 coded slices must be copied unchanged"
-    );
+    assert_copied_video(&ffmpeg, &clip, &saved).await;
     let mut decode = Command::new(ffmpeg);
     decode
         .args(["-v", "error", "-xerror", "-i"])
@@ -259,8 +263,8 @@ async fn real_next_copy_profile_transcodes_unsupported_codecs_with_profile_setti
 }
 
 #[tokio::test]
-#[ignore = "requires real Next and FFmpeg 9; graphics force video fallback while audio remains copied"]
-async fn real_next_copy_profile_burns_graphics_without_transcoding_selected_audio() {
+#[ignore = "requires real Next and FFmpeg 9; copied video omits overlays and preserves selected payloads"]
+async fn real_next_copy_profile_omits_graphics_and_preserves_selected_payloads() {
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let root = tempfile::tempdir().unwrap();
@@ -276,7 +280,7 @@ async fn real_next_copy_profile_burns_graphics_without_transcoding_selected_audi
         .as_array()
         .unwrap()
         .iter()
-        .any(|s| s["width"] == 640 && s["height"] == 360));
+        .any(|s| s["width"] == 320 && s["height"] == 180));
     let mut decode = Command::new(&ffmpeg);
     decode
         .args(["-v", "error", "-xerror", "-i"])
@@ -296,11 +300,13 @@ async fn real_next_copy_profile_burns_graphics_without_transcoding_selected_audi
         ]);
     let pixels = tool(decode).await;
     assert_eq!(pixels.len(), 160 * 90 * 3);
-    let red = pixels
-        .chunks_exact(3)
-        .filter(|p| p[0] > 180 && p[1] < 50 && p[2] < 50)
-        .count();
-    assert!(red > 20, "watermark must be visible on transcoded video");
+    assert!(
+        pixels
+            .chunks_exact(3)
+            .all(|p| p[0] < 50 && p[1] < 50 && p[2] > 180),
+        "copied video must remain blue without the configured red watermark"
+    );
+    assert_copied_video(&ffmpeg, &clip, &saved).await;
     let source_audio = elementary(&ffmpeg, &clip, "0:a:1", "adts").await;
     let output_audio = elementary(&ffmpeg, &saved, "0:a:0", "adts").await;
     let source_frames = aac_frames(&source_audio);
@@ -310,7 +316,7 @@ async fn real_next_copy_profile_burns_graphics_without_transcoding_selected_audi
         output_frames
             .iter()
             .all(|frame| source_frames.contains(frame)),
-        "graphics must not re-encode the selected AAC stream"
+        "ignored graphics must not re-encode the selected AAC stream"
     );
 }
 

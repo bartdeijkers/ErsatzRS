@@ -77,7 +77,7 @@ resolved = false
 id = 'ucu09-row185-copy-projection'
 description = 'Match upstream copy-mode cleanup: refresh affected Next projections after profile copy/resolution changes, suppress copied-video overlays, and omit fixed HLS resolution.'
 discovered = '2026-10-06'
-evidence = 'UCU-09 owns row185 acceptance: editor/API notifications preserve schedules, every projection path skips copied-video overlays, normal/preview Next playlists omit fixed resolution, decoded copy/non-copy graphics and Convert HTTP lifecycle pass. Focused regressions, architecture lint and strict affected Clippy pass; baseline advances to e1d2cac0.'
+evidence = 'UCU-09 owns row185 acceptance: editor/API notifications preserve schedules, every projection path skips copied-video overlays, normal/preview Next playlists omit fixed resolution, decoded copy/non-copy graphics and Convert HTTP lifecycle pass. A later compatibility check exposed a stale row184 assertion expecting resize/overlay fallback. It is corrected to prove original dimensions, absent overlays and unchanged compressed H.264/AAC payloads; both the published runtime and row186 candidate pass, with strict lint. UCU-09 records exact results. Baseline remains accepted at e1d2cac0.'
 resolved = true
 
 [[debt]]

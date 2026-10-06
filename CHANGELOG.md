@@ -33,6 +33,7 @@ release section when tagging a release.
 
 - Refresh Next projections after profile copy/resolution changes, omit graphics
   from copied video and stop advertising a fixed copied-video HLS resolution.
+  Runtime checks verify unchanged compressed video/audio with configured overlays.
 
 - Pin a temporary, revision-verified Next source correction for live RTSP
   startup buffering (ADR 0116). It preserves padded-audio termination and
