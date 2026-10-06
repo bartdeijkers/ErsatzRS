@@ -36,6 +36,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prevent Block playout skips and repeats after collection changes by removing
+  orphaned future cursor history before restoration and deleting all duplicate
+  history at replaced programme starts. Preserve consumed history, current
+  programmes and restart-safe rotation during preserving Refresh.
+
 - Use hardware VAAPI padding only with the compatible Intel iHD driver,
   preserving effective color tags and range. Keep NV12/P010 depth during
   software fallback and subsequent subtitle/graphics composition; hardware

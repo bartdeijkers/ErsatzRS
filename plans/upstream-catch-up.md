@@ -4,11 +4,51 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-186 are accepted; rows187-208 are the 22 remaining in-scope
+verified). Rows1-187 are accepted; rows188-208 are the 21 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 187 source map and acceptance
+
+Accepted slice: `e18b4a07`, block scheduling/history correctness. The outcome is
+continuous media rotation when rebuilding changed block collections, without
+stale future cursor rows causing skips or repeats. Preserve already consumed
+history and the retained current programme under ADR 0110. No schema, UI,
+FFmpeg/Next runtime, health capability or new scheduling policy is included.
+
+- Upstream: `ErsatzTV.Core/Scheduling/BlockScheduling/BlockPlayoutBuilder.cs`,
+  `BlockPlayoutChangeDetection.cs`, and the production-builder regressions in
+  `ErsatzTV.Core.Tests/Scheduling/BlockScheduling/BlockPlayoutRebuildHistoryTests.cs`.
+- Rust: `crates/ersatzrs-core/src/scheduling/block.rs` removes orphaned future
+  history before `block_sources.rs` restores cursors. Existing set-based removal
+  already covers all rows at deleted item starts, and source/deco restoration
+  already filters history queued for removal.
+- Persistence: the existing build result and scheduling repository transaction
+  remove exact history IDs. SQLite reopen/Continue/Refresh tests belong in
+  `crates/ersatzrs-infra/tests/scheduling_repository/block_continuation.rs`.
+- Boundary: identify orphaned future history against the original requested
+  clock before programme-preservation state is restored, then repeat against
+  retained items after change detection. Keep pre-request consumed history
+  even when its played item has been pruned. Retain the current programme and
+  its matched checkpoint; the protected seam remains governed by ADR 0110.
+  Publish exact removed history IDs even when preserving Refresh clears only
+  the future beyond that seam. Preroll shifts remove every old-start duplicate.
+- Intentional deviations: retain existing ADR 0110 programme preservation and
+  persisted deterministic enumerator checkpoints; no new deviation is proposed.
+
+Acceptance: mixed-duration repeated Shuffle references and collection additions
+retain consecutive cursor indexes; orphaned future and duplicate removed-start
+history are deleted; past consumed history remains. Persist production-generated
+state, inject stale future history, reopen SQLite and compare complete future
+media/timestamps/context/settings against the clean oracle for Continue/Refresh.
+Reuse existing five-order, membership, current-programme and health regressions.
+All33 core Block checks and10 selected SQLite/publication checks pass,
+including both new paired-control cases after correcting a fixture ID collision.
+Strict affected lint and independent substantive review pass. Row187 is Port;
+UCU-09 owns exact evidence. Row188 is next. Final UCU-09 playback, closeout
+and window CI remain separate required gates.
 
 ## Row 186 source map and acceptance
 
@@ -238,7 +278,7 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
   — docs: prep for release v26.11.1.
-- Ledger: **208 commits**, **22 pending**. The original plan covered 152 through
+- Ledger: **208 commits**, **21 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -278,7 +318,7 @@ remain. See `post-publication-cleanup.json`.
   processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **186**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **187**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -5400,7 +5440,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 184 | `aad7bdc4` | feat: use next copy mode when normalization is disabled (#3049) | Adapt (ADR 0116) | upstream-baseline-catch-up | `feat(infra): support Next copy mode with verified runtime` | ucu-09; versioned independent copy/transcode mapping, codec fallback, overlay health upgrade, six-platform patched snapshot with mandatory upstream retirement. 328 Linux compatibility, decoded RTSP handoff/EOF, six Windows application, Burn/Convert HTTP, 83 TSDuck checks, strict lint and published artifact identity pass. Candidate build CI 37503854054 green; application window CI remains pending. |
 | 185 | `e1d2cac0` | fix: cleanup for next copy mode (#3050) | Port | Next projection, profile commands and HLS playlists | `fix(next): preserve copy mode across profile and overlay changes` | ucu-09; editor/API and channel-profile saves notify normal/preview without scheduling changes; copied video skips overlays and Next playlists omit fixed resolution. 18 focused, 63 projection and 17 final fallback checks, decoded copy/non-copy graphics, strict affected lint and Convert HTTP lifecycle pass. |
 | 186 | `b4a7efe2` | fix: image and remote stream durations using next engine (#3051) | Adapt (ADR 0117) | upstream-baseline-catch-up | `fix(next): integrate verified image runtime packages` | ucu-09; shared image/remote duration and indexed probe hints preserve selection and scheduling. 18 focused and 64 scheduling checks, all image/AVI hints, optimized Linux/Windows runtime compatibility, six checksum-pinned Next packages and published FFmpeg v2.0.6 pass. Production HTTP playback, Dutch audio/captions, preview/reconnect/idle cleanup and independent review pass. Both temporary Next corrections remain required; final application window CI stays open. |
-| 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | | | | ucu-09; provisional: Port, partly covered; highest-value row of this batch because it is native scheduling correctness. (a) Enumerators must not see history queued for removal: ErsatzRS filters this for break content (`crates/ersatzrs-core/src/scheduling/block.rs:1386`) while block item enumerators consume no history at all, so this needs an architecture check rather than a 1:1 port. (b) Removing every history row at a removed item's start is already covered by the set-based `history_to_remove_for_items` (`block.rs:984`). (c) Dropping orphaned history at or after the requested start has no counterpart; `cleanup_history` (`scheduling/mod.rs:1252`) only prunes old rows per key. Claude 2026-10-04 triage. |
+| 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | Port | Block scheduling/history and SQLite publication | `fix(scheduling): remove orphaned block history before restoration` | ucu-09; original-clock future orphan cleanup precedes preservation/cursor restoration, removed-start duplicates are deleted including preroll shifts, and exact removal IDs publish within preserving transactions. 33 core Block checks, 10 selected SQLite/transaction checks, complete clean-oracle timeline/track/checkpoint comparisons, strict affected lint and independent substantive review pass. Consumed history/current programmes/seeds remain; final window gates and CI stay open. |
 | 188 | `26755a16` | update changelog for most recent next build | | | | ucu-09; provisional: N/A (one upstream CHANGELOG line for a Next build; no product behavior). Claude 2026-10-04 triage. |
 | 189 | `481840fb` | feat: add songs to next engine (#3053) | | | | ucu-09; provisional: Port. Songs become playable through Next: an audio-only item keeps its source as the audio track and gains a generated video track (song background over a signed internal HTTP source with a png_pipe hint, black video for other audio-only items), the song background generator is seeded per playout item instead of using a shared RNG, and an internal signed route serves that background. Needs the ErsatzRS song video surface and the Next item projection audited; shares the audio and video stream split with row 186. Claude 2026-10-04 triage. |
 | 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | | | | ucu-09; provisional: Adapt, pending acceptance. Upstream bundles FFmpeg8.1.2-4 on macOS, adopts bundled paths once, applies the bundled-series health warning there and bumps Windows/Docker packages too. ADRs0008/0063 retain separate unbundled FFmpeg9 acquisition, explicit operator overrides and PATH9 fallback when no matching asset exists. All15 upstream package patches are audited as already carried/equivalent or inapplicable with existing dependency pins. No new macOS build is implied; existing macOS application debt and unpatched WebP limitation remain explicit. Consolidated audit: ADR0117 and UCU-09. |

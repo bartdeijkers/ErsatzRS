@@ -11421,6 +11421,41 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row187 accepted as Port: original requested-clock future orphan
+history is filtered before programme-preservation checkpoint restoration, then
+rechecked against retained starts after change detection. Every duplicate at a
+repositioned primary's old start is deleted. The owned SQLite publication
+transaction applies exact history removal IDs even when preserving Refresh
+clears only the future beyond a protected seam. Matched current programmes and
+consumed pre-request history are retained; no schema/runtime/UI policy changes.
+All33 core Block tests pass (d3b85020-cba9-4982-8dbe-30c0ca940b27), including
+40 mixed-duration items/20 shared Shuffle references, membership addition,
+three successive clean timeline/track/history/checkpoint comparisons, earlier
+block versus requested-clock boundary, malformed retained-prefix orphan and
+preroll duplicates. The new collection regression failed before the fix
+(51be7a90-741f-46ec-9633-55932ed644ce); a separate initial boundary fixture was
+corrected after accidentally matching an existing item start.
+Nine selected SQLite/publication checks pass in3c91d9f4-4d9e-40b5-8b1a-9bf431128824.
+The remaining new EngineDefault fixture initially reused a seeded BlockItem ID;
+its corrected ID range passes in4f696134-e30b-4705-bfa3-c4968359ef36. Both new
+cases use production-generated history, close/reopen SQLite before generation
+and after publication, and compare full persisted timeline/settings and history
+against a clean control. Continue/Refresh collection changes and valid/Version99
+KeepCurrent orphans at08:01:01 before the protected09:00 seam are covered.
+Consumed07:00 history/current rows, seed, Dutch audio/title, English forced
+subtitles, watermarks/graphics and Block Playout State remain correct. Existing
+five-order rotation, corrupt checkpoint refusal, preserving Reset, current
+settings, publication deadline and cancelled/expired transaction tests pass.
+Core/infra strict all-target Clippy, workspace formatting, diff and new Clippy
+allow policy pass. Independent substantive review finds no concrete blocker.
+Canonical proof: tmp/ucu09-row187/{acceptance-proof.json,ordered-source-proof.json,
+core-before-fix.log,core-after-fix.log,sqlite-after-fix.log,
+sqlite-fixture-corrected.log,core-clippy.log,infra-clippy.log}.
+All208 ledger SHA/subjects and fixed v26.11.1 ancestry are verified. Pin/ledger
+land together and the clean upstream checkout then follows. 187/208 accepted,
+21 pending; row188 is next. No intermediate main push/window CI is claimed;
+UCU-09 final local/playback/exact-SHA CI and approved platform debt remain open.
+
 2026-10-06 maintainer accepts consolidated ADR 0117 and fixes the UCU-09
 boundary at upstream v26.11.1. Remote and local tag verification agree at
 46118d43313b7828780fbfcfb46e980390ea8b0d, ledger row208: 185 accepted,
