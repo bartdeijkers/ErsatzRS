@@ -24,6 +24,7 @@ release section when tagging a release.
 
 - Prepare a temporary Next correction that holds static WebP and repeats complete
   GIF animations for the scheduled duration, with decoded regression coverage.
+  Preserve fractional seeking, local/HTTP image handoff and live-input EOF.
   Replacement packages and finite animated-WebP acceptance remain pending.
 
 - Use image metadata and remote-stream fallback durations consistently for

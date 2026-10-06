@@ -70,7 +70,7 @@ id = 'ucu09-row186-media-duration'
 adr = '0117'
 description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
 discovered = '2026-10-06'
-evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint, all six static image formats and complete finite-GIF animation across repeated cycles. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions; a four-line correction and an extension to the same ADR are proposed, not built or accepted. Row186 and its baseline remain pending.'
+evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions; a four-line correction and an extension to the same ADR are proposed, not built or accepted. Row186 and its baseline remain pending.'
 resolved = false
 
 [[debt]]

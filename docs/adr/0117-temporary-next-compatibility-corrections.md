@@ -11,7 +11,9 @@ bounded by upstream v26.11.1, not later releases.
 
 Partial — a candidate patch distinguishes static WebP from animated WebP and
 repeats complete GIF cycles. All six static image formats and a finite GIF
-animation pass decoded Linux application checks. Production packages are
+animation pass decoded Linux application checks, including local/HTTP fractional
+seeking, six-second handoff to static WebP and an exact eight-second finite output.
+Live inputs retain their EOF behavior. Production packages are
 unchanged; finite animated WebP remains blocked by FFmpeg demuxer seeking.
 
 ## Context
@@ -173,6 +175,9 @@ demuxer correction, its implementation, commit/push, CI and publication of
 verified replacement Linux/Windows packages as v2.0.6. Reuse existing verified
 inputs and build caches; adopt immutable version/checksum pins only after
 acceptance. This exception adds no unrelated FFmpeg changes or platform waiver.
+Preserve the existing ARM assets and their original checksums in the replacement
+release. Published v2.0.5 already mixes v2.0.4 Linux/Windows packages with v2.0.5
+ARM packages; replacing Linux/Windows must not drop those ARM downloads.
 
 Require decoded finite/infinite animation, fractional seeking, scheduled
 termination and cleanup, plus relevant graphics, audio and subtitle regressions

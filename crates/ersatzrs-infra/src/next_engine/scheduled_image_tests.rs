@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "scheduled_image_lifecycle_tests.rs"]
+mod lifecycle;
+
 async fn image_metadata(pool: &crate::db::DbPool) {
     for sql in [
         r#"INSERT INTO "Image" ("Id") VALUES (10)"#,
@@ -238,13 +241,13 @@ async fn run_image(extension: &str) {
     );
     assert_audio_and_subtitle(&ffmpeg, &ffprobe, &saved, true, "aac").await;
     if extension == "animated.gif" {
-        assert_animation_cycle(&ffmpeg, &saved).await;
+        assert_animation_cycle(&ffmpeg, &saved, None).await;
     } else {
         assert_blue_picture(&ffmpeg, &saved).await;
     }
 }
 
-async fn assert_animation_cycle(ffmpeg: &Path, saved: &Path) {
+async fn assert_animation_cycle(ffmpeg: &Path, saved: &Path, first_color: Option<u8>) {
     let mut colors = Vec::new();
     for seek in [
         "0.25", "0.75", "1.25", "1.75", "2.25", "2.75", "3.25", "3.75",
@@ -284,6 +287,12 @@ async fn assert_animation_cycle(ffmpeg: &Path, saved: &Path) {
         colors.push(color);
     }
     assert_eq!(&colors[..4], &colors[4..], "animation cycle must repeat");
+    if let Some(expected) = first_color {
+        assert_eq!(
+            colors[0], expected,
+            "fractional input seek must select its frame"
+        );
+    }
     assert!(
         colors.windows(2).all(|pair| pair[1] == (pair[0] + 1) % 4),
         "animation must preserve all frames in forward order: {colors:?}"

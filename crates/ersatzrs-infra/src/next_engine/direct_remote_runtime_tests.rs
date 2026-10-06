@@ -7,8 +7,7 @@ use std::sync::Arc;
 mod endings;
 #[path = "direct_remote_images.rs"]
 mod images;
-#[path = "direct_remote_servers.rs"]
-mod servers;
+use super::super::direct_remote_servers as servers;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CaptionSource {

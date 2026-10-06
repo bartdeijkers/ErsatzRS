@@ -47,13 +47,14 @@
      },
      Subtitle {
          input_source: InputSource,
-@@ -643,6 +644,23 @@
+@@ -643,6 +644,24 @@
                  },
                  realtime: final_output_settings.realtime && !final_output_settings.is_live,
                  decoder: video_decoder,
 +                // Reopen GIFs after one cycle; embedded finite loop counts must not
 +                // end a scheduled image early or freeze it to its first frame.
-+                extra_input_args: if video_stream.codec == "gif"
++                extra_input_args: if !final_output_settings.is_live
++                    && video_stream.codec == "gif"
 +                    && input_settings
 +                        .video_input
 +                        .probe_result
@@ -71,7 +72,7 @@
              },
          ];
  
-@@ -1245,11 +1263,13 @@
+@@ -1245,11 +1264,13 @@
                      seek,
                      realtime,
                      decoder,
@@ -85,7 +86,7 @@
  
                      if let Some((audio_path, audio_args)) = &audio_decoder_args
                          && *audio_path == path.as_str()
-@@ -1626,5 +1646,39 @@
+@@ -1626,5 +1647,48 @@
              subtitle_force_style: None,
              reports_folder: None,
              report_id: None,
@@ -94,11 +95,13 @@
 +
 +    #[test]
 +    fn gif_programme_loops_all_frames_with_input_options_and_output_bound() {
-+        for (codec, container, repeated) in [
-+            ("gif", "gif", true),
-+            ("gif", "matroska", false),
-+            ("webp", "webp_pipe", false),
-+            ("h264", "matroska", false),
++        for (codec, container, live, http, repeated) in [
++            ("gif", "gif", false, false, true),
++            ("gif", "gif", false, true, true),
++            ("gif", "gif", true, true, false),
++            ("gif", "matroska", false, false, false),
++            ("webp", "webp_pipe", false, false, false),
++            ("h264", "matroska", false, false, false),
 +        ] {
 +            let mut input = multichannel_ac3_input("image-input");
 +            let crate::probe::ProbeResultStream::Video(stream) =
@@ -108,8 +111,15 @@
 +            };
 +            stream.codec = codec.to_owned();
 +            input.video_input.probe_result.format_name = Some(container.to_owned());
-+            let mut pipeline =
-+                Pipeline::full(&FfmpegInfo::default(), input, stereo_output()).unwrap();
++            if http {
++                input.video_input.input_source = InputSource::Http(crate::input::HttpInputSource {
++                    uri: "https://media.example.test/animation.gif".to_owned(),
++                    options: crate::input::HttpInputOptions::default(),
++                });
++            }
++            let mut output = stereo_output();
++            output.is_live = live;
++            let mut pipeline = Pipeline::full(&FfmpegInfo::default(), input, output).unwrap();
 +            pipeline.optimize();
 +            let argv = pipeline.args();
 +            let args: Vec<&str> = argv.iter().map(|arg| arg.as_ref()).collect();
