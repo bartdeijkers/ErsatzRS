@@ -11482,9 +11482,30 @@ eight bytes past ANMF chunk headers at source d32b387f2b0a484599d4587d651891f0c6
 The four-line correction in tmp/ucu09-row186/ffmpeg-review/ is a reviewable
 proposal, not built or runtime-verified. ADR0117 records a proposed extension
 because its accepted scope explicitly excludes FFmpeg rebuilds/releases.
-Next action: obtain the maintainer decision on that extension, then prove
+Next action: obtain the maintainer decision on the consolidated extension, then prove
 animated WebP and finish the existing row186 acceptance gates. No FFmpeg build,
 publication, acceptance exception or baseline advancement is claimed.
+
+Subsequent maintainer-requested audit covers all rows186-208, exact current Next
+03626929089a438245cfc77cbedda6e92d98dc9f and all15 patches in ErsatzTV-ffmpeg8.1.2-4.
+One additional binary amendment is necessary: upstream cfaaf006's exact ICC/EXIF
+short-read handling in the same WebP demuxer. Remaining upstream patches are
+already carried/equivalent or unnecessary with the current libva/OpenAPV pins.
+Both checksum-verified ARM assets use affected source d32b387 too. ADR0117 now
+proposes two WebP corrections and v2.0.6 packages for all four supplied RIDs,
+superseding the narrower proposal to retain old ARM bytes. Existing macOS PATH9
+fallback and approved native-platform/hardware debt remain explicit.
+The source audit also identifies native VAAPI padding/capability guards and
+Matroska content-duration parsing as application corrections, not FFmpeg patches.
+The exact Linux package exposes existing graphics, shaping and subtitle filters;
+PNG/AAC at30000/1001 works. A one-second video with a twenty-second subtitle
+reports numeric video duration20 but DURATION1 and packets ending at1: the parser
+must account for synthesized numeric estimates. These capability probes do not
+accept songs, output rate, duration or any pending row. Evidence:
+tmp/ucu09-ffmpeg-amendment-audit/{existing-runtime-probes.json,content-duration-packets.json,
+truncated-webp-probes.json,arm-package-audit.json,patch-review/patch-equivalence.json,
+rows-review/source-findings.md}. Source review and bounded probes only; no builds,
+releases, package pins, ordered baseline or acceptance gates changed.
 
 2026-10-06 reopened under the existing latest-tip acceptance clause: fetched
 origin/main is d55be01f1b7d8e72e68445ab9d2022421a86518d. Rows 184-206 are

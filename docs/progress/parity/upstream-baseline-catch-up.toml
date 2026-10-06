@@ -70,7 +70,23 @@ id = 'ucu09-row186-media-duration'
 adr = '0117'
 description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
 discovered = '2026-10-06'
-evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions; a four-line correction and an extension to the same ADR are proposed, not built or accepted. Row186 and its baseline remain pending.'
+evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The production package pin is unchanged. Finite animated WebP remains blocked by FFmpeg packet seek positions. The consolidated ADR0117 extension proposes that correction plus upstream ICC/EXIF short-read hardening for all four currently published RID payloads; ARM archives share the affected source and must not retain the known defect. Full remaining-row and 15-patch source audits establish no further binary amendment with current dependency pins. The extension is not built or accepted; UCU-09 owns exact evidence. Row186 and its baseline remain pending.'
+resolved = false
+
+[[debt]]
+id = 'ucu09-row194-content-duration'
+adr = '0117'
+description = 'Use selected content-stream duration for local scans, guarding against FFmpeg 9 Matroska numeric durations synthesized from a longer subtitle/container; preserve video selection and complete-audio fallback.'
+discovered = '2026-10-06'
+evidence = 'Remaining-row audit and exact-package probe find one second of video packets and a one-second video DURATION tag but numeric video and format durations of twenty seconds. FFmpeg timing source explains the estimate; a scanner correction and conflicting/missing/invalid-tag regression plus decoded handoff remain required. No binary patch is justified. Canonical evidence is recorded in UCU-09; row194 is not accepted.'
+resolved = false
+
+[[debt]]
+id = 'ucu09-row207-vaapi-padding'
+adr = '0117'
+description = 'Adopt upstream Next VAAPI padding correction and repair native driver eligibility, color-state preservation and padding fallback without assuming that every VAAPI driver honors black padding.'
+discovered = '2026-10-06'
+evidence = 'Next0362692 gates pad_vaapi to compatible Intel iHD and restores BT.2020 tags around padding. Native apply_pad_filter currently selects pad_vaapi without those guards. Source matching establishes a credible green-padding path; native capability/filter, HDR/range/depth and upload regressions remain required. Existing hardware acceptance debt is unchanged; no additional FFmpeg binary patch or row207 acceptance is claimed.'
 resolved = false
 
 [[debt]]

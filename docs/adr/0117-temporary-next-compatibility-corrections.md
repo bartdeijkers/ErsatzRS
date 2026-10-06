@@ -7,6 +7,9 @@ including implementation, commit/push, CI and verified package publication.
 Individual qualifying fixes do not require another ADR or approval. UCU-09 is
 bounded by upstream v26.11.1, not later releases.
 
+The consolidated FFmpeg extension below is **Proposed**. Acceptance of the
+Next policy does not authorize its FFmpeg builds or publication.
+
 ## Implementation
 
 Partial — a candidate patch distinguishes static WebP from animated WebP and
@@ -51,7 +54,7 @@ would repeatedly interrupt the same compatibility work. The maintainer asks
 for one decision covering necessary Next corrections. This decision extends
 the exception without changing UCU-09's product scope or acceptance gates.
 
-The runtime evidence and source audit of pending rows 186-206 identify two
+The runtime evidence and source audit of pending rows 186-208 identify two
 demonstrated local corrections: the accepted RTSP buffer bound and image repetition.
 Song playback uses Next's existing separate audio/video inputs; output frame
 rate and bounded troubleshooting already exist in e88b2d7. Subtitle eligibility,
@@ -168,23 +171,127 @@ The native infinite-loop path seeks to the correct header and decodes all frames
 Evidence and a four-line candidate correction are retained in
 `tmp/ucu09-row186/animation-audit/webp-packet-offsets.json` and
 `tmp/ucu09-row186/ffmpeg-review/0001-correct-animated-webp-seek-position.patch`.
-The correction has not been built or runtime-verified.
+The correction has not been built or runtime-verified. Current FFmpeg upstream
+`9008db55d29631ae4ec62d46edea77c840ce0663` still has this seek-position defect.
 
-Propose extending this same decision to the minimal FFmpeg animated-WebP
-demuxer correction, its implementation, commit/push, CI and publication of
-verified replacement Linux/Windows packages as v2.0.6. Reuse existing verified
-inputs and build caches; adopt immutable version/checksum pins only after
-acceptance. This exception adds no unrelated FFmpeg changes or platform waiver.
-Preserve the existing ARM assets and their original checksums in the replacement
-release. Published v2.0.5 already mixes v2.0.4 Linux/Windows packages with v2.0.5
-ARM packages; replacing Linux/Windows must not drop those ARM downloads.
+#### Consolidated audit through v26.11.1
 
-Require decoded finite/infinite animation, fractional seeking, scheduled
-termination and cleanup, plus relevant graphics, audio and subtitle regressions
-on Linux and Windows. Existing approved platform/hardware debt remains unchanged.
-Track source/patch/payload hashes and remove the correction independently once
-equivalent upstream behavior passes these checks, following the retirement
-policy above. A build or publication alone does not accept row 186.
+The 2026-10-06 audit covers all 23 pending application rows, the current Next
+revision `03626929089a438245cfc77cbedda6e92d98dc9f`, all 15 patches in
+ErsatzTV-ffmpeg `8.1.2-4`, and the exact four published first-party RID payloads.
+It establishes one additional FFmpeg source amendment:
+
+- Backport upstream FFmpeg
+  [`cfaaf0062c085433ccb500689f137849794aeb63`](https://github.com/FFmpeg/FFmpeg/commit/cfaaf0062c085433ccb500689f137849794aeb63).
+  The same WebP demuxer allocates ICC/EXIF side data for the declared chunk size
+  but accepts a positive short read, leaving unread bytes uninitialized. The
+  upstream fix requires exact-length reads and removes incomplete side data.
+  The published source lacks it. A truncated EXIF fixture currently finishes
+  probing without an error; post-fix demuxer error/side-data handling still
+  requires verification. This is source evidence of the unsafe read path,
+  not proof of an exploit or a validated replacement binary.
+
+| Pending rows / runtime surface | Audit result and required owner |
+| --- | --- |
+| 186: still and animated images | Next lifetime correction plus FFmpeg WebP rewind and ICC/EXIF fixes. |
+| 187: block scheduling | Application scheduling/history changes; no new FFmpeg primitive. |
+| 189: songs | Application separate audio/video and song-background integration; existing PNG, lavfi, drawtext and audio filters suffice. |
+| 190/192: macOS acquisition and unsigned packaging | Adapt through ADRs 0008/0063; keep unbundled FFmpeg 9 acquisition and explicit operator overrides. No FFmpeg 8 downgrade or one-time override of saved paths. |
+| 193/201: seek and troubleshooting | Application/Next integration with a bounded troubleshooting process; no new FFmpeg library. |
+| 194/195: duration and deep scan | Application scanner/parser changes; existing ffprobe fields suffice, with the Matroska duration guard below. |
+| 197/198: subtitles and cached URLs | Application eligibility and URL preparation; preserve ADR 0100 refusals. |
+| 199/200: output rate and engine selection | Application/Next schema integration using existing rational frame-rate support; preserve ADR 0095's accepted native default. |
+| 204: Windows playout folders | Application filesystem lifecycle; no FFmpeg amendment. |
+| 207: VAAPI padding | Adopt the upstream Next correction and correct the matching native Rust pipeline path; no FFmpeg binary patch established. |
+| 188/191/196/202/203/205/206/208: build or release documentation | Source/workflow review; no additional codec or library requirement established. |
+
+All 15 upstream FFmpeg patches are already present, have an FFmpeg 9 equivalent,
+or are inapplicable with the existing dependency pins. In particular, the fixed
+QSV decoder pool, D3D11 handle index and child-context transfer corrections are
+already in v2.0.4; they must not be added again. The pinned libva already enables
+the surface-alignment query. Existing x64 OpenAPV predates its changed 1.1 API;
+ARM packages carry the matching compatibility patch. Reassess these conditions
+only if their dependencies change. Compiled hardware support remains distinct
+from the already unverified hardware acceptance.
+
+The four downloaded packages already include Cairo, librsvg and text shaping.
+None uses `--enable-small`; the upstream container metadata fix does not require
+another managed-package amendment. A bounded Linux probe produces H.264/AAC
+with a PNG background at `30000/1001`, confirming the existing primitives.
+These probes establish capabilities, not acceptance of the pending song/rate rows.
+
+Two application corrections remain visible alongside the binary amendments:
+
+- The native `apply_pad_filter` selects `pad_vaapi` without driver eligibility
+  or BT.2020 handling. Next's upstream fix limits hardware padding to compatible
+  Intel iHD, restores source color tags around its padding workaround, and
+  provides fallback for other drivers. Correct the native capability/filter
+  selection too; preserve frame depth, HDR signaling, range and encoder uploads.
+  Driver-specific runtime proof remains subject to the existing hardware debt.
+- FFmpeg 9 may synthesize a Matroska stream's numeric duration from the container.
+  A one-second video plus a twenty-second subtitle reports video `duration=20`
+  but video `DURATION=00:00:01.000000000`; the two video packets end at one second.
+  Copying upstream's numeric-first parser would retain the overrun. Prefer valid
+  content-stream Matroska duration tags over that estimate, preserving upstream's
+  content-bound outcome, stream selection and incomplete-audio fallback. Scope
+  this preference to the demonstrated Matroska conflict with a container-derived
+  numeric estimate; retain numeric precedence for other containers and fallback
+  for missing/invalid tags. Conflicting/stale tags need regression coverage to
+  prevent undercounting. This requires a scanner regression and decoded handoff,
+  not an FFmpeg source patch.
+
+Retained audit evidence is in `tmp/ucu09-ffmpeg-amendment-audit/`: the upstream
+source window, `patch-review/patch-equivalence.json`, `arm-package-audit.json`,
+`existing-runtime-probes.json`, `content-duration-packets.json` and malformed
+WebP probes. The owning milestone records the result; no pending row is accepted
+by this audit and the ordered baseline remains at row 185.
+
+#### Proposed authority and package scope
+
+Extend this same decision to the two necessary WebP corrections, their regression
+tests, implementation, commit/push, CI and verified v2.0.6 package publication.
+Also cover a subsequently demonstrated minimal FFmpeg correction necessary for
+an existing requirement through the fixed row-208 boundary, under the same entry,
+identity, compatibility and independent-retirement conditions as the Next policy.
+Source proof of a matching upstream memory-safety fix qualifies; speculative
+changes, unrelated features, general dependency upgrades and acceptance waivers
+do not. Prefer an equivalent upstream correction when available.
+
+Build corrected packages for **all four currently supplied RIDs**: Linux x64,
+Windows x64, Linux ARM64 and Linux ARMv7. Published v2.0.5 reuses v2.0.4 x64
+archives; both ARM archives also use the affected `d32b387` source. Carrying the
+old ARM bytes into the replacement release would knowingly preserve the defect.
+This supersedes the earlier proposal to replace only Linux/Windows x64 and reuse
+the ARM archives. Keep the older release available for existing explicit pins;
+each replacement asset needs its own source, patch, payload and archive hashes.
+
+Reuse verified dependency inputs and available build caches. Keep the existing
+FFmpeg 9 source pin with these narrow corrections unless source review establishes
+why another exact revision is necessary. Preserve graphics, SVG, subtitle,
+alternate-audio, codec and portability capabilities. Use host Docker for build
+containers, without a Docker socket mount. Application containers consume the
+managed packages; this proposal does not require publication of another separate
+FFmpeg runtime image or use a mutable image tag as package evidence.
+
+No macOS first-party asset currently exists. ADR 0063 permits an operator FFmpeg
+9 runtime on PATH in that case; row 190 does not overturn that accepted contract.
+This extension does not promise macOS packages or verified macOS animation.
+An unpatched operator runtime can share the WebP defect; keep that limitation
+and the existing approved macOS application acceptance debt explicit.
+
+Require decoded finite/infinite animation, fractional seeking, exact scheduled
+termination/handoff and process cleanup on Linux and Windows, plus emulated
+software checks of both corrected ARM payloads. Verify malformed ICC/EXIF error
+handling and removal of incomplete side data. Preserve GIF/static-image, SVG
+alpha/text, drawvg/drawtext, sparse-subtitle, alternate-audio, RTSP and existing
+available NVIDIA/Vulkan regressions; verify clean portability baselines and all
+download checksums. Existing native ARM/macOS and hardware acceptance debt remains
+unchanged; emulation is not native application or GPU proof.
+
+Remove each local correction independently when equivalent upstream behavior
+passes its required regressions. A package build/publication does not accept
+row 186, another pending row, UCU-09 or the stable application release. The full
+closeout and terminal green exact-SHA CI gates remain required.
 
 ## Alternatives Considered
 
@@ -201,6 +308,9 @@ policy above. A build or publication alone does not accept row 186.
 
 - [ADR 0100](0100-next-alpha-embedded-text-subtitle-limits.md)
 - [ADR 0116](0116-temporarily-bound-next-live-rtsp-buffering.md)
+- [ADR 0008](0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+- [ADR 0063](0063-ffmpeg-9-runtime-and-profile-options.md)
+- [Upstream FFmpeg package changes](https://github.com/ErsatzTV/ErsatzTV-ffmpeg/blob/8.1.2-4/release-notes/8.1.2-4.md)
 - [Upstream VAAPI padding correction](https://github.com/ErsatzTV/next/commit/03626929089a438245cfc77cbedda6e92d98dc9f)
 - [Catch-up source map](../../plans/upstream-catch-up.md)
 - [Owning UCU-09 milestone](../progress/milestones.toml)

@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Expand ADR 0117's proposed FFmpeg amendment after auditing the v26.11.1
+  catch-up window: cover animated WebP seeking and upstream ICC/EXIF read safety
+  in all four supplied runtime packages. Record native VAAPI padding and
+  Matroska duration gaps separately; build approval and runtime acceptance remain
+  pending.
+
 - Use one accepted approval policy for temporary Next compatibility corrections
   during upstream catch-up (ADR 0117), retaining verified package provenance,
   acceptance gates and mandatory removal when upstream fixes each defect.
