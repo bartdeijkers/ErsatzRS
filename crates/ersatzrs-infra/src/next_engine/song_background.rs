@@ -103,6 +103,12 @@ impl SongProjection {
         }
         binding.occurrence.playout_start = (start != binding.occurrence.start).then_some(start);
         binding.occurrence.session = session;
+        // Keep the projection fingerprint stable, then renew the emitted ticket
+        // for historical troubleshooting without changing session revocation.
+        if session.is_some() {
+            binding.occurrence.expires =
+                super::troubleshooting::callback_expiry(binding.occurrence.finish)?;
+        }
         relay.song_source(&binding, self.hint.clone())
     }
 }
@@ -191,6 +197,15 @@ mod tests {
             (in_point_ms, out_point_ms, is_live),
             (None, None, Some(false))
         );
+        let published_url = url::Url::parse(&uri).unwrap();
+        let encoded = published_url
+            .query_pairs()
+            .find(|(key, _)| key == "binding")
+            .unwrap()
+            .1
+            .into_owned();
+        let published_binding: SongBinding = serde_json::from_str(&encoded).unwrap();
+        let binding = &published_binding;
         let ticket = header(&headers, SONG_HEADER);
         assert!(relay.authorized_song(binding, ticket, binding.occurrence.start));
         for field in [
@@ -269,5 +284,39 @@ mod tests {
         assert_eq!(binding.occurrence.session, Some(session));
         assert_eq!(binding.occurrence.playout_start, Some(start));
         assert!(relay.authorized_song(&binding, header(&headers, SONG_HEADER), start));
+    }
+    #[test]
+    fn historical_song_ticket_is_fresh_without_mutating_fingerprinted_projection() {
+        let relay = MediaRelay::new();
+        relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+        let mut projection = projection(2);
+        let old = Utc::now() - TimeDelta::days(3);
+        projection.binding.occurrence.start = old;
+        projection.binding.occurrence.finish = old + TimeDelta::seconds(30);
+        projection.binding.occurrence.expires = old + TimeDelta::hours(2);
+        let before = serde_json::to_value(&projection).unwrap();
+        let session = uuid::Uuid::new_v4();
+        let Source::Http { uri, headers, .. } =
+            projection.publish(&relay, Some(session), old).unwrap()
+        else {
+            panic!("song source");
+        };
+        let url = url::Url::parse(&uri).unwrap();
+        let encoded = url
+            .query_pairs()
+            .find(|(key, _)| key == "binding")
+            .unwrap()
+            .1
+            .into_owned();
+        let published: SongBinding = serde_json::from_str(&encoded).unwrap();
+        assert!(published.occurrence.expires > Utc::now());
+        assert_eq!(published.occurrence.session, Some(session));
+        assert!(relay.authorized_song(&published, header(&headers, SONG_HEADER), Utc::now()));
+        assert!(!relay.authorized_song(
+            &published,
+            header(&headers, SONG_HEADER),
+            published.occurrence.expires
+        ));
+        assert_eq!(serde_json::to_value(&projection).unwrap(), before);
     }
 }

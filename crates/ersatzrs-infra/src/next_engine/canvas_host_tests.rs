@@ -182,7 +182,9 @@ async fn canvas_session_preview_is_transient_and_instance_specific() {
         let mut contexts = host.dynamic_contexts.lock().await;
         let session = contexts.get_mut(&instance).unwrap();
         session.request.preview = true;
-        session.troubleshooting = Some(Arc::new(context));
+        session.troubleshooting = Some(Arc::new(super::super::troubleshooting::Session::single(
+            Arc::new(context),
+        )));
     }
     let selected = host
         .canvas_session(instance, &binding, &canvas_timing())
@@ -466,7 +468,9 @@ async fn canvas_channel_preview_advances_decorations_on_source_and_mirror_clocks
             context.request.channel_id = channel.id;
             context.request.number = channel.number;
             context.request.preview = true;
-            context.troubleshooting = Some(Arc::new(preview));
+            context.troubleshooting = Some(Arc::new(
+                super::super::troubleshooting::Session::single(Arc::new(preview)),
+            ));
         }
         for (offset, count) in [("0", 0), ("19000", 0), ("20000", 1)] {
             let selected = host

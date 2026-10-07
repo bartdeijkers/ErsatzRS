@@ -57,6 +57,11 @@ impl CanvasProjection {
         }
         binding.playout_start = (start != binding.start).then_some(start);
         binding.session = session;
+        // Expiry is renewed only after immutable projection validation; it is
+        // part of the fingerprint and must not drift during a second snapshot.
+        if session.is_some() {
+            binding.expires = super::troubleshooting::callback_expiry(binding.finish)?;
+        }
         if binding.item == 0 && session.is_none() {
             return Err(unavailable());
         }

@@ -58,7 +58,7 @@ pub struct NextHost {
 pub(super) struct DynamicContext {
     pub started_at: chrono::DateTime<Utc>,
     pub request: NextStart,
-    pub troubleshooting: Option<Arc<super::troubleshooting::Context>>,
+    pub troubleshooting: Option<Arc<super::troubleshooting::Session>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
     pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
     pub gaps: Arc<Mutex<Vec<super::fallback::Gap>>>,

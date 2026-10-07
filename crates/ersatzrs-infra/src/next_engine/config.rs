@@ -217,7 +217,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
 }
 
 /// Sample the effective scheduled source using the requested channel's profile.
-/// Troubleshooting does not call this: its output retains the selected source rate.
+/// A preview supplies its transient selected profile, ignoring the stored profile flag.
 ///
 /// # Errors
 /// Returns scheduled metadata read errors or malformed rate values.
@@ -326,3 +326,14 @@ fn runtime_path(path: &Path) -> Result<String, ConfigError> {
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
+
+/// Convert the effective channel rate for a transient selected preview profile.
+/// # Errors
+/// Returns scheduled metadata errors or malformed source frame rates.
+pub async fn troubleshooting_channel_frame_rate(
+    pool: &crate::db::DbPool,
+    channel: &ersatzrs_domain::Channel,
+    playback: &PlaybackProfile,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    channel_frame_rate(pool, channel, playback).await
+}

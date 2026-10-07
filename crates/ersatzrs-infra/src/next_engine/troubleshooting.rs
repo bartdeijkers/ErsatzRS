@@ -1,4 +1,6 @@
-//! Isolated item projection for upstream `PrepareTroubleshootingPlaybackHandler`.
+//! Isolated item/window projection for upstream `PrepareTroubleshootingPlaybackHandler`.
+//! Row201 `GetNextChannelProcess` retains the historical virtual clock and one
+//! session containing every exact occurrence in a complete thirty-second window.
 //! No persisted playout is created, edited or published by this adapter.
 
 use std::path::Path;
@@ -52,6 +54,8 @@ pub(super) struct Context {
     watermark_ids: Vec<i64>,
     graphics_ids: Vec<i64>,
     pub diagnostics: Option<super::diagnostics::SelectionLog>,
+    pub(super) fallback_gap: Option<super::fallback::Gap>,
+    credits: Option<protocol::Track>,
 }
 
 impl Context {
@@ -65,7 +69,71 @@ impl Context {
             watermark_ids: request.watermark_ids.to_vec(),
             graphics_ids: request.graphics_ids.to_vec(),
             diagnostics: request.diagnostics.clone(),
+            fallback_gap: None,
+            credits: None,
         }
+    }
+
+    pub(super) fn attach_credits(&self, projection: &mut DeferredProjection) -> Result<()> {
+        let Some(credits) = &self.credits else {
+            return Ok(());
+        };
+        if self.subtitle_id.is_some()
+            || !super::credits::eligible(
+                &self.channel,
+                &self.media.item,
+                projection.selected_subtitle.is_some(),
+            )
+        {
+            return Ok(());
+        }
+        let tracks = projection
+            .item
+            .tracks
+            .as_mut()
+            .ok_or_else(|| unavailable("credits tracks are unavailable"))?;
+        tracks.subtitle = Some(credits.clone());
+        projection.pending_burn = None;
+        projection.selected_subtitle = None;
+        Ok(())
+    }
+
+    pub(super) fn credits_at(
+        &self,
+        projection: &DeferredProjection,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<protocol::Track>> {
+        if self.credits.is_none()
+            || self.subtitle_id.is_some()
+            || !super::credits::eligible(
+                &self.channel,
+                &self.media.item,
+                projection.selected_subtitle.is_some(),
+            )
+        {
+            return Ok(None);
+        }
+        let Some(installed) = projection
+            .item
+            .tracks
+            .as_ref()
+            .and_then(|tracks| tracks.subtitle.as_ref())
+        else {
+            return Ok(None);
+        };
+        let expected = self
+            .credits
+            .as_ref()
+            .ok_or_else(|| unavailable("credits ownership is unavailable"))?;
+        if serde_json::to_vec(installed).map_err(|_| unavailable("credits ownership is invalid"))?
+            != serde_json::to_vec(expected)
+                .map_err(|_| unavailable("credits ownership is invalid"))?
+        {
+            return Ok(None);
+        }
+        let timed = super::dynamic_item::resolve_at(&projection.item, now)
+            .map_err(|_| unavailable("credits timing is invalid"))?;
+        Ok(timed.tracks.and_then(|tracks| tracks.subtitle))
     }
 
     pub(super) async fn graphics(
@@ -81,8 +149,17 @@ impl Context {
         offset: chrono::TimeDelta,
     ) -> Result<Vec<playback::ResolvedPlaybackGraphicsElement>> {
         if let Some(source_time) = self.source_time(offset)? {
-            playback::select_playback_graphics(pool, &self.channel, self.media.item.id, source_time)
+            if self.fallback_gap.is_some() {
+                playback::select_fallback_graphics(pool, &self.media.item, source_time).await
+            } else {
+                playback::select_playback_graphics(
+                    pool,
+                    &self.channel,
+                    self.media.item.id,
+                    source_time,
+                )
                 .await
+            }
         } else {
             playback::resolve_playback_graphics_by_ids(pool, self.graphics_ids.clone()).await
         }
@@ -101,6 +178,15 @@ impl Context {
         offset: chrono::TimeDelta,
     ) -> Result<Vec<playback::ResolvedPlaybackWatermark>> {
         if let Some(source_time) = self.source_time(offset)? {
+            if self.fallback_gap.is_some() {
+                return playback::select_fallback_watermarks(
+                    pool,
+                    &self.channel,
+                    &self.media.item,
+                    source_time,
+                )
+                .await;
+            }
             playback::select_playback_watermarks(
                 pool,
                 &self.channel,
@@ -135,12 +221,136 @@ impl Context {
     }
 }
 
+/// One process's immutable preview policy and exact occurrence membership.
+/// No Debug: individual source bindings and configuration are private.
+pub(super) struct Session {
+    pub channel: Channel,
+    pub profile: PlaybackProfile,
+    pub occurrences: Vec<std::sync::Arc<Context>>,
+    pub window: Option<super::fallback::Gap>,
+}
+
+impl Session {
+    pub(super) fn single(context: std::sync::Arc<Context>) -> Self {
+        Self {
+            channel: context.channel.clone(),
+            profile: context.profile.clone(),
+            occurrences: vec![context],
+            window: None,
+        }
+    }
+
+    pub(super) fn occurrence(
+        &self,
+        item: i64,
+        at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<std::sync::Arc<Context>> {
+        let mut matching = self.occurrences.iter().filter(|context| {
+            context.media.item.id == item
+                && context.media.item.start <= at
+                && context.media.item.finish > at
+        });
+        let context = matching
+            .next()
+            .cloned()
+            .ok_or_else(|| unavailable("preview occurrence is unavailable"))?;
+        if matching.next().is_some() {
+            return Err(unavailable("preview occurrence is ambiguous"));
+        }
+        Ok(context)
+    }
+
+    pub(super) fn fallback(
+        &self,
+        media: ScheduledMedia,
+        gap: super::fallback::Gap,
+    ) -> Result<std::sync::Arc<Context>> {
+        let window = self
+            .window
+            .ok_or_else(|| unavailable("preview window is unavailable"))?;
+        if gap.start < window.start
+            || gap.finish > window.finish
+            || media.item.start < gap.start
+            || media.item.finish > gap.finish
+        {
+            return Err(unavailable("preview fallback is outside its window"));
+        }
+        Ok(std::sync::Arc::new(Context {
+            selection_time: Some(media.item.start),
+            media,
+            channel: self.channel.clone(),
+            profile: self.profile.clone(),
+            subtitle_id: None,
+            watermark_ids: Vec::new(),
+            graphics_ids: Vec::new(),
+            diagnostics: None,
+            fallback_gap: Some(gap),
+            credits: None,
+        }))
+    }
+}
+
+/// One exact occurrence with its transient channel/track policy.
+pub struct TroubleshootingChannelOccurrence {
+    pub media: ScheduledMedia,
+    pub channel: Channel,
+    pub subtitle_id: Option<i64>,
+    /// Optional owned generated credits; exact caption eligibility is checked during projection.
+    pub credits: Option<protocol::Track>,
+}
+
+/// Check basic caption ownership before staging optional generated credits.
+/// A Custom selector's actual selected caption is checked during immutable projection.
+#[must_use]
+pub fn channel_credits_eligible(
+    channel: &Channel,
+    item: &ersatzrs_domain::PlayoutItem,
+    subtitle_id: Option<i64>,
+) -> bool {
+    subtitle_id.is_none() && super::credits::eligible(channel, item, false)
+}
+
+/// Exact historical channel window prepared under one existing preview admission.
+/// No Debug: includes private media/provider bindings.
+pub struct TroubleshootingChannelWindow<'a> {
+    pub channel: &'a Channel,
+    pub profile: &'a PlaybackProfile,
+    pub occurrences: &'a [TroubleshootingChannelOccurrence],
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub finish: chrono::DateTime<chrono::Utc>,
+    pub replacements: &'a [PathReplacement],
+    pub ffmpeg: &'a Path,
+    pub deadline: Instant,
+    pub diagnostics: Option<super::diagnostics::SelectionLog>,
+}
+
+/// Historical tickets remain live for two hours without weakening session checks.
+pub(super) fn callback_expiry(
+    finish: chrono::DateTime<chrono::Utc>,
+) -> Result<chrono::DateTime<chrono::Utc>> {
+    finish
+        .max(chrono::Utc::now())
+        .checked_add_signed(chrono::TimeDelta::hours(2))
+        .ok_or_else(|| unavailable("callback expiry overflow"))
+}
+
 struct Snapshot {
     projection: DeferredProjection,
     identity: Identity,
 }
 
 impl NextHost {
+    pub(super) async fn preview_session(
+        &self,
+        instance: uuid::Uuid,
+    ) -> Option<std::sync::Arc<Session>> {
+        self.dynamic_contexts
+            .lock()
+            .await
+            .get(&instance)
+            .and_then(|context| context.troubleshooting.clone())
+    }
+
     /// Prepare one transient occurrence and admit its exact process
     /// instance. The caller must revoke the session after stopping that process,
     /// including on startup failure, before releasing output or transcode capacity.
@@ -159,14 +369,35 @@ impl NextHost {
         }
         let context = std::sync::Arc::new(Context::new(&request));
         let instance = uuid::Uuid::new_v4();
-        let item = if request.media.remote_stream_id.is_none() {
+        let item = self.prepare_context(&request, &context, instance).await?;
+        self.dynamic_contexts.lock().await.insert(
+            instance,
+            super::host::DynamicContext {
+                started_at: chrono::Utc::now(),
+                request: start,
+                troubleshooting: Some(std::sync::Arc::new(Session::single(context))),
+                transfers: std::sync::Arc::default(),
+                fallback: std::sync::Arc::default(),
+                gaps: std::sync::Arc::default(),
+            },
+        );
+        Ok((instance, item))
+    }
+
+    async fn prepare_context(
+        &self,
+        request: &TroubleshootingPreview<'_>,
+        context: &std::sync::Arc<Context>,
+        instance: uuid::Uuid,
+    ) -> Result<protocol::PlayoutItem> {
+        Ok(if request.media.remote_stream_id.is_none() {
             let mut projection = timeout_at(
                 request.deadline,
-                self.prepare_troubleshooting_inner(&request),
+                self.prepare_troubleshooting_context(request, context),
             )
             .await
             .map_err(|_| unavailable("preparation deadline expired"))??;
-            projection.publish_graphics(&self.media, Some(instance), context.media.item.start)?;
+            projection.publish_graphics(&self.media, Some(instance), request.media.item.start)?;
             projection.item
         } else {
             let mut before = timeout_at(
@@ -185,7 +416,7 @@ impl NextHost {
             before.projection.publish_graphics(
                 &self.media,
                 Some(instance),
-                context.media.item.start,
+                request.media.item.start,
             )?;
             self.defer_item(
                 context.channel.id,
@@ -193,19 +424,125 @@ impl NextHost {
                 &before.identity.descriptor,
                 before.projection.item,
             )?
+        })
+    }
+
+    /// Prepare all intersecting occurrences and bounded gaps without writing SQL.
+    /// The caller revokes the one returned session after its producer is reaped.
+    /// # Errors
+    /// Refuses invalid windows, stale selected bindings or preparation timeout.
+    pub async fn prepare_troubleshooting_window(
+        &self,
+        window: TroubleshootingChannelWindow<'_>,
+        start: super::host::NextStart,
+    ) -> Result<(uuid::Uuid, protocol::Playout)> {
+        if window.finish - window.start != chrono::TimeDelta::seconds(30)
+            || start.channel_id != window.channel.id
+            || start.number != window.channel.number
+        {
+            return Err(unavailable("invalid preview window identity"));
+        }
+        if Instant::now() >= window.deadline {
+            return Err(unavailable("preparation deadline expired"));
+        }
+        let instance = uuid::Uuid::new_v4();
+        let mut contexts = Vec::with_capacity(window.occurrences.len());
+        let mut items = Vec::with_capacity(window.occurrences.len());
+        for occurrence in window.occurrences {
+            let media = &occurrence.media;
+            if media.item.start >= window.finish
+                || media.item.finish <= window.start
+                || media.item.finish > window.finish
+            {
+                return Err(unavailable("preview occurrence is outside its window"));
+            }
+            let request = TroubleshootingPreview {
+                media,
+                channel: &occurrence.channel,
+                profile: window.profile,
+                subtitle_id: occurrence.subtitle_id,
+                selection_time: Some(media.item.start),
+                watermark_ids: &[],
+                graphics_ids: &[],
+                replacements: window.replacements,
+                ffmpeg: window.ffmpeg,
+                deadline: window.deadline,
+                diagnostics: window.diagnostics.clone(),
+            };
+            let mut context = Context::new(&request);
+            context.credits = occurrence.credits.clone();
+            let context = std::sync::Arc::new(context);
+            items.push(self.prepare_context(&request, &context, instance).await?);
+            contexts.push(context);
+        }
+        if Instant::now() >= window.deadline {
+            return Err(unavailable("preparation deadline expired"));
+        }
+        let (items, gaps) = super::fallback::insert_bounded_gaps(
+            &self.media,
+            window.channel.id,
+            window.start,
+            window.finish,
+            items,
+        )?;
+        let context = Session {
+            channel: window.channel.clone(),
+            profile: window.profile.clone(),
+            occurrences: contexts,
+            window: Some(super::fallback::Gap {
+                start: window.start,
+                finish: window.finish,
+            }),
         };
         self.dynamic_contexts.lock().await.insert(
             instance,
             super::host::DynamicContext {
                 started_at: chrono::Utc::now(),
                 request: start,
-                troubleshooting: Some(context),
+                troubleshooting: Some(std::sync::Arc::new(context)),
                 transfers: std::sync::Arc::default(),
                 fallback: std::sync::Arc::default(),
-                gaps: std::sync::Arc::default(),
+                gaps: std::sync::Arc::new(tokio::sync::Mutex::new(gaps)),
             },
         );
-        Ok((instance, item))
+        Ok((
+            instance,
+            protocol::Playout {
+                version: protocol::PLAYOUT_VERSION.to_owned(),
+                items,
+            },
+        ))
+    }
+
+    /// Read every intersecting occurrence on the requested channel clock.
+    /// Build locks are released before any provider or process preparation.
+    /// # Errors
+    /// Returns schedule read failures, invalid bounds or a busy source schedule.
+    pub async fn troubleshooting_channel_window(
+        &self,
+        channel: &Channel,
+        at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<ScheduledMedia>> {
+        let at = chrono::DateTime::from_timestamp(at.timestamp(), 0)
+            .ok_or_else(|| unavailable("invalid preview start"))?;
+        let finish = at
+            .checked_add_signed(chrono::TimeDelta::seconds(30))
+            .ok_or_else(|| unavailable("invalid preview finish"))?;
+        let locked = super::schedule::read_locked(&self.pool, &self.locker, channel, at, finish)
+            .await?
+            .ok_or_else(|| unavailable("channel schedule is busy"))?;
+        let mut items = locked.items;
+        for media in &mut items {
+            if media.item.finish > finish {
+                media.item.finish = finish;
+                media.item.out_point = media
+                    .item
+                    .in_point
+                    .checked_add(&(finish - media.item.start))
+                    .ok_or_else(|| unavailable("invalid preview source range"))?;
+            }
+        }
+        Ok(items)
     }
 
     /// Revoke preview callbacks before awaiting all producer cleanup.
@@ -282,19 +619,31 @@ impl NextHost {
         &self,
         request: &TroubleshootingPreview<'_>,
     ) -> Result<DeferredProjection> {
-        let before = self.troubleshooting_snapshot(request).await?;
+        let context = Context::new(request);
+        self.prepare_troubleshooting_context(request, &context)
+            .await
+    }
+
+    async fn prepare_troubleshooting_context(
+        &self,
+        request: &TroubleshootingPreview<'_>,
+        context: &Context,
+    ) -> Result<DeferredProjection> {
+        let before = self
+            .troubleshooting_snapshot_with_context(request, context)
+            .await?;
         let Some(pending) = before.projection.pending_burn.as_ref() else {
             return Ok(before.projection);
         };
         let validate = || async {
-            self.troubleshooting_snapshot(request)
+            self.troubleshooting_snapshot_with_context(request, context)
                 .await
                 .is_ok_and(|current| {
                     current.identity.descriptor == before.identity.descriptor
                         && current.identity.cache_key == before.identity.cache_key
                 })
         };
-        let expires = before.projection.item.finish;
+        let expires = before.projection.item.finish.max(chrono::Utc::now());
         let prepared = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
         {
             self.burn_cache
@@ -323,7 +672,9 @@ impl NextHost {
                 .await
         }
         .map_err(|_| unavailable("subtitle preparation failed"))?;
-        let mut after = self.troubleshooting_snapshot(request).await?;
+        let mut after = self
+            .troubleshooting_snapshot_with_context(request, context)
+            .await?;
         if after.identity.descriptor != before.identity.descriptor
             || after.identity.cache_key != before.identity.cache_key
         {
@@ -333,9 +684,19 @@ impl NextHost {
         Ok(after.projection)
     }
 
+    #[cfg(test)]
     async fn troubleshooting_snapshot(
         &self,
         request: &TroubleshootingPreview<'_>,
+    ) -> Result<Snapshot> {
+        self.troubleshooting_snapshot_with_context(request, &Context::new(request))
+            .await
+    }
+
+    async fn troubleshooting_snapshot_with_context(
+        &self,
+        request: &TroubleshootingPreview<'_>,
+        context: &Context,
     ) -> Result<Snapshot> {
         let source = source::resolve_published(
             &self.pool,
@@ -358,7 +719,7 @@ impl NextHost {
             },
         )
         .await?;
-        let context = Context::new(request);
+        context.attach_credits(&mut projection)?;
         let (watermarks, graphics) = if super::graphics::enabled(request.profile) {
             (
                 context.watermarks(&self.pool).await?,

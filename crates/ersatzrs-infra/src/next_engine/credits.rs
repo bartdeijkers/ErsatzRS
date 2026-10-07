@@ -16,6 +16,14 @@ use crate::{
 
 use super::{host::NextHost, media::MediaRelay, protocol, selection};
 
+/// Keep generated credits behind the ordinary caption ownership policy.
+pub(super) fn eligible(channel: &Channel, item: &PlayoutItem, selected_subtitle: bool) -> bool {
+    channel.music_video_credits_mode == ChannelMusicVideoCreditsMode::GenerateSubtitles
+        && item.subtitle_mode.unwrap_or(channel.subtitle_mode) != ChannelSubtitleMode::None
+        && item.pinned_stream_selection.is_none()
+        && !(channel.stream_selector_mode == ChannelStreamSelectorMode::Custom && selected_subtitle)
+}
+
 pub(super) async fn attach(
     pool: &crate::db::DbPool,
     relay: &MediaRelay,
@@ -23,12 +31,7 @@ pub(super) async fn attach(
     item: &PlayoutItem,
     projection: &mut selection::DeferredProjection,
 ) -> Result<()> {
-    if channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::GenerateSubtitles
-        || item.subtitle_mode.unwrap_or(channel.subtitle_mode) == ChannelSubtitleMode::None
-        || item.pinned_stream_selection.is_some()
-        || (channel.stream_selector_mode == ChannelStreamSelectorMode::Custom
-            && projection.selected_subtitle.is_some())
-    {
+    if !eligible(channel, item, projection.selected_subtitle.is_some()) {
         return Ok(());
     }
     let music_video: bool =

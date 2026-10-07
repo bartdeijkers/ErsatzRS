@@ -11421,6 +11421,50 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 rows201–208 are accepted in order through the fixed v26.11.1
+boundary. Local and live remote release tag agree at46118d43; all208 ledger
+rows have justified dispositions. The final window gates and exact-SHA CI
+remain required; UCU-09 stays In progress until those gates pass.
+
+Row201 is Port. Canonical tmp/ucu09-row201/acceptance-proof.json SHA256
+f418022befdfdc4690144beaf7943191a9f1275fdac079ecd235faef459a541a
+owns source12, all1513 inputs and explicit reuse: production and ordinary tests
+are unchanged since source08; only four ignored fixture helpers changed.
+Linux118/Windows116 ordinary checks pass with all26 new/updated names each.
+Each OS has seven required actual wrappers, nine complete decoded30s windows
+and one Stop/revocation case. Historical gaps, both normalization choices,
+mirror broadcast clocks, selected profiles/selectors, Dutch audio/captions,
+later canvas, direct HTTP/RTSP, installed Live and three Finite caption controls,
+unchanged persisted state and owned process/capacity cleanup pass. Strict
+Clippy passes; Linux/native Windows formatting passes. Original compiler,
+path, missing-peer, wrong clock-cutoff and zero-seek assertions remain failed
+history. Only named passing cases are reused from partial failed runs; corrected
+Live/Stop are proven independently. Source11-to12 is exact rustfmt output.
+No runtime package/protocol/schema or persisted-state migration is included.
+
+Rows202/203/206/208 are N/A upstream release tooling/notes. ErsatzRS already
+uses pushed stable tags; upstream calendar/.NET/signing/dry-run behavior is
+not claimed. Row204 is Covered: real owned directories plus atomic stable JSON
+avoid the current-junction failure. Linux14 existing publication checks remain
+valid; native16 pass, including both real held-handle cases. Canonical
+publication proof tmp/ucu09-row204/acceptance-proof.json SHA256
+3c338a0d6f832a894244cbcc2aae1434309b111030bc9cc90055896c9ad3cc8a
+retains the original format-stage failure and guarded formatter-only reuse;
+unchanged publication bytes, actual raw streams and owned-process absence
+are proven. Original failed NTFS roots remain retained, without a false cleanup
+claim. The actual row201 loader ignores a stale ordinary current directory.
+Row205 is Covered: exact upstream comparison confirms e88b2d7 is an ancestor
+of pinned Next036 (ahead1/behind0), including QSV+loudnorm fixed-pool buffering.
+Row207 is Covered under ADR0117: explicit-iHD native eligibility, software
+fallback, effective-color restoration and ten-bit composition are corrected.
+Reuse the owning21 checks, four snapshot groups within231 passes and four
+software NV12/P010 range/depth decodes; source/helper inputs are unchanged.
+Hardware execution remains approved unverified debt. No FFmpeg/Next build or
+release is needed. Published checksum-pinned FFmpegv2.0.6 and Next036 remain.
+No ARM/macOS or hardware acceptance is inferred. Continue final workspace,
+paired-bundle, browser and real playback/transport gates, then authorized push,
+terminal green exact-SHA CI and the stable v1.1.0 draft publication.
+
 2026-10-07 row200 accepted as Adapt under ADR0095. Exact upstream
 a3bbf89dad6459d3c3fb31a849849ac5219e5aca (#3064) changes defaults and native-only help.
 The maintainer accepted Next defaults only with an always-bundled or verified

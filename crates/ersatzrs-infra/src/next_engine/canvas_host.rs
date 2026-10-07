@@ -213,6 +213,19 @@ impl NextHost {
                 context.transfers.clone(),
             )
         };
+        let preview = if let Some(session) = preview {
+            let context = if binding.item == 0 && session.window.is_some() {
+                let current = fallback.lock().await;
+                let occurrence = current.as_ref().ok_or_else(unavailable)?;
+                let media = schedule::bind_media(&self.pool, occurrence.item.clone()).await?;
+                session.fallback(media, occurrence.gap)?
+            } else {
+                session.occurrence(binding.item, binding.start)?
+            };
+            Some(context)
+        } else {
+            None
+        };
         let (channel, profile, media) = if let Some(preview) = &preview {
             if binding.session != Some(instance)
                 || !binding.matches(preview.channel.id, &preview.media, Utc::now())

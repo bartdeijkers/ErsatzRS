@@ -46,7 +46,7 @@ fn from_timestamp_ticks(ticks: i64) -> Result<DateTime<Utc>> {
 }
 
 pub(super) struct Occurrence {
-    gap: Gap,
+    pub(super) gap: Gap,
     pub(super) item: PlayoutItem,
     audio: Option<usize>,
     descriptor: String,
@@ -97,6 +97,47 @@ pub(super) fn insert_gaps(
         result.push(item);
     }
     Ok((result, gaps))
+}
+
+/// The finite preview has an explicit outer bound, unlike ordinary publication.
+pub(super) fn insert_bounded_gaps(
+    relay: &super::media::MediaRelay,
+    channel_id: i64,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    items: Vec<protocol::PlayoutItem>,
+) -> Result<(Vec<protocol::PlayoutItem>, Vec<Gap>)> {
+    if finish <= start {
+        return Err(unavailable());
+    }
+    let (mut items, mut gaps) = insert_gaps(relay, channel_id, start, items)?;
+    let cursor = items
+        .iter()
+        .map(|item| item.finish)
+        .max()
+        .unwrap_or(start)
+        .max(start);
+    if cursor < finish {
+        let gap = Gap {
+            start: cursor,
+            finish,
+        };
+        items.push(protocol::PlayoutItem {
+            id: gap.id(),
+            start: gap.start,
+            finish: gap.finish,
+            source: Some(relay.fallback_source(
+                channel_id,
+                timestamp_ticks(gap.start)?,
+                timestamp_ticks(gap.finish)?,
+            )?),
+            tracks: None,
+            watermark: None,
+            graphics: Vec::new(),
+        });
+        gaps.push(gap);
+    }
+    Ok((items, gaps))
 }
 
 impl NextHost {
@@ -150,14 +191,20 @@ impl NextHost {
             deadline,
             Box::pin(async {
                 let mut state = state.lock().await;
-                let channel = make_repositories(self.pool.clone())
-                    .channel
-                    .get_with_profile(channel_id)
-                    .await?;
-                if channel.streaming_engine != StreamingEngine::Next {
-                    return Err(unavailable());
-                }
-                let locked = self.validate_gap(&channel, gap).await?;
+                let preview = self.preview_session(instance).await;
+                let channel = if let Some(preview) = &preview {
+                    preview.channel.clone()
+                } else {
+                    let channel = make_repositories(self.pool.clone())
+                        .channel
+                        .get_with_profile(channel_id)
+                        .await?;
+                    if channel.streaming_engine != StreamingEngine::Next {
+                        return Err(unavailable());
+                    }
+                    channel
+                };
+                let locked = self.validate_session_gap(&channel, gap, instance).await?;
                 let candidates =
                     fallback_playback::load_candidates(&self.pool, &channel, now, gap.finish)
                         .await?
@@ -187,6 +234,7 @@ impl NextHost {
                         &request,
                         selection::AudioDirective::Select,
                         gap,
+                        instance,
                     )
                     .await?;
                 let audio = selected_audio(&projected.snapshot.projection.item)?;
@@ -227,6 +275,7 @@ impl NextHost {
                 request,
                 selection::AudioDirective::Published(current.audio),
                 current.gap,
+                instance,
             )
             .await?;
         if projected.snapshot.identity.descriptor != current.descriptor
@@ -373,12 +422,19 @@ impl NextHost {
             let key = dynamic_projection::digest(&serde_json::json!({"credits": content}))?;
             let path = self
                 .burn_cache
-                .prepare_text(&key, "ass", &content, item.finish, deadline, || async {
-                    Box::pin(self.fallback_preparation_unchanged(
-                        channel, item, request, gap, instance, audio, identity,
-                    ))
-                    .await
-                })
+                .prepare_text(
+                    &key,
+                    "ass",
+                    &content,
+                    item.finish.max(Utc::now()),
+                    deadline,
+                    || async {
+                        Box::pin(self.fallback_preparation_unchanged(
+                            channel, item, request, gap, instance, audio, identity,
+                        ))
+                        .await
+                    },
+                )
                 .await
                 .map_err(|_| unavailable())?;
             projected
@@ -417,7 +473,7 @@ impl NextHost {
                     .prepare_provider(
                         &self.pool,
                         (&identity.cache_key, pending.subtitle.id),
-                        item.finish,
+                        item.finish.max(Utc::now()),
                         preparation_deadline,
                         validate,
                     )
@@ -430,7 +486,7 @@ impl NextHost {
                         u32::try_from(pending.subtitle.stream_index).map_err(|_| unavailable())?,
                         pending.subtitle.codec.as_deref().unwrap_or("subrip"),
                         &request.ffmpeg,
-                        item.finish,
+                        item.finish.max(Utc::now()),
                         preparation_deadline,
                         validate,
                     )
@@ -443,8 +499,21 @@ impl NextHost {
         Ok(())
     }
 
-    async fn validate_gap(&self, channel: &Channel, gap: Gap) -> Result<schedule::LockedSchedule> {
-        validate_gap(&self.pool, &self.locker, channel, gap).await
+    async fn validate_session_gap(
+        &self,
+        channel: &Channel,
+        gap: Gap,
+        instance: Uuid,
+    ) -> Result<schedule::LockedSchedule> {
+        if let Some(preview) = self.preview_session(instance).await {
+            let window = preview.window.ok_or_else(unavailable)?;
+            if gap.start < window.start || gap.finish > window.finish {
+                return Err(unavailable());
+            }
+            validate_preview_gap(&self.pool, &self.locker, channel, gap).await
+        } else {
+            validate_gap(&self.pool, &self.locker, channel, gap).await
+        }
     }
 
     async fn project_fallback(
@@ -454,11 +523,22 @@ impl NextHost {
         request: &super::host::NextStart,
         audio: selection::AudioDirective,
         gap: Gap,
+        instance: Uuid,
     ) -> Result<Projection> {
         let media = schedule::bind_media(&self.pool, item.clone()).await?;
-        let profile = playback::load_channel_playback_profile(&self.pool, channel.id)
-            .await?
-            .ok_or_else(unavailable)?;
+        let preview = self.preview_session(instance).await;
+        let profile = if let Some(preview) = &preview {
+            preview.profile.clone()
+        } else {
+            playback::load_channel_playback_profile(&self.pool, channel.id)
+                .await?
+                .ok_or_else(unavailable)?
+        };
+        let origin = if let Some(preview) = &preview {
+            super::remote_projection::Origin::Troubleshooting(preview.fallback(media.clone(), gap)?)
+        } else {
+            super::remote_projection::Origin::Fallback(gap)
+        };
         if media.remote_stream_id.is_some() {
             return Ok(Projection {
                 snapshot: super::remote_projection::project_publishable_for_origin(
@@ -467,7 +547,7 @@ impl NextHost {
                     &media,
                     &profile.resolution,
                     audio,
-                    super::remote_projection::Origin::Fallback(gap),
+                    origin,
                 )
                 .await?,
                 credits: None,
@@ -489,6 +569,46 @@ impl NextHost {
             audio,
         )
         .await?;
+        let credits = self
+            .project_fallback_credits(channel, item, &profile, &mut projected)
+            .await?;
+        projected.canvas = super::graphics::project(
+            &self.pool,
+            channel,
+            &media,
+            &profile,
+            &mut projected.item,
+            &watermarks,
+            &graphics,
+        )
+        .await?;
+        let mut identity =
+            dynamic_projection::fingerprint(&self.pool, &media, &projected, channel).await?;
+        if let Some(content) = &credits {
+            identity.descriptor = dynamic_projection::digest(
+                &serde_json::json!({"projection": identity.descriptor, "credits": content}),
+            )?;
+        }
+        Ok(Projection {
+            snapshot: dynamic_projection::Snapshot {
+                projection: projected,
+                identity,
+                prepared_remote: None,
+                producer_remote: None,
+                retained_remote: None,
+            },
+            credits,
+            remote: false,
+        })
+    }
+
+    async fn project_fallback_credits(
+        &self,
+        channel: &Channel,
+        item: &PlayoutItem,
+        profile: &playback::PlaybackProfile,
+        projected: &mut selection::DeferredProjection,
+    ) -> Result<Option<String>> {
         let credits = if item.subtitle_mode.unwrap_or(channel.subtitle_mode)
             != ersatzrs_domain::ChannelSubtitleMode::None
             && item.pinned_stream_selection.is_none()
@@ -519,34 +639,7 @@ impl NextHost {
                 stream_index: Some(0),
             });
         }
-        projected.canvas = super::graphics::project(
-            &self.pool,
-            channel,
-            &media,
-            &profile,
-            &mut projected.item,
-            &watermarks,
-            &graphics,
-        )
-        .await?;
-        let mut identity =
-            dynamic_projection::fingerprint(&self.pool, &media, &projected, channel).await?;
-        if let Some(content) = &credits {
-            identity.descriptor = dynamic_projection::digest(
-                &serde_json::json!({"projection": identity.descriptor, "credits": content}),
-            )?;
-        }
-        Ok(Projection {
-            snapshot: dynamic_projection::Snapshot {
-                projection: projected,
-                identity,
-                prepared_remote: None,
-                producer_remote: None,
-                retained_remote: None,
-            },
-            credits,
-            remote: false,
-        })
+        Ok(credits)
     }
 
     #[allow(
@@ -584,6 +677,7 @@ impl NextHost {
                 request,
                 selection::AudioDirective::Published(audio),
                 gap,
+                instance,
             )
             .await
         else {
@@ -619,14 +713,19 @@ impl NextHost {
         audio: Option<usize>,
         descriptor: &str,
     ) -> bool {
-        let Ok(current) = make_repositories(self.pool.clone())
-            .channel
-            .get_with_profile(channel.id)
-            .await
-        else {
-            return false;
+        let current = if let Some(preview) = self.preview_session(instance).await {
+            preview.channel.clone()
+        } else {
+            let Ok(current) = make_repositories(self.pool.clone())
+                .channel
+                .get_with_profile(channel.id)
+                .await
+            else {
+                return false;
+            };
+            current
         };
-        let Ok(_locked) = self.validate_gap(&current, gap).await else {
+        let Ok(_locked) = self.validate_session_gap(&current, gap, instance).await else {
             return false;
         };
         let Ok(Some(candidates)) =
@@ -642,11 +741,31 @@ impl NextHost {
                     request,
                     selection::AudioDirective::Published(audio),
                     gap,
+                    instance,
                 )
                 .await
                 .is_ok_and(|projected| projected.snapshot.identity.descriptor == descriptor)
             && self.dynamic_contexts.lock().await.contains_key(&instance)
     }
+}
+
+pub(super) async fn validate_preview_gap(
+    pool: &crate::db::DbPool,
+    locker: &ersatzrs_core::locking::EntityLocker,
+    channel: &Channel,
+    gap: Gap,
+) -> Result<schedule::LockedSchedule> {
+    let snapshot = schedule::read_locked(pool, locker, channel, gap.start, gap.finish)
+        .await?
+        .ok_or_else(unavailable)?;
+    if snapshot
+        .items
+        .iter()
+        .any(|media| media.item.start < gap.finish && media.item.finish > gap.start)
+    {
+        return Err(unavailable());
+    }
+    Ok(snapshot)
 }
 
 async fn validate_gap(
@@ -729,7 +848,7 @@ fn selected_audio(item: &protocol::PlayoutItem) -> Result<Option<usize>> {
         .map_err(|_| unavailable())
 }
 
-fn candidate_matches(
+pub(super) fn candidate_matches(
     candidates: &fallback_playback::FallbackCandidates,
     item: &PlayoutItem,
 ) -> bool {

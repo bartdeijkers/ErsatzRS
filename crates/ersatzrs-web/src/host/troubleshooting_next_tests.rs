@@ -998,23 +998,862 @@ async fn native_channel_preview_retains_music_video_credits_configuration() {
 }
 
 #[tokio::test]
-async fn channel_programme_seek_preserves_inpoint_and_clamps_before_the_next_row() {
+async fn channel_programme_seek_preserves_original_inpoint_and_full_preview_window() {
     let fixture = Fixture::new().await;
     let mut query = Fixture::query();
     query.channel = Some(1);
     query.start = Some(fixture.at.to_rfc3339());
     for (seek, elapsed) in [(0, 0), (15, 15), (60, 59), (i64::MAX, 59)] {
         query.seek_seconds = Some(seek);
-        let selected = select(&fixture.state, &query).await.unwrap();
+        let selected = select_channel_window(&fixture.state, &query).await.unwrap();
         assert_eq!(
-            selected.selected_at.unwrap(),
+            selected.start,
             fixture.at - TimeDelta::seconds(20) + TimeDelta::seconds(elapsed)
         );
-        assert_eq!(selected.media.item.media_item_id, 10);
-        assert_eq!(
-            selected.media.item.in_point,
-            TimeDelta::seconds(10 + elapsed)
-        );
-        assert!(selected.media.item.out_point <= TimeDelta::seconds(70));
+        assert_eq!(selected.finish - selected.start, TimeDelta::seconds(30));
+        assert_eq!(selected.media[0].item.media_item_id, 10);
+        // Historical programme time drives Next's seek; source in-point is not
+        // advanced again and the window can continue after this occurrence.
+        assert_eq!(selected.media[0].item.in_point, TimeDelta::seconds(10));
+        assert!(selected.media[0].item.out_point <= TimeDelta::seconds(70));
     }
 }
+
+async fn channel_window_second_movie(fixture: &Fixture) {
+    for sql in [
+        r#"INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (11,1,0)"#,
+        r#"INSERT INTO "Movie" ("Id") VALUES (11)"#,
+        r#"INSERT INTO "MovieMetadata" ("Id","MovieId","Title","MetadataKind","DateAdded","DateUpdated") VALUES (30,11,'Second synthetic movie',0,'2026-09-26','2026-09-26')"#,
+        r#"INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","MovieId","Height","Width","VideoScanKind","RFrameRate") VALUES (200,'2026-09-26','2026-09-26','00:01:00',11,180,320,0,'25')"#,
+        r#"INSERT INTO "MediaStream" ("Id","Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId") VALUES (20,0,'h264',1,NULL,0,NULL,1,0,200),(21,1,'aac',2,'eng',2,'English',1,0,200),(22,2,'aac',2,'nld',2,'Dutch',0,0,200)"#,
+        r#"INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (20,30,1,'Second Dutch',9,'subrip',1,0,0,'nld',0,'fixture-second.srt','2026-09-26','2026-09-26')"#,
+        r#"UPDATE "MediaVersion" SET "RFrameRate"='30' WHERE "Id" IN (100,101)"#,
+    ] {
+        sqlx::query(sql).execute(&fixture.state.pool).await.unwrap();
+    }
+    sqlx::query(r#"INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (3,200,?,'second-window')"#)
+        .bind(fixture.root.path().join("fixture.mkv").to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
+    let repos = &fixture.state.repositories;
+    let mut first = repos
+        .playout
+        .items_in_range(
+            1,
+            fixture.at - TimeDelta::seconds(30),
+            fixture.at + TimeDelta::seconds(60),
+        )
+        .await
+        .unwrap()
+        .remove(0);
+    first.finish = fixture.at + TimeDelta::seconds(5);
+    first.out_point = TimeDelta::seconds(35);
+    repos.playout.upsert_item(&first).await.unwrap();
+    repos
+        .playout
+        .upsert_item(&PlayoutItem {
+            id: 2,
+            playout_id: 1,
+            media_item_id: 11,
+            start: fixture.at + TimeDelta::seconds(9),
+            finish: fixture.at + TimeDelta::seconds(60),
+            in_point: TimeDelta::zero(),
+            out_point: TimeDelta::seconds(51),
+            preferred_audio_title: Some("English".into()),
+            pinned_stream_selection: Some(PinnedStreamSelection {
+                media_version_id: 200,
+                video_stream_index: 0,
+                audio_stream_index: Some(1),
+                subtitle_stream_index: None,
+            }),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+}
+
+async fn read_channel_window_manifest(manifest: &tempfile::TempDir) -> protocol::Playout {
+    let mut files = tokio::fs::read_dir(manifest.path()).await.unwrap();
+    let entry = files.next_entry().await.unwrap().unwrap();
+    assert!(files.next_entry().await.unwrap().is_none());
+    serde_json::from_slice(&tokio::fs::read(entry.path()).await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn next_channel_window_crosses_boundaries_and_keeps_pins_and_persisted_state() {
+    let fixture = Fixture::new().await;
+    channel_window_second_movie(&fixture).await;
+    fixture
+        .state
+        .next_engine
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let before = fixture
+        .state
+        .repositories
+        .playout
+        .items_in_range(
+            1,
+            fixture.at - TimeDelta::seconds(30),
+            fixture.at + TimeDelta::seconds(90),
+        )
+        .await
+        .unwrap();
+    let mut query = Fixture::query();
+    query.channel = Some(1);
+    query.seek_seconds = None;
+    query.start = Some((fixture.at + TimeDelta::milliseconds(850)).to_rfc3339());
+    let paths = fixture.paths();
+    let mut session = None;
+    let (manifest, configuration, number, _) = prepare(
+        &fixture.state,
+        &query,
+        &paths,
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    assert_eq!(configuration.playout.virtual_start, Some(fixture.at));
+    assert_eq!(number, "1");
+    assert_eq!(playout.items.len(), 3);
+    assert_eq!(
+        (playout.items[1].start, playout.items[1].finish),
+        (
+            fixture.at + TimeDelta::seconds(5),
+            fixture.at + TimeDelta::seconds(9)
+        )
+    );
+    assert_eq!(playout.items[2].finish, fixture.at + TimeDelta::seconds(30));
+    let wire = serde_json::to_value(&playout).unwrap();
+    assert_eq!(
+        wire["items"][0]["tracks"]["audio"]["source"]["source_type"],
+        "lavfi"
+    );
+    assert_eq!(wire["items"][2]["tracks"]["audio"]["stream_index"], 1);
+    assert!(playout.items[2].tracks.as_ref().unwrap().subtitle.is_none());
+    let after = fixture
+        .state
+        .repositories
+        .playout
+        .items_in_range(
+            1,
+            fixture.at - TimeDelta::seconds(30),
+            fixture.at + TimeDelta::seconds(90),
+        )
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_historical_mirror_uses_selected_profile_normalization() {
+    let fixture = Fixture::new().await;
+    channel_window_second_movie(&fixture).await;
+    fixture
+        .state
+        .next_engine
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let repos = &fixture.state.repositories;
+    let mut profile = repos.ffmpeg_profile.get(2).await.unwrap();
+    profile.normalize_framerate = true;
+    repos.ffmpeg_profile.upsert(&profile).await.unwrap();
+    let source = repos.channel.get_with_profile(1).await.unwrap();
+    for offset in [TimeDelta::hours(1), -TimeDelta::hours(1)] {
+        let mut mirror = source.clone();
+        mirror.id = 2;
+        mirror.number = "2".into();
+        mirror.playout_source = ersatzrs_domain::ChannelPlayoutSource::Mirror;
+        mirror.mirror_source_channel_id = Some(1);
+        mirror.playout_offset = Some(offset);
+        repos.channel.upsert(&mirror).await.unwrap();
+        let mut query = Fixture::query();
+        query.channel = Some(2);
+        query.seek_seconds = None;
+        query.start = Some((fixture.at + offset).to_rfc3339());
+        let mut session = None;
+        let (manifest, configuration, _, _) = prepare(
+            &fixture.state,
+            &query,
+            &fixture.paths(),
+            Instant::now() + Duration::from_secs(30),
+            &mut session,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            configuration.normalization.video.frame_rate.as_deref(),
+            Some("25")
+        );
+        assert_eq!(
+            configuration.playout.virtual_start,
+            Some(fixture.at + offset)
+        );
+        let playout = read_channel_window_manifest(&manifest).await;
+        assert_eq!(
+            playout.items[2].finish,
+            fixture.at + offset + TimeDelta::seconds(30)
+        );
+        assert_eq!(playout.items[0].id, "1");
+        assert_eq!(playout.items[2].id, "2");
+        fixture
+            .state
+            .next_engine
+            .finish_troubleshooting_session(session.unwrap())
+            .await
+            .unwrap();
+    }
+    profile.normalize_framerate = false;
+    repos.ffmpeg_profile.upsert(&profile).await.unwrap();
+    let mut query = Fixture::query();
+    query.channel = Some(1);
+    query.seek_seconds = None;
+    query.start = Some(fixture.at.to_rfc3339());
+    let mut session = None;
+    let (_, configuration, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &fixture.paths(),
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    assert!(configuration.normalization.video.frame_rate.is_none());
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_scopes_manual_choices_and_rejects_foreign_initial_subtitle() {
+    let fixture = Fixture::new().await;
+    channel_window_second_movie(&fixture).await;
+    fixture
+        .state
+        .next_engine
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let subtitle = fixture.root.path().join("first.nl.srt");
+    tokio::fs::write(
+        &subtitle,
+        b"1\n00:00:00,000 --> 00:01:00,000\nFirst Dutch\n",
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (2,20,1,'First Dutch',9,'subrip',1,0,0,'nld',0,?,'2026-09-26','2026-09-26')"#)
+        .bind(subtitle.to_str().unwrap())
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    let mut channel = fixture
+        .state
+        .repositories
+        .channel
+        .get_with_profile(1)
+        .await
+        .unwrap();
+    channel.next_engine_text_subtitle_mode = ersatzrs_domain::NextEngineTextSubtitleMode::Convert;
+    fixture
+        .state
+        .repositories
+        .channel
+        .upsert(&channel)
+        .await
+        .unwrap();
+    let mut query = Fixture::query();
+    query.channel = Some(1);
+    query.seek_seconds = None;
+    query.start = Some(fixture.at.to_rfc3339());
+    query.subtitle_id = Some(20);
+    let mut session = None;
+    assert!(prepare(
+        &fixture.state,
+        &query,
+        &fixture.paths(),
+        Instant::now() + Duration::from_secs(30),
+        &mut session
+    )
+    .await
+    .is_err());
+    assert!(session.is_none());
+    query.subtitle_id = Some(2);
+    let selected = select_channel_window(&fixture.state, &query).await.unwrap();
+    assert_eq!(
+        selected.media[0].item.preferred_audio_title.as_deref(),
+        Some("Dutch")
+    );
+    assert_eq!(
+        selected.media[1].item.preferred_audio_title.as_deref(),
+        Some("English")
+    );
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &fixture.paths(),
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    assert!(playout.items[0].tracks.as_ref().unwrap().subtitle.is_some());
+    assert!(playout.items[2].tracks.as_ref().unwrap().subtitle.is_none());
+    assert_eq!(
+        playout.items[2]
+            .tracks
+            .as_ref()
+            .unwrap()
+            .audio
+            .as_ref()
+            .unwrap()
+            .stream_index,
+        Some(1)
+    );
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[test]
+fn next_channel_window_custom_selector_override_and_reset_are_transient() {
+    let original = Channel {
+        stream_selector_mode: ersatzrs_domain::ChannelStreamSelectorMode::Custom,
+        stream_selector: Some("stored.yml".into()),
+        ..Default::default()
+    };
+    let mut channel = original.clone();
+    let mut query = Fixture::query();
+    query.stream_selector = Some("selected.yml".into());
+    apply_channel_selector(&mut channel, &query);
+    assert_eq!(channel.stream_selector.as_deref(), Some("selected.yml"));
+    assert_eq!(
+        channel.stream_selector_mode,
+        ersatzrs_domain::ChannelStreamSelectorMode::Custom
+    );
+    query.stream_selector = None;
+    apply_channel_selector(&mut channel, &query);
+    assert!(channel.stream_selector.is_none());
+    assert_eq!(
+        channel.stream_selector_mode,
+        ersatzrs_domain::ChannelStreamSelectorMode::Default
+    );
+    assert_eq!(original.stream_selector.as_deref(), Some("stored.yml"));
+}
+
+async fn channel_window_music_video(fixture: &Fixture, remote: bool) {
+    channel_window_second_movie(fixture).await;
+    for sql in [
+        r#"INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (31,1,0)"#,
+        r#"INSERT INTO "Artist" ("Id") VALUES (31)"#,
+        r#"INSERT INTO "ArtistMetadata" ("Id","ArtistId","Title","MetadataKind","DateAdded","DateUpdated") VALUES (32,31,'Window Artist',0,'2026-09-30','2026-09-30')"#,
+        r#"INSERT INTO "MusicVideo" ("Id","ArtistId") VALUES (11,31)"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL,"MusicVideoId"=11 WHERE "Id"=200"#,
+        r#"DELETE FROM "Subtitle" WHERE "Id"=20"#,
+        r#"DELETE FROM "MovieMetadata" WHERE "MovieId"=11"#,
+        r#"DELETE FROM "Movie" WHERE "Id"=11"#,
+        r#"INSERT INTO "MusicVideoMetadata" ("Id","MusicVideoId","Title","Album","MetadataKind","DateAdded","DateUpdated") VALUES (33,11,'Window Credit Song','Window Album',0,'2026-09-30','2026-09-30')"#,
+    ] {
+        sqlx::query(sql).execute(&fixture.state.pool).await.unwrap();
+    }
+    let caption = fixture.root.path().join("second.nl.srt");
+    tokio::fs::write(
+        &caption,
+        b"1\n00:00:00,000 --> 00:01:00,000\nSecond Dutch\n",
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "Subtitle" ("Id","MusicVideoMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (20,33,1,'Second Dutch',9,'subrip',1,1,0,'nld',0,?,'2026-09-30','2026-09-30')"#)
+        .bind(caption.to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
+    if remote {
+        sqlx::query(r#"INSERT INTO "RemoteStream" ("Id","Url","IsLive","Liveness","Duration") VALUES (11,'https://example.test/window.mp4',0,1,'00:01:00')"#).execute(&fixture.state.pool).await.unwrap();
+        sqlx::query(r#"UPDATE "MediaVersion" SET "RemoteStreamId"=11 WHERE "Id"=200"#)
+            .execute(&fixture.state.pool)
+            .await
+            .unwrap();
+    }
+    let mut channel = fixture
+        .state
+        .repositories
+        .channel
+        .get_with_profile(1)
+        .await
+        .unwrap();
+    channel.subtitle_mode = ersatzrs_domain::ChannelSubtitleMode::Default;
+    channel.music_video_credits_mode =
+        ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles;
+    channel.next_engine_text_subtitle_mode = ersatzrs_domain::NextEngineTextSubtitleMode::Convert;
+    fixture
+        .state
+        .repositories
+        .channel
+        .upsert(&channel)
+        .await
+        .unwrap();
+    fixture
+        .state
+        .next_engine
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+}
+
+fn window_query(fixture: &Fixture) -> PlaybackPreviewQuery {
+    let mut query = Fixture::query();
+    query.channel = Some(1);
+    query.seek_seconds = None;
+    query.start = Some(fixture.at.to_rfc3339());
+    query.subtitle_id = None;
+    query
+}
+
+async fn window_second_selection(fixture: &Fixture) -> PlayoutItem {
+    fixture
+        .state
+        .repositories
+        .playout
+        .items_in_range(1, fixture.at, fixture.at + TimeDelta::seconds(60))
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|item| item.id == 2)
+        .unwrap()
+}
+
+#[tokio::test]
+async fn next_channel_window_music_video_preserves_off_and_exact_scheduled_captions() {
+    for (mode, pin, caption) in [
+        (
+            Some(ersatzrs_domain::ChannelSubtitleMode::None),
+            false,
+            None,
+        ),
+        (None, true, None),
+        (None, true, Some(9)),
+    ] {
+        let fixture = Fixture::new().await;
+        channel_window_music_video(&fixture, false).await;
+        let mut second = window_second_selection(&fixture).await;
+        second.subtitle_mode = mode;
+        second.pinned_stream_selection = pin.then_some(PinnedStreamSelection {
+            media_version_id: 200,
+            video_stream_index: 0,
+            audio_stream_index: Some(1),
+            subtitle_stream_index: caption,
+        });
+        fixture
+            .state
+            .repositories
+            .playout
+            .upsert_item(&second)
+            .await
+            .unwrap();
+        let mut session = None;
+        let paths = fixture.paths();
+        let (manifest, _, _, _) = prepare(
+            &fixture.state,
+            &window_query(&fixture),
+            &paths,
+            Instant::now() + Duration::from_secs(30),
+            &mut session,
+        )
+        .await
+        .unwrap();
+        let playout = read_channel_window_manifest(&manifest).await;
+        let tracks = playout.items[2].tracks.as_ref().unwrap();
+        assert_eq!(
+            tracks.audio.as_ref().unwrap().stream_index,
+            Some(if pin { 1 } else { 2 })
+        );
+        if caption.is_some() {
+            let protocol::Source::Local { path, .. } =
+                tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+            else {
+                panic!("selected caption");
+            };
+            assert_eq!(
+                path,
+                fixture.root.path().join("second.nl.srt").to_str().unwrap()
+            );
+        } else {
+            assert!(tracks.subtitle.is_none());
+        }
+        assert!(!paths
+            .output
+            .join("occurrence-2")
+            .join("music-video-credits-playback.ass")
+            .exists());
+        fixture
+            .state
+            .next_engine
+            .finish_troubleshooting_session(session.unwrap())
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn next_channel_window_music_video_keeps_custom_dutch_caption() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, false).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = None;
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let mut query = window_query(&fixture);
+    let _selector = configure_runtime_selector(&mut query);
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &fixture.paths(),
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    let tracks = playout.items[2].tracks.as_ref().unwrap();
+    assert_eq!(tracks.audio.as_ref().unwrap().stream_index, Some(2));
+    let protocol::Source::Local { path, .. } =
+        tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+    else {
+        panic!("custom Dutch caption");
+    };
+    assert_eq!(
+        path,
+        fixture.root.path().join("second.nl.srt").to_str().unwrap()
+    );
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_music_video_keeps_initial_manual_caption() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, false).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = None;
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let mut query = window_query(&fixture);
+    query.start = Some((fixture.at + TimeDelta::seconds(9)).to_rfc3339());
+    query.subtitle_id = Some(20);
+    let paths = fixture.paths();
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &paths,
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    let tracks = playout.items[0].tracks.as_ref().unwrap();
+    let protocol::Source::Local { path, .. } =
+        tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+    else {
+        panic!("manual caption");
+    };
+    assert_eq!(
+        path,
+        fixture.root.path().join("second.nl.srt").to_str().unwrap()
+    );
+    assert!(!paths
+        .output
+        .join("occurrence-2")
+        .join("music-video-credits-playback.ass")
+        .exists());
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_remote_music_video_credits_survive_deferred_resolution_and_revoke() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, true).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = None;
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let paths = fixture.paths();
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &window_query(&fixture),
+        &paths,
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    let item = &playout.items[2];
+    assert!(item.tracks.is_none());
+    let Some(protocol::Source::Dynamic { uri, .. }) = item.source.as_ref() else {
+        panic!("deferred remote credits");
+    };
+    let segments: Vec<_> = uri.split('/').collect();
+    let digest = segments[segments.len() - 2];
+    let published_audio: u32 = segments.last().unwrap().parse().unwrap();
+    assert_eq!(published_audio, 2);
+    let instance = session.unwrap();
+    let start = fixture.at + TimeDelta::seconds(9);
+    assert!(fixture
+        .state
+        .next_engine
+        .resolve_dynamic(1, 2, digest, Some(1), "1", instance, start, item.finish)
+        .await
+        .is_err());
+    for offset in [0, 2] {
+        let resolved = fixture
+            .state
+            .next_engine
+            .resolve_dynamic(
+                1,
+                2,
+                digest,
+                Some(published_audio),
+                "1",
+                instance,
+                start + TimeDelta::seconds(offset),
+                item.finish,
+            )
+            .await
+            .unwrap();
+        let tracks = resolved.tracks.as_ref().unwrap();
+        assert_eq!(tracks.audio.as_ref().unwrap().stream_index, Some(2));
+        let protocol::Source::Local {
+            path, in_point_ms, ..
+        } = tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+        else {
+            panic!("owned generated credits");
+        };
+        assert_eq!(*in_point_ms, Some(u64::try_from(offset * 1000).unwrap()));
+        assert_eq!(
+            path,
+            paths
+                .output
+                .join("occurrence-2")
+                .join("music-video-credits-playback.ass")
+                .to_str()
+                .unwrap()
+        );
+        assert!(tokio::fs::read_to_string(path)
+            .await
+            .unwrap()
+            .contains("Window Credit Song"));
+    }
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(instance)
+        .await
+        .unwrap();
+    assert!(fixture
+        .state
+        .next_engine
+        .resolve_dynamic(
+            1,
+            2,
+            digest,
+            Some(published_audio),
+            "1",
+            instance,
+            start,
+            item.finish
+        )
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn next_channel_window_eligible_local_music_video_has_owned_generated_credits() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, false).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = None;
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let paths = fixture.paths();
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &window_query(&fixture),
+        &paths,
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    let tracks = playout.items[2].tracks.as_ref().unwrap();
+    assert_eq!(tracks.audio.as_ref().unwrap().stream_index, Some(2));
+    let protocol::Source::Local {
+        path, in_point_ms, ..
+    } = tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+    else {
+        panic!("owned generated caption");
+    };
+    assert_eq!(*in_point_ms, Some(0));
+    assert_eq!(
+        path,
+        paths
+            .output
+            .join("occurrence-2")
+            .join("music-video-credits-playback.ass")
+            .to_str()
+            .unwrap()
+    );
+    assert!(tokio::fs::read_to_string(path)
+        .await
+        .unwrap()
+        .contains("Window Credit Song"));
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_music_video_preserves_explicit_manual_zero() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, false).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = None;
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let mut query = window_query(&fixture);
+    query.subtitle_id = Some(0);
+    query.start = Some((fixture.at + TimeDelta::seconds(9)).to_rfc3339());
+    let paths = fixture.paths();
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &paths,
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    assert!(playout.items[0].tracks.as_ref().unwrap().subtitle.is_none());
+    assert!(!paths
+        .output
+        .join("occurrence-2")
+        .join("music-video-credits-playback.ass")
+        .exists());
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn next_channel_window_initial_manual_zero_does_not_disable_later_pinned_dutch_caption() {
+    let fixture = Fixture::new().await;
+    channel_window_music_video(&fixture, false).await;
+    let mut second = window_second_selection(&fixture).await;
+    second.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 200,
+        video_stream_index: 0,
+        audio_stream_index: Some(1),
+        subtitle_stream_index: Some(9),
+    });
+    fixture
+        .state
+        .repositories
+        .playout
+        .upsert_item(&second)
+        .await
+        .unwrap();
+    let mut query = window_query(&fixture);
+    query.subtitle_id = Some(0);
+    let mut session = None;
+    let (manifest, _, _, _) = prepare(
+        &fixture.state,
+        &query,
+        &fixture.paths(),
+        Instant::now() + Duration::from_secs(30),
+        &mut session,
+    )
+    .await
+    .unwrap();
+    let playout = read_channel_window_manifest(&manifest).await;
+    assert!(playout.items[0].tracks.as_ref().unwrap().subtitle.is_none());
+    let tracks = playout.items[2].tracks.as_ref().unwrap();
+    assert_eq!(tracks.audio.as_ref().unwrap().stream_index, Some(1));
+    let protocol::Source::Local { path, .. } =
+        tracks.subtitle.as_ref().unwrap().source.as_ref().unwrap()
+    else {
+        panic!("later pinned Dutch caption");
+    };
+    assert_eq!(
+        path,
+        fixture.root.path().join("second.nl.srt").to_str().unwrap()
+    );
+    fixture
+        .state
+        .next_engine
+        .finish_troubleshooting_session(session.unwrap())
+        .await
+        .unwrap();
+}
+
+#[path = "troubleshooting_channel_window_runtime_tests.rs"]
+mod channel_window_runtime;

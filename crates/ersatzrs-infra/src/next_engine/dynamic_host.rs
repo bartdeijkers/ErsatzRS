@@ -24,7 +24,7 @@ impl NextHost {
             .ok_or_else(|| unavailable("session is unavailable"))?
             .troubleshooting
             .clone();
-        let Some(context) = context else {
+        let Some(session) = context else {
             return dynamic_projection::project_snapshot(
                 &self.pool,
                 &self.locker,
@@ -38,6 +38,7 @@ impl NextHost {
             )
             .await;
         };
+        let context = session.occurrence(item_id, now)?;
         if item_id != context.media.item.id
             || now < context.media.item.start
             || now >= context.media.item.finish
@@ -69,6 +70,44 @@ impl NextHost {
             &crate::file_system_layout::addon_processed_media_folder(),
         ))
         .await
+    }
+
+    async fn prepare_live_captions(
+        &self,
+        before: &mut dynamic_projection::Snapshot,
+        instance: uuid::Uuid,
+        item_id: i64,
+        now: DateTime<Utc>,
+        deadline: Instant,
+    ) -> Result<bool> {
+        // Capture immutable generated ownership before natural caption preparation
+        // can remove an ended Custom-selected caption.
+        let generated = if super::live_subtitles::is_live(&before.projection.item) {
+            if let Some(session) = self.preview_session(instance).await {
+                session
+                    .occurrence(item_id, now)?
+                    .credits_at(&before.projection, now)?
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let changed =
+            super::live_subtitles::prepare(&self.burn_cache, before, now, deadline).await?;
+        let Some(generated) = generated else {
+            return Ok(changed);
+        };
+        let prepared = super::live_subtitles::prepare_generated(
+            &self.burn_cache,
+            &generated,
+            &before.identity.descriptor,
+            before.projection.item.finish,
+            deadline,
+        )
+        .await?;
+        super::live_subtitles::install_generated(before, now, prepared)?;
+        Ok(true)
     }
 
     /// Resolve a published item for the currently registered Next session.
@@ -131,7 +170,10 @@ impl NextHost {
         if before.identity.descriptor != digest {
             return Err(unavailable("publication changed"));
         }
-        if super::live_subtitles::prepare(&self.burn_cache, &mut before, now, deadline).await? {
+        if self
+            .prepare_live_captions(&mut before, instance, item_id, now, deadline)
+            .await?
+        {
             let current = self
                 .project_session_snapshot(&request, instance, item_id, now, until, audio)
                 .await?;
@@ -207,7 +249,7 @@ impl NextHost {
                 .prepare_provider(
                     &self.pool,
                     (&before.identity.cache_key, pending.subtitle.id),
-                    before.projection.item.finish,
+                    before.projection.item.finish.max(Utc::now()),
                     preparation_deadline,
                     validate,
                 )
@@ -220,7 +262,7 @@ impl NextHost {
                     stream,
                     pending.subtitle.codec.as_deref().unwrap_or("subrip"),
                     &request.ffmpeg,
-                    before.projection.item.finish,
+                    before.projection.item.finish.max(Utc::now()),
                     preparation_deadline,
                     validate,
                 )

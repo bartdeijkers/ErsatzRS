@@ -16,7 +16,7 @@ use sha2::{Digest as _, Sha256};
 
 use super::{
     dynamic_projection::Identity,
-    protocol::Source,
+    protocol::{self, Source},
     schedule::{self, ScheduledMedia},
     selection,
 };
@@ -46,6 +46,17 @@ pub(super) enum Origin {
 }
 
 impl Origin {
+    pub(super) fn credits_at(
+        &self,
+        projection: &selection::DeferredProjection,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<protocol::Track>> {
+        match self {
+            Self::Troubleshooting(context) => context.credits_at(projection, now),
+            Self::Persisted | Self::Fallback(_) => Ok(None),
+        }
+    }
+
     pub(super) async fn snapshot(
         self,
         pool: &DbPool,
@@ -71,6 +82,22 @@ impl Origin {
                 super::fallback::remote_snapshot(pool, locker, channel_id, item, gap, audio).await
             }
             Self::Troubleshooting(context) => {
+                if let Some(gap) = context.fallback_gap {
+                    let _locked =
+                        super::fallback::validate_preview_gap(pool, locker, &context.channel, gap)
+                            .await?;
+                    let candidates = crate::fallback_playback::load_candidates(
+                        pool,
+                        &context.channel,
+                        context.media.item.start,
+                        gap.finish,
+                    )
+                    .await?
+                    .ok_or_else(unavailable)?;
+                    if !super::fallback::candidate_matches(&candidates, &context.media.item) {
+                        return Err(unavailable());
+                    }
+                }
                 let media = schedule::bind_media(pool, context.media.item.clone()).await?;
                 if media.media_version_id != context.media.media_version_id
                     || media.media_file_id != context.media.media_file_id
@@ -494,7 +521,7 @@ async fn project_selection(
         Origin::Troubleshooting(context) => (context.subtitle_id, context.diagnostics.clone()),
         Origin::Persisted | Origin::Fallback(_) => (None, None),
     };
-    selection::project_troubleshooting_item_with_audio(
+    let mut projection = selection::project_troubleshooting_item_with_audio(
         pool,
         selection::TroubleshootingSelection {
             channel,
@@ -508,7 +535,11 @@ async fn project_selection(
         },
         audio,
     )
-    .await
+    .await?;
+    if let Origin::Troubleshooting(context) = origin {
+        context.attach_credits(&mut projection)?;
+    }
+    Ok(projection)
 }
 
 async fn load_binding(pool: &DbPool, id: i64) -> Result<Binding> {

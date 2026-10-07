@@ -486,10 +486,14 @@ async fn song_png_keeps_saved_preview_geometry_and_isolates_and_revokes_sessions
         .await
         .get_mut(&fixture.instance)
         .unwrap()
-        .troubleshooting = Some(preview.clone());
+        .troubleshooting = Some(Arc::new(super::super::troubleshooting::Session::single(
+        preview.clone(),
+    )));
     let other = Uuid::new_v4();
     let mut other_context = context(&snapshot.channel, &fixture.ffmpeg, fixture.root.path());
-    other_context.troubleshooting = Some(preview);
+    other_context.troubleshooting = Some(Arc::new(super::super::troubleshooting::Session::single(
+        preview,
+    )));
     fixture
         .host
         .dynamic_contexts

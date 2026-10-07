@@ -61,20 +61,18 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row200 accepted; complete rows201-208 through
-upstream v26.11.1 (46118d43); rows209 onward remain separate work. Accepted
-ADR0095 makes new-channel/standalone-preview Next default conditional on bundled
-or verified automatic acquisition. Public six-RID archives, staged payloads,
-Linux/native Windows cold and bundled playback, Dutch audio/subtitles,
-reconnect/preview/idle cleanup and six read-only startup cases per platform pass.
-Stored engines, explicit Native/AV1 and profile values remain. All38 selected
-native ordinary tests, current11 lifecycle/HTML cases, affected strict lint and
-matched Chromium31/Firefox30 pass, with one unchanged historical skip and all
-new no-JS/320px and causal diagnostics cases executed. Canonical row200 proof
-and independent reviews belong to UCU-09; no final full-suite CI claim.
-Continue201: prove the complete historical30s channel troubleshooting window,
-per-occurrence callbacks, selected profiles, generated/live captions and cleanup
-on Linux and native Windows. Source-only candidate03 review is not acceptance.
+2026-10-07 UCU-09: all208 rows through v26.11.1 are accepted in order.
+Row201 passes Linux118/Windows116 ordinary checks and26 named cases each;
+both platforms pass nine complete decoded30s scenarios plus Stop. Native
+publication16, both held-handle cases, strict lint and Linux/Windows format pass.
+UCU-09 owns canonical source/checksum/state/cleanup and explicit fixture-only
+reuse. Release tooling/notes are N/A; included QSV and native/Next VAAPI
+prerequisites are Covered with hardware execution unverified. No additional
+runtime build is needed. Continue final workspace, paired-bundle, complete
+sequential browsers and playback/transport gates. Then commit/push the accepted
+candidate, require terminal green exact-SHA CI and publish stable v1.1.0.
+Existing approved hardware/ARM/macOS debt remains explicitly unverified;
+UCU-09 stays In progress until window acceptance and CI pass. Preserve other work.
 Row199 exact rate/copy/mirror/pin/track/state/cleanup evidence remains valid.
 Row198 cached Next TS/HLS and26 native routing/artwork checks remain valid.
 Local deep scan retains real Linux/Windows scanner/durable admission/restart,

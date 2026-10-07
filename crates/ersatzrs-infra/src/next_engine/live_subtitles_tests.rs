@@ -225,3 +225,134 @@ async fn oversized_or_stalled_http_captions_close_the_connection() {
         server.await.unwrap();
     }
 }
+
+const GENERATED_ASS: &str = "[Script Info]\nTitle: Synthetic credits\n[V4+ Styles]\nFormat: Name, Fontname\nStyle: Default,Arial\n[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,EXPIRED\nDialogue: 0,0:00:02.00,0:00:05.00,Default,ACTIVE\n";
+
+fn generated_track(path: &std::path::Path, seek: u64) -> protocol::Track {
+    protocol::Track {
+        stream_index: Some(0),
+        source: Some(Source::Local {
+            path: path.to_str().unwrap().into(),
+            in_point_ms: Some(seek),
+            out_point_ms: None,
+            probe_hint: None,
+        }),
+    }
+}
+
+#[tokio::test]
+async fn generated_live_credits_rebase_historical_join_and_remove_ended_cues() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("credits.ass");
+    tokio::fs::write(&path, GENERATED_ASS).await.unwrap();
+    let cache = BurnCache::new(root.path().join("cache"));
+    let deadline = Instant::now() + std::time::Duration::from_secs(5);
+    let finish = Utc::now() - chrono::Duration::days(2);
+    let prepared = prepare_generated(
+        &cache,
+        &generated_track(&path, 2000),
+        "immutable-window",
+        finish,
+        deadline,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let (artifact, seek) = source_path(&prepared).unwrap();
+    assert_eq!(seek, 0);
+    let text = tokio::fs::read_to_string(&artifact).await.unwrap();
+    assert!(!text.contains("EXPIRED"));
+    assert!(text.contains("Dialogue: 0,0:00:00.00,0:00:03.00,Default,ACTIVE"));
+    // A historical finish must not expire the callback's newly prepared cache lease.
+    assert!(std::path::Path::new(&artifact).is_file());
+    assert!(prepare_generated(
+        &cache,
+        &generated_track(&path, 5000),
+        "immutable-window",
+        finish,
+        deadline
+    )
+    .await
+    .unwrap()
+    .is_none());
+}
+
+#[tokio::test]
+async fn generated_credits_use_actual_live_producer_timing_and_keep_finite_seek() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("credits.ass");
+    tokio::fs::write(&path, GENERATED_ASS).await.unwrap();
+    let cache = BurnCache::new(root.path().join("cache"));
+    let track = generated_track(&path, 2000);
+    for live in [false, true] {
+        let primary = Source::Http {
+            uri: "http://example.test/owned-producer".into(),
+            in_point_ms: Some(0),
+            out_point_ms: None,
+            is_live: Some(live),
+            probe_hint: None,
+            headers: vec![],
+            user_agent: None,
+            keep_alive: None,
+            reconnect: None,
+            reconnect_delay_max: None,
+            timeout_us: None,
+        };
+        let prepared = prepare_generated_for_source(
+            &cache,
+            &track,
+            &primary,
+            "producer-publication",
+            Utc::now() + chrono::Duration::seconds(30),
+            Instant::now() + std::time::Duration::from_secs(5),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let (artifact, seek) = source_path(&prepared).unwrap();
+        let text = tokio::fs::read_to_string(&artifact).await.unwrap();
+        if live {
+            assert_eq!(seek, 0);
+            assert!(!text.contains("EXPIRED"));
+            assert!(text.contains("0:00:00.00,0:00:03.00,Default,ACTIVE"));
+        } else {
+            assert_eq!(seek, 2000);
+            assert_eq!(artifact, path.to_str().unwrap());
+            assert_eq!(text, GENERATED_ASS);
+        }
+    }
+}
+
+#[tokio::test]
+async fn rebased_generated_track_installs_caption_metadata_without_second_seek() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("credits.ass");
+    tokio::fs::write(&path, GENERATED_ASS).await.unwrap();
+    let cache = BurnCache::new(root.path().join("cache"));
+    let mut projected = snapshot(&path);
+    projected.projection.selected_subtitle = None;
+    let now = projected.projection.item.start + chrono::Duration::seconds(2);
+    let track = prepare_generated(
+        &cache,
+        &generated_track(&path, 2000),
+        "original-publication",
+        projected.projection.item.finish,
+        Instant::now() + std::time::Duration::from_secs(5),
+    )
+    .await
+    .unwrap();
+    install_generated(&mut projected, now, track).unwrap();
+    assert_eq!(projected.projection.item.start, now);
+    let selected = projected.projection.selected_subtitle.as_ref().unwrap();
+    assert_eq!(
+        selected.subtitle_kind,
+        crate::metadata::subtitle_kind::GENERATED
+    );
+    let timed = dynamic_item::resolve_at(&projected.projection.item, now).unwrap();
+    let track = timed.tracks.unwrap().subtitle.unwrap();
+    assert_eq!(source_path(&track).unwrap().1, 0);
+    assert_eq!(
+        selected.path.as_deref(),
+        Some(source_path(&track).unwrap().0.as_str())
+    );
+}

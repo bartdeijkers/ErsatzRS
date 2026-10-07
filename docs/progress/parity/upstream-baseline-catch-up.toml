@@ -4,9 +4,10 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-200/208 accepted; rows201-208 pending through v26.11.1.
-200 Adapt(ADR0095): verified bundled/public Next default; Linux/Windows
-startup/playback and matched browsers pass; UCU-09 owns canonical proof.
+208/208 accepted through v26.11.1; final window gates and exact-SHA CI pending.
+201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
+202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
+200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
 199 Port: rate/copy/mirror/Dutch tracks; UCU-09 owns Linux/Windows proof.
 198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
 196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
@@ -18,8 +19,6 @@ pass on Linux/Windows; final window gates remain open.
 Rows209 onward are later work and do not reopen UCU-09.
 Next0362692 six-RID pins and independent retirement for both patches remain;
 row186 owns package CI and runtime/cleanup.
-UCU-00–08 Complete; UCU-09 open through v26.11.1.
-UCU-09 owns final gates, CI and stable-release acceptance.
 Windows Next/JavaScript/chapter proof passes in all four profile languages.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
 (2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
@@ -66,6 +65,13 @@ explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas.
 """
 
 [[debt]]
+id = 'ucu09-row201-channel-troubleshooting-window'
+description = 'Prove the complete historical 30-second Next channel-preview window with configured gap filler, immutable occurrence callbacks, selected profiles, protected international tracks and live-generated caption timing.'
+discovered = '2026-10-07'
+evidence = 'Resolved as Port. UCU-09 owns canonical f418022b: Linux118/Windows116 ordinary cases,26 named regressions each, nine complete decoded30s windows and Stop per OS, direct HTTP/RTSP/installed Live/Finite caption controls, exact source/runtime hashes, state/revocation/cleanup and strict lint/format. Compiler/fixture failures remain failed history; valid passing cases are reused explicitly. Final window gates/CI and approved hardware/ARM/macOS debt remain unverified.'
+resolved = true
+
+[[debt]]
 id = 'ucu09-row200-managed-next-default'
 adr = '0095'
 description = 'Make Next the new-channel and standalone-preview default only with exact bundled or automatic verified runtime acquisition, retaining stored engine choices and explicit Native.'
@@ -108,8 +114,8 @@ id = 'ucu09-row207-vaapi-padding'
 adr = '0117'
 description = 'Adopt upstream Next VAAPI padding correction and repair native driver eligibility, color-state preservation and padding fallback without assuming that every VAAPI driver honors black padding.'
 discovered = '2026-10-06'
-evidence = 'Next0362692 and the native pipeline now gate hardware padding to explicit compatible Intel iHD, restore effective BT.2020 tags without changing range, and retain software fallback for other drivers/HDR tonemapping. NV12/P010 transfers preserve depth through subtitle/graphics composition. Twenty-one focused VAAPI checks, four reviewed snapshots, strict affected lint and four decoded software range/depth cases pass; independent review finds no concrete source/graph regression. UCU-09 owns exact evidence. VAAPI hardware execution remains unverified; no additional FFmpeg binary patch or ordered row207 acceptance is claimed.'
-resolved = false
+evidence = 'Next0362692 and the native pipeline now gate hardware padding to explicit compatible Intel iHD, restore effective BT.2020 tags without changing range, and retain software fallback for other drivers/HDR tonemapping. NV12/P010 transfers preserve depth through subtitle/graphics composition. Twenty-one focused VAAPI checks, four reviewed snapshots, strict affected lint and four decoded software range/depth cases pass; independent review finds no concrete source/graph regression. UCU-09 owns exact evidence. VAAPI hardware execution remains unverified; ordered row207 is Covered under ADR0117 with no additional FFmpeg binary patch. UCU-09 owns final gates/CI; hardware execution remains approved unverified debt.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row185-copy-projection'

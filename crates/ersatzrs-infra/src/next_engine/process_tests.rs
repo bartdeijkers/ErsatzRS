@@ -173,7 +173,7 @@ async fn finite_troubleshooting_delivers_stdin_and_preserves_exit_and_artifacts_
 }
 
 #[tokio::test]
-async fn troubleshooting_uses_only_default_overlay_and_explicit_run_mode() {
+async fn standalone_troubleshooting_uses_only_default_overlay_and_explicit_run_mode() {
     let root = tempfile::tempdir().unwrap();
     let default = root.path().join("default.json");
     tokio::fs::write(&default, "{}").await.unwrap();
@@ -182,7 +182,7 @@ async fn troubleshooting_uses_only_default_overlay_and_explicit_run_mode() {
         .unwrap();
     let command = troubleshooting_command(
         Path::new("fixture-next"),
-        "1",
+        ".troubleshooting",
         Path::new("fixture-output"),
         Some(root.path()),
         Instant::now() + Duration::from_secs(10),
@@ -200,7 +200,7 @@ async fn troubleshooting_uses_only_default_overlay_and_explicit_run_mode() {
             "run".into(),
             "--output-folder".into(),
             "fixture-output".into(),
-            "--number=1".into(),
+            "--number=.troubleshooting".into(),
             "-".into(),
             "--troubleshoot".into(),
             default.into_os_string(),

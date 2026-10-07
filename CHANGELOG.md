@@ -63,6 +63,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preview the complete 30-second Next channel troubleshooting window, including
+  scheduled handoffs and configured gap filler. Keep historical callbacks valid,
+  preserve per-programme audio/subtitle choices and apply the selected preview
+  profile without changing saved channel or playout state (upstream #3065).
+
 - Keep profile applicability help readable on narrow screens without JavaScript.
   Preserve a failed preview's startup diagnostic instead of attaching logs from
   an earlier producer that did not belong to that preview.

@@ -1,5 +1,6 @@
 use super::*;
 use crate::{db::DbPool, next_engine::schedule};
+use ersatzrs_core::repositories::PlayoutRepository as _;
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -502,4 +503,442 @@ async fn troubleshooting_publishes_one_canvas_for_all_selected_graphics() {
         .finish_troubleshooting_session(instance)
         .await
         .unwrap();
+}
+
+fn channel_occurrence(
+    fixture: &Fixture,
+    id: i64,
+    start: chrono::DateTime<chrono::Utc>,
+    finish: chrono::DateTime<chrono::Utc>,
+) -> TroubleshootingChannelOccurrence {
+    let mut media = fixture.media.clone();
+    media.item.id = id;
+    media.item.playout_id = 1;
+    media.item.start = start;
+    media.item.finish = finish;
+    media.item.in_point = chrono::TimeDelta::seconds(1);
+    media.item.out_point = media.item.in_point + (finish - start);
+    TroubleshootingChannelOccurrence {
+        media,
+        channel: fixture.channel.clone(),
+        subtitle_id: Some(0),
+        credits: None,
+    }
+}
+
+async fn channel_manifest(
+    fixture: &Fixture,
+    occurrences: &[TroubleshootingChannelOccurrence],
+    start: chrono::DateTime<chrono::Utc>,
+) -> (uuid::Uuid, protocol::Playout) {
+    let repositories = crate::repositories::make_repositories(fixture.pool.clone());
+    for occurrence in occurrences {
+        repositories
+            .playout
+            .upsert_item(&occurrence.media.item)
+            .await
+            .unwrap();
+    }
+    let finish = start + chrono::TimeDelta::seconds(30);
+    let before = persisted_window_state(&fixture.pool, start, finish).await;
+    let prepared = fixture
+        .host
+        .prepare_troubleshooting_window(
+            TroubleshootingChannelWindow {
+                channel: &fixture.channel,
+                profile: &fixture.profile,
+                occurrences,
+                start,
+                finish,
+                replacements: &[],
+                ffmpeg: Path::new("unused-ffmpeg"),
+                deadline: Instant::now() + std::time::Duration::from_secs(10),
+                diagnostics: None,
+            },
+            fixture.start(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        before,
+        persisted_window_state(&fixture.pool, start, finish).await,
+        "window preparation must preserve scheduled rows and their exact state"
+    );
+    prepared
+}
+
+pub(super) async fn persisted_window_state(
+    pool: &DbPool,
+    start: chrono::DateTime<chrono::Utc>,
+    finish: chrono::DateTime<chrono::Utc>,
+) -> (i64, Vec<ersatzrs_domain::PlayoutItem>) {
+    let count = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutItem""#)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let items = crate::repositories::make_repositories(pool.clone())
+        .playout
+        .items_in_range(1, start, finish)
+        .await
+        .unwrap();
+    (count, items)
+}
+
+#[tokio::test]
+async fn troubleshooting_channel_window_preserves_overlap_and_fills_every_outer_gap() {
+    let fixture = Fixture::new().await;
+    fixture
+        .host
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let start =
+        chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 2 * 86_400, 0).unwrap();
+    let occurrences = [
+        channel_occurrence(
+            &fixture,
+            11,
+            start + chrono::TimeDelta::seconds(3),
+            start + chrono::TimeDelta::seconds(8),
+        ),
+        channel_occurrence(
+            &fixture,
+            12,
+            start + chrono::TimeDelta::seconds(6),
+            start + chrono::TimeDelta::seconds(9),
+        ),
+        channel_occurrence(
+            &fixture,
+            13,
+            start + chrono::TimeDelta::seconds(20),
+            start + chrono::TimeDelta::seconds(25),
+        ),
+    ];
+    let (instance, playout) = channel_manifest(&fixture, &occurrences, start).await;
+    let bounds: Vec<_> = playout
+        .items
+        .iter()
+        .map(|item| {
+            (
+                (item.start - start).num_seconds(),
+                (item.finish - start).num_seconds(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        bounds,
+        vec![(0, 3), (3, 8), (6, 9), (9, 20), (20, 25), (25, 30)]
+    );
+    for item in playout
+        .items
+        .iter()
+        .filter(|item| !item.id.starts_with("fallback-"))
+    {
+        assert_eq!(
+            serde_json::to_value(item).unwrap()["tracks"]["audio"]["stream_index"],
+            2
+        );
+    }
+    fixture
+        .host
+        .finish_troubleshooting_session(instance)
+        .await
+        .unwrap();
+    let fixture = Fixture::new().await;
+    fixture
+        .host
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let (instance, empty) = channel_manifest(&fixture, &[], start).await;
+    assert_eq!(empty.items.len(), 1);
+    assert_eq!(
+        (empty.items[0].start, empty.items[0].finish),
+        (start, start + chrono::TimeDelta::seconds(30))
+    );
+    fixture
+        .host
+        .finish_troubleshooting_session(instance)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn troubleshooting_window_second_occurrence_canvas_is_bound_and_revoked() {
+    use super::super::canvas::{CanvasBinding, CanvasRequest};
+    let fixture = Fixture::new().await;
+    fixture
+        .host
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    let start =
+        chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 2 * 86_400, 0).unwrap();
+    let occurrences = [
+        channel_occurrence(&fixture, 11, start, start + chrono::TimeDelta::seconds(10)),
+        channel_occurrence(
+            &fixture,
+            12,
+            start + chrono::TimeDelta::seconds(10),
+            start + chrono::TimeDelta::seconds(30),
+        ),
+    ];
+    let (first, _) = channel_manifest(&fixture, &occurrences, start).await;
+    let (other, _) = channel_manifest(&fixture, &occurrences, start).await;
+    let binding = CanvasBinding::new(
+        fixture.channel.id,
+        &occurrences[1].media,
+        callback_expiry(occurrences[1].media.item.finish).unwrap(),
+    )
+    .for_session(first);
+    let timing = CanvasRequest::parse("0", "1000", "25").unwrap();
+    let selected = fixture
+        .host
+        .canvas_session(first, &binding, &timing)
+        .await
+        .unwrap();
+    assert_eq!(selected.media.item.id, 12);
+    assert_eq!(
+        selected.media.media_version_id,
+        occurrences[1].media.media_version_id
+    );
+    assert!(fixture
+        .host
+        .canvas_session(other, &binding, &timing)
+        .await
+        .is_err());
+    let mut wrong = binding.clone();
+    wrong.item = 99;
+    assert!(fixture
+        .host
+        .canvas_session(first, &wrong, &timing)
+        .await
+        .is_err());
+    fixture
+        .host
+        .finish_troubleshooting_session(first)
+        .await
+        .unwrap();
+    assert!(fixture
+        .host
+        .canvas_session(first, &binding, &timing)
+        .await
+        .is_err());
+    assert!(fixture
+        .host
+        .canvas_session(other, &binding.for_session(other), &timing)
+        .await
+        .is_ok());
+    fixture
+        .host
+        .finish_troubleshooting_session(other)
+        .await
+        .unwrap();
+}
+
+#[test]
+fn troubleshooting_historical_callback_expiry_is_future_without_removing_expiration() {
+    let now = chrono::Utc::now();
+    let historical = now - chrono::TimeDelta::days(3);
+    let expiry = callback_expiry(historical).unwrap();
+    assert!(expiry >= now + chrono::TimeDelta::hours(2));
+    assert!(expiry < now + chrono::TimeDelta::hours(2) + chrono::TimeDelta::seconds(2));
+    let future = now + chrono::TimeDelta::hours(4);
+    assert_eq!(
+        callback_expiry(future).unwrap(),
+        future + chrono::TimeDelta::hours(2)
+    );
+}
+
+#[tokio::test]
+async fn troubleshooting_empty_window_fallback_uses_preview_profile_and_requires_its_session() {
+    use ersatzrs_core::repositories::ChannelRepository as _;
+    let mut fixture = Fixture::new().await;
+    fixture
+        .host
+        .media
+        .configure("127.0.0.1:8409".parse().unwrap())
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "FillerPreset" ("Id","AllowWatermarks","CollectionType","MediaItemId","FillerKind","FillerMode","UseChaptersAsMediaItems") VALUES (1,0,10,10,4,0,0)"#).execute(&fixture.pool).await.unwrap();
+    fixture.channel.fallback_filler_id = Some(1);
+    fixture.channel.subtitle_mode = ersatzrs_domain::ChannelSubtitleMode::None;
+    // A stored Native channel explicitly previewed by Next must still work.
+    let mut stored = fixture.channel.clone();
+    stored.streaming_engine = ersatzrs_domain::StreamingEngine::Legacy;
+    crate::repositories::make_repositories(fixture.pool.clone())
+        .channel
+        .upsert(&stored)
+        .await
+        .unwrap();
+    fixture.profile.resolution.width = 640;
+    fixture.profile.resolution.height = 360;
+    let start = chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+    let (instance, playout) = channel_manifest(&fixture, &[], start).await;
+    let item = &playout.items[0];
+    let ticks = |t: chrono::DateTime<chrono::Utc>| {
+        t.timestamp() * 10_000_000 + i64::from(t.timestamp_subsec_nanos() / 100)
+    };
+    let resolved = fixture
+        .host
+        .resolve_fallback(
+            fixture.channel.id,
+            ticks(item.start),
+            ticks(item.finish),
+            &fixture.channel.number,
+            instance,
+            &item.id,
+            start,
+            item.finish,
+        )
+        .await
+        .unwrap();
+    assert_eq!(resolved.start, start);
+    assert!(resolved.finish <= item.finish);
+    let context = fixture.host.preview_session(instance).await.unwrap();
+    assert_eq!(context.profile.resolution.width, 640);
+    fixture
+        .host
+        .finish_troubleshooting_session(instance)
+        .await
+        .unwrap();
+    assert!(fixture
+        .host
+        .resolve_fallback(
+            fixture.channel.id,
+            ticks(item.start),
+            ticks(item.finish),
+            &fixture.channel.number,
+            instance,
+            &item.id,
+            start,
+            item.finish
+        )
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn troubleshooting_generated_credits_keep_timing_through_fresh_track_materialization() {
+    let fixture = Fixture::new().await;
+    let mut request = fixture.request(None);
+    let mut channel = fixture.channel.clone();
+    channel.subtitle_mode = ersatzrs_domain::ChannelSubtitleMode::Default;
+    channel.music_video_credits_mode =
+        ersatzrs_domain::ChannelMusicVideoCreditsMode::GenerateSubtitles;
+    request.channel = &channel;
+    let mut context = Context::new(&request);
+    context.media.item.pinned_stream_selection = None;
+    context.credits = Some(protocol::Track {
+        stream_index: Some(0),
+        source: Some(protocol::Source::Local {
+            path: "owned-preview/generated-credits.ass".into(),
+            in_point_ms: Some(0),
+            out_point_ms: None,
+            probe_hint: None,
+        }),
+    });
+    let mut projection = fixture
+        .host
+        .troubleshooting_snapshot(&request)
+        .await
+        .unwrap()
+        .projection;
+    context.attach_credits(&mut projection).unwrap();
+    let origin =
+        super::super::remote_projection::Origin::Troubleshooting(std::sync::Arc::new(context));
+    let now = projection.item.start + chrono::TimeDelta::seconds(2);
+    assert_replaced_caption_does_not_resurrect_credits(&origin, &mut projection, now);
+    let credits = origin.credits_at(&projection, now).unwrap().unwrap();
+    let protocol::Source::Local { in_point_ms, .. } = credits.source.as_ref().unwrap() else {
+        panic!("generated caption");
+    };
+    assert_eq!(*in_point_ms, Some(2000));
+    let previous =
+        playback::load_source_audio_streams(&fixture.pool, fixture.media.media_version_id)
+            .await
+            .unwrap();
+    let mut probe = super::super::probe_hint::tests::metadata();
+    probe.streams[1].language = Some("nld".into());
+    probe.streams[1].title = Some("Dutch".into());
+    let mut materialized = super::super::retained_host::install_fresh_tracks(
+        projection.item,
+        &probe,
+        &previous,
+        Some(2),
+        protocol::Source::Local {
+            path: "prepared.nut".into(),
+            in_point_ms: Some(0),
+            out_point_ms: None,
+            probe_hint: None,
+        },
+        None,
+        now,
+    )
+    .unwrap();
+    assert_eq!(
+        materialized
+            .tracks
+            .as_ref()
+            .unwrap()
+            .audio
+            .as_ref()
+            .unwrap()
+            .stream_index,
+        Some(23)
+    );
+    assert!(materialized.tracks.as_ref().unwrap().subtitle.is_none());
+    super::super::retained_host::install_generated_credits(&mut materialized, Some(credits))
+        .unwrap();
+    let protocol::Source::Local {
+        path, in_point_ms, ..
+    } = materialized
+        .tracks
+        .as_ref()
+        .unwrap()
+        .subtitle
+        .as_ref()
+        .unwrap()
+        .source
+        .as_ref()
+        .unwrap()
+    else {
+        panic!("restored caption");
+    };
+    assert_eq!(path, "owned-preview/generated-credits.ass");
+    assert_eq!(*in_point_ms, Some(2000));
+}
+
+fn assert_replaced_caption_does_not_resurrect_credits(
+    origin: &super::super::remote_projection::Origin,
+    projection: &mut super::super::selection::DeferredProjection,
+    now: chrono::DateTime<chrono::Utc>,
+) {
+    // A removed/expired natural Custom caption must not resurrect the Context's
+    // generated overlay after natural caption preparation clears its selection.
+    let original = projection
+        .item
+        .tracks
+        .as_mut()
+        .unwrap()
+        .subtitle
+        .as_mut()
+        .unwrap()
+        .source
+        .replace(protocol::Source::Local {
+            path: "owned-preview/selected-dutch.ass".into(),
+            in_point_ms: Some(0),
+            out_point_ms: None,
+            probe_hint: None,
+        });
+    assert!(projection.selected_subtitle.is_none());
+    assert!(origin.credits_at(projection, now).unwrap().is_none());
+    projection
+        .item
+        .tracks
+        .as_mut()
+        .unwrap()
+        .subtitle
+        .as_mut()
+        .unwrap()
+        .source = original;
 }

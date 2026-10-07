@@ -49,6 +49,7 @@ impl NextHost {
         if now < before.projection.item.start || now >= before.projection.item.finish {
             return Err(unavailable());
         }
+        let credits = context.origin.credits_at(&before.projection, now)?;
         let programme_ms = u64::try_from(
             (context.media.item.in_point + (now - context.media.item.start)).num_milliseconds(),
         )
@@ -116,7 +117,7 @@ impl NextHost {
             let source = self
                 .media
                 .prepared_source(instance, ready.id, hint, false)?;
-            install_fresh_tracks(
+            let mut item = install_fresh_tracks(
                 before.projection.item,
                 &ready.probe,
                 &context.previous_audio,
@@ -124,7 +125,9 @@ impl NextHost {
                 source,
                 subtitle,
                 now,
-            )
+            )?;
+            install_generated_credits(&mut item, credits)?;
+            Ok(item)
         }
         .await;
         if result.is_err() {
@@ -307,6 +310,17 @@ pub(super) fn install_fresh_tracks(
         }),
     });
     Ok(item)
+}
+
+/// Restore only the exact generated preview caption after fresh media remapping.
+pub(super) fn install_generated_credits(
+    item: &mut protocol::PlayoutItem,
+    credits: Option<protocol::Track>,
+) -> Result<()> {
+    if let Some(credits) = credits {
+        item.tracks.as_mut().ok_or_else(unavailable)?.subtitle = Some(credits);
+    }
+    Ok(())
 }
 
 fn generated_video_source(source: Option<&protocol::Source>) -> bool {
