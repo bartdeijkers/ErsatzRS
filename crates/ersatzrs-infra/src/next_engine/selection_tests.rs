@@ -1208,6 +1208,8 @@ async fn next_custom_selection_excludes_unextracted_text_like_native() {
         .unwrap();
     selector.flush().unwrap();
     let channel = Channel {
+        streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+        streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
         next_engine_text_subtitle_mode: ersatzrs_domain::NextEngineTextSubtitleMode::Convert,
         stream_selector_mode: ChannelStreamSelectorMode::Custom,
         stream_selector: Some(
@@ -1240,6 +1242,37 @@ async fn next_custom_selection_excludes_unextracted_text_like_native() {
     .await
     .unwrap()
     .is_none());
+
+    // The first English candidate remains unextracted. The later extracted
+    // candidate must satisfy the same YAML rule, as in upstream 39c1811f.
+    sqlx::query(r#"INSERT INTO "MediaStream" ("Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels", "Title", "Default", "Forced", "MediaVersionId") VALUES (6,5,'subrip',3,'eng',0,'Extracted English',0,0,100)"#)
+        .execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO "Subtitle" ("Id", "MovieMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated") VALUES (4,20,0,'Extracted English',5,'subrip',0,0,0,'eng',1,'synthetic/extracted-english.srt','2026-09-22','2026-09-22')"#)
+        .execute(&pool).await.unwrap();
+    let selected = crate::playback::select_custom_playback_streams_for_version(
+        &pool,
+        100,
+        10,
+        &channel,
+        item().start,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    )
+    .await
+    .unwrap()
+    .expect("extracted English satisfies the custom rule");
+    assert_eq!(selected.audio_stream_index, Some(1));
+    let subtitle = selected.subtitle.expect("selected extracted subtitle");
+    assert_eq!(subtitle.id, 4);
+    assert_eq!(subtitle.stream_index, 5);
+    assert_eq!(subtitle.language.as_deref(), Some("eng"));
+    assert!(subtitle.is_extracted);
+    let projected = project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap();
+    assert_eq!(projected.audio.unwrap().stream_index, Some(1));
+    assert_eq!(projected.subtitle.unwrap().stream_index, Some(5));
 }
 
 #[tokio::test]

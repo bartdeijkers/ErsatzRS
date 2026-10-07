@@ -1454,7 +1454,9 @@ pub async fn select_custom_playback_streams(
 }
 
 /// Select Next custom tracks while excluding embedded subtitles from other versions.
-/// Next reads embedded text directly and excludes external bitmap subtitles.
+/// Embedded text candidates require extraction with a nonblank path outside HLS Direct.
+/// Embedded bitmap candidates remain eligible; external bitmap subtitles are excluded.
+/// Explicit pins and troubleshooting use separate selection paths.
 ///
 /// # Errors
 /// Returns selector, database and subtitle metadata errors.

@@ -315,8 +315,10 @@ release section when tagging a release.
 - Check out Windows batch scripts with CRLF line endings, including the bundled
   MPEG-TS script, while retaining LF for shell scripts.
 
-- Respect Use Embedded Subtitles for Next automatic selection and skip embedded
-  text without a usable extracted path before choosing subtitle preferences.
+- Respect Use Embedded Subtitles for Next automatic selection. Automatic and
+  custom segmenter choices skip embedded text without a usable extracted path
+  before applying preferences or selector rules. Preserve bitmap eligibility
+  and exact pins.
 
 - Publish plain Next watermarks as direct media layers, avoiding a graphics
   canvas when no graphics elements or opacity expressions require it. The pinned

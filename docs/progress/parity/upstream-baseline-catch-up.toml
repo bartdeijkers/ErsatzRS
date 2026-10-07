@@ -4,7 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-196/208 accepted; rows197-208 pending through v26.11.1.
+197/208 accepted; rows198-208 pending through v26.11.1.
+197 Covered: extracted custom text wins; four cases and lint pass.
 196 N/A: .NET PDB/dependency change; Rust/Next staging verified.
 195 Port: local deep scan, confirmations and fresh artwork; Linux/Windows
 restart, 12 browser cases and lint pass. UCU-09 owns exact evidence and reuse.
@@ -13,10 +14,10 @@ pass on Linux/Windows; final window gates remain open.
 193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward are later work and do not reopen UCU-09.
-Next0362692 is pinned for six RIDs; both local patches still require independent
-retirement. Package CI and row186 production playback/cleanup pass.
-UCU-00–08 are Complete; UCU-09 remains open through v26.11.1.
-UCU-09 owns prior CI evidence; final gates and stable-release acceptance remain open.
+Next0362692 six-RID pins and independent retirement for both patches remain;
+row186 owns package CI and runtime/cleanup.
+UCU-00–08 Complete; UCU-09 open through v26.11.1.
+UCU-09 owns final gates, CI and stable-release acceptance.
 Windows Next/JavaScript/chapter proof passes in all four profile languages.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
 (2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.

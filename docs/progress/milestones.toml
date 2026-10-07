@@ -11421,6 +11421,35 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row197 accepted as Covered. Exact upstream
+39c1811ff618ee7ce13f8b41e277975d4ac178bf changes the custom selector, its tests
+and Changelog; complete diff SHA256b7104fe76dd91c8c7c3dc8053989775d90e8f9054b3edfe8995fb9ad390f1f1b
+is reviewed. Native/Next shared retain_playable_subtitles already rejects
+unextracted embedded text outside HLS Direct before YAML rule ranking, while
+preserving nonblank extracted paths, bitmap eligibility, version scope and
+separate exact-pin/troubleshooting contracts. No missing production policy is
+demonstrated. The SQL/YAML owning fixture now explicitly sets Next/Segmenter,
+rejects first unextracted English subtitle1, selects extracted English subtitle4
+at stream5 and preserves audio1 in both exact shared selector and actual Next
+wire projection. Existing automatic/settings/extracted missing-blank-valid path,
+Direct, bitmap/version/pinned/Off cases also pass. Source01 receipt
+121829b1f2397a99ec3859d84f3bc17af7ed0f4dad6989e19d33b3b3ff15a05b
+covers1502 inputs at base3bd3702f. Focused nextestee9d85fe-9910-4bff-bdff-938b9397724c
+passes4/4; strict infra all-target Clippy, format, new-allow policy and source
+pre/post guards pass with private successful fixture cleanup confirmed.
+Substantive Codex source review confirms the upstream rule and meaningful
+positive selection seam. Rustdoc and curated release overview clarify existing
+custom eligibility. Test-only/contract-documentation changes introduce no
+executable selection policy, generated FFmpeg output, package, schema or health
+capability change. A synthetic extracted path is selection/projection evidence;
+new physical sidecar decoding or native Windows invocation is not claimed.
+Row174 and subsequent unchanged-policy runtime evidence remain retained;
+required final integrated Linux/Windows, window gates, push, exact-SHA CI and
+stable publication remain open. Approved hardware/ARM/macOS debt is unchanged.
+Canonical proof tmp/ucu09-row197/acceptance-proof.json
+SHA2564218aec2aeba12c8e08fbf76ffbe64c50e06fc224f68fe89cefa7f35f4b2fc79.
+Pin/ledger advance only197/208 with11 pending; continue198 cached Next URLs.
+
 2026-10-07 row196 accepted as N/A. Exact upstream
 ffa4743e0c24ea38cc14ad3add823c750f80a65f changes Directory.Build.targets and
 ErsatzTV.Infrastructure.csproj only: drop native .NET publish PDBs, especially
