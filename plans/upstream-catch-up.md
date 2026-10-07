@@ -4,11 +4,23 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-191 are accepted; rows192-208 are the 17 remaining in-scope
+verified). Rows1-192 are accepted; rows193-208 are the 16 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 192 source review and acceptance
+
+Accepted slice: `20c81e63`, upstream unsigned macOS CI. N/A after reviewing
+the complete ten-file delta: pass `CODE_SIGNING_ALLOWED=NO` through the Xcode
+bundle script for unsigned builds, run packaging for affected pull requests,
+and trim upstream workflow/script comments. ErsatzRS does not invoke that
+Xcode project or bundle/sign script and retains its own CI/release workflow.
+Independent substantive review confirms there is no broken Rust counterpart.
+UCU-09 owns exact diff/workflow hashes. Approved macOS application/runtime
+debt remains explicit; no native proof, new package build or release is claimed.
+Continue at row193, troubleshooting playback seek/readiness.
 
 ## Row 191 source review and acceptance
 
@@ -362,7 +374,7 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
   — docs: prep for release v26.11.1.
-- Ledger: **208 commits**, **17 pending**. The original plan covered 152 through
+- Ledger: **208 commits**, **16 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -402,7 +414,7 @@ remain. See `post-publication-cleanup.json`.
   processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **191**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **192**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -5529,7 +5541,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 189 | `481840fb` | feat: add songs to next engine (#3053) | Adapt | ADRs 0005/0102/0105; shared native song renderer and private owned Next callbacks | `feat(streaming): render songs through native and Next playback` | ucu-09; occurrence-stable visuals preserve original selected audio/subtitles, seek/handoff, mirror and saved-preview geometry, finite black fallback, strict health pins and cancellation/capacity ownership. Linux22 and native Windows20 runtime cases plus actual private HTTP on both pass with exact published packages; complete pipeline snapshots, affected regressions, strict lint and independent review pass. UCU-09 owns source receipts and explicit lint-only deltas. Existing platform/hardware debt and final window gates/CI remain open. |
 | 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | Adapt | ADRs 0008/0063/0117; managed FFmpeg9 acquisition and health | `docs(parity): reconcile bundled macOS FFmpeg policy` | ucu-09; preserve unbundled9, explicit overrides, checksum/capability validation before promotion and validated PATH fallback with visible acquisition warning. Exact nine source hashes and upstream diff verified; 16 applicable runtime-policy regressions and independent review pass. All15 upstream package patches already carried/equivalent/inapplicable; no build/release required. macOS application/runtime proof and unpatched operator-WebP risk remain explicit. UCU-09 owns exact evidence and final window gates/CI remain. |
 | 191 | `fdf3b13c` | build: manual develop workflow (#3055) | N/A | Upstream develop-release tagging and .NET artifact/image/signing workflows | `docs(parity): reconcile upstream manual develop workflow` | ucu-09; complete six-file diff and current own CI/release workflow hashes verified. ErsatzRS retains separate verification, tag-triggered releases and explicit stable/beta publication gates; no matching broken develop-tag or signing-environment path. Independent substantive review agrees. No source build, new release or publication-policy change; UCU-09 owns exact evidence and final gates/CI remain open. |
-| 192 | `20c81e63` | fix: unsigned mac ci (#3056) | | | | ucu-09; provisional: N/A (upstream-only CI follow-up to row 191: unsigned macOS artifacts, workflow script cleanup). No product behavior. Claude 2026-10-05 triage. |
+| 192 | `20c81e63` | fix: unsigned mac ci (#3056) | N/A | Upstream unsigned Xcode bundle and develop/CI workflow scripts | `docs(parity): reconcile unsigned macOS CI repair` | ucu-09; full ten-file diff reviewed and current own workflow hashes verified. Xcode signing-flag forwarding and .NET/macOS artifact callers have no ErsatzRS counterpart; independent review confirms no source correction. Existing own CI/tagged releases and approved explicit unverified macOS application/runtime debt remain. No additional build or publication; UCU-09 owns exact evidence and final gates/CI remain open. |
 | 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |
 | 194 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; pending application correction and acceptance. Preserve highest-bitrate non-attached video duration, complete-audio maximum and valid Matroska DURATION/DURATION-language parsing. Exact FFmpeg9 fixture additionally reports numeric video duration20 with tag1 and video packets ending at1; generic FFmpeg timing can synthesize the numeric value from container duration. Guard that conflict in the scanner rather than copying numeric-first parsing unchanged; test missing, malformed and conflicting tags, preserve other-container precedence and decode schedule handoff. No FFmpeg binary patch is justified. ADR0117/UCU-09 record source and probe evidence. |
 | 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |

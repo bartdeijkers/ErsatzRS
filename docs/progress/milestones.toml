@@ -11421,6 +11421,23 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row192 accepted as N/A. Complete upstream20c81e635000378d54ab560d752d5dd32f1f2ced
+ten-file diff reviewed: unsigned artifact builds pass CODE_SIGNING_ALLOWED=NO
+through scripts/macOS/bundle.sh to xcodebuild, affected pull requests gain
+packaging checks, and upstream workflow/script comments are shortened.
+Exact delta SHA256e0f7a1330a6206a2ea62cd17a01baa4b8f81d4ed74b81e7870e032c28a95dd36
+and own release/CI workflow hashes are recorded atf36df6ea9a0a694b9a25438db1a5823c938c8d55.
+No ErsatzRS path invokes that Xcode project/.app bundler or reusable .NET
+artifact/signing workflow, so no matching broken caller requires repair.
+Independent substantive review confirms the N/A disposition. Canonical source
+proof: tmp/ucu09-row192/acceptance-proof.json. No runtime, application build or
+publication is needed for this documentation-only reconciliation. macOS
+application/runtime acceptance remains approved explicit unverified debt;
+workflow source inspection is not native execution proof. Ordered baseline,
+ledger and clean upstream HEAD advance together:192/208 accepted,16 pending.
+Row193 seek/readiness is next; final UCU-09 local/window gates, authorized
+milestone push and terminal green exact-SHA CI remain required.
+
 2026-10-07 row191 accepted as N/A. Upstreamfdf3b13cda2c70f2ef4d2386e11e881068a58f97
 changes six workflow/script files only: manual develop publication, extracted
 prerelease tagging, unsigned CI artifacts/images and separate signing/publish
