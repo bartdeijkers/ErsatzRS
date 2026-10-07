@@ -268,10 +268,13 @@ release section when tagging a release.
   Wait for hydrated pages before subsequent test navigation, preserving Firefox
   page-error checks.
 
-- Run Next CI against the validated FFmpeg v2.0.5 release and supply the
+- Run Next CI against the validated FFmpeg v2.0.6 release and supply the
   packaged executable to the graphics-canvas runtime test. Keep fallback and
   on-demand subtitle fixtures eligible under the extracted-text selection
-  contract, without bypassing the playback assertions.
+  contract, without bypassing the playback assertions. Keep routed fixtures
+  alive through the host's startup deadline while proving authenticated
+  decoding and explicit producer cleanup. Stage the pinned Next and FFmpeg
+  packages for browser CI so its real Next cases run against verified runtimes.
 
 - Preserve AV1 profiles and use fMP4 for native AV1 HLS output. Reject AV1
   MPEG-TS output before startup and report incompatible channel settings in

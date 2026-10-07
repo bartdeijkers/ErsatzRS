@@ -11421,6 +11421,26 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 candidate 47004a46 CI passes Format, Test, Clippy, cargo deny,
+documentation and complete Chromium (329 passes, 11 existing conditional skips).
+Next CI fails two routed fixtures with a 20s wait that contradicts the admitted
+30s startup deadline. Corrected Unix-only fixtures honor each admitted deadline,
+keep the finite programme alive until explicit Stop, and give preview its own
+30s admission window. All three routed lifecycle wrappers pass, retaining
+source-owned blue/Dutch decoding, authentication, independent producers and
+process/capacity cleanup. The full local Next selection records 411 passes;
+its only failure is a missing ERSATZRS_FFMPEG invocation variable. That unchanged
+canvas test passes separately with the exact packaged executable. Canonical
+routed-ci-correction-03.log, next-ci-correction-01.log and
+next-ci-canvas-recheck-01.log retain all 412 passing cases and original failures.
+Browser CI now stages the existing checksum-pinned Next036 and FFmpeg v2.0.6
+packages instead of using a runner-local override or skipping real Next cases.
+Workflow lint, formatting and strict web Clippy pass. No production code or
+runtime artifact changes; native Windows and prior playback evidence remain
+valid. Existing Firefox CI is preserved. Terminal green full CI on the
+corrected exact commit and stable publication remain required; approved
+platform/hardware debt stays unverified.
+
 2026-10-07 final window checks at corrected runtime source b7f704f0 pass:
 workspace Clippy, all4011 nextest cases (216 intentional ignored/skipped),
 Cargo doctests, parity/progress/architecture/hydration/format and cargo deny.

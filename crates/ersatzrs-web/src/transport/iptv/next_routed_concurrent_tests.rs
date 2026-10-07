@@ -56,12 +56,6 @@ async fn fixture_child_concurrent_producers() {
     fixture::seed(&pool, root.path()).await;
     sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?, '2') ON CONFLICT("Key") DO UPDATE SET "Value"='2'"#)
         .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT).execute(&pool).await.unwrap();
-    // Keep both real-time producers active until explicit stop.
-    sqlx::query(r#"UPDATE "PlayoutItem" SET "Finish"=?,"OutPoint"='00:01:00' WHERE "Id"=1"#)
-        .bind(chrono::Utc::now() + chrono::Duration::seconds(50))
-        .execute(&pool)
-        .await
-        .unwrap();
     run(
         state(pool, root.path()),
         root.path().to_owned(),
@@ -106,6 +100,7 @@ async fn run(state: AppState, root: PathBuf, ffmpeg: PathBuf, ffprobe: PathBuf) 
     let mut preview_request = request;
     preview_request.preview = true;
     preview_request.output.clone_from(&preview);
+    preview_request.deadline = Instant::now() + Duration::from_secs(30);
     let preview_task = state
         .next_engine
         .start(state.preview_hls_sessions.clone(), preview_request)
