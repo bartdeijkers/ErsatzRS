@@ -584,9 +584,9 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
-  — docs: prep for release v26.11.1.
-- Ledger: **208 commits**, **0 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-10-07): `4cdce16af3b7e65601d4eb541d149e31b80a402e`
+  — fix: next playout folders on linux/macos (#3068).
+- Ledger: **209 commits**, **1 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -618,6 +618,8 @@ remain. See `post-publication-cleanup.json`.
   A later 2026-10-06 refresh appends an upstream changelog update and release
   v26.11.1 as pending rows 207-208; all 206 existing SHA/subject pairs remain an
   exact prefix.
+  The 2026-10-07 refresh appends the Linux/macOS Next playout folder fix as
+  pending row 209; all 208 existing SHA/subject pairs remain an exact prefix.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
@@ -5770,3 +5772,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 206 | `d55be01f` | docs: tweak changelog | N/A | Upstream release-note wording | `docs(parity): reconcile Windows playout note wording` | ucu-09; Clarifies the row204 symptom only; source and acceptance are unchanged. |
 | 207 | `47d7716a` | docs: update changelog for next fix | Covered (ADR 0117) | Next036 and native VAAPI driver/color/depth prerequisites | `docs(parity): accept verified VAAPI padding prerequisites` | ucu-09; Pinned Next036 includes iHD BT.2020 retag/restoration and AMD/i965 rejection. Native explicit-iHD eligibility, software fallback, effective BT.709/HDR state and P010 composition preservation are already corrected. Reuse21 focused checks, four owning snapshot groups in231 passes and four decoded software range/depth cases. VAAPI execution remains explicitly unverified hardware debt; no new FFmpeg binary amendment. |
 | 208 | `46118d43` | docs: prep for release v26.11.1 | N/A | Fixed upstream v26.11.1 release boundary | `docs(parity): finish ordered catch-up through v26.11.1` | ucu-09; CHANGELOG heading/date/compare links only. Local and live remote tag agree at46118d43313b7828780fbfcfb46e980390ea8b0d. All208 rows are dispositioned; later upstream changes remain outside UCU-09. Final window gates and exact-SHA CI remain required. |
+| 209 | `4cdce16a` | fix: next playout folders on linux/macos (#3068) | | | | ucu-09; provisional: Covered, pending one check, like row 204. Upstream reworks its `current` link: removal now runs on every platform before linking, a failed symlink and a failed rename are both reported instead of throwing, a leftover file where the junction belongs is replaced, and the temporary link is cleaned up. ErsatzRS hands the engine the per-channel playout folder directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link at all, so none of these failure modes exist; the audit only has to confirm the folder swap is atomic, which is the same check row 204 already carries. Claude 2026-10-07 triage. |
