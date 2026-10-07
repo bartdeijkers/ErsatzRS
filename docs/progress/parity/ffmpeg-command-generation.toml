@@ -1,7 +1,7 @@
 feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0003', '0014', '0017', '0063']
 
 summary    = '''
@@ -54,13 +54,13 @@ their specific filter-gating behavior rather than the current runtime version.
 A 2026-08-07 differential review found the emitted command surface unaffected by
 the 8.1.2 to 9.0 upgrade; see `ffmpeg-9-differential-review` below.
 
-Reopened 2026-10-07: normal scanned video-only native playback still creates a
-source audio leg at index1 instead of the upstream null-audio input. A real
-native HLS run fails before content publication with a filtergraph stream
-specifier error. The shared direct adapter has the same input construction;
-its runtime counterpart remains to be verified. UCU-09 closeout requires the
-confirmed-no-audio correction and focused decoded playback/cleanup evidence;
-this is an unresolved implementation defect, not accepted platform debt.
+Resolved 2026-10-07: complete metadata confirms absent audio before the shared
+native lavfi/index0 fallback. Unknown Automatic, explicit Disabled/Exact,
+selected tracks, source seek and fresh retained metadata remain preserved.
+Copy/None audio encodes AAC with profile constraints and video copy intact.
+Genuine video-only Linux/Windows HLS/direct decoding, silent PCM and Stop/cleanup
+pass. UCU-09 owns exact evidence; historical row194 failure/duration proof and
+approved platform/hardware debt remain.
 
 '''
 
@@ -68,8 +68,8 @@ this is an unresolved implementation defect, not accepted platform debt.
 id          = 'native-video-only-null-audio-fallback'
 description = 'Normally scanned video-only media falls back to Automatic audio selection, but PipelineRequest always retains source audio stream index1 when the known audio list is empty. Native HLS therefore fails instead of using the upstream NullAudioInputFile silence source. Reuse existing lavfi audio input support for confirmed source-audio absence, shared across native HLS/direct construction; preserve explicit Disabled, exact pinned and alternate-language selection, unknown/unprobed pipe inputs, retained transport indexes, source seek and programme duration bounds.'
 discovered  = '2026-10-07'
-evidence    = 'UCU-09 row194 source03 application run ebea3819-0a16-40ee-93e5-92e68f3143ef, source receipt 927cc750b66eba7df3d3825782600f2fbe10377a99a7cabcde2b06912bdf3d9d, uses checksum-verified ErsatzRS-ffmpeg v2.0.6 and normal scanner/scheduler/HlsSessionWorker. Correct persisted1s/5s durations and adjacent schedule items precede real FFmpeg exit234: [0:1]aresample=async=1,apad[a] matches no streams. The retained synthetic probe has video index0 and subtitle index1, no audio. At upstream fb75ce8ccbc5570bf0e3c12533d87fe359b2d517, FFmpegLibraryProcessService replaces a version with no audio streams using NullAudioInputFile(anullsrc, stream0, lavfi). PipelineRequest constructor/missing-stream behavior predates row194 in prerequisite2fdd126c. Canonical UCU-09 evidence owns closeout; adding ordinary audio to the independent duration fixture does not resolve this defect. Required proof: generated-silence argv plus decoded genuine video-only native HLS/direct playback, programme handoff and confirmed owned cleanup, with existing Disabled/selected-audio regressions preserved.'
-resolved    = false
+evidence    = 'UCU-09 row194 source03 application run ebea3819-0a16-40ee-93e5-92e68f3143ef, source receipt 927cc750b66eba7df3d3825782600f2fbe10377a99a7cabcde2b06912bdf3d9d, uses checksum-verified ErsatzRS-ffmpeg v2.0.6 and normal scanner/scheduler/HlsSessionWorker. Correct persisted1s/5s durations and adjacent schedule items precede real FFmpeg exit234: [0:1]aresample=async=1,apad[a] matches no streams. The retained synthetic probe has video index0 and subtitle index1, no audio. At upstream fb75ce8ccbc5570bf0e3c12533d87fe359b2d517, FFmpegLibraryProcessService replaces a version with no audio streams using NullAudioInputFile(anullsrc, stream0, lavfi). PipelineRequest constructor/missing-stream behavior predates row194 in prerequisite2fdd126c. Canonical UCU-09 evidence owns closeout; adding ordinary audio to the independent duration fixture does not resolve this defect. Original required proof: generated-silence argv plus decoded genuine video-only native HLS/direct playback, programme handoff and confirmed owned cleanup, with existing Disabled/selected-audio regressions preserved. Resolved 2026-10-07 by the shared AutomaticSilence helper and complete-metadata native consumers, independently verified generated argv and genuine video-only Linux/Windows HLS/direct playback, finite HLS Direct source-copy output, decoded silent AAC and confirmed Stop/cleanup. UCU-09 owns canonical proof tmp/ucu09-native-null-audio/acceptance-proof.json SHA256164d177616f15b95796a44b3f20b806dccc635f92b9a597c81b5465dc012c482, native Windows source01/runtime and source02/preview, both drivers terminal0; UCU-09 owns source01 native HTTP smoke/HLS lifecycle, TSDuck87/0 and final source02 affected all-target strict Clippy/format. No runtime binary amendment or row advance is included; approved platform/hardware debt remains explicit.'
+resolved    = true
 
 [[debt]]
 id          = 'nvenc-filter-gate-live-proof'

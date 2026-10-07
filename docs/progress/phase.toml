@@ -63,8 +63,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 next_steps = '''
 2026-10-07 UCU-09 boundary: row194 accepted; complete rows195-208 through upstream v26.11.1
 (46118d43); rows209 onward are separate post-release work and cannot reopen
-this milestone. Correct the confirmed native no-audio graph failure before
-closeout; ffmpeg-command-generation owns its unresolved silence-fallback debt.
+this milestone. The native no-audio graph failure is resolved by the separate
+non-row checkpoint; UCU-09 owns exact Linux/Windows decoded playback, cleanup
+and final lint/transport proof. Continue ordered row195 acceptance; final window
+local gates, push and terminal green exact-SHA CI remain required.
 ADR 0117 is accepted for necessary Next corrections, packages
 and mandatory retirement. Row186's candidate static WebP and complete GIF
 animation pass; the maintainer accepted the consolidated ADR0117 FFmpeg extension

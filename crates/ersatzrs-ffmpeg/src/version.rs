@@ -33,6 +33,7 @@ const REQUIRED_FILTERS: &[&str] = &[
     // replacement covered by ADR 0003.
     "drawvg",
     "drawtext",
+    "anullsrc",
     "apad",
     "boxblur",
     "aresample",
@@ -2505,8 +2506,8 @@ mod tests {
         parse_nvidia_encoder_capability, parse_vaapi_profile_entrypoints, parse_version,
         preferred_default_profile_acceleration, videotoolbox_decoder_probe_specs,
         FfmpegCapabilityReport, FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig,
-        FfmpegRuntimeIssue, FfmpegVersion, HardwareAccelerationKind, NvidiaDecoderCapability,
-        VaapiProfileEntrypoint, REQUIRED_MAJOR, REQUIRED_MINOR,
+        FfmpegRuntimeIssue, FfmpegRuntimeReport, FfmpegVersion, HardwareAccelerationKind,
+        NvidiaDecoderCapability, VaapiProfileEntrypoint, REQUIRED_MAJOR, REQUIRED_MINOR,
     };
     use std::collections::BTreeSet;
 
@@ -2817,6 +2818,7 @@ h264_nvenc AVOptions:
             [
                 "drawvg",
                 "drawtext",
+                "anullsrc",
                 "apad",
                 "boxblur",
                 "aresample",
@@ -2845,6 +2847,23 @@ h264_nvenc AVOptions:
                 "zscale",
             ]
         );
+    }
+
+    #[test]
+    fn default_runtime_reports_missing_automatic_null_audio_filter() {
+        let config = FfmpegRuntimeCheckConfig::default();
+        let mut capabilities = FfmpegRuntimeReport::for_tests().capabilities;
+        assert!(capabilities.filters.remove("anullsrc"));
+        let issues = collect_runtime_issues(&config, &capabilities);
+        assert_eq!(
+            issues,
+            vec![FfmpegRuntimeIssue::RequiredFilter {
+                name: "anullsrc".to_owned(),
+            }]
+        );
+        assert!(issues[0].is_error());
+        capabilities.filters.insert("anullsrc".to_owned());
+        assert!(collect_runtime_issues(&config, &capabilities).is_empty());
     }
 
     #[test]

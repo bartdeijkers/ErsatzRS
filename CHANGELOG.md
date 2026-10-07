@@ -22,10 +22,6 @@ release section when tagging a release.
 
 ### Changed
 
-- Local media without an audio stream currently fails native playback.
-  Generated-silence fallback and its acceptance checks remain required before
-  release.
-
 - Share song artwork, BlurHash and multilingual metadata rendering between
   native and Next playback. Keep the native progress bar, preserve literal
   titles, and use default artwork when an optional cover is unavailable.
@@ -51,6 +47,10 @@ release section when tagging a release.
   Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 ### Fixed
+
+- Generate profile-compatible silent audio for native playback of media with
+  confirmed missing audio streams. Preserve disabled and selected audio, source
+  seeking, programme handoff and unprobed input behavior.
 
 - Use selected video or complete audio-stream duration when scheduling local
   media, so subtitles extending beyond the content do not delay the next

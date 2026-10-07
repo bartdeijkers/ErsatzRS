@@ -1,6 +1,7 @@
 //! Opt-in scan-to-playback proof using the published Next and `FFmpeg` packages.
-//! Required: `ERSATZRS_NEXT_TEST_BIN`, `ERSATZRS_NEXT_TEST_FFMPEG`,
-//! `ERSATZRS_NEXT_TEST_FFPROBE`, and matching normal `FFMPEG_PATH`/`FFPROBE_PATH`.
+//! Both cases require `ERSATZRS_NEXT_TEST_FFMPEG`, `ERSATZRS_NEXT_TEST_FFPROBE`,
+//! and matching normal `FFMPEG_PATH`/`FFPROBE_PATH`. The combined native/Next
+//! case additionally requires `ERSATZRS_NEXT_TEST_BIN`; native video-only does not.
 //! Optional `ERSATZRS_ROW194_PROOF_DIR` exports synthetic evidence.
 
 use super::*;
@@ -36,7 +37,7 @@ use tokio::{io::AsyncReadExt, process::Command, sync::RwLock, time::timeout};
 struct Tools {
     ffmpeg: PathBuf,
     ffprobe: PathBuf,
-    next: PathBuf,
+    next: Option<PathBuf>,
 }
 
 #[expect(
@@ -51,10 +52,16 @@ fn required_path(name: &str) -> PathBuf {
 
 impl Tools {
     fn load() -> Self {
+        let mut tools = Self::native();
+        tools.next = Some(required_path("ERSATZRS_NEXT_TEST_BIN"));
+        tools
+    }
+
+    fn native() -> Self {
         let tools = Self {
             ffmpeg: required_path("ERSATZRS_NEXT_TEST_FFMPEG"),
             ffprobe: required_path("ERSATZRS_NEXT_TEST_FFPROBE"),
-            next: required_path("ERSATZRS_NEXT_TEST_BIN"),
+            next: None,
         };
         assert_eq!(PathBuf::from(ersatzrs_ffmpeg::ffmpeg_path()), tools.ffmpeg);
         assert_eq!(
@@ -182,7 +189,88 @@ async fn generate(tools: &Tools, library: &Path) {
     .await;
 }
 
-async fn prove_conflict(tools: &Tools, root: &Path) {
+async fn generate_video_only(tools: &Tools, root: &Path) {
+    let library = root.join("library");
+    tokio::fs::create_dir(&library).await.unwrap();
+    let subtitle = root.join("duration.nl.srt");
+    tokio::fs::write(
+        &subtitle,
+        "1\n00:00:00,000 --> 00:00:20,000\nDutch video-only proof\n",
+    )
+    .await
+    .unwrap();
+    tool(
+        Command::new(&tools.ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-nostdin",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=blue:s=64x64:r=2:d=1",
+                "-i",
+            ])
+            .arg(&subtitle)
+            .args([
+                "-map",
+                "0:v",
+                "-map",
+                "1:s",
+                "-c:v",
+                "libx264",
+                "-threads",
+                "1",
+                "-c:s",
+                "srt",
+                "-metadata:s:s:0",
+                "language=nld",
+                "-metadata:s:s:0",
+                "title=Dutch",
+            ])
+            .arg(library.join("blue.mkv")),
+    )
+    .await;
+    tool(
+        Command::new(&tools.ffmpeg)
+            .args([
+                "-v",
+                "error",
+                "-nostdin",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=red:s=64x64:r=25:d=5",
+                "-map",
+                "0:v",
+                "-c:v",
+                "libx264",
+                "-threads",
+                "1",
+            ])
+            .arg(library.join("red.mkv")),
+    )
+    .await;
+    let red = tool(
+        Command::new(&tools.ffprobe)
+            .args(["-v", "error", "-show_streams", "-of", "json"])
+            .arg(library.join("red.mkv")),
+    )
+    .await;
+    tokio::fs::write(root.join("red-input-probe.json"), &red)
+        .await
+        .unwrap();
+    let red: Value = serde_json::from_slice(&red).unwrap();
+    let streams = red["streams"].as_array().unwrap();
+    assert_eq!(
+        streams.len(),
+        1,
+        "second programme must be genuine video-only media"
+    );
+    assert_eq!(streams[0]["codec_type"], "video");
+}
+
+async fn prove_conflict(tools: &Tools, root: &Path, has_audio: bool) {
     let bytes = tool(
         Command::new(&tools.ffprobe)
             .args([
@@ -256,14 +344,26 @@ async fn prove_conflict(tools: &Tools, root: &Path) {
         .unwrap()
         .iter()
         .any(|stream| stream["codec_type"] == "subtitle" && stream["tags"]["language"] == "nld"));
-    assert!(
-        probe["streams"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|stream| stream["codec_type"] == "audio" && stream["channels"] == 2),
-        "duration fixture must retain normal stereo audio"
-    );
+    let streams = probe["streams"].as_array().unwrap();
+    if has_audio {
+        assert!(
+            streams
+                .iter()
+                .any(|stream| stream["codec_type"] == "audio" && stream["channels"] == 2),
+            "duration fixture must retain normal stereo audio"
+        );
+    } else {
+        assert!(
+            !streams.iter().any(|stream| stream["codec_type"] == "audio"),
+            "video-only fixture must have no manufactured source audio"
+        );
+        assert!(
+            streams
+                .iter()
+                .any(|stream| stream["codec_type"] == "subtitle" && stream["index"] == 1),
+            "subtitle index1 must never be mistaken for source audio"
+        );
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -654,7 +754,10 @@ async fn next(
     configuration.playout.virtual_start = Some(start);
     let output = root.join("next-output");
     let mut process = NextProcess::start_troubleshooting(
-        &tools.next,
+        tools
+            .next
+            .as_ref()
+            .expect("finite Next acceptance requires its published executable"),
         "10",
         &output,
         &configuration,
@@ -758,6 +861,144 @@ async fn decoded(tools: &Tools, playlist: &Path, root: &Path, engine: &str) {
     );
 }
 
+async fn assert_synthetic_silence(tools: &Tools, root: &Path) {
+    let playlist = root.join("native-capture/live.m3u8");
+    let bytes = tool(
+        Command::new(&tools.ffprobe)
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-read_intervals",
+                "%+#1",
+                "-show_packets",
+                "-show_streams",
+                "-of",
+                "json",
+            ])
+            .arg(&playlist),
+    )
+    .await;
+    tokio::fs::write(root.join("native-audio-probe.json"), &bytes)
+        .await
+        .unwrap();
+    let probe: Value = serde_json::from_slice(&bytes).unwrap();
+    let streams = probe["streams"].as_array().unwrap();
+    eprintln!("video-only native generated audio streams: {streams:?}");
+    assert_eq!(
+        streams.len(),
+        1,
+        "native output must contain the synthetic audio track"
+    );
+    assert_eq!(streams[0]["codec_name"], "aac");
+    assert_eq!(streams[0]["channels"], 2);
+    assert_eq!(streams[0]["sample_rate"], "48000");
+    assert!(
+        !probe["packets"].as_array().unwrap().is_empty(),
+        "generated audio must contain actual packets"
+    );
+    // Decode both programmes on the audio sample clock. Do not resample or
+    // remix: the preceding probe proves the producer's actual stereo/48kHz.
+    let pcm = tool(
+        Command::new(&tools.ffmpeg)
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(&playlist)
+            .args([
+                "-map",
+                "0:a:0",
+                "-af",
+                "asetpts=N/SR/TB",
+                "-t",
+                "2",
+                "-c:a",
+                "pcm_s16le",
+                "-f",
+                "s16le",
+                "pipe:1",
+            ]),
+    )
+    .await;
+    tokio::fs::write(root.join("native-audio.s16le"), &pcm)
+        .await
+        .unwrap();
+    assert_eq!(pcm.len() % 4, 0, "complete interleaved stereo PCM frames");
+    let max_amplitude = pcm
+        .chunks_exact(2)
+        .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]).unsigned_abs())
+        .max()
+        .unwrap_or_default();
+    eprintln!(
+        "video-only native decoded silence: {} bytes, max amplitude={max_amplitude}",
+        pcm.len()
+    );
+    tokio::fs::write(root.join("native-silence.json"),serde_json::to_vec_pretty(&json!({"codec":"aac","channels":2,"sample_rate_hz":48000,"pcm_bytes":pcm.len(),"max_amplitude":max_amplitude})).unwrap()).await.unwrap();
+    assert!(
+        pcm.len() >= 2 * 48000 * 2 * 2,
+        "decoded silence must span blue and red programmes"
+    );
+    assert!(
+        max_amplitude <= 1,
+        "generated audio must decode to silence across the programme handoff"
+    );
+}
+
+async fn assert_scanned_video_only(pool: &SqlitePool, scanned: &[Scanned; 2]) {
+    for media in scanned {
+        let audio:i64=sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaStream" WHERE "MediaVersionId"=? AND "MediaStreamKind"=2"#).bind(media.version).fetch_one(pool).await.unwrap();
+        assert_eq!(audio, 0, "persisted probe must confirm no source audio");
+    }
+    let subtitle:i32=sqlx::query_scalar(r#"SELECT "Index" FROM "MediaStream" WHERE "MediaVersionId"=? AND "MediaStreamKind"=3 AND "Language"='nld'"#).bind(scanned[0].version).fetch_one(pool).await.unwrap();
+    assert_eq!(
+        subtitle, 1,
+        "preserve Dutch subtitle index1 without promoting it to audio"
+    );
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Explicit opt-in native video-only synthetic proof export, never production configuration"
+)]
+async fn export_video_only(root: &Path) {
+    if let Some(destination) = env::var_os("ERSATZRS_ROW194_PROOF_DIR") {
+        let destination = PathBuf::from(destination).join("native-video-only");
+        tokio::fs::create_dir_all(&destination).await.unwrap();
+        for name in [
+            "input-probe.json",
+            "red-input-probe.json",
+            "scanned-identities.json",
+            "native-schedule.json",
+            "native-decoded.rgb",
+            "native-packets.json",
+            "native-audio-probe.json",
+            "native-audio.s16le",
+            "native-silence.json",
+        ] {
+            tokio::fs::copy(root.join(name), destination.join(name))
+                .await
+                .unwrap();
+        }
+        let target = destination.join("native-capture");
+        tokio::fs::create_dir(&target).await.unwrap();
+        let mut entries = tokio::fs::read_dir(root.join("native-capture"))
+            .await
+            .unwrap();
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            if matches!(
+                entry
+                    .path()
+                    .extension()
+                    .and_then(|extension| extension.to_str()),
+                Some("ts" | "m3u8")
+            ) {
+                tokio::fs::copy(entry.path(), target.join(entry.file_name()))
+                    .await
+                    .unwrap();
+            }
+        }
+    }
+}
+
 #[expect(
     clippy::disallowed_methods,
     reason = "Optional explicit opt-in synthetic evidence export, never production configuration"
@@ -825,7 +1066,7 @@ async fn local_scanned_content_duration_bounds_native_and_next_handoff() {
     let pool = test_db().await;
     let proof = AssertUnwindSafe(async {
         generate(&tools, &root.path().join("library")).await;
-        prove_conflict(&tools, root.path()).await;
+        prove_conflict(&tools, root.path(), true).await;
         let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
         seed_schedule(&pool, root.path(), &scanned).await;
         let locker = EntityLocker::new();
@@ -848,5 +1089,43 @@ async fn local_scanned_content_duration_bounds_native_and_next_handoff() {
     assert!(
         !path.exists(),
         "successful fixture must remove its owned temporary assets"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires published FFmpeg v2.0.6; genuine scanned video-only native HLS/silent-audio handoff"]
+async fn native_video_only_scanned_duration_synthesizes_silent_audio_and_handoff() {
+    let _ = tracing_subscriber::fmt()
+        .with_test_writer()
+        .with_max_level(tracing::Level::WARN)
+        .try_init();
+    let tools = Tools::native();
+    let root = tempfile::tempdir().unwrap();
+    let pool = test_db().await;
+    let proof = AssertUnwindSafe(async {
+        generate_video_only(&tools, root.path()).await;
+        prove_conflict(&tools, root.path(), false).await;
+        let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
+        assert_scanned_video_only(&pool, &scanned).await;
+        seed_schedule(&pool, root.path(), &scanned).await;
+        native(&pool, &EntityLocker::new(), &tools, root.path(), &scanned).await;
+        assert_synthetic_silence(&tools, root.path()).await;
+        export_video_only(root.path()).await;
+    })
+    .catch_unwind()
+    .await;
+    pool.close().await;
+    if let Err(panic) = proof {
+        eprintln!(
+            "retained synthetic native video-only fixture: {}",
+            root.keep().display()
+        );
+        std::panic::resume_unwind(panic);
+    }
+    let path = root.path().to_path_buf();
+    root.close().unwrap();
+    assert!(
+        !path.exists(),
+        "successful video-only fixture must remove its owned assets"
     );
 }

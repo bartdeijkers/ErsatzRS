@@ -11421,6 +11421,45 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 non-row native null-audio parity checkpoint resolves
+ffmpeg-command-generation/native-video-only-null-audio-fallback. Complete
+persisted/full-probe metadata creates AutomaticSilence only for confirmed
+absence; explicit Disabled/Exact pins, unknown eager pipes, alternate audio,
+source versions and subtitle metadata retain their existing behavior. Fresh
+retained metadata is reclassified after remapping. A shared helper replaces
+only the logical audio with independent lavfi anullsrc, index0/PCM Unknown,
+profile sample rate/stereo input and no inherited source seek/readrate options.
+Copy/None profiles encode generated AAC; profile codec/channels/rate/bitrate,
+normalization and video-copy state are preserved. HLS Direct bounds generated
+audio by the remaining programme duration and admits its encoding through the
+existing capacity path. Song/source/retained timestamp behavior is unchanged.
+Source receipt93daeab7f7188d9833767038ace6d28f5741749b1b7b25e667bcea954456f9d4
+covers1501 inputs at base1643e89e. Published FFmpeg v2.0.6 and pinned
+Next0362692 archives/executables pass checksum checks; pre/post guards agree.
+Linux scanner runtime acf4eb8d-2503-4df6-a670-1bb31df68c20 passes2/2; direct
+runtime e2e87b3b-5286-48d5-a382-e4fc91b9fc3e passes1/1. Genuine blue video0 plus
+Dutch subtitle1 and red video-only inputs have no audio. Normal scan/rescan
+preserves item/version/file identities and1s/5s content duration; scheduling
+places red exactly at blue finish. Actual HLS blue0.25/red1.25 handoff passes,
+with maximum forward packet gap0.5s. Generated AAC/stereo48k decodes384000
+zero PCM bytes over2s. Direct transcode and HLS Direct each seek into red,
+finish2s video/2.026667s AAC padding and decode192000 zero PCM bytes over1s.
+Exact argv preserves HLS Direct video copy while encoding audio. Natural finite
+completion and explicit Stop confirm registry release, capacity restoration and
+owned output/fixture removal. Independent retained-artifact review passes:
+tmp/ucu09-native-null-audio/linux-proof-review.md; original source03 failure and
+source05 audio-bearing duration acceptance are preserved below.
+Native Windows final evidence: source01 native MSVC infra2ede5ee1-1e85-42d9-b7e0-f9ef503a0e7f 14/14 and web5e477cee-83ca-4993-8b33-9101b2e41800 8/8; scanner398f77c8-2598-4493-b4a2-a73308901486 2/2 and directb82d4131-4edf-4f59-8f20-aa1012d38723 1/1. Driver87163 terminal0 includes candidate/root pre/post guards and own-temp cleanup; independent windows-proof-review.md passes. Final source02 preview-only three-state pin representation preserves semantics: receipt5542bf85a58e68da393338aefb98ab6ff3c32ff0047c75bbac2cb39754d5cd18, 1501 inputs, native preview3d98594c-c9e6-49ca-a48f-cef43cdeae59 1/1, driver48530 terminal0 with candidate/root pre/post guards. Source-01-to-02 delta changes only troubleshooting.rs; actual media runtime code, tools and fixtures are unchanged, so source01 media results are reused with their original identity.
+Focused portable regression/argv proof: final source02 Linux12d4ffbc-dee3-475a-b3e4-9e89a56724a5 22/22 plus native Windows source01 22/22 and source02 preview1/1; unchanged FFmpeg capabilityed15be72-80d5-4cd9-b885-a120f7579d35 3/3. Five generated argv snapshots were individually reviewed and accepted; Disabled/Exact/alternate selection, unknown pipe input, fresh retained indexes, source seek, finite duration, copy-video and audio profile contracts pass.
+Required native HTTP smoke/TSDuck: source01 native HTTP smoke --hls-lifecycle passed; TSDuck four transport modes passed87/87, no failure signatures. Driver19634 terminal0 with pre/post source guards; tmp/ucu09-native-null-audio/transport-closeout-01.log. TSDuck is an ordinary calibration-stream transport regression; decoded silence/content and Stop proof are separate application fixtures.
+Final affected strict lint/format: source02 strict cargo clippy for ersatzrs-ffmpeg/infra/scanner/web --all-targets --locked --offline -- -D warnings passed, clippy-final-02.log; cargo fmt --all -- --check passed, fmt-final-02.log; new-clippy-allows-final-02.log passed with no new suppression. Architecture-lint source01 passed and SQL/boundary surface is unchanged by the preview argument representation.
+Final canonical receipt: tmp/ucu09-native-null-audio/acceptance-proof.json SHA256164d177616f15b95796a44b3f20b806dccc635f92b9a597c81b5465dc012c482.
+Live retained hardware retry is not claimed; portable exact argv/selection regressions prove its construction only.
+The approved hardware and ARM/macOS application debt remains unverified. This
+checkpoint does not process a ledger row or advance baseline194, and does not
+claim complete window CI/publication. Continue row195; fourteen rows through
+v26.11.1 and all existing final window/release gates remain required.
+
 2026-10-07 row194 accepted as Adapt under ADR0117. Exact upstream
 fb75ce8ccbc5570bf0e3c12533d87fe359b2d517 changes three files; complete formatless
 delta SHA25675318dac8244637c0a09e85864729232bde031fb9bbcf6046f01c53551120afb.
@@ -11456,10 +11495,12 @@ Source01/03 failures are retained; source03 exposes a genuine preexisting
 video-only native graph defect. Source04 already proved native decoded handoff
 but its unbounded live packet inspection timed out; source05 adds normal finite
 stereo audio and a bounded read without changing handoff assertions/playlists.
-The separate ffmpeg-command-generation/native-video-only-null-audio-fallback
-is unresolved required work, not approved acceptance debt: upstream substitutes
-anullsrc, current Automatic input emits nonexistent [0:1]. The duration pass
-does not waive it; correction/decoded cleanup proof is required before closeout.
+At row194 acceptance the separate
+ffmpeg-command-generation/native-video-only-null-audio-fallback was unresolved
+required work, not approved acceptance debt: upstream substitutes anullsrc,
+while the original Automatic input emitted nonexistent [0:1]. The independent
+audio-bearing duration pass did not waive it. The subsequent non-row checkpoint
+above resolves this defect with separate genuine video-only/cleanup evidence.
 After application proof, remaining changes are documentation/progress, including
 the release-visible unresolved limitation; no additional Rust delta is claimed.
 Canonical evidence: tmp/ucu09-row194/acceptance-proof.json (SHA256

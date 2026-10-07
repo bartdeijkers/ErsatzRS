@@ -19,16 +19,17 @@ use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::{GraphicsRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{
     Channel, ChannelSubtitleMode, ChannelWatermark, ChannelWatermarkImageSource,
-    ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, GraphicsElement,
-    GraphicsElementConfig, HardwareAccelerationKind, MotionEndBehavior, Resolution, StreamingMode,
-    TextGraphicsRenderer, VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    ChannelWatermarkMode, DecoMode, FFmpegProfile, FFmpegProfileAudioFormat, FillerKind,
+    GraphicsElement, GraphicsElementConfig, HardwareAccelerationKind, MotionEndBehavior,
+    Resolution, StreamingMode, TextGraphicsRenderer, VideoScanKind,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
-    ffmpeg_path, ffprobe_path, graphics_element_drawtext_overlay, FrameRate, FrameSize,
-    GraphicsPipelineOverlay, GraphicsRenderContext, GraphicsTemplateRenderer, InputFile,
-    OutputFormat, PixelFormat, SourceAudioCodec, SourceAudioStream, SourceColorParams,
-    SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
-    WatermarkOverlay,
+    ffmpeg_path, ffprobe_path, graphics_element_drawtext_overlay, DesiredVideoState, FrameRate,
+    FrameSize, GraphicsPipelineOverlay, GraphicsRenderContext, GraphicsTemplateRenderer, InputFile,
+    InputKind, OutputFormat, PipelineRequest, PixelFormat, SourceAudioCodec, SourceAudioStream,
+    SourceColorParams, SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind,
+    WatermarkFadePoint, WatermarkOverlay,
 };
 use sqlx::Row;
 
@@ -101,10 +102,14 @@ pub struct CustomStreamSelection {
 ///
 /// `Automatic` preserves normal channel and profile behavior, while
 /// `Disabled` represents the explicit silence encoded by a pinned tuple whose
-/// audio stream index is absent.
+/// audio stream index is absent. `AutomaticSilence` is established only after
+/// successfully reading complete source audio metadata, including a fresh
+/// retained transport probe; an empty default metadata vector is insufficient.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackAudioSelection {
     Automatic,
+    /// Complete source metadata confirms that automatic playback needs silence.
+    AutomaticSilence,
     Exact(usize),
     Disabled,
 }
@@ -114,13 +119,29 @@ impl PlaybackAudioSelection {
     pub const fn stream_index(self) -> Option<usize> {
         match self {
             Self::Exact(index) => Some(index),
-            Self::Automatic | Self::Disabled => None,
+            Self::Automatic | Self::AutomaticSilence | Self::Disabled => None,
         }
     }
 
     #[must_use]
     pub const fn is_disabled(self) -> bool {
         matches!(self, Self::Disabled)
+    }
+
+    /// Classify automatic audio after a complete persisted read or fresh probe.
+    ///
+    /// Explicit disabled and exact selections retain their meaning. Reclassify
+    /// fresh retained metadata so an earlier absence cannot hide newly available
+    /// audio, or make an unknown input appear to have been completely probed.
+    #[must_use]
+    pub fn with_complete_source_audio(self, streams: &[SourceAudioStream]) -> Self {
+        match self {
+            Self::Automatic | Self::AutomaticSilence if streams.is_empty() => {
+                Self::AutomaticSilence
+            }
+            Self::Automatic | Self::AutomaticSilence => Self::Automatic,
+            selection => selection,
+        }
     }
 }
 
@@ -134,6 +155,68 @@ impl From<Option<usize>> for PlaybackAudioSelection {
 pub struct PlaybackProfile {
     pub profile: FFmpegProfile,
     pub resolution: Resolution,
+}
+
+/// Generate audio only for automatic playback with confirmed absent source audio.
+///
+/// Mirrors `FFmpegLibraryProcessService`'s `NullAudioInputFile` fallback. Unknown
+/// metadata, exact pins and explicit disabled audio remain untouched. The lavfi
+/// leg has its own input options and index; the existing output duration bounds
+/// it without applying the original video's source seek a second time.
+pub fn apply_automatic_null_audio(
+    request: &mut PipelineRequest,
+    playback_profile: &PlaybackProfile,
+    selection: PlaybackAudioSelection,
+) {
+    if selection != PlaybackAudioSelection::AutomaticSilence
+        || !request.source_audio_streams.is_empty()
+    {
+        return;
+    }
+
+    let audio = DesiredVideoState::from_profile(
+        &playback_profile.profile,
+        &playback_profile.resolution,
+        None,
+        None,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    let sample_rate = audio.audio_sample_rate.unwrap_or(48_000);
+    let input = InputFile::lavfi_audio(format!(
+        "anullsrc=channel_layout=stereo:sample_rate={sample_rate}"
+    ))
+    .without_readrate();
+    if let Some(audio_input) = request
+        .inputs
+        .iter_mut()
+        .find(|input| input.kind == InputKind::Audio)
+    {
+        *audio_input = input;
+    } else {
+        request.inputs.push(input);
+    }
+    // anullsrc produces pcm_u8, represented by the existing Unknown codec;
+    // encoding the output as AAC must not label its source bytes as AAC.
+    let mut stream = SourceAudioStream::new(SourceAudioCodec::Unknown).with_index(0);
+    stream.channels = Some(2);
+    stream.sample_rate = Some(sample_rate);
+    request.source_audio_streams = vec![stream];
+
+    // HLS Direct strips audio constraints for source copy. Restore only audio
+    // settings for this generated leg, preserving its video copy/color state.
+    request.desired.audio_format = match audio.audio_format {
+        FFmpegProfileAudioFormat::None | FFmpegProfileAudioFormat::Copy => {
+            FFmpegProfileAudioFormat::Aac
+        }
+        format => format,
+    };
+    request.desired.audio_channels = audio.audio_channels;
+    request.desired.audio_sample_rate = Some(sample_rate);
+    request.desired.audio_bitrate = audio.audio_bitrate;
+    request.desired.audio_buffer_size = audio.audio_buffer_size;
+    request.desired.normalize_loudness_mode = audio.normalize_loudness_mode;
+    request.desired.target_loudness = audio.target_loudness;
+    request.desired.pad_audio = true;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -4145,6 +4228,211 @@ mod transient_probe_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn null_audio_profile() -> PlaybackProfile {
+        PlaybackProfile {
+            profile: FFmpegProfile {
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                audio_channels: 2,
+                audio_sample_rate: 48,
+                audio_bitrate: 192,
+                audio_buffer_size: 384,
+                ..FFmpegProfile::default()
+            },
+            resolution: Resolution::default(),
+        }
+    }
+
+    #[test]
+    fn automatic_null_audio_selection_requires_complete_metadata_and_preserves_pins() {
+        let fresh_audio = [SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3)];
+        for selection in [
+            PlaybackAudioSelection::Automatic,
+            PlaybackAudioSelection::AutomaticSilence,
+        ] {
+            assert_eq!(
+                selection.with_complete_source_audio(&[]),
+                PlaybackAudioSelection::AutomaticSilence
+            );
+            assert_eq!(
+                selection.with_complete_source_audio(&fresh_audio),
+                PlaybackAudioSelection::Automatic
+            );
+        }
+        for selection in [
+            PlaybackAudioSelection::Disabled,
+            PlaybackAudioSelection::Exact(99),
+        ] {
+            assert_eq!(selection.with_complete_source_audio(&[]), selection);
+            assert_eq!(
+                selection.with_complete_source_audio(&fresh_audio),
+                selection
+            );
+        }
+        assert_eq!(
+            PlaybackAudioSelection::from(None),
+            PlaybackAudioSelection::Automatic
+        );
+        assert_eq!(
+            PlaybackAudioSelection::AutomaticSilence.stream_index(),
+            None
+        );
+        assert!(!PlaybackAudioSelection::AutomaticSilence.is_disabled());
+    }
+
+    #[test]
+    fn automatic_null_audio_leaves_unknown_disabled_exact_and_actual_audio_unchanged() {
+        let profile = null_audio_profile();
+        for path in ["synthetic-video-only.mkv", "pipe:0"] {
+            for selection in [
+                PlaybackAudioSelection::Automatic,
+                PlaybackAudioSelection::Disabled,
+                PlaybackAudioSelection::Exact(99),
+            ] {
+                let mut request =
+                    PipelineRequest::new(InputFile::video(path), DesiredVideoState::h264_1080p());
+                if selection.is_disabled() {
+                    request = request.without_audio();
+                }
+                let original = request.clone();
+                apply_automatic_null_audio(&mut request, &profile, selection);
+                assert_eq!(request, original, "{path}: {selection:?}");
+            }
+        }
+        let mut request = PipelineRequest::new(
+            InputFile::video("synthetic-dutch.mkv"),
+            DesiredVideoState::h264_1080p(),
+        );
+        let mut actual = SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(3);
+        actual.language = Some("nld".into());
+        actual.title = Some("Dutch SDH".into());
+        request.source_audio_streams = vec![actual];
+        let original = request.clone();
+        apply_automatic_null_audio(
+            &mut request,
+            &profile,
+            PlaybackAudioSelection::AutomaticSilence,
+        );
+        assert_eq!(
+            request, original,
+            "a stale absence classification cannot replace actual fresh audio"
+        );
+    }
+
+    #[test]
+    fn automatic_null_audio_is_independent_of_source_seek_and_retained_input_options() {
+        let profile = null_audio_profile();
+        let video = InputFile::video("pipe:0")
+            .with_stream_index(7)
+            .with_input_options(["-f", "nut"]);
+        let mut request = PipelineRequest::new(video.clone(), DesiredVideoState::h264_1080p());
+        request.inputs.push(InputFile::text_subtitle(
+            "synthetic.srt",
+            SubtitleMethod::Burn,
+        ));
+        request.state.start = Some(Duration::from_secs(90));
+        request.state.duration = Some(Duration::from_secs(20));
+        request.state.output_ts_offset = Some(Duration::from_mins(5));
+        request = request.with_retained_stream_input();
+        let state = request.state.clone();
+        let subtitle = request.inputs[2].clone();
+        apply_automatic_null_audio(
+            &mut request,
+            &profile,
+            PlaybackAudioSelection::AutomaticSilence,
+        );
+        assert_eq!(request.inputs[0], video);
+        assert_eq!(request.inputs[2], subtitle);
+        assert_eq!(request.state, state);
+        assert_eq!(
+            request.inputs[1],
+            InputFile::lavfi_audio("anullsrc=channel_layout=stereo:sample_rate=48000")
+                .without_readrate()
+        );
+        assert_eq!(request.source_audio_streams[0].index, 0);
+        assert_eq!(
+            request.source_audio_streams[0].codec,
+            SourceAudioCodec::Unknown
+        );
+        assert_eq!(request.source_audio_streams[0].channels, Some(2));
+        assert_eq!(request.source_audio_streams[0].sample_rate, Some(48_000));
+        let once = request.clone();
+        apply_automatic_null_audio(
+            &mut request,
+            &profile,
+            PlaybackAudioSelection::AutomaticSilence,
+        );
+        assert_eq!(request, once);
+    }
+
+    #[test]
+    fn automatic_null_audio_restores_profile_audio_without_changing_copy_video() {
+        for (format, expected) in [
+            (FFmpegProfileAudioFormat::Ac3, FFmpegProfileAudioFormat::Ac3),
+            (
+                FFmpegProfileAudioFormat::AacLatm,
+                FFmpegProfileAudioFormat::AacLatm,
+            ),
+            (
+                FFmpegProfileAudioFormat::None,
+                FFmpegProfileAudioFormat::Aac,
+            ),
+            (
+                FFmpegProfileAudioFormat::Copy,
+                FFmpegProfileAudioFormat::Aac,
+            ),
+        ] {
+            let mut profile = null_audio_profile();
+            profile.profile.audio_format = format;
+            profile.profile.audio_channels = 6;
+            profile.profile.audio_sample_rate = 44;
+            profile.profile.normalize_loudness_mode =
+                ersatzrs_domain::NormalizeLoudnessMode::LoudNorm;
+            profile.profile.target_loudness = Some(-16.0);
+            let desired = DesiredVideoState::from_profile(
+                &profile.profile,
+                &profile.resolution,
+                None,
+                None,
+                StreamingMode::HttpLiveStreamingDirect,
+            );
+            let mut expected_desired = desired.clone();
+            expected_desired.audio_format = expected;
+            expected_desired.audio_channels = Some(6);
+            expected_desired.audio_sample_rate = Some(44_000);
+            expected_desired.audio_bitrate = Some(192);
+            expected_desired.audio_buffer_size = Some(384);
+            expected_desired.pad_audio = true;
+            expected_desired.normalize_loudness_mode =
+                ersatzrs_domain::NormalizeLoudnessMode::LoudNorm;
+            expected_desired.target_loudness = Some(-16.0);
+            let mut request = PipelineRequest::new(InputFile::video("synthetic-copy.mkv"), desired);
+            apply_automatic_null_audio(
+                &mut request,
+                &profile,
+                PlaybackAudioSelection::AutomaticSilence,
+            );
+            assert_eq!(request.desired, expected_desired, "{format:?}");
+            assert_eq!(request.source_audio_streams[0].sample_rate, Some(44_000));
+        }
+    }
+
+    #[test]
+    fn automatic_null_audio_defaults_unspecified_sample_rate_to_48khz() {
+        let mut profile = null_audio_profile();
+        profile.profile.audio_sample_rate = 0;
+        let mut request = PipelineRequest::new(
+            InputFile::video("synthetic-video-only.mkv"),
+            DesiredVideoState::h264_1080p(),
+        );
+        apply_automatic_null_audio(
+            &mut request,
+            &profile,
+            PlaybackAudioSelection::AutomaticSilence,
+        );
+        assert_eq!(request.desired.audio_sample_rate, Some(48_000));
+        assert_eq!(request.source_audio_streams[0].sample_rate, Some(48_000));
+    }
 
     fn graphics_startup_context() -> PlaybackGraphicsRenderContext {
         PlaybackGraphicsRenderContext {

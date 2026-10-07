@@ -6,8 +6,8 @@ adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0
 summary    = """
 194/208 rows accepted; rows195-208 remain pending through v26.11.1.
 194 Adapt (0117): scanned content duration reaches normal scheduling and decoded
-native/Next handoff on Linux/Windows. Native no-audio fallback is unresolved
-required work in ffmpeg-command-generation before closeout.
+native/Next handoff on Linux/Windows. Separate native null-audio fallback passes;
+UCU-09 owns exact evidence. Final window gates remain open.
 193 Port: generated preview playlist, current readiness and first-frame seek;
 Linux/Windows runtime, both browsers, strict lint and independent review pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
@@ -93,7 +93,7 @@ id = 'ucu09-row194-content-duration'
 adr = '0117'
 description = 'Use selected content-stream duration for local scans, guarding against FFmpeg 9 Matroska numeric durations synthesized from a longer subtitle/container; preserve video selection and complete-audio fallback.'
 discovered = '2026-10-06'
-evidence = 'Resolved as Adapt under ADR0117: UCU-09 owns unchanged parser/test identity and valid earlier evidence, exact v2.0.6 conflict proof, new normal scan/rescan persistence and Dutch track preservation, adjacent 1s/5s scheduling and actual decoded native/Next handoff on Linux and native Windows. Source05 passes one selected application test per platform (706f8776/370d035c), both engines blue0.25/red1.25, Next6s ENDLIST, bounded packet gaps and owned cleanup. Exact source/tool checks, strict scanner all-target lint, format and independent review pass. The separate demonstrated native-video-only-null-audio-fallback remains unresolved required work before UCU-09 closeout, not waived by this duration acceptance. No FFmpeg binary amendment or browser/schema change is included.'
+evidence = 'Resolved as Adapt under ADR0117: UCU-09 owns unchanged parser/test identity and valid earlier evidence, exact v2.0.6 conflict proof, new normal scan/rescan persistence and Dutch track preservation, adjacent 1s/5s scheduling and actual decoded native/Next handoff on Linux and native Windows. Source05 passes one selected application test per platform (706f8776/370d035c), both engines blue0.25/red1.25, Next6s ENDLIST, bounded packet gaps and owned cleanup. Exact source/tool checks, strict scanner all-target lint, format and independent review pass. At row194 acceptance the separate demonstrated native-video-only-null-audio-fallback remained unresolved required work, not waived by that duration acceptance. The subsequent non-row native checkpoint resolves it with independent genuine video-only Linux/Windows HLS/direct, generated-silence and cleanup proof; UCU-09 owns final evidence. The audio-bearing source05 duration result remains valid independent history. No FFmpeg binary amendment or browser/schema change is included.'
 resolved = true
 
 [[debt]]

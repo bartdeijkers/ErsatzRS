@@ -49,14 +49,14 @@ use crate::hls_delivery::{
     HlsDeliveryState,
 };
 use crate::playback::{
-    enrich_source_video_stream_for_playback, load_channel_playback_profile,
-    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
-    render_playback_graphics_overlays, select_channel_playback_subtitle,
-    select_custom_playback_streams, select_pinned_playback_subtitle,
-    select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
-    subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
-    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    apply_automatic_null_audio, enrich_source_video_stream_for_playback,
+    load_channel_playback_profile, load_channel_target_frame_rate, load_source_audio_streams,
+    load_source_video_stream_by_index, render_playback_graphics_overlays,
+    select_channel_playback_subtitle, select_custom_playback_streams,
+    select_pinned_playback_subtitle, select_playback_audio_stream_index, select_playback_graphics,
+    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
+    watermark_inputs_for_stream, CustomStreamSelection, PlaybackAudioSelection,
+    PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::remote_stream::{
     decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
@@ -1616,6 +1616,15 @@ impl HlsSessionWorker {
             if interval_playback.is_some() {
                 audio_selection =
                     retained_hls_audio_selection(audio_selection, &source_audio_streams);
+            }
+            // Persisted media/external probes and fresh retained transports have
+            // complete metadata. An eager unprobed RemoteStream can have no
+            // stored audio rows without proving that its actual input is silent.
+            if active.remote_stream.is_none()
+                || active.external.is_some()
+                || interval_playback.is_some()
+            {
+                audio_selection = audio_selection.with_complete_source_audio(&source_audio_streams);
             }
             let subtitle = if active.has_pinned_stream_selection {
                 if let Some(stream_index) = active.subtitle_stream_index {
@@ -3497,7 +3506,7 @@ fn retained_hls_audio_selection(
     audio: &[SourceAudioStream],
 ) -> PlaybackAudioSelection {
     match selection {
-        PlaybackAudioSelection::Automatic => audio
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => audio
             .iter()
             .find(|audio| audio.default)
             .or_else(|| audio.first())
@@ -4033,7 +4042,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
             }
         }
         PlaybackAudioSelection::Disabled => request = request.without_audio(),
-        PlaybackAudioSelection::Automatic => {}
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => {}
     }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
@@ -4088,6 +4097,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
         troubleshooting,
     });
 
+    apply_automatic_null_audio(&mut request, playback_profile, audio_selection);
     if let Some(song) = song {
         if input_timeline == HlsInputTimeline::RetainedIntervals {
             request.state.song_progress_start = Some(start_position);
@@ -5662,7 +5672,7 @@ fn playback_output_metadata(
             .and_then(trimmed_string)
     });
     let audio_language = match audio_selection {
-        PlaybackAudioSelection::Disabled => None,
+        PlaybackAudioSelection::Disabled | PlaybackAudioSelection::AutomaticSilence => None,
         PlaybackAudioSelection::Exact(_) => selected_language,
         PlaybackAudioSelection::Automatic => selected_language
             .or_else(|| preferred_audio_language.and_then(trimmed_string))
@@ -6861,6 +6871,284 @@ mod tests {
             retained_hls_audio_selection(PlaybackAudioSelection::Exact(0), &streams),
             PlaybackAudioSelection::Exact(0)
         );
+    }
+
+    #[test]
+    fn retained_hls_automatic_null_audio_classifies_only_fresh_complete_metadata() {
+        let absent = PlaybackAudioSelection::Automatic.with_complete_source_audio(&[]);
+        assert_eq!(
+            retained_hls_audio_selection(absent, &[]),
+            PlaybackAudioSelection::AutomaticSilence
+        );
+        let mut dutch = SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(3);
+        dutch.default = true;
+        dutch.language = Some("nld".into());
+        let fresh = [dutch];
+        let selection = absent.with_complete_source_audio(&fresh);
+        assert_eq!(
+            retained_hls_audio_selection(selection, &fresh),
+            PlaybackAudioSelection::Exact(3)
+        );
+        assert_eq!(
+            retained_hls_audio_selection(PlaybackAudioSelection::Automatic, &[]),
+            PlaybackAudioSelection::Automatic,
+            "empty unclassified metadata is still unknown"
+        );
+        assert!(
+            playback_output_metadata(None, None, Some("nld"), &[], None, absent)
+                .audio_language
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_maps_independent_stream_zero_and_preserves_seek() {
+        let command = build_hls_command(
+            "synthetic-video-with-subtitle.mkv",
+            Path::new("synthetic-hls"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            Duration::from_secs(3),
+            Some(Duration::from_secs(5)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(0)),
+            Vec::new(),
+            PlaybackAudioSelection::Automatic.with_complete_source_audio(&[]),
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let arguments = command.arguments.join(" ");
+        assert!(
+            arguments.contains("[1:0]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(!arguments.contains("[0:1]aresample"), "{arguments}");
+        assert_eq!(
+            command
+                .arguments
+                .iter()
+                .filter(|argument| *argument == "-ss")
+                .count(),
+            1
+        );
+        assert!(arguments.contains("-t 00:00:05"), "{arguments}");
+        let input_contract = command
+            .arguments
+            .windows(2)
+            .filter(|pair| matches!(pair[0].as_str(), "-ss" | "-f" | "-i"))
+            .map(|pair| pair.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(input_contract, @"
+        -ss 00:00:03.0000000
+        -i synthetic-video-with-subtitle.mkv
+        -f lavfi
+        -i anullsrc=channel_layout=stereo:sample_rate=48000
+        -f hls
+        ");
+        insta::assert_snapshot!(arguments);
+    }
+
+    #[test]
+    fn automatic_null_audio_retained_hls_preserves_fresh_video_index_and_clock() {
+        let mut profile = playback_profile();
+        profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+        profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
+        let video = InputFile::video("pipe:0")
+            .with_stream_index(7)
+            .with_input_options(["-f", "nut"]);
+        let command = build_hls_command_with_input_explicit_discontinuity(
+            video,
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            Duration::from_secs(90),
+            Some(Duration::from_secs(20)),
+            Some(Duration::from_mins(5)),
+            &profile,
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(SourceVideoStream::new(SourceVideoCodec::RawVideo).with_index(7)),
+            Vec::new(),
+            PlaybackAudioSelection::AutomaticSilence,
+            None,
+            Vec::new(),
+            Vec::new(),
+            HlsDiscontinuity::Absent,
+            None,
+            HlsInputTimeline::RetainedIntervals,
+            None,
+        )
+        .unwrap();
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("0:7"), "{arguments}");
+        let source_input = command
+            .arguments
+            .iter()
+            .position(|argument| argument == "pipe:0")
+            .unwrap();
+        let audio_input = command
+            .arguments
+            .iter()
+            .position(|argument| argument.starts_with("anullsrc="))
+            .unwrap();
+        assert!(
+            command.arguments[..source_input]
+                .iter()
+                .any(|argument| argument == "-readrate"),
+            "retained source must retain its pacing: {arguments}"
+        );
+        assert!(
+            !command.arguments[source_input + 1..audio_input]
+                .iter()
+                .any(|argument| argument.starts_with("-readrate")),
+            "generated silence must not acquire independent readrate: {arguments}"
+        );
+        assert!(
+            arguments.contains("[1:0]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(
+            command
+                .arguments
+                .iter()
+                .any(|argument| argument == "-copyts"),
+            "{arguments}"
+        );
+        assert!(
+            !command.arguments.iter().any(|argument| argument == "-ss"),
+            "{arguments}"
+        );
+        assert!(
+            !arguments.contains("-codec:v copy") && !arguments.contains("-codec:a copy"),
+            "{arguments}"
+        );
+        let input_contract = command
+            .arguments
+            .windows(2)
+            .filter(|pair| matches!(pair[0].as_str(), "-f" | "-i"))
+            .map(|pair| pair.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(input_contract, @"
+        -f nut
+        -i pipe:0
+        -f lavfi
+        -i anullsrc=channel_layout=stereo:sample_rate=48000
+        -f hls
+        ");
+        insta::assert_snapshot!(arguments);
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_does_not_repair_unknown_or_explicit_selection() {
+        for selection in [
+            PlaybackAudioSelection::Automatic,
+            PlaybackAudioSelection::Disabled,
+            PlaybackAudioSelection::Exact(99),
+        ] {
+            let command = build_hls_command(
+                "pipe:0",
+                Path::new("synthetic-hls"),
+                OutputFormat::Hls,
+                true,
+                false,
+                false,
+                Duration::ZERO,
+                Some(Duration::from_secs(5)),
+                None,
+                &playback_profile(),
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                None,
+                Vec::new(),
+                selection,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+            let arguments = command.arguments.join(" ");
+            assert!(
+                !arguments.contains("anullsrc"),
+                "{selection:?}: {arguments}"
+            );
+            if selection.is_disabled() {
+                assert!(
+                    !arguments.contains("-codec:a") && !arguments.contains("-map [a]"),
+                    "{arguments}"
+                );
+            } else if let Some(index) = selection.stream_index() {
+                assert!(
+                    arguments.contains(&format!("[0:{index}]aresample")),
+                    "{arguments}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_copy_video_uses_profile_audio_encoder() {
+        for (format, encoder) in [
+            (FFmpegProfileAudioFormat::Copy, "aac"),
+            (FFmpegProfileAudioFormat::None, "aac"),
+            (FFmpegProfileAudioFormat::Ac3, "ac3"),
+            (FFmpegProfileAudioFormat::AacLatm, "aac"),
+        ] {
+            let mut profile = playback_profile();
+            profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+            profile.profile.audio_format = format;
+            profile.profile.audio_channels = 6;
+            profile.profile.audio_sample_rate = 44;
+            let command = build_hls_command(
+                "synthetic-copy-video.mkv",
+                Path::new("synthetic-hls"),
+                OutputFormat::Hls,
+                true,
+                false,
+                false,
+                Duration::ZERO,
+                Some(Duration::from_secs(5)),
+                None,
+                &profile,
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(SourceVideoStream::new(SourceVideoCodec::H264)),
+                Vec::new(),
+                PlaybackAudioSelection::AutomaticSilence,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+            let arguments = command.arguments.join(" ");
+            assert!(arguments.contains("-codec:v copy"), "{arguments}");
+            assert!(
+                arguments.contains(&format!("-codec:a {encoder}")),
+                "{arguments}"
+            );
+            assert!(
+                arguments.contains("-ac 6") && arguments.contains("-ar 44k"),
+                "{arguments}"
+            );
+            assert!(
+                arguments.contains("anullsrc=channel_layout=stereo:sample_rate=44000"),
+                "{arguments}"
+            );
+            assert!(!arguments.contains("-codec:a copy"), "{arguments}");
+        }
     }
 
     #[test]

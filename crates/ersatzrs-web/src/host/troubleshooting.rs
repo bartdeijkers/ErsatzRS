@@ -32,8 +32,8 @@ use ersatzrs_infra::{
         resolve_playback_watermarks_by_ids, select_custom_playback_streams,
         select_playback_audio_stream_index, select_playback_graphics, select_playback_subtitle,
         select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
-        CustomStreamSelection, PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext,
-        PlaybackProfile, PlaybackSubtitle,
+        CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+        PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     },
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
@@ -401,6 +401,20 @@ async fn start_playback_preview(
             selector_channel.preferred_audio_title.as_deref(),
         )
     });
+    // Projected add-on items can share their ordinary media kind while still
+    // carrying an eager-unprobed RemoteStream version. Read exact ownership.
+    let source_audio_complete: bool =
+        sqlx::query_scalar(r#"SELECT "RemoteStreamId" IS NULL FROM "MediaVersion" WHERE "Id" = ?"#)
+            .bind(media.media_version_id)
+            .fetch_one(&state.pool)
+            .await?;
+    let audio_selection = native_preview_audio_selection(
+        selected_audio_stream_index,
+        false,
+        None,
+        &source_audio_streams,
+        source_audio_complete,
+    )?;
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
     if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
@@ -429,7 +443,7 @@ async fn start_playback_preview(
         preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        selected_audio_stream_index,
+        audio_selection,
     );
     let spawn_time = Utc::now();
     let opacity_clock = watermark_opacity_clock_at_spawn(
@@ -463,7 +477,7 @@ async fn start_playback_preview(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -695,6 +709,13 @@ async fn start_channel_playback_preview(
             preferred_audio_title,
         )
     });
+    let audio_selection = native_preview_audio_selection(
+        selected_audio_stream_index,
+        active.has_pinned_stream_selection,
+        active.audio_stream_index,
+        &source_audio_streams,
+        active.remote_stream.is_none(),
+    )?;
     let watermark_inputs = preview_channel_watermark_inputs(
         &state.pool,
         &channel,
@@ -751,7 +772,7 @@ async fn start_channel_playback_preview(
         preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        selected_audio_stream_index,
+        audio_selection,
     );
     let opacity_clock = watermark_opacity_clock_at_spawn(
         start_time,
@@ -784,7 +805,7 @@ async fn start_channel_playback_preview(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -802,6 +823,31 @@ async fn start_channel_playback_preview(
         song,
     )
     .await
+}
+
+fn native_preview_audio_selection(
+    selected: Option<usize>,
+    has_pinned_stream_selection: bool,
+    pinned: Option<i32>,
+    streams: &[ersatzrs_ffmpeg::SourceAudioStream],
+    complete: bool,
+) -> ApiResult<PlaybackAudioSelection> {
+    let selection = match (has_pinned_stream_selection, pinned) {
+        (true, Some(index)) => {
+            let index = usize::try_from(index)?;
+            if !streams.iter().any(|stream| stream.index == index) {
+                return Err("pinned preview audio stream is unavailable".into());
+            }
+            PlaybackAudioSelection::Exact(index)
+        }
+        (true, None) => PlaybackAudioSelection::Disabled,
+        (false, _) => PlaybackAudioSelection::from(selected),
+    };
+    Ok(if complete {
+        selection.with_complete_source_audio(streams)
+    } else {
+        selection
+    })
 }
 
 fn programme_preview_time(
@@ -2376,6 +2422,31 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_null_audio_preview_preserves_complete_metadata_and_pinned_silence() {
+        use super::*;
+        use ersatzrs_ffmpeg::{SourceAudioCodec, SourceAudioStream};
+        let audio = [SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3)];
+        assert_eq!(
+            native_preview_audio_selection(None, false, None, &[], true).unwrap(),
+            PlaybackAudioSelection::AutomaticSilence
+        );
+        assert_eq!(
+            native_preview_audio_selection(Some(3), true, None, &audio, true).unwrap(),
+            PlaybackAudioSelection::Disabled
+        );
+        assert_eq!(
+            native_preview_audio_selection(None, true, Some(3), &audio, true).unwrap(),
+            PlaybackAudioSelection::Exact(3)
+        );
+        assert_eq!(
+            native_preview_audio_selection(None, false, None, &[], false).unwrap(),
+            PlaybackAudioSelection::Automatic
+        );
+        assert!(native_preview_audio_selection(None, true, Some(3), &[], true).is_err());
+        assert!(native_preview_audio_selection(None, true, Some(-1), &audio, true).is_err());
+    }
+
     #[test]
     fn media_sample_extension_excludes_url_credentials_and_fragments() {
         for (input, expected) in [

@@ -840,6 +840,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn null_audio_capability_health_reports_missing_filter() {
+        let pool = test_pool().await;
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.capabilities.filters.remove("anullsrc");
+        report.issues = vec![FfmpegRuntimeIssue::RequiredFilter {
+            name: "anullsrc".to_owned(),
+        }];
+        let failed = FFmpegCapabilitiesHealthCheck::new(report, pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(failed.status, HealthCheckStatus::Fail);
+        assert!(failed.message.contains("anullsrc"));
+        let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(ready.status, HealthCheckStatus::NotApplicable);
+    }
+
+    #[tokio::test]
     async fn av1_health_distinguishes_native_hls_next_and_mpegts() {
         let pool = test_pool().await;
         seed_hdr10_profile_and_channel(&pool, 71, "AV1 output", 4, 0, 1).await;

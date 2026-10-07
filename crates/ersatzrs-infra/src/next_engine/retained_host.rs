@@ -286,7 +286,9 @@ pub(super) fn install_fresh_tracks(
             stream_index: Some(u32::try_from(index).map_err(|_| unavailable())?),
         },
         PlaybackAudioSelection::Disabled => super::selection::silent_audio(duration),
-        PlaybackAudioSelection::Automatic => return Err(unavailable()),
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => {
+            return Err(unavailable());
+        }
     };
     item.start = now;
     item.source = None;
