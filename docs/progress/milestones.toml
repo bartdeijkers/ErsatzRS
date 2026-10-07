@@ -11421,6 +11421,23 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row191 accepted as N/A. Upstreamfdf3b13cda2c70f2ef4d2386e11e881068a58f97
+changes six workflow/script files only: manual develop publication, extracted
+prerelease tagging, unsigned CI artifacts/images and separate signing/publish
+branches. Full exact delta SHA256bc667c625dc996bbbc9042bf3386c9cac0be7ea0ce549a7455096ba44e576c2c
+is verified atd36d73245eac0b13c5ace85596d79dd9fa14d2c7. ErsatzRS's independent
+CI verification and tag-triggered release workflow are inspected and hashed;
+neither uses the upstream develop-tag script/.NET reusable artifacts or its
+signing environment. Existing explicit stable/beta publication gates remain.
+Independent substantive review finds no broken Rust counterpart requiring a
+patch. No product/dependency/build/publication behavior changes; no additional
+Cargo/runtime build or release is justified. Canonical exact source/workflow
+proof: tmp/ucu09-row191/acceptance-proof.json. The plan's stale processed-row
+counter is reconciled with the actual ledger. Ordered ledger/baseline/clean
+upstream checkout advance together:191/208 accepted,17 pending; row192 is next.
+No intermediate application push/CI or completion is claimed; final UCU-09
+local gates and terminal green exact-SHA CI remain required.
+
 2026-10-07 row190 accepted as Adapt under ADRs0008/0063/0117. Complete
 ten-file upstream c13ef9c5527dbda6f4563361d00912f1c215a850 diff reviewed;
 upstream bundles FFmpeg8.1.2-4 on macOS, adopts bundled paths once and changes

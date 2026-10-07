@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-190/208 rows accepted; rows191-208 remain pending through v26.11.1.
+191/208 rows accepted; rows192-208 remain pending through v26.11.1.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward are later work and do not reopen UCU-09.
 ADR 0117 accepts qualifying Next corrections.
