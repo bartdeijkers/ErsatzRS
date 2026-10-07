@@ -160,3 +160,25 @@ fn canvas_layers_round_trip_without_affecting_legacy_media_layers() {
     }))
     .is_err());
 }
+
+#[test]
+fn output_frame_rate_wire_accepts_old_video_configs_and_round_trips_optional_rate() {
+    let video = json!({
+        "mode":"copy", "format":"h264", "bit_depth":8, "width":320, "height":180,
+        "filters": { "libplacebo":{"tonemapping":"linear"}, "tonemap":{"tonemap":"linear"}, "tonemap_opencl":{"tonemap":"linear"} }
+    });
+    for rate in [None, Some("25"), Some("24000/1001")] {
+        let mut input = video.clone();
+        if let Some(rate) = rate {
+            input["frame_rate"] = json!(rate);
+        }
+        let parsed: Video = serde_json::from_value(input).unwrap();
+        assert_eq!(parsed.frame_rate.as_deref(), rate);
+        let output = serde_json::to_value(parsed).unwrap();
+        assert_eq!(
+            output.get("frame_rate").and_then(serde_json::Value::as_str),
+            rate
+        );
+        assert_eq!(output["mode"], "copy");
+    }
+}

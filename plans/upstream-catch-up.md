@@ -4,11 +4,35 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-198 are accepted; rows199-208 are the 10 remaining in-scope
+verified). Rows1-199 are accepted; rows200-208 are the 9 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 199 source map and acceptance
+
+Accepted slice: `df6ae228`, Next output frame-rate normalization. Port:
+channel schema0.1.1 has an optional target derived from the selected scheduled
+versions and requested profile, including mirrors. Integer/rational/NTSC
+conversion matches upstream; unknown0/0 probe hints preserve startup without
+publishing an unusable target. Disabled normalization avoids unnecessary reads.
+
+Eleven focused cases on each Linux and native Windows platform, strict infra
+all-target lint and three actual playback cases per platform pass. Decoded
+integer normalization, original-rate passthrough and rational mirror output
+retain selected Dutch audio, Convert/Burn captions, exact pins and full persisted
+state. Matching coded-video slices copy unchanged; mismatched sources transcode.
+Independent reviews recompute every-frame cadence, measured source-clock
+precision, cumulative phase, audio/pixels, payload identity and owned cleanup.
+The original failed disabled-only oracle is preserved; its correction accounts
+for original Matroska timestamp precision and still rejects drift/missing frames.
+
+UCU-09 owns exact frozen-source and canonical acceptance proof. No runtime
+package build, browser, hardware, other-platform or full-CI claim is introduced.
+Final integrated/window/release gates remain open. Continue at row200, whose
+Next default is maintainer-approved only with bundled or verified automatic
+runtime acquisition; existing channel selections and explicit Native remain.
 
 ## Row 198 source map and acceptance
 
@@ -5711,7 +5735,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | N/A | Upstream .NET publish symbols and EF bulk-extension dependency | `docs(status): reconcile Windows artifact-size policy` | ucu-09; exact two-file delta and current release/profile/staging inputs reviewed. Rust/SQLx has neither .NET dependency; release strip and explicit named application executable staging exclude build-directory PDBs. Four Rust application executables plus pinned Next/companions are staged; checksum/provenance inspection of the existing Windows Next archive confirms only expected members, no PDB. No runtime correction/build/release required; final archive execution and all window gates remain independently required. UCU-09 owns exact proof. |
 | 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | Covered | Shared custom subtitle eligibility and Next selected-version projection | `test(infra): verify extracted Next custom subtitle selection` | ucu-09; shared filter already excludes unextracted text outside HLS Direct for both engines. Explicit Next/Segmenter SQL/YAML fixture selects extracted English subtitle4/index5 after rejecting the first unextracted candidate, preserving audio1 through actual wire projection. Four focused eligibility/settings/bitmap/pin cases, strict infra lint, source guards and substantive review pass. Selector rustdoc and release overview now state the existing contract. No new sidecar decoding, Windows execution, runtime policy/package or generated argv change; UCU-09 owns exact proof and final gates. |
 | 198 | `897a6ef9` | fix: coerce next channels to supported streaming modes (#3062) | Port | Cached Next IPTV transport dispatch and existing HLS session ownership | `fix(web): preserve cached Next streaming URLs` | ucu-09; resolved legacy TS uses the existing hybrid wrapper; Next-first HLS dispatch remains covered. Five portable routing/authentication regressions, strict lint, 26 native Windows routing/artwork tests and actual Linux/Windows TS/reconnect/HLS Dutch audio/caption decoding pass. State preservation, disconnect/preview/restart/idle cleanup and independent raw-artifact review pass; exact published FFmpeg v2.0.6/Next036 reused. UCU-09 owns canonical proof and final gates; no package, browser, hardware or other-platform claim. |
-| 199 | `df6ae228` | feat: next output frame rate (#3063) | | | | ucu-09; provisional: Port (channel config schema 0.1.1). Adds an output `frame_rate` to the Next video section, derived from the channel framerate and normalization setting, with a converter that normalizes decimal rates (including exact NTSC mappings), preserves valid integers/rationals, and rejects unusable rates outside 1–240 fps. ErsatzRS only carries `frame_rate` as a source probe hint (`crates/ersatzrs-infra/src/next_engine/protocol.rs:368`); the channel config's video section has no output frame rate at all, so this depends on the row 184 schema work. Claude 2026-10-06 triage. |
+| 199 | `df6ae228` | feat: next output frame rate (#3063) | Port | Next channel/protocol, selected-version sampling and mirror configuration | `feat(infra): normalize scheduled output frame rates` | ucu-09; channel0.1.1 optional output rate matches integer/rational/NTSC behavior and selected exact versions; requested mirror profile controls normalization. Unknown0/0 probe sentinel preserves startup without emitting an invalid target. Eleven focused cases per Linux/Windows plus three actual runtime cases per platform pass: compatible coded-video copy, mismatched transcode, disabled source cadence, requested rational mirror, Dutch audio/Convert/Burn, exact persisted selections and owned cleanup. Strict infra lint, frozen1503 inputs and independent raw-artifact reviews pass. Original failure and measured disabled-only source-clock oracle correction are retained with drift/dropped/duplicate counterexamples. No package change/browser/hardware/other-platform/fullCI claim; UCU-09 owns exact proof and final gates. |
 | 200 | `a3bbf89d` | feat: next engine by default (#3064) | | | | ucu-09; provisional: Adapt under ADR 0095, and deliberately not in full. A migration flips every existing channel to the Next engine and rewrites unsupported streaming modes, new channels default to Next, and legacy-only options are hidden. ErsatzRS keeps the native pipeline primary with Next as an accepted optional second engine, so neither the migration nor the default may be copied; the portable half is the editor hiding options that do not apply to the selected engine. A maintainer decision is needed before any default changes. Claude 2026-10-06 triage. |
 | 201 | `33cabcf1` | fix: next channel troubleshooting (#3065) | | | | ucu-09; provisional: Port. Troubleshooting builds a dedicated Next process over a fixed 30-second window instead of reusing the legacy playout-item path, and the channel framerate query gains an ignore-profile mode so an un-normalized profile still yields a rate. ErsatzRS varies only the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:110`), so this lands on the same surface as pending row 193 and should be audited with it. Claude 2026-10-06 triage. |
 | 202 | `6c7c4e69` | build: release from a pushed tag (#3066) | | | | ucu-09; provisional: N/A (upstream-only release workflow: a prep-release script and a tag-triggered publish). ErsatzRS already releases from a pushed tag with its own CI, as rows 179 and 191 recorded. Claude 2026-10-06 triage. |

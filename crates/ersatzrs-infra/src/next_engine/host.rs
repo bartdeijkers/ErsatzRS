@@ -163,7 +163,7 @@ impl NextHost {
         true
     }
 
-    async fn configuration(
+    pub(super) async fn configuration(
         &self,
         request: &NextStart,
     ) -> Result<super::protocol::ChannelConfig, ProcessError> {
@@ -193,6 +193,10 @@ impl NextHost {
             &request.ffprobe,
         )
         .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+        configuration.normalization.video.frame_rate =
+            config::channel_frame_rate(&self.pool, &channel, &profile)
+                .await
+                .map_err(|_| ProcessError::Preparation("target frame rate read"))?;
         configuration.normalization.subtitle.fonts_folder = Some(
             crate::file_system_layout::fonts_cache_folder()
                 .to_str()

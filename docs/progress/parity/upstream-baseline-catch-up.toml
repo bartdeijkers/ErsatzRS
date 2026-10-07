@@ -4,11 +4,11 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-198/208 accepted; rows199-208 pending through v26.11.1.
-198 Port: cached Next TS/HLS, decoded Linux/Windows and cleanup pass;
-26 native routing/artwork tests, strict lint and independent reviews pass.
-197 Covered: extracted custom text wins; four cases and lint pass.
-196 N/A: .NET PDB/dependency change; Rust/Next staging verified.
+199/208 accepted; rows200-208 pending through v26.11.1.
+199 Port: output rates, selected pins/mirror/copy/audio/captions;
+Linux/Windows11 focused and3 actual each, lint and independent reviews pass.
+198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
+196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
 195 Port: local deep scan, confirmations and fresh artwork; Linux/Windows
 restart, 12 browser cases and lint pass. UCU-09 owns exact evidence and reuse.
 194 Adapt (0117): content duration/native-Next handoff and generated silence

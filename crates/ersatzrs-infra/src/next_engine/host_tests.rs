@@ -341,3 +341,232 @@ async fn unconfirmed_cleanup_quarantines_capacity_but_reaped_failure_does_not() 
     )
     .is_some());
 }
+
+async fn output_frame_rate_host_fixture(
+) -> (NextHost, ersatzrs_domain::Channel, chrono::DateTime<Utc>) {
+    use ersatzrs_core::repositories::FfmpegProfileRepository as _;
+    use ersatzrs_domain::{
+        Channel, ChannelPlayoutSource, FFmpegProfile, FFmpegProfileAudioFormat,
+        FFmpegProfileVideoFormat, NextEngineTextSubtitleMode, StreamingEngine,
+    };
+    let (pool, locker, source, start) = super::super::schedule::tests::fixture().await;
+    for sql in [
+        r#"UPDATE "MediaVersion" SET "RFrameRate"='30' WHERE "Id"=100"#,
+        r#"INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","MovieId","Height","Width","VideoScanKind","RFrameRate") VALUES (101,'2026-09-22','2026-09-22','00:01:00',10,180,320,0,'25')"#,
+        r#"INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (3,101,'media/pinned-alternate.mkv','pinned-alternate')"#,
+        r#"INSERT INTO "MediaStream" ("Id","Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId") VALUES (6,0,'h264',1,NULL,0,NULL,1,0,101),(7,2,'aac',2,'nld',2,'Dutch',0,0,101),(8,4,'subrip',3,'eng',0,'English',1,0,101)"#,
+        r#"UPDATE "PlayoutItem" SET "MediaVersionId"=101,"VideoStreamIndex"=0,"AudioStreamIndex"=2,"SubtitleStreamIndex"=4 WHERE "Id"=2"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    let repos = crate::repositories::make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&FFmpegProfile {
+            id: 2,
+            resolution_id: 1,
+            normalize_framerate: true,
+            video_format: FFmpegProfileVideoFormat::Hevc,
+            audio_format: FFmpegProfileAudioFormat::Ac3,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let mirror = Channel {
+        id: 2,
+        number: "2".into(),
+        name: "Frame rate mirror".into(),
+        ffmpeg_profile_id: 2,
+        playout_source: ChannelPlayoutSource::Mirror,
+        mirror_source_channel_id: Some(source.id),
+        playout_offset: Some(chrono::Duration::seconds(3)),
+        streaming_engine: StreamingEngine::Next,
+        preferred_audio_language_code: Some("eng".into()),
+        preferred_subtitle_language_code: Some("nld".into()),
+        next_engine_text_subtitle_mode: NextEngineTextSubtitleMode::Convert,
+        ..Default::default()
+    };
+    repos.channel.upsert(&mirror).await.unwrap();
+    assert!(
+        !load_channel_playback_profile(&pool, source.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .profile
+            .normalize_framerate
+    );
+    assert_eq!(
+        super::super::schedule::frame_rates(&pool, mirror.id)
+            .await
+            .unwrap(),
+        Vec::<String>::new()
+    );
+    (
+        NextHost::new(pool, locker, "fixture/frame-rate-playout".into()),
+        mirror,
+        start,
+    )
+}
+
+async fn assert_output_frame_rate_host_preserves_exact_tracks(
+    host: &NextHost,
+    mirror: &ersatzrs_domain::Channel,
+    start: chrono::DateTime<Utc>,
+) {
+    let target_start = start + mirror.playout_offset.unwrap();
+    let schedule = super::super::schedule::read_locked(
+        &host.pool,
+        &host.locker,
+        mirror,
+        target_start,
+        target_start + chrono::Duration::minutes(2),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(schedule.items.len(), 2);
+    assert_eq!(schedule.items[0].media_version_id, 100);
+    let pinned = &schedule.items[1];
+    assert_eq!(pinned.media_version_id, 101);
+    assert_eq!(pinned.media_file_id, 3);
+    assert_eq!(pinned.path, "media/pinned-alternate.mkv");
+    assert_eq!(
+        pinned.item.pinned_stream_selection,
+        Some(ersatzrs_domain::PinnedStreamSelection {
+            media_version_id: 101,
+            video_stream_index: 0,
+            audio_stream_index: Some(2),
+            subtitle_stream_index: Some(4),
+        })
+    );
+    let profile = load_channel_playback_profile(&host.pool, mirror.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let projected = super::super::selection::project_item(
+        &host.pool,
+        mirror,
+        &pinned.item,
+        pinned.media_version_id,
+        super::super::protocol::Source::Local {
+            path: pinned.path.clone(),
+            probe_hint: None,
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        &profile.resolution,
+    )
+    .await
+    .unwrap();
+    let wire = serde_json::to_value(projected).unwrap();
+    assert_eq!(wire["tracks"]["video"]["stream_index"], 0);
+    assert_eq!(
+        wire["tracks"]["audio"]["stream_index"], 2,
+        "exact Dutch track must survive conflicting English preference"
+    );
+    assert_eq!(
+        wire["tracks"]["subtitle"]["stream_index"], 4,
+        "exact English caption must survive conflicting Dutch preference"
+    );
+}
+
+#[tokio::test]
+async fn output_frame_rate_host_ordinary_and_preview_use_mirror_source_and_requested_profile() {
+    let (host, mirror, start) = output_frame_rate_host_fixture().await;
+    assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
+    for normalize in [true, false] {
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "NormalizeFramerate"=? WHERE "Id"=2"#)
+            .bind(normalize)
+            .execute(&host.pool)
+            .await
+            .unwrap();
+        for preview in [false, true] {
+            let mut start_request = request(preview);
+            start_request.channel_id = mirror.id;
+            start_request.number.clone_from(&mirror.number);
+            let config = host.configuration(&start_request).await.unwrap();
+            let wire = serde_json::to_value(config).unwrap();
+            assert_eq!(
+                wire["version"],
+                "https://ersatztv.org/channel/version/0.1.1"
+            );
+            if normalize {
+                assert_eq!(wire["normalization"]["video"]["frame_rate"], "25");
+            } else {
+                assert!(wire["normalization"]["video"].get("frame_rate").is_none());
+            }
+            assert_eq!(
+                wire["normalization"]["video"]["format"],
+                if preview { "h264" } else { "hevc" }
+            );
+            assert_eq!(
+                wire["normalization"]["audio"]["format"],
+                if preview { "aac" } else { "ac3" }
+            );
+            assert_eq!(wire["normalization"]["subtitle"]["mode"], "convert");
+            if preview {
+                assert_eq!(wire["normalization"]["video"]["bit_depth"], 8);
+            }
+            assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
+        }
+    }
+    host.pool.close().await;
+}
+
+#[tokio::test]
+async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_exact_pins() {
+    use ersatzrs_core::repositories::PlayoutRepository as _;
+    let (host, mirror, start) = output_frame_rate_host_fixture().await;
+    let repos = crate::repositories::make_repositories(host.pool.clone());
+    let finish = start + chrono::Duration::minutes(2);
+    let items_before = repos
+        .playout
+        .items_in_range(1, start, finish)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaVersion" SET "RFrameRate"='0/0' WHERE "Id"=100"#)
+        .execute(&host.pool)
+        .await
+        .unwrap();
+    for alternate in ["0/0", "25"] {
+        sqlx::query(r#"UPDATE "MediaVersion" SET "RFrameRate"=? WHERE "Id"=101"#)
+            .bind(alternate)
+            .execute(&host.pool)
+            .await
+            .unwrap();
+        let stored_before: Vec<(i64, String)> = sqlx::query_as(
+            r#"SELECT "Id","RFrameRate" FROM "MediaVersion" WHERE "Id" IN (100,101) ORDER BY "Id""#,
+        )
+        .fetch_all(&host.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            stored_before,
+            [(100, "0/0".to_owned()), (101, alternate.to_owned())]
+        );
+        for preview in [false, true] {
+            let mut start_request = request(preview);
+            start_request.channel_id = mirror.id;
+            start_request.number.clone_from(&mirror.number);
+            let config = host.configuration(&start_request).await.expect(
+                "known unknown-rate source metadata must not refuse Next startup configuration",
+            );
+            assert!(config.normalization.video.frame_rate.is_none());
+            assert_eq!(
+                config.version.as_deref(),
+                Some("https://ersatztv.org/channel/version/0.1.1")
+            );
+            assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
+            assert_eq!(repos.playout.items_in_range(1,start,finish).await.unwrap(),items_before,
+                "sampling must preserve every exact version/video/audio/subtitle pin and programme clock");
+            let stored_after: Vec<(i64,String)> = sqlx::query_as(
+                r#"SELECT "Id","RFrameRate" FROM "MediaVersion" WHERE "Id" IN (100,101) ORDER BY "Id""#)
+                .fetch_all(&host.pool).await.unwrap();
+            assert_eq!(
+                stored_after, stored_before,
+                "unknown rate metadata must not be rewritten"
+            );
+        }
+    }
+    host.pool.close().await;
+}

@@ -180,6 +180,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
             wire::StreamMode::Transcode
         },
         format,
+        frame_rate: None,
         bit_depth: match (profile.video_format, profile.bit_depth) {
             (FFmpegProfileVideoFormat::Mpeg2Video, _) | (_, FFmpegProfileBitDepth::EightBit) => 8,
             (_, FFmpegProfileBitDepth::TenBit) => 10,
@@ -213,6 +214,102 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
             .filter(|path| !path.trim().is_empty()),
         vaapi_driver,
     })
+}
+
+/// Sample the effective scheduled source using the requested channel's profile.
+/// Troubleshooting does not call this: its output retains the selected source rate.
+///
+/// # Errors
+/// Returns scheduled metadata read errors or malformed rate values.
+pub(super) async fn channel_frame_rate(
+    pool: &crate::db::DbPool,
+    channel: &ersatzrs_domain::Channel,
+    playback: &PlaybackProfile,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    if !playback.profile.normalize_framerate {
+        return Ok(None);
+    }
+    let context = crate::channel_playout::ChannelPlayoutContext::for_channel(channel);
+    let rates = super::schedule::frame_rates(pool, context.source_channel_id).await?;
+    target_frame_rate(rates)
+}
+
+fn target_frame_rate(
+    mut rates: Vec<String>,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    let mut parsed = Vec::with_capacity(rates.len());
+    for value in &rates {
+        let rate = frame_rate_value(value).ok_or_else(|| {
+            ersatzrs_core::repositories::RepositoryError::Decode {
+                kind: "channel target frame rate",
+                value: value.clone(),
+            }
+        })?;
+        parsed.push((value.clone(), rate));
+    }
+    rates.sort();
+    rates.dedup();
+    if rates.len() <= 1 {
+        return Ok(None);
+    }
+    let target = parsed
+        .iter()
+        .filter(|(_, rate)| *rate > 23.0)
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map_or("24", |(value, _)| value.as_str());
+    Ok(next_frame_rate(target))
+}
+
+fn frame_rate_value(value: &str) -> Option<f64> {
+    let value = value.trim();
+    // ffprobe's unknown-rate sentinel remains valid source metadata. Upstream
+    // FrameRate ranks it as 24; next_frame_rate still rejects it as an output
+    // target, so sampling cannot turn unknown timing into a startup refusal.
+    if value == "0/0" {
+        return Some(24.0);
+    }
+    let rate = if let Some((numerator, denominator)) = value.split_once('/') {
+        numerator.parse::<f64>().ok()? / denominator.parse::<f64>().ok()?
+    } else {
+        value.parse::<f64>().ok()?
+    };
+    rate.is_finite().then_some(rate)
+}
+
+// ChannelConfigConverter.ToNextFrameRate at upstream df6ae228.
+// The pinned Next parser requires every rational component to fit u32.
+fn next_frame_rate(value: &str) -> Option<String> {
+    let value = value.trim();
+    let parts = value.split('/').collect::<Vec<_>>();
+    if parts.len() <= 2
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        let numerator = parts[0].parse::<u32>().ok()?;
+        let denominator = parts.get(1).copied().unwrap_or("1").parse::<u32>().ok()?;
+        if numerator == 0
+            || denominator == 0
+            || numerator < denominator
+            || u64::from(numerator) > u64::from(denominator) * 240
+        {
+            return None;
+        }
+        return Some(value.to_owned());
+    }
+    let rate = value.parse::<f64>().ok()?;
+    if !rate.is_finite() || !(1.0..=240.0).contains(&rate) {
+        return None;
+    }
+    let integer = rate.round_ties_even();
+    if (rate - integer).abs() < 0.001 {
+        return Some(format!("{integer:.0}"));
+    }
+    let ntsc = (rate * 1.001).round_ties_even();
+    if (rate * 1.001 - ntsc).abs() < 0.005 {
+        return Some(format!("{:.0}/1001", ntsc * 1000.0));
+    }
+    Some(format!("{:.0}/1000", (rate * 1000.0).round_ties_even()))
 }
 
 fn positive(value: i32) -> Option<u32> {

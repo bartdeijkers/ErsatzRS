@@ -61,12 +61,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row198 accepted; complete rows199-208 through
-upstream v26.11.1 (46118d43); rows209 onward remain separate work. Row198
-preserves cached Next TS/HLS modes with decoded Linux/Windows audio/captions,
-state preservation, restart/idle cleanup and independent raw-artifact reviews.
-Five portable routing/authentication tests, strict lint and 26 native Windows
-routing/artwork tests pass. Continue199 output frame-rate normalization.
+2026-10-07 UCU-09 boundary: row199 accepted; complete rows200-208 through
+upstream v26.11.1 (46118d43); rows209 onward remain separate work. Row199
+output-rate normalization passes11 focused and3 actual runtime cases on each
+Linux/Windows platform, strict lint and independent artifact reviews; exact
+pins, copy identity, Dutch audio/captions, mirror settings and cleanup hold.
+Continue200: the maintainer accepts a new Next default only when ErsatzRS always
+bundles or automatically downloads/verifies the engine. Existing channel
+selections and explicit Native remain; runtime/default/browser proof is pending.
+Row198 cached Next TS/HLS and26 native routing/artwork checks remain valid.
 Local deep scan retains real Linux/Windows scanner/durable admission/restart,
 international-track identity, same-mtime recovery, eight Libraries and four
 artwork-cache browser cases. Final source06/cache proof and explicit native

@@ -126,7 +126,7 @@ fn aac_frames(bytes: &[u8]) -> Vec<&[u8]> {
     frames
 }
 
-fn video_slices(bytes: &[u8]) -> Vec<&[u8]> {
+pub(super) fn video_slices(bytes: &[u8]) -> Vec<&[u8]> {
     let starts: Vec<usize> = bytes
         .windows(3)
         .enumerate()

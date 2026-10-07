@@ -11421,6 +11421,52 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row199 accepted as Port. Exact upstream
+df6ae228fa5e92528977a9bd0ccd836742765322 adds optional Next output frame rate, channel schema0.1.1.
+Sampling uses the selected scheduled versions/video pins, source playout for
+mirrors and the requested channel profile. Integer/rational/decimalNTSC target
+conversion, mixed-only policy and valid1..240/u32 bounds match the accepted
+runtime. Normalizationoff avoids sampling; recognized ffprobe0/0 ranks as24
+without emitting an invalid target or refusing existing homogeneous startup.
+Standalone troubleshooting remains source-rate; native policy is unchanged.
+Frozen source-row199-05 receipt
+00002e8c1a439b12676a530d55e697e61f1e2ebc3f7ffba31c1d14254fff59ae
+covers1503 inputs at basef9507ac8. Linux focused nextest
+e163dc54-8dcc-4e45-8b6d-ea275378819b passes11/11; strict infra all-target Clippy,
+format, new-allow policy and source pre/post guards pass. Native Windows focused
+b1a9b0e2-f0c5-4be3-aaba-e00bf3fbaec1 also passes11/11 before runtime overrides.
+Actual Linux9c416440-73ad-459a-847b-03099b260700 and native Windows
+ed3f900a-ff2f-4f93-ac69-2317f1854a6a each pass3/3 through production NextHost
+with checksum-verified published FFmpeg v2.0.6 and Next036. Compatible25fps
+copies120 coded slices unchanged; mismatched30fps normalizes25fps with100 changed
+slices. Disabled25/30 retains120 copied slices each and original quantized source
+cadence. Requested mirror normalization yields96 frames at24000/1001,320x180,
+selected Dutch880Hz audio and burned captions (Linux35/33 white pixels,
+Windows53/48). Convert cases retain timed DutchVTT with0 burned white pixels.
+All frames identify the correct programme; exact persisted selections, schedule,
+channel/source/requested profiles, Stop/reap, callback/output/registry absence
+and capacity0 pass. Independent reviews recompute every-frame timing/phase,
+raw AnnexB payloads, PCM/RGB, manifests and cleanup from186 artifact hashes on
+each platform. Automatic normalized timing keeps its strict oracle. Original
+Linux01 test-oracle failure remains retained: actual original Matroska1ms clock
+explains33/34ms source spacing; only disabled passthrough now uses measured
+source+remux precision and cumulative phase. Counterexamples reject29.5fps drift,
+dropped and duplicate frames; no production or accepted requirement is relaxed.
+Linux canonical proof 8fc99a83ee6195e5e0bbfe73ac6938f12f4ee75b406208b59436b3588bd49dd1
+and Linux independent reviewf3b293b4;
+Windows canonical proof b23a79d14dd071e38f53f17ab6e7e2a0e4be79426b4afa2773501feb0693af88
+and independent native review6bbc154473af52f66293e2161246e84ec955be2bf1228e2f09c85e36cae19595.
+Canonical row199 proof tmp/ucu09-row199/acceptance-proof.json
+SHA2567ee05567f31aaf10a149edb9394c05a57716e39779e5a47e2ab1399fefd269d1. Pin/ledger advance199/208 with9 pending.
+No dependency package change, browser/hardware/other-platform/fullCI/push/release
+or milestone-completion claim; final integrated/window gates and exact-SHA CI
+remain. Continue200 under the maintainer's accepted condition: defaultNext only
+with always-bundled or verified automatic acquisition, preserving stored engines
+and explicit Native. Both candidate source reviews pass after correcting hash
+validation before automatic health execution and stored-channel preview
+ownership when both channel/media IDs are supplied; implementation/runtime/UI
+acceptance remains pending.
+
 2026-10-07 row198 accepted as Port. Exact upstream
 897a6ef936c23fedc3a29111c0cc04625eefbec1 coerces cached Next TS/HLS modes.
 Resolved Next Legacy requests now use the existing HybridWrapper; native

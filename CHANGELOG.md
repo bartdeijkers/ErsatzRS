@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Normalize Next output frame rates to the lowest scheduled rate above 23 fps,
+  preserving rational rates and selected audio/subtitles. Copy compatible video
+  at the target rate and transcode mismatched sources (upstream #3063).
+
 - Deep-scan local libraries to refresh unchanged television episodes and
   cached track metadata. Confirm library and external-collection deep scans
   before queuing them, with localized warnings about longer scan times.

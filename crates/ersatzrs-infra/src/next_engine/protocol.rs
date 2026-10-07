@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
-pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.0";
+pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.1";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -107,6 +107,9 @@ pub struct Loudness {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Video {
+    /// Output rate: frames are dropped/repeated; copy applies only at this rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<String>,
     #[serde(default)]
     pub mode: StreamMode,
     pub format: VideoFormat,

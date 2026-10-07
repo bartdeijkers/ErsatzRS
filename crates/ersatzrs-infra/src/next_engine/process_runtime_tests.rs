@@ -1281,3 +1281,6 @@ mod rotation_runtime_tests;
 
 #[path = "copy_runtime_tests.rs"]
 mod copy_runtime_tests;
+
+#[path = "output_frame_rate_runtime_tests.rs"]
+mod output_frame_rate_runtime_tests;
