@@ -17,11 +17,11 @@ use crate::{
     pad_filter, pad_vaapi_filter, pad_vaapi_software_filter, pipe_output, preserve_hdr10_filter,
     progress_to_stdout, realtime_filter, reset_pts_filter, scale_subtitle_image_filter,
     sdr_to_hdr10_cuda_filter, sdr_to_hdr10_filter, select_forced_software_video_decoder,
-    select_software_video_decoder, select_video_decoder, standard_format_flags,
-    still_image_loop_filter, strip_dolby_vision_metadata_filter, subtitle_overlay_cuda_filter,
-    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
-    subtitles_filter, time_limit, tonemap_filter_for, unknown_source_scale_filter,
-    vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    select_software_video_decoder, select_video_decoder, song_progress_filter,
+    standard_format_flags, still_image_loop_filter, strip_dolby_vision_metadata_filter,
+    subtitle_overlay_cuda_filter, subtitle_overlay_filter, subtitle_overlay_vaapi_filter,
+    subtitle_scale_npp_filter, subtitles_filter, time_limit, tonemap_filter_for,
+    unknown_source_scale_filter, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
     watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
     watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
     yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter,
@@ -126,7 +126,16 @@ pub struct OutputMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Song progress, retained timestamps, progress reporting and metadata mapping are independent output settings"
+)]
 pub struct FfmpegState {
+    /// Native song progress uses original content seek while PNG starts at zero.
+    pub song_progress_start: Option<Duration>,
+    /// Explicit zero for native callers which already rebase text subtitles.
+    pub song_text_subtitle_start: Option<Duration>,
+    pub song_with_progress: bool,
     /// Preserve the already-edited common clock of the provider's NUT stream.
     pub retained_stream_timestamps: bool,
     pub output_format: OutputFormat,
@@ -144,6 +153,9 @@ pub struct FfmpegState {
 impl Default for FfmpegState {
     fn default() -> Self {
         Self {
+            song_progress_start: None,
+            song_text_subtitle_start: None,
+            song_with_progress: false,
             retained_stream_timestamps: false,
             output_format: OutputFormat::MpegTs,
             start: None,
@@ -181,6 +193,76 @@ pub struct PipelineRequest {
 }
 
 impl PipelineRequest {
+    /// Replace a song's picture while keeping its selected audio and subtitles.
+    /// The finite PNG is never sought; seek belongs to the original audio input.
+    #[must_use]
+    pub fn with_song_background(
+        mut self,
+        video: InputFile,
+        stream: SourceVideoStream,
+        progress: bool,
+    ) -> Self {
+        let source = self
+            .inputs
+            .iter()
+            .find(|input| input.kind == InputKind::Video)
+            .cloned();
+        if let Some(source) = source {
+            if let Some(audio) = self
+                .inputs
+                .iter_mut()
+                .find(|input| input.kind == InputKind::Audio && input.path == source.path)
+            {
+                // Previously the audio shared the video input, including its NUT
+                // demuxer/probe options. It becomes an independent audio input.
+                audio.input_options.splice(0..0, source.input_options);
+                audio.input_instance = source.input_instance;
+            }
+        }
+        let seek = self.state.start.take().or(self.state.output_start.take());
+        if let Some(seek) = seek.filter(|seek| !seek.is_zero()) {
+            if let Some(audio) = self
+                .inputs
+                .iter_mut()
+                .find(|input| input.kind == InputKind::Audio)
+            {
+                if audio.seek_after_input {
+                    audio.filter_steps.extend([
+                        format!("atrim=start={}", seek.as_secs_f64()),
+                        "asetpts=PTS-STARTPTS".to_owned(),
+                    ]);
+                } else {
+                    audio
+                        .input_options
+                        .splice(0..0, ["-ss".to_owned(), format_time_limit(seek)]);
+                }
+            }
+            for subtitle in self
+                .inputs
+                .iter_mut()
+                .filter(|input| input.kind == InputKind::Subtitle && input.is_image_based_subtitle)
+            {
+                subtitle
+                    .input_options
+                    .splice(0..0, ["-ss".to_owned(), format_time_limit(seek)]);
+            }
+        }
+        if let Some(input) = self
+            .inputs
+            .iter_mut()
+            .find(|input| input.kind == InputKind::Video)
+        {
+            *input = video;
+        }
+        self.source_video_stream = Some(stream);
+        self.state.song_progress_start = seek.or(self.state.song_progress_start);
+        self.state.song_text_subtitle_start = self.state.song_text_subtitle_start.or(seek);
+        self.state.song_with_progress = progress;
+        if self.desired.video_format == FFmpegProfileVideoFormat::Copy {
+            self.desired.video_format = FFmpegProfileVideoFormat::H264;
+        }
+        self
+    }
     /// Use the caller's already-edited, zero-based NUT rawvideo/PCM input.
     ///
     /// The caller configures pipe:0 and fresh stream indexes before opting in.
@@ -2716,7 +2798,20 @@ fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut F
         .as_ref()
         .is_some_and(|source| source.is_still_image)
     {
-        filter_chain.video.push(still_image_loop_filter());
+        let progress = request
+            .state
+            .song_with_progress
+            .then(|| {
+                song_progress_filter(
+                    request.desired.frame_size,
+                    request.state.song_progress_start,
+                    request.state.duration,
+                )
+            })
+            .filter(|filter| !filter.is_empty());
+        filter_chain
+            .video
+            .push(progress.unwrap_or_else(still_image_loop_filter));
         if request.desired.realtime_mode == RealtimeMode::On {
             filter_chain.video.push(realtime_filter());
         }
@@ -2925,10 +3020,18 @@ fn apply_text_subtitle_burn_filters(
             target_state.pixel_format = request.desired.pixel_format();
         }
 
-        filter_chain.video.push(subtitles_filter(
-            &input.path,
-            request.subtitle_fonts_dir.as_deref(),
-        ));
+        let subtitle = subtitles_filter(&input.path, request.subtitle_fonts_dir.as_deref());
+        let subtitle = if let Some(offset) = request
+            .state
+            .song_text_subtitle_start
+            .filter(|offset| !offset.is_zero())
+        {
+            let offset = offset.as_secs_f64();
+            format!("settb=AVTB,setpts=PTS+{offset}/TB,{subtitle},setpts=PTS-{offset}/TB")
+        } else {
+            subtitle
+        };
+        filter_chain.video.push(subtitle);
 
         if use_cuda_overlay && has_later_cuda_overlay {
             filter_chain.video.push(hardware_upload_filter(

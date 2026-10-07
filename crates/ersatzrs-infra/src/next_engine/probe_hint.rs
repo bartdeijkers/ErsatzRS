@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use ersatzrs_core::repositories::Result as RepositoryResult;
-use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
+use ersatzrs_domain::{MediaStream, MediaStreamKind, Resolution};
 use sqlx::Row;
 
 use crate::db::DbPool;
@@ -16,6 +16,49 @@ use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHi
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[error("Next producer input metadata is incomplete or unsupported")]
 pub struct ProbeHintError;
+
+/// Finite, output-sized video for an audio-only programme. Neither a cover-art
+/// stream nor the original audio seek describes this generated video input.
+pub(super) fn generated_video(
+    resolution: &Resolution,
+    duration_ms: u64,
+    codec: &str,
+    format_name: Option<&str>,
+) -> RepositoryResult<ProbeHint> {
+    let dimension = |value| u32::try_from(value).ok().filter(|value| *value > 0);
+    let invalid =
+        || RepositoryError::unavailable("Next generated video", "invalid geometry or duration");
+    let width = dimension(resolution.width).ok_or_else(invalid)?;
+    let height = dimension(resolution.height).ok_or_else(invalid)?;
+    if duration_ms == 0 {
+        return Err(invalid());
+    }
+    Ok(ProbeHint {
+        video: vec![VideoProbeHint {
+            codec: codec.to_owned(),
+            width,
+            height,
+            pix_fmt: "yuv420p".into(),
+            stream_index: 0,
+            frame_rate: None,
+            profile: None,
+            field_order: None,
+            sample_aspect_ratio: None,
+            display_aspect_ratio: None,
+            color_range: None,
+            color_space: None,
+            color_transfer: None,
+            color_primaries: None,
+            dv_profile: None,
+            has_hdr10_metadata: None,
+            rotation: None,
+        }],
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        format_name: format_name.map(str::to_owned),
+        duration_ms: Some(duration_ms),
+    })
+}
 
 /// Describe a persisted local or media-server version without opening the
 /// source. Incomplete stream metadata leaves Next's ordinary probe in control.
@@ -267,6 +310,9 @@ pub fn producer(probe: &FfprobeMediaVersion) -> Result<ProbeHint, ProbeHintError
             return Err(ProbeHintError);
         }
         match stream.kind {
+            // Album artwork stays in the producer bytes but cannot be selected
+            // as programme video, just like persisted AttachedPic metadata.
+            MediaStreamKind::Video if stream.attached_pic => {}
             MediaStreamKind::Video if !stream.attached_pic => {
                 hint.video.push(video(probe, stream, index)?);
             }

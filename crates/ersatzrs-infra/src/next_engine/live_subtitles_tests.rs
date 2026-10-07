@@ -12,6 +12,12 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
         producer_remote: None,
         retained_remote: None,
         projection: DeferredProjection {
+            original_source: protocol::Source::Rtsp {
+                uri: "rtsp://example.test/live".into(),
+                timeout_us: None,
+                probe_hint: None,
+            },
+            song: None,
             canvas: None,
             pending_burn: None,
             selected_subtitle: Some(crate::playback::PlaybackSubtitle {

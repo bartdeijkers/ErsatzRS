@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicI32, AtomicI64, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering},
     Arc, Mutex as StdMutex, OnceLock,
 };
 use std::time::Duration;
@@ -185,21 +185,41 @@ impl ActiveTranscodeSlot {
     }
 }
 
+#[derive(Clone)]
 pub struct ActiveTranscodeReservation {
+    lease: Arc<ActiveTranscodeLease>,
+}
+
+struct ActiveTranscodeLease {
     key: String,
     slot_id: u64,
+    release_on_drop: AtomicBool,
 }
 
 impl ActiveTranscodeReservation {
     #[must_use]
-    pub const fn slot_id(&self) -> u64 {
-        self.slot_id
+    pub fn slot_id(&self) -> u64 {
+        self.lease.slot_id
+    }
+
+    /// Preserve admission after a managed process cannot be reaped. The
+    /// existing bounded slot registry owns the quarantine until host restart.
+    pub fn retain_until_restart(&self) {
+        self.lease.release_on_drop.store(false, Ordering::Release);
+        let mut slots = active_transcode_slots()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(slot) = slots.get_mut(&self.lease.key) {
+            slot.reclaim = None;
+        }
     }
 }
 
-impl Drop for ActiveTranscodeReservation {
+impl Drop for ActiveTranscodeLease {
     fn drop(&mut self) {
-        release_active_transcode(&self.key);
+        if self.release_on_drop.load(Ordering::Acquire) {
+            release_active_transcode(&self.key);
+        }
     }
 }
 
@@ -288,7 +308,13 @@ pub fn try_reserve_active_transcode(
     let active = i32::try_from(slots.len()).unwrap_or(i32::MAX);
     ACTIVE_TRANSCODE_PEAK.fetch_max(active, Ordering::AcqRel);
 
-    Some(ActiveTranscodeReservation { key, slot_id })
+    Some(ActiveTranscodeReservation {
+        lease: Arc::new(ActiveTranscodeLease {
+            key,
+            slot_id,
+            release_on_drop: AtomicBool::new(true),
+        }),
+    })
 }
 
 pub fn request_active_transcode_reclaim(
@@ -303,7 +329,7 @@ pub fn request_active_transcode_reclaim(
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
     let work_ahead = best_reclaim_candidate(&slots, requester_channel, now_ms, |slot, _| {
-        slot.kind == ActiveTranscodeKind::HlsWorkAhead
+        slot.kind == ActiveTranscodeKind::HlsWorkAhead && slot.reclaim.is_some()
     })
     .map(|slot| (slot, ActiveTranscodeReclaimReason::WorkAhead));
 
@@ -410,6 +436,71 @@ pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preparation_clone_holds_one_slot_until_its_last_owner_finishes() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let request = try_reserve_active_transcode(1, hls_slot("song", "song")).unwrap();
+        let preparation = request.clone();
+        assert_eq!(request.slot_id(), preparation.slot_id());
+        assert_eq!(active_transcode_snapshot(1).active, 1);
+        drop(request);
+        assert!(try_reserve_active_transcode(1, hls_slot("other", "other")).is_none());
+        drop(preparation);
+        assert_eq!(active_transcode_snapshot(1).active, 0);
+        reset_active_transcode_state_for_tests();
+    }
+
+    #[test]
+    fn unconfirmed_process_keeps_capacity_and_disables_reclaim_until_restart() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let request = try_reserve_active_transcode(1, hls_slot("song", "song")).unwrap();
+        let preparation = request.clone();
+        preparation.retain_until_restart();
+        drop(preparation);
+        drop(request);
+        assert_eq!(active_transcode_snapshot(1).active, 1);
+        assert!(try_reserve_active_transcode(1, hls_slot("other", "other")).is_none());
+        assert!(request_active_transcode_reclaim(
+            "other",
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO
+        )
+        .is_none());
+        reset_active_transcode_state_for_tests();
+    }
+
+    #[test]
+    fn quarantined_work_ahead_does_not_hide_another_reclaimable_slot() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let mut old_slot = hls_slot("uncertain", "uncertain");
+        old_slot.kind = ActiveTranscodeKind::HlsWorkAhead;
+        old_slot
+            .last_access_ms
+            .store(Utc::now().timestamp_millis() - 60_000, Ordering::Release);
+        let old = try_reserve_active_transcode(2, old_slot).unwrap();
+        old.retain_until_restart();
+        let mut healthy_slot = hls_slot("healthy", "healthy");
+        healthy_slot.kind = ActiveTranscodeKind::HlsWorkAhead;
+        let healthy = try_reserve_active_transcode(2, healthy_slot).unwrap();
+        let reclaim = request_active_transcode_reclaim(
+            "other",
+            Duration::ZERO,
+            Duration::ZERO,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(reclaim.slot_id, healthy.slot_id());
+        assert_eq!(reclaim.channel_number, "healthy");
+        assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::WorkAhead);
+        drop(healthy);
+        drop(old);
+        reset_active_transcode_state_for_tests();
+    }
 
     fn hls_slot(channel_number: &str, capacity_key: &str) -> ActiveTranscodeSlot {
         ActiveTranscodeSlot::new_hls_with_capacity_key(

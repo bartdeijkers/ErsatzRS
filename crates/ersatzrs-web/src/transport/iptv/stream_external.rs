@@ -36,7 +36,7 @@ pub(super) async fn load(
             failure(error)
         })? {
         external::ExternalPlayoutSelection::NotConfigured => {
-            return load_active_media_path(&state.pool, channel_id, now).await
+            return load_active_media_path(&state.pool, channel_id, now).await;
         }
         external::ExternalPlayoutSelection::Unavailable => return Ok(None),
         external::ExternalPlayoutSelection::Item(item) => *item,

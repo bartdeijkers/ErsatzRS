@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 async-trait = "0.1"
 base64 = "0.23"
+blurhash = { version = "=0.2.3", default-features = false }
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 directories = "6"

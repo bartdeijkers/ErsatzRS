@@ -1363,6 +1363,43 @@ async fn serve_channel_stream_admitted_inner(
             return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
         }
     };
+    let song = {
+        let executable = runtime_capabilities
+            .runtime_identity
+            .as_ref()
+            .map_or_else(ersatzrs_ffmpeg::ffmpeg_path, |identity| {
+                identity.ffmpeg_path.clone()
+            });
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        match ersatzrs_infra::song_background::stage_native(
+            &state.pool,
+            active.media_item_id,
+            channel.id,
+            &playback_profile.resolution,
+            active.playout_item_id,
+            std::path::Path::new(&executable),
+            tokio::time::Instant::now() + Duration::from_secs(15),
+            receiver,
+        )
+        .await
+        {
+            Ok(song) => song.map(Arc::new),
+            Err(error) => {
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
+                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                tracing::warn!(channel_id = channel.id, %error, "song image preparation failed");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        }
+    };
+    let stream_duration = if song.is_some() {
+        active.remaining_duration(now)
+    } else {
+        stream_duration
+    };
     let remote_stream = active.remote_stream.clone();
     let retained_stream = retained_playback.is_some();
     let command = match build_stream_command_with_retained_inputs(
@@ -1383,6 +1420,7 @@ async fn serve_channel_stream_admitted_inner(
         graphics_overlays.clone(),
         Some(opacity_clock),
         retained_stream,
+        song.as_deref(),
     ) {
         Ok(command) => command,
         Err(error) => {
@@ -1409,6 +1447,7 @@ async fn serve_channel_stream_admitted_inner(
     let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
     let retry_preferred_audio_language = preferred_audio_language.clone();
     let retry = StreamDenialRetry {
+        song: song.clone(),
         pool: state.pool.clone(),
         shared_ffmpeg_runtime: Arc::clone(&state.ffmpeg_runtime),
         runtime_capabilities,
@@ -1418,6 +1457,7 @@ async fn serve_channel_stream_admitted_inner(
         ffmpeg_path: command.executable.clone(),
         rebuild: Some(StreamRetryBuilder({
             let media_input = media_input.clone();
+            let song = song.clone();
             let channel_number = channel.number.clone();
             let pool = state.pool.clone();
             Box::new(move |mode, cancel| {
@@ -1545,6 +1585,7 @@ async fn serve_channel_stream_admitted_inner(
                         graphics_overlays,
                         Some(opacity_clock),
                         retained_stream,
+                        song.as_deref(),
                     );
                     let Ok(command) = command else {
                         if let Some(fresh) = fresh.take() {
@@ -1569,10 +1610,21 @@ async fn serve_channel_stream_admitted_inner(
     };
     let capacity_reservation = if interval_reservation.is_some() {
         interval_reservation
-    } else if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
+    } else if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream
+        || song.is_some()
+    {
         match reserve_mpeg_ts_capacity(state, &channel.number).await {
             Ok(Some(reservation)) => Some(reservation),
             Ok(None) => {
+                if effective_streaming_mode != ersatzrs_domain::StreamingMode::TransportStream {
+                    shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                    cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        [(axum::http::header::RETRY_AFTER, "1")],
+                    )
+                        .into_response();
+                }
                 if let Some(playback) = retained_playback.take() {
                     let _ = playback.prepared.cancel().await;
                     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
@@ -1683,7 +1735,9 @@ async fn serve_channel_stream_admitted_inner(
         }
         Err(error) => {
             tracing::error!(%error, "failed to spawn ffmpeg for channel stream");
-            cleanup_stream_artifacts(&cleanup_on_spawn_failure).await;
+            if error.cleanup_confirmed() {
+                cleanup_stream_artifacts(&cleanup_on_spawn_failure).await;
+            }
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
@@ -2414,8 +2468,29 @@ fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) 
 enum StreamSpawnError {
     #[error("failed to spawn ffmpeg: {0}")]
     Spawn(String),
+    #[error("ffmpeg spawn cleanup could not be confirmed: {0}")]
+    CleanupUnconfirmed(String),
     #[error("ffmpeg did not expose stdout")]
     MissingStdout,
+}
+
+impl StreamSpawnError {
+    fn cleanup_confirmed(&self) -> bool {
+        !matches!(self, Self::CleanupUnconfirmed(_))
+    }
+
+    fn prepared(error: &ersatzrs_infra::remote_stream::RemoteStreamError) -> Self {
+        if matches!(
+            error,
+            ersatzrs_infra::remote_stream::RemoteStreamError::Spawn(_)
+        ) {
+            // The prepared adapter reaps its producer when consumer creation
+            // fails; that is its only guaranteed no-consuming-child error.
+            Self::Spawn(error.to_string())
+        } else {
+            Self::CleanupUnconfirmed(error.to_string())
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -2930,6 +3005,7 @@ fn build_stream_command_with_input_and_opacity_clock(
         graphics_overlays,
         opacity_clock,
         false,
+        None,
     )
 }
 
@@ -2952,6 +3028,7 @@ fn build_stream_command_with_retained_inputs(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
     retained_stream: bool,
+    song: Option<&ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
@@ -3039,6 +3116,12 @@ fn build_stream_command_with_retained_inputs(
         }
     }
 
+    if let Some(song) = song {
+        if retained_stream {
+            request.state.song_progress_start = Some(start_position);
+        }
+        song.apply(&mut request);
+    }
     let acceleration = if streaming_mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect
     {
         ersatzrs_domain::HardwareAccelerationKind::None
@@ -3394,6 +3477,7 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 /// command. Decode denials persist a negative capability row; encoder-open
 /// failures force software encoding for this stream.
 struct StreamDenialRetry {
+    song: Option<Arc<ersatzrs_infra::song_background::NativeSongBackground>>,
     pool: DbPool,
     /// Process-wide runtime state used by future direct and HLS sessions.
     shared_ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
@@ -3440,7 +3524,8 @@ impl StreamRetryBuilder {
     }
 }
 
-#[cfg(test)]
+// Used only by Unix shell-backed retry fixtures; native code uses deferred builders.
+#[cfg(all(test, unix))]
 fn immediate_stream_retry(
     build: Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>,
 ) -> StreamRetryBuilder {
@@ -3468,7 +3553,7 @@ async fn spawn_stream_retry(
             RemoteStreamSpawnContext::mpeg_ts(channel_number),
         )
         .await
-        .map_err(|error| StreamSpawnError::Spawn(error.to_string())),
+        .map_err(|error| StreamSpawnError::prepared(&error)),
         None => spawn_stream_process(&attempt.command, producer, channel_number),
     }
 }
@@ -3523,6 +3608,7 @@ struct DirectStreamFailure {
 }
 
 struct StreamFailureContext {
+    song: Option<Arc<ersatzrs_infra::song_background::NativeSongBackground>>,
     graph: Option<ersatzrs_ffmpeg::HardwareGraphOperation>,
     acceleration: ersatzrs_domain::HardwareAccelerationKind,
     source: Option<SourceVideoStream>,
@@ -3575,7 +3661,16 @@ fn spawn_stream_process(
         remote_producer,
         RemoteStreamSpawnContext::mpeg_ts(channel_number),
     )
-    .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
+    .map_err(|error| {
+        // With no producer, every error precedes consumer creation. A paired
+        // producer adapter can fail after creating the consumer, so retain its
+        // assets unless that adapter gives an explicit reaping guarantee.
+        if remote_producer.is_none() {
+            StreamSpawnError::Spawn(error.to_string())
+        } else {
+            StreamSpawnError::CleanupUnconfirmed(error.to_string())
+        }
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3605,7 +3700,42 @@ async fn spawn_stream_body(
     .await
 }
 
+async fn render_stream_song(
+    song: Arc<ersatzrs_infra::song_background::NativeSongBackground>,
+    reservation: Option<ActiveTranscodeReservation>,
+    cancel: Option<&Arc<Notify>>,
+) -> Result<(), StreamSpawnError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let operation = ersatzrs_infra::song_background::render_native(
+        song,
+        tokio::time::Instant::now() + Duration::from_secs(15),
+        receiver,
+        reservation,
+    );
+    tokio::pin!(operation);
+    let result = if let Some(cancel) = cancel {
+        tokio::select! {
+            result = &mut operation => result,
+            () = cancel.notified() => { let _ = sender.send(()); operation.await }
+        }
+    } else {
+        let _sender = sender;
+        operation.await
+    };
+    result.map_err(|error| {
+        if error.termination_unconfirmed() {
+            StreamSpawnError::CleanupUnconfirmed(error.to_string())
+        } else {
+            StreamSpawnError::Spawn(error.to_string())
+        }
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps admitted producer, song, subtitle and capacity ownership together through startup and supervised cleanup"
+)]
 async fn spawn_stream_body_with_prepared_input(
     command: &FfmpegCommand,
     cleanup_paths: Vec<PathBuf>,
@@ -3619,7 +3749,14 @@ async fn spawn_stream_body_with_prepared_input(
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
 ) -> Result<Body, StreamSpawnError> {
-    let mut child = match prepared {
+    if let Some(song) = retry.as_ref().and_then(|retry| retry.song.clone()) {
+        render_stream_song(song, capacity_reservation.clone(), None).await?;
+    }
+    let song = retry.as_ref().and_then(|retry| retry.song.as_ref());
+    if let Some(song) = song {
+        song.mark_in_use();
+    }
+    let spawned = match prepared {
         Some(prepared) => spawn_ffmpeg_with_prepared_remote_input(
             command,
             None,
@@ -3627,16 +3764,45 @@ async fn spawn_stream_body_with_prepared_input(
             RemoteStreamSpawnContext::mpeg_ts(&channel_number),
         )
         .await
-        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))?,
+        .map_err(|error| StreamSpawnError::prepared(&error)),
         None => spawn_stream_process(
             command,
             remote_stream.as_ref().and_then(remote_stream_producer),
             &channel_number,
-        )?,
+        ),
+    };
+    let mut child = match spawned {
+        Ok(child) => child,
+        Err(error) => {
+            if error.cleanup_confirmed() {
+                if let Some(song) = song {
+                    song.confirm_reaped();
+                }
+            } else if song.is_some() {
+                if let Some(reservation) = &capacity_reservation {
+                    reservation.retain_until_restart();
+                }
+            }
+            return Err(error);
+        }
     };
     if child.stdout.is_none() {
-        let _ = child.kill().await;
-        return Err(StreamSpawnError::MissingStdout);
+        return match child.kill().await {
+            Ok(()) => {
+                if let Some(song) = song {
+                    song.confirm_reaped();
+                }
+                Err(StreamSpawnError::MissingStdout)
+            }
+            Err(error) => {
+                if song.is_some() {
+                    if let Some(reservation) = &capacity_reservation {
+                        reservation.retain_until_restart();
+                    }
+                }
+                Err(StreamSpawnError::CleanupUnconfirmed(error.to_string()))
+            }
+        };
     }
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
@@ -3646,9 +3812,10 @@ async fn spawn_stream_body_with_prepared_input(
 
     tokio::spawn(async move {
         let _subtitle_owner = subtitle_owner;
-        let _capacity_reservation = capacity_reservation;
+        let capacity_guard = capacity_reservation;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
+        let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
         let outcome = supervise_stream_command_with_retry(
             child,
             &mut writer,
@@ -3658,6 +3825,14 @@ async fn spawn_stream_body_with_prepared_input(
             remote_stream.as_ref(),
         )
         .await;
+        let cleanup_unconfirmed = song_owner
+            .as_ref()
+            .is_some_and(|song| song.cleanup_unconfirmed());
+        if cleanup_unconfirmed {
+            if let Some(reservation) = &capacity_guard {
+                reservation.retain_until_restart();
+            }
+        }
         if let Some((terminal, completed)) = terminal {
             terminal.store(
                 if matches!(outcome, DirectStreamOutcome::Completed) {
@@ -3672,8 +3847,10 @@ async fn spawn_stream_body_with_prepared_input(
         }
         session_registry.unregister_direct(&handle).await;
         shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-        for path in cleanup_paths {
-            cleanup_stream_artifact(&path).await;
+        if !cleanup_unconfirmed {
+            for path in cleanup_paths {
+                cleanup_stream_artifact(&path).await;
+            }
         }
     });
 
@@ -3681,6 +3858,10 @@ async fn spawn_stream_body_with_prepared_input(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps capacity admission, cancellation, slate retry and uncertainty quarantine in one supervised lifetime"
+)]
 fn spawn_stream_body_waiting_for_mpegts_capacity(
     command: FfmpegCommand,
     slate_command: FfmpegCommand,
@@ -3703,6 +3884,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
         let _subtitle_owner = subtitle_owner;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
+        let staged_song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
         loop {
             let limit = match load_active_transcode_limit(&pool).await {
                 Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
@@ -3719,10 +3901,22 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 limit,
                 ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
             ) {
-                let _capacity_reservation = reservation;
+                let capacity_guard = reservation;
+                if let Some(song) = retry.as_ref().and_then(|retry| retry.song.clone()) {
+                    if let Err(error) =
+                        render_stream_song(song, Some(capacity_guard.clone()), Some(&cancel)).await
+                    {
+                        tracing::warn!(%error, channel_number, "failed to prepare song after capacity became available");
+                        break;
+                    }
+                }
                 let producer = remote_stream.as_ref().and_then(remote_stream_producer);
+                if let Some(song) = retry.as_ref().and_then(|retry| retry.song.as_ref()) {
+                    song.mark_in_use();
+                }
                 match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(child) => {
+                        let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
                         let _ = supervise_stream_command_with_retry(
                             child,
                             &mut writer,
@@ -3732,8 +3926,22 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                             remote_stream.as_ref(),
                         )
                         .await;
+                        if song_owner
+                            .as_ref()
+                            .is_some_and(|song| song.cleanup_unconfirmed())
+                        {
+                            capacity_guard.retain_until_restart();
+                        }
                     }
                     Err(error) => {
+                        if error.cleanup_confirmed() {
+                            if let Some(song) = retry.as_ref().and_then(|retry| retry.song.as_ref())
+                            {
+                                song.confirm_reaped();
+                            }
+                        } else if retry.as_ref().is_some_and(|retry| retry.song.is_some()) {
+                            capacity_guard.retain_until_restart();
+                        }
                         tracing::warn!(
                             %error,
                             channel_number = %channel_number,
@@ -3791,8 +3999,13 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
         }
         session_registry.unregister_direct(&handle).await;
         shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-        for path in cleanup_paths {
-            cleanup_stream_artifact(&path).await;
+        if !staged_song_owner
+            .as_ref()
+            .is_some_and(|song| song.cleanup_unconfirmed())
+        {
+            for path in cleanup_paths {
+                cleanup_stream_artifact(&path).await;
+            }
         }
     });
 
@@ -3812,6 +4025,7 @@ async fn supervise_stream_command_with_retry(
     retry: &mut Option<StreamDenialRetry>,
     remote_stream: Option<&ResolvedRemoteStream>,
 ) -> DirectStreamOutcome {
+    let song = retry.as_ref().and_then(|retry| retry.song.clone());
     loop {
         let outcome = supervise_stream_process_with_retry_context(
             &mut child,
@@ -3819,11 +4033,22 @@ async fn supervise_stream_command_with_retry(
             cancel,
             channel_number,
             remote_stream,
-            retry.as_ref().map(|retry| StreamFailureContext {
-                graph: retry.graph_operation,
-                acceleration: retry.acceleration,
-                source: retry.source_stream.clone(),
-            }),
+            retry
+                .as_ref()
+                .map(|retry| StreamFailureContext {
+                    song: song.clone(),
+                    graph: retry.graph_operation,
+                    acceleration: retry.acceleration,
+                    source: retry.source_stream.clone(),
+                })
+                .or_else(|| {
+                    song.as_ref().map(|song| StreamFailureContext {
+                        song: Some(Arc::clone(song)),
+                        graph: None,
+                        acceleration: ersatzrs_domain::HardwareAccelerationKind::None,
+                        source: Some(song.stream.clone()),
+                    })
+                }),
         )
         .await;
         let DirectStreamOutcome::Failed(mut stderr) = outcome else {
@@ -3904,6 +4129,9 @@ async fn supervise_stream_command_with_retry(
                     .source_stream
                     .clone_from(&retry_command.source_stream);
             }
+            if let Some(song) = &song {
+                song.mark_in_use();
+            }
             match spawn_stream_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
@@ -3921,6 +4149,11 @@ async fn supervise_stream_command_with_retry(
                     *retry = Some(context);
                 }
                 Err(error) => {
+                    if error.cleanup_confirmed() {
+                        if let Some(song) = &song {
+                            song.confirm_reaped();
+                        }
+                    }
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after graph denial");
                     return DirectStreamOutcome::Failed(error.to_string().into());
                 }
@@ -3980,6 +4213,9 @@ async fn supervise_stream_command_with_retry(
                     .source_stream
                     .clone_from(&retry_command.source_stream);
             }
+            if let Some(song) = &song {
+                song.mark_in_use();
+            }
             match spawn_stream_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
@@ -3997,6 +4233,11 @@ async fn supervise_stream_command_with_retry(
                     *retry = Some(context);
                 }
                 Err(error) => {
+                    if error.cleanup_confirmed() {
+                        if let Some(song) = &song {
+                            song.confirm_reaped();
+                        }
+                    }
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
                     return DirectStreamOutcome::Failed(error.to_string().into());
                 }
@@ -4036,6 +4277,9 @@ async fn supervise_stream_command_with_retry(
             );
             return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned().into());
         };
+        if let Some(song) = &song {
+            song.mark_in_use();
+        }
         match spawn_stream_retry(
             retry_command,
             remote_stream.and_then(remote_stream_producer),
@@ -4045,6 +4289,11 @@ async fn supervise_stream_command_with_retry(
         {
             Ok(next) => child = next,
             Err(error) => {
+                if error.cleanup_confirmed() {
+                    if let Some(song) = &song {
+                        song.confirm_reaped();
+                    }
+                }
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
                 return DirectStreamOutcome::Failed(error.to_string().into());
             }
@@ -4083,6 +4332,10 @@ async fn supervise_stream_process(
     .await
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps stdout pumping, cancellation, process reaping and failure classification in their required teardown order"
+)]
 async fn supervise_stream_process_with_retry_context(
     child: &mut RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
@@ -4099,6 +4352,10 @@ async fn supervise_stream_process_with_retry_context(
         .map_or(ersatzrs_domain::HardwareAccelerationKind::None, |retry| {
             retry.acceleration
         });
+    let song = retry.as_ref().and_then(|retry| retry.song.clone());
+    if let Some(song) = &song {
+        song.mark_in_use();
+    }
     let source = retry.and_then(|retry| retry.source);
     let stderr_task = child.stderr.take().map(|stderr| {
         tokio::spawn(async move {
@@ -4133,8 +4390,9 @@ async fn supervise_stream_process_with_retry_context(
         }
         () = cancel.notified() => {
             tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
-            if let Err(error) = child.kill().await {
-                tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
+            match child.kill().await {
+                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } },
+                Err(error) => tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream"),
             }
             let stderr = await_stderr_tail(stderr_task).await;
             if !stderr.redacted_stderr.is_empty() {
@@ -4147,8 +4405,9 @@ async fn supervise_stream_process_with_retry_context(
     let waited = tokio::select! {
         biased;
         () = cancel.notified() => {
-            if let Err(error) = child.kill().await {
-                tracing::warn!(%error, channel_number, "failed to reap cancelled channel stream after stdout closed");
+            match child.kill().await {
+                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } },
+                Err(error) => tracing::warn!(%error, channel_number, "failed to reap cancelled channel stream after stdout closed"),
             }
             None
         },
@@ -4158,6 +4417,11 @@ async fn supervise_stream_process_with_retry_context(
         let _ = await_stderr_tail(stderr_task).await;
         return DirectStreamOutcome::Cancelled;
     };
+    if waited.is_ok() {
+        if let Some(song) = &song {
+            song.confirm_reaped();
+        }
+    }
     match waited {
         Ok(status) if status.success() => {
             let _ = await_stderr_tail(stderr_task).await;
@@ -4180,6 +4444,14 @@ async fn supervise_stream_process_with_retry_context(
             }
         }
         Err(error) => {
+            if matches!(
+                tokio::time::timeout(Duration::from_secs(5), child.kill()).await,
+                Ok(Ok(()))
+            ) {
+                if let Some(song) = &song {
+                    song.confirm_reaped();
+                }
+            }
             let mut stderr = await_stderr_tail(stderr_task).await;
             stderr.wrote_media = wrote_media;
             tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
@@ -4430,6 +4702,7 @@ mod tests {
             Vec::new(),
             None,
             true,
+            None,
         )
         .unwrap();
         let argv = command.arguments.join(" ");
@@ -6986,6 +7259,7 @@ mod tests {
         let command =
             FfmpegCommand::new_with_executable(ffmpeg.to_string_lossy(), Vec::new(), Vec::new());
         let mut retry = Some(StreamDenialRetry {
+            song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
             runtime_capabilities: capabilities,
@@ -7089,6 +7363,7 @@ mod tests {
             FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
         let fallback_path = fallback.to_string_lossy().into_owned();
         let mut retry = Some(StreamDenialRetry {
+            song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
             runtime_capabilities: capabilities,
@@ -7202,6 +7477,7 @@ mod tests {
             FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
         let fallback_path = fallback.to_string_lossy().into_owned();
         let mut retry = Some(StreamDenialRetry {
+            song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
             runtime_capabilities: capabilities,

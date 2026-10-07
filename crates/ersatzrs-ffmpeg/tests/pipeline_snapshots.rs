@@ -26,12 +26,13 @@ use ersatzrs_ffmpeg::{
     DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
     GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
     GraphicsTemplateRenderer, HardwareGraphDenial, HardwareGraphOperation, HlsOutput, InputFile,
-    NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder, PipelineRequest,
-    PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder,
-    SourceAudioCodec, SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream,
-    SvgTemplate, TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder,
-    VaapiProfileEntrypoint, VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint,
-    WatermarkOpacityClock, WatermarkOverlay,
+    InputKind, NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder,
+    PipelineRequest, PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder,
+    SoftwarePipelineBuilder, SourceAudioCodec, SourceAudioStream, SourceColorParams,
+    SourceVideoCodec, SourceVideoStream, SubtitleMethod, SvgTemplate, TonemapAlgorithm,
+    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VaapiProfileEntrypoint,
+    VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOpacityClock,
+    WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -1509,6 +1510,98 @@ fn software_pipeline_still_image_source_loops_video_snapshot() {
     let command = pipeline.command(&request.inputs);
 
     insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn software_pipeline_song_progress_keeps_audio_seek_and_subtitle_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut source = source_1080p(SourceVideoCodec::Unknown, 1920, 1080);
+    source.is_still_image = true;
+    let mut request = PipelineRequest::new(InputFile::video("/media/song.flac"), desired)
+        .with_source_video_stream(source.clone());
+    request.inputs[1] = InputFile::audio("/media/song.flac").with_stream_index(3);
+    request.state.start = Some(Duration::from_secs(30));
+    request.state.duration = Some(Duration::from_secs(90));
+    request.inputs.push(InputFile::text_subtitle(
+        "/media/song.srt",
+        SubtitleMethod::Burn,
+    ));
+    request =
+        request.with_song_background(InputFile::video("/media/song-background.png"), source, true);
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let args = command.arguments.join(" ");
+    assert!(args.contains("-ss 00:00:30.0000000 -i /media/song.flac"));
+    assert!(!args.contains("-ss 00:00:30.0000000 -i /media/song-background.png"));
+    assert!(args.contains("loop=-1:1[si];color="));
+    assert!(args.contains("iw*0.25+iw*(t/90)*0.75"));
+    assert!(args.contains("[1:3]"));
+    assert!(args.contains("setpts=PTS+30/TB,subtitles=/media/song.srt,setpts=PTS-30/TB"));
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn song_progress_filter_rejects_zero_duration_and_rounds_bar_dimensions() {
+    assert!(song_progress_filter(FrameSize::new(320, 180), None, Some(Duration::ZERO)).is_empty());
+    let filter = song_progress_filter(FrameSize::new(320, 180), None, Some(Duration::from_secs(3)));
+    assert!(filter.contains("s=288x5"));
+    assert!(!filter.contains("[si],color"));
+}
+
+#[test]
+fn song_picture_keeps_explicit_audio_only_and_retained_audio_inputs() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.video_format = FFmpegProfileVideoFormat::None;
+    let mut source = source_1080p(SourceVideoCodec::Unknown, 1920, 1080);
+    source.is_still_image = true;
+    let request = PipelineRequest::new(
+        InputFile::video("pipe:0")
+            .with_input_options(["-f", "nut"])
+            .with_seek_after_input(),
+        desired,
+    )
+    .with_retained_stream_input()
+    .with_song_background(InputFile::video("/media/song-background.png"), source, true);
+    assert_eq!(request.desired.video_format, FFmpegProfileVideoFormat::None);
+    let audio = request
+        .inputs
+        .iter()
+        .find(|input| input.kind == InputKind::Audio)
+        .unwrap();
+    assert_eq!(audio.path, "pipe:0");
+    assert_eq!(audio.input_options, ["-f", "nut"]);
+    assert!(audio.seek_after_input);
+    assert!(audio.filter_steps.is_empty());
+    assert!(request.state.retained_stream_timestamps);
+    assert_eq!(request.state.start, None);
+}
+
+#[test]
+fn song_picture_keeps_independent_bitmap_subtitle_seek() {
+    let mut source = source_1080p(SourceVideoCodec::Unknown, 1920, 1080);
+    source.is_still_image = true;
+    let mut request = PipelineRequest::new(
+        InputFile::video("/media/song.flac"),
+        DesiredVideoState::h264_1080p(),
+    );
+    request.inputs.push(InputFile::image_subtitle(
+        "/media/captions.sup",
+        SubtitleMethod::Burn,
+    ));
+    request.state.start = Some(Duration::from_secs(30));
+    request.state.duration = Some(Duration::from_secs(90));
+    let request = request.with_song_background(InputFile::video("/media/song.png"), source, false);
+    let bitmap = request
+        .inputs
+        .iter()
+        .find(|input| input.is_image_based_subtitle)
+        .unwrap();
+    assert_eq!(bitmap.input_options, ["-ss", "00:00:30.0000000"]);
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+    assert!(args.contains("-ss 00:00:30.0000000 -i /media/captions.sup"));
+    assert!(!args.contains("-ss 00:00:30.0000000 -i /media/song.png"));
+    assert!(args.contains("[2:0]"));
 }
 
 #[test]

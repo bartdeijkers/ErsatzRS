@@ -170,17 +170,11 @@ pub(crate) async fn fingerprint(
     let path_hash: String = row.try_get("PathHash").map_err(|_| unavailable())?;
     let path: String = row.try_get("Path").map_err(|_| unavailable())?;
     let pending = projection.pending_burn.as_ref();
-    let input = pending.map(|pending| &pending.source).or_else(|| {
-        projection
-            .item
-            .tracks
-            .as_ref()?
-            .video
-            .as_ref()?
-            .source
-            .as_ref()
-    });
-    let local_revision = if let Some(Source::Local { path, .. }) = input {
+    // Generated song/black video and explicitly silent audio do not identify
+    // the underlying programme. Keep source revisions and provider identity
+    // tied to the original selected media, including its path replacements.
+    let input = pending.map_or(&projection.original_source, |pending| &pending.source);
+    let local_revision = if let Source::Local { path, .. } = input {
         let metadata = tokio::fs::metadata(path).await.map_err(|_| unavailable())?;
         if !metadata.is_file() {
             return Err(unavailable());
@@ -212,13 +206,14 @@ pub(crate) async fn fingerprint(
         "version": media.media_version_id, "file": media.media_file_id,
         "updated": updated, "duration": duration, "path_hash": path_hash,
         "path": path, "local": local_revision, "subtitle": subtitle,
-        "provider": super::dynamic_provider_identity::identity(pool, media, input.ok_or_else(unavailable)?).await?,
+        "provider": super::dynamic_provider_identity::identity(pool, media, input).await?,
     });
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
     Ok(Identity {
         descriptor: digest(&json!({"binding": binding, "item": projection.item,
-            "canvas": projection.canvas, "persisted_item": media.item, "channel": channel, "audio_script": script,
+            "canvas": projection.canvas, "song": projection.song,
+            "persisted_item": media.item, "channel": channel, "audio_script": script,
             "audio_language": preferences.default_audio_language,
             "subtitle_language": preferences.default_subtitle_language,
             "fallback_subtitle_language": preferences.fallback_subtitle_language,

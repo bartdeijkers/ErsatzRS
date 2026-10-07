@@ -1,6 +1,8 @@
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request},
+    http::StatusCode,
     middleware,
+    response::{IntoResponse as _, Response},
     routing::{delete, get, post, put},
     Router,
 };
@@ -620,10 +622,36 @@ pub fn build_app(app_state: AppState) -> Router {
     }
 
     // Run before tracing and routing, including unknown API paths and methods.
-    root.layer(middleware::from_fn_with_state(
-        api_key,
-        super::api_security::authenticate,
-    ))
+    root.layer(middleware::from_fn(reject_private_callback_namespace))
+        .layer(middleware::from_fn_with_state(
+            api_key,
+            super::api_security::authenticate,
+        ))
+}
+
+// Leptos also owns /ffmpeg/{id}. Keep the exact profile page shapes while
+// refusing the private callback namespace before that SSR route can render it.
+fn is_public_ffmpeg_profile_path(path: &str) -> bool {
+    let path = path.trim_end_matches('/');
+    if path == "/ffmpeg" {
+        return true;
+    }
+    let Some(profile) = path.strip_prefix("/ffmpeg/") else {
+        return false;
+    };
+    if profile == "profiles" {
+        return true;
+    }
+    let profile = profile.strip_prefix("profiles/").unwrap_or(profile);
+    profile == "add" || profile.parse::<i64>().is_ok()
+}
+
+async fn reject_private_callback_namespace(request: Request, next: middleware::Next) -> Response {
+    let path = request.uri().path();
+    if path.starts_with("/ffmpeg/") && !is_public_ffmpeg_profile_path(path) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    next.run(request).await
 }
 
 fn web_routes(development_routes_enabled: bool) -> Vec<leptos_axum::AxumRouteListing> {
@@ -729,6 +757,10 @@ pub(crate) fn build_internal_app(app_state: AppState) -> Router {
             get(iptv::next_media::get_prepared),
         )
         .route("/ffmpeg/next-canvas", get(iptv::next_canvas::get_canvas))
+        .route(
+            "/ffmpeg/next-song-background",
+            get(iptv::next_song_background::get_song_background),
+        )
         .route(
             "/ffmpeg/next-item/{channel}/{item}/{digest}/{audio}",
             get(iptv::next_media::get_item),

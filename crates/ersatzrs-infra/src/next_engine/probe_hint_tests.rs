@@ -164,6 +164,59 @@ fn ordinary_producer_preserves_detected_container_codecs_and_subtitles_without_d
     );
 }
 
+#[test]
+fn ordinary_producer_excludes_cover_art_without_weakening_playable_stream_validation() {
+    for real_video in [false, true] {
+        let mut probe = metadata();
+        probe.format_name = Some("matroska,webm".into());
+        if !real_video {
+            probe.streams.remove(0);
+        }
+        // Artwork requires no playable geometry, rate or codec metadata. Its
+        // actual bytes remain untouched in the original producer stream.
+        probe.streams.insert(
+            0,
+            MediaStream {
+                index: 0,
+                kind: MediaStreamKind::Video,
+                attached_pic: true,
+                ..Default::default()
+            },
+        );
+        let hint = producer(&probe).unwrap();
+        assert_eq!(hint.video.len(), usize::from(real_video));
+        assert_eq!(hint.audio[0].stream_index, 23);
+        assert_eq!(hint.audio[0].codec, "pcm_f32le");
+        assert!(!hint.video.iter().any(|video| video.stream_index == 0));
+        if real_video {
+            assert_eq!(hint.video[0].stream_index, 17);
+            let mut malformed = probe.clone();
+            malformed.streams[1].pixel_format = None;
+            assert!(producer(&malformed).is_err());
+        }
+        assert!(
+            retained(&probe, 1000).is_err(),
+            "retained rawvideo/PCM contract stays strict"
+        );
+        let mut duplicate = probe.clone();
+        duplicate.streams[0].index = 23;
+        assert!(
+            producer(&duplicate).is_err(),
+            "artwork does not excuse duplicate indexes"
+        );
+        let audio = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.kind == MediaStreamKind::Audio)
+            .unwrap();
+        audio.channels = Some(0);
+        assert!(
+            producer(&probe).is_err(),
+            "playable audio still needs channels"
+        );
+    }
+}
+
 #[tokio::test]
 async fn dolby_vision_profiles_survive_persisted_and_producer_hints() {
     let pool = super::super::selection::tests::fixture_pool().await;

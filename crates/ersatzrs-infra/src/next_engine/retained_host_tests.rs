@@ -99,6 +99,109 @@ fn source(probe: &FfprobeMediaVersion) -> protocol::Source {
 }
 
 #[test]
+fn audio_only_producer_preserves_generated_picture_and_exact_audio_after_probe() {
+    use ersatzrs_domain::{MediaStreamKind, Resolution};
+    for song in [false, true] {
+        for selected in [None, Some(2)] {
+            let (mut probe, previous, mut item) = fixture();
+            probe.streams[0].attached_pic = true;
+            let hint = super::super::probe_hint::generated_video(
+                &Resolution {
+                    width: 320,
+                    height: 180,
+                    ..Default::default()
+                },
+                50_000,
+                if song { "png" } else { "rawvideo" },
+                song.then_some("png_pipe"),
+            )
+            .unwrap();
+            let picture = if song {
+                serde_json::from_value(serde_json::json!({
+                    "source_type": "http", "uri": "http://127.0.0.1/ffmpeg/next-song-background?binding=synthetic",
+                    "probe_hint": hint,
+                })).unwrap()
+            } else {
+                protocol::Source::Lavfi {
+                    params: "color=c=black:s=320x180".into(),
+                    probe_hint: Some(hint),
+                }
+            };
+            let expected = serde_json::to_value(&picture).unwrap();
+            item.tracks = Some(protocol::Tracks {
+                video: Some(protocol::Track {
+                    source: Some(picture),
+                    stream_index: Some(0),
+                }),
+                audio: None,
+                subtitle: None,
+            });
+            let now = item.start + chrono::Duration::seconds(10);
+            let prepared = protocol::Source::Local {
+                path: "owned-producer.nut".into(),
+                in_point_ms: None,
+                out_point_ms: None,
+                probe_hint: None,
+            };
+            let resolved = install_fresh_tracks(
+                item.clone(),
+                &probe,
+                &previous,
+                selected,
+                prepared.clone(),
+                None,
+                now,
+            )
+            .unwrap();
+            let tracks = resolved.tracks.unwrap();
+            let video = tracks.video.unwrap();
+            assert_eq!(video.stream_index, Some(0));
+            assert_eq!(
+                serde_json::to_value(video.source.unwrap()).unwrap(),
+                expected
+            );
+            let audio = tracks.audio.unwrap();
+            if selected.is_some() {
+                assert_eq!(audio.stream_index, Some(23));
+                assert!(
+                    matches!(audio.source, Some(protocol::Source::Local { path, .. }) if path == "owned-producer.nut")
+                );
+            } else {
+                assert!(matches!(audio.source, Some(protocol::Source::Lavfi { .. })));
+            }
+            // Retained normalization can add raw black video to an audio-only
+            // song; that fresh index must not erase its published picture.
+            probe.streams[0].attached_pic = false;
+            let normalized = install_fresh_tracks(
+                item.clone(),
+                &probe,
+                &previous,
+                selected,
+                prepared.clone(),
+                None,
+                now,
+            )
+            .unwrap();
+            let normalized_video = normalized.tracks.unwrap().video.unwrap();
+            assert_eq!(normalized_video.stream_index, Some(0));
+            assert_eq!(
+                serde_json::to_value(normalized_video.source.unwrap()).unwrap(),
+                expected
+            );
+            // A producer losing its original audio must fail rather than publish
+            // an apparently healthy, silently frozen programme.
+            probe
+                .streams
+                .retain(|stream| stream.kind != MediaStreamKind::Audio);
+            assert!(
+                install_fresh_tracks(item, &probe, &previous, selected, prepared, None, now)
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
 fn fresh_retained_indexes_replace_old_indexes_without_second_seek() {
     let (probe, previous, item) = fixture();
     let now = item.start + chrono::Duration::seconds(10);

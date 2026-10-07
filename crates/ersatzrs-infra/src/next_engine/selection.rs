@@ -11,7 +11,9 @@ use crate::playback::{
     select_next_playback_subtitle_for_version, select_playback_audio_stream_index,
     subtitle_input_for_stream, CustomStreamSelection, PlaybackSubtitle,
 };
-use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
+use crate::repositories::SqlxResultExt as _;
+use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream, SourceVideoStream};
+use sqlx::Row as _;
 
 use super::protocol as wire;
 
@@ -22,7 +24,9 @@ mod availability;
 /// Deliberately no Debug: source paths and subtitle metadata may be private.
 pub(crate) struct DeferredProjection {
     pub item: wire::PlayoutItem,
+    pub original_source: wire::Source,
     pub canvas: Option<Box<super::graphics::CanvasProjection>>,
+    pub song: Option<Box<super::song_background::SongProjection>>,
     pub pending_burn: Option<PendingBurn>,
     pub selected_subtitle: Option<PlaybackSubtitle>,
 }
@@ -34,6 +38,15 @@ impl DeferredProjection {
         session: Option<uuid::Uuid>,
         start: chrono::DateTime<chrono::Utc>,
     ) -> Result<()> {
+        if let Some(song) = &self.song {
+            let source = song.publish(relay, session, start)?;
+            self.item
+                .tracks
+                .as_mut()
+                .and_then(|tracks| tracks.video.as_mut())
+                .ok_or_else(|| invalid("missing song video track"))?
+                .source = Some(source);
+        }
         if let Some(canvas) = &self.canvas {
             self.item.graphics = vec![canvas.publish(relay, session, start)?];
         }
@@ -113,6 +126,11 @@ pub async fn project_item(
 ) -> Result<wire::PlayoutItem> {
     let mut projected =
         project_deferred_item(pool, channel, item, media_version_id, source, resolution).await?;
+    if projected.song.is_some() {
+        return Err(invalid(
+            "song background requires authenticated deferred publication",
+        ));
+    }
     if let Some(pending) = projected.pending_burn {
         if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR {
             return Err(invalid("provider subtitles require deferred preparation"));
@@ -204,7 +222,7 @@ async fn project_deferred_item_selected(
     item: &PlayoutItem,
     media_version_id: i64,
     mut source: wire::Source,
-    _resolution: &Resolution,
+    resolution: &Resolution,
     directives: SelectionDirectives,
 ) -> Result<DeferredProjection> {
     let duration_ms = u64::try_from((item.finish - item.start).num_milliseconds())
@@ -220,6 +238,35 @@ async fn project_deferred_item_selected(
             .is_some_and(|pin| pin.subtitle_stream_index.is_some());
     let selected =
         select_projection_tracks(pool, channel, item, media_version_id, directives).await?;
+    let song = if selected.generated_video && is_song(pool, item.media_item_id).await? {
+        Some(Box::new(
+            super::song_background::SongProjection::new(
+                pool,
+                channel,
+                item,
+                media_version_id,
+                resolution,
+            )
+            .await?,
+        ))
+    } else {
+        None
+    };
+    let video = if selected.generated_video {
+        wire::Track {
+            source: if song.is_some() {
+                None
+            } else {
+                Some(black_video(resolution, duration_ms)?)
+            },
+            stream_index: Some(0),
+        }
+    } else {
+        wire::Track {
+            source: Some(source.clone()),
+            stream_index: selected.video.map(index_u32).transpose()?,
+        }
+    };
     let audio = match selected.audio {
         Some(index) => wire::Track {
             source: Some(source.clone()),
@@ -245,7 +292,9 @@ async fn project_deferred_item_selected(
         item,
     )?;
     Ok(DeferredProjection {
+        original_source: source,
         canvas: None,
+        song,
         pending_burn,
         selected_subtitle,
         item: wire::PlayoutItem {
@@ -256,10 +305,7 @@ async fn project_deferred_item_selected(
             finish: item.finish,
             source: None,
             tracks: Some(wire::Tracks {
-                video: Some(wire::Track {
-                    source: Some(source),
-                    stream_index: selected.video.map(index_u32).transpose()?,
-                }),
+                video: Some(video),
                 audio: Some(audio),
                 subtitle,
             }),
@@ -269,6 +315,7 @@ async fn project_deferred_item_selected(
 
 struct SelectedProjectionTracks {
     video: Option<usize>,
+    generated_video: bool,
     audio: Option<usize>,
     subtitle: Option<PlaybackSubtitle>,
 }
@@ -284,12 +331,20 @@ async fn select_projection_tracks(
     if pin.is_some_and(|pin| pin.media_version_id != media_version_id) {
         return Err(invalid("resolved version differs from pinned version"));
     }
-    let video = load_source_video_stream_by_index(
-        pool,
-        media_version_id,
-        pin.map(|pin| pin.video_stream_index),
-    )
-    .await?;
+    let generated_video = has_generated_video(pool, media_version_id).await?;
+    let video = if generated_video {
+        if pin.is_some_and(|pin| pin.video_stream_index != 0) {
+            return Err(invalid("generated video has only stream zero"));
+        }
+        None
+    } else {
+        source_video(
+            pool,
+            media_version_id,
+            pin.map(|pin| pin.video_stream_index),
+        )
+        .await?
+    };
     let audio_streams = load_source_audio_streams(pool, media_version_id).await?;
     let preferences = playback_language_preferences(pool).await?;
     if let Some(log) = &directives.diagnostics {
@@ -324,16 +379,7 @@ async fn select_projection_tracks(
             None
         };
     let audio_index = if let AudioDirective::Published(audio) = directives.audio {
-        let pinned_audio = audio
-            .map(i32::try_from)
-            .transpose()
-            .map_err(|_| invalid("published audio index is invalid"))?;
-        if pin.is_some_and(|pin| pin.audio_stream_index != pinned_audio)
-            || audio.is_some_and(|index| !audio_streams.iter().any(|stream| stream.index == index))
-        {
-            return Err(invalid("published audio binding changed"));
-        }
-        audio
+        validated_published_audio(item, audio, &audio_streams)?
     } else {
         selected_audio_with_script(
             pool,
@@ -368,8 +414,101 @@ async fn select_projection_tracks(
     }
     Ok(SelectedProjectionTracks {
         video: video.map(|stream| stream.index),
+        generated_video,
         audio: audio_index,
         subtitle,
+    })
+}
+
+fn validated_published_audio(
+    item: &PlayoutItem,
+    audio: Option<usize>,
+    streams: &[SourceAudioStream],
+) -> Result<Option<usize>> {
+    let pinned_audio = audio
+        .map(i32::try_from)
+        .transpose()
+        .map_err(|_| invalid("published audio index is invalid"))?;
+    if item
+        .pinned_stream_selection
+        .is_some_and(|pin| pin.audio_stream_index != pinned_audio)
+        || audio.is_some_and(|index| !streams.iter().any(|stream| stream.index == index))
+    {
+        return Err(invalid("published audio binding changed"));
+    }
+    Ok(audio)
+}
+
+/// Upstream `PlayoutItemConverter` classifies raw stream presence before selection.
+/// Pinned silence and attached cover art cannot turn an audio-only programme
+/// back into a source-video item. Unknown streams retain ordinary probing.
+pub(super) async fn has_generated_video(pool: &DbPool, version_id: i64) -> Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "MediaStream" WHERE "MediaVersionId"=? AND "MediaStreamKind"=2)
+             AND NOT EXISTS(SELECT 1 FROM "MediaStream" WHERE "MediaVersionId"=?
+                            AND "MediaStreamKind"=1 AND "AttachedPic"=0)"#,
+    )
+    .bind(version_id).bind(version_id).fetch_one(pool).await.repository()
+}
+
+async fn is_song(pool: &DbPool, media_id: i64) -> Result<bool> {
+    sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "Song" WHERE "Id"=?)"#)
+        .bind(media_id)
+        .fetch_one(pool)
+        .await
+        .repository()
+}
+
+async fn eligible_video_index(
+    pool: &DbPool,
+    version_id: i64,
+    pinned: Option<i32>,
+) -> Result<Option<(i32, Option<String>)>> {
+    let row = sqlx::query(
+        r#"SELECT "Index", "Codec" FROM "MediaStream"
+           WHERE "MediaVersionId"=? AND "MediaStreamKind"=1 AND "AttachedPic"=0
+             AND (? IS NULL OR "Index"=?) ORDER BY "Index", "Id" LIMIT 1"#,
+    )
+    .bind(version_id)
+    .bind(pinned)
+    .bind(pinned)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    let Some(row) = row else {
+        if pinned.is_some() {
+            return Err(invalid(
+                "pinned source video stream is unavailable or attached artwork",
+            ));
+        }
+        return Ok(None);
+    };
+    let index = i32::try_from(row.try_get::<i64, _>("Index").repository()?)
+        .map_err(|_| invalid("source video index is invalid"))?;
+    if index < 0 {
+        return Err(invalid("source video index is invalid"));
+    }
+    Ok(Some((index, row.try_get("Codec").repository()?)))
+}
+
+pub(super) async fn source_video(
+    pool: &DbPool,
+    version_id: i64,
+    pinned: Option<i32>,
+) -> Result<Option<SourceVideoStream>> {
+    match eligible_video_index(pool, version_id, pinned).await? {
+        Some((index, codec)) if codec.is_some() || pinned.is_some() => {
+            load_source_video_stream_by_index(pool, version_id, Some(index)).await
+        }
+        _ => Ok(None),
+    }
+}
+
+fn black_video(resolution: &Resolution, duration_ms: u64) -> Result<wire::Source> {
+    let hint = super::probe_hint::generated_video(resolution, duration_ms, "rawvideo", None)?;
+    Ok(wire::Source::Lavfi {
+        params: format!("color=c=black:s={}x{}", resolution.width, resolution.height),
+        probe_hint: Some(hint),
     })
 }
 
@@ -467,11 +606,11 @@ pub(crate) fn silent_audio(duration_ms: u64) -> wire::Track {
     wire::Track {
         source: Some(wire::Source::Lavfi {
             params: "anullsrc=channel_layout=stereo:sample_rate=48000".to_owned(),
-            probe_hint: Some(wire::AudioOnlyProbeHint {
-                video: [],
-                subtitle: [],
-                format_name: "mpegts".to_owned(),
-                duration_ms,
+            probe_hint: Some(wire::ProbeHint {
+                video: Vec::new(),
+                subtitle: Vec::new(),
+                format_name: Some("mpegts".to_owned()),
+                duration_ms: Some(duration_ms),
                 audio: vec![wire::AudioProbeHint {
                     stream_index: 0,
                     codec: "pcm_s16le".to_owned(),

@@ -125,16 +125,24 @@ pub(super) async fn project(
         .ok()
         .filter(|value| *value > 0)
         .ok_or_else(unavailable)?;
-    let index = projected
-        .tracks
-        .as_ref()
-        .and_then(|tracks| tracks.video.as_ref())
-        .and_then(|video| video.stream_index)
-        .map(i32::try_from)
-        .transpose()
-        .map_err(|_| unavailable())?;
-    let video =
-        playback::load_source_video_stream_by_index(pool, media.media_version_id, index).await?;
+    let generated = super::selection::has_generated_video(pool, media.media_version_id).await?;
+    let index = if generated {
+        None
+    } else {
+        projected
+            .tracks
+            .as_ref()
+            .and_then(|tracks| tracks.video.as_ref())
+            .and_then(|video| video.stream_index)
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|_| unavailable())?
+    };
+    let video = if generated {
+        None
+    } else {
+        super::selection::source_video(pool, media.media_version_id, index).await?
+    };
     let expires = media
         .item
         .finish

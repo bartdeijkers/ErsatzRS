@@ -1084,6 +1084,9 @@ mod reports_runtime_tests;
 #[path = "scheduled_image_tests.rs"]
 mod scheduled_image_tests;
 
+#[path = "song_runtime_tests.rs"]
+mod song_runtime_tests;
+
 #[path = "direct_remote_servers.rs"]
 mod direct_remote_servers;
 

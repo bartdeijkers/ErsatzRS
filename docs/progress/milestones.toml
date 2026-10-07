@@ -11421,6 +11421,43 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row189 accepted as Adapt under existing ADRs0005/0102/0105.
+Exact upstream481840fbd47ebfe57ab9919ffabec0b9f69e9874 is reconciled;
+shared deterministic song rendering supplies
+native and private authenticated Next PNGs, preserving original audio/subtitle
+sources, seek, finite black fallback, mirror and saved preview geometry.
+Native progress remains enabled; Next's upstream omission is preserved.
+Health includes Song sidecars and strict generated-picture pins. Native owned
+preparation holds capacity/assets until confirmed cleanup and quarantines
+uncertain termination. Independent implementation and lint-refactor reviews
+find no concrete blocker. Linux22 runtime cases pass in
+4e4a1c58-156c-49de-b4f3-a0278b008f3a; actual private HTTP passes in
+c09d915b-02ff-4206-a1c7-d31676243e47. Native Windows20 runtime cases pass in
+cbad3c99-45d7-4e4c-8c9c-3807f061882b; actual private HTTP passes in
+39558637-83be-4dfa-9735-7455bd9aa809. Both complete invocations pass with
+published hash-verified FFmpeg v2.0.6 and Next0362692; no new runtime build.
+Scoped strict all-target Clippy, formatting and new-allow policy pass;
+39 projection/retained checks, six publication-finalization cases,69 web
+ownership/retry checks and16 runtime-policy cases pass after lint corrections.
+Public callback paths now return opaque404 before SSR, retaining profile pages;
+11 actual-listener/router checks pass. Windows UNC language registry quoting
+is corrected; invocation staging now includes the embedded changelog.
+113 subtitle-query checks,118 infra ownership checks, four reviewed song
+snapshots and all231 pipeline snapshots also pass; five intentionally ignored.
+Canonical evidence: tmp/ucu09-row189/acceptance-proof.json with frozen source
+receipts08/09/10 and invocation logs. Windows08 to Linux09 changes only scoped
+lint annotations and equivalent callers/await boxing; renderer/callback/router
+source is identical. Acceptance10 additionally guards a Unix-only shell test
+helper with cfg(all(test,unix)); production and compiled Unix behavior is
+unchanged. After those caller changes,39 projection/retained, six finalization
+and69 web ownership/retry checks pass. Native Windows compilation confirms
+the UNC language fix. All208 ordered SHA/subjects and the local/remote fixed
+release tag are verified. Row, baseline and clean upstream checkout advance
+together:189/208 accepted,19 pending; row190 is next. UCU-09 final window local
+gates and terminal green exact-SHA CI remain required. No intermediate push/CI
+or milestone/release completion is claimed; approved hardware/platform debt
+remains explicit and unverified.
+
 2026-10-07 row188 accepted as N/A. Upstream26755a1664e505adecc6900a69a8b956d53c6601
 adds one changelog line announcing the QSV loudness/canvas memory correction;
 no source/dependency/package contract changes. Exact pinned Next0362692 already

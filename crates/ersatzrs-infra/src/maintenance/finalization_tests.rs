@@ -136,7 +136,7 @@ async fn later_file_failure_restores_earlier_owner_and_rolls_back_sql() {
         pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     // A destination directory cannot be atomically replaced by a regular file.
     // The first publisher succeeds; the mirror fails after its preparation.
     let mirror = path(root.path(), 2);
@@ -163,7 +163,7 @@ async fn sql_commit_deadline_failure_restores_every_published_file() {
         pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     let deadline = decision_deadline(pending.publication_deadline(), prepared.len())
         .unwrap()
         .unwrap();
@@ -204,7 +204,7 @@ async fn aborted_awaiter_cannot_release_build_before_file_rollback_finishes() {
         pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     let (entered, waiting) = tokio::sync::oneshot::channel();
     let entered = std::sync::Mutex::new(Some(entered));
     let (release, blocked) = std::sync::mpsc::channel();
@@ -260,7 +260,7 @@ async fn successful_group_commits_sql_and_keeps_both_candidate_files() {
         pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     assert_eq!(
         settle(pending, prepared, None, guard.hold_finalization())
             .await
@@ -300,7 +300,7 @@ async fn insufficient_recovery_window_refuses_before_any_file_changes() {
         mut pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     pending.restrict_deadline(Instant::now() + StdDuration::from_secs(1));
     let error = settle(pending, prepared, None, guard.hold_finalization())
         .await
@@ -321,7 +321,7 @@ async fn failed_compensation_reports_storage_failure_and_retains_previous_bytes(
         pending,
         prepared,
         guard,
-    } = fixture().await;
+    } = Box::pin(fixture()).await;
     let root_path = root.path().to_owned();
     let runtime = tokio::runtime::Handle::current();
     let error = tokio::task::spawn_blocking(move || {

@@ -2,6 +2,77 @@ use super::*;
 use ersatzrs_domain::{FFmpegProfile, GraphicsElement, GraphicsElementConfig, Resolution};
 
 #[tokio::test]
+async fn generated_video_canvas_uses_output_geometry_without_pinning_cover_art() {
+    for cover in [false, true] {
+        let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;
+        sqlx::query(if cover {
+            r#"UPDATE "MediaStream" SET "AttachedPic"=1,"Codec"=NULL WHERE "Id"=1"#
+        } else {
+            r#"DELETE FROM "MediaStream" WHERE "Id"=1"#
+        })
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"UPDATE "MediaVersion" SET "SampleAspectRatio"='100:1',"RFrameRate"='1/1' WHERE "Id"=100"#)
+            .execute(&pool).await.unwrap();
+        let media =
+            super::super::schedule::bind_media(&pool, super::super::selection::tests::item())
+                .await
+                .unwrap();
+        let profile = playback::PlaybackProfile {
+            profile: FFmpegProfile::default(),
+            resolution: Resolution {
+                width: 640,
+                height: 360,
+                ..Default::default()
+            },
+        };
+        let mut projected = super::super::selection::project_item(
+            &pool,
+            &channel,
+            &media.item,
+            media.media_version_id,
+            protocol::Source::Local {
+                path: media.path.clone(),
+                in_point_ms: None,
+                out_point_ms: None,
+                probe_hint: None,
+            },
+            &profile.resolution,
+        )
+        .await
+        .unwrap();
+        let graphics = [ResolvedPlaybackGraphicsElement {
+            element: GraphicsElement::default(),
+            variables: None,
+        }];
+        let plan = project(
+            &pool,
+            &channel,
+            &media,
+            &profile,
+            &mut projected,
+            &[],
+            &graphics,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let value = serde_json::to_value(plan).unwrap();
+        assert!(
+            value["binding"]["video_stream_index"].is_null(),
+            "generated index0 is not an original-media pin"
+        );
+        assert_eq!(value["hint"]["video"][0]["width"], 640);
+        assert_eq!(value["hint"]["video"][0]["height"], 360);
+        assert!(
+            value["hint"]["video"][0].get("frame_rate").is_none(),
+            "cover-art frame rate does not define generated video"
+        );
+    }
+}
+
+#[tokio::test]
 async fn copy_profile_omits_watermarks_and_canvas_without_loading_video() {
     let (pool, _, channel, _) = super::super::schedule::tests::fixture().await;
     let media = super::super::schedule::bind_media(&pool, super::super::selection::tests::item())

@@ -58,7 +58,7 @@ impl NextHost {
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let preparation = ProducerPreparation {
             pool: self.pool.clone(),
-            media_id: context.media.item.media_item_id,
+            media_id: super::remote_projection::remote_owner(&context.media)?,
             ffmpeg: request.ffmpeg.to_str().ok_or_else(unavailable)?.into(),
             ffprobe: request.ffprobe.to_str().ok_or_else(unavailable)?.into(),
             number: request.number.clone(),
@@ -371,6 +371,13 @@ mod tests {
     fn projection(path: &str) -> DeferredProjection {
         let start = Utc::now();
         DeferredProjection {
+            original_source: protocol::Source::Local {
+                path: path.into(),
+                in_point_ms: Some(6000),
+                out_point_ms: Some(36000),
+                probe_hint: None,
+            },
+            song: None,
             canvas: None,
             selected_subtitle: Some(PlaybackSubtitle {
                 id: 1,

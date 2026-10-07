@@ -146,6 +146,69 @@ async fn dynamic_snapshot_invalidates_source_revisions_and_local_mtime() {
 }
 
 #[tokio::test]
+async fn song_background_and_pinned_silence_still_fence_original_source_changes() {
+    let (pool, locker, mut channel, start, file) = fixture().await;
+    for query in [
+        r#"INSERT INTO "Song" ("Id") VALUES (10)"#,
+        r#"INSERT INTO "SongMetadata" ("Id", "SongId", "Title", "MetadataKind", "DateAdded", "DateUpdated") VALUES (21, 10, 'Synthetic song', 0, '2026-09-22 00:00:00', '2026-09-22 00:00:00')"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL, "SongId"=10 WHERE "Id"=100"#,
+        r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100 AND "MediaStreamKind"=1"#,
+        r#"UPDATE "PlayoutItem" SET "AudioStreamIndex"=NULL, "SubtitleStreamIndex"=NULL"#,
+    ] {
+        sqlx::query(query).execute(&pool).await.unwrap();
+    }
+    channel.subtitle_mode = ChannelSubtitleMode::None;
+    make_repositories(pool.clone())
+        .channel
+        .upsert(&channel)
+        .await
+        .unwrap();
+    let relay = MediaRelay::new();
+    let project = || {
+        project_snapshot(
+            &pool,
+            &locker,
+            &relay,
+            1,
+            1,
+            start,
+            start + Duration::seconds(60),
+            &[],
+            None,
+        )
+    };
+    let before = project().await.unwrap();
+    assert!(before.projection.song.is_some());
+    assert!(matches!(
+        before.projection.original_source,
+        Source::Local { .. }
+    ));
+    assert!(matches!(
+        &before
+            .projection
+            .item
+            .tracks
+            .as_ref()
+            .unwrap()
+            .audio
+            .as_ref()
+            .unwrap()
+            .source,
+        Some(Source::Lavfi { .. })
+    ));
+    file.as_file()
+        .set_times(
+            std::fs::FileTimes::new().set_modified(
+                std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_002),
+            ),
+        )
+        .unwrap();
+    let after = project().await.unwrap();
+    assert_ne!(before.identity.descriptor, after.identity.descriptor);
+    assert_ne!(before.identity.cache_key, after.identity.cache_key);
+}
+
+#[tokio::test]
 async fn dynamic_snapshot_rejects_missing_local_identity_and_stale_binding() {
     let (pool, locker, channel, start, file) = fixture().await;
     let valid = snapshot(&pool, &locker, start).await;

@@ -50,7 +50,9 @@ impl Job {
             created_at: now.clone(),
             updated_at: now,
             error_code: None,
-            return_url: format!("/system/troubleshooting/playback?mediaItem={media}&channel={channel}&previewId={id}"),
+            return_url: format!(
+                "/system/troubleshooting/playback?mediaItem={media}&channel={channel}&previewId={id}"
+            ),
             log: None,
         };
         let (status, _) = watch::channel(status);
@@ -84,6 +86,15 @@ impl Job {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
+    }
+
+    pub(super) fn preparation_reservation(
+        &self,
+    ) -> Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation> {
+        self.reservation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub(super) fn running(&self) {
@@ -302,7 +313,7 @@ impl NativeAdminTroubleshootingRuntime {
             let result = if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
                 next::start(state, request.into(), ownership).await
             } else {
-                start_playback_preview(&state, &request.into(), ownership)
+                Box::pin(start_playback_preview(&state, &request.into(), ownership))
                     .await
                     .map_err(map_runtime_error)
             };
@@ -384,7 +395,7 @@ impl NativeAdminTroubleshootingRuntime {
                 Err(_) => {
                     return Err(AdminTroubleshootingRuntimeError::unavailable(
                         "preview output cannot be read",
-                    ))
+                    ));
                 }
             };
             if file
@@ -422,10 +433,11 @@ impl NativeAdminTroubleshootingRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use crate::host::troubleshooting::{
-        write_preview_logs, Command, DynamicTextController, FfmpegRuntimeReport, ManagedProcess,
-        Mutex, PathBuf, RwLock, Stdio,
+        write_preview_logs, Command, DynamicTextController, ManagedProcess, Mutex, PathBuf, Stdio,
     };
+    use crate::host::troubleshooting::{FfmpegRuntimeReport, RwLock};
 
     fn runtime() -> NativeAdminTroubleshootingRuntime {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -620,6 +632,7 @@ mod tests {
             vec![controller],
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            None,
         ));
         tokio::time::timeout(Duration::from_secs(2), async {
             while !root.path().join("descendant.pid").exists() {

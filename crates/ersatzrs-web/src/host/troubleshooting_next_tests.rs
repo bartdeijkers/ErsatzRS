@@ -1,6 +1,7 @@
 use super::*;
 use ersatzrs_core::repositories::{FfmpegProfileRepository as _, PlayoutRepository as _};
 use ersatzrs_domain::{FFmpegProfile, PinnedStreamSelection};
+use ersatzrs_infra::hls_worker::build_hls_command_with_opacity_clock;
 
 struct Fixture {
     root: tempfile::TempDir,

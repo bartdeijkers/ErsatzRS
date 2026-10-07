@@ -13,7 +13,18 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Play songs through the optional Next engine with occurrence-stable artwork,
+  metadata and channel-sized pictures served by authenticated private callbacks.
+  Preserve alternate audio, subtitle selection, seeking and scheduled handoff;
+  use finite black video for other audio-only programmes.
+
 ### Changed
+
+- Share song artwork, BlurHash and multilingual metadata rendering between
+  native and Next playback. Keep the native progress bar, preserve literal
+  titles, and use default artwork when an optional cover is unavailable.
 
 - Update the optional Next engine to the reviewed six-platform
   `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding and
@@ -36,6 +47,14 @@ release section when tagging a release.
   Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 ### Fixed
+
+- Preserve Windows UNC paths in the generated language registry, and return
+  opaque 404s for private callback paths on the management listener while
+  retaining the existing FFmpeg profile pages.
+
+- Include song subtitles in playback selection and validate generated-picture
+  and song-sidecar pins accurately in health checks. Continue rejecting stale
+  media versions and unavailable tracks.
 
 - Prevent Block playout skips and repeats after collection changes by removing
   orphaned future cursor history before restoration and deleting all duplicate

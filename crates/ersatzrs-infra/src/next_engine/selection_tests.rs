@@ -53,6 +53,335 @@ pub(crate) fn item() -> PlayoutItem {
     }
 }
 
+async fn audio_only_fixture(cover: bool, song: bool) -> DbPool {
+    let pool = fixture_pool().await;
+    sqlx::query(if cover {
+        r#"UPDATE "MediaStream" SET "AttachedPic"=1, "Codec"='mjpeg' WHERE "Id"=1"#
+    } else {
+        r#"DELETE FROM "MediaStream" WHERE "Id"=1"#
+    })
+    .execute(&pool)
+    .await
+    .unwrap();
+    if song {
+        for sql in [
+            r#"INSERT INTO "Song" ("Id") VALUES (10)"#,
+            r#"UPDATE "MediaVersion" SET "MovieId"=NULL, "SongId"=10 WHERE "Id"=100"#,
+            r#"DELETE FROM "Movie" WHERE "Id"=10"#,
+            r#"INSERT INTO "SongMetadata" ("Id","SongId","Title","MetadataKind","DateAdded","DateUpdated") VALUES (20,10,'Synthetic Song',0,'2026-09-22','2026-09-22')"#,
+            r#"INSERT INTO "Subtitle" ("Id","SongMetadataId","SubtitleKind","Title","StreamIndex","Codec","Language","Default","Forced","SDH","IsExtracted","DateAdded","DateUpdated") VALUES (3,20,0,'Japanese',3,'hdmv_pgs_subtitle','jpn',0,0,0,0,'2026-09-22','2026-09-22')"#,
+        ] {
+            sqlx::query(sql).execute(&pool).await.unwrap();
+        }
+    }
+    sqlx::query(r#"INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (1,100,'media/fixture.mkv','synthetic')"#)
+        .execute(&pool).await.unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn audio_only_movies_generate_finite_black_without_losing_audio_subtitle_or_seek() {
+    for cover in [false, true] {
+        let pool = audio_only_fixture(cover, false).await;
+        let mut selected = item();
+        selected.pinned_stream_selection = Some(PinnedStreamSelection {
+            media_version_id: 100,
+            video_stream_index: 0,
+            audio_stream_index: Some(2),
+            subtitle_stream_index: Some(3),
+        });
+        let value = serde_json::to_value(
+            project(&pool, &Channel::default(), &selected)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(value["tracks"]["video"]["stream_index"], 0);
+        assert_eq!(value["tracks"]["video"]["source"]["source_type"], "lavfi");
+        assert_eq!(
+            value["tracks"]["video"]["source"]["params"],
+            "color=c=black:s=320x180"
+        );
+        assert_eq!(
+            value["tracks"]["video"]["source"]["probe_hint"]["duration_ms"],
+            60_000
+        );
+        assert_eq!(
+            value["tracks"]["video"]["source"]["probe_hint"]["video"][0]["codec"],
+            "rawvideo"
+        );
+        assert_eq!(
+            value["tracks"]["video"]["source"]["probe_hint"]["video"][0]["pix_fmt"],
+            "yuv420p"
+        );
+        assert!(value["tracks"]["video"]["source"]["probe_hint"]["format_name"].is_null());
+        for (kind, index) in [("audio", 2), ("subtitle", 3)] {
+            assert_eq!(value["tracks"][kind]["stream_index"], index);
+            assert_eq!(value["tracks"][kind]["source"]["path"], "media/fixture.mkv");
+            assert_eq!(value["tracks"][kind]["source"]["in_point_ms"], 1000);
+            assert_eq!(value["tracks"][kind]["source"]["out_point_ms"], 61_000);
+        }
+        selected
+            .pinned_stream_selection
+            .as_mut()
+            .unwrap()
+            .audio_stream_index = None;
+        let value = serde_json::to_value(
+            project(&pool, &Channel::default(), &selected)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            value["tracks"]["video"]["source"]["params"],
+            "color=c=black:s=320x180"
+        );
+        assert!(value["tracks"]["audio"]["source"]["params"]
+            .as_str()
+            .unwrap()
+            .starts_with("anullsrc"));
+    }
+}
+
+#[tokio::test]
+async fn songs_defer_signed_output_sized_video_and_preserve_original_track_pins() {
+    for cover in [false, true] {
+        let pool = audio_only_fixture(cover, true).await;
+        let selected = PlayoutItem {
+            pinned_stream_selection: Some(PinnedStreamSelection {
+                media_version_id: 100,
+                video_stream_index: 0,
+                audio_stream_index: Some(2),
+                subtitle_stream_index: Some(3),
+            }),
+            ..item()
+        };
+        let channel = Channel {
+            id: 7,
+            preferred_audio_language_code: Some("eng".into()),
+            ..Default::default()
+        };
+        let resolution = Resolution {
+            width: 640,
+            height: 360,
+            ..Default::default()
+        };
+        let source = wire::Source::Local {
+            path: "media/fixture.mkv".into(),
+            in_point_ms: None,
+            out_point_ms: None,
+            probe_hint: None,
+        };
+        let mut projected =
+            project_deferred_item(&pool, &channel, &selected, 100, source.clone(), &resolution)
+                .await
+                .unwrap();
+        assert!(projected.song.is_some());
+        assert!(projected
+            .item
+            .tracks
+            .as_ref()
+            .unwrap()
+            .video
+            .as_ref()
+            .unwrap()
+            .source
+            .is_none());
+        assert!(
+            project_item(&pool, &channel, &selected, 100, source.clone(), &resolution)
+                .await
+                .is_err(),
+            "unbound Song cannot escape deferred publication"
+        );
+        let relay = super::super::media::MediaRelay::new();
+        relay.configure("127.0.0.1:18419".parse().unwrap()).unwrap();
+        projected
+            .publish_graphics(&relay, None, selected.start)
+            .unwrap();
+        let value = serde_json::to_value(&projected.item).unwrap();
+        let video = &value["tracks"]["video"]["source"];
+        assert_eq!(video["source_type"], "http");
+        assert_eq!(video["probe_hint"]["format_name"], "png_pipe");
+        assert_eq!(video["probe_hint"]["video"][0]["codec"], "png");
+        assert_eq!(video["probe_hint"]["video"][0]["width"], 640);
+        assert_eq!(video["probe_hint"]["video"][0]["height"], 360);
+        assert_eq!(video["probe_hint"]["duration_ms"], 60_000);
+        assert!(video.get("in_point_ms").is_none());
+        for (kind, index) in [("audio", 2), ("subtitle", 3)] {
+            assert_eq!(value["tracks"][kind]["stream_index"], index);
+            assert_eq!(value["tracks"][kind]["source"]["in_point_ms"], 1000);
+            assert_eq!(value["tracks"][kind]["source"]["out_point_ms"], 61_000);
+        }
+        let mut stale = selected.clone();
+        stale
+            .pinned_stream_selection
+            .as_mut()
+            .unwrap()
+            .video_stream_index = 5;
+        assert!(
+            project_deferred_item(&pool, &channel, &stale, 100, source.clone(), &resolution)
+                .await
+                .is_err()
+        );
+        stale
+            .pinned_stream_selection
+            .as_mut()
+            .unwrap()
+            .video_stream_index = 0;
+        stale
+            .pinned_stream_selection
+            .as_mut()
+            .unwrap()
+            .audio_stream_index = Some(19);
+        assert!(
+            project_deferred_item(&pool, &channel, &stale, 100, source, &resolution)
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn real_video_ignores_attached_artwork_and_unknown_metadata_keeps_source_probing() {
+    let pool = audio_only_fixture(true, false).await;
+    sqlx::query(r#"INSERT INTO "MediaStream" ("Id","Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId") VALUES (6,5,'h264',1,0,0,0,100)"#).execute(&pool).await.unwrap();
+    let value =
+        serde_json::to_value(project(&pool, &Channel::default(), &item()).await.unwrap()).unwrap();
+    assert_eq!(value["tracks"]["video"]["stream_index"], 5);
+    assert_eq!(
+        value["tracks"]["video"]["source"]["path"],
+        "media/fixture.mkv"
+    );
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: None,
+    });
+    assert!(
+        project(&pool, &Channel::default(), &pinned).await.is_err(),
+        "cover artwork is not source video"
+    );
+    sqlx::query(r#"UPDATE "MediaStream" SET "Codec"=NULL WHERE "Id"=6"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let value =
+        serde_json::to_value(project(&pool, &Channel::default(), &item()).await.unwrap()).unwrap();
+    assert_eq!(
+        value["tracks"]["video"]["source"]["path"],
+        "media/fixture.mkv"
+    );
+    assert!(value["tracks"]["video"].get("stream_index").is_none());
+    pinned
+        .pinned_stream_selection
+        .as_mut()
+        .unwrap()
+        .video_stream_index = 5;
+    assert!(
+        project(&pool, &Channel::default(), &pinned).await.is_err(),
+        "unknown pinned codec remains strict"
+    );
+    sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let value =
+        serde_json::to_value(project(&pool, &Channel::default(), &item()).await.unwrap()).unwrap();
+    assert_eq!(
+        value["tracks"]["video"]["source"]["path"],
+        "media/fixture.mkv"
+    );
+    assert!(value["tracks"]["audio"]["source"]["params"]
+        .as_str()
+        .unwrap()
+        .starts_with("anullsrc"));
+}
+
+#[tokio::test]
+async fn generated_video_keeps_frozen_audio_and_validates_geometry_and_version_pins() {
+    let pool = audio_only_fixture(false, false).await;
+    let channel = Channel::default();
+    let selected = item();
+    let source = wire::Source::Local {
+        path: "media/fixture.mkv".into(),
+        in_point_ms: None,
+        out_point_ms: None,
+        probe_hint: None,
+    };
+    let resolution = Resolution {
+        width: 320,
+        height: 180,
+        ..Default::default()
+    };
+    for audio in [Some(2), None] {
+        let projected = project_deferred_item_with_audio(
+            &pool,
+            &channel,
+            &selected,
+            100,
+            source.clone(),
+            &resolution,
+            AudioDirective::Published(audio),
+        )
+        .await
+        .unwrap();
+        let value = serde_json::to_value(projected.item).unwrap();
+        assert_eq!(
+            value["tracks"]["video"]["source"]["params"],
+            "color=c=black:s=320x180"
+        );
+        if let Some(index) = audio {
+            assert_eq!(value["tracks"]["audio"]["stream_index"], index);
+        } else {
+            assert!(value["tracks"]["audio"]["source"]["params"]
+                .as_str()
+                .unwrap()
+                .starts_with("anullsrc"));
+        }
+        assert_eq!(
+            serde_json::to_value(projected.original_source).unwrap()["in_point_ms"],
+            1000
+        );
+    }
+    assert!(project_deferred_item_with_audio(
+        &pool,
+        &channel,
+        &selected,
+        100,
+        source.clone(),
+        &resolution,
+        AudioDirective::Published(Some(99))
+    )
+    .await
+    .is_err());
+    assert!(project_item(
+        &pool,
+        &channel,
+        &selected,
+        100,
+        source.clone(),
+        &Resolution::default()
+    )
+    .await
+    .is_err());
+    let selected = PlayoutItem {
+        pinned_stream_selection: Some(PinnedStreamSelection {
+            media_version_id: 101,
+            video_stream_index: 0,
+            audio_stream_index: Some(2),
+            subtitle_stream_index: None,
+        }),
+        ..selected
+    };
+    assert!(
+        project_item(&pool, &channel, &selected, 100, source, &resolution)
+            .await
+            .is_err()
+    );
+}
+
 #[tokio::test]
 async fn provider_sidecar_projection_defers_burn_and_convert_without_network_access() {
     let pool = fixture_pool().await;

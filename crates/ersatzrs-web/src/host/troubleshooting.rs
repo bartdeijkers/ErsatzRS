@@ -23,7 +23,7 @@ use ersatzrs_infra::{
         channel_stream_selectors_folder, list_channel_stream_selectors,
         transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
     },
-    hls_worker::build_hls_command_with_opacity_clock,
+    hls_worker::build_hls_command_with_opacity_clock_and_song,
     playback::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
         load_playback_profile, load_playback_subtitle_candidates, load_source_audio_streams,
@@ -271,7 +271,7 @@ fn map_runtime_error(
 async fn start_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: PreviewOwnership,
+    mut ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     if query.channel.is_some_and(|id| id > 0) {
         return start_channel_playback_preview(state, query, ownership).await;
@@ -438,7 +438,16 @@ async fn start_playback_preview(
         Some(Duration::from_secs_f64(media.duration_seconds.max(0.0))),
         spawn_time,
     );
-    let command = build_hls_command_with_opacity_clock(
+    let song = prepare_native_song(
+        state,
+        media_item_id,
+        selector_channel.id,
+        &playback_profile.resolution,
+        &runtime_capabilities,
+        &mut ownership,
+    )
+    .await?;
+    let command = build_hls_command_with_opacity_clock_and_song(
         &media_path,
         &working_dir,
         output_format,
@@ -459,6 +468,7 @@ async fn start_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
+        song.as_ref(),
     );
 
     start_native_command(
@@ -468,6 +478,7 @@ async fn start_playback_preview(
         dynamic_text_controllers,
         ownership,
         output_format,
+        song,
     )
     .await
 }
@@ -476,7 +487,7 @@ async fn start_playback_preview(
 async fn start_channel_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: PreviewOwnership,
+    mut ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     let channel_id = query.channel.filter(|id| *id > 0).ok_or(PreviewNotFound(
         "channel troubleshooting preview requires channel",
@@ -748,7 +759,16 @@ async fn start_channel_playback_preview(
         active.content_duration,
         content_start_time,
     );
-    let command = build_hls_command_with_opacity_clock(
+    let song = prepare_native_song(
+        state,
+        active.media_item_id,
+        channel.id,
+        &playback_profile.resolution,
+        &runtime_capabilities,
+        &mut ownership,
+    )
+    .await?;
+    let command = build_hls_command_with_opacity_clock_and_song(
         &media_path,
         &working_dir,
         output_format,
@@ -769,6 +789,7 @@ async fn start_channel_playback_preview(
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
+        song.as_ref(),
     );
 
     start_native_command(
@@ -778,6 +799,7 @@ async fn start_channel_playback_preview(
         dynamic_text_controllers,
         ownership,
         output_format,
+        song,
     )
     .await
 }
@@ -1663,6 +1685,106 @@ fn preview_command_arguments(command: &FfmpegCommand) -> Vec<String> {
     arguments
 }
 
+async fn prepare_native_song(
+    state: &NativeAdminTroubleshootingRuntime,
+    media_item_id: i64,
+    channel_id: i64,
+    resolution: &ersatzrs_domain::Resolution,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+    ownership: &mut PreviewOwnership,
+) -> ApiResult<Option<ersatzrs_infra::song_background::NativeSongBackground>> {
+    let is_song: i64 = sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "Song" WHERE "Id" = ?)"#)
+        .bind(media_item_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if is_song == 0 {
+        return Ok(None);
+    }
+    let job = lifecycle::job(ownership);
+    let reservation =
+        if let Some(reservation) = job.as_ref().and_then(|job| job.preparation_reservation()) {
+            reservation
+        } else {
+            let reservation = reserve_native_preview(state).await?;
+            if let Some(job) = &job {
+                job.retain_reservation(reservation.clone());
+            }
+            reservation
+        };
+    let id = job
+        .as_ref()
+        .and_then(|job| uuid::Uuid::parse_str(&job.read().id).ok())
+        .unwrap_or_else(uuid::Uuid::new_v4);
+    let seed =
+        i64::from_le_bytes(id.as_bytes()[..8].try_into().expect("UUID seed prefix")) & i64::MAX;
+    let executable = capabilities
+        .runtime_identity
+        .as_ref()
+        .map_or_else(ersatzrs_ffmpeg::ffmpeg_path, |identity| {
+            identity.ffmpeg_path.clone()
+        });
+    let (sender, receiver) = oneshot::channel();
+    let operation = ersatzrs_infra::song_background::prepare_native_with_reservation(
+        &state.pool,
+        media_item_id,
+        channel_id,
+        resolution,
+        seed,
+        FsPath::new(&executable),
+        tokio::time::Instant::now() + Duration::from_secs(15),
+        receiver,
+        Some(reservation),
+    );
+    tokio::pin!(operation);
+    let cancellation = job
+        .as_ref()
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let result = tokio::select! {
+        result = &mut operation => result,
+        () = cancellation.cancelled() => {
+            let _ = sender.send(());
+            operation.await
+        }
+    };
+    if result.as_ref().is_err_and(
+        ersatzrs_infra::song_background::NativeSongPreparationError::termination_unconfirmed,
+    ) {
+        **ownership = PreviewAvailability::CleanupUnconfirmed {
+            _reservation: job.as_ref().and_then(|job| job.take_reservation()),
+        };
+        if let Some(job) = &job {
+            job.fail("cleanup");
+            job.finish(false, false, None);
+        }
+    } else if result.is_err() {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
+    }
+    result.map_err(Into::into)
+}
+
+async fn reserve_native_preview(
+    state: &NativeAdminTroubleshootingRuntime,
+) -> ApiResult<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation> {
+    use ersatzrs_infra::transcode_capacity::{
+        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
+        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    };
+    let limit = load_active_transcode_limit(&state.pool)
+        .await?
+        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+    try_reserve_active_transcode(
+        limit,
+        ActiveTranscodeSlot::new_next_hls_with_capacity_key(
+            TRANSCODE_TROUBLESHOOTING_CHANNEL,
+            "troubleshooting",
+        ),
+    )
+    .ok_or_else(|| "troubleshooting capacity is unavailable".into())
+}
+
 async fn start_native_command(
     state: &NativeAdminTroubleshootingRuntime,
     working: &FsPath,
@@ -1670,45 +1792,37 @@ async fn start_native_command(
     controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
     output_format: OutputFormat,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> ApiResult<()> {
-    use ersatzrs_infra::transcode_capacity::{
-        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
-        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
-    };
     let job = lifecycle::job(&ownership);
     let command = match command {
         Ok(command) => command,
         Err(error) => {
+            if let Some(job) = &job {
+                drop(job.take_reservation());
+            }
             shutdown_dynamic_text_controllers(controllers).await;
             return Err(error.into());
         }
     };
     if job.as_ref().is_some_and(|job| job.cancel.is_cancelled()) {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
         shutdown_dynamic_text_controllers(controllers).await;
         return Err("troubleshooting playback cancelled".into());
     }
     if let Err(error) = write_ffmpeg_arguments(working, &command).await {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
         shutdown_dynamic_text_controllers(controllers).await;
         return Err(error);
     }
-    let admission = async {
-        let limit = load_active_transcode_limit(&state.pool)
-            .await?
-            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
-        try_reserve_active_transcode(
-            limit,
-            ActiveTranscodeSlot::new_next_hls_with_capacity_key(
-                TRANSCODE_TROUBLESHOOTING_CHANNEL,
-                "troubleshooting",
-            ),
-        )
-        .ok_or_else(|| {
-            Box::<dyn std::error::Error + Send + Sync>::from(
-                "troubleshooting capacity is unavailable",
-            )
-        })
-    }
-    .await;
+    let admission = match job.as_ref().and_then(|job| job.preparation_reservation()) {
+        Some(reservation) => Ok(reservation),
+        None => reserve_native_preview(state).await,
+    };
     let reservation = match admission {
         Ok(reservation) => reservation,
         Err(error) => {
@@ -1719,7 +1833,7 @@ async fn start_native_command(
     if let Some(job) = job {
         job.retain_reservation(reservation);
     }
-    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership).await?;
+    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership, song).await?;
     wait_for_preview_output(&working.to_path_buf(), output_format, completion).await
 }
 
@@ -1728,6 +1842,7 @@ async fn spawn_preview_ffmpeg(
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> ApiResult<oneshot::Receiver<bool>> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
@@ -1746,9 +1861,15 @@ async fn spawn_preview_ffmpeg(
         process.env(variable.name, variable.value);
     }
 
+    if let Some(song) = &song {
+        song.mark_in_use();
+    }
     let mut child = match ManagedProcess::spawn(process) {
         Ok(child) => child,
         Err(error) => {
+            if let Some(song) = &song {
+                song.confirm_reaped();
+            }
             shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
             if let Some(job) = lifecycle::job(&ownership) {
                 drop(job.take_reservation());
@@ -1772,6 +1893,7 @@ async fn spawn_preview_ffmpeg(
             dynamic_text_controllers,
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            song,
         )
         .await;
         // Diagnostics and owner cleanup complete even if the request disconnected.
@@ -1780,6 +1902,10 @@ async fn spawn_preview_ffmpeg(
     Ok(completion)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bounded preview cleanup owns process pipes, controllers, admission and song assets together"
+)]
 async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
@@ -1788,6 +1914,7 @@ async fn write_preview_logs(
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> bool {
     let mut logs = Vec::new();
     let mut progress_output = Vec::new();
@@ -1829,6 +1956,11 @@ async fn write_preview_logs(
         )
     {
         *ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
+    }
+    if let Some(song) = &song {
+        if !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
+            song.confirm_reaped();
+        }
     }
     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
     if let Some(speed) = progress::parse_speed(&String::from_utf8_lossy(&progress_output)) {
@@ -1892,10 +2024,10 @@ async fn wait_for_preview_output(
     loop {
         match completion.try_recv() {
             Ok(succeeded) => {
-                return completed_preview_output(working_dir, segment_extension, succeeded).await
+                return completed_preview_output(working_dir, segment_extension, succeeded).await;
             }
             Err(oneshot::error::TryRecvError::Closed) => {
-                return Err("troubleshooting worker ended without completion".into())
+                return Err("troubleshooting worker ended without completion".into());
             }
             Err(oneshot::error::TryRecvError::Empty) => {}
         }
@@ -2378,6 +2510,7 @@ mod tests {
             Vec::new(),
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            None,
         );
         assert!(lock.try_lock().is_err());
         completion.await;
@@ -2410,6 +2543,7 @@ mod tests {
                     Vec::new(),
                     ownership,
                     tokio::time::Instant::now() + Duration::from_mins(2),
+                    None,
                 )
                 .await;
                 let _ = finished.send(succeeded);
@@ -2481,6 +2615,7 @@ mod tests {
             Vec::new(),
             ownership,
             tokio::time::Instant::now(),
+            None,
         )
         .await;
         assert!(matches!(

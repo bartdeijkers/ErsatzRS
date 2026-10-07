@@ -286,13 +286,13 @@ impl NextHost {
         now: DateTime<Utc>,
         deadline: Instant,
     ) -> Result<protocol::PlayoutItem> {
-        let mut snapshot = super::remote_projection::materialize_prepared(
+        let mut snapshot = Box::pin(super::remote_projection::materialize_prepared(
             &self.pool,
             &self.locker,
             projected.snapshot,
             audio,
             &crate::file_system_layout::addon_processed_media_folder(),
-        )
+        ))
         .await?;
         super::live_subtitles::prepare(&self.burn_cache, &mut snapshot, now, deadline).await?;
         if !Box::pin(self.fallback_preparation_unchanged(
@@ -589,13 +589,13 @@ impl NextHost {
         else {
             return false;
         };
-        let Ok(current) = super::remote_projection::materialize_prepared(
+        let Ok(current) = Box::pin(super::remote_projection::materialize_prepared(
             &self.pool,
             &self.locker,
             projected.snapshot,
             audio,
             &crate::file_system_layout::addon_processed_media_folder(),
-        )
+        ))
         .await
         else {
             return false;

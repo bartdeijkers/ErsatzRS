@@ -1,4 +1,4 @@
-use super::super::protocol::{AudioOnlyProbeHint, AudioProbeHint, Track, Tracks};
+use super::super::protocol::{AudioProbeHint, ProbeHint, Track, Tracks};
 use super::*;
 use chrono::{Duration, TimeZone};
 
@@ -87,11 +87,11 @@ fn generated_silence_and_explicit_subtitles_off_remain_valid() {
     tracks.video.as_mut().unwrap().source = Some(local(None));
     tracks.audio.as_mut().unwrap().source = Some(Source::Lavfi {
         params: "anullsrc=channel_layout=stereo:sample_rate=48000".into(),
-        probe_hint: Some(AudioOnlyProbeHint {
-            video: [],
-            subtitle: [],
-            format_name: "mpegts".into(),
-            duration_ms: 60_000,
+        probe_hint: Some(ProbeHint {
+            video: Vec::new(),
+            subtitle: Vec::new(),
+            format_name: Some("mpegts".into()),
+            duration_ms: Some(60_000),
             audio: vec![AudioProbeHint {
                 stream_index: 0,
                 codec: "pcm_s16le".into(),

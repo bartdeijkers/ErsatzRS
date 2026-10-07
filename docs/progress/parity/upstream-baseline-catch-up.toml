@@ -2,22 +2,23 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..46118d43 (v26.11.1; fixed UCU-09 boundary)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
+adr        = ['0005', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-188/208 in-scope rows accepted; rows189-208 remain pending through v26.11.1.
+189/208 in-scope rows accepted; rows190-208 remain pending through v26.11.1.
 Rows209 onward are later work and do not reopen UCU-09.
 ADR 0117 accepts qualifying Next corrections.
-Six packages pin Next0362692 with the QSV fix; unpatched upstream still fails
-both local regressions. ADRs 0116/0117 require independent patch retirement. Linux/Windows compatibility
-and macOS package CI pass. Row186 production HTTP playback, selected audio/
-captions, preview, reconnect and idle cleanup pass; application window CI remains open.
-UCU-00 through UCU-08 are Complete; UCU-09 remains open through its fixed v26.11.1
-release boundary. Final window local gates and terminal
-green exact-SHA CI 36900396649 at b76d11c6 pass. Stable v1.1.0 package acceptance remains separate.
+Next0362692 is pinned for six RIDs; both local patches still require independent
+retirement. Package CI and row186 production playback/cleanup pass.
+UCU-00–08 are Complete; UCU-09 remains open through v26.11.1.
+Earlier window gates and exact-SHA CI36900396649 at b76d11c6
+passed; fixed-cutoff closeout and stable v1.1.0 package acceptance remain open.
 UCU-09 now has native Windows application proof for Next, JavaScript selection
 and chapter expressions, including all four chapter-profile language environments.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
 (2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
+189 Adapt (0005/0102/0105): shared deterministic song rendering, strict track
+pins and private owned Next callbacks; Linux/Windows decoded runtime, actual
+private HTTP, affected regressions, strict lint and independent review pass.
 187 Port: original-clock orphan cleanup and restart-safe Block history;
 33 core/10 SQLite checks, lint and independent review pass.
 146 Adapt (0105): graphics canvas, owned clocks/cleanup and 87 TSDuck checks.

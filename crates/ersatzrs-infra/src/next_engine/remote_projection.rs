@@ -123,7 +123,7 @@ pub(crate) async fn materialize_prepared(
     let resolved = Box::pin(
         crate::addon_media_list_playback::resolve_persisted_remote_stream(
             pool,
-            context.media.item.media_item_id,
+            remote_owner(&context.media)?,
             &crate::addons::AddonRuntimeContext::default(),
             root,
         ),
@@ -397,10 +397,7 @@ pub(super) async fn project_for_origin(
     audio: selection::AudioDirective,
     origin: Origin,
 ) -> Result<Snapshot> {
-    let remote_id = media
-        .remote_stream_id
-        .filter(|id| *id == media.item.media_item_id)
-        .ok_or_else(unavailable)?;
+    let remote_id = remote_owner(media)?;
     let binding = load_binding(pool, remote_id).await?;
     if binding.script.is_some() {
         return Err(unavailable());
@@ -452,7 +449,8 @@ pub(super) async fn project_for_origin(
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
     let descriptor = digest(&json!({
-        "binding":material, "item":media.item, "selection":projection.item, "canvas": projection.canvas,
+        "binding":material, "item":media.item, "selection":projection.item,
+        "canvas": projection.canvas, "song": projection.song,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
         "audio_script":script, "audio_language":preferences.default_audio_language,
         "subtitle_language":preferences.default_subtitle_language,
@@ -677,8 +675,13 @@ async fn fingerprint_material(
 ) -> Result<Value> {
     let version: String = sqlx::query_scalar(r#"SELECT json_array(v."Id",v."DateUpdated",v."Duration",v."Width",v."Height",v."VideoScanKind",f."Id",f."Path",f."PathHash")
         FROM "MediaVersion" v JOIN "MediaFile" f ON f."MediaVersionId"=v."Id"
-        WHERE v."Id"=? AND f."Id"=? AND f."Path"=? AND v."RemoteStreamId"=?"#)
+        WHERE v."Id"=? AND f."Id"=? AND f."Path"=? AND v."RemoteStreamId"=?
+          AND (v."RemoteStreamId"=? OR v."MovieId"=? OR v."EpisodeId"=?
+               OR v."MusicVideoId"=? OR v."OtherVideoId"=? OR v."SongId"=? OR v."ImageId"=?)"#)
         .bind(media.media_version_id).bind(media.media_file_id).bind(&media.path).bind(binding.id)
+        .bind(media.item.media_item_id).bind(media.item.media_item_id).bind(media.item.media_item_id)
+        .bind(media.item.media_item_id).bind(media.item.media_item_id).bind(media.item.media_item_id)
+        .bind(media.item.media_item_id)
         .fetch_optional(pool).await.repository()?.ok_or_else(unavailable)?;
     let streams: Vec<String> = sqlx::query_scalar(r#"SELECT json_array(s."Index",s."Codec",s."Profile",s."Language",s."Title",s."Default",s."Forced",s."Channels",s."MediaStreamKind",s."PixelFormat",s."ColorPrimaries",s."ColorRange",s."ColorSpace",s."ColorTransfer",s."Rotation",s."BitsPerRawSample",s."AttachedPic")
         FROM "MediaStream" s WHERE s."MediaVersionId"=? ORDER BY s."Index",s."Id""#)
@@ -693,6 +696,13 @@ async fn fingerprint_material(
     Ok(
         json!({"schema":1,"source":binding,"publication":publication,"version":version,"streams":streams,"subtitles":subtitles,"package":package,"settings":settings}),
     )
+}
+
+/// Projected songs/videos share their original Remote Stream version. The
+/// occurrence retains its visible media identity; provider preparation uses the
+/// version's remote owner, whose relationship is revalidated in the fingerprint.
+pub(super) fn remote_owner(media: &ScheduledMedia) -> Result<i64> {
+    media.remote_stream_id.ok_or_else(unavailable)
 }
 
 fn digest(value: &Value) -> Result<String> {

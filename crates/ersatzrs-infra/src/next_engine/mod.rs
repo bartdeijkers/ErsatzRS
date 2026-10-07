@@ -36,6 +36,8 @@ pub mod schedule;
 pub mod selection;
 pub mod session;
 pub mod session_transfers;
+pub mod song_background;
+mod song_host;
 mod source;
 pub mod troubleshooting;
 pub mod version;

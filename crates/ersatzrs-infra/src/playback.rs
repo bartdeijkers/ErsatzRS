@@ -1170,7 +1170,7 @@ fn map_playback_profile(row: &crate::db::DbRow) -> Result<PlaybackProfile> {
 /// Load the ErsatzTV `Subtitle` rows attached to the active media item.
 ///
 /// The `Subtitle` table hangs from metadata rows instead of `MediaVersion`, so
-/// this joins each video metadata type by the current `PlayoutItem.MediaItemId`.
+/// this joins each programme metadata type by the current `PlayoutItem.MediaItemId`.
 ///
 /// # Errors
 ///
@@ -1197,13 +1197,16 @@ pub async fn load_subtitles_for_media_item(
            LEFT JOIN "MusicVideoMetadata" mvm ON mvm."Id" = sub."MusicVideoMetadataId"
            LEFT JOIN "OtherVideoMetadata" ovm ON ovm."Id" = sub."OtherVideoMetadataId"
            LEFT JOIN "RemoteStreamMetadata" rsm ON rsm."Id" = sub."RemoteStreamMetadataId"
+           LEFT JOIN "SongMetadata" sm ON sm."Id" = sub."SongMetadataId"
            WHERE mm."MovieId" = ?
               OR em."EpisodeId" = ?
               OR mvm."MusicVideoId" = ?
               OR ovm."OtherVideoId" = ?
               OR rsm."RemoteStreamId" = ?
+              OR sm."SongId" = ?
            ORDER BY sub."StreamIndex", sub."Id""#,
     )
+    .bind(media_item_id)
     .bind(media_item_id)
     .bind(media_item_id)
     .bind(media_item_id)

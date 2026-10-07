@@ -143,9 +143,15 @@ async fn prepared_open_preserves_audio_and_resolves_sidecars_against_actual_arti
     assert!(initial.projection.canvas.is_some());
     let canvas = serde_json::to_value(&initial.projection.canvas).unwrap();
     let original_key = initial.identity.cache_key.clone();
-    let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
-        .await
-        .unwrap();
+    let ready = Box::pin(materialize_prepared(
+        &pool,
+        &locker,
+        initial,
+        Some(2),
+        root.path(),
+    ))
+    .await
+    .unwrap();
     assert_ne!(ready.identity.cache_key, original_key);
     assert!(ready.prepared_remote.is_none());
     assert_eq!(
@@ -186,11 +192,15 @@ async fn prepared_open_refuses_missing_bytes_and_stale_publication() {
                 .await
                 .unwrap();
         }
-        assert!(
-            materialize_prepared(&pool, &locker, initial, Some(2), root.path())
-                .await
-                .is_err()
-        );
+        assert!(Box::pin(materialize_prepared(
+            &pool,
+            &locker,
+            initial,
+            Some(2),
+            root.path()
+        ))
+        .await
+        .is_err());
     }
 }
 
@@ -200,17 +210,27 @@ async fn prepared_sidecar_pins_are_checked_against_the_materialized_source() {
     sqlx::query(r#"UPDATE "PlayoutItem" SET "MediaVersionId"=100,"VideoStreamIndex"=0,"AudioStreamIndex"=2,"SubtitleStreamIndex"=9"#)
         .execute(&pool).await.unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
-    let ready = materialize_prepared(&pool, &locker, initial, Some(2), root.path())
-        .await
-        .unwrap();
+    let ready = Box::pin(materialize_prepared(
+        &pool,
+        &locker,
+        initial,
+        Some(2),
+        root.path(),
+    ))
+    .await
+    .unwrap();
     assert!(ready.projection.item.tracks.unwrap().subtitle.is_some());
     tokio::fs::remove_file(root.path().join("objects/fixture.nl.srt"))
         .await
         .unwrap();
     let initial = published(&pool, &locker, &channel, start).await;
-    assert!(
-        materialize_prepared(&pool, &locker, initial, Some(2), root.path())
-            .await
-            .is_err()
-    );
+    assert!(Box::pin(materialize_prepared(
+        &pool,
+        &locker,
+        initial,
+        Some(2),
+        root.path()
+    ))
+    .await
+    .is_err());
 }
