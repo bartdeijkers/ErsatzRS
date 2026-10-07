@@ -2345,6 +2345,7 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::Stretch => "Estirar",
         TextKey::TargetLoudnessLufs => "Sonoridad objetivo (LUFS)",
         TextKey::ThreadCountAuto => "Número de hilos (0 = automático)",
+        TextKey::NativeEngineOnlyHelp => "Solo el motor nativo de ErsatzRS usa esta configuración. ErsatzTV Next la ignora.",
         TextKey::OutputDynamicRange => "Rango dinámico de salida",
         TextKey::OutputDynamicRangeCopyHint => {
             "El video se copia, por lo que la salida conserva el rango dinámico del origen."

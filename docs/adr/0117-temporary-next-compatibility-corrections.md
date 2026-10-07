@@ -26,8 +26,19 @@ behavior. The reviewed upstream0362692 and both local patches are now published 
 six platforms as `next-0362692-ersatzrs.1`. Both macOS package jobs passed at
 checkpoint `4b5b1523`; Linux and Windows optimized executables each passed 20
 focused checks. Production staging pins all source, patch and archive hashes;
-all six real archives pass its guards, and an independent public Linux download
-matches the verified executable. Production HTTP smoke passes normal/preview
+all six real archives pass its guards, and authenticated release staging
+matches the verified executable. Earlier evidence described as a public download
+used the authenticated GitHub CLI and did not establish anonymous availability.
+On 2026-10-07 the maintainer approved a public, package-only
+`bartdeijkers/ErsatzRS-next` destination. All19 unchanged assets are published
+there, and actual anonymous downloads of all six archives match their accepted
+hashes. No Next or FFmpeg rebuild was performed. Frozen row200 source08 pins
+that public destination and passes actual Linux cold acquisition before
+listening, decoded TS/HLS playback and all six standalone offline/override
+startup cases. Matched Chromium/Firefox checks also pass; available native
+Windows cold and bundled decoded playback and all six read-only/offline/override
+startup cases now pass with independent reviews. Row200 is accepted under the
+conditional availability decision in ADR0095; final window acceptance remains open. Production HTTP smoke passes normal/preview
 playback, selected Dutch audio and rendered captions, reconnect and idle cleanup.
 Row186 is accepted; later ordered rows, final window CI and ARM/macOS application
 debt remain open. UCU-09 owns the canonical acceptance evidence.
@@ -231,7 +242,7 @@ It establishes one additional FFmpeg source amendment:
 | 193/201: seek and troubleshooting | Application/Next integration with a bounded troubleshooting process; no new FFmpeg library. |
 | 194/195: duration and deep scan | Application scanner/parser changes; existing ffprobe fields suffice, with the Matroska duration guard below. |
 | 197/198: subtitles and cached URLs | Application eligibility and URL preparation; preserve ADR 0100 refusals. |
-| 199/200: output rate and engine selection | Application/Next schema integration using existing rational frame-rate support; preserve ADR 0095's accepted native default. |
+| 199/200: output rate and engine selection | Application/Next schema integration using existing rational frame-rate support; preserve ADR 0095's conditional Next default and stored native choices. |
 | 204: Windows playout folders | Application filesystem lifecycle; no FFmpeg amendment. |
 | 207: VAAPI padding | Adopt the upstream Next correction and correct the matching native Rust pipeline path; no FFmpeg binary patch established. |
 | 188/191/196/202/203/205/206/208: build or release documentation | Source/workflow review; no additional codec or library requirement established. |

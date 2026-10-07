@@ -3060,6 +3060,7 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::Stretch => "Esticar",
         TextKey::TargetLoudnessLufs => "Loudness alvo (LUFS)",
         TextKey::ThreadCountAuto => "Quantidade de threads (0 = auto)",
+        TextKey::NativeEngineOnlyHelp => "Somente o mecanismo nativo do ErsatzRS usa esta configuração. O ErsatzTV Next a ignora.",
         TextKey::OutputDynamicRange => "Faixa dinâmica de saída",
         TextKey::OutputDynamicRangeCopyHint => {
             "O vídeo é copiado, portanto a saída mantém a faixa dinâmica da origem."

@@ -418,7 +418,8 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     const disabled = await selector.isDisabled();
     expect(disabled).toBe(false);
     await selector.selectOption('preview-fixture.yml');
-    await expect(engine).toHaveValue('Legacy');
+    await expect(engine).toHaveValue('Next');
+    await engine.selectOption('Legacy');
     await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
     await watermarks.selectOption([`${id}`, `${id + 1}`]);
     await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
@@ -483,6 +484,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         sql(`UPDATE "Channel" SET "StreamingMode"=${mode} WHERE "Id"=${id};`);
         const channel = sql(`SELECT * FROM "Channel" WHERE "Id"=${id};`);
         await page.goto(`/system/troubleshooting/playback?channel=${id}`);
+        await expect(page.locator('select[name="streamingEngine"]')).toHaveValue('Legacy');
         await page.waitForFunction(() =>
           (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
         await page.locator('input[name="start"]').fill('2026-10-02T12:00');
@@ -513,21 +515,24 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     }
   });
 
-  test('startup failures show actionable status before a producer starts', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
-    await page.waitForFunction(() =>
-      (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
-    await page.locator('select[name="ffmpegProfile"]').evaluate((select: HTMLSelectElement) => {
-      select.value = '';
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} startup failures show actionable status before a producer starts`, async ({ page }) => {
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
+      await page.waitForFunction(() =>
+        (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+      await page.locator('select[name="streamingEngine"]').selectOption(engine);
+      await page.locator('select[name="ffmpegProfile"]').evaluate((select: HTMLSelectElement) => {
+        select.value = '';
+      });
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-preview-status]')).toContainText('preview could not start');
+      await expect(page.locator('textarea')).toHaveValue(/Check the server log/);
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      expect(errors).toEqual([]);
     });
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(page.locator('[data-preview-status]')).toContainText('preview could not start');
-    await expect(page.locator('textarea')).toHaveValue(/Check the server log/);
-    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
-    expect(errors).toEqual([]);
-  });
+  }
 
   test('failed native playback completes promptly and leaves diagnostics for the next request', async ({ page }) => {
     const invalid = path.join(root, 'invalid-preview.mkv');
@@ -602,6 +607,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
 
   test('lost admission response allows retry without cancelling an unknown producer', async ({ page }) => {
     await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+    await page.locator('select[name="streamingEngine"]').selectOption('Legacy');
     await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
     await page.locator('input[name="seekSeconds"]').fill('0');
     let owned: string | undefined;
@@ -633,6 +639,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     try {
       const page = await context.newPage();
       await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+      await expect(page.locator('select[name="streamingEngine"]')).toHaveValue('Next');
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
       await page.locator('input[name="seekSeconds"]').fill('0');
       await page.getByRole('button', { name: 'Play', exact: true }).click();

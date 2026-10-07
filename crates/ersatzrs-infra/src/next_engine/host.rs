@@ -435,19 +435,11 @@ fn unavailable(message: &str) -> RepositoryError {
     RepositoryError::unavailable("Next projection", message)
 }
 
-/// Resolve the installed runtime only when a Next channel is requested.
+/// Resolve the same validated startup runtime for every Next consumer.
 /// # Errors
-/// Returns a redacted error when the configured/bundled executable is unavailable.
+/// Returns a redacted error when the accepted executable is unavailable.
 pub fn channel_binary() -> std::io::Result<PathBuf> {
-    let host = std::env::current_exe()
-        .map_err(|e| std::io::Error::new(e.kind(), "host executable is unavailable"))?;
-    super::runtime::resolve_channel_binary(
-        crate::startup_config::next_folder().as_deref(),
-        &host,
-        crate::startup_config::StartupConfig::load()
-            .home_dir
-            .as_deref(),
-    )
+    super::manager::channel_binary()
 }
 
 #[cfg(test)]

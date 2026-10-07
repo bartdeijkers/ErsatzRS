@@ -227,7 +227,13 @@ pub(super) async fn complete_ownership(
     folder: &FsPath,
 ) {
     let confirmed = !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. });
-    let log = if job.is_some() && confirmed {
+    // Selection can fail before clearing the shared output folder. Only a job
+    // that started its producer can own the completed log found there.
+    let log = if confirmed
+        && job
+            .as_ref()
+            .is_some_and(|job| job.spawned.load(Ordering::Acquire))
+    {
         read_completed_preview_log(folder).await.ok().flatten()
     } else {
         None
@@ -625,6 +631,89 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn unspawned_preview_failure_does_not_inherit_previous_completed_log() {
+        let runtime = runtime();
+        let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+            ..Default::default()
+        }));
+        let root = tempfile::tempdir().unwrap();
+        let previous_log =
+            "exit status: exit status: 0\nINFO: unthrottled transcode completed; speed=68.1x\n";
+        tokio::fs::write(root.path().join("logs.txt"), previous_log)
+            .await
+            .unwrap();
+        let mut ownership = Arc::clone(&runtime.preview_lock).lock_owned().await;
+        *ownership = PreviewAvailability::Active(Arc::clone(&job));
+        assert!(!job.spawned.load(Ordering::Acquire));
+
+        complete_ownership(ownership, Some(Arc::clone(&job)), false, root.path()).await;
+
+        let status = job.read();
+        assert_eq!(status.state, Phase::Failed);
+        assert_eq!(status.error_code.as_deref(), Some("startup"));
+        assert!(status.cleanup_confirmed);
+        assert!(!status.ready);
+        assert!(status.log.is_none());
+        assert!(matches!(
+            &*runtime.preview_lock.lock().await,
+            PreviewAvailability::Available
+        ));
+        assert_eq!(
+            tokio::fs::read_to_string(root.path().join("logs.txt"))
+                .await
+                .unwrap(),
+            previous_log
+        );
+    }
+
+    #[tokio::test]
+    async fn spawned_preview_keeps_its_completed_log_on_success_or_failure() {
+        for success in [true, false] {
+            let runtime = runtime();
+            let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+                streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+                ..Default::default()
+            }));
+            let root = tempfile::tempdir().unwrap();
+            // Exit zero can still fail output readiness; retain its real diagnostics.
+            let current_log = "exit status: exit status: 0\nspeed=1.25x\n";
+            tokio::fs::write(root.path().join("logs.txt"), current_log)
+                .await
+                .unwrap();
+            let mut ownership = Arc::clone(&runtime.preview_lock).lock_owned().await;
+            *ownership = PreviewAvailability::Active(Arc::clone(&job));
+            job.running();
+            job.ready();
+
+            complete_ownership(ownership, Some(Arc::clone(&job)), success, root.path()).await;
+
+            let status = job.read();
+            assert_eq!(
+                status.state,
+                if success {
+                    Phase::Completed
+                } else {
+                    Phase::Failed
+                }
+            );
+            assert_eq!(
+                status.error_code.as_deref(),
+                (!success).then_some("startup")
+            );
+            assert!(status.cleanup_confirmed);
+            assert_eq!(status.ready, success);
+            let log = status.log.unwrap();
+            assert_eq!(log.text, current_log);
+            assert_eq!(log.speed, Some(1.25));
+            assert!(matches!(
+                &*runtime.preview_lock.lock().await,
+                PreviewAvailability::Available
+            ));
         }
     }
 

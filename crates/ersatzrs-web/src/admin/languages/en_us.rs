@@ -2285,6 +2285,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::Stretch => "Stretch",
         TextKey::TargetLoudnessLufs => "Target Loudness (LUFS)",
         TextKey::ThreadCountAuto => "Thread Count (0 = auto)",
+        TextKey::NativeEngineOnlyHelp => "Used only by the ErsatzRS native engine. ErsatzTV Next ignores this setting.",
         TextKey::OutputDynamicRange => "Output Dynamic Range",
         TextKey::OutputDynamicRangeCopyHint => {
             "Video is copied, so the output keeps the source dynamic range."

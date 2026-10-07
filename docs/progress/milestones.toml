@@ -11421,6 +11421,95 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row200 accepted as Adapt under ADR0095. Exact upstream
+a3bbf89dad6459d3c3fb31a849849ac5219e5aca (#3064) changes defaults and native-only help.
+The maintainer accepted Next defaults only with an always-bundled or verified
+automatic engine. Startup now acquires/verifies before application composition;
+new-channel/standalone previews use Next while stored engines, explicit Native,
+AV1 and every shared profile value remain. Unlike upstream, no bulk migration
+rewrites existing channels. Owning-channel preview priority remains authoritative
+when both channel and media IDs are supplied. Native-only help covers eight
+settings in all nine cultures; SlugSeconds stays populated/enabled while hidden
+for Next. Both local Windows packaging and Docker staging share the exact pin.
+
+Canonical row200 proof tmp/ucu09-row200/acceptance-proof.json
+SHA256d5df6734452cb08d75f9bf83b7860c32b8b8c898dfafa6c7e9494ab772233cfe; independent acceptance review
+SHA256cadf9a0198a41765705a142e2b733867eeb47ea789c2efb076f37af6da3a8b8c. Frozen source-row200-08 covers1505 inputs at
+base3b98c378, receiptca65ea316291a573b6ed5a5904473f4cc12490ba8901dde046c9687620908487.
+All live/frozen/native inputs match; configured targets and warm caches remain.
+Source v02 hash-before-version and stored-channel priority corrections have
+independent substantive reviews; source04 lint and source05/06 test/module-order
+corrections preserve semantics. Linux29 default/acquisition/health tests
+(nextest215eaa73), two SQLite channel cases (40bacc86), fresh11 checksum/HTML
+cases (39dfcfce), and current full lifecycle/HTML11 (78595da8) pass.
+Strict affected all-target Clippy, format, new-allow policy and hydration lint
+pass. Native Windows runs all38 selected ordinary cases:28 portable/default/
+health (bef64426), two real channel repository cases (ed00e366), eight lifecycle
+cases (35998a65), including both causal log ownership regressions. The two
+documented Unix-only process fixtures are excluded; no selected test retries or
+ignored cases. Actual returned runner stderr is retained separately from the
+limited PowerShell transcript (receiptc1e498fd/rawaca9cd8a, review3734def5).
+
+All six accepted archives stage14 payload members and six provenance records;
+21 offline staging tests pass (proof1a486fe7, review045178c8). The maintainer
+approved public package-only bartdeijkers/ErsatzRS-next; all19 unchanged assets
+are published in release405622778. Anonymous HTTPS downloads of all six RID
+archives match accepted hashes/sizes (proofe15ca301, review3e99cca2). The separate
+checkout is clean at95206a81. Manifest9579837e switches the public distribution
+only, without changing source0362692, version, patches or archive identities.
+No Next or FFmpeg rebuild was performed; verified FFmpegv2.0.6 is reused.
+
+Linux source08 cold startup downloads/verifies before listening, then decodes
+four TS/HLS captures with selected Dutch880Hz audio and captions, reconnect,
+preview and idle cleanup (proof95096485,53 retained artifact hashes,
+independent review0a53ff3c). All six actual standalone Linux cases pass
+(proof9daf1183): public cold, same downloaded-cache offline restart, read-only
+offline bundle, strict absent override despite valid bundle/cache, usable custom
+override marked unverified and blocked-proxy missing-cache failure before listen.
+Owned process groups exit; packages/modes remain unchanged. Earlier bundled
+Linux playback also passes without an override (proofe295fb46,52 raw artifacts,
+review37a681fc); its three unchanged own sidecars are removed only after absence.
+
+Native Windows cold invocation60531 exits0; verified Downloaded precedes listen,
+four decoded H264/AAC TS/HLS captures have Dutch880Hz audio and visible captions,
+private callbacks404, reconnect/preview/idle cleanup, exact persisted config and
+all source/process/TEMP guards pass (proof7985bbbe, host9a74cdcb, review6f500340).
+Exact returned build/smoke output is retained (receipt9640b411/raw5425633a).
+Bundled invocation42354 exits0 against the same host with38 ordinary tests
+reused, no managed install and all four decoded/lifecycle controls passing
+(proofa70543f6, review867de952; measured880/880/880/878Hz within the unchanged
+selected880Hz predicate). All five unchanged own sidecars/empty next directory
+are removed after absence; warm cache and host remain (outputb91e753c/raw8e95a58f).
+Fresh standalone04 invocation5552 exits0 and independently proves all six actual
+startup cases on native NTFS (proofcac10521, review22510b76): real cold then
+same-cache offline reuse, read-only split bundle/no install, strict override,
+custom unverified runtime and causal failed-download/no partial cache. Each own
+package denies sentinel writes and remains byte/ACL-identical; four healthy
+hosts exit0 after Ctrl+C confined to their verified private console. Two expected
+startup refusals exit101. Owned process absence passes; original case dirs and
+raw evidence are retained, not claimed deleted.
+
+The exact matched bundle/structural gate and complete three-spec browser matrix
+pass sequentially without retries: Chromium31 and Firefox30, with one unchanged
+older no-JS h264 skip (matrix53ccced1, bundle1e196faa, inputsff0bee25,
+reviewde969742). Newly changed no-JS/320px preservation cases execute in both
+languages and browsers; Native/Next diagnostics retain every original assertion.
+Real sought playback, selected Dutch audio/captions, Stop/replacement, motion,
+credits and saves pass. This row matrix is not final full-suite CI.
+
+Historical failures remain preserved: source06 anonymous private404 before
+listen; source06 browsers show320px overflow and stale prior-producer diagnostics
+(Chromium12/Firefox11+one skip,15 later cases unrun). Source07 fixes only those
+demonstrated defects; source08 current complete matrix passes. Standalone02
+stale LASTEXITCODE and03 empty executable ACL both fail before any host/case;
+fresh04 changes only the fixture guards/per-fileRX and passes. No failed attempt
+is promoted into acceptance and no product requirement is weakened.
+Pin/ledger advance200/208 with8 pending. Row201 complete-window troubleshooting
+is next; its reviewed candidate03 remains source-only. Final integrated/window
+gates, exact-SHA CI and stable release remain required. Existing approved QSV/
+AMF/native Linux NVIDIA and ARM/macOS application debt stays unverified; no
+available Linux/Windows waiver or intermediate application push/CI is claimed.
+
 2026-10-07 row199 accepted as Port. Exact upstream
 df6ae228fa5e92528977a9bd0ccd836742765322 adds optional Next output frame rate, channel schema0.1.1.
 Sampling uses the selected scheduled versions/video pins, source playout for

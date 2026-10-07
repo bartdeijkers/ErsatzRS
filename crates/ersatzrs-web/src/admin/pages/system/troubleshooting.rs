@@ -638,6 +638,7 @@ fn render_playback_form(
     preview: Option<OwnedPreviewView>,
 ) -> AnyView {
     let is_media_item = context.mode == PlaybackTroubleshootingMode::MediaItem;
+    let use_next = context.streaming_engine == ersatzrs_domain::StreamingEngine::Next;
     let stream_selectors_disabled = context.stream_selectors.is_empty();
     let preferred_audio_title = context.preferred_audio_title.clone();
     let selected_subtitle_id = context.selected_subtitle_id;
@@ -660,8 +661,8 @@ fn render_playback_form(
             <label class=style::playbackField>
                 <span>{tr(TextKey::StreamingEngine)}</span>
                 <select class=style::select name="streamingEngine">
-                    <option value="Legacy" selected>"Legacy"</option>
-                    <option value="Next">"Next"</option>
+                    <option value="Legacy" selected=!use_next>"Legacy"</option>
+                    <option value="Next" selected=use_next>"Next"</option>
                 </select>
             </label>
             {playback_select_field(
@@ -1310,3 +1311,52 @@ fn copy_to_clipboard(content: String) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn copy_to_clipboard(_content: String) {}
+
+#[cfg(all(test, feature = "ssr"))]
+mod default_engine_tests {
+    use super::*;
+
+    #[test]
+    fn playback_ssr_selects_resolved_engine_without_hiding_the_native_option() {
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let owner = Owner::new();
+            let html = owner.with(|| {
+                render_playback_form(
+                    PlaybackTroubleshootingContext {
+                        mode: PlaybackTroubleshootingMode::MediaItem,
+                        streaming_engine: engine,
+                        ..PlaybackTroubleshootingContext::default()
+                    },
+                    "0".to_owned(),
+                    None,
+                )
+                .to_html()
+            });
+            let native = html
+                .split("value=\"Legacy\"")
+                .nth(1)
+                .unwrap()
+                .split('>')
+                .next()
+                .unwrap();
+            let next = html
+                .split("value=\"Next\"")
+                .nth(1)
+                .unwrap()
+                .split('>')
+                .next()
+                .unwrap();
+            assert_eq!(
+                native.contains("selected"),
+                engine == ersatzrs_domain::StreamingEngine::Legacy
+            );
+            assert_eq!(
+                next.contains("selected"),
+                engine == ersatzrs_domain::StreamingEngine::Next
+            );
+        }
+    }
+}

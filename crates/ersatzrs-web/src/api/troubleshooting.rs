@@ -13,7 +13,7 @@ use crate::host::state::AppState;
 
 #[derive(Debug, Default)]
 pub struct PlaybackPreviewQuery {
-    streaming_engine: StreamingEngine,
+    streaming_engine: Option<StreamingEngine>,
     media_item: Option<i64>,
     channel: Option<i64>,
     ffmpeg_profile: Option<i64>,
@@ -49,11 +49,11 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
             };
             match key.as_str() {
                 "streamingEngine" => {
-                    query.streaming_engine = match value.as_str() {
+                    query.streaming_engine = Some(match value.as_str() {
                         "Legacy" | "0" => StreamingEngine::Legacy,
                         "Next" | "1" => StreamingEngine::Next,
                         _ => return Err(serde::de::Error::custom("invalid streaming engine")),
-                    }
+                    });
                 }
                 "mediaItem" => query.media_item = integer()?,
                 "channel" => query.channel = integer()?,
@@ -77,10 +77,40 @@ impl<'de> Deserialize<'de> for PlaybackPreviewQuery {
     }
 }
 
+impl PlaybackPreviewQuery {
+    async fn into_request(
+        mut self,
+        state: &AppState,
+    ) -> Result<PlaybackPreviewRequest, AdminTroubleshootingRuntimeError> {
+        // Explicit request choices win. Only an omitted channel-bound engine
+        // reads the owning channel; standalone preview defaults to Next.
+        if self.streaming_engine.is_none() {
+            if let Some(id) = self.channel.filter(|id| *id > 0) {
+                let data = state
+                    .application
+                    .ports()
+                    .troubleshooting()
+                    .load_playback_context_admin(0, id)
+                    .await
+                    .map_err(|_| {
+                        AdminTroubleshootingRuntimeError::unavailable(
+                            "channel preview configuration could not be loaded",
+                        )
+                    })?;
+                let channel = data.channel.ok_or_else(|| {
+                    AdminTroubleshootingRuntimeError::NotFound("channel does not exist".to_owned())
+                })?;
+                self.streaming_engine = Some(channel.streaming_engine);
+            }
+        }
+        Ok(self.into())
+    }
+}
+
 impl From<PlaybackPreviewQuery> for PlaybackPreviewRequest {
     fn from(query: PlaybackPreviewQuery) -> Self {
         Self {
-            streaming_engine: query.streaming_engine,
+            streaming_engine: query.streaming_engine.unwrap_or(StreamingEngine::Next),
             media_item_id: query.media_item,
             channel_id: query.channel,
             ffmpeg_profile_id: query.ffmpeg_profile,
@@ -105,7 +135,11 @@ pub async fn playback_preview(
     State(state): State<AppState>,
     Query(query): Query<PlaybackPreviewQuery>,
 ) -> Response {
-    playback_preview_response(state.application.start_playback_preview(query.into()).await)
+    let request = match query.into_request(&state).await {
+        Ok(request) => request,
+        Err(error) => return playback_preview_response(Err(error)),
+    };
+    playback_preview_response(state.application.start_playback_preview(request).await)
 }
 
 fn playback_preview_response(result: Result<(), AdminTroubleshootingRuntimeError>) -> Response {
@@ -126,7 +160,11 @@ pub async fn queue_preview(
     State(state): State<AppState>,
     Query(query): Query<PlaybackPreviewQuery>,
 ) -> Response {
-    match state.application.queue_playback_preview(query.into()).await {
+    let request = match query.into_request(&state).await {
+        Ok(request) => request,
+        Err(error) => return playback_preview_response(Err(error)),
+    };
+    match state.application.queue_playback_preview(request).await {
         Ok(status) => (
             StatusCode::ACCEPTED,
             [(header::CACHE_CONTROL, "no-store")],
@@ -185,7 +223,11 @@ pub async fn start_preview_form(
     State(state): State<AppState>,
     Form(query): Form<PlaybackPreviewQuery>,
 ) -> Response {
-    match state.application.queue_playback_preview(query.into()).await {
+    let request = match query.into_request(&state).await {
+        Ok(request) => request,
+        Err(error) => return playback_preview_response(Err(error)),
+    };
+    match state.application.queue_playback_preview(request).await {
         Ok(status) => Redirect::to(&status.return_url).into_response(),
         Err(error) => preview_startup_failure(StatusCode::CONFLICT, &error.to_string()),
     }
@@ -350,20 +392,118 @@ mod tests {
         .is_err());
     }
 
+    #[tokio::test]
+    async fn preview_request_resolves_stored_channel_engine_and_preserves_explicit_and_standalone_choices(
+    ) {
+        use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
+        use sqlx::Executor;
+        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::disabled());
+        sqlx::migrate!("../../migrations")
+            .run(&state.pool)
+            .await
+            .unwrap();
+        state.pool.execute(r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#).await.unwrap();
+        let repositories = ersatzrs_infra::repositories::make_repositories(state.pool.clone());
+        repositories
+            .ffmpeg_profile
+            .upsert(&ersatzrs_domain::FFmpegProfile {
+                id: 1,
+                name: "Preview".to_owned(),
+                resolution_id: 1,
+                ..ersatzrs_domain::FFmpegProfile::default()
+            })
+            .await
+            .unwrap();
+        for (id, engine) in [(10, StreamingEngine::Legacy), (11, StreamingEngine::Next)] {
+            repositories
+                .channel
+                .upsert(&ersatzrs_domain::Channel {
+                    id,
+                    number: id.to_string(),
+                    name: "Preview".to_owned(),
+                    ffmpeg_profile_id: 1,
+                    unique_id: uuid::Uuid::from_u128(u128::try_from(id).unwrap()),
+                    streaming_engine: engine,
+                    preferred_audio_language_code: Some("nld".to_owned()),
+                    preferred_subtitle_language_code: Some("eng".to_owned()),
+                    ..ersatzrs_domain::Channel::default()
+                })
+                .await
+                .unwrap();
+            for media in ["", "&mediaItem=20"] {
+                let query: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
+                    "channel={id}{media}&subtitleId=5&watermark=1&watermark=2"
+                ))
+                .unwrap();
+                let request = query.into_request(&state).await.unwrap();
+                assert_eq!(request.streaming_engine, engine);
+                assert_eq!(request.channel_id, Some(id));
+                assert_eq!(
+                    request.media_item_id,
+                    if media.is_empty() { None } else { Some(20) }
+                );
+                assert_eq!(request.subtitle_id, Some(5));
+                assert_eq!(request.watermark_ids, [1, 2]);
+                for (value, explicit_engine) in [
+                    ("Legacy", StreamingEngine::Legacy),
+                    ("Next", StreamingEngine::Next),
+                ] {
+                    let explicit: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
+                        "channel={id}{media}&streamingEngine={value}"
+                    ))
+                    .unwrap();
+                    assert_eq!(
+                        explicit
+                            .into_request(&state)
+                            .await
+                            .unwrap()
+                            .streaming_engine,
+                        explicit_engine
+                    );
+                }
+            }
+        }
+        for (query, engine) in [
+            ("mediaItem=20", StreamingEngine::Next),
+            (
+                "mediaItem=20&streamingEngine=Legacy",
+                StreamingEngine::Legacy,
+            ),
+        ] {
+            let query: PlaybackPreviewQuery = serde_urlencoded::from_str(query).unwrap();
+            assert_eq!(
+                query.into_request(&state).await.unwrap().streaming_engine,
+                engine
+            );
+        }
+        let missing: PlaybackPreviewQuery = serde_urlencoded::from_str("channel=999").unwrap();
+        assert!(matches!(
+            missing.into_request(&state).await,
+            Err(AdminTroubleshootingRuntimeError::NotFound(_))
+        ));
+    }
+
     #[test]
-    fn preview_engine_defaults_to_legacy_and_both_engines_retain_all_watermarks() {
+    fn preview_engine_defaults_to_next_and_explicit_engines_retain_all_watermarks() {
         let legacy: PlaybackPreviewQuery =
             serde_urlencoded::from_str("watermark=1&watermark=2").unwrap();
         let legacy: PlaybackPreviewRequest = legacy.into();
-        assert_eq!(legacy.streaming_engine, StreamingEngine::Legacy);
+        assert_eq!(legacy.streaming_engine, StreamingEngine::Next);
         assert_eq!(legacy.watermark_ids, [1, 2]);
-        for value in ["Next", "1"] {
+        for value in ["Next", "1", "Legacy", "0"] {
             let next: PlaybackPreviewQuery = serde_urlencoded::from_str(&format!(
                 "streamingEngine={value}&watermark=1&watermark=2"
             ))
             .unwrap();
             let next: PlaybackPreviewRequest = next.into();
-            assert_eq!(next.streaming_engine, StreamingEngine::Next);
+            assert_eq!(
+                next.streaming_engine,
+                if matches!(value, "Legacy" | "0") {
+                    StreamingEngine::Legacy
+                } else {
+                    StreamingEngine::Next
+                }
+            );
             assert_eq!(next.watermark_ids, [1, 2]);
         }
         assert!(

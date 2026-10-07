@@ -15,6 +15,17 @@ use crate::repositories::SqlxResultExt as _;
 #[derive(Clone)]
 pub struct SqliteTroubleshootingRepository(pub Pool<crate::db::Db>);
 
+fn decode_playback_streaming_engine(value: i64) -> Result<ersatzrs_domain::StreamingEngine> {
+    match value {
+        0 => Ok(ersatzrs_domain::StreamingEngine::Legacy),
+        1 => Ok(ersatzrs_domain::StreamingEngine::Next),
+        _ => Err(RepositoryError::Decode {
+            kind: "channel streaming engine",
+            value: value.to_string(),
+        }),
+    }
+}
+
 fn decode_channel_subtitle_mode(value: i64) -> Result<ChannelSubtitleMode> {
     match value {
         0 => Ok(ChannelSubtitleMode::None),
@@ -332,7 +343,7 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
     ) -> Result<PlaybackTroubleshootingAdmin> {
         let channel = if channel_id > 0 {
             sqlx::query(
-                r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId"
+                r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId", "StreamingEngine"
                    FROM "Channel" WHERE "Id" = ?"#,
             )
             .bind(channel_id)
@@ -341,6 +352,9 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
             .repository()?
             .map(|row| {
                 Ok(PlaybackChannelSummaryAdmin {
+                    streaming_engine: decode_playback_streaming_engine(
+                        row.try_get("StreamingEngine").repository()?,
+                    )?,
                     name: row.try_get("Name").repository()?,
                     ffmpeg_profile_id: row.try_get("FFmpegProfileId").repository()?,
                 })

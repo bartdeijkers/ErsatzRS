@@ -626,7 +626,7 @@ async fn channel_editor_lists_bundled_music_video_credit_templates() {
 }
 
 #[tokio::test]
-async fn channel_editor_new_channel_defaults_to_ersatzrs_group() {
+async fn channel_editor_new_channel_defaults_to_next_and_ersatzrs_group() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     seed_editor_dependencies(&pool, &repos).await;
@@ -634,6 +634,8 @@ async fn channel_editor_new_channel_defaults_to_ersatzrs_group() {
     let state = repos.channel.get_editor_state(None).await.unwrap().unwrap();
     assert_eq!(state.form.group, "ErsatzRS");
     assert_eq!(state.form.name, "New Channel");
+    assert_eq!(state.form.streaming_engine, 1);
+    assert_eq!(state.form.streaming_mode, 5);
 
     let mut form = state.form.clone();
     form.number = "77".to_owned();
@@ -647,6 +649,8 @@ async fn channel_editor_new_channel_defaults_to_ersatzrs_group() {
         .unwrap()
         .unwrap();
     assert_eq!(saved.form.group, "ErsatzRS");
+    assert_eq!(saved.form.streaming_engine, 1);
+    assert_eq!(saved.form.streaming_mode, 5);
 }
 
 #[tokio::test]
@@ -1274,5 +1278,37 @@ async fn troubleshooting_channel_round_trips_all_persisted_streaming_modes() {
             .load_preview_channel_admin(10)
             .await
             .is_err());
+    }
+}
+
+#[tokio::test]
+async fn playback_troubleshooting_projection_retains_each_owning_channel_engine() {
+    use ersatzrs_core::repositories::TroubleshootingRepository;
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+    let repository = ersatzrs_infra::repositories::SqliteTroubleshootingRepository(pool);
+    for (id, engine) in [
+        (10, ersatzrs_domain::StreamingEngine::Legacy),
+        (11, ersatzrs_domain::StreamingEngine::Next),
+    ] {
+        let mut channel = common::channel(id, &id.to_string(), true);
+        channel.streaming_engine = engine;
+        channel.preferred_audio_language_code = Some("nld".to_owned());
+        channel.preferred_subtitle_language_code = Some("eng".to_owned());
+        repos.channel.upsert(&channel).await.unwrap();
+        let context = repository.load_playback_context_admin(0, id).await.unwrap();
+        assert_eq!(context.channel.unwrap().streaming_engine, engine);
+        let stored = repos.channel.get_with_profile(id).await.unwrap();
+        assert_eq!(stored.streaming_engine, engine);
+        assert_eq!(stored.preferred_audio_language_code.as_deref(), Some("nld"));
+        assert_eq!(
+            stored.preferred_subtitle_language_code.as_deref(),
+            Some("eng")
+        );
     }
 }

@@ -35,20 +35,28 @@ impl HealthCheck for NextRuntimeHealthCheck {
         "Next Runtime Availability"
     }
     async fn check(&self) -> Result<HealthCheckResult> {
+        if (self.resolve)().is_err() {
+            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
+                "ErsatzRS requires the accepted bundled or managed Next runtime, or a valid ETV_NEXT_FOLDER override",
+                "Next executable is unavailable").with_link("/channels"));
+        }
+        if crate::next_engine::manager::validate_published()
+            .await
+            .is_err()
+        {
+            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
+                "The accepted Next runtime has changed or no longer passes its bounded version probe",
+                "Next runtime validation failed").with_link("/channels"));
+        }
         let channels: Vec<(i64, String)> = sqlx::query_as(r#"SELECT "Id", "Number" FROM "Channel" WHERE "StreamingEngine"=1 AND "IsEnabled"=1 ORDER BY "Id""#)
             .fetch_all(&self.pool).await.map_err(sqlx_error)?;
         if channels.is_empty() {
             return Ok(HealthCheckResult::new(
                 self.title(),
-                HealthCheckStatus::NotApplicable,
-                "No enabled channel selects the Next engine",
-                "Next is not selected",
+                HealthCheckStatus::Pass,
+                "The required Next runtime is available; no enabled channel needs profile validation",
+                "Next runtime is available",
             ));
-        }
-        if (self.resolve)().is_err() {
-            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
-                "Enabled Next channels require the bundled ersatztv-channel executable or a valid ETV_NEXT_FOLDER override",
-                "Next executable is unavailable").with_link("/channels"));
         }
         let mut invalid = 0;
         for (channel, _) in &channels {
@@ -172,7 +180,7 @@ async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError
 mod tests {
     use super::*;
     #[tokio::test]
-    async fn next_runtime_is_required_only_when_selected_and_profiles_are_checked() {
+    async fn next_runtime_is_always_required_and_only_selected_profiles_are_checked() {
         let (pool, _, _, _) = crate::next_engine::schedule::tests::fixture().await;
         let overlays = tempfile::tempdir().unwrap();
         let mut check = NextRuntimeHealthCheck {
@@ -180,10 +188,16 @@ mod tests {
             resolve: || Err(io::Error::from(io::ErrorKind::NotFound)),
             overlays: overlays.path().to_owned(),
         };
+        let missing_unused = check.check().await.unwrap();
+        assert_eq!(missing_unused.status, HealthCheckStatus::Fail);
+        assert!(missing_unused.brief_message.contains("executable"));
+        check.resolve = || Ok(PathBuf::from("synthetic-engine"));
         assert_eq!(
             check.check().await.unwrap().status,
-            HealthCheckStatus::NotApplicable
+            HealthCheckStatus::Pass,
+            "runtime availability is mandatory before a Next channel exists; profile checks are not"
         );
+        check.resolve = || Err(io::Error::from(io::ErrorKind::NotFound));
         sqlx::query(r#"UPDATE "Channel" SET "StreamingEngine"=1, "IsEnabled"=1"#)
             .execute(&pool)
             .await

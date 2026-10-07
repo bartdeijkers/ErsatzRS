@@ -2342,6 +2342,7 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::Stretch => "Étirer",
         TextKey::TargetLoudnessLufs => "Volume cible (LUFS)",
         TextKey::ThreadCountAuto => "Nombre de threads (0 = auto)",
+        TextKey::NativeEngineOnlyHelp => "Seul le moteur natif ErsatzRS utilise ce réglage. ErsatzTV Next ignore ce réglage.",
         TextKey::OutputDynamicRange => "Plage dynamique de sortie",
         TextKey::OutputDynamicRangeCopyHint => {
             "La vidéo est copiée, la sortie conserve donc la plage dynamique de la source."

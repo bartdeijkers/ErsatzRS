@@ -3047,6 +3047,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::Stretch => "Rozciągnij",
         TextKey::TargetLoudnessLufs => "Docelowa głośność (LUFS)",
         TextKey::ThreadCountAuto => "Liczba wątków (0 = auto)",
+        TextKey::NativeEngineOnlyHelp => "Tylko natywny silnik ErsatzRS używa tego ustawienia. ErsatzTV Next je ignoruje.",
         TextKey::OutputDynamicRange => "Zakres dynamiki wyjścia",
         TextKey::OutputDynamicRangeCopyHint => {
             "Wideo jest kopiowane, więc wyjście zachowuje zakres dynamiki źródła."

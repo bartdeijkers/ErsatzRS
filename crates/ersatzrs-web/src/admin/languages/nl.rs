@@ -3044,6 +3044,7 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::Stretch => "Uitrekken",
         TextKey::TargetLoudnessLufs => "Doelloudness (LUFS)",
         TextKey::ThreadCountAuto => "Aantal threads (0 = auto)",
+        TextKey::NativeEngineOnlyHelp => "Alleen gebruikt door de native engine van ErsatzRS. ErsatzTV Next negeert deze instelling.",
         TextKey::OutputDynamicRange => "Dynamisch bereik van uitvoer",
         TextKey::OutputDynamicRangeCopyHint => {
             "Video wordt gekopieerd, dus de uitvoer behoudt het dynamisch bereik van de bron."

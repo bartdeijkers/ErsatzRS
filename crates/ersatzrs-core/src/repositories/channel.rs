@@ -132,6 +132,7 @@ impl ChannelEditorForm {
             name: "New Channel".to_owned(),
             group: "ErsatzRS".to_owned(),
             ffmpeg_profile_id,
+            streaming_engine: 1,
             streaming_mode: 5,
             is_enabled: true,
             show_in_epg: true,
@@ -303,4 +304,22 @@ pub trait ChannelRepository: Send + Sync {
     async fn list_filler_preset_options(&self) -> Result<Vec<ChannelSelectOption>>;
     async fn validation_state(&self) -> Result<ChannelValidationState>;
     async fn save_side_effects(&self, id: EntityId) -> Result<Option<ChannelSaveSideEffects>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_channel_defaults_next_without_reinterpreting_legacy_serialized_forms() {
+        let form = ChannelEditorForm::new_defaults(7, "101".to_owned());
+        assert_eq!(form.streaming_engine, 1);
+        assert_eq!(form.streaming_mode, 5);
+        assert_eq!(form.ffmpeg_profile_id, 7);
+        let mut old = serde_json::to_value(&form).unwrap();
+        old.as_object_mut().unwrap().remove("streaming_engine");
+        let restored: ChannelEditorForm = serde_json::from_value(old).unwrap();
+        assert_eq!(restored.streaming_engine, 0);
+        assert_eq!(ChannelEditorForm::default().streaming_engine, 0);
+    }
 }

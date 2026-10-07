@@ -1,4 +1,4 @@
-//! Startup-only discovery of the optional Next engine version.
+//! Startup-only discovery of the selected Next engine version.
 
 use std::{path::Path, process::Stdio, time::Duration};
 
@@ -10,12 +10,17 @@ const OUTPUT_LIMIT: u16 = 4096;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Query the same executable used for playback. Unavailable or unsuccessful
-/// probes return `None`; startup never requires the optional engine.
+/// probes return `None`; managed startup acquisition owns availability validation.
 /// Output is capped at 4 KiB, execution at five seconds, and cleanup gets a
 /// further five seconds. Cancellation terminates the managed process tree.
 pub async fn discover() -> Option<String> {
     let binary = super::host::channel_binary().ok()?;
     probe(&binary, TIMEOUT).await
+}
+
+/// Probe an explicitly selected runtime using the existing startup limits.
+pub(super) async fn probe_binary(binary: &Path) -> Option<String> {
+    probe(binary, TIMEOUT).await
 }
 
 async fn probe(binary: &Path, timeout: Duration) -> Option<String> {

@@ -2340,6 +2340,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::Stretch => "Stiramento",
         TextKey::TargetLoudnessLufs => "Volume target (LUFS)",
         TextKey::ThreadCountAuto => "Numero thread (0 = automatico)",
+        TextKey::NativeEngineOnlyHelp => "Usata solo dal motore nativo ErsatzRS. ErsatzTV Next ignora questa impostazione.",
         TextKey::OutputDynamicRange => "Gamma dinamica di output",
         TextKey::OutputDynamicRangeCopyHint => {
             "Il video è copiato, quindi l'output mantiene la gamma dinamica della sorgente."

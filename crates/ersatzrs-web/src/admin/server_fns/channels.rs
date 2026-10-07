@@ -159,6 +159,7 @@ pub struct ChannelNumberFormUpdate {
 
 /// Form data for channel create / edit.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(from = "ChannelFormInput")]
 pub struct ChannelForm {
     pub id: i64,
     pub number: String,
@@ -199,6 +200,96 @@ pub struct ChannelForm {
     pub idle_behavior: i32,
 }
 
+// Only a new create may reinterpret an omitted engine. Existing update payloads
+// retain their historical native default, and explicit native selection stays 0.
+#[derive(Deserialize)]
+struct ChannelFormInput {
+    id: i64,
+    number: String,
+    name: String,
+    group: String,
+    categories: String,
+    ffmpeg_profile_id: i64,
+    slug_seconds: Option<f64>,
+    logo_path: String,
+    logo_content_type: String,
+    external_logo_url: String,
+    stream_selector_mode: i32,
+    stream_selector: String,
+    preferred_audio_language_code: String,
+    preferred_audio_title: String,
+    playout_source: i32,
+    playout_mode: i32,
+    mirror_source_channel_id: i64,
+    playout_offset_hours: i32,
+    /// DB integer value: 0=native, 1=ErsatzTV Next.
+    #[serde(default, deserialize_with = "deserialize_supplied_streaming_engine")]
+    streaming_engine: Option<i32>,
+    #[serde(default)]
+    next_engine_text_subtitle_mode: i32,
+    /// DB integer value: 1=TS, 2=HLSDirect, 4=HLSSegmenter, 5=TSHybrid.
+    streaming_mode: i32,
+    watermark_id: i64,
+    is_enabled: bool,
+    show_in_epg: bool,
+    /// 0 = no fallback filler.
+    fallback_filler_id: i64,
+    preferred_subtitle_language_code: String,
+    subtitle_mode: i32,
+    music_video_credits_mode: i32,
+    music_video_credits_template: String,
+    song_video_mode: i32,
+    transcode_mode: i32,
+    idle_behavior: i32,
+}
+
+// None records omission only; an explicit null/invalid integer still fails
+// deserialization, as it did for the numeric input contract.
+pub(crate) fn deserialize_supplied_streaming_engine<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<i32>, D::Error> {
+    i32::deserialize(deserializer).map(Some)
+}
+
+impl From<ChannelFormInput> for ChannelForm {
+    fn from(input: ChannelFormInput) -> Self {
+        Self {
+            id: input.id,
+            number: input.number,
+            name: input.name,
+            group: input.group,
+            categories: input.categories,
+            ffmpeg_profile_id: input.ffmpeg_profile_id,
+            slug_seconds: input.slug_seconds,
+            logo_path: input.logo_path,
+            logo_content_type: input.logo_content_type,
+            external_logo_url: input.external_logo_url,
+            stream_selector_mode: input.stream_selector_mode,
+            stream_selector: input.stream_selector,
+            preferred_audio_language_code: input.preferred_audio_language_code,
+            preferred_audio_title: input.preferred_audio_title,
+            playout_source: input.playout_source,
+            playout_mode: input.playout_mode,
+            mirror_source_channel_id: input.mirror_source_channel_id,
+            playout_offset_hours: input.playout_offset_hours,
+            streaming_engine: input.streaming_engine.unwrap_or(i32::from(input.id == 0)),
+            next_engine_text_subtitle_mode: input.next_engine_text_subtitle_mode,
+            streaming_mode: input.streaming_mode,
+            watermark_id: input.watermark_id,
+            is_enabled: input.is_enabled,
+            show_in_epg: input.show_in_epg,
+            fallback_filler_id: input.fallback_filler_id,
+            preferred_subtitle_language_code: input.preferred_subtitle_language_code,
+            subtitle_mode: input.subtitle_mode,
+            music_video_credits_mode: input.music_video_credits_mode,
+            music_video_credits_template: input.music_video_credits_template,
+            song_video_mode: input.song_video_mode,
+            transcode_mode: input.transcode_mode,
+            idle_behavior: input.idle_behavior,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ChannelSelectOption {
     pub id: i64,
@@ -234,6 +325,7 @@ impl ChannelForm {
         Self {
             is_enabled: true,
             show_in_epg: true,
+            streaming_engine: 1,
             streaming_mode: 5,
             name: "New Channel".to_string(),
             group: "ErsatzRS".to_string(),
@@ -803,6 +895,53 @@ fn channel_logo_url(name: &str, path: Option<&str>) -> String {
 
 #[cfg(all(test, feature = "ssr"))]
 mod tests {
+    #[test]
+    fn channel_create_wire_omission_defaults_next_but_explicit_and_update_engines_remain_numeric() {
+        assert_eq!(ChannelForm::new_defaults().streaming_engine, 1);
+        let mut null_engine = serde_json::to_value(ChannelForm::new_defaults()).unwrap();
+        null_engine["streaming_engine"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<ChannelForm>(null_engine).is_err());
+        for (id, supplied, expected) in [
+            (0, None, 1),
+            (0, Some(0), 0),
+            (0, Some(1), 1),
+            (7, None, 0),
+            (7, Some(0), 0),
+            (7, Some(1), 1),
+        ] {
+            let mut payload = serde_json::to_value(ChannelForm {
+                id,
+                preferred_audio_language_code: "nld".to_owned(),
+                preferred_subtitle_language_code: "eng".to_owned(),
+                slug_seconds: Some(2.0),
+                ..ChannelForm::new_defaults()
+            })
+            .unwrap();
+            if let Some(engine) = supplied {
+                payload["streaming_engine"] = serde_json::json!(engine);
+            } else {
+                payload.as_object_mut().unwrap().remove("streaming_engine");
+            }
+            let mut expected_payload = payload.clone();
+            expected_payload["streaming_engine"] = serde_json::json!(expected);
+            let form: ChannelForm = serde_json::from_value(payload).unwrap();
+            assert_eq!(serde_json::to_value(&form).unwrap(), expected_payload);
+            assert_eq!(form.streaming_engine, expected);
+            assert_eq!(
+                serde_json::to_value(&form).unwrap()["streaming_engine"],
+                expected
+            );
+            let core = form.into_core();
+            assert_eq!(core.streaming_engine, expected);
+            assert_eq!(core.preferred_audio_language_code.as_deref(), Some("nld"));
+            assert_eq!(
+                core.preferred_subtitle_language_code.as_deref(),
+                Some("eng")
+            );
+            assert_eq!(core.slug_seconds, Some(2.0));
+        }
+    }
+
     use tokio::sync::mpsc;
 
     use super::*;

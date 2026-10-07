@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `df6ae228fa5e92528977a9bd0ccd836742765322` |
-| **Commit subject** | `feat: next output frame rate (#3063)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/df6ae228fa5e92528977a9bd0ccd836742765322 |
+| **Pinned commit** | `a3bbf89dad6459d3c3fb31a849849ac5219e5aca` |
+| **Commit subject** | `feat: next engine by default (#3064)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a3bbf89dad6459d3c3fb31a849849ac5219e5aca |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -61,7 +61,7 @@ The daily routine must **not** advance this pin on its own.
 
 The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
 `v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
-There are **199 accepted and 9 pending in-scope rows**. This supersedes the
+There are **200 accepted and 8 pending in-scope rows**. This supersedes the
 2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.
@@ -77,7 +77,9 @@ routine or a bulk baseline bump. Land the filled row and updated pin/subject/URL
 together only with maintainer commit authorization, then move the upstream
 checkout to that SHA. Stop after one upstream commit in each task run;
 bootstrap leaves the pin intact. Milestone acceptance and evidence live in
-`docs/progress/milestones.toml`; ADR 0095 accepts Next as an optional second engine; implementation remains open.
+`docs/progress/milestones.toml`; ADR 0095 accepts the conditional new-channel and
+standalone-preview Next default with bundled or verified automatic acquisition.
+Final integrated acceptance remains open.
 
 The active catch-up procedure uses direct substantive Codex review under the
 maintainer's 2026-09-20 decision; Claude review is not a current gate. AMM-N-03

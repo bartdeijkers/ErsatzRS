@@ -61,14 +61,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row199 accepted; complete rows200-208 through
-upstream v26.11.1 (46118d43); rows209 onward remain separate work. Row199
-output-rate normalization passes11 focused and3 actual runtime cases on each
-Linux/Windows platform, strict lint and independent artifact reviews; exact
-pins, copy identity, Dutch audio/captions, mirror settings and cleanup hold.
-Continue200: the maintainer accepts a new Next default only when ErsatzRS always
-bundles or automatically downloads/verifies the engine. Existing channel
-selections and explicit Native remain; runtime/default/browser proof is pending.
+2026-10-07 UCU-09 boundary: row200 accepted; complete rows201-208 through
+upstream v26.11.1 (46118d43); rows209 onward remain separate work. Accepted
+ADR0095 makes new-channel/standalone-preview Next default conditional on bundled
+or verified automatic acquisition. Public six-RID archives, staged payloads,
+Linux/native Windows cold and bundled playback, Dutch audio/subtitles,
+reconnect/preview/idle cleanup and six read-only startup cases per platform pass.
+Stored engines, explicit Native/AV1 and profile values remain. All38 selected
+native ordinary tests, current11 lifecycle/HTML cases, affected strict lint and
+matched Chromium31/Firefox30 pass, with one unchanged historical skip and all
+new no-JS/320px and causal diagnostics cases executed. Canonical row200 proof
+and independent reviews belong to UCU-09; no final full-suite CI claim.
+Continue201: prove the complete historical30s channel troubleshooting window,
+per-occurrence callbacks, selected profiles, generated/live captions and cleanup
+on Linux and native Windows. Source-only candidate03 review is not acceptance.
+Row199 exact rate/copy/mirror/pin/track/state/cleanup evidence remains valid.
 Row198 cached Next TS/HLS and26 native routing/artwork checks remain valid.
 Local deep scan retains real Linux/Windows scanner/durable admission/restart,
 international-track identity, same-mtime recovery, eight Libraries and four

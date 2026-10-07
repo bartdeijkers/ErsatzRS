@@ -2354,6 +2354,7 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::Stretch => "Strecken",
         TextKey::TargetLoudnessLufs => "Ziel-Lautheit (LUFS)",
         TextKey::ThreadCountAuto => "Thread-Anzahl (0 = automatisch)",
+        TextKey::NativeEngineOnlyHelp => "Nur die native Engine von ErsatzRS verwendet diese Einstellung. ErsatzTV Next ignoriert sie.",
         TextKey::OutputDynamicRange => "Dynamikumfang der Ausgabe",
         TextKey::OutputDynamicRangeCopyHint => {
             "Das Video wird kopiert, daher behält die Ausgabe den Dynamikumfang der Quelle."

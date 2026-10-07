@@ -30,6 +30,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Use Next for newly created channels and standalone playback previews, with
+  the exact engine bundled in packages or downloaded and verified automatically
+  before startup. Preserve existing channel engines and explicit Native choices.
+  Keep verified installations usable offline and label native-only profile
+  settings in every supported admin language. Distribute the pinned engine from
+  the public package-only ErsatzRS-next repository without GitHub credentials.
+
 - Share song artwork, BlurHash and multilingual metadata rendering between
   native and Next playback. Keep the native progress bar, preserve literal
   titles, and use default artwork when an optional cover is unavailable.
@@ -55,6 +62,10 @@ release section when tagging a release.
   Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 ### Fixed
+
+- Keep profile applicability help readable on narrow screens without JavaScript.
+  Preserve a failed preview's startup diagnostic instead of attaching logs from
+  an earlier producer that did not belong to that preview.
 
 - Keep cached IPTV URLs working after a channel switches to Next: legacy
   MPEG-TS modes use its hybrid wrapper and old HLS modes use its segmenter,

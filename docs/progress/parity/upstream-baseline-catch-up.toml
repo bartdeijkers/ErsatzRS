@@ -4,13 +4,13 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-199/208 accepted; rows200-208 pending through v26.11.1.
-199 Port: output rates, selected pins/mirror/copy/audio/captions;
-Linux/Windows11 focused and3 actual each, lint and independent reviews pass.
+200/208 accepted; rows201-208 pending through v26.11.1.
+200 Adapt(ADR0095): verified bundled/public Next default; Linux/Windows
+startup/playback and matched browsers pass; UCU-09 owns canonical proof.
+199 Port: rate/copy/mirror/Dutch tracks; UCU-09 owns Linux/Windows proof.
 198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
 196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
-195 Port: local deep scan, confirmations and fresh artwork; Linux/Windows
-restart, 12 browser cases and lint pass. UCU-09 owns exact evidence and reuse.
+195 Port: deep scan/artwork; UCU-09 owns runtime/browser/restart proof.
 194 Adapt (0117): content duration/native-Next handoff and generated silence
 pass on Linux/Windows; final window gates remain open.
 193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
@@ -64,6 +64,14 @@ RGB opacity is proven; UCU-09 owns evidence.
 Row39 owns Remote Stream/add-on source, caption and normal/preview lifecycle acceptance. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
 """
+
+[[debt]]
+id = 'ucu09-row200-managed-next-default'
+adr = '0095'
+description = 'Make Next the new-channel and standalone-preview default only with exact bundled or automatic verified runtime acquisition, retaining stored engine choices and explicit Native.'
+discovered = '2026-10-07'
+evidence = 'Resolved as Adapt under accepted ADR0095. UCU-09 owns source08 proof and independent review: public six-RID checksum/provenance staging, focused default/health/repository/lifecycle and strict lint, Linux/native Windows actual cold decoded TS/HLS with Dutch tracks/reconnect/preview/idle cleanup, native bundled playback, six real read-only/offline/override/failure startup cases per platform and matched Chromium31/Firefox30 with one unchanged older skip. Stored engines, explicit Native/AV1 and profile values remain; no bulk migration. Historical private404, responsive/diagnostic failures and pre-host standalone fixture failures remain retained. Canonical row200 acceptance-proof.json SHA256d5df6734452cb08d75f9bf83b7860c32b8b8c898dfafa6c7e9494ab772233cfe; final integrated/window/exact-SHA CI and approved platform/hardware debt remain open.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row193-troubleshooting-seek'

@@ -162,7 +162,7 @@ fn ffmpeg_profile_no_script_html(data: Result<Option<FfmpegProfileForm>, String>
     }
 
     format!(
-        r#"<form method="post" action="/admin-api/ffmpeg/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/ffmpeg" class="{back_link}">&#8592; {profiles}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button class="{btn_primary}" type="submit">{save_label}</button><a href="/ffmpeg" class="{cancel_link}">{cancel}</a></div><div class="{section}"><h2 class="{section_title}">{video}</h2><div class="{form_row}"><div class="{fallback_field}"><label>{name_label}</label><input name="name" value="{name}"></div><div class="{fallback_field}"><label>{accel_label}</label><select name="hardware_acceleration">{hardware_options}</select></div><div class="{fallback_field}"><label>{format_label}</label><select name="video_format">{format_options}</select></div><div class="{fallback_field}"><label>{profile_label}</label><select name="video_profile">{profile_options}</select></div><div class="{fallback_field}"><label>{bit_depth_label}</label><select name="bit_depth">{bit_depth_options}</select></div></div></div></form>"#,
+        r#"<form method="post" action="/admin-api/ffmpeg/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/ffmpeg" class="{back_link}">&#8592; {profiles}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button class="{btn_primary}" type="submit">{save_label}</button><a href="/ffmpeg" class="{cancel_link}">{cancel}</a></div><div class="{section}"><h2 class="{section_title}">{video}</h2><div class="{form_row}"><div class="{fallback_field}"><label>{name_label}</label><input name="name" value="{name}"></div><div class="{fallback_field}"><label>{accel_label}</label><select name="hardware_acceleration">{hardware_options}</select></div><div class="{fallback_field}"><label>{format_label}</label><select name="video_format">{format_options}</select></div><div class="{fallback_field}" data-native-engine-only="video_profile"><label>{profile_label}</label><select name="video_profile">{profile_options}</select><p class="{native_engine_hint}">{native_engine_only_help}</p></div><div class="{fallback_field}"><label>{bit_depth_label}</label><select name="bit_depth">{bit_depth_options}</select></div></div></div></form>"#,
         page = style::page,
         id = form.id,
         breadcrumb = style::breadcrumb,
@@ -186,6 +186,8 @@ fn ffmpeg_profile_no_script_html(data: Result<Option<FfmpegProfileForm>, String>
         hardware_options = hardware_options_html(form.hardware_acceleration),
         format_label = escape_html(tr(TextKey::VideoFormat)),
         format_options = video_format_options_html(form.video_format),
+        native_engine_hint = style::native_engine_hint,
+        native_engine_only_help = escape_html(tr(TextKey::NativeEngineOnlyHelp)),
         profile_label = escape_html(tr(TextKey::VideoProfile)),
         profile_options = profile_options,
         bit_depth_label = escape_html(tr(TextKey::BitDepth)),
@@ -318,6 +320,18 @@ fn localized_hw_accel_items(
             (option.value, label)
         })
         .collect()
+}
+
+// Upstream FFmpegEditor labels these persisted options as legacy-only. ADR0095
+// retains native profiles; keep values editable for profiles shared by both engines.
+#[component]
+fn NativeEngineField(field: &'static str, children: Children) -> impl IntoView {
+    view! {
+        <div class=style::native_field data-native-engine-only=field>
+            {children()}
+            <p class=style::native_engine_hint>{tr(TextKey::NativeEngineOnlyHelp)}</p>
+        </div>
+    }
 }
 
 /// Fully hydrated `FFmpegProfile` editor body.
@@ -707,7 +721,9 @@ fn FfmpegProfileEditorForm(
                 <h2 class=style::section_title>{tr(TextKey::General)}</h2>
                 <div class=style::form_grid>
                     <TextField label=tr(TextKey::Name) value=name name=Some("name")/>
-                    <NumberField label=tr(TextKey::ThreadCountAuto) value=thread_count min=Some(0)/>
+                    <NativeEngineField field="thread_count">
+                        <NumberField label=tr(TextKey::ThreadCountAuto) value=thread_count min=Some(0)/>
+                    </NativeEngineField>
                 </div>
                 <SelectField<i64>
                     label=tr(TextKey::Resolution)
@@ -725,7 +741,9 @@ fn FfmpegProfileEditorForm(
                 />
                 <CheckBox label=tr(TextKey::DeinterlaceVideo) value=deinterlace_video/>
                 <CheckBox label=tr(TextKey::NormalizeFramerate) value=normalize_framerate/>
-                <CheckBox label=tr(TextKey::NormalizeColors) value=normalize_colors/>
+                <NativeEngineField field="normalize_colors">
+                    <CheckBox label=tr(TextKey::NormalizeColors) value=normalize_colors/>
+                </NativeEngineField>
             </div>
 
             // ── Video section ─────────────────────────────────────────
@@ -767,11 +785,13 @@ fn FfmpegProfileEditorForm(
                         />
                         // QSV extra frames — always rendered; hidden for non-QSV accelerators.
                         <div style:display=move || if show_qsv_frames.get() { "" } else { "none" }>
-                            <NumberField
-                                label=tr(TextKey::QsvExtraHardwareFrames)
-                                value=qsv_extra_hardware_frames
-                                min=Some(0)
-                            />
+                            <NativeEngineField field="qsv_extra_hardware_frames">
+                                <NumberField
+                                    label=tr(TextKey::QsvExtraHardwareFrames)
+                                    value=qsv_extra_hardware_frames
+                                    min=Some(0)
+                                />
+                            </NativeEngineField>
                         </div>
                         // VAAPI fields — always rendered; hidden for non-VAAPI accelerators.
                         <div
@@ -779,17 +799,21 @@ fn FfmpegProfileEditorForm(
                             style:display=move || if show_vaapi_fields.get() { "" } else { "none" }
                         >
                             <TextField label=tr(TextKey::VaapiDevicePath) value=vaapi_device/>
-                            <TextField label=tr(TextKey::VaapiDisplay) value=vaapi_display/>
+                            <NativeEngineField field="vaapi_display">
+                                <TextField label=tr(TextKey::VaapiDisplay) value=vaapi_display/>
+                            </NativeEngineField>
                             <SelectField<i32>
                                 label=tr(TextKey::VaapiDriver)
                                 value=vaapi_driver
                                 items=mk_vaapi_driver_items()
                             />
-                            <SelectField<i32>
-                                label=tr(TextKey::PadMode)
-                                value=pad_mode
-                                items=mk_pad_mode_items()
-                            />
+                            <NativeEngineField field="pad_mode">
+                                <SelectField<i32>
+                                    label=tr(TextKey::PadMode)
+                                    value=pad_mode
+                                    items=mk_pad_mode_items()
+                                />
+                            </NativeEngineField>
                         </div>
                     </div>
 
@@ -809,13 +833,15 @@ fn FfmpegProfileEditorForm(
                                 items.push((profile.to_string(), profile.to_string()));
                             }
                             view! {
-                                <SelectField<String>
-                                    label=tr(TextKey::VideoProfile)
-                                    value=video_profile
-                                    items=items
-                                    name=Some("video_profile")
-                                    disabled=disabled
-                                />
+                                <NativeEngineField field="video_profile">
+                                    <SelectField<String>
+                                        label=tr(TextKey::VideoProfile)
+                                        value=video_profile
+                                        items=items
+                                        name=Some("video_profile")
+                                        disabled=disabled
+                                    />
+                                </NativeEngineField>
                             }
                         }}
                         // FFmpeg 9 exposes NVENC performance preset and tune as
@@ -830,11 +856,13 @@ fn FfmpegProfileEditorForm(
                                 items.push((preset.to_string(), preset.to_string()));
                             }
                             view! {
-                                <SelectField<String>
-                                    label=tr(TextKey::VideoPreset)
-                                    value=video_preset
-                                    items=items
-                                />
+                                <NativeEngineField field="video_preset">
+                                    <SelectField<String>
+                                        label=tr(TextKey::VideoPreset)
+                                        value=video_preset
+                                        items=items
+                                    />
+                                </NativeEngineField>
                             }
                         }}
                         {move || {
@@ -919,7 +947,9 @@ fn FfmpegProfileEditorForm(
                             />
                         </div>
                     </div>
-                    <CheckBox label=tr(TextKey::AllowBFrames) value=allow_b_frames/>
+                    <NativeEngineField field="allow_b_frames">
+                        <CheckBox label=tr(TextKey::AllowBFrames) value=allow_b_frames/>
+                    </NativeEngineField>
                 </div>
             </div>
 
@@ -978,5 +1008,69 @@ fn FfmpegProfileEditorForm(
                 <TextField label=tr(TextKey::NewProfileName) value=copy_name/>
             </Modal>
         </form>
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::admin::i18n::{text, UiLanguage};
+
+    #[test]
+    fn profile_native_only_help_covers_all_eight_fields_in_every_culture() {
+        for language in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(language.code);
+            let owner = Owner::new();
+            let html = owner.with(|| {
+                provide_context(language);
+                view! {
+                    <FfmpegProfileEditorForm
+                        initial_form=FfmpegProfileForm::new_defaults()
+                        initial_resolutions=Vec::new()
+                        initial_hw_accels=Vec::new()
+                    />
+                }
+                .into_view()
+                .to_html()
+            });
+            for field in [
+                "thread_count",
+                "normalize_colors",
+                "qsv_extra_hardware_frames",
+                "vaapi_display",
+                "pad_mode",
+                "video_profile",
+                "video_preset",
+                "allow_b_frames",
+            ] {
+                assert!(html.contains(&format!("data-native-engine-only=\"{field}\"")));
+            }
+            assert_eq!(
+                html.matches(text(language, TextKey::NativeEngineOnlyHelp))
+                    .count(),
+                8
+            );
+        }
+    }
+
+    #[test]
+    fn no_js_video_profile_retains_selected_option_and_localized_native_only_help() {
+        for language in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(language.code);
+            let owner = Owner::new();
+            let html = owner.with(|| {
+                provide_context(language);
+                ffmpeg_profile_no_script_html(Ok(Some(FfmpegProfileForm {
+                    hardware_acceleration: 2,
+                    video_format: 1,
+                    video_profile: "high444p".to_owned(),
+                    ..FfmpegProfileForm::new_defaults()
+                })))
+            });
+            assert!(html.contains("data-native-engine-only=\"video_profile\""));
+            assert!(html.contains("value=\"high444p\" selected"));
+            assert!(html.contains(text(language, TextKey::NativeEngineOnlyHelp)));
+            assert!(html.contains("method=\"post\" action=\"/admin-api/ffmpeg/save\""));
+        }
     }
 }
