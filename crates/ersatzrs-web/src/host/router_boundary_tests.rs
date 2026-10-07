@@ -306,17 +306,51 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
         }
     }
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/iptv/channel/7.ts")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(state.pool.size(), 0);
+    for suffix in [
+        "ts",
+        "ts?mode=ts-legacy",
+        "ts?mode=mpegts",
+        "ts?mode=mpeg-ts",
+        "m3u8?mode=hls-direct",
+        "m3u8?mode=hls-direct-raw",
+        "m3u8?mode=ts-legacy",
+    ] {
+        for method in ["GET", "HEAD"] {
+            for credential in [None, Some("invalid")] {
+                let mut uri = format!("/iptv/channel/7.{suffix}");
+                if let Some(credential) = credential {
+                    let separator = if uri.contains('?') { '&' } else { '?' };
+                    uri.push(separator);
+                    uri.push_str("access_token=");
+                    uri.push_str(credential);
+                }
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(uri)
+                            .header("X-Ers-Api-Key", "synthetic-fixture-key")
+                            .header("cookie", "management=synthetic-session")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::UNAUTHORIZED,
+                    "{method} {suffix}"
+                );
+                assert_eq!(
+                    state.pool.size(),
+                    0,
+                    "cached URL authentication must precede channel discovery"
+                );
+                assert!(state.hls_sessions.active_channels().await.is_empty());
+            }
+        }
+    }
 }
 
 #[tokio::test]

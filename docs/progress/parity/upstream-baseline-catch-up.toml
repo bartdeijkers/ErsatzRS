@@ -4,7 +4,9 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-197/208 accepted; rows198-208 pending through v26.11.1.
+198/208 accepted; rows199-208 pending through v26.11.1.
+198 Port: cached Next TS/HLS, decoded Linux/Windows and cleanup pass;
+26 native routing/artwork tests, strict lint and independent reviews pass.
 197 Covered: extracted custom text wins; four cases and lint pass.
 196 N/A: .NET PDB/dependency change; Rust/Next staging verified.
 195 Port: local deep scan, confirmations and fresh artwork; Linux/Windows
@@ -55,15 +57,11 @@ UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
 chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
 the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
 
-Rows23-30 have decoded/browser proof for track selection, captions, graphics,
-provider selection and Next Hybrid; ADR0099 retains converted text on HLS.
-UCU-02 owns the detailed evidence.
+UCU-02 owns rows23-30 decoded/browser evidence; ADR0099 retains converted HLS text.
 68-71: Plex/Classic continuity. 75: NVIDIA overlay passes; AMD live unproven.
 76-77: Classic anchors/checkpoints.
 RGB opacity is proven; UCU-09 owns evidence.
-Remote Stream/add-on support now has row-39 runtime acceptance for direct,
-prepared, retained and ordinary sources, including supported captions and
-independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
+Row39 owns Remote Stream/add-on source, caption and normal/preview lifecycle acceptance. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
 """
 

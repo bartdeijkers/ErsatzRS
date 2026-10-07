@@ -85,18 +85,29 @@ pub(super) fn seed(db: &Path, media: &Path) -> Result<()> {
 }
 
 pub(super) fn verify(channel: &str, root: &Path, deadline: Deadline, convert: bool) -> Result<()> {
-    let capture = root.join("next-wrapper.ts");
+    let label = "next-wrapper";
     let url = format!(
         "http://{}/iptv/channel/{channel}.ts?mode=ts",
         listen_addr()?
     );
+    let capture = capture_wrapper(&url, root, label, deadline)?;
+    decode_capture(&capture, root, label, deadline, convert)?;
+    if convert {
+        verify_converted_cue(channel, deadline)?;
+    }
+    verify_hls_after_disconnect(channel, deadline)?;
+    Ok(())
+}
+
+fn capture_wrapper(url: &str, root: &Path, label: &str, deadline: Deadline) -> Result<PathBuf> {
+    let capture = root.join(format!("{label}.ts"));
     bounded(
         ffmpeg()
             .args([
                 "-rw_timeout",
                 "15000000",
                 "-i",
-                &url,
+                url,
                 "-t",
                 "3",
                 "-map",
@@ -109,11 +120,21 @@ pub(super) fn verify(channel: &str, root: &Path, deadline: Deadline, convert: bo
             .arg(&capture),
         deadline,
     )?;
-    let audio = root.join("next-wrapper.pcm");
+    Ok(capture)
+}
+
+fn decode_capture(
+    capture: &Path,
+    root: &Path,
+    label: &str,
+    deadline: Deadline,
+    convert: bool,
+) -> Result<()> {
+    let audio = root.join(format!("{label}.pcm"));
     bounded(
         ffmpeg()
             .arg("-i")
-            .arg(&capture)
+            .arg(capture)
             .args([
                 "-map", "0:a:0", "-t", "1", "-ac", "1", "-ar", "8000", "-f", "s16le",
             ])
@@ -126,19 +147,19 @@ pub(super) fn verify(channel: &str, root: &Path, deadline: Deadline, convert: bo
         .map(|s| i16::from_le_bytes([s[0], s[1]]))
         .collect();
     if samples.len() < 7000 {
-        bail!("Next TS audio capture is too short");
+        bail!("{label}: audio capture is too short");
     }
     let crossings = samples.windows(2).filter(|s| s[0] <= 0 && s[1] > 0).count();
     let frequency =
         f64::from(u32::try_from(crossings)?) * 8000.0 / f64::from(u32::try_from(samples.len())?);
     if !(820.0..940.0).contains(&frequency) {
-        bail!("Next TS lost selected Dutch 880 Hz audio: {frequency} Hz");
+        bail!("{label}: lost selected Dutch 880 Hz audio: {frequency} Hz");
     }
-    let frame = root.join("next-wrapper.rgb");
+    let frame = root.join(format!("{label}.rgb"));
     bounded(
         ffmpeg()
             .arg("-i")
-            .arg(&capture)
+            .arg(capture)
             .args([
                 "-ss",
                 "0.5",
@@ -158,26 +179,40 @@ pub(super) fn verify(channel: &str, root: &Path, deadline: Deadline, convert: bo
     )?;
     let pixels = fs::read(frame)?;
     if pixels.len() != 320 * 48 * 3 {
-        bail!("Next TS decoded frame has unexpected dimensions");
+        bail!("{label}: decoded frame has unexpected dimensions");
     }
     let white = pixels
         .chunks_exact(3)
         .filter(|p| p.iter().all(|v| *v > 180))
         .count();
     if (!convert && white <= 20) || (convert && white != 0) {
-        bail!("Next TS subtitle mode mismatch: {white} white pixels, Convert={convert}");
+        bail!("{label}: subtitle mode mismatch: {white} white pixels, Convert={convert}");
     }
-    if convert {
-        let blue = pixels
-            .chunks_exact(3)
-            .filter(|p| p[0] < 40 && p[1] < 40 && p[2] > 180)
-            .count();
-        if blue * 100 < (pixels.len() / 3) * 99 {
-            bail!("Next Convert TS frame is not the expected unburned blue fixture");
-        }
-        verify_converted_cue(channel, deadline)?;
+    let blue = pixels
+        .chunks_exact(3)
+        .filter(|p| p[0] < 40 && p[1] < 40 && p[2] > 180)
+        .count();
+    let minimum_blue_percent = if convert { 99 } else { 50 };
+    if blue * 100 < (pixels.len() / 3) * minimum_blue_percent {
+        bail!("{label}: frame is not the expected blue fixture, Convert={convert}");
     }
-    inspect_streams(&capture, root, deadline)?;
+    fs::write(
+        root.join(format!("{label}-decoded-proof.json")),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "audio_frequency_hz": frequency,
+            "audio_samples": samples.len(),
+            "subtitle_white_pixels": white,
+            "blue_pixels": blue,
+            "rgb_bytes": pixels.len(),
+            "convert": convert,
+        }))?,
+    )?;
+    inspect_streams(capture, root, label, deadline)?;
+    println!("smoke evidence: {label} decoded Dutch {frequency:.1} Hz audio; subtitle white pixels={white}, Convert={convert}");
+    Ok(())
+}
+
+fn verify_hls_after_disconnect(channel: &str, deadline: Deadline) -> Result<()> {
     // The wrapper client has disconnected. The same channel must still serve HLS.
     let path = format!("/iptv/session/{channel}/hls.m3u8");
     let playlist = http_get_until_body(&path, usize::MAX, deadline.remaining()?)?;
@@ -188,11 +223,11 @@ pub(super) fn verify(channel: &str, root: &Path, deadline: Deadline, convert: bo
         deadline.remaining()?,
         true,
     )?;
-    println!("smoke evidence: Next Hybrid TS decoded Dutch {frequency:.1} Hz audio; subtitle white pixels={white}, Convert={convert}; HLS remains playable after wrapper disconnect");
+    println!("smoke evidence: Next HLS remains playable after wrapper disconnect");
     Ok(())
 }
 
-fn inspect_streams(capture: &Path, root: &Path, deadline: Deadline) -> Result<()> {
+fn inspect_streams(capture: &Path, root: &Path, label: &str, deadline: Deadline) -> Result<()> {
     let configured = configured_ffmpeg_path();
     #[cfg(target_os = "windows")]
     let probe_name = "ffprobe.exe";
@@ -205,7 +240,7 @@ fn inspect_streams(capture: &Path, root: &Path, deadline: Deadline) -> Result<()
     let probe = probe
         .filter(|p| p.is_file())
         .unwrap_or_else(|| PathBuf::from("ffprobe"));
-    let output = root.join("next-wrapper-streams.json");
+    let output = root.join(format!("{label}-streams.json"));
     let mut command = Command::new(probe);
     apply_ffmpeg_library_path(&mut command, configured.as_deref());
     // Use ffprobe's output-file option because bounded() deliberately owns stdout.
@@ -229,16 +264,119 @@ fn inspect_streams(capture: &Path, root: &Path, deadline: Deadline) -> Result<()
     if !streams.iter().any(|s| s["codec_type"] == "video")
         || !streams.iter().any(|s| s["codec_type"] == "audio")
     {
-        bail!("Next wrapper omitted audio/video streams");
+        bail!("{label}: omitted audio/video streams");
     }
     println!(
-        "smoke evidence: Next Hybrid TS stream types/codecs: {}",
+        "smoke evidence: {label} stream types/codecs: {}",
         report["streams"]
     );
     Ok(())
 }
 
-fn owned_subtitle_path(channel: &str, uri: &str) -> Result<String> {
+/// Cached URLs must preserve Next, selected tracks and persisted configuration.
+pub(super) fn verify_cached_modes(
+    channel: &str,
+    root: &Path,
+    db: &Path,
+    deadline: Deadline,
+    convert: bool,
+) -> Result<()> {
+    let configuration = configuration_snapshot(db, channel)?;
+    let live = env::temp_dir()
+        .join("ersatzrs-hls")
+        .join(channel)
+        .join("live.m3u8");
+    fs::copy(&live, root.join("next-cached-live-before.m3u8"))?;
+    let url = format!(
+        "http://{}/iptv/channel/{channel}.ts?mode=ts-legacy",
+        listen_addr()?
+    );
+    for label in ["next-cached-ts", "next-cached-ts-reconnect"] {
+        let capture = capture_wrapper(&url, root, label, deadline)?;
+        decode_capture(&capture, root, label, deadline, convert)?;
+        // Dropping each finite wrapper consumer must not tear down Next HLS.
+        verify_hls_after_disconnect(channel, deadline)?;
+    }
+    verify_cached_hls(channel, root, deadline, convert)?;
+    if convert {
+        verify_converted_cue(channel, deadline)?;
+    }
+    fs::copy(&live, root.join("next-cached-live-after.m3u8"))?;
+    if configuration_snapshot(db, channel)? != configuration {
+        bail!("cached URLs mutated the Next channel, profile or resolution");
+    }
+    println!("smoke evidence: cached TS reconnect and old HLS URL preserve Next configuration");
+    Ok(())
+}
+
+fn configuration_snapshot(db: &Path, channel: &str) -> Result<Vec<Vec<rusqlite::types::Value>>> {
+    let connection = Connection::open(db)?;
+    let engine: i64 = connection.query_row(
+        r#"SELECT "StreamingEngine" FROM "Channel" WHERE "Number"=?"#,
+        [channel],
+        |row| row.get(0),
+    )?;
+    if engine != 1 {
+        bail!("cached URL smoke requires its persisted Next channel");
+    }
+    let mut snapshot = Vec::new();
+    for query in [
+        r#"SELECT * FROM "Channel" WHERE "Number"=?"#,
+        r#"SELECT p.* FROM "FFmpegProfile" p JOIN "Channel" c ON c."FFmpegProfileId"=p."Id" WHERE c."Number"=?"#,
+        r#"SELECT r.* FROM "Resolution" r JOIN "FFmpegProfile" p ON p."ResolutionId"=r."Id" JOIN "Channel" c ON c."FFmpegProfileId"=p."Id" WHERE c."Number"=?"#,
+    ] {
+        snapshot.push(connection.query_row(query, [channel], |row| {
+            (0..row.as_ref().column_count())
+                .map(|index| row.get(index))
+                .collect::<rusqlite::Result<Vec<rusqlite::types::Value>>>()
+        })?);
+    }
+    Ok(snapshot)
+}
+
+fn verify_cached_hls(channel: &str, root: &Path, deadline: Deadline, convert: bool) -> Result<()> {
+    let master_path = format!("/iptv/channel/{channel}.m3u8?mode=hls-direct");
+    let master = http_get_until_body(&master_path, usize::MAX, deadline.remaining()?)?;
+    master.ensure_success_with_body("cached Next HLS master")?;
+    fs::write(root.join("next-cached-hls-master.m3u8"), &master.body)?;
+    let master_text = String::from_utf8(master.body)?;
+    if !master_text.contains("#EXT-X-STREAM-INF:") {
+        bail!("cached Next HLS URL omitted its production master variant");
+    }
+    let uri = master_text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .context("cached Next HLS master omitted its media URI")?;
+    let media_path = owned_session_path(channel, uri)?;
+    let expected_media = format!("/iptv/session/{channel}/hls.m3u8");
+    if media_path.split('?').next() != Some(expected_media.as_str()) {
+        bail!("cached Next HLS master did not reference its owned channel session");
+    }
+    let media = http_get_until_body(&media_path, usize::MAX, deadline.remaining()?)?;
+    media.ensure_success_with_body("cached Next HLS media playlist")?;
+    fs::write(root.join("next-cached-hls-media.m3u8"), &media.body)?;
+    let media_text = String::from_utf8(media.body)?;
+    if !media_text.contains("#EXTINF:") {
+        bail!("cached Next HLS media playlist omitted segments");
+    }
+    let uri = media_text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .context("cached Next HLS media playlist omitted its segment URI")?;
+    let segment_path = owned_session_path(channel, uri)?;
+    let segment = http_get_until_body(&segment_path, usize::MAX, deadline.remaining()?)?;
+    segment.ensure_success_with_body("cached Next HLS segment")?;
+    ensure_mpeg_ts_segment(&segment.body)?;
+    let capture = root.join("next-cached-hls.ts");
+    fs::write(&capture, &segment.body)?;
+    // Decode the bytes actually referenced and served, not a synthetic playlist.
+    decode_capture(&capture, root, "next-cached-hls", deadline, convert)?;
+    Ok(())
+}
+
+fn owned_session_path(channel: &str, uri: &str) -> Result<String> {
     let origin = format!("http://{}", listen_addr()?);
     let uri = uri.strip_prefix(&origin).unwrap_or(uri);
     let prefix = format!("/iptv/session/{channel}/");
@@ -249,7 +387,7 @@ fn owned_subtitle_path(channel: &str, uri: &str) -> Result<String> {
     };
     let file = path
         .strip_prefix(&prefix)
-        .context("subtitle URI escaped the smoke channel")?;
+        .context("media URI escaped the smoke channel")?;
     let file = file.split('?').next().unwrap_or(file);
     if file.is_empty()
         || file.contains("..")
@@ -258,7 +396,7 @@ fn owned_subtitle_path(channel: &str, uri: &str) -> Result<String> {
             .all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c))
         || path.bytes().any(|c| c.is_ascii_control())
     {
-        bail!("unsupported smoke subtitle URI");
+        bail!("unsupported smoke session URI");
     }
     Ok(path)
 }
@@ -274,7 +412,7 @@ fn verify_converted_cue(channel: &str, deadline: Deadline) -> Result<()> {
         .and_then(|line| line.split("URI=\"").nth(1))
         .and_then(|tail| tail.split('"').next())
         .context("Next Convert master omitted the subtitle rendition")?;
-    let path = owned_subtitle_path(channel, uri)?;
+    let path = owned_session_path(channel, uri)?;
     let playlist = http_get_until_body(&path, usize::MAX, deadline.remaining()?)?;
     playlist.ensure_success_with_body("Next Convert subtitle playlist")?;
     let playlist = String::from_utf8(playlist.body)?;
@@ -287,7 +425,7 @@ fn verify_converted_cue(channel: &str, deadline: Deadline) -> Result<()> {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .take(8)
     {
-        let path = owned_subtitle_path(channel, uri)?;
+        let path = owned_session_path(channel, uri)?;
         let cue = http_get_until_body(&path, usize::MAX, deadline.remaining()?)?;
         cue.ensure_success_with_body("Next Convert WebVTT segment")?;
         let cue = String::from_utf8(cue.body)?;

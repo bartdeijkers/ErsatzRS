@@ -197,6 +197,13 @@ fn run_inner(opts: Opts) -> Result<()> {
             }
             if generated_next && opts.check_ts {
                 next_proof::verify(channel, &root.path, deadline, opts.next_convert)?;
+                next_proof::verify_cached_modes(
+                    channel,
+                    &root.path,
+                    &db_path,
+                    deadline,
+                    opts.next_convert,
+                )?;
             }
             probe_preview(channel, deadline.remaining()?)?;
         }
@@ -222,7 +229,8 @@ fn run_inner(opts: Opts) -> Result<()> {
                 )?;
             }
             if opts.check_ts {
-                let path = format!("/iptv/channel/{channel}.ts?mode=ts");
+                let mode = if opts.next { "ts-legacy" } else { "ts" };
+                let path = format!("/iptv/channel/{channel}.ts?mode={mode}");
                 let response =
                     http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
                         .with_context(|| {

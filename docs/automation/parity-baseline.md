@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `39c1811ff618ee7ce13f8b41e277975d4ac178bf` |
-| **Commit subject** | `fix: ignore unextracted text subtitles on next engine (#3061)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/39c1811ff618ee7ce13f8b41e277975d4ac178bf |
+| **Pinned commit** | `897a6ef936c23fedc3a29111c0cc04625eefbec1` |
+| **Commit subject** | `fix: coerce next channels to supported streaming modes (#3062)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/897a6ef936c23fedc3a29111c0cc04625eefbec1 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -61,7 +61,7 @@ The daily routine must **not** advance this pin on its own.
 
 The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
 `v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
-There are **197 accepted and 11 pending in-scope rows**. This supersedes the
+There are **198 accepted and 10 pending in-scope rows**. This supersedes the
 2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.

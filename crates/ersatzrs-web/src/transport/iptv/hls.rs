@@ -2120,7 +2120,9 @@ mod tests {
             stream::serve_transport_stream(state, "1", &HeaderMap::new(), &legacy)
                 .await
                 .status(),
-            StatusCode::NOT_FOUND
+            // No streaming listener is installed in this route fixture. The
+            // cached request reaches the same wrapper prerequisite as mode=ts.
+            StatusCode::SERVICE_UNAVAILABLE
         );
         sqlx::query(r#"UPDATE "Channel" SET "IsEnabled"=0 WHERE "Id"=1"#)
             .execute(&state.pool)
@@ -2144,13 +2146,165 @@ mod tests {
             .unwrap();
     }
 
+    async fn assert_next_native_streams_refused(state: &AppState) {
+        assert_eq!(
+            stream::serve_channel_stream(state, "1", OutputFormat::MpegTs)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            stream::serve_internal_legacy_stream(state, "1")
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    async fn assert_cached_next_hls_modes(state: &AppState) {
+        let original: (i32, i32, i32) = sqlx::query_as(
+            r#"SELECT "StreamingEngine", "StreamingMode", "IsEnabled" FROM "Channel" WHERE "Id"=1"#,
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+        let original_worker = state.hls_sessions.try_get("1").await.unwrap();
+        for mode in [
+            "segmenter",
+            "segmenter-v2",
+            "segmenter-fmp4",
+            "hls-direct",
+            "hls-direct-raw",
+            "ts-legacy",
+            "mpegts",
+            "mpeg-ts",
+            "ts",
+            "hybrid",
+            "unknown",
+        ] {
+            let query = HlsQuery {
+                mode: Some(mode.into()),
+                access_token: Some("synthetic-token".into()),
+            };
+            let response = serve_channel_m3u8(state, "1", &HeaderMap::new(), &query).await;
+            assert_eq!(response.status(), StatusCode::OK, "cached HLS mode {mode}");
+            let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            let text = std::str::from_utf8(&body).unwrap();
+            assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
+            assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
+            assert!(!text.contains("/iptv/hls-direct/"));
+            assert!(!text.contains("/ffmpeg/concat/"));
+            assert!(Arc::ptr_eq(
+                &original_worker,
+                &state.hls_sessions.try_get("1").await.unwrap()
+            ));
+        }
+        let retained: (i32, i32, i32) = sqlx::query_as(
+            r#"SELECT "StreamingEngine", "StreamingMode", "IsEnabled" FROM "Channel" WHERE "Id"=1"#,
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            retained, original,
+            "URL normalization must not change channel settings"
+        );
+    }
+
+    async fn assert_cached_next_routes_keep_authentication(state: &AppState) {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        let token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            &serde_json::json!({ "exp": chrono::Utc::now().timestamp() + 60 }),
+            &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
+        )
+        .unwrap();
+        let app = crate::host::router::build_streaming_app(state.clone());
+        let original_worker = state.hls_sessions.try_get("1").await.unwrap();
+        for (suffix, expected) in [
+            ("ts?mode=ts-legacy", StatusCode::SERVICE_UNAVAILABLE),
+            ("ts?mode=mpegts", StatusCode::SERVICE_UNAVAILABLE),
+            ("ts?mode=ts", StatusCode::SERVICE_UNAVAILABLE),
+            ("m3u8?mode=hls-direct", StatusCode::OK),
+            ("m3u8?mode=hls-direct-raw", StatusCode::OK),
+            ("m3u8?mode=ts-legacy", StatusCode::OK),
+        ] {
+            for method in ["GET", "HEAD"] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(format!("/iptv/channel/1.{suffix}&access_token={token}"))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), expected, "authorized {method} {suffix}");
+            }
+        }
+        assert_cached_next_disabled_and_unknown_routes(state, &app, &token, &original_worker).await;
+    }
+
+    async fn assert_cached_next_disabled_and_unknown_routes(
+        state: &AppState,
+        app: &axum::Router,
+        token: &str,
+        original_worker: &Arc<dyn HlsSessionHandle>,
+    ) {
+        use axum::{body::Body, http::Request};
+        use tower::ServiceExt;
+        sqlx::query(r#"UPDATE "Channel" SET "IsEnabled"=0 WHERE "Id"=1"#)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        for number in ["1", "999"] {
+            for suffix in [
+                "ts?mode=ts-legacy",
+                "ts?mode=mpeg-ts",
+                "m3u8?mode=hls-direct",
+                "m3u8?mode=ts-legacy",
+            ] {
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::get(format!(
+                            "/iptv/channel/{number}.{suffix}&access_token={token}"
+                        ))
+                        .body(Body::empty())
+                        .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::NOT_FOUND,
+                    "disabled/unknown {number} {suffix}"
+                );
+                assert!(state.hls_sessions.try_get("999").await.is_none());
+                assert!(Arc::ptr_eq(
+                    original_worker,
+                    &state.hls_sessions.try_get("1").await.unwrap()
+                ));
+            }
+        }
+        sqlx::query(r#"UPDATE "Channel" SET "IsEnabled"=1 WHERE "Id"=1"#)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn next_engine_routes_preserve_hybrid_hls_tokens_and_reject_native_playback() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
         use ersatzrs_domain::{FFmpegProfile, StreamingEngine};
-        let state = AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-        );
+        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::enabled(
+            "synthetic-iptv-secret",
+        ));
         sqlx::migrate!("../../migrations")
             .run(&state.pool)
             .await
@@ -2227,12 +2381,9 @@ mod tests {
             "/iptv/channel/1.m3u8?access_token=synthetic-token"
         );
         assert_next_hybrid_routes(&state).await;
-        assert_eq!(
-            stream::serve_channel_stream(&state, "1", OutputFormat::MpegTs)
-                .await
-                .status(),
-            StatusCode::NOT_FOUND
-        );
+        assert_cached_next_hls_modes(&state).await;
+        assert_cached_next_routes_keep_authentication(&state).await;
+        assert_next_native_streams_refused(&state).await;
         assert!(worker.touched.load(Ordering::SeqCst) >= 2);
     }
 }

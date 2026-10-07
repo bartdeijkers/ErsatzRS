@@ -61,17 +61,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row197 accepted; complete rows198-208 through upstream v26.11.1
-(46118d43); rows209 onward remain separate work. Row197 is Covered: exact
-extracted custom selection/audio preservation, Direct/bitmap/settings/pin matrix
-and strict lint pass. Continue198 cached Next streaming URL compatibility.
-Local deep scan passes real
-Linux/Windows scanner/durable admission/restart, international-track identity
-and same-mtime recovery. Eight Libraries and four real artwork-cache browser
-cases, strict focused lint and independent review pass. UCU-09 owns final
-source06/cache proof and explicit native source03 reuse; final integrated Windows
-artwork execution remains required. The separate native null-audio checkpoint
-retains its existing decoded playback/cleanup/lint/transport evidence.
+2026-10-07 UCU-09 boundary: row198 accepted; complete rows199-208 through
+upstream v26.11.1 (46118d43); rows209 onward remain separate work. Row198
+preserves cached Next TS/HLS modes with decoded Linux/Windows audio/captions,
+state preservation, restart/idle cleanup and independent raw-artifact reviews.
+Five portable routing/authentication tests, strict lint and 26 native Windows
+routing/artwork tests pass. Continue199 output frame-rate normalization.
+Local deep scan retains real Linux/Windows scanner/durable admission/restart,
+international-track identity, same-mtime recovery, eight Libraries and four
+artwork-cache browser cases. Final source06/cache proof and explicit native
+source03 reuse remain valid; all 21 current artwork tests now execute on Windows.
+Final integrated packaged Windows/browser acceptance remains required. The
+separate native null-audio checkpoint retains its existing decoded playback,
+cleanup/lint/transport evidence.
 Final window local gates, push and terminal
 green exact-SHA CI remain required.
 ADR 0117 is accepted for necessary Next corrections, packages

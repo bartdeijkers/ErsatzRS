@@ -52,6 +52,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep cached IPTV URLs working after a channel switches to Next: legacy
+  MPEG-TS modes use its hybrid wrapper and old HLS modes use its segmenter,
+  preserving authentication and native-engine isolation (upstream #3062).
+
 - Keep failed local deep scans retryable when source timestamps are unchanged.
   Render the Libraries table without JavaScript and preserve the selected
   language for hydrated scan controls and confirmation dialogs. Revalidate

@@ -11421,6 +11421,47 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row198 accepted as Port. Exact upstream
+897a6ef936c23fedc3a29111c0cc04625eefbec1 coerces cached Next TS/HLS modes.
+Resolved Next Legacy requests now use the existing HybridWrapper; native
+resolution and Next-first HLS dispatch are unchanged. Five portable routing,
+authentication and native-isolation cases pass (nextest
+2ae94b74-317a-4f5a-abf6-47d2bbe2c61d), as do strict web/xtask all-target Clippy,
+formatting, new-allow policy and source pre/post guards. Frozen source198-01
+receipt c1dd50fc9a56d7dedc9c32f5e85f56af44e465aafb95208cbe709130973d6bd1
+covers1502 inputs at historic basefc256583. Linux actual host smoke decodes
+ordinary TS, cached legacy TS, reconnect and the real cached-HLS segment:
+8000 PCM samples at880Hz, blue frames and35 white caption pixels per case.
+Linux proof fe02d86d36fdf13b386612035e60a9f6ef5e7f55626afef2dd29eddf923ff2b7
+and independent review35b0043d0ba66b2a995f61b6e2b24794061e51c744e24d5caa662502cab27336
+verify retained source, manifests, raw artifacts and owned cleanup.
+Native Windows driver terminal0 runs26/26 ordinary selected cases (21 artwork,
+5 routing; nextest835df5d4-e628-4fc0-a71b-ee7325d62880), then actual host smoke
+using checksum-verified published FFmpeg v2.0.6 and Next036. Four real captures
+have H264/AAC, 8000 PCM samples at879/880Hz, blue pictures and53 white caption
+pixels. Raw TS packet/PMT checks, PCM/RGB remeasurement, actual master/media/live
+manifests, full persisted Channel/Profile/Resolution equality, HLS after
+wrapper disconnect, preview and normal/preview idle cleanup pass. Cached TS
+restart returns HTTP200 with3015 bytes; restart is not a decoded-restart claim.
+The driver proves source equality across1502 live/frozen/native inputs, owned
+process absence and private temporary-state removal. Windows canonical proof
+6ebdc80f1db5d70acf6e5d30a21399f94a6570e4572e3f4a068c479c0dc2bf54 and independent
+review27f23a877da72db0792362e419af41949767871f0f5da94ef269b6a502f0724d
+verify33 referenced files and exact published payloads. All21 current artwork
+checks are now native Windows executed; final packaged/browser acceptance stays
+open. Substantive source review finds no blocker. No new runtime package,
+argv/schema/health change, browser/hardware/other-platform or full-CI claim.
+Required final window/platform gates, exact-SHA CI and stable release remain.
+Canonical row198 proof tmp/ucu09-row198/acceptance-proof.json
+SHA2565439f2e4e1b701c85c194b6c12d215ab847e87a09edd3542a554a82d9fe7aebe.
+Reviewed metadata-only repair adds required upstream credits to four unpublished
+row194-197 landing messages; the five-node chain retains all exact trees,
+author/committer identities/dates, index and working files. Historical test-base
+receipts remain immutable; equivalent current base97c7917588e346e80d42b59447993fc5d3416cb9
+is mapped by tmp/ucu09-row198/upstream-credit-repair-execution.json. The old
+chain is retained under a backup ref; no published history or remote is changed.
+Pin/ledger advance198/208 with10 pending; continue199 frame-rate normalization.
+
 2026-10-07 row197 accepted as Covered. Exact upstream
 39c1811ff618ee7ce13f8b41e277975d4ac178bf changes the custom selector, its tests
 and Changelog; complete diff SHA256b7104fe76dd91c8c7c3dc8053989775d90e8f9054b3edfe8995fb9ad390f1f1b

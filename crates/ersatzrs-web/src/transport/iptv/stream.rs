@@ -126,9 +126,7 @@ pub async fn serve_transport_stream(
         }
     };
 
-    let Some(mode) = channel_transport_stream_mode(query.mode.as_deref(), &channel) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
+    let mode = channel_transport_stream_mode(query.mode.as_deref(), &channel);
 
     if !matches!(mode, TransportStreamMode::RedirectToHls) {
         if let Err(response) = super::validate_profile_output(
@@ -1769,18 +1767,23 @@ enum TransportStreamMode {
     HybridWrapper,
 }
 
-// A legacy concat request must never silently switch a Next channel's engine.
+// Upstream IptvController coerces cached ts-legacy URLs to Next's TS wrapper.
+// Resolve aliases and stale stored modes too, without starting the native engine.
 fn channel_transport_stream_mode(
     requested_mode: Option<&str>,
     channel: &Channel,
-) -> Option<TransportStreamMode> {
+) -> TransportStreamMode {
     let mode = resolve_transport_stream_mode(requested_mode, channel.streaming_mode);
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next
         && mode == TransportStreamMode::Legacy
     {
-        None
+        tracing::info!(
+            channel_id = channel.id,
+            "Next channel uses hybrid MPEG-TS for a legacy transport request"
+        );
+        TransportStreamMode::HybridWrapper
     } else {
-        Some(mode)
+        mode
     }
 }
 
@@ -5989,39 +5992,60 @@ mod tests {
 
     #[test]
     fn next_transport_dispatch_preserves_engine_and_allows_hybrid_wrapper() {
+        use ersatzrs_domain::StreamingEngine;
         let mut channel = Channel {
-            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
-            streaming_mode: StreamingMode::TransportStreamHybrid,
+            streaming_engine: StreamingEngine::Next,
             ..Default::default()
         };
-        for requested in [None, Some("mixed"), Some("ts"), Some("hybrid")] {
-            assert_eq!(
-                channel_transport_stream_mode(requested, &channel),
-                Some(TransportStreamMode::HybridWrapper)
-            );
+        for setting in [
+            StreamingMode::TransportStream,
+            StreamingMode::TransportStreamHybrid,
+            StreamingMode::HttpLiveStreamingDirect,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        ] {
+            channel.streaming_mode = setting;
+            for requested in [None, Some(""), Some("mixed"), Some(" mixed ")] {
+                let resolved = resolve_transport_stream_mode(requested, setting);
+                let expected = if resolved == TransportStreamMode::Legacy {
+                    TransportStreamMode::HybridWrapper
+                } else {
+                    resolved
+                };
+                assert_eq!(channel_transport_stream_mode(requested, &channel), expected);
+            }
+            for requested in [
+                "ts-legacy",
+                " ts-legacy ",
+                "mpegts",
+                "mpeg-ts",
+                "ts",
+                "hybrid",
+                "unknown",
+            ] {
+                assert_eq!(
+                    channel_transport_stream_mode(Some(requested), &channel),
+                    TransportStreamMode::HybridWrapper,
+                    "Next setting {setting:?}, cached request {requested}"
+                );
+            }
+            channel.streaming_engine = StreamingEngine::Legacy;
+            for requested in [
+                None,
+                Some(""),
+                Some("mixed"),
+                Some("ts-legacy"),
+                Some("mpegts"),
+                Some("mpeg-ts"),
+                Some("ts"),
+            ] {
+                assert_eq!(
+                    channel_transport_stream_mode(requested, &channel),
+                    resolve_transport_stream_mode(requested, setting),
+                    "native setting {setting:?}, request {requested:?}"
+                );
+            }
+            channel.streaming_engine = StreamingEngine::Next;
         }
-        for requested in ["ts-legacy", "mpegts", "mpeg-ts"] {
-            assert_eq!(
-                channel_transport_stream_mode(Some(requested), &channel),
-                None
-            );
-        }
-        channel.streaming_mode = StreamingMode::HttpLiveStreamingSegmenter;
-        assert_eq!(
-            channel_transport_stream_mode(None, &channel),
-            Some(TransportStreamMode::RedirectToHls)
-        );
-        assert_eq!(
-            channel_transport_stream_mode(Some("ts"), &channel),
-            Some(TransportStreamMode::HybridWrapper)
-        );
-        channel.streaming_mode = StreamingMode::TransportStream;
-        assert_eq!(channel_transport_stream_mode(None, &channel), None);
-        channel.streaming_engine = ersatzrs_domain::StreamingEngine::Legacy;
-        assert_eq!(
-            channel_transport_stream_mode(None, &channel),
-            Some(TransportStreamMode::Legacy)
-        );
     }
 
     #[test]
