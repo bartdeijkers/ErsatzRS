@@ -4,11 +4,49 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-193 are accepted; rows194-208 are the 15 remaining in-scope
+verified). Rows1-194 are accepted; rows195-208 are the 14 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 194 source map and acceptance
+
+Active slice: `fb75ce8c`, content-bound local-library duration. The existing
+parser at the ErsatzRS prerequisite `2fdd126c` implements upstream video
+selection and complete-audio fallback. ADR 0117 additionally guards the
+verified FFmpeg9 Matroska numeric/container20-second estimate when a valid
+content tag and video packets end at one second. Row194 is accepted as Adapt.
+
+- Upstream: `ErsatzTV.Infrastructure/Metadata/LocalStatisticsProvider.cs`
+  and `ErsatzTV.Infrastructure.Tests/Metadata/LocalStatisticsProviderTests.cs`.
+  Choose highest-bitrate non-attached video, retain first bitrate tie, use
+  usable stream duration/tag, and require all audio durations for audio-only
+  maximum before container fallback.
+- Rust projection: `ersatzrs-infra/src/ffprobe.rs` and its extractor tests.
+  Preserve independent numeric durations, other-container precedence,
+  missing/malformed-tag fallback, subtitle language and selected stream data.
+- Persistence: public `scan_local_library`, normal insert/update and rescan
+  of `MediaVersion.Duration`; do not seed its duration manually.
+- Runtime acceptance: build the normal persisted schedule from scanned IDs,
+  then decode real native HLS and published Next output across the one-second
+  blue-to-red programme seam, with six-second finite Next ENDLIST and owned
+  stop/reaping/capacity restoration.
+- Existing parser/projection/lint evidence is reusable with its unchanged
+  source identity. The exact v2.0.6 probe reconfirms the numeric20/tag1/packet1
+  conflict. The old retained clip has no language metadata; a new synthetic
+  blue/Dutch-subtitle fixture proves persistence and track preservation on
+  Linux and native Windows; normal scheduling and actual decoded native/Next
+  handoff, six-second finite Next ENDLIST and owned cleanup pass.
+- Exclusions: no production-parser change is currently demonstrated, no
+  FFmpeg/Next build/release, browser/layout/schema change or later row.
+  UCU-09 owns exact evidence; platform/hardware debt and final gates remain.
+- The first truly video-only fixture exposed a separate existing native audio
+  graph defect. It remains required work under ffmpeg-command-generation /
+  native-video-only-null-audio-fallback before closeout, not accepted debt.
+  Reuse existing generated silence for confirmed missing source audio and
+  preserve explicit Disabled, pinned/selected tracks and unknown pipe inputs.
+  Continue at row195 after this ordered local checkpoint.
 
 ## Row 193 source map and acceptance
 
@@ -5579,7 +5617,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 191 | `fdf3b13c` | build: manual develop workflow (#3055) | N/A | Upstream develop-release tagging and .NET artifact/image/signing workflows | `docs(parity): reconcile upstream manual develop workflow` | ucu-09; complete six-file diff and current own CI/release workflow hashes verified. ErsatzRS retains separate verification, tag-triggered releases and explicit stable/beta publication gates; no matching broken develop-tag or signing-environment path. Independent substantive review agrees. No source build, new release or publication-policy change; UCU-09 owns exact evidence and final gates/CI remain open. |
 | 192 | `20c81e63` | fix: unsigned mac ci (#3056) | N/A | Upstream unsigned Xcode bundle and develop/CI workflow scripts | `docs(parity): reconcile unsigned macOS CI repair` | ucu-09; full ten-file diff reviewed and current own workflow hashes verified. Xcode signing-flag forwarding and .NET/macOS artifact callers have no ErsatzRS counterpart; independent review confirms no source correction. Existing own CI/tagged releases and approved explicit unverified macOS application/runtime debt remain. No additional build or publication; UCU-09 owns exact evidence and final gates/CI remain open. |
 | 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | Port | ersatzrs-web API, preview supervision and shared player | `fix(web): start troubleshooting playback at the requested seek point` | ucu-09; generated live playlist and current Next marker, successful reaped short-EOF fallback, native two-segment running readiness and diagnostic first-segment player start. 34 focused/831 web and six Linux runtime checks; corrected Windows7/21/5 and both browsers21 each pass, with exact source/reuse identities, strict lint and independent review. Existing owned-file/cancellation/cleanup safety and ordinary live edge remain. No runtime package build or row201 change; final gates/CI remain open. |
-| 194 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; pending application correction and acceptance. Preserve highest-bitrate non-attached video duration, complete-audio maximum and valid Matroska DURATION/DURATION-language parsing. Exact FFmpeg9 fixture additionally reports numeric video duration20 with tag1 and video packets ending at1; generic FFmpeg timing can synthesize the numeric value from container duration. Guard that conflict in the scanner rather than copying numeric-first parsing unchanged; test missing, malformed and conflicting tags, preserve other-container precedence and decode schedule handoff. No FFmpeg binary patch is justified. ADR0117/UCU-09 record source and probe evidence. |
+| 194 | `fb75ce8c` | fox: local library duration (#3058) | Adapt | infra content-duration projection; scanner persistence, normal scheduling and native/Next consumers | `test(scanner): verify content duration through programme handoff` | ucu-09; ADR0117 narrow Matroska numeric/container conflict guard retains upstream video/complete-audio selection and tag precedence. Existing parser evidence is reused with unchanged identity; new source05 Linux/Windows application tests each pass1/1, normal scan/rescan/Dutch metadata and1s/5s schedule, actual blue0.25/red1.25 handoff, Next6s ENDLIST, packet gaps and owned cleanup. Strict scanner lint, exact tool/source guards and independent review pass. Separate preexisting video-only native silence fallback remains required work before closeout; no binary build or later-row change. UCU-09 owns exact evidence and final gates/CI remain open. |
 | 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |
 | 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | | | | ucu-09; provisional: Covered, pending a focused check. Upstream drops the Next exemption in `CustomStreamSelector`, so an embedded text subtitle that has not been extracted is ignored for Next too, exactly as for the legacy engine. ErsatzRS selection and extraction carry no engine-specific exemption (`crates/ersatzrs-infra/src/subtitles.rs:1448` re-extracts on any missing cache file regardless of engine), and row 174 already applied automatic eligibility to both engines, so the audit only has to prove an unextracted embedded text track is skipped rather than selected. Claude 2026-10-05 triage. |

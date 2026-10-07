@@ -4,17 +4,18 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-193/208 rows accepted; rows194-208 remain pending through v26.11.1.
+194/208 rows accepted; rows195-208 remain pending through v26.11.1.
+194 Adapt (0117): scanned content duration reaches normal scheduling and decoded
+native/Next handoff on Linux/Windows. Native no-audio fallback is unresolved
+required work in ffmpeg-command-generation before closeout.
 193 Port: generated preview playlist, current readiness and first-frame seek;
 Linux/Windows runtime, both browsers, strict lint and independent review pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward are later work and do not reopen UCU-09.
-ADR 0117 accepts qualifying Next corrections.
 Next0362692 is pinned for six RIDs; both local patches still require independent
 retirement. Package CI and row186 production playback/cleanup pass.
 UCU-00–08 are Complete; UCU-09 remains open through v26.11.1.
-Earlier window gates and exact-SHA CI36900396649 at b76d11c6
-passed; fixed-cutoff closeout and stable v1.1.0 package acceptance remain open.
+UCU-09 owns prior CI evidence; final gates and stable-release acceptance remain open.
 Windows Next/JavaScript/chapter application proof passes, including all four
 chapter-profile languages.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
@@ -92,8 +93,8 @@ id = 'ucu09-row194-content-duration'
 adr = '0117'
 description = 'Use selected content-stream duration for local scans, guarding against FFmpeg 9 Matroska numeric durations synthesized from a longer subtitle/container; preserve video selection and complete-audio fallback.'
 discovered = '2026-10-06'
-evidence = 'Remaining-row audit and exact-package probe find one second of video packets and a one-second video DURATION tag but numeric video and format durations of twenty seconds. FFmpeg timing source explains the estimate; The scanner correction and conflicting/missing/invalid-tag regressions now pass, including the actual one-second-video/twenty-second-subtitle fixture; decoded application handoff remains required. No binary patch is justified. Canonical evidence is recorded in UCU-09; row194 is not accepted.'
-resolved = false
+evidence = 'Resolved as Adapt under ADR0117: UCU-09 owns unchanged parser/test identity and valid earlier evidence, exact v2.0.6 conflict proof, new normal scan/rescan persistence and Dutch track preservation, adjacent 1s/5s scheduling and actual decoded native/Next handoff on Linux and native Windows. Source05 passes one selected application test per platform (706f8776/370d035c), both engines blue0.25/red1.25, Next6s ENDLIST, bounded packet gaps and owned cleanup. Exact source/tool checks, strict scanner all-target lint, format and independent review pass. The separate demonstrated native-video-only-null-audio-fallback remains unresolved required work before UCU-09 closeout, not waived by this duration acceptance. No FFmpeg binary amendment or browser/schema change is included.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row207-vaapi-padding'

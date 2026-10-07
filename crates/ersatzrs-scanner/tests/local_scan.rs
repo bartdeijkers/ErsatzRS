@@ -8,6 +8,9 @@ use sqlx::{Executor, Row, SqlitePool};
 #[path = "local_scan/scripted_refresh.rs"]
 mod scripted_refresh;
 
+#[path = "local_scan/content_duration_runtime.rs"]
+mod content_duration_runtime;
+
 #[tokio::test]
 #[ignore = "requires ffprobe and the Big Buck Bunny fixture; use ./run.sh test with --run-ignored ignored-only"]
 async fn local_scan_populates_media_rows_from_test_mp4() {

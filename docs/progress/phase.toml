@@ -61,9 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row188 accepted; complete rows189-208 through upstream v26.11.1
+2026-10-07 UCU-09 boundary: row194 accepted; complete rows195-208 through upstream v26.11.1
 (46118d43); rows209 onward are separate post-release work and cannot reopen
-this milestone. ADR 0117 is accepted for necessary Next corrections, packages
+this milestone. Correct the confirmed native no-audio graph failure before
+closeout; ffmpeg-command-generation owns its unresolved silence-fallback debt.
+ADR 0117 is accepted for necessary Next corrections, packages
 and mandatory retirement. Row186's candidate static WebP and complete GIF
 animation pass; the maintainer accepted the consolidated ADR0117 FFmpeg extension
 with the explicit condition to update ErsatzRS-ffmpeg to v2.0.6. All four corrected

@@ -22,6 +22,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Local media without an audio stream currently fails native playback.
+  Generated-silence fallback and its acceptance checks remain required before
+  release.
+
 - Share song artwork, BlurHash and multilingual metadata rendering between
   native and Next playback. Keep the native progress bar, preserve literal
   titles, and use default artwork when an optional cover is unavailable.
@@ -47,6 +51,11 @@ release section when tagging a release.
   Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 ### Fixed
+
+- Use selected video or complete audio-stream duration when scheduling local
+  media, so subtitles extending beyond the content do not delay the next
+  programme. Guard FFmpeg 9's conflicting Matroska duration estimates
+  (ErsatzTV #3058).
 
 - Start troubleshooting playback at the requested seek point using the
   generated playlist and its first segment. Preserve normal live-preview

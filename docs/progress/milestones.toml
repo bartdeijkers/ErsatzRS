@@ -11421,6 +11421,55 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row194 accepted as Adapt under ADR0117. Exact upstream
+fb75ce8ccbc5570bf0e3c12533d87fe359b2d517 changes three files; complete formatless
+delta SHA25675318dac8244637c0a09e85864729232bde031fb9bbcf6046f01c53551120afb.
+Independent source review confirms highest-bitrate non-attached video selection,
+first-tie retention, positive numeric/tag and complete-audio maximum/container
+fallback. Existing parser/test files remain byte-identical to ErsatzRS
+prerequisite2fdd126c (SHA256947875bb660349448c894998980f216d93e4d46cece7a3ce18449c0631bc73c0
+and7d77b8a8986ab9092fc84c39f22d7a6247e85a31f45c4f25a7bdb1e9de92eaa6).
+Reuse original four parser regressions (8a8cde5b), real projection (22096e64),
+JSON/argv checks (31afd437) and strict infrastructure lint with their original
+source/runtime identities. The ADR0117 adaptation prefers a valid shorter
+Matroska content tag only when FFmpeg9 numeric video duration equals container;
+independent numeric, other-container and missing/malformed-tag precedence remain.
+Exact published v2.0.6 probing again confirms numeric video/container20 seconds,
+content tag1 and two video packets ending at1. The old retained probe has no
+language metadata and proves conflict only. New application fixtures explicitly
+carry Dutch subtitle20s and real video/audio1s, plus a5s red programme.
+Public scan persists1s/5s and normal rescan preserves item/version/file identities
+and Dutch track metadata. Normal Reset/Scripted scheduling produces adjacent
+1s/5s items from scanned IDs, without manually overriding MediaVersion.Duration.
+Linux source05 passes1/1 (706f8776-c7ef-4283-938f-e2bde4dee3e3); native Windows
+passes1/1 (370d035c-f9e6-4edc-9fb5-c21bffde7588). Both engines decode actual
+blue[0,0,255] at0.25s and red[254,0,0] at1.25s on both platforms. Next finishes
+successfully reaped with6s ENDLIST; native live capture stays unmodified without
+ENDLIST. Each bounded probe reads50 video packets with maximum forward gap0.5s.
+Native first-programme joins are33ms Linux/58ms Windows; generated programme
+clock equals owned producer clock. Stop/reaping, registry release, admission,
+capacity restoration, output/fixture and invocation temp cleanup pass.
+Source receipt e2643f6c85e1271dfcbf569ad8d3382b818cc239cffe15c3ec9aa09414819e0d
+covers1496 inputs at base60a1d6ea. Both driver exits0 and pre/post guards pass;
+strict scanner all-target Clippy, format and substantive review pass.
+Source01/03 failures are retained; source03 exposes a genuine preexisting
+video-only native graph defect. Source04 already proved native decoded handoff
+but its unbounded live packet inspection timed out; source05 adds normal finite
+stereo audio and a bounded read without changing handoff assertions/playlists.
+The separate ffmpeg-command-generation/native-video-only-null-audio-fallback
+is unresolved required work, not approved acceptance debt: upstream substitutes
+anullsrc, current Automatic input emits nonexistent [0:1]. The duration pass
+does not waive it; correction/decoded cleanup proof is required before closeout.
+After application proof, remaining changes are documentation/progress, including
+the release-visible unresolved limitation; no additional Rust delta is claimed.
+Canonical evidence: tmp/ucu09-row194/acceptance-proof.json (SHA256
+21c552c5bb47098491cbed0e892609b33be0500fad9b39fc140bec2f39093506), source-review.md,
+application-review.md and video-only-native-review.md. No runtime binary build,
+browser/layout/schema or later-row implementation is included. Ledger/pin advance
+one row to194/208 with14 pending, followed by the clean upstream checkout after
+the local checkpoint. Continue at195; final window gates, push, exact-SHA CI and
+stable release acceptance remain. Existing approved platform/hardware debt stays.
+
 2026-10-07 row193 accepted as Port. Upstream432f107ebf175a709f219481807b46595ffae55e
 fixes troubleshooting first-frame seek; complete four-file delta SHA256
 eec75d00000df13632873c8b860f60188f19aad9e4d1305fca5fc1e60450b1b2.
