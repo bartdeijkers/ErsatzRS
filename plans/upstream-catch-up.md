@@ -4,11 +4,29 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-189 are accepted; rows190-208 are the 19 remaining in-scope
+verified). Rows1-190 are accepted; rows191-208 are the 18 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 190 source review and acceptance
+
+Accepted slice: `c13ef9c5`, upstream macOS bundled FFmpeg8.1.2-4,
+one-time saved-path adoption, bundled-series health warnings and package/CI
+changes. Adapt under ADRs 0008/0063/0117: retain separate managed FFmpeg9,
+explicit operator overrides, checksum/capability validation before promotion,
+and validated PATH9 fallback with visible acquisition warnings when no managed
+RID asset is available. Do not adopt the upstream FFmpeg8 downgrade or replace
+saved operator paths. All15 upstream package patches are already carried,
+equivalent or inapplicable under current dependency pins; reuse v2.0.6.
+
+Exact source hashes remain unchanged at the accepted row189 checkpoint;
+16 runtime-policy regressions and independent substantive review pass.
+UCU-09 owns exact diff/source receipts and verification. macOS application
+and runtime proof remain approved explicit unverified debt; no first-party
+macOS FFmpeg asset, native acceptance, new build or publication is claimed.
+Continue at row191; final window gates and exact-SHA CI remain open.
 
 ## Row 189 source map and acceptance
 
@@ -332,7 +350,7 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-06): `46118d43313b7828780fbfcfb46e980390ea8b0d`
   — docs: prep for release v26.11.1.
-- Ledger: **208 commits**, **19 pending**. The original plan covered 152 through
+- Ledger: **208 commits**, **18 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -5497,7 +5515,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 187 | `e18b4a07` | fix: block playout skips and repeats (#3052) | Port | Block scheduling/history and SQLite publication | `fix(scheduling): remove orphaned block history before restoration` | ucu-09; original-clock future orphan cleanup precedes preservation/cursor restoration, removed-start duplicates are deleted including preroll shifts, and exact removal IDs publish within preserving transactions. 33 core Block checks, 10 selected SQLite/transaction checks, complete clean-oracle timeline/track/checkpoint comparisons, strict affected lint and independent substantive review pass. Consumed history/current programmes/seeds remain; final window gates and CI stay open. |
 | 188 | `26755a16` | update changelog for most recent next build | N/A | upstream-baseline-catch-up | `docs(parity): reconcile Next QSV runtime announcement` | ucu-09; exact delta adds one upstream changelog line only. Published/pinned Next0362692 already includes separate audio input for legacy fixed-pool QSV+loudnorm+canvas and the 500ms shortest buffer. Exact source/archive provenance, existing QSV argument checks and independent substantive review pass. Intel QSV hardware execution remains explicitly unverified; no new build/runtime correction is required. |
 | 189 | `481840fb` | feat: add songs to next engine (#3053) | Adapt | ADRs 0005/0102/0105; shared native song renderer and private owned Next callbacks | `feat(streaming): render songs through native and Next playback` | ucu-09; occurrence-stable visuals preserve original selected audio/subtitles, seek/handoff, mirror and saved-preview geometry, finite black fallback, strict health pins and cancellation/capacity ownership. Linux22 and native Windows20 runtime cases plus actual private HTTP on both pass with exact published packages; complete pipeline snapshots, affected regressions, strict lint and independent review pass. UCU-09 owns source receipts and explicit lint-only deltas. Existing platform/hardware debt and final window gates/CI remain open. |
-| 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | | | | ucu-09; provisional: Adapt, pending acceptance. Upstream bundles FFmpeg8.1.2-4 on macOS, adopts bundled paths once, applies the bundled-series health warning there and bumps Windows/Docker packages too. ADRs0008/0063 retain separate unbundled FFmpeg9 acquisition, explicit operator overrides and PATH9 fallback when no matching asset exists. All15 upstream package patches are audited as already carried/equivalent or inapplicable with existing dependency pins. No new macOS build is implied; existing macOS application debt and unpatched WebP limitation remain explicit. Consolidated audit: ADR0117 and UCU-09. |
+| 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | Adapt | ADRs 0008/0063/0117; managed FFmpeg9 acquisition and health | `docs(parity): reconcile bundled macOS FFmpeg policy` | ucu-09; preserve unbundled9, explicit overrides, checksum/capability validation before promotion and validated PATH fallback with visible acquisition warning. Exact nine source hashes and upstream diff verified; 16 applicable runtime-policy regressions and independent review pass. All15 upstream package patches already carried/equivalent/inapplicable; no build/release required. macOS application/runtime proof and unpatched operator-WebP risk remain explicit. UCU-09 owns exact evidence and final window gates/CI remain. |
 | 191 | `fdf3b13c` | build: manual develop workflow (#3055) | | | | ucu-09; provisional: N/A (upstream-only release tooling: a manual develop workflow, develop tag script and artifact/docker workflow split). ErsatzRS keeps its own CI and tag-triggered releases, as rows 179-180 already recorded. Claude 2026-10-05 triage. |
 | 192 | `20c81e63` | fix: unsigned mac ci (#3056) | | | | ucu-09; provisional: N/A (upstream-only CI follow-up to row 191: unsigned macOS artifacts, workflow script cleanup). No product behavior. Claude 2026-10-05 triage. |
 | 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |

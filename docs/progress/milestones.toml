@@ -11421,6 +11421,30 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row190 accepted as Adapt under ADRs0008/0063/0117. Complete
+ten-file upstream c13ef9c5527dbda6f4563361d00912f1c215a850 diff reviewed;
+upstream bundles FFmpeg8.1.2-4 on macOS, adopts bundled paths once and changes
+bundled-series health/package CI. ErsatzRS retains the accepted separate
+managed FFmpeg9 runtime, explicit administrator overrides, both-tool major and
+capability validation, archive checksum verification before staging, validator
+success before atomic promotion, and validated PATH9 fallback when no managed
+RID asset exists. Acquisition failure remains a visible health warning. No
+FFmpeg8 downgrade, implicit operator-path replacement or macOS package build
+is introduced. All15 upstream FFmpeg package patches were already audited as
+carried/equivalent/inapplicable with current pins; published v2.0.6 is reused.
+Exact upstream delta SHA256c064fce4c7f01db5f73931625c922b344c11937c588c167cd0e7e855deca76ac
+and all nine acceptance-map source hashes match at2591638695532a69f5ca98f4816cbb8fd5860ef2.
+Runtime/version source is identical to the applicable frozen proof, so16/16
+runtime-policy run5a0cbc57-dad2-4c7f-ad2d-1877c00d965c is reused. Independent
+substantive review finds no concrete blocker or further required patch/build.
+Canonical acceptance proof: tmp/ucu09-row190/acceptance-proof.json. macOS
+application/runtime proof remains approved explicit unverified debt; no
+first-party FFmpeg macOS asset or native acceptance is claimed. Unpatched
+operator builds may still carry the known animated-WebP limitation. Ledger,
+baseline and clean upstream checkout advance together:190/208 accepted,
+18 pending; row191 is next. No intermediate application push/CI or release;
+UCU-09 final window gates and terminal green exact-SHA CI remain required.
+
 2026-10-07 row189 accepted as Adapt under existing ADRs0005/0102/0105.
 Exact upstream481840fbd47ebfe57ab9919ffabec0b9f69e9874 is reconciled;
 shared deterministic song rendering supplies
