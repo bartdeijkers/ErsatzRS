@@ -1392,10 +1392,12 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
   });
 });
 
+const jpegXlProgressPeriodSeconds = 0.1;
+
 async function captureJpegXlStream(ffmpeg: string, url: string, output: string) {
   const started = Date.now();
   const samples: { wallSeconds: number; mediaSeconds: number }[] = [];
-  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', '0.1',
+  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', String(jpegXlProgressPeriodSeconds),
     '-progress', 'pipe:1', '-analyzeduration', '1000000', '-probesize', '1000000',
     '-rw_timeout', '15000000', '-i', url, '-t', '8', '-c', 'copy', output],
     { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -1551,9 +1553,11 @@ INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") V
     if (label === 'producer') {
       expect(speed, 'actual full native HTTP graph capacity with all three carriers active').toBeGreaterThanOrEqual(1);
     } else {
-      // The public wrapper uses -readrate 1.0. At 25 fps, reported media progress
-      // is quantized to 40 ms; require realtime delivery within one output frame.
-      expect(measuredMediaSeconds + 1 / 25).toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
+      // The public wrapper uses -readrate 1.0. Progress reports sample mixed
+      // audio/video timestamps every 100 ms; their receipt times are not frame
+      // clocks. Bound realtime delivery by one report interval plus one frame.
+      expect(measuredMediaSeconds + jpegXlProgressPeriodSeconds + 1 / 25)
+        .toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
     }
     expect(programmeTimeline(playout)).toBe(before);
     for(const [time,state] of [['0.4','visible'],['7.2','clear']]) {

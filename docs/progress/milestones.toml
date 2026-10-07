@@ -11421,6 +11421,18 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 complete Firefox CI at 47004a46 retains 302 passes, 36 existing
+conditional skips and two fixture failures. The scan fixture now uses the
+existing bounded SQLite busy timeout before acquiring its write transaction.
+The public JPEG XL timing check accounts for its existing 100ms progress-report
+interval plus one 25fps frame; actual producer capacity still requires at least
+1x, and decoded rendering, opacity, animation, expiry and state checks remain.
+All five affected cases pass in both browsers, with no skips or retries:
+firefox-fixture-correction-01.log and chromium-fixture-correction-01.log under
+tmp/ucu09-final-gates-09c237a4/. Original failures and artifacts are preserved.
+No production source or runtime pins changed. Exact full green CI and stable
+v1.1.0 package acceptance/publication remain required.
+
 2026-10-07 candidate 47004a46 CI passes Format, Test, Clippy, cargo deny,
 documentation and complete Chromium (329 passes, 11 existing conditional skips).
 Next CI fails two routed fixtures with a 20s wait that contradicts the admitted

@@ -22,7 +22,7 @@ const labels = {
 function seed(databasePath: string) {
   const database = new DatabaseSync(databasePath);
   try {
-    database.exec('PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;');
+    database.exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;');
     kinds.forEach((kind, index) => {
       const id = 870_000 + index;
       database.prepare('INSERT INTO "MediaSource" ("Id") VALUES (?)').run(id);
