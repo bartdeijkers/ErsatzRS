@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from 'fs';
 import { get as httpGet } from 'http';
+import { tmpdir } from 'os';
 import { dirname, join, relative } from 'path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
@@ -585,41 +586,58 @@ WHERE playout."ChannelId" = ${channelId}
       )
       .toBe('1');
 
-    const tsBody = await readStreamBytes(
-      new URL(`/iptv/channel/${channelNumber}.ts?mode=ts`, baseURL).toString(),
-      188 * 10,
-      60_000,
-    );
-    expect(tsBody.length).toBeGreaterThanOrEqual(188 * 10);
-    expect(tsBody.includes(0x47)).toBe(true);
+    try {
+      const tsBody = await readStreamBytes(
+        new URL(`/iptv/channel/${channelNumber}.ts?mode=ts`, baseURL).toString(),
+        188 * 10,
+        60_000,
+      );
+      expect(tsBody.length).toBeGreaterThanOrEqual(188 * 10);
+      expect(tsBody.includes(0x47)).toBe(true);
 
-    const variantUrl = new URL(
-      `/iptv/channel/${channelNumber}.m3u8?mode=segmenter`,
-      baseURL,
-    ).toString();
-    const variant = await pollText(request, variantUrl, (body) => body.includes('#EXTM3U'));
-    expect(variant).toContain('#EXTM3U');
-    const sessionUrl = new URL(`/iptv/session/${channelNumber}/hls.m3u8`, baseURL).toString();
-    const session = await pollText(request, sessionUrl, (body) => body.includes('#EXTINF'));
-    const segment = session
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line !== '' && !line.startsWith('#'));
-    expect(segment).toBeTruthy();
-    const segmentUrl = segment!.includes('://')
-      ? segment!
-      : segment!.startsWith('/')
-        ? new URL(segment!, baseURL).toString()
-        : new URL(`/iptv/session/${channelNumber}/${segment!}`, baseURL).toString();
-    const segmentResponse = await request.get(segmentUrl, { timeout: 30_000 });
-    expect(segmentResponse.ok(), `GET ${segmentUrl}`).toBe(true);
-    expect((await segmentResponse.body()).length).toBeGreaterThan(0);
+      const variantUrl = new URL(
+        `/iptv/channel/${channelNumber}.m3u8?mode=segmenter`,
+        baseURL,
+      ).toString();
+      const variant = await pollText(request, variantUrl, (body) => body.includes('#EXTM3U'));
+      expect(variant).toContain('#EXTM3U');
+      const sessionUrl = new URL(`/iptv/session/${channelNumber}/hls.m3u8`, baseURL).toString();
+      const session = await pollText(request, sessionUrl, (body) => body.includes('#EXTINF'));
+      const segment = session
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line !== '' && !line.startsWith('#'));
+      expect(segment).toBeTruthy();
+      const segmentUrl = segment!.includes('://')
+        ? segment!
+        : segment!.startsWith('/')
+          ? new URL(segment!, baseURL).toString()
+          : new URL(`/iptv/session/${channelNumber}/${segment!}`, baseURL).toString();
+      const segmentResponse = await request.get(segmentUrl, { timeout: 30_000 });
+      expect(segmentResponse.ok(), `GET ${segmentUrl}`).toBe(true);
+      expect((await segmentResponse.body()).length).toBeGreaterThan(0);
 
-    await expect
-      .poll(() => producerSeeks(fixture.seekLogPath).length, { timeout: 30_000 })
-      .toBeGreaterThanOrEqual(1);
-    const seeks = producerSeeks(fixture.seekLogPath);
-    expect(seeks.every((seek) => seek === '0'), `producer seeks: ${seeks.join(', ')}`).toBe(true);
-    expect(runtimeErrors).toEqual([]);
+      await expect
+        .poll(() => producerSeeks(fixture.seekLogPath).length, { timeout: 30_000 })
+        .toBeGreaterThanOrEqual(1);
+      const seeks = producerSeeks(fixture.seekLogPath);
+      expect(seeks.every((seek) => seek === '0'), `producer seeks: ${seeks.join(', ')}`).toBe(true);
+      expect(runtimeErrors).toEqual([]);
+    } finally {
+      // Stop only this fixture's channel; Next retains an idle capacity lease.
+      await gotoHydrated(page, '/channels');
+      const row = page.getByRole('row').filter({
+        has: page.locator(`a[href="/channels/${channelId}"]`),
+      });
+      const stopped = page.waitForResponse((response) =>
+        response.request().method() === 'POST'
+        && new URL(response.url()).pathname.includes('/admin-api/stop_channel_session'));
+      await row.getByRole('button', { name: 'Stop Transcode Session', exact: true }).click();
+      const response = await stopped;
+      expect(response.ok()).toBe(true);
+      expect(await response.json()).toBe(true);
+      await expect.poll(() => existsSync(join(tmpdir(), 'ersatzrs-hls', channelNumber)))
+        .toBe(false);
+    }
   });
 });

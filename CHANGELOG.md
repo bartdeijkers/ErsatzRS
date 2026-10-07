@@ -13,53 +13,47 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-### Added
+## [1.1.0] - 2026-10-07
 
-- Normalize Next output frame rates to the lowest scheduled rate above 23 fps,
-  preserving rational rates and selected audio/subtitles. Copy compatible video
-  at the target rate and transcode mismatched sources (upstream #3063).
+### Security
 
-- Deep-scan local libraries to refresh unchanged television episodes and
-  cached track metadata. Confirm library and external-collection deep scans
-  before queuing them, with localized warnings about longer scan times.
+- Add expiring, source-bound media-part tickets on the private callback listener
+  for external JSON playback integration, without publishing Plex credentials.
+  Resolve current credentials at each open and preserve byte-range requests.
 
-- Play songs through the optional Next engine with occurrence-stable artwork,
-  metadata and channel-sized pictures served by authenticated private callbacks.
-  Preserve alternate audio, subtitle selection, seeking and scheduled handoff;
-  use finite black video for other audio-only programmes.
+- Disable HDHomeRun HTTP endpoints and UDP discovery while IPTV JWT protection
+  is enabled. Explain the inactive settings in the selected UI language and
+  reject changes to them until JWT protection is disabled.
 
-### Changed
+- Reject invalid artwork-cache, watermark and channel-logo filenames before reading files,
+  while preserving registered local artwork and existing uploaded logos.
+  Provider artwork URLs now resolve persisted artwork IDs; callers cannot select
+  provider paths or override stored resize settings. Follow bounded image
+  redirects without forwarding provider credentials across origins.
+  Keep browser artwork within the management authentication boundary and IPTV
+  artwork under the separate IPTV token policy (ADR 0103).
 
-- Use Next for newly created channels and standalone playback previews, with
-  the exact engine bundled in packages or downloaded and verified automatically
-  before startup. Preserve existing channel engines and explicit Native choices.
-  Keep verified installations usable offline and label native-only profile
-  settings in every supported admin language. Distribute the pinned engine from
-  the public package-only ErsatzRS-next repository without GitHub credentials.
+- Compare internal Next media capabilities and credits tickets in constant time,
+  preserving rejection of altered bindings and credentials from an earlier host
+  process.
+  Keep URL query credentials out of troubleshooting sample filenames.
 
-- Share song artwork, BlurHash and multilingual metadata rendering between
-  native and Next playback. Keep the native progress bar, preserve literal
-  titles, and use default artwork when an optional cover is unavailable.
+- Require `X-Ers-Api-Key` for machine API requests, with a persistent random
+  credential in the application state directory's `api-secrets.json` file.
+  **Breaking change:** browser action and server-function paths move to
+  `/admin-api`; machine clients must send the key. Browser troubleshooting and
+  IPTV retain their separate policies. No machine key is sent to the browser
+  (ErsatzTV #2991; ADR 0103).
 
-- Update the optional Next engine to the reviewed six-platform
-  `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding and
-  legacy QSV loudness/canvas memory fixes, complete GIF/WebP programme repetition
-  and bounded live RTSP buffering.
-  Pin exact source, patch and archive checksums, preserve licenses and platform
-  companions, and retain independent removal requirements for both local
-  corrections (ADR 0117). Available Linux/Windows application checks and macOS
-  package CI pass; existing hardware/platform acceptance debt remains explicit.
+- Isolate internal FFmpeg and Next callbacks on a loopback listener and build
+  their URLs from the bound address, preventing client-supplied Host or proxy
+  headers from selecting callback origins. Preserve Next capability checks.
+  Add an optional streaming-only listener that does not expose management
+  pages, APIs, server functions or assets (ErsatzTV #2989; ADR 0102).
 
-- Update the managed FFmpeg runtime to the published v2.0.6 packages for Linux
-  x64, Windows x64, ARM64 and ARMv7, with animated WebP seeking and ICC/EXIF
-  read safety (ADR 0117). All four package CI jobs pass and published checksums
-  match the tested archives. Native VAAPI padding and application acceptance
-  remain tracked separately.
-
-- Use one accepted approval policy for temporary Next compatibility corrections
-  during upstream catch-up (ADR 0117), retaining verified package provenance,
-  acceptance gates and mandatory removal when upstream fixes each defect.
-  Close UCU-09 at upstream v26.11.1; later releases are separate work.
+- Update the bundled SQLite used by the server and tooling to 3.51.3, above
+  the 3.50.2 fix for CVE-2025-6965, without requiring a system SQLite install.
+  Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
 
@@ -265,50 +259,6 @@ release section when tagging a release.
   recording the corrected build recipe.
 - Allow Docker recovery to inspect unpublished drafts and validate release
   evidence with Python on runners without `jq`.
-
-## [1.1.0] - 2026-10-01
-
-### Security
-
-- Add expiring, source-bound media-part tickets on the private callback listener
-  for external JSON playback integration, without publishing Plex credentials.
-  Resolve current credentials at each open and preserve byte-range requests.
-
-- Disable HDHomeRun HTTP endpoints and UDP discovery while IPTV JWT protection
-  is enabled. Explain the inactive settings in the selected UI language and
-  reject changes to them until JWT protection is disabled.
-
-- Reject invalid artwork-cache, watermark and channel-logo filenames before reading files,
-  while preserving registered local artwork and existing uploaded logos.
-  Provider artwork URLs now resolve persisted artwork IDs; callers cannot select
-  provider paths or override stored resize settings. Follow bounded image
-  redirects without forwarding provider credentials across origins.
-  Keep browser artwork within the management authentication boundary and IPTV
-  artwork under the separate IPTV token policy (ADR 0103).
-
-- Compare internal Next media capabilities and credits tickets in constant time,
-  preserving rejection of altered bindings and credentials from an earlier host
-  process.
-  Keep URL query credentials out of troubleshooting sample filenames.
-
-- Require `X-Ers-Api-Key` for machine API requests, with a persistent random
-  credential in the application state directory's `api-secrets.json` file.
-  **Breaking change:** browser action and server-function paths move to
-  `/admin-api`; machine clients must send the key. Browser troubleshooting and
-  IPTV retain their separate policies. No machine key is sent to the browser
-  (ErsatzTV #2991; ADR 0103).
-
-- Isolate internal FFmpeg and Next callbacks on a loopback listener and build
-  their URLs from the bound address, preventing client-supplied Host or proxy
-  headers from selecting callback origins. Preserve Next capability checks.
-  Add an optional streaming-only listener that does not expose management
-  pages, APIs, server functions or assets (ErsatzTV #2989; ADR 0102).
-
-- Update the bundled SQLite used by the server and tooling to 3.51.3, above
-  the 3.50.2 fix for CVE-2025-6965, without requiring a system SQLite install.
-  Verify the linked runtime also retains the WAL-reset corruption fix.
-
-### Fixed
 
 - Select managed FFmpeg packages by the complete platform suffix so 32-bit ARM
   installations cannot download the ARM64 executable from a mixed release.
@@ -781,6 +731,19 @@ release section when tagging a release.
 
 ### Added
 
+- Normalize Next output frame rates to the lowest scheduled rate above 23 fps,
+  preserving rational rates and selected audio/subtitles. Copy compatible video
+  at the target rate and transcode mismatched sources (upstream #3063).
+
+- Deep-scan local libraries to refresh unchanged television episodes and
+  cached track metadata. Confirm library and external-collection deep scans
+  before queuing them, with localized warnings about longer scan times.
+
+- Play songs through the optional Next engine with occurrence-stable artwork,
+  metadata and channel-sized pictures served by authenticated private callbacks.
+  Preserve alternate audio, subtitle selection, seeking and scheduled handoff;
+  use finite black video for other audio-only programmes.
+
 - Support MPEG-2 video output with the Next engine, using 8-bit output and an
   explicit positive video bitrate. Preserve selected audio and subtitles;
   omit the HLS `CODECS` attribute when either codec identifier is unknown.
@@ -884,6 +847,37 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Use Next for newly created channels and standalone playback previews, with
+  the exact engine bundled in packages or downloaded and verified automatically
+  before startup. Preserve existing channel engines and explicit Native choices.
+  Keep verified installations usable offline and label native-only profile
+  settings in every supported admin language. Distribute the pinned engine from
+  the public package-only ErsatzRS-next repository without GitHub credentials.
+
+- Share song artwork, BlurHash and multilingual metadata rendering between
+  native and Next playback. Keep the native progress bar, preserve literal
+  titles, and use default artwork when an optional cover is unavailable.
+
+- Update the optional Next engine to the reviewed six-platform
+  `next-0362692-ersatzrs.1` snapshot, including upstream colour/padding and
+  legacy QSV loudness/canvas memory fixes, complete GIF/WebP programme repetition
+  and bounded live RTSP buffering.
+  Pin exact source, patch and archive checksums, preserve licenses and platform
+  companions, and retain independent removal requirements for both local
+  corrections (ADR 0117). Available Linux/Windows application checks and macOS
+  package CI pass; existing hardware/platform acceptance debt remains explicit.
+
+- Update the managed FFmpeg runtime to the published v2.0.6 packages for Linux
+  x64, Windows x64, ARM64 and ARMv7, with animated WebP seeking and ICC/EXIF
+  read safety (ADR 0117). All four package CI jobs pass and published checksums
+  match the tested archives. Native VAAPI padding and application acceptance
+  remain tracked separately.
+
+- Use one accepted approval policy for temporary Next compatibility corrections
+  during upstream catch-up (ADR 0117), retaining verified package provenance,
+  acceptance gates and mandatory removal when upstream fixes each defect.
+  Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 - Preserve the accepted Next dependency in a checksum-pinned snapshot, so
   upstream replacement of its develop release cannot change or break packaging.

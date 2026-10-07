@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'fs';
 import { waitForHydration } from './hydration';
 
-// Default host has no optional Next installation. Set this when running the
-// same proof against a staged engine via ETV_NEXT_FOLDER.
-const expectedVersion = process.env.ERSATZRS_E2E_NEXT_VERSION ?? 'Not available';
+// Startup acquires the pinned runtime unless an override supplies it. Keep the
+// expected version aligned with that pin; alternate runtimes can opt in explicitly.
+const expectedVersion = process.env.ERSATZRS_E2E_NEXT_VERSION
+  ?? JSON.parse(readFileSync('scripts/release/next-patches/manifest.json', 'utf8')).distribution_version;
 
 test('Next version is cached SSR content in the responsive navigation drawer', async ({ browser }, testInfo) => {
   for (const javaScriptEnabled of [true, false]) {

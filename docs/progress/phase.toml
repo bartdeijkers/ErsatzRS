@@ -68,8 +68,12 @@ publication16, both held-handle cases, strict lint and Linux/Windows format pass
 UCU-09 owns canonical source/checksum/state/cleanup and explicit fixture-only
 reuse. Release tooling/notes are N/A; included QSV and native/Next VAAPI
 prerequisites are Covered with hardware execution unverified. No additional
-runtime build is needed. Continue final workspace, paired-bundle, complete
-sequential browsers and playback/transport gates. Then commit/push the accepted
+runtime build is needed. Workspace4011 tests, Clippy, parity, dependency audit,
+matched bundle, both engines' playback and87 TSDuck checks pass. Eight affected
+browser rechecks pass. Full Chromium and unchanged Firefox cases, corrected
+JPEG XL rechecks and authenticated-caption checks in both browsers complete
+local acceptance. UCU-09 owns exact results and fixture-only evidence reuse.
+Commit/push the accepted
 candidate, require terminal green exact-SHA CI and publish stable v1.1.0.
 Existing approved hardware/ARM/macOS debt remains explicitly unverified;
 UCU-09 stays In progress until window acceptance and CI pass. Preserve other work.

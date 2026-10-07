@@ -1087,7 +1087,7 @@ WHERE "Id" = ${source.id + 3};
     }
   });
 
-  test('Next burns unextracted embedded text independently of native extraction settings', async ({ page }, testInfo) => {
+  test('Next burns explicitly pinned unextracted text independently of native extraction settings', async ({ page }, testInfo) => {
     test.skip(!process.env.ETV_NEXT_FOLDER, 'Requires the real Next engine');
     test.setTimeout(120_000);
     const clipPath = makeCalibrationClip(testInfo, 'color=c=blue:size=640x360:rate=30');
@@ -1109,7 +1109,9 @@ WHERE "Id" = ${source.id + 3};
 UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=4,
   "NextEngineTextSubtitleMode"=0, "SubtitleMode"=2,
   "PreferredSubtitleLanguageCode"='nld' WHERE "Id"=${channel.id};
-UPDATE "PlayoutItem" SET "OutPoint"='00:01:00' WHERE "PlayoutId"=${channel.id + 1};
+UPDATE "PlayoutItem" SET "OutPoint"='00:01:00', "MediaVersionId"=${channel.id + 105},
+  "VideoStreamIndex"=0, "AudioStreamIndex"=1, "SubtitleStreamIndex"=2
+  WHERE "PlayoutId"=${channel.id + 1};
 INSERT INTO "MediaStream" ("MediaVersionId", "Index", "MediaStreamKind", "Codec",
   "Language", "Title", "Default", "Forced", "Channels")
 VALUES (${channel.id + 105}, 2, 3, 'subrip', 'nld', 'Dutch', 1, 0, 0);
@@ -1155,11 +1157,13 @@ ${keys.map((key) => `INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VAL
       await expect(root.getByRole('button', { name: 'Captions', exact: true })).toBeDisabled();
       expect(sqlite(`SELECT "IsExtracted", "Path" IS NULL FROM "Subtitle"
         WHERE "MovieMetadataId"=${channel.id + 104};`)).toBe('0|1');
-      await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
-      await stopFixtureTranscode(page, channel.number);
       expect(errors).toEqual([]);
     } finally {
-      sqlite(`DELETE FROM "ConfigElement" WHERE "Key" IN (${keys.map(sqlString).join(',')});\n${restoreSettings}`);
+      try {
+        await stopFixtureTranscode(page, channel.number);
+      } finally {
+        sqlite(`DELETE FROM "ConfigElement" WHERE "Key" IN (${keys.map(sqlString).join(',')});\n${restoreSettings}`);
+      }
     }
   });
 
@@ -1518,7 +1522,21 @@ INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") V
     expect(firstSourceFrame).toBeGreaterThanOrEqual(10);
     expect(Math.min(...scores), 'decoded served glyph must match an actual source animation frame').toBeLessThan(5);
     expect(Math.max(...peaks.slice(0,40))).toBeGreaterThan(180);
-    expect(Math.max(...peaks.slice(0,40))).toBeLessThan(250);
+    // H.264 ringing can brighten an isolated pixel. Check the matched white
+    // glyph's mean compositing error to distinguish transparency from opacity.
+    let foregroundPixels = 0, foregroundError = 0;
+    for (let pixel=0;pixel<300*150;pixel++) {
+      const sourcePixel = firstSourceFrame*300*150*4+pixel*4;
+      if (sourceFrames[sourcePixel] > 250 && sourceFrames[sourcePixel+1] > 250 &&
+          sourceFrames[sourcePixel+2] > 250 && sourceFrames[sourcePixel+3] >= 127) {
+        const alpha = sourceFrames[sourcePixel+3]/255;
+        const predicted = sourceFrames[sourcePixel]*(1-Math.pow(1-alpha,3));
+        foregroundError += Math.abs(frames[pixel*3]-predicted);
+        foregroundPixels++;
+      }
+    }
+    expect(foregroundPixels, 'matched source frame must contain a white glyph').toBeGreaterThan(0);
+    expect(foregroundError/foregroundPixels, 'served glyph must preserve the three-layer alpha blend').toBeLessThan(5);
     expect(new Set(white.slice(0,40)).size).toBeGreaterThan(5);
     expect(Math.max(...peaks.slice(-40))).toBeLessThan(35);
     // Measure live delivery while all three carriers are active. The total

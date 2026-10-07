@@ -40,7 +40,7 @@ INSERT INTO "Channel" (
   "MusicVideoCreditsMode", "SongVideoMode", "SubtitleMode", "IsEnabled", "ShowInEpg"
 ) VALUES (
   ${channelId}, '00000000-0000-0000-0000-${channelId.toString().padStart(12, '0')}',
-  '${channelId}', ${channelId}, '${channelName}', 'ErsatzTV',
+  '${channelId}', ${-channelId}, '${channelName}', 'ErsatzTV',
   ${profileId}, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1
 );
 

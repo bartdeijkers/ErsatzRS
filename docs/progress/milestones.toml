@@ -11421,10 +11421,47 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 final window checks at corrected runtime source b7f704f0 pass:
+workspace Clippy, all4011 nextest cases (216 intentional ignored/skipped),
+Cargo doctests, parity/progress/architecture/hydration/format and cargo deny.
+The Classic original-clock correction and health-summary assertion pass all35
+owning Linux and native Windows cases; publication and row201 proof remain valid.
+Matched Leptos build and structural bundle verification pass. Actual native,
+Next Burn and Next Convert smokes pass selected Dutch audio/captions, decoded
+pixels, served TS/HLS/reconnect/preview and owned cleanup. TSDuck passes87 checks
+across all four native pipelines. Canonical logs are in
+tmp/ucu09-final-gates-09c237a4/; native controlled deltas are recorded in
+windows-source12-controlled-deltas.json. Runtime pins and hashes remain unchanged.
+
+The complete initial Chromium gate records328 passes,5 intentional skips and
+seven failures. Its logs/traces remain failed history. Four test-fixture changes
+resolve demonstrated slot leaks, use an explicit subtitle pin while preserving
+automatic embedded-subtitle settings, derive the expected version from the
+managed Next manifest, and keep the feedback fixture on the first page. All
+eight affected checks pass, including NSF Stop, decoded prepared media, pinned
+Burn glyphs, full JPEG XL playback and real worker/dialog actions. Canonical
+fixture-recheck-01.log and result JSON retain actual evidence. No production
+Rust or paired bundle changed; prior Rust/native/runtime proof is reusable.
+Complete Chromium records335 passes,5 existing conditional skips and no flaky
+results. Complete Firefox records309 passes,30 existing conditional skips and
+one JPEG XL peak-bound failure. The retained image has one H.264 ringing pixel
+at251; source-matched white glyph mean223.559 agrees with the predicted223.491.
+The corrected nonempty foreground comparison retains error<5 (opaque output
+would exceed31), phase, animation, expiration and throughput requirements.
+Fresh jxl-chromium-01 and jxl-firefox-01 checks pass both private producer and
+public playback. This supersedes only the named assertion failure; unchanged
+full-suite cases remain valid. No retry or hardware waiver is introduced.
+The existing opt-in authenticated converted-caption test also passes in both
+browsers with actual cues and protected media URLs: caption-auth-chromium-01
+and caption-auth-firefox-01. All four focused result JSONs report one pass,
+zero skips, failures and flaky results. These use the same matched build and
+pinned runtimes on isolated databases. Local acceptance is complete; authorized
+push and terminal green full CI on the exact candidate remain required.
+
 2026-10-07 rows201–208 are accepted in order through the fixed v26.11.1
 boundary. Local and live remote release tag agree at46118d43; all208 ledger
-rows have justified dispositions. The final window gates and exact-SHA CI
-remain required; UCU-09 stays In progress until those gates pass.
+rows have justified dispositions. Final local window acceptance passes as
+recorded above; UCU-09 stays In progress until terminal green exact-SHA CI.
 
 Row201 is Port. Canonical tmp/ucu09-row201/acceptance-proof.json SHA256
 f418022befdfdc4690144beaf7943191a9f1275fdac079ecd235faef459a541a
