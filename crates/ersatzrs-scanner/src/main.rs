@@ -203,6 +203,7 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     let report = scan_local_library(
         pool,
         &LocalScanConfig {
+            deep_scan: args.deep_scan,
             library_id: args.library_id,
             ffprobe_path: resolve_ffprobe_path(pool, args).await?,
         },

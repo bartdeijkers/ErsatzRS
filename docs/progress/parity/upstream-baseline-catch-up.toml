@@ -4,12 +4,12 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-194/208 rows accepted; rows195-208 remain pending through v26.11.1.
-194 Adapt (0117): scanned content duration reaches normal scheduling and decoded
-native/Next handoff on Linux/Windows. Separate native null-audio fallback passes;
-UCU-09 owns exact evidence. Final window gates remain open.
-193 Port: generated preview playlist, current readiness and first-frame seek;
-Linux/Windows runtime, both browsers, strict lint and independent review pass.
+195/208 accepted; rows196-208 pending through v26.11.1.
+195 Port: local deep scan, confirmations and fresh artwork; Linux/Windows
+restart, 12 browser cases and lint pass. UCU-09 owns exact evidence and reuse.
+194 Adapt (0117): content duration/native-Next handoff and generated silence
+pass on Linux/Windows; final window gates remain open.
+193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward are later work and do not reopen UCU-09.
 Next0362692 is pinned for six RIDs; both local patches still require independent

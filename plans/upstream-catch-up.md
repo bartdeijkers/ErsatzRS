@@ -4,15 +4,40 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-194 are accepted; rows195-208 are the 14 remaining in-scope
+verified). Rows1-195 are accepted; rows196-208 are the 13 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
 
+## Row 195 source map and acceptance
+
+Accepted slice: `007b3415`, Local deep scan. The commit covers Image, Movie,
+MusicVideo, OtherVideo, RemoteStream, Song and Television. Only native television
+has an unchanged-season shortcut requiring a deep bypass; the other families
+already reprocess their source metadata. CLI and durable native runtime preserve
+the requested flag, retryability, identity and international tracks.
+
+- Always-mounted localized confirmation covers library and external-collection
+  deep actions. No-JavaScript renders current rows with disabled scan controls
+  and a clear requirement; it does not imply a scan was dispatched.
+- Local original artwork is database-gated and reread with no-cache. A stable
+  URL policy marker bypasses the previous one-hour browser cache. Provider and
+  compatibility-hash routes retain their existing policy.
+- Known finite/live RemoteStreams still use fresh bounded probes. Managed
+  definitions and Unknown liveness preserve existing publication authority;
+  local deep scan does not trigger managed provider rediscovery.
+- Linux and Windows scanner/durable-restart proof, eight Libraries browser
+  cases, four real-cache browser cases, eighteen artwork regressions, strict
+  lint and independent review pass. UCU-09 owns exact receipts and explicit
+  source deltas for reuse. Historical failures remain retained.
+- Final integrated Windows artwork execution is still required at window
+  close; no new Windows source06 execution or full CI/publication is claimed.
+  Existing approved platform/hardware debt is unchanged. Continue at row196.
+
 ## Row 194 source map and acceptance
 
-Active slice: `fb75ce8c`, content-bound local-library duration. The existing
+Accepted slice: `fb75ce8c`, content-bound local-library duration. The existing
 parser at the ErsatzRS prerequisite `2fdd126c` implements upstream video
 selection and complete-audio fallback. ADR 0117 additionally guards the
 verified FFmpeg9 Matroska numeric/container20-second estimate when a valid
@@ -5622,11 +5647,11 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 192 | `20c81e63` | fix: unsigned mac ci (#3056) | N/A | Upstream unsigned Xcode bundle and develop/CI workflow scripts | `docs(parity): reconcile unsigned macOS CI repair` | ucu-09; full ten-file diff reviewed and current own workflow hashes verified. Xcode signing-flag forwarding and .NET/macOS artifact callers have no ErsatzRS counterpart; independent review confirms no source correction. Existing own CI/tagged releases and approved explicit unverified macOS application/runtime debt remain. No additional build or publication; UCU-09 owns exact evidence and final gates/CI remain open. |
 | 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | Port | ersatzrs-web API, preview supervision and shared player | `fix(web): start troubleshooting playback at the requested seek point` | ucu-09; generated live playlist and current Next marker, successful reaped short-EOF fallback, native two-segment running readiness and diagnostic first-segment player start. 34 focused/831 web and six Linux runtime checks; corrected Windows7/21/5 and both browsers21 each pass, with exact source/reuse identities, strict lint and independent review. Existing owned-file/cancellation/cleanup safety and ordinary live edge remain. No runtime package build or row201 change; final gates/CI remain open. |
 | 194 | `fb75ce8c` | fox: local library duration (#3058) | Adapt | infra content-duration projection; scanner persistence, normal scheduling and native/Next consumers | `test(scanner): verify content duration through programme handoff` | ucu-09; ADR0117 narrow Matroska numeric/container conflict guard retains upstream video/complete-audio selection and tag precedence. Existing parser evidence is reused with unchanged identity; new source05 Linux/Windows application tests each pass1/1, normal scan/rescan/Dutch metadata and1s/5s schedule, actual blue0.25/red1.25 handoff, Next6s ENDLIST, packet gaps and owned cleanup. Strict scanner lint, exact tool/source guards and independent review pass. The separate preexisting video-only native silence fallback is resolved by its subsequent non-row checkpoint with independent genuine video-only proof; source05 remains audio-bearing duration evidence. No binary build or later-row change. UCU-09 owns exact evidence and final gates/CI remain open. |
-| 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |
+| 195 | `007b3415` | feat: local deep scan (#3059) | Port | Local scanner/config/CLI, durable scan runtime, Libraries confirmation and mutable artwork HTTP | `feat(scanner): support restart-safe local deep scans` | ucu-09; all seven folder families reviewed. Linux/Windows same-mtime scanner/durable restart, identities and Dutch tracks pass; Local TV bypasses unchanged seasons and invalidates prior success before retry. Other families already refresh; managed RemoteStream publication/Unknown authority remains accepted. Nine cultures, SSR/no-JavaScript and keyboard/320px confirmation pass eight browser cases; fresh artwork and old-policy cache migration pass four more. Eighteen artwork regressions, strict lint and independent review pass. UCU-09 owns exact receipts/reused inputs; final integrated Windows artwork and window gates/CI remain required. |
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |
 | 197 | `39c1811f` | fix: ignore unextracted text subtitles on next engine (#3061) | | | | ucu-09; provisional: Covered, pending a focused check. Upstream drops the Next exemption in `CustomStreamSelector`, so an embedded text subtitle that has not been extracted is ignored for Next too, exactly as for the legacy engine. ErsatzRS selection and extraction carry no engine-specific exemption (`crates/ersatzrs-infra/src/subtitles.rs:1448` re-extracts on any missing cache file regardless of engine), and row 174 already applied automatic eligibility to both engines, so the audit only has to prove an unextracted embedded text track is skipped rather than selected. Claude 2026-10-05 triage. |
 | 198 | `897a6ef9` | fix: coerce next channels to supported streaming modes (#3062) | | | | ucu-09; provisional: Port. Cached lineup and playlist URLs still carry legacy modes, so upstream coerces `ts-legacy` to `ts` and any non-segmenter playlist mode to `segmenter` for channels on the Next engine, logging the substitution. ErsatzRS refuses instead of coercing: the legacy transport path returns 404 for a Next channel (`crates/ersatzrs-web/src/transport/iptv/stream.rs:280`) while the HLS path branches to the Next handler (`transport/iptv/hls.rs:751`), so a client holding an older URL loses the channel. Claude 2026-10-05 triage. |
-| 199 | `df6ae228` | feat: next output frame rate (#3063) | | | | ucu-09; provisional: Port (channel config schema 0.1.1). Adds an output `frame_rate` to the Next video section, derived from the channel framerate and normalization setting, with a strict converter that rejects decimals, zero and anything above 240 and keeps exact NTSC fractions. ErsatzRS only carries `frame_rate` as a source probe hint (`crates/ersatzrs-infra/src/next_engine/protocol.rs:368`); the channel config's video section has no output frame rate at all, so this depends on the row 184 schema work. Claude 2026-10-06 triage. |
+| 199 | `df6ae228` | feat: next output frame rate (#3063) | | | | ucu-09; provisional: Port (channel config schema 0.1.1). Adds an output `frame_rate` to the Next video section, derived from the channel framerate and normalization setting, with a converter that normalizes decimal rates (including exact NTSC mappings), preserves valid integers/rationals, and rejects unusable rates outside 1–240 fps. ErsatzRS only carries `frame_rate` as a source probe hint (`crates/ersatzrs-infra/src/next_engine/protocol.rs:368`); the channel config's video section has no output frame rate at all, so this depends on the row 184 schema work. Claude 2026-10-06 triage. |
 | 200 | `a3bbf89d` | feat: next engine by default (#3064) | | | | ucu-09; provisional: Adapt under ADR 0095, and deliberately not in full. A migration flips every existing channel to the Next engine and rewrites unsupported streaming modes, new channels default to Next, and legacy-only options are hidden. ErsatzRS keeps the native pipeline primary with Next as an accepted optional second engine, so neither the migration nor the default may be copied; the portable half is the editor hiding options that do not apply to the selected engine. A maintainer decision is needed before any default changes. Claude 2026-10-06 triage. |
 | 201 | `33cabcf1` | fix: next channel troubleshooting (#3065) | | | | ucu-09; provisional: Port. Troubleshooting builds a dedicated Next process over a fixed 30-second window instead of reusing the legacy playout-item path, and the channel framerate query gains an ignore-profile mode so an un-normalized profile still yields a rate. ErsatzRS varies only the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:110`), so this lands on the same surface as pending row 193 and should be audited with it. Claude 2026-10-06 triage. |
 | 202 | `6c7c4e69` | build: release from a pushed tag (#3066) | | | | ucu-09; provisional: N/A (upstream-only release workflow: a prep-release script and a tag-triggered publish). ErsatzRS already releases from a pushed tag with its own CI, as rows 179 and 191 recorded. Claude 2026-10-06 triage. |

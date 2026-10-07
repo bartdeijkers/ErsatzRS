@@ -63,6 +63,7 @@ async fn local_nfo_scan_refreshes_selected_scripted_future_without_replacing_cur
     let pool = test_db().await;
     seed_local_library(&pool, &library, 1).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };

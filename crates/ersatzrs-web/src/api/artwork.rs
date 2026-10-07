@@ -55,8 +55,16 @@ fn local_artwork_url(path: &str, kind: ArtworkUrlKind) -> Option<String> {
     } else if path.starts_with("http://") || path.starts_with("https://") {
         Some(path.to_owned())
     } else {
+        // Bypass originals cached under the former one-hour policy on upgrade.
+        // Subsequent requests revalidate; immutable compatibility hashes keep
+        // their existing URL and cache policy.
+        let revision = if std::path::Path::new(path).is_absolute() {
+            "?v=2"
+        } else {
+            ""
+        };
         Some(format!(
-            "/artwork/{}/{}",
+            "/artwork/{}/{}{revision}",
             kind.url_segment(),
             urlencoding::encode(path)
         ))
@@ -439,7 +447,14 @@ async fn serve_local_artwork(
             }
         }
         return match read_artwork_file(decoded_path).await {
-            Ok(response) | Err(response) => response,
+            Ok(mut response) => {
+                response.headers_mut().insert(
+                    header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("no-cache"),
+                );
+                response
+            }
+            Err(response) => response,
         };
     }
 
@@ -663,6 +678,48 @@ async fn open_provider_artwork(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mutable_original_urls_bypass_old_cache_without_changing_compatibility_urls() {
+        use ersatzrs_core::repositories::ArtworkReference;
+        use ersatzrs_domain::ArtworkKind;
+
+        let file = std::env::temp_dir().join("synthetic-artwork.jpg");
+        let original = ArtworkReference {
+            id: 42,
+            kind: ArtworkKind::Thumbnail,
+            path: file.to_string_lossy().into_owned(),
+        };
+        let url = artwork_reference_url(&original, ArtworkUrlKind::Thumbnail).unwrap();
+        assert_eq!(
+            url,
+            format!(
+                "/artwork/thumbnails/{}?v=2",
+                urlencoding::encode(&original.path)
+            )
+        );
+        assert_eq!(
+            artwork_reference_url(&original, ArtworkUrlKind::Thumbnail),
+            Some(url),
+            "the policy marker must stay stable between scans"
+        );
+        let cached = ArtworkReference {
+            path: "ABCDEF0123456789".into(),
+            ..original
+        };
+        assert_eq!(
+            artwork_reference_url(&cached, ArtworkUrlKind::Thumbnail).as_deref(),
+            Some("/artwork/thumbnails/ABCDEF0123456789")
+        );
+        assert_eq!(
+            local_artwork_url(
+                "https://example.test/artwork.jpg",
+                ArtworkUrlKind::Thumbnail
+            )
+            .as_deref(),
+            Some("https://example.test/artwork.jpg")
+        );
+    }
 
     #[test]
     fn provider_identity_hides_stored_paths_and_uses_persisted_resize_kind() {
@@ -954,6 +1011,13 @@ mod tests {
         let response = serve_local_artwork(&repo, "posters", path_str).await;
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-cache");
+        assert_eq!(
+            axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap(),
+            b"fake-jpeg-bytes"[..]
+        );
         let original_modified = std::fs::metadata(&file_path).unwrap().modified().unwrap();
         tokio::fs::remove_file(&file_path).await.unwrap();
         assert_eq!(
@@ -975,6 +1039,7 @@ mod tests {
             .unwrap();
         let restored = serve_local_artwork(&repo, "posters", path_str).await;
         assert_eq!(restored.status(), StatusCode::OK);
+        assert_eq!(restored.headers()[header::CACHE_CONTROL], "no-cache");
         assert_eq!(
             axum::body::to_bytes(restored.into_body(), 1024)
                 .await

@@ -17,3 +17,11 @@ description = 'Clicking Scan Library on more than one library could run provider
 discovered  = '2026-06-22'
 evidence    = 'Fixed 2026-06-22: `AppState` now owns a process-local `LibraryScanQueue`; `scan_library` enqueues accepted jobs and a single worker drains them FIFO through the existing provider/local scan paths. `list_locked_libraries` includes queued ids so the hydrated table disables/shows busy state before queued rows start. `library_scan_queue_runs_jobs_fifo_and_stops_when_empty` covers the queue contract.'
 resolved    = true
+
+[[debt]]
+id = 'ucu09-deep-scan-confirmation'
+description = 'Local deep scan had no action and library/collections deep scans lacked localized confirmation; Libraries SSR/language boundaries also failed actual browser acceptance.'
+discovered = '2026-10-07'
+resolved = true
+evidence = 'UCU-09 row195 owns exact source receipts, real scanner/durable restart on Linux and Windows, twelve Chromium/Firefox cases, focused regressions, lint and substantive review.'
+resolution = 'Resolved at row195 checkpoint. Required final integrated Linux/Windows and window acceptance remains open; no new native Windows artwork execution is claimed. Existing approved platform/hardware debt is unchanged.'

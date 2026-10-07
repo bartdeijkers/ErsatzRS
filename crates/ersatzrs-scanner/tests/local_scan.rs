@@ -34,6 +34,7 @@ async fn local_scan_populates_media_rows_from_test_mp4() {
     let report = scan_local_library(
         &pool,
         &LocalScanConfig {
+            deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe,
         },
@@ -112,6 +113,7 @@ async fn local_movie_scan_enriches_sidecars_artwork_and_is_idempotent() {
     let pool = test_db().await;
     seed_local_library(&pool, &library, 1).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -218,6 +220,7 @@ async fn local_scan_flags_missing_files_and_keeps_present_ones() {
     let gone_id = seed_movie_with_file(&pool, gone.to_str().unwrap()).await;
 
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: "ffprobe".to_string(),
     };

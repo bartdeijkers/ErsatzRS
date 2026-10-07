@@ -11421,6 +11421,100 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row195 accepted as Port. Exact upstream
+007b34151fc36e039282bc4a2726e1086e6a8105 has seven local folder families.
+Local deep scan now crosses CLI/config/durable NativeScanRuntime and refreshes
+unchanged television seasons; failed/interrupted scans invalidate prior-success
+ETags before reprocessing and remain retryable. Other local families already
+refresh on ordinary scans. RemoteStream rereads YAML/NFO and freshly probes
+confirmed finite/live sources; managed publication and Unknown semantics retain
+ADRs0065/0068/0075/0078. No new provider rediscovery or network proof is claimed.
+All nine cultures have an always-mounted confirmation for library/collections
+deep actions, with cancellation, one-use admission, keyboard/focus containment,
+320px layout and accurate no-JavaScript fallback. Matched source05 browser
+acceptance passes four Chromium/four Firefox cases with zero retries/skips.
+Linux source05 scanner9a29b43a and durable admission/restartcdd5ad2e each pass1/1
+using checksum-verified published FFmpeg v2.0.6. Native Windows source03 passes
+six SSR/replay, scanner3ca228cb and durable restart371f6bfc, with source guards
+and owned cleanup. Actual scanner/admission inputs remain unchanged on final06;
+identity, Dutch alternate audio/subtitles, same-mtime recovery, ordinary skip and
+repeated-deep idempotence are proven. Six non-TV and one artwork regression are
+reused with unchanged inputs. Final web artwork policy corrects the discovered
+one-hour browser staleness: exact DB-gated originals use no-cache and stable
+?v=2 URLs; compatibility-hash caching and provider authorization stay unchanged.
+Source06 receipt03d195a17cc7da1c5b76530c468997aac304a0e3e9a2a0db63060b2d17bda969
+has only artwork/Changelog delta from05. Eighteen artwork regressions, strict
+web Clippy, format and new-allow policy pass. Actual warm old-policy migration
+and unchanged-URL/same-mtime decoded green pixels pass two Chromium/two Firefox
+cases, no retries/skips, with both source guards and terminal driver0. Browser
+receipt08afb744135ad6a5e93c5b4f04baec43008d1ccfb02a0f701809fd1ea54833c535.
+Initial proofce53785ae0dd8be9c413766074b45590f82f1c17409d64958e008eb99f9db60c
+and historical failures are retained: first Libraries run exposed SSR/language
+bugs; artwork attempt01 passed migration but failed fixture startup DB lock,
+corrected by bounded SQL busy timeout without changing cache assertions.
+Independent substantive source/security/platform/cache-fixture review finds no
+blocker. Canonical final proof: tmp/ucu09-row195/final-acceptance-proof.json
+SHA256ccdc2ae8d396d5f5e0d985366437750c00a1b05e01eeea93592ef02126fd3279. The owning explicit03-to06/05-to06
+deltas identify valid reuse; new native Windows06 artwork execution is not
+claimed. Required final integrated Linux/Windows checks, window gates, push,
+exact-SHA CI and stable publication remain open. Approved hardware/ARM/macOS
+debt is unchanged. Pin/ledger advance only195/208; continue196 with13 pending.
+
+Historical row195 preparation and intermediate evidence (superseded above):
+2026-10-07 row195 implementation is in progress, not accepted. Exact upstream
+007b34151fc36e039282bc4a2726e1086e6a8105 adds Local deep scan and confirmation
+for library/collections deep actions. LocalScanConfig/CLI/NativeScanRuntime now
+forward the existing durable deep flag; television bypasses only its unchanged
+season etag fast path. The Libraries island exposes Local deep scan with an
+always-mounted shared confirmation and all nine cultures; cancellation/one-use
+confirmation and intentionally hydrated actions have focused SSR/browser cases.
+Synthetic scanner and durable native admission/restart fixtures require exact
+published tools and preserve source bytes/mtime, media identities, Dutch audio
+and subtitles, ordinary skip and repeated-deep idempotence. Review also corrected
+prior-success etag invalidation before reprocessing, keeping failed/interrupted
+deep scans retryable even when source mtimes are unchanged. Six web SSR/replay
+tests, hydration lint and progress validation pass. On frozen source-row195-03
+(receipt d0d025a465ef664728be85fc4a001481a498cdb52b4aba4dd3f8bb05d4e25af8),
+mandatory Linux scanner acceptance850463c9 and native durable admission/restart
+84a327e9 each pass1/1 using checksum-verified published FFmpeg v2.0.6, including
+pre/post source guards and own successful fixture cleanup. Six unchanged non-TV
+metadata/artwork/fallback regressions and one artwork replacement regression
+also pass. Native Windows has passed six web SSR/replay cases, the mandatory
+scanner case and actual durable admission/restart371f6bfc (one passed, no skips),
+with source03 pre/post guards and owned temporary cleanup confirmed.
+Chromium attempt01 passed the English hydrated case, but failed Dutch hydrated
+labels and both no-JavaScript cases: the island loses its language context and
+the route leaves non-streaming clients on Loading. Firefox has not run.
+Reviewed narrow route/context fixes and test-helper lint corrections are now
+applied on frozen source05 (receipt064a93007fa3d95f817d01e8106a11a39a5d285f6c612c1d88d1f7060277e9b0).
+The explicit source03-to-source05 delta keeps scanner/admission production inputs
+unchanged; native source03 evidence is retained without claiming a source05
+Windows runtime invocation. The additional source04-to-source05 change only
+renames a test variable; all six source04 web SSR/replay cases pass. Source05
+strict affected Clippy, format, new-allow policy, architecture/hydration lint and
+progress checks pass. Actual source05 Linux scanner9a29b43a and durable restart
+cdd5ad2e each pass1/1. Libraries confirmation/no-JavaScript acceptance passes
+four Chromium and four Firefox cases, zero retries/skips, with source/browser
+pre/post guards (browser inputs3d6a1e20ba20ea92d91841e087b83f16f00a2a4bb96ea75359c6120aacd89006).
+Initial focused proof SHA256ce53785ae0dd8be9c413766074b45590f82f1c17409d64958e008eb99f9db60c
+is preserved, not ledger acceptance. Final completeness review confirms all
+seven upstream folder families, including RemoteStream's existing fresh known
+finite/live probes and reread local definitions; managed publication authority
+and Unknown liveness remain under accepted ADRs0065/0068/0075/0078.
+That review found browser caching could hide fresh original artwork for one hour.
+Source06 receipt03d195a17cc7da1c5b76530c468997aac304a0e3e9a2a0db63060b2d17bda969
+changes only artwork response/URL policy and Changelog from source05: registered
+absolute originals return no-cache with a stable migration query marker, while
+provider and compatibility-hash behavior stays unchanged. Eighteen artwork
+regressions, strict web Clippy, format and new-allow policy pass. Independent
+source review confirms Windows-native path semantics and unchanged admission
+security; Windows03 scanner/admission evidence remains reusable, without claiming
+new native Windows artwork execution. Warm-cache upgrade and same-mtime browser
+pixel acceptance are running. Canonical invocation logs/source maps remain
+under tmp/ucu09-row195/. Complete the artwork browser gate before ledger
+acceptance; final integrated Linux/Windows and window gates remain required.
+Baseline/pin remain194 and all14 rows remain pending.
+
 2026-10-07 non-row native null-audio parity checkpoint resolves
 ffmpeg-command-generation/native-video-only-null-audio-fallback. Complete
 persisted/full-probe metadata creates AutomaticSilence only for confirmed

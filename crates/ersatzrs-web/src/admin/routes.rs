@@ -330,7 +330,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=BlockEditorPage
             />
 
-            <Route path=(StaticSegment("media"), StaticSegment("libraries")) view=LibrariesPage/>
+            <Route path=(StaticSegment("media"), StaticSegment("libraries")) view=LibrariesPage ssr=SsrMode::InOrder/>
             <Route path=(StaticSegment("media"), StaticSegment("trash")) view=TrashPage/>
             <Route path=(StaticSegment("media"), StaticSegment("movies")) view=MoviesPage/>
             <Route

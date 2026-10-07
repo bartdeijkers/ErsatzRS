@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `fb75ce8ccbc5570bf0e3c12533d87fe359b2d517` |
-| **Commit subject** | `fox: local library duration (#3058)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/fb75ce8ccbc5570bf0e3c12533d87fe359b2d517 |
+| **Pinned commit** | `007b34151fc36e039282bc4a2726e1086e6a8105` |
+| **Commit subject** | `feat: local deep scan (#3059)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/007b34151fc36e039282bc4a2726e1086e6a8105 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -61,7 +61,7 @@ The daily routine must **not** advance this pin on its own.
 
 The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
 `v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
-There are **194 accepted and 14 pending in-scope rows**. This supersedes the
+There are **195 accepted and 13 pending in-scope rows**. This supersedes the
 2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.

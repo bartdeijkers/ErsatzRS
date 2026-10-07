@@ -13,9 +13,10 @@ its original native-only wording is superseded by this decision.
 Partial — the optional engine is integrated through persisted selection,
 managed package discovery, supervised processes, authenticated provider/remote
 inputs, selected tracks, fallback, graphics, troubleshooting and health. The
-UCU-09 final window gates pass; approved platform acceptance debt remains open. The
-owning [catch-up milestone](../progress/milestones.toml) records current proof.
-Linux and native Windows application playback tests pass
+UCU-09 final window gates remain pending through the accepted v26.11.1 boundary;
+approved platform acceptance debt remains open. The owning
+[catch-up milestone](../progress/milestones.toml) records current proof.
+Historical Linux and native Windows application playback tests passed
 with Next `6b49dae` and published ErsatzRS-ffmpeg v2.0.4, including selected
 subtitles/audio and graphics. Direct RGB image opacity is now proven; the
 older limitation described below is superseded. Accepted live embedded-text

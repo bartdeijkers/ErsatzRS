@@ -85,6 +85,7 @@ async fn local_music_video_scan_writes_full_metadata_and_child_rows() {
     let report = scan_local_library(
         &pool,
         &LocalScanConfig {
+            deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe,
         },
@@ -185,6 +186,7 @@ async fn local_music_video_scan_resolves_bare_basename_thumbnail() {
     let report = scan_local_library(
         &pool,
         &LocalScanConfig {
+            deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe,
         },
@@ -247,6 +249,7 @@ async fn local_music_video_rescan_keeps_one_artist_when_nfo_name_diverges_from_f
     .await;
 
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };

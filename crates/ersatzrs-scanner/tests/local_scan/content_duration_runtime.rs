@@ -395,6 +395,7 @@ async fn scan_and_rescan(tools: &Tools, root: &Path, pool: &SqlitePool) -> [Scan
     let library = root.join("library");
     seed_local_library(pool, &library, 4).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: tools.ffprobe.to_str().unwrap().to_owned(),
     };

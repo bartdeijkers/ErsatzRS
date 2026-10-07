@@ -61,12 +61,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row194 accepted; complete rows195-208 through upstream v26.11.1
-(46118d43); rows209 onward are separate post-release work and cannot reopen
-this milestone. The native no-audio graph failure is resolved by the separate
-non-row checkpoint; UCU-09 owns exact Linux/Windows decoded playback, cleanup
-and final lint/transport proof. Continue ordered row195 acceptance; final window
-local gates, push and terminal green exact-SHA CI remain required.
+2026-10-07 UCU-09 boundary: row195 accepted; complete rows196-208 through upstream v26.11.1
+(46118d43); rows209 onward remain separate work. Local deep scan passes real
+Linux/Windows scanner/durable admission/restart, international-track identity
+and same-mtime recovery. Eight Libraries and four real artwork-cache browser
+cases, strict focused lint and independent review pass. UCU-09 owns final
+source06/cache proof and explicit native source03 reuse; final integrated Windows
+artwork execution remains required. The separate native null-audio checkpoint
+retains its existing decoded playback/cleanup/lint/transport evidence.
+Final window local gates, push and terminal
+green exact-SHA CI remain required.
 ADR 0117 is accepted for necessary Next corrections, packages
 and mandatory retirement. Row186's candidate static WebP and complete GIF
 animation pass; the maintainer accepted the consolidated ADR0117 FFmpeg extension

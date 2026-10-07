@@ -47,11 +47,13 @@ impl NativeScanRuntime {
     async fn scan_local_library_report(
         &self,
         library_id: EntityId,
+        deep_scan: bool,
         progress: &dyn ScanProgressSink,
     ) -> Result<ersatzrs_scanner::LocalScanReport, ScanRuntimeError> {
         let config = ersatzrs_scanner::LocalScanConfig {
             library_id,
             ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
+            deep_scan,
         };
         ersatzrs_scanner::scan_local_library_with_progress(&self.pool, &config, Some(progress))
             .await
@@ -195,7 +197,9 @@ impl ScanRuntime for NativeScanRuntime {
                         .find(|resolution| resolution.library_id == library_id)
                         .map(|resolution| resolution.generation);
                 let result = async {
-                    let mut report = self.scan_local_library_report(library_id, progress).await?;
+                    let mut report = self
+                        .scan_local_library_report(library_id, deep_scan, progress)
+                        .await?;
                     if report.failed_files > 0 {
                         return Err(ScanRuntimeError::new(format!(
                             "Local scan reported {} failed file(s)",

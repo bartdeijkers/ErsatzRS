@@ -180,3 +180,11 @@ discovered = '2026-10-02'
 adr = '0108'
 resolved = true
 evidence = 'Milestone v111-findings-03 owns completed local acceptance: shared expanded discovery, explicit diagnostics, bounded read-only nine-language SSR preview, native MPEG/TS upgrade/rescan and identity/track preservation, API and Chromium/Firefox JS/no-JS proof, plus strict lint and structural checks.'
+
+[[debt]]
+id = 'ucu09-local-deep-scan-refresh'
+description = 'Local deep scan did not bypass unchanged television seasons or consistently propagate through local CLI and durable admission.'
+discovered = '2026-10-07'
+resolved = true
+evidence = 'UCU-09 row195 owns exact source receipts, real scanner/durable restart on Linux and Windows, twelve Chromium/Firefox cases, focused regressions, lint and substantive review.'
+resolution = 'Resolved at row195 checkpoint. Required final integrated Linux/Windows and window acceptance remains open; no new native Windows artwork execution is claimed. Existing approved platform/hardware debt is unchanged.'

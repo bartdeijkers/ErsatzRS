@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Deep-scan local libraries to refresh unchanged television episodes and
+  cached track metadata. Confirm library and external-collection deep scans
+  before queuing them, with localized warnings about longer scan times.
+
 - Play songs through the optional Next engine with occurrence-stable artwork,
   metadata and channel-sized pictures served by authenticated private callbacks.
   Preserve alternate audio, subtitle selection, seeking and scheduled handoff;
@@ -47,6 +51,12 @@ release section when tagging a release.
   Close UCU-09 at upstream v26.11.1; later releases are separate work.
 
 ### Fixed
+
+- Keep failed local deep scans retryable when source timestamps are unchanged.
+  Render the Libraries table without JavaScript and preserve the selected
+  language for hydrated scan controls and confirmation dialogs. Revalidate
+  mutable local artwork so refreshed images appear even when file timestamps
+  stay unchanged, and bypass images retained under the former cache policy.
 
 - Generate profile-compatible silent audio for native playback of media with
   confirmed missing audio streams. Preserve disabled and selected audio, source
