@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-07): `d89f6156f55afa0a541e75b9567219a37bef1334`
-  — docs: update changelog for next fix.
+- Latest fetched target (`origin/main`, 2026-10-07): `5f5d28154d9a7f9a3aa26bf821647ebdab5fdafc`
+  — build: pin a specific next version (#3070).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -623,6 +623,9 @@ remain. See `post-publication-cleanup.json`.
   pending row 209; all 208 existing SHA/subject pairs remain an exact prefix.
   A later 2026-10-07 refresh appends one upstream changelog commit as pending row
   210; all 209 existing SHA/subject pairs remain an exact prefix.
+  A later 2026-10-07 refresh appends scoped release tokens and the pinned Next
+  version as pending rows 211-212; all 210 existing SHA/subject pairs remain an
+  exact prefix.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
@@ -5777,3 +5780,5 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 208 | `46118d43` | docs: prep for release v26.11.1 | N/A | Fixed upstream v26.11.1 release boundary | `docs(parity): finish ordered catch-up through v26.11.1` | ucu-09; CHANGELOG heading/date/compare links only. Local and live remote tag agree at46118d43313b7828780fbfcfb46e980390ea8b0d. All208 rows are dispositioned; later upstream changes remain outside UCU-09. Final window gates and exact-SHA CI remain required. |
 | 209 | `4cdce16a` | fix: next playout folders on linux/macos (#3068) | | | | Post-v26.11.1 work outside UCU-09; provisional: Covered, pending one check, like row 204. Upstream reworks its `current` link: removal now runs on every platform before linking, a failed symlink and a failed rename are both reported instead of throwing, a leftover file where the junction belongs is replaced, and the temporary link is cleaned up. ErsatzRS hands the engine the per-channel playout folder directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link at all, so none of these failure modes exist; the audit only has to confirm the folder swap is atomic, which is the same check row 204 already carries. Claude 2026-10-07 triage. |
 | 210 | `d89f6156` | docs: update changelog for next fix | | | | Post-v26.11.1 work outside UCU-09; provisional: N/A for the diff (three upstream CHANGELOG lines; no source change). The entry describes a Next-engine fix outside this repository: VAAPI playback froze at the end of items on channels with an Intermittent watermark, most often music videos whose audio outlives their video, logged as an ffmpeg stall. Worth carrying into the runtime audit rather than a row: ErsatzRS has its own intermittent watermark path (`crates/ersatzrs-infra/src/next_engine/watermark.rs`, with runtime proof in `next_engine/intermittent_watermark_runtime_tests.rs`), so whether the same end-of-item stall appears belongs with the accepted hardware debt. Claude 2026-10-07 triage. |
+| 211 | `9d60b28e` | build: scope app tokens (#3069) | | | | ucu-09; provisional: N/A (upstream-only GitHub Actions change: the release-repository input becomes a name under the same owner and each app token is scoped to that repository). ErsatzRS publishes from its own repository with its own CI, as rows 191, 192 and 202 recorded. Claude 2026-10-07 triage. |
+| 212 | `5f5d2815` | build: pin a specific next version (#3070) | | | | ucu-09; provisional: N/A for the diff, with one thing to compare. Upstream adds a NEXT_PIN file plus scripts that download exactly that Next build per target (currently `v0.2.0-96aa6cb6-develop`) instead of the latest one. ErsatzRS already acquires a pinned Next engine before startup (`af7eb835`) with verified bytes, and its wire contracts are pinned in `crates/ersatzrs-infra/src/next_engine/protocol.rs:6` (playout 0.0.5, channel 0.1.1), so the workflow has no counterpart; what is worth checking is whether our pinned build matches the one upstream now pins. Claude 2026-10-07 triage. |
