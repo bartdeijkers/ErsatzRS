@@ -11421,6 +11421,27 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row196 accepted as N/A. Exact upstream
+ffa4743e0c24ea38cc14ad3add823c750f80a65f changes Directory.Build.targets and
+ErsatzTV.Infrastructure.csproj only: drop native .NET publish PDBs, especially
+SkiaSharp, and use EFCore.BulkExtensions.Core. Complete upstream diff
+SHA256a5c8de52edb7d021c8b0fa2581897978fff65478519734d3e84621261e44af99
+and current Cargo/release/Next staging hashes are verified. Neither .NET
+runtime/dependency tree has a Rust/SQLx counterpart; Cargo release strip=true
+and both Windows archive paths stage four named application executables rather
+than build-directory PDBs. Pinned Next plus its required Windows companions are
+separate exact permitted archive members. The existing published Next0362692
+Windows archive SHA2564f14f94f8a904a61d3b69f9d50ba072aa54db36939cd8a50a692a2276427611e
+passes current helper checksum/provenance verification; selected payload has no
+PDB. This corrects the provisional one-executable description: four Rust app
+executables plus the optional engine/companions are packaged. No Rust/runtime
+change, build/download or publication is required; substantive Codex review finds
+no gap. Final release/archive execution, integrated Linux/Windows acceptance,
+full window gates and exact-SHA CI remain required, with approved hardware and
+ARM/macOS debt unchanged. Canonical proof tmp/ucu09-row196/acceptance-proof.json
+SHA2565f22f6cbd40aa0dc21d99ad60e0c8db0f92a9b5d2cac0d180c72fdd76be6404b. Pin/ledger advance one row to
+196/208 with12 pending; continue197 custom subtitle eligibility.
+
 2026-10-07 row195 accepted as Port. Exact upstream
 007b34151fc36e039282bc4a2726e1086e6a8105 has seven local folder families.
 Local deep scan now crosses CLI/config/durable NativeScanRuntime and refreshes

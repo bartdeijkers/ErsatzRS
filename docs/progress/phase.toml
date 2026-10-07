@@ -61,8 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-07 UCU-09 boundary: row195 accepted; complete rows196-208 through upstream v26.11.1
-(46118d43); rows209 onward remain separate work. Local deep scan passes real
+2026-10-07 UCU-09 boundary: row196 accepted; complete rows197-208 through upstream v26.11.1
+(46118d43); rows209 onward remain separate work. Row196 is N/A after exact .NET
+source and Rust/Next packaging review; continue custom subtitle eligibility197.
+Local deep scan passes real
 Linux/Windows scanner/durable admission/restart, international-track identity
 and same-mtime recovery. Eight Libraries and four real artwork-cache browser
 cases, strict focused lint and independent review pass. UCU-09 owns final
