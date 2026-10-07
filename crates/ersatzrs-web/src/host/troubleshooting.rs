@@ -2032,7 +2032,7 @@ async fn wait_for_preview_output(
             Err(oneshot::error::TryRecvError::Empty) => {}
         }
         if tokio::fs::try_exists(&playlist_path).await?
-            && count_segments(working_dir, segment_extension).await? >= 1
+            && count_segments(working_dir, segment_extension).await? >= 2
         {
             return Ok(());
         }
@@ -2566,12 +2566,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn running_preview_readiness_requires_two_matching_ts_or_m4s_segments() {
+        for (format, extension, other) in [
+            (OutputFormat::Hls, "ts", "m4s"),
+            (OutputFormat::HlsMp4, "m4s", "ts"),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            tokio::fs::write(
+                root.path().join("live.m3u8"),
+                format!("#EXTM3U\n#EXTINF:1,\nfirst.{extension}\n#EXTINF:1,\nsecond.{extension}\n"),
+            )
+            .await
+            .unwrap();
+            tokio::fs::write(root.path().join(format!("first.{extension}")), b"output")
+                .await
+                .unwrap();
+            tokio::fs::write(root.path().join(format!("other.{other}")), b"other output")
+                .await
+                .unwrap();
+            let directory = root.path().to_path_buf();
+            let (finished, completion) = oneshot::channel();
+            let waiting = wait_for_preview_output(&directory, format, completion);
+            tokio::pin!(waiting);
+            assert!(
+                tokio::time::timeout(Duration::from_millis(250), &mut waiting)
+                    .await
+                    .is_err(),
+                "one matching segment cannot ready a running {extension} preview"
+            );
+            tokio::fs::write(root.path().join(format!("second.{extension}")), b"output")
+                .await
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(1), &mut waiting)
+                .await
+                .unwrap()
+                .unwrap();
+            drop(finished);
+        }
+    }
+
+    #[tokio::test]
     async fn completed_preview_requires_success_and_matching_segments() {
         for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
             let root = tempfile::tempdir().unwrap();
-            tokio::fs::write(root.path().join("live.m3u8"), b"#EXTM3U")
-                .await
-                .unwrap();
+            tokio::fs::write(
+                root.path().join("live.m3u8"),
+                format!("#EXTM3U\n#EXTINF:1,\nsegment.{extension}\n#EXT-X-ENDLIST\n"),
+            )
+            .await
+            .unwrap();
             tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
                 .await
                 .unwrap();
@@ -2592,6 +2635,78 @@ mod tests {
                     .await
                     .is_err()
             );
+            tokio::fs::remove_file(root.path().join(format!("segment.{extension}")))
+                .await
+                .unwrap();
+            let wrong_extension = if extension == "ts" { "m4s" } else { "ts" };
+            tokio::fs::write(
+                root.path().join(format!("other.{wrong_extension}")),
+                b"wrong format",
+            )
+            .await
+            .unwrap();
+            let (finished, completion) = oneshot::channel();
+            finished.send(true).unwrap();
+            assert!(
+                wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                    .await
+                    .is_err(),
+                "successful exit still needs a matching {extension} segment"
+            );
+        }
+    }
+
+    // The shell only supplies an owned finite child; completion/reaping uses
+    // the production supervisor shared by every supported platform.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn completed_preview_one_segment_is_ready_only_after_successful_reaped_eof() {
+        for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
+            for exit in [0, 1] {
+                let root = tempfile::tempdir().unwrap();
+                tokio::fs::write(
+                    root.path().join("live.m3u8"),
+                    format!("#EXTM3U\n#EXTINF:1,\nsegment.{extension}\n#EXT-X-ENDLIST\n"),
+                )
+                .await
+                .unwrap();
+                tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
+                    .await
+                    .unwrap();
+                let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
+                let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+                let mut command = Command::new("sh");
+                command.args(["-c", &format!("exit {exit}")]);
+                let child = ManagedProcess::spawn(command).unwrap();
+                let log_path = root.path().join("logs.txt");
+                let (finished, completion) = oneshot::channel();
+                tokio::spawn(async move {
+                    let succeeded = write_preview_logs(
+                        log_path,
+                        None,
+                        None,
+                        child,
+                        Vec::new(),
+                        ownership,
+                        tokio::time::Instant::now() + Duration::from_mins(2),
+                        None,
+                    )
+                    .await;
+                    let _ = finished.send(succeeded);
+                });
+                let result = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    wait_for_preview_output(&root.path().to_path_buf(), format, completion),
+                )
+                .await
+                .unwrap();
+                assert_eq!(result.is_ok(), exit == 0, "{extension} exit {exit}");
+                assert!(
+                    lock.try_lock().is_ok(),
+                    "finite output cannot release readiness before ownership cleanup"
+                );
+                assert!(root.path().join("logs.txt").exists());
+            }
         }
     }
 

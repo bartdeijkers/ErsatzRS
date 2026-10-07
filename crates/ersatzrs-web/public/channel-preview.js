@@ -124,7 +124,8 @@ function attachVideoState(video, entry) {
   entry.nativeListeners = listeners;
 }
 
-async function start(video, url) {
+// -1 keeps ordinary channel previews at the live edge; diagnostics start at 0.
+async function start(video, url, startPosition = -1) {
   destroy(video);
   // Preview authorization and the Hls.js import are asynchronous. Keep both
   // the default and current mute state set so autoplay remains browser-safe;
@@ -150,6 +151,7 @@ async function start(video, url) {
       const root = rootFor(video);
       if (root) root.dataset.previewEngine = "hlsjs";
       const hls = new Hls({
+        startPosition,
         enableWorker: true,
         lowLatencyMode: true,
         backBufferLength: 30,

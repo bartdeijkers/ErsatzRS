@@ -48,6 +48,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Start troubleshooting playback at the requested seek point using the
+  generated playlist and its first segment. Preserve normal live-preview
+  starting behavior and successful short previews without a Next ready marker
+  (ErsatzTV #3057).
+
 - Preserve Windows UNC paths in the generated language registry, and return
   opaque 404s for private callback paths on the management listener while
   retaining the existing FFmpeg profile pages.

@@ -11421,6 +11421,46 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 row193 accepted as Port. Upstream432f107ebf175a709f219481807b46595ffae55e
+fixes troubleshooting first-frame seek; complete four-file delta SHA256
+eec75d00000df13632873c8b860f60188f19aad9e4d1305fca5fc1e60450b1b2.
+Both engines serve generated live.m3u8; Next waits for its fresh marker while
+running. Successful reaped short EOF requires final ENDLIST and a referenced
+local segment; failed/cancelled output cannot gain this fallback. Native
+running readiness needs two matching segments. Owned job identity, stale-file
+refusal, read guards, process reaping/capacity, cancellation and quarantine
+remain. Diagnostics start at zero; ordinary preview keeps live edge.
+Frozen source01 receipt SHA256
+53e00fa7d34cb0cbd31f4cf9a495580a2366266604f053c4a9b498bc9d39a88a passes
+34 focused checks,831 web regressions and six real published Linux Next
+previews (eae1016b-0372-49a0-95e8-19b46eadcd90). Matched browser runs each pass
+21/21 with no skips/retries/flaky cases. Actual first-presented sought red
+frames contain Dutch captions; normal preview starts blue near10 seconds.
+Independent segment decode confirms the selected880Hz Dutch track instead of
+440Hz English. Browser inputs SHA256
+58d1e09c8b9a69b03045e618ba4a2828cf5826112c3483ae204fde7eb7b3c482.
+The original web command failed only its extension-predicate lint; that reviewed
+correction passes both focused readiness tests (8e574b48), formatting and
+strict all-target web Clippy. The original Windows prepared fixture failed503
+because its native backslash path violated the unchanged confinement contract;
+only the fixture now stores the production writer's slash-separated path.
+Corrected formatted source03 receipt SHA256
+b9bb902e1f75b5de81cb0498e35df22819326f870f8f2925b46279c8bd38284d passes
+all7 process/21 portable/5 actual native Windows Next previews, run IDs
+24327267-d9b9-46a0-99e9-5edbf28f87d0,56b517f1-b9b3-4a7c-80a0-d513bc13d53b,
+c265d167-1ab3-424e-9d03-9687077244fc; final1495-input source guard and owned
+TEMP cleanup pass. Source01 proof is reused with its original identity and
+the independently reviewed two-file correction delta, not relabeled source03.
+Earlier failed audio/motion/fixture attempts remain retained. Substantive
+review finds no concrete blocker. Canonical proof and exact logs/reviews:
+tmp/ucu09-row193/acceptance-proof.json. Published FFmpegv2.0.6 and
+next-0362692-ersatzrs.1 payload hashes are verified; no dependency build/release,
+argv, schema, layout, localization or row201 preview-window change is included.
+Baseline and ledger advance together:193/208 accepted,15 pending; align the
+clean upstream checkout after the local checkpoint. Row194 content duration is
+next. Final window gates, milestone push, exact-SHA CI and stable release remain
+required; approved platform/hardware debt is unchanged.
+
 2026-10-07 row192 accepted as N/A. Complete upstream20c81e635000378d54ab560d752d5dd32f1f2ced
 ten-file diff reviewed: unsigned artifact builds pass CODE_SIGNING_ALLOWED=NO
 through scripts/macOS/bundle.sh to xcodebuild, affected pull requests gain

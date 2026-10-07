@@ -34,18 +34,13 @@ impl Job {
         let id = uuid::Uuid::new_v4().to_string();
         let channel = request.channel_id.unwrap_or_default();
         let media = request.media_item_id.unwrap_or_default();
-        let playlist = if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-            "ffmpeg.m3u8"
-        } else {
-            "live.m3u8"
-        };
         let now = Utc::now().to_rfc3339();
         let status = PlaybackPreviewStatus {
             id: id.clone(),
             state: Phase::Queued,
             ready: false,
             cleanup_confirmed: false,
-            playlist_url: format!("/api/troubleshoot/playback/previews/{id}/files/{playlist}"),
+            playlist_url: format!("/api/troubleshoot/playback/previews/{id}/files/live.m3u8"),
             selected_at: None,
             created_at: now.clone(),
             updated_at: now,
@@ -365,6 +360,16 @@ impl NativeAdminTroubleshootingRuntime {
         id: &str,
         filename: &str,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.read_owned_file_from(id, filename, &troubleshooting_folder())
+            .await
+    }
+
+    async fn read_owned_file_from(
+        &self,
+        id: &str,
+        filename: &str,
+        folder: &FsPath,
+    ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
         use tokio::io::AsyncReadExt as _;
         if filename.is_empty()
             || filename.contains(['/', '\\'])
@@ -389,7 +394,7 @@ impl NativeAdminTroubleshootingRuntime {
             return Ok(None);
         }
         tokio::time::timeout(Duration::from_secs(2), async {
-            let file = match tokio::fs::File::open(troubleshooting_folder().join(filename)).await {
+            let file = match tokio::fs::File::open(folder.join(filename)).await {
                 Ok(file) => file,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
                 Err(_) => {
@@ -458,6 +463,35 @@ mod tests {
         )
     }
 
+    #[test]
+    fn both_preview_engines_advertise_the_owned_generated_live_playlist() {
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let job = Job::new(&PlaybackPreviewRequest {
+                streaming_engine: engine,
+                channel_id: Some(12),
+                media_item_id: Some(34),
+                ..Default::default()
+            });
+            let status = job.read();
+            assert_eq!(
+                status.playlist_url,
+                format!(
+                    "/api/troubleshoot/playback/previews/{}/files/live.m3u8",
+                    status.id
+                )
+            );
+            assert!(status
+                .return_url
+                .contains(&format!("previewId={}", status.id)));
+            assert!(status.return_url.contains("mediaItem=34&channel=12"));
+            assert_eq!(status.state, Phase::Queued);
+            assert!(!status.ready);
+        }
+    }
+
     #[tokio::test]
     async fn queued_stop_releases_ownership_without_preparing_or_spawning() {
         let runtime = runtime();
@@ -491,6 +525,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn both_engines_read_owned_live_playlist_and_refuse_marker_and_replacement_ids() {
+        let runtime = runtime();
+        let root = tempfile::tempdir().unwrap();
+        tokio::fs::write(
+            root.path().join("live.m3u8"),
+            b"#EXTM3U\n#EXTINF:1,\nsegment.ts\n#EXT-X-ENDLIST\n",
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(root.path().join(".ready"), b"private marker")
+            .await
+            .unwrap();
+        let mut prior: Option<String> = None;
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+                streaming_engine: engine,
+                ..Default::default()
+            }));
+            job.running();
+            job.ready();
+            runtime
+                .previews
+                .write()
+                .await
+                .jobs
+                .push_back(Arc::clone(&job));
+            let status = job.read();
+            let filename = status.playlist_url.rsplit('/').next().unwrap();
+            assert_eq!(filename, "live.m3u8");
+            let bytes = runtime
+                .read_owned_file_from(&status.id, filename, root.path())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(bytes.ends_with(b"#EXT-X-ENDLIST\n"));
+            for forbidden in [".ready", "../live.m3u8", "a/live.m3u8", "a\\live.m3u8"] {
+                assert!(runtime
+                    .read_owned_file_from(&status.id, forbidden, root.path())
+                    .await
+                    .unwrap()
+                    .is_none());
+            }
+            if let Some(old) = prior {
+                assert!(runtime
+                    .read_owned_file_from(&old, filename, root.path())
+                    .await
+                    .unwrap()
+                    .is_none());
+            }
+            job.cancel();
+            assert!(runtime
+                .read_owned_file_from(&status.id, filename, root.path())
+                .await
+                .unwrap()
+                .is_none());
+            prior = Some(status.id);
+        }
+    }
+
+    #[tokio::test]
     async fn stale_preview_ids_and_cancelled_jobs_cannot_read_replacement_files() {
         let runtime = runtime();
         let old = Arc::new(Job::new(&PlaybackPreviewRequest::default()));
@@ -511,13 +608,18 @@ mod tests {
             .unwrap()
             .is_none());
         replacement.ready();
+        assert!(runtime
+            .read_owned_file(&replacement.read().id, ".ready")
+            .await
+            .unwrap()
+            .is_none());
         replacement.cancel();
         assert!(runtime
             .read_owned_file(&replacement.read().id, "live.m3u8")
             .await
             .unwrap()
             .is_none());
-        for path in ["../logs.txt", "a/b.ts", "a\\b.ts", "logs.txt", ""] {
+        for path in [".ready", "../logs.txt", "a/b.ts", "a\\b.ts", "logs.txt", ""] {
             assert!(runtime
                 .read_owned_file(&replacement.read().id, path)
                 .await

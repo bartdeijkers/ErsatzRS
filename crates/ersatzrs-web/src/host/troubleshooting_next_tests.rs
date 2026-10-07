@@ -3,6 +3,79 @@ use ersatzrs_core::repositories::{FfmpegProfileRepository as _, PlayoutRepositor
 use ersatzrs_domain::{FFmpegProfile, PinnedStreamSelection};
 use ersatzrs_infra::hls_worker::build_hls_command_with_opacity_clock;
 
+#[tokio::test]
+async fn next_preview_readiness_requires_generated_playlist_and_current_marker() {
+    let root = tempfile::tempdir().unwrap();
+    tokio::fs::write(root.path().join("ffmpeg.m3u8"), "#EXTM3U\n")
+        .await
+        .unwrap();
+    tokio::fs::write(root.path().join("live000000.ts"), b"segment")
+        .await
+        .unwrap();
+    assert!(!output_ready(root.path()).await.unwrap());
+    tokio::fs::write(root.path().join(".ready"), b"")
+        .await
+        .unwrap();
+    assert!(!output_ready(root.path()).await.unwrap());
+    tokio::fs::write(root.path().join("live.m3u8"), "#EXTM3U\nlive000000.ts\n")
+        .await
+        .unwrap();
+    assert!(output_ready(root.path()).await.unwrap());
+    tokio::fs::remove_file(root.path().join(".ready"))
+        .await
+        .unwrap();
+    assert!(!output_ready(root.path()).await.unwrap());
+}
+
+#[tokio::test]
+async fn next_completed_preview_requires_success_endlist_and_a_referenced_segment() {
+    let root = tempfile::tempdir().unwrap();
+    let playlist = root.path().join("live.m3u8");
+    tokio::fs::write(root.path().join("unrelated.ts"), b"other")
+        .await
+        .unwrap();
+    for body in [
+        "",
+        "#EXTM3U\n",
+        "#EXTM3U\n#EXT-X-ENDLIST\n",
+        "#EXTM3U\nlive000000.ts\n",
+    ] {
+        tokio::fs::write(&playlist, body).await.unwrap();
+        assert!(!completed_output_ready(root.path(), true).await.unwrap());
+    }
+    tokio::fs::write(
+        &playlist,
+        "#EXTM3U\n#EXTINF:1,\nlive000000.ts\n#EXT-X-ENDLIST\n",
+    )
+    .await
+    .unwrap();
+    assert!(!completed_output_ready(root.path(), true).await.unwrap());
+    tokio::fs::write(root.path().join("live000000.ts"), b"segment")
+        .await
+        .unwrap();
+    assert!(completed_output_ready(root.path(), true).await.unwrap());
+    assert!(!completed_output_ready(root.path(), false).await.unwrap());
+    assert!(!output_ready(root.path()).await.unwrap());
+    for reference in [
+        "../unrelated.ts",
+        "folder/unrelated.ts",
+        "folder\\unrelated.ts",
+    ] {
+        tokio::fs::write(&playlist, format!("#EXTM3U\n{reference}\n#EXT-X-ENDLIST\n"))
+            .await
+            .unwrap();
+        assert!(!completed_output_ready(root.path(), true).await.unwrap());
+    }
+    tokio::fs::remove_file(&playlist).await.unwrap();
+    tokio::fs::write(
+        root.path().join("ffmpeg.m3u8"),
+        "#EXTM3U\nlive000000.ts\n#EXT-X-ENDLIST\n",
+    )
+    .await
+    .unwrap();
+    assert!(!completed_output_ready(root.path(), true).await.unwrap());
+}
+
 struct Fixture {
     root: tempfile::TempDir,
     state: NativeAdminTroubleshootingRuntime,
@@ -405,11 +478,17 @@ async fn run_real_preview_configured(mode: remote_runtime::Mode, custom: bool, c
         );
     }
     receiver.await.unwrap().unwrap();
-    let playlist = paths.output.join("ffmpeg.m3u8");
+    let playlist = paths.output.join("live.m3u8");
     assert!(tokio::fs::read_to_string(&playlist)
         .await
         .unwrap()
         .contains("#EXT-X-ENDLIST"));
+    if mode == remote_runtime::Mode::Local && !custom && !canvas {
+        // The real five-second sought output finishes below Next's four-
+        // segment threshold. Reaped final output must still become playable.
+        assert!(!paths.output.join(".ready").exists());
+        assert!(completed_output_ready(&paths.output, true).await.unwrap());
+    }
     assert!(build_troubleshooting_archive_from(&paths.output)
         .await
         .unwrap()

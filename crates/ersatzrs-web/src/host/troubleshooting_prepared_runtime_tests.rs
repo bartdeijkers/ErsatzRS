@@ -30,7 +30,14 @@ pub(super) async fn install(fixture: &Fixture) -> tempfile::TempDir {
         INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","SourceUrl","ProviderLiveness","EffectiveLiveness","Published","MediaItemId")
           VALUES (11,1,'item','Fixture',4,0,'Fixture','https://example.test/unavailable',1,1,1,10);
     "#).execute(pool).await.unwrap();
-    let relative = clip.strip_prefix(&processed).unwrap().to_str().unwrap();
+    // Stored artifact paths use slash-separated components on every platform,
+    // matching the production writer and the confined-file reader's contract.
+    let relative = clip
+        .strip_prefix(&processed)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .replace('\\', "/");
     let bytes = i64::try_from(tokio::fs::metadata(&clip).await.unwrap().len()).unwrap();
     sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("Id","AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","RelativePath","ByteLength","DurationMilliseconds","CreatedAt","UpdatedAt")
           VALUES (1,1,11,'fixture',1,2,?,?,6000,'2026-09-26','2026-09-26')"#)

@@ -4,11 +4,47 @@
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
-verified). Rows1-192 are accepted; rows193-208 are the 16 remaining in-scope
+verified). Rows1-193 are accepted; rows194-208 are the 15 remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
 UCU-09. Existing row acceptance, final local gates, push and terminal green
 exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## Row 193 source map and acceptance
+
+Accepted slice: `432f107e`, troubleshooting first-frame seek correctness.
+Port: serve generated `live.m3u8` for both engines; preserve
+the owned job ID, stale-read refusal, process reaping, cancellation, capacity
+and native/Next cleanup quarantine. No argv, runtime-package, schema, layout
+or row201 preview-window change is included.
+
+- Upstream controller: `Controllers/Api/TroubleshootController.cs` selects
+  the generated playlist, waits for Next `.ready`, and requires two Legacy
+  segments while running.
+- Upstream player: `Pages/Troubleshooting/PlaybackTroubleshooting.razor` passes
+  start position zero; shared `_Host.cshtml` retains default minus one for live
+  channel previews. Existing page geometry and controls are unchanged.
+- Rust API/identity: `api/troubleshooting.rs` and
+  `host/troubleshooting_lifecycle.rs` expose `live.m3u8` on the existing GET
+  redirect and owned job URL. Preserve registry read guards, filename bounds,
+  no-store status, stop/replacement and SSR/no-JS form routes.
+- Rust supervision: `host/troubleshooting_next.rs` requires the fresh `.ready`
+  and generated playlist while running. The published Next marker needs four
+  segments and is not emitted by `finish()`: successful reaped short previews
+  retain a separate final-ENDLIST/referenced-segment fallback. Failed or
+  cancelled previews never gain readiness from that fallback. Native running
+  readiness requires two segments; successful finite EOF retains one.
+- JS boundary: existing `public/channel-preview.js` accepts optional
+  `startPosition = -1`; `public/troubleshooting-preview.js` alone passes zero.
+  Preserve async player identity, subtitle synchronization, autoplay, error
+  reporting and navigation teardown; no Leptos DOM or localization change.
+- Acceptance passes: readiness/EOF, API/job URL, stale-file/ownership checks,
+  real published Next selected-track/callback/short-EOF proof on Linux and
+  native Windows, and first-presented sought frames in both browsers with an
+  ordinary live-edge control and unchanged encoded segments. UCU-09 owns exact
+  source identities, reviewed reuse and results. Final window gates and
+  exact-SHA CI remain separate; approved platform debt is unchanged.
+  Continue at row194 content-duration application acceptance.
 
 ## Row 192 source review and acceptance
 
@@ -414,7 +450,7 @@ remain. See `post-publication-cleanup.json`.
   processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **192**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **193**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -5542,7 +5578,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 190 | `c13ef9c5` | feat: macos bundled ffmpeg (#3054) | Adapt | ADRs 0008/0063/0117; managed FFmpeg9 acquisition and health | `docs(parity): reconcile bundled macOS FFmpeg policy` | ucu-09; preserve unbundled9, explicit overrides, checksum/capability validation before promotion and validated PATH fallback with visible acquisition warning. Exact nine source hashes and upstream diff verified; 16 applicable runtime-policy regressions and independent review pass. All15 upstream package patches already carried/equivalent/inapplicable; no build/release required. macOS application/runtime proof and unpatched operator-WebP risk remain explicit. UCU-09 owns exact evidence and final window gates/CI remain. |
 | 191 | `fdf3b13c` | build: manual develop workflow (#3055) | N/A | Upstream develop-release tagging and .NET artifact/image/signing workflows | `docs(parity): reconcile upstream manual develop workflow` | ucu-09; complete six-file diff and current own CI/release workflow hashes verified. ErsatzRS retains separate verification, tag-triggered releases and explicit stable/beta publication gates; no matching broken develop-tag or signing-environment path. Independent substantive review agrees. No source build, new release or publication-policy change; UCU-09 owns exact evidence and final gates/CI remain open. |
 | 192 | `20c81e63` | fix: unsigned mac ci (#3056) | N/A | Upstream unsigned Xcode bundle and develop/CI workflow scripts | `docs(parity): reconcile unsigned macOS CI repair` | ucu-09; full ten-file diff reviewed and current own workflow hashes verified. Xcode signing-flag forwarding and .NET/macOS artifact callers have no ErsatzRS counterpart; independent review confirms no source correction. Existing own CI/tagged releases and approved explicit unverified macOS application/runtime debt remain. No additional build or publication; UCU-09 owns exact evidence and final gates/CI remain open. |
-| 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | | | | ucu-09; provisional: Port. Next troubleshooting playback now reads `live.m3u8` like the legacy engine and waits for the engine's `.ready` file instead of counting .ts segments, and the preview player passes `startPosition: 0` so a playlist without an endlist does not start at the live edge. ErsatzRS still splits the playlist name per engine (`crates/ersatzrs-web/src/api/troubleshooting.rs:109`) and its preview builds hls.js without a start position (`crates/ersatzrs-web/public/channel-preview.js:152`), while the Next `.ready` file already exists (`next_engine/process.rs:265`). Claude 2026-10-05 triage. |
+| 193 | `432f107e` | fix: troubleshooting playback seek point (#3057) | Port | ersatzrs-web API, preview supervision and shared player | `fix(web): start troubleshooting playback at the requested seek point` | ucu-09; generated live playlist and current Next marker, successful reaped short-EOF fallback, native two-segment running readiness and diagnostic first-segment player start. 34 focused/831 web and six Linux runtime checks; corrected Windows7/21/5 and both browsers21 each pass, with exact source/reuse identities, strict lint and independent review. Existing owned-file/cancellation/cleanup safety and ordinary live edge remain. No runtime package build or row201 change; final gates/CI remain open. |
 | 194 | `fb75ce8c` | fox: local library duration (#3058) | | | | ucu-09; pending application correction and acceptance. Preserve highest-bitrate non-attached video duration, complete-audio maximum and valid Matroska DURATION/DURATION-language parsing. Exact FFmpeg9 fixture additionally reports numeric video duration20 with tag1 and video packets ending at1; generic FFmpeg timing can synthesize the numeric value from container duration. Guard that conflict in the scanner rather than copying numeric-first parsing unchanged; test missing, malformed and conflicting tags, preserve other-container precedence and decode schedule handoff. No FFmpeg binary patch is justified. ADR0117/UCU-09 record source and probe evidence. |
 | 195 | `007b3415` | feat: local deep scan (#3059) | | | | ucu-09; provisional: Port. A `--deep` option on scan-local bypasses the unchanged/etag short-circuits in all six local folder scanners and refreshes metadata, artwork and statistics anyway, with a Libraries button and a confirmation dialog warning it takes much longer. ErsatzRS already threads `deep_scan` through the provider scans (`crates/ersatzrs-scanner/src/main.rs:45`), but no local scanner consumes it and the season fast path has no bypass (`crates/ersatzrs-scanner/src/local_television.rs:561`), so the local half plus the localized admin surface is the gap. Claude 2026-10-05 triage. |
 | 196 | `ffa4743e` | build: windows artifact size (#3060) | | | | ucu-09; provisional: N/A (.NET publish specifics: drop the ~100 MB SkiaSharp native pdb from the Windows publish output and move to the EFCore.BulkExtensions.Core package). ErsatzRS ships one static Rust binary and uses no EF package, so neither change has a counterpart; Windows package contents are already covered by the row-176 packaging evidence. Claude 2026-10-05 triage. |

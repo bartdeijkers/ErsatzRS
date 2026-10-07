@@ -105,12 +105,12 @@ pub async fn playback_preview(
     State(state): State<AppState>,
     Query(query): Query<PlaybackPreviewQuery>,
 ) -> Response {
-    let playlist = match query.streaming_engine {
-        StreamingEngine::Legacy => "/iptv/session/.troubleshooting/live.m3u8",
-        StreamingEngine::Next => "/iptv/session/.troubleshooting/ffmpeg.m3u8",
-    };
-    match state.application.start_playback_preview(query.into()).await {
-        Ok(()) => Redirect::temporary(playlist).into_response(),
+    playback_preview_response(state.application.start_playback_preview(query.into()).await)
+}
+
+fn playback_preview_response(result: Result<(), AdminTroubleshootingRuntimeError>) -> Response {
+    match result {
+        Ok(()) => Redirect::temporary("/iptv/session/.troubleshooting/live.m3u8").into_response(),
         Err(AdminTroubleshootingRuntimeError::NotFound(error)) => {
             tracing::warn!(%error, "playback troubleshooting preview cannot be started");
             preview_startup_failure(StatusCode::NOT_FOUND, &error)
@@ -289,6 +289,16 @@ fn zip_response(bytes: Vec<u8>, filename: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn successful_preview_response_redirects_to_generated_live_playlist() {
+        let response = playback_preview_response(Ok(()));
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(
+            response.headers()[header::LOCATION],
+            "/iptv/session/.troubleshooting/live.m3u8"
+        );
+    }
 
     #[tokio::test]
     async fn preview_startup_failure_exposes_only_safe_action_codes() {

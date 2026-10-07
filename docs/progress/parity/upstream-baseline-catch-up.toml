@@ -4,7 +4,9 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-192/208 rows accepted; rows193-208 remain pending through v26.11.1.
+193/208 rows accepted; rows194-208 remain pending through v26.11.1.
+193 Port: generated preview playlist, current readiness and first-frame seek;
+Linux/Windows runtime, both browsers, strict lint and independent review pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward are later work and do not reopen UCU-09.
 ADR 0117 accepts qualifying Next corrections.
@@ -51,14 +53,9 @@ UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
 chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
 the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
 
-Row 23 is Port: version-bound image selection preserves Dutch subtitles,
-explicit off and alternate audio in decoded two-track PGS playback.
-
-Rows24-29 have decoded, browser and regression proof for Burn/Convert,
-authenticated WebVTT, caption caches, watermarks, scaling and provider selection;
+Rows23-30 have decoded/browser proof for track selection, captions, graphics,
+provider selection and Next Hybrid; ADR0099 retains converted text on HLS.
 UCU-02 owns the detailed evidence.
-Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
-Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
 68-71: Plex/Classic continuity. 75: NVIDIA overlay passes; AMD live unproven.
 76-77: Classic anchors/checkpoints.
 RGB opacity is proven; UCU-09 owns evidence.
@@ -67,6 +64,13 @@ prepared, retained and ordinary sources, including supported captions and
 independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
 explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
 """
+
+[[debt]]
+id = 'ucu09-row193-troubleshooting-seek'
+description = 'Use generated troubleshooting playlists, current Next readiness and first-segment player start while preserving successful short-preview EOF and owned cancellation/cleanup.'
+discovered = '2026-10-07'
+evidence = 'Row193 is Port. Both engines serve the generated playlist; Next requires its current marker while running and permits successful reaped short EOF only with a referenced final segment. Native running readiness requires two matching segments. First-presented sought frames, Dutch captions and independently decoded selected audio pass in Chromium and Firefox; normal player live edge is preserved. UCU-09 owns 34 focused/831 web checks, six real Linux previews, complete corrected Windows 7 process/21 portable/5 real checks, strict lint, exact source identities and independently reviewed correction deltas. Original failed attempts remain retained. Final window gates and exact-SHA CI are open.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row187-block-history'

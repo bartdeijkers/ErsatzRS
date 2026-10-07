@@ -490,7 +490,13 @@ async fn supervise(
         tokio::select! {
             status = process.wait() => {
                 let status = status?;
-                if status.success() && output_ready(working).await? {
+                // A short successful preview can finish before Next publishes
+                // its four-segment readiness marker. Only reaped success may
+                // use the final generated playlist in that case.
+                if !cancellation.is_cancelled()
+                    && completed_output_ready(working, status.success()).await?
+                    && !cancellation.is_cancelled()
+                {
                     if let Some(job) = lifecycle::job(ownership) { job.ready(); }
                     notify(ready, Ok(()));
                 }
@@ -498,8 +504,10 @@ async fn supervise(
             }
             result = wait_output(working) => {
                 result?;
-                if let Some(job) = lifecycle::job(ownership) { job.ready(); }
+                if !cancellation.is_cancelled() {
+                    if let Some(job) = lifecycle::job(ownership) { job.ready(); }
                     notify(ready, Ok(()));
+                }
                 Ok(process.wait().await?)
             }
         }
@@ -542,8 +550,40 @@ fn notify(ready: &mut Readiness, value: Result<(), &'static str>) {
 }
 
 async fn output_ready(folder: &FsPath) -> ApiResult<bool> {
-    Ok(tokio::fs::try_exists(folder.join("ffmpeg.m3u8")).await?
-        && count_segments(&folder.to_owned(), "ts").await? > 0)
+    Ok(tokio::fs::try_exists(folder.join("live.m3u8")).await?
+        && tokio::fs::try_exists(folder.join(".ready")).await?)
+}
+
+async fn completed_output_ready(folder: &FsPath, succeeded: bool) -> ApiResult<bool> {
+    if !succeeded {
+        return Ok(false);
+    }
+    let playlist = match tokio::fs::read_to_string(folder.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if !playlist.lines().any(|line| line.trim() == "#EXT-X-ENDLIST") {
+        return Ok(false);
+    }
+    for segment in playlist.lines().map(str::trim) {
+        // The generated playlist names local TS members; never infer playable
+        // output from an unrelated segment or an out-of-folder reference.
+        if !segment.starts_with('#')
+            && !segment.contains(['/', '\\'])
+            && !segment.contains("..")
+            && matches!(
+                FsPath::new(segment)
+                    .extension()
+                    .and_then(|ext| ext.to_str()),
+                Some("ts")
+            )
+            && tokio::fs::try_exists(folder.join(segment)).await?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn wait_output(folder: &FsPath) -> ApiResult<()> {
