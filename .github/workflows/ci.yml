@@ -480,7 +480,12 @@ jobs:
           echo "ETV_NEXT_FOLDER=$runtime_tmp/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_FFMPEG_DIR=$runtime_tmp/ffmpeg" >> "$GITHUB_ENV"
       - name: Full Playwright E2E suite
-        run: scripts/e2e/playwright-e2e.sh --project=${{ matrix.project }}
+        run: |
+          export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
+          export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
+          ffmpeg_bin_dir="$(dirname "$FFMPEG_PATH")"
+          export PATH="$ffmpeg_bin_dir:$PATH"
+          scripts/e2e/playwright-e2e.sh --project=${{ matrix.project }}
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7

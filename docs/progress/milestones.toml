@@ -962,8 +962,23 @@ browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the
 supported MPEG-TS/HLS/browser behavior; chooses page/language/region and
 accessibility semantics; and records the six-RID FFmpeg/libzvbi packaging and
 fallback contract before schema or pipeline work begins.
+Revalidate the completed UCU source baseline. The ADR records an explicit
+native/Next engine, source-lifecycle and output matrix, including Next
+Burn/Convert, video copy, finite/prepared inputs and live/one-shot sources.
+Preserve exact selection and source ownership under ADR 0100; classify any
+browsing/sidecar endpoint under existing listener and API policies. Authored
+pages, if selected, reuse shared programme context while retaining a distinct
+teletext encoding/carriage decision.
 '''
-evidence = ''
+evidence = '''
+2026-10-07 maintainer-authorized planning refresh accounts for current Next,
+subtitle/provider identity, runtime, SQLite and admin boundaries. The plan and
+owning parity debt are aligned; product/standards acceptance remains open.
+No teletext schema, API, runtime capability or implementation is delivered.
+Planning validation passes: progress check, local documentation links and diff
+whitespace checks. Scoped comparison preserves all other milestone records,
+teletext statuses/dependencies and the active phase/focus.
+'''
 
 [[milestone]]
 id         = 'dtx-a-01'
@@ -1035,6 +1050,10 @@ Every first-party FFmpeg 9 RID either ships and startup-probes the accepted
 libzvbi teletext decoder contract or has an explicit supported-platform
 decision. Operator runtimes report capability accurately, and missing optional
 support is visible without breaking unrelated playback.
+Verify decoder options and a bounded functional fixture against exact pinned
+artifacts, including packaged dependencies. Reuse existing managed-runtime
+acquisition and probes. UCU-specific platform/hardware exceptions do not waive
+these teletext gates without a separate accepted decision.
 '''
 evidence = ''
 
@@ -1050,8 +1069,11 @@ acceptance = '''
 Local and supported remote scans identify DVB teletext streams and persist the
 approved service/page, subtitle flag, language, region/character-set, stream
 index, and source provenance without conflating teletext with DVB bitmap or
-ordinary text subtitles. SQLite/MySQL, rescan, missing-file, and version
-selection behavior are regression-proven.
+ordinary text subtitles. SQLite, rescan, missing-file, and version selection
+behavior are regression-proven. Multiple pages in one stream retain distinct
+source/version/stream/page identities and selection. Source replacement and
+rescan invalidate stale page state without losing provider track identity or
+ordinary subtitle/alternate-audio metadata.
 '''
 evidence = ''
 
@@ -1068,6 +1090,12 @@ Application and playback selection honor page, language, forced/default, and
 channel/global preferences. The accepted contract is implemented for burn-in,
 extraction, MPEG-TS carriage or passthrough, and HLS/browser fallback without
 advertising an unsupported teletext encoder or full-page service.
+Prove every supported native/Next matrix combination, including Next
+Burn/Convert and video-copy policy; unsupported exact selections fail visibly
+without silent caption loss, engine switching or double consumption of a
+one-shot source. Existing bounded preparation gains page-aware identity,
+deadlines, cancellation and atomic artifact publication. Mid-cue seek, edited
+source timelines and chunk/programme handoff retain caption timing and audio.
 '''
 evidence = ''
 
@@ -1084,6 +1112,15 @@ Localized admin/troubleshooting surfaces show teletext type, page, language,
 selection, capability, and failures. Licensed or redistributable DVB fixtures
 prove scan, rescan, select, seek/restart, direct MPEG-TS, HLS fallback,
 accessibility behavior, health reporting, and client-visible output end to end.
+All supported admin cultures and matched hydrated/no-JS Chromium/Firefox flows
+cover the changed surfaces. Route tests preserve management, machine-API and
+internal-callback separation. Decoded fixtures cover multiple pages in one
+stream, multilingual text, alternate audio, source changes, stale artifacts,
+cancellation, runtime refresh, missing capabilities and the accepted engine/copy
+matrix. TSDuck and client evidence verify separate subtitle/teletext carriage
+when it is selected by the ADR.
+Existing workspace closeout, Clippy, Leptos, parity-check, smoke, changed-output
+TSDuck and progress validation gates remain required.
 '''
 evidence = ''
 
@@ -11421,6 +11458,21 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-07 CI 37679761724 at 0eeb39f4 passes Format, documentation, cargo
+deny, Clippy, all3687 ordinary Rust cases and all412 Next cases, plus actual
+Next HTTP Burn/preview and Hybrid Convert smokes. Chromium records320 passes,
+five existing skips and15 failures: fixture commands omit the provisioned
+FFmpeg path and invoke a runner-local executable missing libavdevice.so.62.
+The CI entry now supplies the existing fixture variables and prepends the
+pinned executable directory to PATH. Both resolutions verify the expected
+e8783412 executable digest, and workflow lint passes. No fixture assertion,
+production source or runtime package changed. The maintainer cancels this CI
+run and requests a pre-reboot push with runners stopped; its original logs,
+JSON and uploaded Chromium/Firefox artifacts remain preserved. Replacement
+full CI must finish green on the pushed exact commit after runner restart.
+UCU-09 and stable v1.1.0 publication remain pending; approved debt stays
+explicitly unverified.
+
 2026-10-07 complete Firefox CI at 47004a46 retains 302 passes, 36 existing
 conditional skips and two fixture failures. The scan fixture now uses the
 existing bounded SQLite busy timeout before acquiring its write transaction.

@@ -18,6 +18,9 @@ flowchart LR
     System -->|starts versioned capability operations| Addon[Installed add-on executable]
     Addon -->|returns health, metadata, or media bytes| System
     System -->|probes and transforms media| MediaTools[FFmpeg and ffprobe]
+    System -->|supervises selected-engine playback| Next[ErsatzTV Next executable]
+    Next -->|opens session-bound media and graphics| System
+    Next -->|transcodes selected tracks| MediaTools
 ```
 
 ErsatzRS owns channel construction, scheduling, guide projection, streaming,
@@ -36,6 +39,7 @@ flowchart LR
     Sources[Media files and provider systems]
     Repository[Operator-managed checkout<br/>or offline bundle]
     Addon[Installed add-on<br/>external child application]
+    Next[ErsatzTV Next<br/>external child application]
     MediaTools[FFmpeg and ffprobe<br/>external child applications]
 
     subgraph ErsatzRS[ErsatzRS software system]
@@ -62,6 +66,9 @@ flowchart LR
     Web -->|starts bounded capability operations| Addon
     Scanner -->|starts list and play operations| Addon
     Web -->|probes and transcodes media| MediaTools
+    Web -->|supervises process and publishes configuration/playouts| Next
+    Next -->|authenticated internal media and graphics callbacks| Web
+    Next -->|runs configured media tools| MediaTools
     Scanner -->|probes media| MediaTools
     Addon -->|may invoke managed tools| MediaTools
 ```
@@ -72,8 +79,17 @@ scanner executable is a separate one-shot application. The Windows launcher is
 a real application only on Windows, and the healthcheck binary is a small
 readiness client.
 
-Installed add-ons and media tools cross an external child-process boundary;
+Installed add-ons, Next and media tools cross an external child-process boundary;
 they are not ErsatzRS crates or dynamically loaded libraries.
+Next is an integrated alternative to the native FFmpeg pipeline. The host retains
+selection, source ownership, session admission and process cleanup; Next consumes
+published channel/playout data and uses the configured FFmpeg runtime. Internal
+callbacks use the host's loopback listener, with session-bound access, separately
+from public streaming and management routes. [ADR 0095](../adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
+owns engine selection and runtime availability; [ADR 0102](../adr/0102-isolate-http-listener-route-surfaces.md)
+owns listener isolation. Acquisition/default and platform acceptance remain in
+the [catch-up record](../progress/parity/upstream-baseline-catch-up.toml).
+
 The database owns local-source, installation, setting, media, schedule, and
 playout state; the managed state directories own immutable packages and
 per-add-on data. [ADR 0051](../adr/0051-application-boundary-and-composition-root.md)

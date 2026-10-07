@@ -13,6 +13,22 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Use the checksum-verified managed FFmpeg for browser fixture commands and
+  PATH lookup, avoiding runner-local binaries with missing shared libraries.
+
+### Changed
+
+- Refresh the queued teletext plan for native and Next playback, exact page and
+  source identity, SQLite persistence and current runtime/admin boundaries.
+  Preserve the product decision and platform/runtime acceptance gates after UCU.
+
+### Security
+
+- Update the transitive CI tooling dependency `fast-uri` to 3.1.8 to fix URI
+  authority injection, host confusion and host normalization vulnerabilities.
+
 ## [1.1.0] - 2026-10-07
 
 ### Security
