@@ -63,6 +63,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve consumed Classic programme and filler history when repairing future
+  overlaps or retaining prefetched programmes during Refresh/Reset. Keep history
+  cleanup anchored to the originally requested start time.
+
 - Preview the complete 30-second Next channel troubleshooting window, including
   scheduled handoffs and configured gap filler. Keep historical callbacks valid,
   preserve per-programme audio/subtitle choices and apply the selected preview

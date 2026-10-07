@@ -557,7 +557,7 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         if let Some(error) = context.error.take() {
             return Err(error);
         }
-        let result = context.into_result();
+        let result = context.into_result(requested_start);
         validate_classic_timeline(
             result
                 .added_items
@@ -2241,7 +2241,7 @@ impl ClassicContext {
         })
     }
 
-    fn into_result(mut self) -> SchedulingResult {
+    fn into_result(mut self, cleanup_start: DateTime<Utc>) -> SchedulingResult {
         self.result.clear_items = matches!(
             self.request.mode,
             PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
@@ -2261,9 +2261,11 @@ impl ClassicContext {
         self.result.program_schedule_anchors = self.program_schedule_anchors();
         self.result.classic_checkpoints = self.classic_checkpoints();
         self.result.fill_group_indices = self.fill_group_indices();
+        // Preserving a programme advances generation, not the history cleanup
+        // clock; retained current and prefetched history must keep its identities.
         self.result.history_to_remove.extend(cleanup_history(
             &self.request.reference_data.existing_history,
-            self.request.start,
+            cleanup_start,
             self.request.reference_data.max_playout_offset,
         ));
         self.result

@@ -731,7 +731,9 @@ mod tests {
             .iter()
             .any(|result| result.title == "ErsatzTV Downgrade"
                 && result.status == HealthCheckStatus::Fail));
-        assert_eq!(run.summary.errors, 1);
+        // Runtime availability depends on the host; the seeded downgrade must
+        // fail, and the persisted summary must include every reported result.
+        assert_eq!(run.summary, HealthCheckSummary::from_results(&run.results));
 
         let store = SqlHealthCheckStore::new(pool);
         assert_eq!(
@@ -739,8 +741,8 @@ mod tests {
             run.summary
         );
         assert_eq!(
-            store.load_results().await.expect("load results").len(),
-            run.results.len()
+            store.load_results().await.expect("load results"),
+            run.results
         );
     }
 
