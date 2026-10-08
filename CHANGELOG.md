@@ -64,6 +64,8 @@ release section when tagging a release.
   PATH lookup, avoiding runner-local binaries with missing shared libraries.
 - Measure live playback throughput with a monotonic clock so host clock
   synchronization cannot create false delivery stalls in browser acceptance.
+- Wait for the add-on import landing to finish its automatic navigation before
+  testing the prepared workspace, preserving the overview and task-count checks.
 
 - Preserve consumed Classic programme and filler history when repairing future
   overlaps or retaining prefetched programmes during Refresh/Reset. Keep history
@@ -858,6 +860,10 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Refresh the README, installation overview, and release requirements for the
+  stable Linux, Windows, and Docker release line. Explain bundled Next,
+  managed FFmpeg, and the platform/hardware acceptance that remains unverified.
 
 - Refresh the queued teletext plan for native and Next playback, exact page and
   source identity, SQLite persistence and current runtime/admin boundaries.

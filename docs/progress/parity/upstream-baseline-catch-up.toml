@@ -4,8 +4,8 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-208/208 accepted; local gates and clock checks in both browsers pass; UCU-09 owns proof.
-Terminal exact-SHA CI remains open.
+208/208 accepted; local gates and both-browser clock/import checks pass.
+UCU-09 owns proof; final exact-SHA CI and package publication remain open.
 201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
 202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
 200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
@@ -17,7 +17,7 @@ Terminal exact-SHA CI remains open.
 pass on Linux/Windows; final window gates remain open.
 193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
-Rows209 onward are later work and do not reopen UCU-09.
+Rows209 onward remain outside UCU-09.
 Next0362692 six-RID pins and independent retirement for both patches remain;
 row186 owns package CI and runtime/cleanup.
 Windows Next/JavaScript/chapter proof passes in all four profile languages.

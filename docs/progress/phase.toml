@@ -61,6 +61,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-09 UCU-09: candidate ea8e2839 passes all3687 Rust and all412 Next CI
+cases plus both actual Next smokes. Chromium334/five skips has one import
+navigation race, now corrected with unchanged assertions and both-browser proof.
+The milestone owns the trace and import-landing-focus-01 acceptance. Stable
+README/onboarding/runtime requirements and changelog are refreshed; keep debt
+explicitly unverified. Firefox completes310 cases with30 existing conditional
+skips. Commit/push the verified test/documentation candidate, require full
+terminal exact-SHA CI, then build,
+accept and publish stable v1.1.0. Preserve the row208/v26.11.1 scope boundary.
+
 2026-10-08 UCU-09: the browser elapsed-time correction passes in both browsers;
 the milestone owns its monotonic-clock proof and unchanged playback assertions.
 Prior CI has 334 Chromium passes plus that corrected measurement failure;

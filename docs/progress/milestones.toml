@@ -11458,6 +11458,23 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-09 CI37850083492 at ea8e2839 passes all3687 ordinary Rust tests,
+all412 Next tests and actual Burn/preview and Hybrid Convert playback smokes.
+Chromium has334 passes, five existing skips and one import navigation race.
+Its trace retains the ImportLandingIsland while the fixture treats its shared
+heading as workspace readiness; its automatic reload aborts the following goto.
+The fixture now waits for addon-import-landing to disappear before checking
+hydration. The unchanged166-entry/task-count case passes in both browsers,
+without skips or retries, in import-landing-focus-01/ under
+tmp/ucu09-final-gates-09c237a4/. The monotonic playback case passes in full CI.
+Firefox completes310 cases with30 existing conditional skips on that candidate.
+README and the linked installation
+overview, tutorial and runtime requirements now describe stable v1.1.0,
+bundled Next and managed FFmpeg, retaining explicit unverified hardware/platform
+acceptance debt; all68 local documentation links and whitespace checks pass.
+These test/documentation corrections still require terminal full exact-SHA CI
+on their final commit, fresh package acceptance and stable publication.
+
 2026-10-08 CI 37686248925 at 917825e3 passes all 3687 ordinary Rust cases,
 all 412 Next cases and its actual Burn/preview/Hybrid Convert smokes, plus
 lint, format, documentation and dependency checks. Chromium has 334 passes,

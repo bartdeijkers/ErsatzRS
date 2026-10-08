@@ -1,7 +1,7 @@
 # Build your first channel
 
 This tutorial takes you from a new Windows installation to a playable channel.
-You will start the published beta archive, scan a small local movie library,
+You will start the Windows release archive, scan a small local movie library,
 create a collection and schedule, and open the resulting stream.
 
 You will finish with a working example of the main ErsatzRS path:

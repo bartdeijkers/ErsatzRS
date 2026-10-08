@@ -5,8 +5,8 @@ ErsatzRS.
 
 ## Release status
 
-ErsatzRS is currently beta software. Back up persistent state before updating
-and review the release notes for migration or packaging changes.
+The stable release line starts at v1.1.0. Back up persistent state before
+updating and review the release notes for migration or packaging changes.
 
 ## Published packages
 
@@ -20,10 +20,14 @@ Normal releases currently publish:
 | `ersatzrs-<tag>-win-x64.zip` | Windows x86-64 |
 | `ghcr.io/bartdeijkers/ersatzrs:<tag>` | Linux amd64, arm64, and arm/v7 |
 
-The current beta release line publishes only the Windows archive. Normal
-release tags use the broader table above. macOS x86-64 and Apple Silicon remain
+Beta tags may publish only the Windows archive. Stable release tags use the
+table above. macOS x86-64 and Apple Silicon remain
 supported build targets, but the active release workflow does not currently
 publish macOS archives.
+
+ARMv7, ARM64, Intel macOS, and Apple Silicon macOS application acceptance for
+Next, JavaScript audio selection, and chapter expressions remains explicitly
+unverified. Building or publishing an archive does not establish that acceptance.
 
 ## Network requirements
 
@@ -66,6 +70,17 @@ ErsatzRS normally downloads the matching first-party runtime and stores it in
 persistent state. An offline installation must provide a compliant explicit or
 pre-placed runtime.
 
+The v1.1.0 release pins checksum-verified ErsatzRS-ffmpeg v2.0.6 packages.
+
+## Next requirement
+
+New channels and standalone previews default to Next. Official archives and
+Docker images include the pinned `next-0362692-ersatzrs.1` engine, its license,
+and provenance. A source installation downloads and verifies that engine when
+no compatible bundled or managed copy exists. Keep verified runtime files for
+offline operation. Existing channels retain their selected playback engine,
+and Native remains an explicit choice.
+
 ## Database support
 
 - SQLite is the sole supported backend and requires no separate database
@@ -97,3 +112,7 @@ VAAPI, QSV, AMF, VideoToolbox, RKMPP, and V4L2M2M paths where available.
 
 The host must supply devices and drivers. Published `linux/arm/v7` Docker images
 are CPU-only for this release line.
+
+Intel QSV, AMD AMF, and native Linux NVIDIA interop validation remains explicitly
+unverified. Available software playback evidence does not prove these hardware
+paths. Confirm the relevant host/device combination before relying on it.

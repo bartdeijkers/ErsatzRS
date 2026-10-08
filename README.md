@@ -1,90 +1,97 @@
 # ErsatzRS
 
-ErsatzRS is a from-scratch Rust reimplementation of
-[ErsatzTV Legacy](https://github.com/ErsatzTV/legacy): a media server that turns
-personal media libraries into linear TV channels served through IPTV, HLS, and
-HDHomeRun-compatible endpoints.
+ErsatzRS turns your local, Plex, Jellyfin, or Emby media library into scheduled
+TV channels. Watch them through IPTV clients using M3U playlists, XMLTV guides,
+MPEG-TS or HLS streams, and HDHomeRun-compatible endpoints.
 
-The project is currently in **beta** stage.
+It is a from-scratch Rust reimplementation of
+[ErsatzTV Legacy](https://github.com/ErsatzTV/legacy), with a web administration
+interface, a bundled Next playback engine, and managed FFmpeg runtimes.
 
-## Goals
+The stable release line starts at **v1.1.0**. Read the
+[changelog](CHANGELOG.md#110---2026-10-09) for features, fixes, and breaking changes.
 
-- Reach feature parity with ErsatzTV Legacy first and then fork into a 'next' version with opinionated changes.
-- Use FFmpeg 9.x as a hard runtime requirement, normally acquired from the
-  first-party `ErsatzRS-ffmpeg` release at startup.
-- Replace the external graphics-renderer process with FFmpeg 9 `drawvg`
-  filters and generated VGS templates.
-- Keep the project public-open-source ready, even while development starts as a
-  solo-maintainer effort.
+## What you can do
 
-## Current Status
+- Build channels from local libraries or connected media servers, using manual
+  and smart collections, schedules, and playouts.
+- Choose alternate audio and subtitles, including language preferences and
+  JavaScript audio selectors.
+- Use Next for new channels and playback previews, or explicitly choose the
+  Native engine. Existing channels retain their selected engine.
+- Add channel logos, watermarks, and broadcast graphics. Native graphics use
+  FFmpeg's `drawvg` filters without a separate graphics renderer.
+- Configure compatible playback profiles, including SDR/HDR output and
+  hardware acceleration where the host and drivers support it.
+- Inspect health checks and playback diagnostics, and extend media discovery
+  with separately installed add-ons.
 
-**Phase 9: Teletext support.** Phases 0–8 are complete. SDR/HDR10 output is now
-an explicit profile contract, Dolby Vision input is characterized, the
-Vulkan/libplacebo path is functionally gated with a proven fallback, and the
-FFmpeg 9 command and media-input hardening has landed. The "The Box"
-video-jukebox extension is Phase 10. See [STATUS.md](STATUS.md) for the
-queryable current phase, parity, and session sources.
+## Install and start
 
-## Quick start
+Download an archive from [ErsatzRS releases](https://github.com/bartdeijkers/ErsatzRS/releases),
+or use the versioned Docker image. Follow the guide for your deployment:
 
-The current beta release line publishes a Windows x86-64 archive. Download and
-extract `ersatzrs-<tag>-win-x64.zip`, then run `ErsatzRS.exe` from the extracted
-folder. On first startup, ErsatzRS downloads and validates its matching
-first-party FFmpeg runtime.
+| Deployment | Start here |
+|---|---|
+| Windows | [Install on Windows](docs/how-to/install-on-windows.md); extract the complete archive and run `ErsatzRS.exe` |
+| Linux | [Install on Linux with systemd](docs/how-to/install-on-linux.md) |
+| Docker | [Install with Docker](docs/how-to/install-with-docker.md) |
 
-Follow [Build your first channel](docs/tutorials/getting-started.md) for the
-complete local-media workflow. Normal release tags can also publish the
-multi-architecture image described in
-[Install with Docker](docs/how-to/install-with-docker.md). Development setup
-lives in [BUILD.md](BUILD.md).
+The release includes its pinned Next engine. On first startup, ErsatzRS
+downloads and checksum-verifies its matching first-party FFmpeg runtime.
+Allow internet access for that acquisition, or prepare the documented offline
+runtime. Keep the server, `site/`, `assets/`, and Next files from the same archive
+together; the browser interface needs the matching JavaScript and WASM assets.
 
-## Key Resources
+Once startup finishes, open <http://localhost:8409>. Follow
+[Build your first channel](docs/tutorials/getting-started.md) to scan a local
+library and create a playable channel.
 
-Project contracts and decisions:
+See [system requirements](docs/reference/system-requirements.md) for the package
+matrix, runtime requirements, and unverified platform/hardware combinations.
+macOS remains a supported build target but has no archive in this release line.
 
-- [STATUS.md](STATUS.md) — current phase, checklist, gaps, session log.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — crate layout, dependency rules.
-- [PORTING.md](PORTING.md) — ErsatzTV porting workflow and critical files.
-- [plans/INDEX.md](plans/INDEX.md) — detailed future implementation plans.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution workflow.
-- [STYLE.md](STYLE.md) — Rust/SQL naming, errors, parity code rules.
-- [TEST.md](TEST.md) — Leptos hydration rules and test playbook format.
-- [docs/adr/](docs/adr/) — architectural decision records.
+## Operate your server
 
-## Documentation
-
-Documentation follows the Diátaxis structure under [docs/](docs/README.md):
-
-- Tutorials teach through a guided path.
-- How-to guides solve specific tasks.
-- Reference pages provide lookup material.
-- Explanation pages describe background and tradeoffs.
-
-Common end-user guides:
-
-- [Install on Windows](docs/how-to/install-on-windows.md)
-- [Install on Linux with systemd](docs/how-to/install-on-linux.md)
 - [Add and scan a local library](docs/how-to/add-and-scan-a-local-library.md)
 - [Connect a Jellyfin server](docs/how-to/connect-a-jellyfin-server.md)
 - [Connect an IPTV client](docs/how-to/connect-an-iptv-client.md)
+- [Install and manage an add-on](docs/how-to/manage-addons.md)
 - [Back up and restore ErsatzRS](docs/how-to/back-up-and-restore.md)
 - [Troubleshoot startup and playback](docs/how-to/troubleshoot-startup-and-playback.md)
 
-## Development Requirements
+Keep SQLite state on a local filesystem and back it up before updating. Network
+shares and multiple active servers sharing one database are unsupported. Use a
+trusted LAN, VPN, or authenticated reverse proxy for administration.
+
+The [documentation home](docs/README.md) brings together tutorials, task guides,
+reference material, and explanations.
+
+## Project status
+
+The v1.1.0 catch-up window covers ErsatzTV Legacy through **v26.11.1**.
+Implementation progress, acceptance evidence, deliberate deviations, and
+remaining debt are tracked in [docs/progress/](docs/progress/README.md).
+
+Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
+planned work. They are not advertised as features of this release.
+
+## Develop and contribute
 
 - Rust stable, pinned through [rust-toolchain.toml](rust-toolchain.toml).
 - Network access for the first managed FFmpeg runtime download, or an explicit
   FFmpeg 9.x override/pre-placed managed runtime for offline development.
-- SQLite as the sole supported database backend (created at
-  `~/.ersatzrs/ErsatzRS.db`). Keep the database on a local filesystem with
-  correct locking semantics; network shares and active-active servers are not
-  supported.
-- For interactive UI development: `cargo install cargo-leptos --locked`, then use
-  the `./run.sh` dev entry point (`./run.sh dev` for hot-reload, `./run.sh build`
-  for a CI-parity one-shot build that generates the WASM hydration assets). On
-  Windows use the [`run.cmd`](run.cmd) shim. See [BUILD.md](BUILD.md) for the full
-  command reference.
+- SQLite as the sole supported database backend; no separate database server is
+  required.
+- For interactive UI development, use the `./run.sh` entry point: `./run.sh dev`
+  for hot reload or `./run.sh build` for a build with matching WASM hydration
+  assets. On Windows use the [run.cmd](run.cmd) shim. See [BUILD.md](BUILD.md)
+  for tool installation and the full command reference.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before making changes. The
+[architecture](ARCHITECTURE.md), [porting workflow](PORTING.md),
+[coding style](STYLE.md), [test contract](TEST.md), and
+[architectural decisions](docs/adr/) describe the project conventions.
 
 ## Credits
 
