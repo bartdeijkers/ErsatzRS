@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-07): `5f5d28154d9a7f9a3aa26bf821647ebdab5fdafc`
-  — build: pin a specific next version (#3070).
+- Latest fetched target (`origin/main`, 2026-10-08): `cef9793aaba701178ad402d5ec2cb0f7943b632b`
+  — refactor: remove imagesharp dependency; update others (#3072).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -626,6 +626,8 @@ remain. See `post-publication-cleanup.json`.
   A later 2026-10-07 refresh appends scoped release tokens and the pinned Next
   version as pending rows 211-212; all 210 existing SHA/subject pairs remain an
   exact prefix.
+  The 2026-10-08 refresh appends the ImageSharp removal as pending row 213; all
+  212 existing SHA/subject pairs remain an exact prefix.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
@@ -5782,3 +5784,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 210 | `d89f6156` | docs: update changelog for next fix | | | | Post-v26.11.1 work outside UCU-09; provisional: N/A for the diff (three upstream CHANGELOG lines; no source change). The entry describes a Next-engine fix outside this repository: VAAPI playback froze at the end of items on channels with an Intermittent watermark, most often music videos whose audio outlives their video, logged as an ffmpeg stall. Worth carrying into the runtime audit rather than a row: ErsatzRS has its own intermittent watermark path (`crates/ersatzrs-infra/src/next_engine/watermark.rs`, with runtime proof in `next_engine/intermittent_watermark_runtime_tests.rs`), so whether the same end-of-item stall appears belongs with the accepted hardware debt. Claude 2026-10-07 triage. |
 | 211 | `9d60b28e` | build: scope app tokens (#3069) | | | | ucu-09; provisional: N/A (upstream-only GitHub Actions change: the release-repository input becomes a name under the same owner and each app token is scoped to that repository). ErsatzRS publishes from its own repository with its own CI, as rows 191, 192 and 202 recorded. Claude 2026-10-07 triage. |
 | 212 | `5f5d2815` | build: pin a specific next version (#3070) | | | | ucu-09; provisional: N/A for the diff, with one thing to compare. Upstream adds a NEXT_PIN file plus scripts that download exactly that Next build per target (currently `v0.2.0-96aa6cb6-develop`) instead of the latest one. ErsatzRS already acquires a pinned Next engine before startup (`af7eb835`) with verified bytes, and its wire contracts are pinned in `crates/ersatzrs-infra/src/next_engine/protocol.rs:6` (playout 0.0.5, channel 0.1.1), so the workflow has no counterpart; what is worth checking is whether our pinned build matches the one upstream now pins. Claude 2026-10-07 triage. |
+| 213 | `cef9793a` | refactor: remove imagesharp dependency; update others (#3072) | | | | ucu-09; provisional: N/A (upstream dependency work). The graphics image element drops ImageSharp and decodes through SkiaSharp's SKCodec instead, with a hand-written APNG decoder added because SKCodec does not animate APNG; the rest is NuGet version bumps. ErsatzRS has no Skia or ImageSharp: images reach the graphics path through FFmpeg demuxers under the accepted drawvg design, and animated formats are already treated as animation-capable (`crates/ersatzrs-infra/src/health/checks/zero_duration.rs:89` names .gif, .webp, .apng and .avif). The audit only has to confirm APNG animation actually plays through that path, which belongs with the animated-graphics work rather than this row. Claude 2026-10-09 triage. |
