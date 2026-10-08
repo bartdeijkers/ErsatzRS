@@ -5,8 +5,6 @@ ErsatzRS is a from-scratch Rust reimplementation of
 personal media libraries into linear TV channels served through IPTV, HLS, and
 HDHomeRun-compatible endpoints.
 
-The project is currently in **beta** stage.
-
 ## Goals
 
 - Reach feature parity with ErsatzTV Legacy first and then fork into a 'next' version with opinionated changes.
