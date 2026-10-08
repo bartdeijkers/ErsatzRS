@@ -11458,6 +11458,25 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-08 CI 37686248925 at 917825e3 passes all 3687 ordinary Rust cases,
+all 412 Next cases and its actual Burn/preview/Hybrid Convert smokes, plus
+lint, format, documentation and dependency checks. Chromium has 334 passes,
+five existing skips and one JPEG XL elapsed-time failure. Its preserved trace
+allows at most 12.719 seconds for capture plus decoding, while Date.now()
+reports at least 13.908 seconds for capture alone: host clock synchronization
+invalidates that duration measurement. Firefox is interrupted by the authorized
+shutdown; GitHub records lost runner communication, not a completed test gate.
+The capture now uses performance.now() for elapsed time only. All throughput,
+frame-count, animation/alpha/expiry and state assertions remain unchanged.
+Both affected browser cases pass without skips or retries in
+tmp/ucu09-final-gates-09c237a4/monotonic-clock-focus-01/: each route decodes
+200 frames, private producer capacity is 1.097x/1.110x, public delivery meets
+the original bounded measurement requirement, and saved timelines are unchanged.
+Original failed evidence remains in ci-37686248925-jxl/. Production source,
+FFmpeg v2.0.6 and Next036 pins are unchanged. Terminal exact-SHA CI and fresh
+stable v1.1.0 package acceptance/publication remain required; approved hardware
+and ARM/macOS application debt remains explicitly unverified.
+
 2026-10-07 CI 37679761724 at 0eeb39f4 passes Format, documentation, cargo
 deny, Clippy, all3687 ordinary Rust cases and all412 Next cases, plus actual
 Next HTTP Burn/preview and Hybrid Convert smokes. Chromium records320 passes,

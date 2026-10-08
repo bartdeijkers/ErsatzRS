@@ -61,6 +61,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-08 UCU-09: the browser elapsed-time correction passes in both browsers;
+the milestone owns its monotonic-clock proof and unchanged playback assertions.
+Prior CI has 334 Chromium passes plus that corrected measurement failure;
+Firefox was interrupted by shutdown. Commit/push the verified correction,
+require terminal green exact-SHA CI, then verify and publish stable v1.1.0.
+Keep approved hardware/platform debt unverified and preserve the v26.11.1 boundary.
+
 2026-10-07 UCU-09: all208 rows through v26.11.1 are accepted in order.
 Row201 passes Linux118/Windows116 ordinary checks and26 named cases each;
 both platforms pass nine complete decoded30s scenarios plus Stop. Native

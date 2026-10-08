@@ -13,25 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-### Fixed
-
-- Use the checksum-verified managed FFmpeg for browser fixture commands and
-  PATH lookup, avoiding runner-local binaries with missing shared libraries.
-
-### Changed
-
-- Refresh the queued teletext plan for native and Next playback, exact page and
-  source identity, SQLite persistence and current runtime/admin boundaries.
-  Preserve the product decision and platform/runtime acceptance gates after UCU.
+## [1.1.0] - 2026-10-09
 
 ### Security
 
 - Update the transitive CI tooling dependency `fast-uri` to 3.1.8 to fix URI
   authority injection, host confusion and host normalization vulnerabilities.
-
-## [1.1.0] - 2026-10-07
-
-### Security
 
 - Add expiring, source-bound media-part tickets on the private callback listener
   for external JSON playback integration, without publishing Plex credentials.
@@ -72,6 +59,11 @@ release section when tagging a release.
   Verify the linked runtime also retains the WAL-reset corruption fix.
 
 ### Fixed
+
+- Use the checksum-verified managed FFmpeg for browser fixture commands and
+  PATH lookup, avoiding runner-local binaries with missing shared libraries.
+- Measure live playback throughput with a monotonic clock so host clock
+  synchronization cannot create false delivery stalls in browser acceptance.
 
 - Preserve consumed Classic programme and filler history when repairing future
   overlaps or retaining prefetched programmes during Refresh/Reset. Keep history
@@ -866,6 +858,10 @@ release section when tagging a release.
   PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
+
+- Refresh the queued teletext plan for native and Next playback, exact page and
+  source identity, SQLite persistence and current runtime/admin boundaries.
+  Preserve the product decision and platform/runtime acceptance gates after UCU.
 
 - Use Next for newly created channels and standalone playback previews, with
   the exact engine bundled in packages or downloaded and verified automatically

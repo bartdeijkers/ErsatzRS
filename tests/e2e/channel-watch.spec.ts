@@ -1395,7 +1395,9 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
 const jpegXlProgressPeriodSeconds = 0.1;
 
 async function captureJpegXlStream(ffmpeg: string, url: string, output: string) {
-  const started = Date.now();
+  // Wall-clock synchronization can step Date.now() while a live stream runs.
+  // Measure delivery against a monotonic clock, like Playwright's trace timing.
+  const started = performance.now();
   const samples: { wallSeconds: number; mediaSeconds: number }[] = [];
   const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', String(jpegXlProgressPeriodSeconds),
     '-progress', 'pipe:1', '-analyzeduration', '1000000', '-probesize', '1000000',
@@ -1411,7 +1413,7 @@ async function captureJpegXlStream(ffmpeg: string, url: string, output: string) 
       if (line.startsWith('out_time_us=')) {
         const mediaSeconds = Number(line.slice('out_time_us='.length)) / 1_000_000;
         if (Number.isFinite(mediaSeconds) && mediaSeconds > 0) {
-          samples.push({ wallSeconds: (Date.now() - started) / 1000, mediaSeconds });
+          samples.push({ wallSeconds: (performance.now() - started) / 1000, mediaSeconds });
         }
       }
     }
@@ -1428,7 +1430,7 @@ async function captureJpegXlStream(ffmpeg: string, url: string, output: string) 
       else resolve();
     });
   });
-  return { wallSeconds: (Date.now() - started) / 1000, samples };
+  return { wallSeconds: (performance.now() - started) / 1000, samples };
 }
 
 test('finding 09 decodes compact JPEG XL in a full native broadcast graph', async ({ page }, testInfo) => {
