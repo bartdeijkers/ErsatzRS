@@ -73,6 +73,8 @@ impl HealthCheck for UnavailableHealthCheck {
 
 /// Count unavailable Remote Streams once each, even when a television
 /// presentation also projects them as episodes, and name up to five by path.
+/// ADR 0119: manual exclusion acknowledges availability only when every owning
+/// add-on item is explicitly excluded. Automatic selection is not an acknowledgement.
 async fn unavailable_remote_streams(pool: &Pool<Db>) -> Result<(i64, Vec<String>)> {
     let from = r#"FROM "MediaItem" AS mi
            JOIN "MediaVersion" AS mv ON mv."RemoteStreamId" IS NOT NULL
@@ -84,7 +86,16 @@ async fn unavailable_remote_streams(pool: &Pool<Db>) -> Result<(i64, Vec<String>
                          JOIN "RemoteStream" AS stream ON stream."Id" = item."MediaItemId"
                          WHERE projection."EpisodeId" = mi."Id"
                            AND stream."Id" = mv."RemoteStreamId"))
-           WHERE mi."State" = ?"#;
+           WHERE mi."State" = ?
+             AND (NOT EXISTS (
+                     SELECT 1 FROM "AddonMediaListItem" AS owner
+                     WHERE owner."MediaItemId" = mv."RemoteStreamId")
+                  OR EXISTS (
+                     SELECT 1 FROM "AddonMediaListItem" AS owner
+                     WHERE owner."MediaItemId" = mv."RemoteStreamId"
+                       AND (owner."Included" <> 0
+                            OR owner."SelectionOverride" IS NULL
+                            OR owner."SelectionOverride" <> 0)))"#;
     let count = sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(format!(
         r#"SELECT COUNT(DISTINCT mv."RemoteStreamId") {from}"#
     )))
@@ -149,7 +160,7 @@ mod tests {
             "Song\" (\"Id\" INTEGER PRIMARY KEY",
             "Image\" (\"Id\" INTEGER PRIMARY KEY",
             "RemoteStream\" (\"Id\" INTEGER PRIMARY KEY",
-            "AddonMediaListItem\" (\"Id\" INTEGER PRIMARY KEY, \"MediaItemId\" INTEGER",
+            "AddonMediaListItem\" (\"Id\" INTEGER PRIMARY KEY, \"MediaItemId\" INTEGER, \"Included\" INTEGER NOT NULL DEFAULT 1, \"SelectionOverride\" INTEGER",
             "AddonMediaListItemEpisode\" (\"AddonMediaListItemId\" INTEGER PRIMARY KEY, \"EpisodeId\" INTEGER UNIQUE",
             "MediaVersion\" (\"Id\" INTEGER PRIMARY KEY, \"MovieId\" INTEGER, \"EpisodeId\" INTEGER, \"MusicVideoId\" INTEGER, \"OtherVideoId\" INTEGER, \"SongId\" INTEGER, \"ImageId\" INTEGER, \"RemoteStreamId\" INTEGER",
             "MediaFile\" (\"Id\" INTEGER PRIMARY KEY, \"MediaVersionId\" INTEGER, \"Path\" TEXT",
@@ -174,7 +185,7 @@ mod tests {
                INSERT INTO "MediaVersion" ("Id", "EpisodeId") VALUES (200, 20);
                INSERT INTO "MediaFile" VALUES (1000, 100, 'streams/Projected.yml'),
                    (2000, 200, 'media/Local.mkv');
-               INSERT INTO "AddonMediaListItem" VALUES (1, 10), (2, 10), (3, 20);
+               INSERT INTO "AddonMediaListItem" ("Id", "MediaItemId") VALUES (1, 10), (2, 10), (3, 20);
                INSERT INTO "AddonMediaListItemEpisode" VALUES (1, 11), (2, 12), (3, 20);"#,
         )
         .await
@@ -211,6 +222,126 @@ mod tests {
             .await
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn manual_exclusion_acknowledges_stream_and_projected_episodes_until_reincluded() {
+        let pool = fixture_pool().await;
+        pool.execute(
+            r#"INSERT INTO "MediaItem" VALUES (10, 2), (11, 2), (12, 2);
+               INSERT INTO "RemoteStream" VALUES (10);
+               INSERT INTO "Episode" VALUES (11), (12);
+               INSERT INTO "MediaVersion" ("Id", "EpisodeId", "RemoteStreamId")
+                   VALUES (100, 11, 10);
+               INSERT INTO "MediaFile" VALUES (1000, 100, 'streams/Excluded.yml');
+               INSERT INTO "AddonMediaListItem"
+                   ("Id", "MediaItemId", "Included", "SelectionOverride") VALUES (1, 10, 0, 0);
+               INSERT INTO "AddonMediaListItemEpisode" VALUES (1, 12);"#,
+        )
+        .await
+        .expect("excluded stream with shared-version and versionless episodes");
+        let check = UnavailableHealthCheck::new(pool.clone());
+        for _ in 0..2 {
+            assert_eq!(
+                check.check().await.expect("excluded health").status,
+                HealthCheckStatus::Pass
+            );
+        }
+        let unavailable_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "State" = 2"#)
+                .fetch_one(&pool)
+                .await
+                .expect("unchanged availability");
+        assert_eq!(unavailable_count, 3);
+
+        pool.execute(r#"UPDATE "AddonMediaListItem" SET "Included" = 1, "SelectionOverride" = 1"#)
+            .await
+            .expect("reinclude stream");
+        let result = check.check().await.expect("reincluded health");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            result.brief_message,
+            "There are 1 Remote Streams that are unavailable"
+        );
+        assert!(result.message.contains("streams/Excluded.yml"));
+        assert!(!result.message.contains("cannot find them on disk"));
+    }
+
+    #[tokio::test]
+    async fn every_owner_must_be_manually_excluded_to_acknowledge_shared_stream() {
+        let pool = fixture_pool().await;
+        pool.execute(
+            r#"INSERT INTO "MediaItem" VALUES (10, 2);
+               INSERT INTO "RemoteStream" VALUES (10);
+               INSERT INTO "MediaVersion" ("Id", "RemoteStreamId") VALUES (100, 10);
+               INSERT INTO "MediaFile" VALUES (1000, 100, 'streams/Shared.yml');
+               INSERT INTO "AddonMediaListItem"
+                   ("Id", "MediaItemId", "Included", "SelectionOverride")
+                   VALUES (1, 10, 0, 0), (2, 10, 1, NULL);"#,
+        )
+        .await
+        .expect("shared stream owners");
+        let check = UnavailableHealthCheck::new(pool.clone());
+        // Automatic exclusion and inconsistent decisions must keep the warning
+        // irrespective of another owner's manual exclusion.
+        for (included, selection_override) in [(1, None), (0, None), (0, Some(1)), (1, Some(0))] {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "Included" = ?, "SelectionOverride" = ? WHERE "Id" = 2"#,
+            )
+            .bind(included)
+            .bind(selection_override)
+            .execute(&pool)
+            .await
+            .expect("other owner decision");
+            let result = check.check().await.expect("shared stream health");
+            assert_eq!(result.status, HealthCheckStatus::Warning);
+            assert_eq!(
+                result.brief_message,
+                "There are 1 Remote Streams that are unavailable"
+            );
+        }
+        pool.execute(r#"UPDATE "AddonMediaListItem" SET "Included" = 0, "SelectionOverride" = 0 WHERE "Id" = 2"#)
+            .await
+            .expect("exclude every owner");
+        assert_eq!(
+            check.check().await.expect("all excluded health").status,
+            HealthCheckStatus::Pass
+        );
+    }
+
+    #[tokio::test]
+    async fn excluded_streams_do_not_displace_actionable_samples_or_hide_local_files() {
+        let pool = fixture_pool().await;
+        pool.execute(
+            r#"INSERT INTO "MediaItem" VALUES (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (6, 2), (10, 2), (20, 2);
+               INSERT INTO "RemoteStream" VALUES (1), (2), (3), (4), (5), (6), (10);
+               INSERT INTO "Movie" VALUES (20);
+               INSERT INTO "MediaVersion" ("Id", "RemoteStreamId")
+                   VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (100, 10);
+               INSERT INTO "MediaVersion" ("Id", "MovieId") VALUES (200, 20);
+               INSERT INTO "MediaFile" VALUES (1, 1, 'streams/Excluded.yml'),
+                   (2, 2, 'streams/Excluded.yml'), (3, 3, 'streams/Excluded.yml'),
+                   (4, 4, 'streams/Excluded.yml'), (5, 5, 'streams/Excluded.yml'),
+                   (6, 6, 'streams/Excluded.yml'), (1000, 100, 'streams/Actionable.yml'),
+                   (2000, 200, 'media/Missing.mkv');
+               INSERT INTO "AddonMediaListItem" ("Id", "MediaItemId", "Included", "SelectionOverride")
+                   VALUES (1, 1, 0, 0), (2, 2, 0, 0), (3, 3, 0, 0),
+                       (4, 4, 0, 0), (5, 5, 0, 0), (6, 6, 0, 0), (20, 20, 0, 0);"#,
+        )
+        .await
+        .expect("six acknowledged streams, standalone stream and excluded local item");
+        let result = UnavailableHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            result.brief_message,
+            "There are 1 items and 1 Remote Streams that are unavailable"
+        );
+        assert!(result.message.contains("streams/Actionable.yml"));
+        assert!(result.message.contains("media/Missing.mkv"));
+        assert!(!result.message.contains("streams/Excluded.yml"));
     }
 
     #[tokio::test]

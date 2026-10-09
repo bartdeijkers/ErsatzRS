@@ -2,8 +2,13 @@ feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
 status     = 'Ported'
-adr        = ['0064']
+adr        = ['0064', '0119']
 summary    = '''
+2026-10-09: ADR 0119 acknowledges provider-unavailable streams through manual
+publication exclusion by every owner. Automatic exclusions and local files
+remain actionable; reinclusion restores warnings. The resolved debt below owns
+the focused verification evidence. Deployment remains separate.
+
 2026-10-02: Unavailable-media diagnostics identify ErsatzRS rather than the
 upstream product. Admin translation accepts both legacy cached and current
 messages in every supported culture, preserves sample names, and keeps provider
@@ -63,6 +68,24 @@ Remote Stream and add-on-list health applies liveness, inclusion, and
 publication filters so valid live entries and retained excluded draft state do
 not inflate the actionable warning count.
 '''
+
+[[debt]]
+id          = 'manual-exclusion-does-not-acknowledge-unavailable-stream'
+description = 'The Unavailable check reports retained provider-unavailable Remote Streams even after the operator manually excludes their add-on-list items from publication.'
+discovered  = '2026-10-09'
+adr         = '0119'
+resolved    = true
+evidence    = '''
+`./run.sh test -p ersatzrs-infra health::` passes all 126 selected tests
+(run e27cacaa-146e-428d-b428-69fed4201f4d), including manual exclusion,
+reinclusion, automatic and multiple-owner decisions, shared-version and
+versionless episodes, bounded path sampling and local-file preservation.
+Repeated checks preserve unavailable media state. SQLite EXPLAIN confirms both
+ownership predicates use IX_AddonMediaListItem_MediaItemId. Strict affected
+all-target Clippy, formatting, progress validation and diff checks pass.
+Installed application and browser acceptance remain unverified for this commit.
+'''
+resolution = 'The shared count/sample predicate suppresses only streams whose every owning item has Included = 0 and SelectionOverride = 0. Standalone streams and any owner without explicit manual exclusion keep their warning. Availability and publication state are unchanged; Health refresh evaluates the saved decision without requiring publication.'
 
 [[debt]]
 id          = 'projected-artwork-cardinality-is-not-health-visible'

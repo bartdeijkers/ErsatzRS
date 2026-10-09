@@ -22,6 +22,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Treat manual exclusion from add-on-list publication as acknowledgement of an
+  unavailable Remote Stream in Health. Keep warnings for automatically filtered
+  items, streams still included in another list, and missing local files;
+  including an item again restores its unavailable warning.
 - Render the admin logo with a transparent vector TV/R-cog mark and theme-aware
   lettering, keeping it sharp and readable in both light and dark mode.
 - Resolve Classic, Block and Scripted editor data before mounting their
