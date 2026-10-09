@@ -28,6 +28,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the on-demand checkpoint regression test's virtual clock stationary
+  during SQLite I/O, avoiding intermittent CI write timeouts while preserving
+  its checkpoint timing and viewer-position assertions.
 - Treat manual exclusion from add-on-list publication as acknowledgement of an
   unavailable Remote Stream in Health. Keep warnings for automatically filtered
   items, streams still included in another list, and missing local files;

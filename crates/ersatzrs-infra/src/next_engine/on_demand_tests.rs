@@ -205,6 +205,14 @@ async fn periodic_and_final_checkpoints_use_last_viewer_touch_not_heartbeat_time
     let touch = session.checkpoint_time().unwrap();
     let observer = progress.clone();
     let active_session = session.clone();
+    // SQLite runs on an external worker. Keep the runtime runnable while its
+    // queries are pending so paused time cannot auto-advance past the tick or
+    // expire the checkpoint write budget before the real I/O completes.
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
     tokio::time::pause();
     let timer = tokio::spawn(async move { observer.run(&active_session).await });
     tokio::task::yield_now().await;
@@ -214,9 +222,13 @@ async fn periodic_and_final_checkpoints_use_last_viewer_touch_not_heartbeat_time
             .unwrap(),
     )
     .await;
+    let before_tick = Instant::now();
     assert_eq!(checkpoint(&pool).await, initial);
+    assert_eq!(Instant::now(), before_tick);
     tokio::time::advance(Duration::from_secs(1)).await;
     tokio::time::resume();
+    clock_guard.abort();
+    assert!(clock_guard.await.unwrap_err().is_cancelled());
     timeout(Duration::from_secs(3), async {
         while checkpoint(&pool).await != Some(encode_datetime(touch)) {
             tokio::time::sleep(Duration::from_millis(10)).await;
