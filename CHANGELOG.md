@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Default new add-on lists to Adaptive automatic refresh when the selected
+  add-on supports source-change checks. Preserve explicit cadence choices and
+  existing lists; providers without adaptive support retain the Daily default.
 - Record the deferred official add-on distribution plan after teletext and video
   jukebox: a bundled repository, automatic repository updates enabled for new
   profiles, and retained installation from both ZIP formats. Include the

@@ -64,6 +64,38 @@ and independent public ZIP verification. Separate debts below remain open.
 '''
 
 [[debt]]
+id          = 'new-list-adaptive-refresh-default'
+description = 'New add-on-list forms default to Daily even when the provider supports adaptive source checks; the maintainer requires Adaptive for capable providers while preserving explicit and saved cadence.'
+discovered  = '2026-10-09'
+resolved    = true
+adr         = '0085'
+evidence    = '''
+Hydration source map: /media/addon-lists/add uses AddAddonMediaListPage and
+AddAddonMediaListPageIsland; the list-page dialog uses AddonMediaListsIsland
+and AddAddonMediaListDialog. Provider DTO supports_adaptive_refresh supplies
+the capability boundary. RefreshCadenceSelect carries the native form value
+and an optional local choice callback; create server functions and the
+add_addon_media_list_form fallback keep the submitted cadence. Saved editors
+still initialize from persisted state. Browser target: focused default and
+existing import/editor cases in hydration-pending-routes.spec.ts, including
+JavaScript-disabled provider contexts.
+
+The 22 focused add-on-list Rust tests pass (run
+96f6080a-fcde-47ae-b9be-597ec8928bfd). The matched SSR/WASM build succeeds.
+Four Chromium/Firefox cases pass in 48.0 seconds, including no-JS defaults,
+capability changes, explicit Monthly preservation, persisted cadence, import
+and saved-editor fallback. Evidence:
+test-results/addon-adaptive-default-final/playwright-results.json.
+The first runtime launch lacked sandbox network access for pinned Next
+acquisition; the same bundle passed with authorized runtime network access.
+Two initial workflow failures were fixture ID/title collisions introduced by
+the new test; separate ID ranges and title prefixes corrected both.
+Strict affected all-target Clippy, formatting and hydration lint pass.
+Deployment remains separate.
+'''
+resolution  = 'New-list defaults follow provider adaptive capability until the operator explicitly selects a cadence. Capable providers default to Adaptive; unsupported providers retain Daily. URL resolution and provider switching use the same signal boundary, both creation forms reset coherently, and saved editor cadence is unchanged. Defaults/workflow fixture IDs and titles are isolated.'
+
+[[debt]]
 id          = 'windows-ytdlp-batch-import-error-record'
 description = 'The installed yt-dlp 0.11.3 Windows package loses the structured import error record on an unmappable v2 item: cmd.exe cannot find the fail batch label with the shipped LF line endings.'
 discovered  = '2026-09-20'

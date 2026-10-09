@@ -222,7 +222,7 @@ notes  = '2026-09-05 AMM-CI-01: focused Chromium/Firefox proof passes for hydrat
 name   = 'AddAddonMediaListPage'
 status = '✅'
 routes = ['/media/addon-lists/add']
-notes  = '2026-08-22: `tests/e2e/addon-metadata-editor.spec.ts` proves the hydrated two-step import page in Chromium and Firefox, including the source URL, provider selection, collection-type switching, refresh policy, storage folder, and original-order playlist choice. 2026-08-26: the same suite proves that direct SSR includes the complete native form, add-on context is selected without hydration, and JavaScript-disabled import redirects to a durable overview job using every visible source setting.'
+notes  = '2026-08-22: `tests/e2e/addon-metadata-editor.spec.ts` proves the hydrated two-step import page in Chromium and Firefox, including the source URL, provider selection, collection-type switching, refresh policy, storage folder, and original-order playlist choice. 2026-08-26: the same suite proves that direct SSR includes the complete native form, add-on context is selected without hydration, and JavaScript-disabled import redirects to a durable overview job using every visible source setting. 2026-10-09: matched Chromium/Firefox proof covers Adaptive defaults for capable providers, Daily fallback, retained explicit cadence and no-JS add-on contexts. The new-list-adaptive-refresh-default debt in addon-metadata-management owns evidence.'
 
 [[page]]
 name   = 'AddonListWorkspacePage'

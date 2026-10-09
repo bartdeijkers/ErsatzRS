@@ -292,9 +292,14 @@ INSERT INTO "MovieMetadata" (
   return seed;
 }
 
-function seedAddonLists(testInfo: TestInfo): AddonListSeed {
-  const base = projectBase(testInfo);
-  const suffix = testInfo.project.name;
+function seedAddonLists(
+  testInfo: TestInfo,
+  supportsAdaptive = false,
+  fixture: 'workflow' | 'defaults' = 'workflow',
+): AddonListSeed {
+  const base = projectBase(testInfo) + (supportsAdaptive ? 20_000 : 0)
+    + (fixture === 'defaults' ? 40_000 : 0);
+  const suffix = `${fixture === 'defaults' ? 'defaults-' : ''}${testInfo.project.name}${supportsAdaptive ? '-adaptive' : ''}`;
   const addonId = `org.example.e2e-lists-${suffix.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   const editorProviderId = `hydration-editor-${suffix}`;
   const editorSourceUrl = `https://example.invalid/lists/hydration-editor-${suffix}`;
@@ -437,6 +442,7 @@ fi
       { id: 'addon.check.v1' },
       { id: 'media-list.import.v1' },
       { id: 'media-list.list.v5' },
+      ...(supportsAdaptive ? [{ id: 'media-list.source-check.v1' }] : []),
     ],
     dependencies: [],
     entrypoints: {
@@ -713,6 +719,47 @@ WHERE "${pathTable[2]}" = ${sourceId}
 SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
 `)).toBe('0');
 
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('new add-on lists default to adaptive without overwriting explicit or saved cadence', async ({
+    page, browser,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const fixed = seedAddonLists(testInfo, false, 'defaults');
+    const adaptive = seedAddonLists(testInfo, true, 'defaults');
+    const savedCadence = sqlite(`SELECT "RefreshCadence" FROM "AddonMediaList" WHERE "Id" = ${fixed.editorListId};`);
+    await forceEnglish(page);
+    await gotoHydrated(page, '/media/addon-lists/add');
+    const cadence = page.getByRole('combobox', { name: 'Automatic Refresh' });
+    const provider = page.getByLabel('Add-on', { exact: true });
+    await expect(cadence).toHaveValue('adaptive');
+    await provider.selectOption(fixed.addonId);
+    await expect(cadence).toHaveValue('daily');
+    await expect(cadence.locator('option[value="adaptive"]')).toHaveJSProperty('disabled', true);
+    await provider.selectOption(adaptive.addonId);
+    await expect(cadence).toHaveValue('adaptive');
+    await cadence.selectOption('monthly');
+    await provider.selectOption(fixed.addonId);
+    await expect(cadence).toHaveValue('monthly');
+    await provider.selectOption(adaptive.addonId);
+    await expect(cadence).toHaveValue('monthly');
+
+    const noJs = await browser.newContext({
+      javaScriptEnabled: false,
+      baseURL: new URL(page.url()).origin,
+    });
+    try {
+      const ssrPage = await noJs.newPage();
+      await forceEnglish(ssrPage);
+      await ssrPage.goto(`/media/addon-lists/add?addon_id=${encodeURIComponent(adaptive.addonId)}`);
+      await expect(ssrPage.getByRole('combobox', { name: 'Automatic Refresh' })).toHaveValue('adaptive');
+      await ssrPage.goto(`/media/addon-lists/add?addon_id=${encodeURIComponent(fixed.addonId)}`);
+      await expect(ssrPage.getByRole('combobox', { name: 'Automatic Refresh' })).toHaveValue('daily');
+    } finally {
+      await noJs.close();
+    }
+    expect(sqlite(`SELECT "RefreshCadence" FROM "AddonMediaList" WHERE "Id" = ${fixed.editorListId};`)).toBe(savedCadence);
     expect(runtimeErrors).toEqual([]);
   });
 
