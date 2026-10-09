@@ -176,7 +176,15 @@ jobs:
           timestamp-digest: SHA256
       - name: Verify Next staging (offline)
         shell: bash
-        run: python scripts/release/test-stage-next.py
+        run: |
+          set -euo pipefail
+          # Use this recovery recipe's corrected host-aware tests against the
+          # immutable application's unchanged staging code and manifest.
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code -- scripts/release/stage-next.py scripts/release/next-patches/manifest.json
+          git show "${GITHUB_SHA}:scripts/release/test-stage-next.py" |
+            python -c 'import sys; __file__="scripts/release/test-stage-next.py"; sys.argv=[__file__]; exec(compile(sys.stdin.read(), __file__, "exec"), globals())'
       - name: Stage archive
         shell: bash
         env:

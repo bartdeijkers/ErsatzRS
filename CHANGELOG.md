@@ -19,6 +19,9 @@ release section when tagging a release.
   installer failures under restricted PowerShell execution policies. Recover a
   failed Windows draft archive from its accepted immutable source and web bundle
   without rebuilding successful Linux archives or changing the release tag.
+- Verify Next staging bytes and provenance on Windows without assuming POSIX
+  execute bits; retain those permission checks on POSIX hosts. Windows recovery
+  runs the corrected tests against the unchanged accepted staging implementation.
 
 ## [1.1.0] - 2026-10-09
 

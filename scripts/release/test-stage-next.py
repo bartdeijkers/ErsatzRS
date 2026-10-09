@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -114,7 +115,12 @@ class StageNextTests(unittest.TestCase):
                 self.assertEqual(json.loads((output / "origin.json").read_text())["source_revision"],
                                  module.PINNED_REVISION)
                 self.assertFalse((folder / "outside").exists())
-                self.assertTrue((output / ("ersatztv-channel" + suffix)).stat().st_mode & 0o100)
+                binary = output / ("ersatztv-channel" + suffix)
+                self.assertEqual(binary.read_bytes(), b"MZ-fixture" if rid == "win-x64" else b"ELF-fixture")
+                # Windows uses executable formats and ACLs, not POSIX execute
+                # bits. Retain the owner-execute check on every POSIX host.
+                if os.name == "posix":
+                    self.assertTrue(binary.stat().st_mode & 0o100)
 
     def test_tampered_artifact_leaves_no_destination(self):
         metadata, data = fixture("linux-x64")
@@ -258,7 +264,10 @@ class StageNextTests(unittest.TestCase):
             module.stage_source_build(source, "linux-arm", folder / "next")
             for name in ("ersatztv-channel", "LICENSE", "origin.json"):
                 self.assertEqual((source / name).read_bytes(), (folder / "next" / name).read_bytes())
-            self.assertTrue((folder / "next/ersatztv-channel").stat().st_mode & 0o111)
+            # The byte/provenance checks above apply on every host; Windows
+            # does not expose POSIX executable permissions for this ARM file.
+            if os.name == "posix":
+                self.assertTrue((folder / "next/ersatztv-channel").stat().st_mode & 0o111)
 
     def test_source_build_rejects_changed_origin_or_payload_atomically(self):
         for changed in ("source_revision", "source_archive_sha256", "cargo_lock_sha256",

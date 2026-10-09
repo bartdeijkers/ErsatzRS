@@ -197,7 +197,10 @@ job's terminal Python setup failure. Other original platform jobs may continue;
 do not rerun the original Windows job in parallel. Recovery checks out only the
 accepted application source with the warm target preserved, repeats the native
 build and startup tests, verifies the matched web bundle and pinned Next staging,
-and replaces only the Windows draft asset. It rechecks the guards before upload
+and replaces only the Windows draft asset. Its offline Next tests come from the
+corrected recovery revision and run against the accepted application's unchanged
+staging implementation and manifest; they check bytes/provenance on every host
+and POSIX execute permissions only on POSIX hosts. It rechecks the guards before upload
 and records the archive checksum, application source and recovery workflow
 revision. Include the green recovery run in release acceptance evidence; the
 original failed Windows job remains a failure. Perform actual packaged Windows
