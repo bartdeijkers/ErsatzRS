@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Update 21 Rust dependencies, including Leptos hydration, JSON Schema
+  validation, scheduling parsers and platform process support; refresh CI
+  actions while preserving the pinned Unicode case-mapping dependency.
 - Default new add-on lists to Adaptive automatic refresh when the selected
   add-on supports source-change checks. Preserve explicit cadence choices and
   existing lists; providers without adaptive support retain the Daily default.
@@ -25,6 +28,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the on-demand checkpoint regression test's virtual clock stationary
+  during SQLite I/O, avoiding intermittent CI write timeouts while preserving
+  its checkpoint timing and viewer-position assertions.
 - Treat manual exclusion from add-on-list publication as acknowledgement of an
   unavailable Remote Stream in Health. Keep warnings for automatically filtered
   items, streams still included in another list, and missing local files;
