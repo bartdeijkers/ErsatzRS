@@ -335,22 +335,25 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         {tr(TextKey::NoFfmpegProfiles)}
                     </p>
 
-                    {select_string_field(
-                        tr(TextKey::SlugSeconds),
-                        "slug_seconds",
-                        slug_seconds,
-                        Signal::derive(|| vec![
-                            (String::new(), tr(TextKey::NoneOption).to_string()),
-                            ("0.5".to_string(), format!("0.5 {}", tr(TextKey::Seconds))),
-                            ("1".to_string(), format!("1 {}", tr(TextKey::Second))),
-                            ("2".to_string(), format!("2 {}", tr(TextKey::Seconds))),
-                            ("3".to_string(), format!("3 {}", tr(TextKey::Seconds))),
-                            ("5".to_string(), format!("5 {}", tr(TextKey::Seconds))),
-                        ]),
-                        "",
-                        None,
-                        tr(TextKey::SlugSecondsHelp),
-                    )}
+                    // Hidden controls stay populated and enabled so Next saves retain the native value.
+                    <div data-native-slug-seconds hidden=initial_form.streaming_engine == 1>
+                        {select_string_field(
+                            tr(TextKey::SlugSeconds),
+                            "slug_seconds",
+                            slug_seconds,
+                            Signal::derive(|| vec![
+                                (String::new(), tr(TextKey::NoneOption).to_string()),
+                                ("0.5".to_string(), format!("0.5 {}", tr(TextKey::Seconds))),
+                                ("1".to_string(), format!("1 {}", tr(TextKey::Second))),
+                                ("2".to_string(), format!("2 {}", tr(TextKey::Seconds))),
+                                ("3".to_string(), format!("3 {}", tr(TextKey::Seconds))),
+                                ("5".to_string(), format!("5 {}", tr(TextKey::Seconds))),
+                            ]),
+                            "",
+                            None,
+                            tr(TextKey::SlugSecondsHelp),
+                        )}
+                    </div>
 
                     {select_i32_field(
                         tr(TextKey::StreamSelectorMode),
@@ -773,6 +776,8 @@ fn streaming_engine_dependency_script() -> &'static str {
     const next = engine.value === "1";
     const subtitles = form.querySelector("[data-next-subtitle-mode]");
     if (subtitles) subtitles.hidden = !next;
+    const slug = form.querySelector("[data-native-slug-seconds]");
+    if (slug) slug.hidden = next;
     for (const option of mode.options) {
       option.disabled = next && !["4", "5"].includes(option.value);
       option.hidden = option.disabled;
@@ -821,4 +826,42 @@ fn music_video_credits_template_dependency_script() -> &'static str {
   mode.addEventListener("change", sync);
 })();
 "#
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::admin::server_fns::channels::ChannelForm;
+
+    #[test]
+    fn native_slug_setting_stays_in_ssr_form_when_next_hides_it() {
+        for engine in [0, 1] {
+            let owner = Owner::new();
+            let html = owner.with(|| {
+                channel_editor_form(
+                    ChannelEditorData {
+                        form: ChannelForm {
+                            streaming_engine: engine,
+                            slug_seconds: Some(2.0),
+                            ..ChannelForm::new_defaults()
+                        },
+                        ..ChannelEditorData::default()
+                    },
+                    String::new(),
+                )
+                .into_view()
+                .to_html()
+            });
+            // The dependency script mentions this selector before the actual field.
+            let wrapper = html.split("<div data-native-slug-seconds").nth(1).unwrap();
+            assert_eq!(
+                wrapper.split('>').next().unwrap().contains("hidden"),
+                engine == 1
+            );
+            let slug = wrapper.split("name=\"slug_seconds\"").nth(1).unwrap();
+            assert!(!slug.split('>').next().unwrap().contains("disabled"));
+            assert!(slug.contains("value=\"2\" selected"));
+            assert!(html.contains("form.querySelector(\"[data-native-slug-seconds]\")"));
+        }
+    }
 }

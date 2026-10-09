@@ -199,11 +199,12 @@ for (const js of [true, false]) test(`finding 02 every culture exposes native ki
       const form = page.locator('[data-graphics-element-editor]').filter({ visible: true });
       await expect(form.locator('[name="kind"] option')).toHaveCount(5);
       await expect(form).toContainText('Drawtext'); await expect(form).toContainText('Drawvg');
-      await expect(form).toContainText('X/Y');
+      await expect(form.locator('[name="location_x"]')).toBeVisible();
+      await expect(form.locator('[name="location_y"]')).toBeVisible();
       await expect(form.locator('[data-graphics-yaml-import]')).toBeVisible();
       if (culture === 'nl') {
         await page.setViewportSize({ width: 390, height: 844 });
-        const toggle = page.locator('#nav-toggle'); if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
+        if (js) await page.keyboard.press('Escape');
         await form.locator('[name="name"]').scrollIntoViewIfNeeded();
         expect((await form.boundingBox())!.width).toBeLessThanOrEqual(390);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

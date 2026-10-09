@@ -2,11 +2,13 @@
 
 ## Status
 
-Queued and not implemented. Phase 8's required milestones completed on
-2026-08-07, but the current program order closes Add-on metadata management and
-the additive FFmpeg drawtext overlay leg first. Phase 9 then starts with the
-blocking `p9a-01` product/standards ADR. The authoritative execution state
-lives in [`docs/progress/milestones.toml`](../docs/progress/milestones.toml) and
+Queued and not implemented. The 2026-10-07 planning refresh retains the five
+teletext milestones and the blocking `p9a-01` product/standards ADR. Implementation
+starts after `ucu-09` and the other recorded prerequisites are Complete. UCU-09
+has a fixed upstream v26.11.1 boundary; later upstream releases do not extend
+that gate. This refresh updates planning, not product scope, schemas, APIs, or
+runtime capability. The authoritative execution state lives in
+[`docs/progress/milestones.toml`](../docs/progress/milestones.toml) and
 [`docs/progress/parity/teletext-support.toml`](../docs/progress/parity/teletext-support.toml);
 this plan owns future sequencing and acceptance boundaries.
 
@@ -24,8 +26,9 @@ failure through health and troubleshooting on every supported platform.
 - ErsatzRS currently has no teletext-specific domain model, scanner branch,
   selection policy, FFmpeg capability requirement, admin surface, or runtime
   proof.
-- Embedded subtitle extraction recognizes SubRip, ASS, WebVTT, MOV text, and
-  selected bitmap codecs, but does not classify or decode `dvb_teletext`.
+- Embedded subtitle extraction recognizes SubRip, ASS, WebVTT and MOV text and
+  distinguishes selected bitmap codecs, but does not classify or decode
+  `dvb_teletext`.
 - The first-party FFmpeg 9 runtime contract does not currently require or probe
   `libzvbi_teletextdec` or the `--enable-libzvbi` build flag.
 - FFmpeg documents DVB teletext as demux/decode support supplied by the optional
@@ -33,9 +36,23 @@ failure through health and troubleshooting on every supported platform.
   numbers and can produce bitmap or text/ASS output. FFmpeg does not document a
   DVB teletext encoder, so decoding support must not be presented as proof that
   ErsatzRS can author a teletext service.
-- A 2026-08-07 workspace search found no pinned ErsatzTV teletext policy. Phase
-  9A must repeat that baseline check before deciding whether each slice is
-  parity or an ErsatzRS extension.
+- Native FFmpeg and Next are now integrated engines. Next publishes selected
+  tracks and subtitle probe hints, but its current host wire types carry no
+  teletext page or decoder options. Native support cannot establish Next support.
+- [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
+  conditionally accepts Next as the new-channel and standalone-preview default
+  only with automatic verified runtime availability. That acquisition/default
+  implementation is still a UCU-09 candidate at this planning checkpoint.
+- Existing selection and preparation include exact media versions, provider
+  stream identity, bounded Next subtitle artifacts, and edited-source subtitle
+  timing. Reuse those boundaries rather than adding a parallel extraction path.
+- The current managed FFmpeg pin is v2.0.6. P9A-02 must inspect the actual pinned
+  FFmpeg and Next artifacts at implementation time; version or package presence
+  alone does not prove teletext capability.
+- The 2026-10-07 search of the local ErsatzTV checkout at `df6ae228` found no
+  teletext-specific policy, as in the initial 2026-08-07 search. P9A-01 must
+  repeat the source audit at the completed UCU baseline and classify each
+  accepted behavior as parity or an ErsatzRS extension.
 
 ## Non-goals before the Phase 9 ADR
 
@@ -77,6 +94,25 @@ Use ETS 300 706/EN 300 706 terminology where it applies and ground output
 carriage decisions in MPEG-TS/client evidence. Record unsupported combinations
 explicitly instead of allowing FFmpeg's automatic stream mapping to decide.
 
+The ADR must fill an engine/source/output matrix using these independent axes:
+
+| Axis | Cases requiring a disposition |
+|---|---|
+| Engine | Native FFmpeg; Next, including its Burn and Convert modes |
+| Source | Reopenable local files; authenticated provider/finite remote sources; prepared add-on files; one-shot producers; live HTTP/RTSP |
+| Output | Native MPEG-TS and HLS modes; Next HLS and hybrid MPEG-TS; browser/client delivery |
+| Video processing | Transcode/burn-in; video-copy policy and its effect on selected captions |
+| Teletext behavior | Subtitle pages; full-page browsing; authored services, as selected by the ADR |
+
+For each accepted combination, identify page selection, decoder/preparation
+ownership, delivery, failure behavior and required runtime proof; explicitly
+reject or mark inapplicable the remaining combinations. Determine whether the
+pinned Next protocol can express the selection or needs an accepted adapter or
+protocol change before promising support. Preserve [ADR 0100](../docs/adr/0100-next-alpha-embedded-text-subtitle-limits.md):
+never silently discard an exact selection, switch engines, consume a one-shot
+producer twice, or await whole-source extraction from an endless stream. Existing
+alpha limitations are constraints to evaluate, not proof of teletext behavior.
+
 ### P9A-02: Runtime packaging and capability
 
 Build or acquire a small redistributable teletext fixture before changing the
@@ -92,12 +128,25 @@ managed runtime. For every first-party RID:
 6. verify runtime archives and container images contain any required shared
    libraries or remain genuinely static.
 
+Use the existing managed-runtime acquisition and capability-reporting paths,
+recording exact artifact identity separately from application decode evidence.
+UCU's scoped ARM/macOS and hardware acceptance exceptions do not waive Phase 9
+requirements; any teletext platform exception needs its own accepted decision.
+
 ### P9A-03: Scan and persistence
 
 Persist a typed teletext stream/page model rather than overloading the existing
 text/image-subtitle heuristic. At minimum carry the ADR-approved stream index,
 codec, service/page number, subtitle flag/type, language, region/character set,
 forced/default disposition, and source provenance.
+
+Bind page identity to the exact source revision, media version and stream. Pages
+within one stream must remain independently selectable and must not collide in
+cache identity. Preserve provider subtitle ownership under
+[ADR 0101](../docs/adr/0101-provider-subtitle-stream-identity.md); a provider path
+is metadata, not sufficient identity. Extend existing reconciliation and
+preparation contracts to invalidate stale page selections and artifacts without
+replacing unrelated tracks.
 
 Scanner work covers local and supported remote providers, exact media-version
 selection, rescan reconciliation, unavailable files, SQLite persistence, and
@@ -109,36 +158,65 @@ visible rather than disappear from selection.
 
 ### P9B-01: Selection and output
 
-Thread exact stream/page selection through collection/schedule entries and both
-IPTV pipeline families. Implement only the output combinations accepted by the
-ADR:
+Thread exact stream/page selection through collection/schedule entries and the
+native and Next adapters. Implement the P9A-01 matrix through the existing
+application ports, selection rules and source owners:
 
 - burn-in uses explicit decoder page/format/region options and preserves
   transparency, timing, seek/restart, scaling, and HDR/SDR behavior;
-- extraction creates a typed cached derivative with atomic failure fallback;
+- extraction reuses bounded, source-bound preparation with page-aware cache keys,
+  deadlines, cancellation and atomic publication; failure follows the accepted
+  selection policy without admitting partial or stale artifacts;
 - MPEG-TS passthrough or carriage is enabled only after PMT/PID and client proof;
 - HLS/browser playback uses the accepted burn-in or sidecar fallback and never
   advertises native teletext controls that do not exist; and
 - full-page browsing or authored pages, if accepted, use a separate stable
   application/API boundary rather than scraping FFmpeg logs or cached files.
 
+Preserve subtitle timing through retained source intervals, mid-cue seeks,
+programme handoffs and chunk restarts. Define video-copy behavior explicitly;
+copying video must not accidentally promise burned-in captions or carry a
+teletext stream solely through automatic mapping.
+
+If authored pages are accepted, reuse the read-only programme occurrence
+projection from [ADR 0112](../docs/adr/0112-programme-aware-graphics-context.md)
+for current/next/continuing programmes and Later Today, including filler and
+DST boundaries. Reuse the native preview boundary from
+[ADR 0114](../docs/adr/0114-author-graphics-with-the-native-renderer.md) where
+appropriate. A rendered page preview does not prove an encoded teletext service;
+the ADR must still select that service's authoring and transport contract.
+
 ### P9B-02: Admin, health, and end-to-end acceptance
 
 Localize teletext type, page/service, language/region, selection, capability,
-and error presentation. Add health checks for selected-but-undecodable streams,
+and error presentation in all supported cultures (currently nine). Extend the
+existing troubleshooting and health surfaces for selected-but-undecodable streams,
 invalid page metadata, missing runtime support, extraction/decode failures, and
 unsupported output combinations.
+
+Keep browser actions on the management surface, machine operations under the
+existing API policy, and decoder/media callbacks on the internal listener under
+[ADRs 0102](../docs/adr/0102-isolate-http-listener-route-surfaces.md) and
+[0103](../docs/adr/0103-separate-machine-api-from-browser-actions.md). Any browsing
+or sidecar endpoint needs an explicit route and access-policy classification;
+do not expose management through the streaming-only listener.
 
 Use licensed or redistributable fixtures for subtitle pages and, if accepted,
 full-page services. Runtime acceptance covers scan/rescan, exact selection,
 seek and chunk restart, mixed subtitle types, direct MPEG-TS, HLS fallback,
 HDHomeRun clients where applicable, malformed input, runtime refresh, and
-decoded visual/text comparison. TSDuck should verify PSI/PID structure whenever
-the output carries a separate teletext or DVB-subtitle stream.
+decoded visual/text comparison. Include multiple pages in one stream,
+multilingual character sets, preserved alternate audio, source replacement,
+stale cache rejection, cancellation, edited timelines, and native/Next copy-mode
+and unsupported-selection outcomes from the accepted matrix. Prove the served
+output, not only serialized selection or successful process startup. TSDuck
+must verify PSI/PID structure whenever the output carries a separate teletext
+or DVB-subtitle stream.
 
 ## Delivery order
 
-1. `p9a-01`: accept the complete product/standards/runtime contract.
+1. `p9a-01`: after UCU-09 closes, revalidate the source baseline and accept the
+   complete product/standards/runtime contract and engine/source/output matrix.
 2. `p9a-02`: package and functionally probe the decoder.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
 4. `p9b-01`: implement only the accepted selection/output matrix.

@@ -69,7 +69,7 @@ async function render(form, session, job) {
     status(form, "stopped");
   } else if (job.ready && !session.playing) {
     session.playing = true;
-    await start(form.querySelector("video"), job.playlist_url);
+    await start(form.querySelector("video"), job.playlist_url, 0);
   }
 }
 async function observe(form, session) {

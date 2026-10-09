@@ -61,6 +61,105 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
+installed and running. The authorized native offline repair attaches exactly
+166 owned episodes and enables the existing skip-missing policy, preserving
+published revision 4 and draft 176. Nine actual Classic Refreshes preserve
+seeds; separately approved Classic and Scripted Resets produce positive,
+nonoverlapping timelines. The operator Lua now adopts its external resume
+clock and SQLite tail only during Continue; the Scripted reset covers the
+present with complete compatible checkpoints.
+Official add-on 0.11.8 fixes missing Windows playlist titles and contradictory
+unknown-liveness hints. Normal synchronization completes both affected
+libraries and resolves their scan-impact state. Settings, enablement and the
+original disabled Unknown sources policy are preserved. The unused disabled
+legacy add-on was removed with no other media/list/library count changes.
+Fresh Health reports zero errors and five truthful warnings: unavailable or
+unknown-duration media, an unpublished empty playlist, local add-on trust and
+historical subtitle preparation. Eight old caption failures lack retained
+causal diagnostics; current-package caption recovery remains unproven. The
+upgrade invalidates older preparation fingerprints, so bulk preparation is
+broader than retrying eight jobs; no blind bulk retry was performed.
+All 35 advertised admin navigation routes hydrate. A reproduced kind-editor
+marker crash is corrected by resolving data before emitting the island and
+using in-order SSR on its three routes; the island initializes the existing
+locale context for callbacks. Headed Chromium and Firefox pass concrete no-JS
+forms, three editor kinds, real validation/persistence, English desktop and
+Dutch mobile feedback, and corrected 330-task totals. Native bundle consistency
+and actual installed Scripted editor readiness pass. The four earlier runtime
+corrections retain full Rust, strict lint and IPTV/HLS smoke evidence; final
+editor closeout and exact-commit CI are recorded in the session. No release or
+milestone scope change is claimed.
+
+2026-10-09: UCU-09 is Complete through v26.11.1/row208. Stable v1.1.0 is
+published with the four completed Linux/Windows archives and verified checksums.
+Exact application97aa48a0 and Windows recipe3ac69586 have terminal full green CI;
+actual Linux/Windows packaged startup, hydrated controls and decoded native/Next
+playback pass. The maintainer excludes Docker from this release after its timeout;
+no Docker recovery was dispatched and no v1.1.0 image is claimed. Approved
+hardware/platform debt stays explicitly unverified. This current closeout
+supersedes historical pending UCU-09 CI/package notes below. Later upstream
+rows and existing v1.1.1 channel findings remain outside this completed window.
+
+2026-10-09 UCU-09: candidate ea8e2839 passes all3687 Rust and all412 Next CI
+cases plus both actual Next smokes. Chromium334/five skips has one import
+navigation race, now corrected with unchanged assertions and both-browser proof.
+The milestone owns the trace and import-landing-focus-01 acceptance. Stable
+README/onboarding/runtime requirements and changelog are refreshed; keep debt
+explicitly unverified. Firefox completes310 cases with30 existing conditional
+skips. Commit/push the verified test/documentation candidate, require full
+terminal exact-SHA CI, then build,
+accept and publish stable v1.1.0. Preserve the row208/v26.11.1 scope boundary.
+
+2026-10-08 UCU-09: the browser elapsed-time correction passes in both browsers;
+the milestone owns its monotonic-clock proof and unchanged playback assertions.
+Prior CI has 334 Chromium passes plus that corrected measurement failure;
+Firefox was interrupted by shutdown. Commit/push the verified correction,
+require terminal green exact-SHA CI, then verify and publish stable v1.1.0.
+Keep approved hardware/platform debt unverified and preserve the v26.11.1 boundary.
+
+2026-10-07 UCU-09: all208 rows through v26.11.1 are accepted in order.
+Row201 passes Linux118/Windows116 ordinary checks and26 named cases each;
+both platforms pass nine complete decoded30s scenarios plus Stop. Native
+publication16, both held-handle cases, strict lint and Linux/Windows format pass.
+UCU-09 owns canonical source/checksum/state/cleanup and explicit fixture-only
+reuse. Release tooling/notes are N/A; included QSV and native/Next VAAPI
+prerequisites are Covered with hardware execution unverified. No additional
+runtime build is needed. Workspace4011 tests, Clippy, parity, dependency audit,
+matched bundle, both engines' playback and87 TSDuck checks pass. Eight affected
+browser rechecks pass. Full Chromium and unchanged Firefox cases, corrected
+JPEG XL rechecks and authenticated-caption checks in both browsers complete
+local acceptance. UCU-09 owns exact results and fixture-only evidence reuse.
+Commit/push the accepted
+candidate, require terminal green exact-SHA CI and publish stable v1.1.0.
+Existing approved hardware/ARM/macOS debt remains explicitly unverified;
+UCU-09 stays In progress until window acceptance and CI pass. Preserve other work.
+Row199 exact rate/copy/mirror/pin/track/state/cleanup evidence remains valid.
+Row198 cached Next TS/HLS and26 native routing/artwork checks remain valid.
+Local deep scan retains real Linux/Windows scanner/durable admission/restart,
+international-track identity, same-mtime recovery, eight Libraries and four
+artwork-cache browser cases. Final source06/cache proof and explicit native
+source03 reuse remain valid; all 21 current artwork tests now execute on Windows.
+Final integrated packaged Windows/browser acceptance remains required. The
+separate native null-audio checkpoint retains its existing decoded playback,
+cleanup/lint/transport evidence.
+Final window local gates, push and terminal
+green exact-SHA CI remain required.
+ADR 0117 is accepted for necessary Next corrections, packages
+and mandatory retirement. Row186's candidate static WebP and complete GIF
+animation pass; the maintainer accepted the consolidated ADR0117 FFmpeg extension
+with the explicit condition to update ErsatzRS-ffmpeg to v2.0.6. All four corrected
+packages are now published after terminal green exact-commit package CI37539516801
+at b221a3d; published asset digests match the tested archives. Managed runtime integration and all six reviewed
+Next packages are verified and pinned; production HTTP smoke passes. Row187
+Block history/cursor cleanup and SQLite restart proof pass. Row188 is a
+documentation-only Next QSV announcement already included in the pinned runtime;
+hardware execution remains unverified. Continue row189 songs/Next integration,
+retaining reviewed native VAAPI padding and
+Matroska content-duration prerequisites for ordered rows207 and 194. Then finish
+ordered acceptance and
+final local gates, push and terminal green exact-SHA CI. Preserve other work below.
+
 2026-10-02: The maintainer authorized all channel setup solutions for
 v1.1.1, each in a separate commit with a changelog entry. After each completed
 milestone, reread the entire maintainer findings.md before starting the next
@@ -1023,8 +1122,22 @@ AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is
 historical evidence, not CI proof for this working tree. After AMM-N-03 is done
 and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
-Resume Phase 9A at p9a-01 after the corrective program by accepting the teletext
-product and standards contract before implementation.
+Resume Phase 9A at p9a-01 after UCU-09 and its other recorded prerequisites
+close. The 2026-10-07 teletext planning refresh preserves all five milestones
+and the undecided product scope; plans/teletext-support.md now accounts for
+native/Next source ownership, page identity, SQLite and current runtime/admin
+boundaries. Accept the product/standards ADR and engine/source/output matrix
+before implementation; UCU platform exceptions do not waive teletext gates.
+
+Deferred product work accepted 2026-10-09: after both p9b-02 (teletext) and
+p10b-02 (video jukebox), resume oad-01 through oad-04 for bundled official
+add-ons, automatic repository updates On at first run and improved Sources UX.
+The official-addon-distribution parity record and plans/official-addon-distribution.md
+own the queue; dependency edges prevent early implementation. The maintainer
+locked docs/reference/ui/design-artifacts/addon-sources/ v0.1 on 2026-10-09;
+further refinement uses new revisions alongside phase work. Preserve both ZIP kinds;
+repository enablement does not authorize automatic yt-dlp installation. This
+does not change current focus or Phase 11 numbering.
 
 Deferred maintainer tooling (retained from the former plan index): evaluate
 mdBook or another documentation build system, and validate the Claude hook

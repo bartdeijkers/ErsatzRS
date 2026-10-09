@@ -123,6 +123,64 @@ async fn multiple_files_and_versions_do_not_duplicate_scheduled_items() {
 }
 
 #[tokio::test]
+async fn song_bindings_keep_exact_versions_and_tracks_on_mirror_timeline() {
+    let (pool, locker, channel, start) = fixture().await;
+    for sql in [
+        r#"INSERT INTO "Song" ("Id") VALUES (10)"#,
+        r#"UPDATE "MediaVersion" SET "MovieId"=NULL,"SongId"=10 WHERE "Id"=100"#,
+        r#"DELETE FROM "Movie" WHERE "Id"=10"#,
+        r#"INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","SongId","Height","Width","VideoScanKind") VALUES (101,'2026-09-22','2026-09-22','00:01:00',10,0,0,0)"#,
+        r#"INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (3,101,'media/song-alternate.flac','song-alternate')"#,
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+    let repo = SqlitePlayoutRepository(pool.clone());
+    let mut first = repo
+        .items_in_range(1, start, start + Duration::minutes(1))
+        .await
+        .unwrap()
+        .remove(0);
+    let pin = PinnedStreamSelection {
+        media_version_id: 101,
+        video_stream_index: 0,
+        audio_stream_index: Some(2),
+        subtitle_stream_index: Some(3),
+    };
+    first.pinned_stream_selection = Some(pin);
+    repo.upsert_item(&first).await.unwrap();
+    let mirror = Channel {
+        id: 2,
+        number: "2".into(),
+        playout_source: ChannelPlayoutSource::Mirror,
+        mirror_source_channel_id: Some(channel.id),
+        playout_offset: Some(Duration::hours(1)),
+        ..channel
+    };
+    let mirrored = read_locked(
+        &pool,
+        &locker,
+        &mirror,
+        start + Duration::hours(1),
+        start + Duration::hours(1) + Duration::minutes(2),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(mirrored.items.len(), 2);
+    let pinned = &mirrored.items[0];
+    assert_eq!(pinned.media_version_id, 101);
+    assert_eq!(pinned.media_file_id, 3);
+    assert_eq!(pinned.path, "media/song-alternate.flac");
+    assert_eq!(pinned.item.pinned_stream_selection, Some(pin));
+    assert_eq!(pinned.item.start, start + Duration::hours(1));
+    assert_eq!(
+        pinned.item.guide_finish,
+        Some(start + Duration::hours(1) + Duration::minutes(1))
+    );
+    assert_eq!(mirrored.items[1].media_version_id, 100);
+}
+
+#[tokio::test]
 async fn identical_paths_preserve_the_selected_file_identity() {
     let (pool, locker, channel, start) = fixture().await;
     // Provider file keys can differ even when their stored paths are identical.

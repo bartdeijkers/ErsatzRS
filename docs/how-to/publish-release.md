@@ -16,6 +16,13 @@ macOS archives are intentionally omitted for now. Keep this release line focused
 on Linux and Windows archives plus GHCR Docker images; restore the two `osx-*`
 matrix entries only in a future macOS-targeted release.
 
+For v1.1.0, the maintainer explicitly approved publishing the four completed
+archives without Docker after the Docker job timed out. Candidate CI and the
+Windows recovery recipe passed; native Linux x64 and Windows x64 package
+acceptance passed. The release notes identify the omitted image, glibc 2.39
+minimum and approved unverified hardware/platform debt. This exception does not
+make the failed Docker job green or waive Docker gates for another release.
+
 Beta tags (`v*.*.*-beta` or `v*.*.*-beta.*`) intentionally take a separate
 Windows-only path.
 They run only on `[self-hosted, ersatzrs-windows-release]`, stage the
@@ -181,3 +188,27 @@ and labels the image with both source and recipe revisions. It publishes and
 verifies the three-platform image and matching `latest` manifest. Include the
 recovery run and recipe revision in release acceptance evidence; the failed
 original Docker job is not a successful build.
+
+### Recover a Windows Python setup failure
+
+If the original Windows job passed its native build and startup tests but failed
+only at Python setup, install Python 3.12 or newer in the Windows runner account's
+PATH. Preserve the accepted application tag, successful Linux archives and shared
+web-assets artifact. Commit and push the workflow correction, wait for its green
+CI, then dispatch `release-windows-recovery.yml` with the existing stable `tag`,
+its full `source_sha`, and the original release `assets_run` ID.
+
+The recovery requires an unpublished stable draft, complete successful CI for the
+exact application source, successful matching web assets, and the original Windows
+job's terminal Python setup failure. Other original platform jobs may continue;
+do not rerun the original Windows job in parallel. Recovery checks out only the
+accepted application source with the warm target preserved, repeats the native
+build and startup tests, verifies the matched web bundle and pinned Next staging,
+and replaces only the Windows draft asset. Its offline Next tests come from the
+corrected recovery revision and run against the accepted application's unchanged
+staging implementation and manifest; they check bytes/provenance on every host
+and POSIX execute permissions only on POSIX hosts. It rechecks the guards before upload
+and records the archive checksum, application source and recovery workflow
+revision. Include the green recovery run in release acceptance evidence; the
+original failed Windows job remains a failure. Perform actual packaged Windows
+startup and playback acceptance before publishing the stable draft.

@@ -73,6 +73,9 @@ On the Windows runner, install:
 - `cargo-leptos 0.3.6`.
 - `stylance-cli 0.8.2`.
 - 7-Zip available as `7z`.
+- Python 3.12 or newer available as `python` in the runner service account's PATH.
+  Windows packaging reuses that installation; it does not install Python or
+  change PowerShell execution policy.
 
 ```powershell
 rustup target add wasm32-unknown-unknown

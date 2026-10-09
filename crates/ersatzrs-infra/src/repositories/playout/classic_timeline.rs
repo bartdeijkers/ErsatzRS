@@ -44,6 +44,11 @@ pub(super) async fn validate_publication(
             "playout item finish",
             &row.try_get::<String, _>("Finish").repository()?,
         )?;
+        // Expired rows are removed by publication even when a legacy row
+        // crosses the restore seam. Only a still-retained row can be cut.
+        if cutoff.is_some_and(|cutoff| finish < cutoff) {
+            continue;
+        }
         if result.clear_items
             && result
                 .retain_through
@@ -51,8 +56,7 @@ pub(super) async fn validate_publication(
         {
             return Err(RepositoryError::Conflict("Classic timeline retention boundary cuts a published item; choose a complete programme boundary".into()));
         }
-        if cutoff.is_some_and(|cutoff| finish < cutoff)
-            || (result.clear_items && result.retain_through.is_none_or(|seam| finish > seam))
+        if (result.clear_items && result.retain_through.is_none_or(|seam| finish > seam))
             || (!result.clear_items && result.items_to_remove.contains(&id))
         {
             continue;

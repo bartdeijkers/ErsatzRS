@@ -1,0 +1,122 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "03626929089a438245cfc77cbedda6e92d98dc9f",
+  "source_archive_sha256": "06e4f530f0985a8c8cde4380f9abb43d4352b7ab07917272b33b75394fa891e7",
+  "source_lock_sha256": "abf9a7d03c93a4e1602d421f2cad4f1295edadaae9f5e50a13b7b24be0072fd8",
+  "distribution_version": "0.1.0-0362692-ersatzrs.1",
+  "adr": "0117",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "75c2b4d7128e140f65322978c8fc6d144638aee24c22e19512f9b746ba8b88f0",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "03626929089a438245cfc77cbedda6e92d98dc9f",
+      "unpatched_regression": "fails at reviewed0362692: unchanged live RTSP readiness deadline; decoded HTTP stages pass but live RTSP buffers before readiness",
+      "evidence": "plans/upstream-catch-up.md"
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "b62884eae96f03a2ea14fc25338ec76ccbac0134e16d9babb637bdf6023a3156",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "03626929089a438245cfc77cbedda6e92d98dc9f",
+      "unpatched_regression": "fails at reviewed0362692: real_next_scheduled_webp_holds_picture_with_silent_audio loses its decoded blue programme picture; patched Linux static/animated local/HTTP lifecycle and compatibility checks pass",
+      "evidence": "docs/adr/0117-temporary-next-compatibility-corrections.md"
+    }
+  ],
+  "distribution_repository": "bartdeijkers/ErsatzRS-next",
+  "distribution_tag": "next-0362692-ersatzrs.1",
+  "artifact_sha256": {
+    "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
+    "provenance.json": "511ec0d2bf8d142433bb5ac4410702e84f0ec4bea3cdbd739b7ae3150bc6bd6a",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm.tar.gz": "a597770522f383418aa75ec22d9f3f5b93801589e9471951176969ac3f27096e",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm64.tar.gz": "4a108d1d7d7b08d73cd00cce1753a7929a3d557b453e6e11281c551e2d7db4eb",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-x64.tar.gz": "365373706913e099c0609f8e447d041a0f1e9b3deb4556066a4dc91024d5f9b3",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-arm64.tar.gz": "36ff3f5fca69bded87759621b192348bd3785a89dde398ff2ded13199e9bcfcf",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-x64.tar.gz": "278032d1470f2b891d69bf22e00c601cfcc380f5583f28b198015839142c624d",
+    "ersatzrs-next-0.1.0-0362692-ersatzrs.1-win-x64.zip": "4f14f94f8a904a61d3b69f9d50ba072aa54db36939cd8a50a692a2276427611e"
+  },
+  "runtime_packages": {
+    "linux-arm": {
+      "target": "armv7-unknown-linux-gnueabihf",
+      "platform": "linux-arm",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm.tar.gz",
+      "payload_sha256": {
+        "ersatztv-channel": "dd18a905f3c6a2186b37c9fc535acc016da8125606351304c8b07cbacdc1878c",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
+      },
+      "payload_bytes": {
+        "ersatztv-channel": 6926408,
+        "LICENSE": 1067
+      }
+    },
+    "linux-arm64": {
+      "target": "aarch64-unknown-linux-gnu",
+      "platform": "linux-arm64",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-arm64.tar.gz",
+      "payload_sha256": {
+        "ersatztv-channel": "eae28d84db17cbe604c24b518bf38292e56671dd2c0d28530f3ba873ee15ee38",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
+      },
+      "payload_bytes": {
+        "ersatztv-channel": 8591800,
+        "LICENSE": 1067
+      }
+    },
+    "linux-x64": {
+      "target": "x86_64-unknown-linux-gnu",
+      "platform": "linux-x64",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-linux-x64.tar.gz",
+      "payload_sha256": {
+        "ersatztv-channel": "473bd8068e78f7d8bca34475aa69dc3197db38049d68bc0abf588eb4268c2bb4",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
+      },
+      "payload_bytes": {
+        "ersatztv-channel": 10423184,
+        "LICENSE": 1067
+      }
+    },
+    "osx-arm64": {
+      "target": "aarch64-apple-darwin",
+      "platform": "macos-arm64",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-arm64.tar.gz",
+      "payload_sha256": {
+        "ersatztv-channel": "b914060778f4f23ab13fe632d3cdd28e7887d7d4e30c1db31dc9fb10e151a46d",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
+      },
+      "payload_bytes": {
+        "ersatztv-channel": 8622640,
+        "LICENSE": 1067
+      }
+    },
+    "osx-x64": {
+      "target": "x86_64-apple-darwin",
+      "platform": "macos-x64",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-osx-x64.tar.gz",
+      "payload_sha256": {
+        "ersatztv-channel": "230d046bfaa10f791b7759d9a95656a5fc0c38b0e96cc65a2a5c95363ca51755",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
+      },
+      "payload_bytes": {
+        "ersatztv-channel": 9892528,
+        "LICENSE": 1067
+      }
+    },
+    "win-x64": {
+      "target": "x86_64-pc-windows-msvc",
+      "platform": "windows-x64",
+      "asset": "ersatzrs-next-0.1.0-0362692-ersatzrs.1-win-x64.zip",
+      "payload_sha256": {
+        "ersatztv-channel.exe": "0cc5370f9af64e5d760bb1a75bdd0bb7d9c30241d62b65f9b6842ea5955840be",
+        "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
+        "libvpl.dll": "ab22b28f67f5b443d0e022b797675314d650669374247766ea91373e2c67a8e7",
+        "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+      },
+      "payload_bytes": {
+        "ersatztv-channel.exe": 9530368,
+        "LICENSE": 1067,
+        "libvpl.dll": 558344,
+        "libvpl-LICENSE.txt": 1074
+      }
+    }
+  }
+}

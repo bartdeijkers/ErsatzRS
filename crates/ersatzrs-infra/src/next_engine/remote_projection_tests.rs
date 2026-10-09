@@ -140,6 +140,80 @@ pub(crate) async fn fixture() -> (DbPool, EntityLocker, Channel, DateTime<Utc>) 
 }
 
 #[tokio::test]
+async fn projected_song_uses_bound_remote_owner_and_refuses_detached_version() {
+    let (pool, _locker, channel, start) = fixture().await;
+    for query in [
+        r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (11, 1, 0)"#,
+        r#"INSERT INTO "Song" ("Id") VALUES (11)"#,
+        r#"INSERT INTO "SongMetadata" ("Id", "SongId", "Title", "MetadataKind", "DateAdded", "DateUpdated") VALUES (31, 11, 'Projected song', 0, '2026-09-22 00:00:00', '2026-09-22 00:00:00')"#,
+        r#"UPDATE "MediaVersion" SET "SongId"=11 WHERE "Id"=100"#,
+        r#"DELETE FROM "MediaStream" WHERE "MediaVersionId"=100 AND "MediaStreamKind"=1"#,
+        r#"UPDATE "PlayoutItem" SET "MediaItemId"=11 WHERE "Id"=1"#,
+    ] {
+        sqlx::query(query).execute(&pool).await.unwrap();
+    }
+    let media = schedule::bind_media(
+        &pool,
+        ersatzrs_domain::PlayoutItem {
+            id: 1,
+            playout_id: 1,
+            media_item_id: 11,
+            start,
+            finish: start + chrono::Duration::seconds(60),
+            out_point: chrono::Duration::seconds(60),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(remote_owner(&media).unwrap(), 10);
+    let projected = project_publishable(
+        &pool,
+        &channel,
+        &media,
+        &Resolution {
+            width: 320,
+            height: 180,
+            ..Default::default()
+        },
+        selection::AudioDirective::Published(Some(2)),
+    )
+    .await
+    .unwrap();
+    assert!(projected.projection.song.is_some());
+    let audio = projected
+        .projection
+        .item
+        .tracks
+        .as_ref()
+        .unwrap()
+        .audio
+        .as_ref()
+        .unwrap();
+    assert_eq!(audio.stream_index, Some(2));
+    assert!(
+        matches!(&audio.source, Some(Source::Http { uri, .. }) if uri == "https://example.test/finite")
+    );
+    sqlx::query(r#"UPDATE "MediaVersion" SET "SongId"=NULL WHERE "Id"=100"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(project_publishable(
+        &pool,
+        &channel,
+        &media,
+        &Resolution {
+            width: 320,
+            height: 180,
+            ..Default::default()
+        },
+        selection::AudioDirective::Published(Some(2))
+    )
+    .await
+    .is_err());
+}
+
+#[tokio::test]
 async fn callback_snapshot_preserves_audio_and_releases_schedule_lock() {
     let (pool, locker, channel, start) = fixture().await;
     let selected = snapshot(

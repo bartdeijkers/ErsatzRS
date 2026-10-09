@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `960421e8a3cb832864fe096d5f0cfa833dbb1837` |
-| **Commit subject** | `fix: remove av1 from ui (#3048)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/960421e8a3cb832864fe096d5f0cfa833dbb1837 |
+| **Pinned commit** | `46118d43313b7828780fbfcfb46e980390ea8b0d` |
+| **Commit subject** | `docs: prep for release v26.11.1` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/46118d43313b7828780fbfcfb46e980390ea8b0d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,12 +59,12 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `960421e8a3cb832864fe096d5f0cfa833dbb1837` (verified 2026-10-01),
-currently **183 commits** beyond the initial pin. Per the maintainer's
-2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
-commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
-`495e3799` cutoff no longer limits scope. The latest fetched tip is the run's
-target. Refreshing the target never advances the parity pin.
+The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
+`v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
+There are **208 accepted and 0 pending in-scope rows**. This supersedes the
+2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
+retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
+Fetching refs never advances the parity pin.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not
@@ -73,11 +73,14 @@ leaving HEAD pinned. Stop on fetch failure or non-prefix history instead of
 silently using a stale target or rewriting processed rows.
 
 The pin advances only through reviewed ledger steps, never through the daily
-routine or a bulk baseline bump. Land the filled row and updated pin/subject/URL
-together only with maintainer commit authorization, then move the upstream
-checkout to that SHA. Stop after one upstream commit in each task run;
-bootstrap leaves the pin intact. Milestone acceptance and evidence live in
-`docs/progress/milestones.toml`; ADR 0095 accepts Next as an optional second engine; implementation remains open.
+routine or an unreviewed baseline bump. The maintainer authorized ordered
+batching of compatible rows201–208 on 2026-10-07; each row still needs its own
+justified disposition and acceptance evidence. Land the filled rows and terminal
+pin/subject/URL together only with maintainer commit authorization, then move
+the clean upstream checkout to that SHA. Bootstrap leaves the pin intact. Milestone acceptance and evidence live in
+`docs/progress/milestones.toml`; ADR 0095 accepts the conditional new-channel and
+standalone-preview Next default with bundled or verified automatic acquisition.
+Final integrated acceptance remains open.
 
 The active catch-up procedure uses direct substantive Codex review under the
 maintainer's 2026-09-20 decision; Claude review is not a current gate. AMM-N-03

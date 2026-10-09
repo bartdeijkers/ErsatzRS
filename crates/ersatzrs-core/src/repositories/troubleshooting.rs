@@ -49,6 +49,7 @@ pub struct PlaybackMediaSummaryAdmin {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackChannelSummaryAdmin {
     pub name: String,
+    pub streaming_engine: ersatzrs_domain::StreamingEngine,
     pub ffmpeg_profile_id: EntityId,
 }
 

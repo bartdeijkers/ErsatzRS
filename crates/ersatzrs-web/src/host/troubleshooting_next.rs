@@ -12,7 +12,9 @@ use ersatzrs_infra::next_engine::{
     host::channel_binary,
     process::{NextProcess, ProcessError},
     protocol, schedule,
-    troubleshooting::TroubleshootingPreview,
+    troubleshooting::{
+        TroubleshootingChannelOccurrence, TroubleshootingChannelWindow, TroubleshootingPreview,
+    },
 };
 use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
@@ -122,6 +124,9 @@ async fn select(
         )
     };
     channel.streaming_engine = StreamingEngine::Next;
+    if selected_at.is_some() {
+        apply_channel_selector(&mut channel, query);
+    }
     let mut subtitle_id = query.subtitle_id;
     if selected_at.is_none() {
         if channel.stream_selector.is_some() {
@@ -142,13 +147,7 @@ async fn select(
     let profile = load_playback_profile(&state.pool, profile_id)
         .await?
         .ok_or(PreviewNotFound("ffmpeg profile does not exist"))?;
-    if let Some(title) = query
-        .preferred_audio_title
-        .as_ref()
-        .filter(|title| !title.trim().is_empty())
-    {
-        media.item.preferred_audio_title = Some(title.clone());
-    }
+    apply_preferred_audio_title(&mut media.item, query);
     let mut info = state
         .repositories
         .troubleshooting
@@ -170,6 +169,16 @@ async fn select(
         playback_start: start,
         subtitle_id,
     })
+}
+
+fn apply_preferred_audio_title(item: &mut PlayoutItem, query: &PlaybackPreviewQuery) {
+    if let Some(title) = query
+        .preferred_audio_title
+        .as_ref()
+        .filter(|title| !title.trim().is_empty())
+    {
+        item.preferred_audio_title = Some(title.clone());
+    }
 }
 
 fn seek_media_item(
@@ -243,6 +252,9 @@ async fn prepare_inner(
     String,
     SelectionLog,
 )> {
+    if query.channel.is_some_and(|id| id > 0) {
+        return prepare_channel_window(state, query, paths, deadline, session).await;
+    }
     let selected = select(state, query).await?;
     state
         .record_preview_selection(selected.selected_at.unwrap_or(selected.playback_start))
@@ -322,6 +334,342 @@ async fn prepare_inner(
         selected.channel.number,
         diagnostics,
     ))
+}
+
+fn apply_channel_selector(channel: &mut Channel, query: &PlaybackPreviewQuery) {
+    if let Some(selector) = query
+        .stream_selector
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        channel.stream_selector_mode = ersatzrs_domain::ChannelStreamSelectorMode::Custom;
+        channel.stream_selector = Some(selector.clone());
+    } else if channel.stream_selector_mode == ersatzrs_domain::ChannelStreamSelectorMode::Custom {
+        channel.stream_selector_mode = ersatzrs_domain::ChannelStreamSelectorMode::Default;
+        channel.stream_selector = None;
+    }
+}
+
+struct ChannelWindowSelection {
+    channel: Channel,
+    profile: PlaybackProfile,
+    media: Vec<schedule::ScheduledMedia>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    manual_owner: Option<(i64, i64, i64)>,
+}
+
+async fn select_channel_window(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+) -> ApiResult<ChannelWindowSelection> {
+    let id = query
+        .channel
+        .filter(|id| *id > 0)
+        .ok_or(PreviewNotFound("channel preview requires channel"))?;
+    let mut channel = state.repositories.channel.get_with_profile(id).await?;
+    if !channel.is_enabled {
+        return Err(PreviewNotFound("channel is disabled").into());
+    }
+    let mut at = requested_preview_start(query.start.as_deref())?;
+    if query.seek_seconds.is_some() {
+        if let Some(media) = state
+            .next_engine
+            .troubleshooting_channel_media(&channel, at)
+            .await?
+        {
+            at = programme_preview_time(query, media.item.start, media.item.finish, at)?;
+        }
+    }
+    let at = DateTime::from_timestamp(at.timestamp(), 0)
+        .ok_or(PreviewNotFound("invalid preview clock"))?;
+    let finish = at
+        .checked_add_signed(TimeDelta::seconds(30))
+        .ok_or(PreviewNotFound("invalid preview finish"))?;
+    let profile_id = query
+        .ffmpeg_profile
+        .filter(|id| *id > 0)
+        .unwrap_or(channel.ffmpeg_profile_id);
+    let profile = load_playback_profile(&state.pool, profile_id)
+        .await?
+        .ok_or(PreviewNotFound("ffmpeg profile does not exist"))?;
+    // Only the transient copy uses the requested engine/profile/selector.
+    channel.streaming_engine = StreamingEngine::Next;
+    channel.ffmpeg_profile_id = profile_id;
+    apply_channel_selector(&mut channel, query);
+    let active = state
+        .next_engine
+        .troubleshooting_channel_media(&channel, at)
+        .await?;
+    let manual_owner = active.as_ref().map(|media| {
+        (
+            media.item.media_item_id,
+            media.media_version_id,
+            media.media_file_id,
+        )
+    });
+    if query.subtitle_id.is_some_and(|id| id > 0) && manual_owner.is_none() {
+        return Err(
+            PreviewNotFound("explicit preview subtitle requires an active occurrence").into(),
+        );
+    }
+    let mut media = state
+        .next_engine
+        .troubleshooting_channel_window(&channel, at)
+        .await?;
+    if let Some(title) = query
+        .preferred_audio_title
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        for media in &mut media {
+            if manual_owner
+                == Some((
+                    media.item.media_item_id,
+                    media.media_version_id,
+                    media.media_file_id,
+                ))
+            {
+                media.item.preferred_audio_title = Some(title.clone());
+            }
+        }
+    }
+    Ok(ChannelWindowSelection {
+        channel,
+        profile,
+        media,
+        start: at,
+        finish,
+        manual_owner,
+    })
+}
+
+struct ChannelWindowOccurrences {
+    occurrences: Vec<TroubleshootingChannelOccurrence>,
+    descriptions: Vec<PreviewMediaItem>,
+}
+
+async fn describe_channel_window(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+    selected: &ChannelWindowSelection,
+    working: &FsPath,
+) -> ApiResult<ChannelWindowOccurrences> {
+    let mut occurrences = Vec::with_capacity(selected.media.len());
+    let mut descriptions = Vec::with_capacity(selected.media.len());
+    for media in &selected.media {
+        let mut info = state
+            .repositories
+            .troubleshooting
+            .load_preview_media_admin(media.item.media_item_id, Some(media.media_version_id))
+            .await?
+            .ok_or(PreviewNotFound("media item does not exist"))?;
+        info.path.clone_from(&media.path);
+        info.media_version_id = media.media_version_id;
+        let channel = credits::channel(query, &info, &selected.channel);
+        let owned_subtitle = query.subtitle_id.and_then(|id| {
+            (selected.manual_owner
+                == Some((
+                    media.item.media_item_id,
+                    media.media_version_id,
+                    media.media_file_id,
+                )))
+            .then_some(id)
+        });
+        let selection = Selection {
+            channel: channel.clone(),
+            media: media.clone(),
+            info: info.clone(),
+            profile: selected.profile.clone(),
+            selected_at: Some(media.item.start),
+            playback_start: selected.start,
+            subtitle_id: owned_subtitle,
+        };
+        let credits = if credits::enabled(&channel, &info)
+            && ersatzrs_infra::next_engine::troubleshooting::channel_credits_eligible(
+                &channel,
+                &media.item,
+                owned_subtitle,
+            ) {
+            let folder = working.join(format!("occurrence-{}", media.item.id));
+            tokio::fs::create_dir(&folder).await?;
+            prepare_occurrence_credits(&state.pool, &selection, &folder).await?
+        } else {
+            None
+        };
+        occurrences.push(TroubleshootingChannelOccurrence {
+            media: media.clone(),
+            channel,
+            subtitle_id: owned_subtitle,
+            credits,
+        });
+        descriptions.push(info);
+    }
+    Ok(ChannelWindowOccurrences {
+        occurrences,
+        descriptions,
+    })
+}
+
+async fn write_channel_window_artifacts(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+    paths: &RuntimePaths,
+    selected: &ChannelWindowSelection,
+    prepared: &ChannelWindowOccurrences,
+    playout: &protocol::Playout,
+    manifest: &FsPath,
+) -> ApiResult<()> {
+    let empty = PreviewMediaItem {
+        kind: "Fallback".into(),
+        duration_seconds: 30.0,
+        ..Default::default()
+    };
+    write_preview_artifacts(
+        state,
+        query,
+        prepared.descriptions.first().unwrap_or(&empty),
+        &selected.profile,
+        &paths.output,
+    )
+    .await?;
+    tokio::fs::write(
+        manifest.join(format!(
+            "{}_{}.json",
+            selected.start.timestamp_millis(),
+            selected.finish.timestamp_millis()
+        )),
+        serde_json::to_vec(&playout)?,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn prepare_channel_window(
+    state: &NativeAdminTroubleshootingRuntime,
+    query: &PlaybackPreviewQuery,
+    paths: &RuntimePaths,
+    deadline: Instant,
+    session: &mut Option<uuid::Uuid>,
+) -> ApiResult<(
+    tempfile::TempDir,
+    protocol::ChannelConfig,
+    String,
+    SelectionLog,
+)> {
+    let selected = select_channel_window(state, query).await?;
+    state.record_preview_selection(selected.start).await;
+    let runtime = state.ffmpeg_runtime.read().await.clone();
+    let replacements = stream::load_path_replacements(&state.repositories.media_source).await?;
+    let diagnostics = SelectionLog::default();
+    prepare_troubleshooting_folder(&paths.output).await?;
+    let prepared = describe_channel_window(state, query, &selected, &paths.output).await?;
+    let start = ersatzrs_infra::next_engine::host::NextStart {
+        channel_id: selected.channel.id,
+        preview: true,
+        number: selected.channel.number.clone(),
+        executable: paths.executable.clone(),
+        output: paths.output.clone(),
+        ffmpeg: runtime.ffmpeg.path.clone().into(),
+        ffprobe: runtime.ffprobe.path.clone().into(),
+        replacements: replacements.clone(),
+        idle_timeout: None,
+        deadline,
+    };
+    let (instance, playout) = state
+        .next_engine
+        .prepare_troubleshooting_window(
+            TroubleshootingChannelWindow {
+                channel: &selected.channel,
+                profile: &selected.profile,
+                occurrences: &prepared.occurrences,
+                start: selected.start,
+                finish: selected.finish,
+                replacements: &replacements,
+                ffmpeg: FsPath::new(&runtime.ffmpeg.path),
+                deadline,
+                diagnostics: Some(diagnostics.clone()),
+            },
+            start,
+        )
+        .await?;
+    *session = Some(instance);
+    let manifest = tempfile::tempdir()?;
+    let mut configuration = config::channel_config(
+        &selected.profile,
+        selected.channel.next_engine_text_subtitle_mode,
+        manifest.path(),
+        FsPath::new(&runtime.ffmpeg.path),
+        FsPath::new(&runtime.ffprobe.path),
+    )?;
+    configuration.normalization.video.frame_rate = config::troubleshooting_channel_frame_rate(
+        &state.pool,
+        &selected.channel,
+        &selected.profile,
+    )
+    .await?;
+    configuration.playout.virtual_start = Some(selected.start);
+    configuration.ffmpeg.reports_folder = Some(
+        paths
+            .output
+            .to_str()
+            .ok_or("invalid output path encoding")?
+            .to_owned(),
+    );
+    configuration.normalization.subtitle.fonts_folder = Some(
+        paths
+            .fonts
+            .to_str()
+            .ok_or("invalid fonts path encoding")?
+            .to_owned(),
+    );
+    write_channel_window_artifacts(
+        state,
+        query,
+        paths,
+        &selected,
+        &prepared,
+        &playout,
+        manifest.path(),
+    )
+    .await?;
+    Ok((
+        manifest,
+        configuration,
+        selected.channel.number,
+        diagnostics,
+    ))
+}
+
+async fn prepare_occurrence_credits(
+    pool: &DbPool,
+    selected: &Selection,
+    working: &FsPath,
+) -> ApiResult<Option<protocol::Track>> {
+    // Stage immutable source-owned credits before local or remote projection.
+    // Next applies elapsed virtual-clock seek once, including after callbacks.
+    let seek = selected.media.item.in_point.to_std()?;
+    let Some(subtitle) = credits::prepare(
+        pool,
+        &selected.info,
+        &selected.channel,
+        &selected.profile,
+        seek,
+        working,
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(protocol::Track {
+        stream_index: Some(0),
+        source: Some(protocol::Source::Local {
+            path: subtitle.path.ok_or("preview credits path is unavailable")?,
+            probe_hint: None,
+            in_point_ms: Some(0),
+            out_point_ms: None,
+        }),
+    }))
 }
 
 async fn attach_preview_credits(
@@ -490,7 +838,13 @@ async fn supervise(
         tokio::select! {
             status = process.wait() => {
                 let status = status?;
-                if status.success() && output_ready(working).await? {
+                // A short successful preview can finish before Next publishes
+                // its four-segment readiness marker. Only reaped success may
+                // use the final generated playlist in that case.
+                if !cancellation.is_cancelled()
+                    && completed_output_ready(working, status.success()).await?
+                    && !cancellation.is_cancelled()
+                {
                     if let Some(job) = lifecycle::job(ownership) { job.ready(); }
                     notify(ready, Ok(()));
                 }
@@ -498,8 +852,10 @@ async fn supervise(
             }
             result = wait_output(working) => {
                 result?;
-                if let Some(job) = lifecycle::job(ownership) { job.ready(); }
+                if !cancellation.is_cancelled() {
+                    if let Some(job) = lifecycle::job(ownership) { job.ready(); }
                     notify(ready, Ok(()));
+                }
                 Ok(process.wait().await?)
             }
         }
@@ -542,8 +898,40 @@ fn notify(ready: &mut Readiness, value: Result<(), &'static str>) {
 }
 
 async fn output_ready(folder: &FsPath) -> ApiResult<bool> {
-    Ok(tokio::fs::try_exists(folder.join("ffmpeg.m3u8")).await?
-        && count_segments(&folder.to_owned(), "ts").await? > 0)
+    Ok(tokio::fs::try_exists(folder.join("live.m3u8")).await?
+        && tokio::fs::try_exists(folder.join(".ready")).await?)
+}
+
+async fn completed_output_ready(folder: &FsPath, succeeded: bool) -> ApiResult<bool> {
+    if !succeeded {
+        return Ok(false);
+    }
+    let playlist = match tokio::fs::read_to_string(folder.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if !playlist.lines().any(|line| line.trim() == "#EXT-X-ENDLIST") {
+        return Ok(false);
+    }
+    for segment in playlist.lines().map(str::trim) {
+        // The generated playlist names local TS members; never infer playable
+        // output from an unrelated segment or an out-of-folder reference.
+        if !segment.starts_with('#')
+            && !segment.contains(['/', '\\'])
+            && !segment.contains("..")
+            && matches!(
+                FsPath::new(segment)
+                    .extension()
+                    .and_then(|ext| ext.to_str()),
+                Some("ts")
+            )
+            && tokio::fs::try_exists(folder.join(segment)).await?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn wait_output(folder: &FsPath) -> ApiResult<()> {

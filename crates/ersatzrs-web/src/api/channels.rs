@@ -61,8 +61,11 @@ pub struct ChannelSaveForm {
     mirror_source_channel_id: i64,
     #[serde(default)]
     playout_offset_hours: i32,
-    #[serde(default)]
-    streaming_engine: i32,
+    #[serde(
+        default,
+        deserialize_with = "crate::admin::server_fns::channels::deserialize_supplied_streaming_engine"
+    )]
+    streaming_engine: Option<i32>,
     #[serde(default)]
     next_engine_text_subtitle_mode: i32,
     streaming_mode: i32,
@@ -348,7 +351,9 @@ impl ChannelSaveForm {
             playout_mode: parse_i32(fields, "playout_mode"),
             mirror_source_channel_id: parse_i64(fields, "mirror_source_channel_id"),
             playout_offset_hours: parse_i32(fields, "playout_offset_hours"),
-            streaming_engine: parse_i32(fields, "streaming_engine"),
+            streaming_engine: fields
+                .get("streaming_engine")
+                .map(|_| parse_i32(fields, "streaming_engine")),
             next_engine_text_subtitle_mode: parse_i32(fields, "next_engine_text_subtitle_mode"),
             streaming_mode: parse_i32(fields, "streaming_mode"),
             watermark_id: parse_i64(fields, "watermark_id"),
@@ -397,7 +402,7 @@ impl ChannelSaveForm {
             playout_mode: self.playout_mode,
             mirror_source_channel_id: self.mirror_source_channel_id,
             playout_offset_hours: self.playout_offset_hours,
-            streaming_engine: self.streaming_engine,
+            streaming_engine: self.streaming_engine.unwrap_or(i32::from(self.id == 0)),
             next_engine_text_subtitle_mode: self.next_engine_text_subtitle_mode,
             streaming_mode: self.streaming_mode,
             watermark_id: self.watermark_id,
@@ -484,7 +489,36 @@ fn channel_logo_dir() -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
+
+    #[test]
+    fn channel_create_html_omission_defaults_next_and_explicit_native_and_updates_stay_native() {
+        for (id, supplied, expected) in [
+            (0, None, 1),
+            (0, Some(0), 0),
+            (0, Some(1), 1),
+            (7, None, 0),
+            (7, Some(0), 0),
+            (7, Some(1), 1),
+        ] {
+            let mut encoded =
+                format!("id={id}&number=101&name=Create&ffmpeg_profile_id=3&streaming_mode=5");
+            if let Some(engine) = supplied {
+                write!(encoded, "&streaming_engine={engine}").unwrap();
+            }
+            let input: ChannelSaveForm = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(input.into_channel_form().streaming_engine, expected);
+            let fields: HashMap<String, String> = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(
+                ChannelSaveForm::from_fields(&fields)
+                    .into_channel_form()
+                    .streaming_engine,
+                expected
+            );
+        }
+    }
 
     #[test]
     fn channel_logo_filename_preserves_uploaded_uuids_and_hex_cache_names() {

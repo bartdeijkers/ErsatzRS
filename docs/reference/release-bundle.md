@@ -20,7 +20,7 @@ matching top-level directory.
 | `ersatzrs-web.exe` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner.exe` | One-shot scanner binary |
 | `ersatzrs-healthcheck.exe` | Readiness probe for `/healthz` |
-| `ersatztv-channel.exe` | Pinned optional Next engine |
+| `ersatztv-channel.exe` | Pinned Next engine, used by default for new channels |
 | `libvpl.dll`, `libvpl-LICENSE.txt` | Next Windows companion and license |
 | `next/` | Next license and artifact provenance |
 | `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
@@ -44,7 +44,7 @@ top-level directory.
 | `ersatzrs-web` | Server for the admin UI and streaming endpoints |
 | `ersatzrs-scanner` | One-shot scanner binary |
 | `ersatzrs-healthcheck` | Readiness probe for `/healthz` |
-| `ersatztv-channel` | Pinned optional Next engine |
+| `ersatztv-channel` | Pinned Next engine, used by default for new channels |
 | `next/` | Next license and artifact provenance |
 | `site/` | Leptos hydration assets plus CSS, fonts, images, and other public assets |
 | `assets/` | Graphics and template assets |

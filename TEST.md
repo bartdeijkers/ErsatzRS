@@ -416,6 +416,10 @@ shared application state in its isolated test database. Set
 `ERSATZRS_E2E_WORKERS=<n>` or pass an explicit `--workers` argument only for
 spec subsets that are known to be independent.
 
+After building, the wrapper copies the matched server and site assets into its
+temporary runtime. The running suite and any restart fixtures use that copy, so
+another local Leptos build cannot replace the candidate's hydration assets.
+
 Because that single worker is a correctness requirement rather than a tuning
 choice, CI runs the wrapper once per Playwright project (`chromium`,
 `firefox`) as two jobs, one after the other. Each job invokes the wrapper

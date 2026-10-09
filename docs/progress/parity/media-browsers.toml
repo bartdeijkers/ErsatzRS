@@ -146,3 +146,11 @@ description = 'UCU-08 row134: season details need show-poster fallback when thei
 discovered = '2026-09-28'
 resolved = true
 evidence = 'Missing fallback reproduced (6f756666). Existing projected-artwork handling now selects the show poster after season artwork; focused repository tests pass (2abae677), and EXPLAIN retains owner-index lookups. Matched SSR/WASM build and all four Chromium/Firefox cardinality/artwork cases pass in test-results/ucu08-row134. Both blank/missing season posters fall back and titles remain unobstructed even without any poster. Existing shared shells already stack content above fanart. Strict infra lint and substantive review pass; row134 is Port.'
+
+[[debt]]
+id = 'ucu09-mutable-original-artwork-cache'
+description = 'Fresh local artwork could remain hidden for an hour in the browser cache even after a deep scan and same-mtime byte replacement.'
+discovered = '2026-10-07'
+resolved = true
+evidence = 'UCU-09 row195 owns exact source receipts, real scanner/durable restart on Linux and Windows, twelve Chromium/Firefox cases, focused regressions, lint and substantive review.'
+resolution = 'Resolved at row195 checkpoint. Required final integrated Linux/Windows and window acceptance remains open; no new native Windows artwork execution is claimed. Existing approved platform/hardware debt is unchanged.'

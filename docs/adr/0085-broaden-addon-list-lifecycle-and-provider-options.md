@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-01), amended (2026-09-04, 2026-09-08, 2026-09-11)
+Accepted (2026-09-01), amended (2026-09-04, 2026-09-08, 2026-09-11, 2026-10-09)
 
 The mandatory SponsorBlock processed-video preparation decision is superseded
 by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
@@ -211,8 +211,13 @@ becomes the new anchor. Failure uses a separate bounded retry time and does not
 advance the cadence. Startup and the hourly maintenance tick enqueue one due
 generation without catch-up bursts or duplicate claims.
 
-The 2026-09-04 amendment adds `adaptive` as an explicit opt-in for a package
-that declares `media-list.source-check.v1`. The bounded probe reports `changed`
+The 2026-09-04 amendment adds `adaptive` for a package that declares
+`media-list.source-check.v1`. The 2026-10-09 maintainer amendment makes Adaptive
+the default in new-list forms for capable providers, including URL-resolved
+and preselected add-on contexts. Unsupported providers retain Daily. Explicit
+operator choices and saved list cadence remain unchanged; this amendment does
+not migrate existing lists or alter scheduler behavior.
+The bounded probe reports `changed`
 or `unchanged`, a package-owned opaque validator, and bounded recent
 source-update instants when the source exposes them. An RSS or Atom package
 should use HTTP conditional requests such as ETag or Last-Modified when

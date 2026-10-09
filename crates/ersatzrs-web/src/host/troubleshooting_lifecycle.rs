@@ -34,23 +34,20 @@ impl Job {
         let id = uuid::Uuid::new_v4().to_string();
         let channel = request.channel_id.unwrap_or_default();
         let media = request.media_item_id.unwrap_or_default();
-        let playlist = if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-            "ffmpeg.m3u8"
-        } else {
-            "live.m3u8"
-        };
         let now = Utc::now().to_rfc3339();
         let status = PlaybackPreviewStatus {
             id: id.clone(),
             state: Phase::Queued,
             ready: false,
             cleanup_confirmed: false,
-            playlist_url: format!("/api/troubleshoot/playback/previews/{id}/files/{playlist}"),
+            playlist_url: format!("/api/troubleshoot/playback/previews/{id}/files/live.m3u8"),
             selected_at: None,
             created_at: now.clone(),
             updated_at: now,
             error_code: None,
-            return_url: format!("/system/troubleshooting/playback?mediaItem={media}&channel={channel}&previewId={id}"),
+            return_url: format!(
+                "/system/troubleshooting/playback?mediaItem={media}&channel={channel}&previewId={id}"
+            ),
             log: None,
         };
         let (status, _) = watch::channel(status);
@@ -84,6 +81,15 @@ impl Job {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
+    }
+
+    pub(super) fn preparation_reservation(
+        &self,
+    ) -> Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation> {
+        self.reservation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub(super) fn running(&self) {
@@ -221,7 +227,13 @@ pub(super) async fn complete_ownership(
     folder: &FsPath,
 ) {
     let confirmed = !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. });
-    let log = if job.is_some() && confirmed {
+    // Selection can fail before clearing the shared output folder. Only a job
+    // that started its producer can own the completed log found there.
+    let log = if confirmed
+        && job
+            .as_ref()
+            .is_some_and(|job| job.spawned.load(Ordering::Acquire))
+    {
         read_completed_preview_log(folder).await.ok().flatten()
     } else {
         None
@@ -302,7 +314,7 @@ impl NativeAdminTroubleshootingRuntime {
             let result = if request.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
                 next::start(state, request.into(), ownership).await
             } else {
-                start_playback_preview(&state, &request.into(), ownership)
+                Box::pin(start_playback_preview(&state, &request.into(), ownership))
                     .await
                     .map_err(map_runtime_error)
             };
@@ -354,6 +366,16 @@ impl NativeAdminTroubleshootingRuntime {
         id: &str,
         filename: &str,
     ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
+        self.read_owned_file_from(id, filename, &troubleshooting_folder())
+            .await
+    }
+
+    async fn read_owned_file_from(
+        &self,
+        id: &str,
+        filename: &str,
+        folder: &FsPath,
+    ) -> Result<Option<Vec<u8>>, AdminTroubleshootingRuntimeError> {
         use tokio::io::AsyncReadExt as _;
         if filename.is_empty()
             || filename.contains(['/', '\\'])
@@ -378,13 +400,13 @@ impl NativeAdminTroubleshootingRuntime {
             return Ok(None);
         }
         tokio::time::timeout(Duration::from_secs(2), async {
-            let file = match tokio::fs::File::open(troubleshooting_folder().join(filename)).await {
+            let file = match tokio::fs::File::open(folder.join(filename)).await {
                 Ok(file) => file,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
                 Err(_) => {
                     return Err(AdminTroubleshootingRuntimeError::unavailable(
                         "preview output cannot be read",
-                    ))
+                    ));
                 }
             };
             if file
@@ -422,10 +444,11 @@ impl NativeAdminTroubleshootingRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use crate::host::troubleshooting::{
-        write_preview_logs, Command, DynamicTextController, FfmpegRuntimeReport, ManagedProcess,
-        Mutex, PathBuf, RwLock, Stdio,
+        write_preview_logs, Command, DynamicTextController, ManagedProcess, Mutex, PathBuf, Stdio,
     };
+    use crate::host::troubleshooting::{FfmpegRuntimeReport, RwLock};
 
     fn runtime() -> NativeAdminTroubleshootingRuntime {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -444,6 +467,35 @@ mod tests {
                 std::env::temp_dir().join("preview-lifecycle-unused"),
             )),
         )
+    }
+
+    #[test]
+    fn both_preview_engines_advertise_the_owned_generated_live_playlist() {
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let job = Job::new(&PlaybackPreviewRequest {
+                streaming_engine: engine,
+                channel_id: Some(12),
+                media_item_id: Some(34),
+                ..Default::default()
+            });
+            let status = job.read();
+            assert_eq!(
+                status.playlist_url,
+                format!(
+                    "/api/troubleshoot/playback/previews/{}/files/live.m3u8",
+                    status.id
+                )
+            );
+            assert!(status
+                .return_url
+                .contains(&format!("previewId={}", status.id)));
+            assert!(status.return_url.contains("mediaItem=34&channel=12"));
+            assert_eq!(status.state, Phase::Queued);
+            assert!(!status.ready);
+        }
     }
 
     #[tokio::test]
@@ -479,6 +531,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn both_engines_read_owned_live_playlist_and_refuse_marker_and_replacement_ids() {
+        let runtime = runtime();
+        let root = tempfile::tempdir().unwrap();
+        tokio::fs::write(
+            root.path().join("live.m3u8"),
+            b"#EXTM3U\n#EXTINF:1,\nsegment.ts\n#EXT-X-ENDLIST\n",
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(root.path().join(".ready"), b"private marker")
+            .await
+            .unwrap();
+        let mut prior: Option<String> = None;
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+                streaming_engine: engine,
+                ..Default::default()
+            }));
+            job.running();
+            job.ready();
+            runtime
+                .previews
+                .write()
+                .await
+                .jobs
+                .push_back(Arc::clone(&job));
+            let status = job.read();
+            let filename = status.playlist_url.rsplit('/').next().unwrap();
+            assert_eq!(filename, "live.m3u8");
+            let bytes = runtime
+                .read_owned_file_from(&status.id, filename, root.path())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(bytes.ends_with(b"#EXT-X-ENDLIST\n"));
+            for forbidden in [".ready", "../live.m3u8", "a/live.m3u8", "a\\live.m3u8"] {
+                assert!(runtime
+                    .read_owned_file_from(&status.id, forbidden, root.path())
+                    .await
+                    .unwrap()
+                    .is_none());
+            }
+            if let Some(old) = prior {
+                assert!(runtime
+                    .read_owned_file_from(&old, filename, root.path())
+                    .await
+                    .unwrap()
+                    .is_none());
+            }
+            job.cancel();
+            assert!(runtime
+                .read_owned_file_from(&status.id, filename, root.path())
+                .await
+                .unwrap()
+                .is_none());
+            prior = Some(status.id);
+        }
+    }
+
+    #[tokio::test]
     async fn stale_preview_ids_and_cancelled_jobs_cannot_read_replacement_files() {
         let runtime = runtime();
         let old = Arc::new(Job::new(&PlaybackPreviewRequest::default()));
@@ -499,18 +614,106 @@ mod tests {
             .unwrap()
             .is_none());
         replacement.ready();
+        assert!(runtime
+            .read_owned_file(&replacement.read().id, ".ready")
+            .await
+            .unwrap()
+            .is_none());
         replacement.cancel();
         assert!(runtime
             .read_owned_file(&replacement.read().id, "live.m3u8")
             .await
             .unwrap()
             .is_none());
-        for path in ["../logs.txt", "a/b.ts", "a\\b.ts", "logs.txt", ""] {
+        for path in [".ready", "../logs.txt", "a/b.ts", "a\\b.ts", "logs.txt", ""] {
             assert!(runtime
                 .read_owned_file(&replacement.read().id, path)
                 .await
                 .unwrap()
                 .is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn unspawned_preview_failure_does_not_inherit_previous_completed_log() {
+        let runtime = runtime();
+        let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+            ..Default::default()
+        }));
+        let root = tempfile::tempdir().unwrap();
+        let previous_log =
+            "exit status: exit status: 0\nINFO: unthrottled transcode completed; speed=68.1x\n";
+        tokio::fs::write(root.path().join("logs.txt"), previous_log)
+            .await
+            .unwrap();
+        let mut ownership = Arc::clone(&runtime.preview_lock).lock_owned().await;
+        *ownership = PreviewAvailability::Active(Arc::clone(&job));
+        assert!(!job.spawned.load(Ordering::Acquire));
+
+        complete_ownership(ownership, Some(Arc::clone(&job)), false, root.path()).await;
+
+        let status = job.read();
+        assert_eq!(status.state, Phase::Failed);
+        assert_eq!(status.error_code.as_deref(), Some("startup"));
+        assert!(status.cleanup_confirmed);
+        assert!(!status.ready);
+        assert!(status.log.is_none());
+        assert!(matches!(
+            &*runtime.preview_lock.lock().await,
+            PreviewAvailability::Available
+        ));
+        assert_eq!(
+            tokio::fs::read_to_string(root.path().join("logs.txt"))
+                .await
+                .unwrap(),
+            previous_log
+        );
+    }
+
+    #[tokio::test]
+    async fn spawned_preview_keeps_its_completed_log_on_success_or_failure() {
+        for success in [true, false] {
+            let runtime = runtime();
+            let job = Arc::new(Job::new(&PlaybackPreviewRequest {
+                streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+                ..Default::default()
+            }));
+            let root = tempfile::tempdir().unwrap();
+            // Exit zero can still fail output readiness; retain its real diagnostics.
+            let current_log = "exit status: exit status: 0\nspeed=1.25x\n";
+            tokio::fs::write(root.path().join("logs.txt"), current_log)
+                .await
+                .unwrap();
+            let mut ownership = Arc::clone(&runtime.preview_lock).lock_owned().await;
+            *ownership = PreviewAvailability::Active(Arc::clone(&job));
+            job.running();
+            job.ready();
+
+            complete_ownership(ownership, Some(Arc::clone(&job)), success, root.path()).await;
+
+            let status = job.read();
+            assert_eq!(
+                status.state,
+                if success {
+                    Phase::Completed
+                } else {
+                    Phase::Failed
+                }
+            );
+            assert_eq!(
+                status.error_code.as_deref(),
+                (!success).then_some("startup")
+            );
+            assert!(status.cleanup_confirmed);
+            assert_eq!(status.ready, success);
+            let log = status.log.unwrap();
+            assert_eq!(log.text, current_log);
+            assert_eq!(log.speed, Some(1.25));
+            assert!(matches!(
+                &*runtime.preview_lock.lock().await,
+                PreviewAvailability::Available
+            ));
         }
     }
 
@@ -620,6 +823,7 @@ mod tests {
             vec![controller],
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            None,
         ));
         tokio::time::timeout(Duration::from_secs(2), async {
             while !root.path().join("descendant.pid").exists() {

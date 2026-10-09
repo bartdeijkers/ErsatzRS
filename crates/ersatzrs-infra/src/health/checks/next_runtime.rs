@@ -35,20 +35,28 @@ impl HealthCheck for NextRuntimeHealthCheck {
         "Next Runtime Availability"
     }
     async fn check(&self) -> Result<HealthCheckResult> {
+        if (self.resolve)().is_err() {
+            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
+                "ErsatzRS requires the accepted bundled or managed Next runtime, or a valid ETV_NEXT_FOLDER override",
+                "Next executable is unavailable").with_link("/channels"));
+        }
+        if crate::next_engine::manager::validate_published()
+            .await
+            .is_err()
+        {
+            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
+                "The accepted Next runtime has changed or no longer passes its bounded version probe",
+                "Next runtime validation failed").with_link("/channels"));
+        }
         let channels: Vec<(i64, String)> = sqlx::query_as(r#"SELECT "Id", "Number" FROM "Channel" WHERE "StreamingEngine"=1 AND "IsEnabled"=1 ORDER BY "Id""#)
             .fetch_all(&self.pool).await.map_err(sqlx_error)?;
         if channels.is_empty() {
             return Ok(HealthCheckResult::new(
                 self.title(),
-                HealthCheckStatus::NotApplicable,
-                "No enabled channel selects the Next engine",
-                "Next is not selected",
+                HealthCheckStatus::Pass,
+                "The required Next runtime is available; no enabled channel needs profile validation",
+                "Next runtime is available",
             ));
-        }
-        if (self.resolve)().is_err() {
-            return Ok(HealthCheckResult::new(self.title(), HealthCheckStatus::Fail,
-                "Enabled Next channels require the bundled ersatztv-channel executable or a valid ETV_NEXT_FOLDER override",
-                "Next executable is unavailable").with_link("/channels"));
         }
         let mut invalid = 0;
         for (channel, _) in &channels {
@@ -76,6 +84,10 @@ impl HealthCheck for NextRuntimeHealthCheck {
                 HealthCheckStatus::Fail,
                 "Next configuration overlay is unavailable or invalid",
             ),
+            Ok(Err(OverlayCheckError::Schema)) => (
+                HealthCheckStatus::Fail,
+                "Next configuration overlay needs a supported version URI (0.1.0 or 0.1.1); review copy settings before upgrading an older overlay",
+            ),
             Ok(Err(OverlayCheckError::Incomplete)) | Err(_) => (
                 HealthCheckStatus::Warning,
                 "Next configuration overlay validation is incomplete",
@@ -88,6 +100,7 @@ impl HealthCheck for NextRuntimeHealthCheck {
 #[derive(Debug, PartialEq, Eq)]
 enum OverlayCheckError {
     Invalid,
+    Schema,
     Incomplete,
 }
 
@@ -97,8 +110,8 @@ impl From<io::Error> for OverlayCheckError {
     }
 }
 
-// Only basic availability and JSON shape are checked. Next owns merging and
-// effective schema validation; this does not claim that an overlay can run.
+// Check availability, shape and the pinned runtime's version boundary. Next
+// owns merging and effective field validation; this does not prove playback.
 async fn overlays_available(
     folder: &Path,
     channels: &[(i64, String)],
@@ -139,8 +152,26 @@ async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_OVERLAY_BYTES {
         return Err(OverlayCheckError::Incomplete);
     }
-    if !serde_json::from_slice::<serde_json::Value>(&bytes).is_ok_and(|value| value.is_object()) {
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| OverlayCheckError::Invalid)?;
+    if !value.is_object() {
         return Err(OverlayCheckError::Invalid);
+    }
+    // Mirrors Next VersionedSchema: major zero, matching breaking version and
+    // no newer compatible revision. Never relabel an old format:null overlay:
+    // that used to request copy, but now selects a transcode default.
+    let version = value["version"]
+        .as_str()
+        .and_then(|uri| uri.strip_prefix("https://ersatztv.org/channel/version/0."))
+        .and_then(|version| version.split_once('.'))
+        .and_then(|(breaking, compatible)| {
+            Some((
+                breaking.parse::<u32>().ok()?,
+                compatible.parse::<u32>().ok()?,
+            ))
+        });
+    if !version.is_some_and(|(breaking, compatible)| breaking == 1 && compatible <= 1) {
+        return Err(OverlayCheckError::Schema);
     }
     Ok(())
 }
@@ -149,7 +180,7 @@ async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError
 mod tests {
     use super::*;
     #[tokio::test]
-    async fn next_runtime_is_required_only_when_selected_and_profiles_are_checked() {
+    async fn next_runtime_is_always_required_and_only_selected_profiles_are_checked() {
         let (pool, _, _, _) = crate::next_engine::schedule::tests::fixture().await;
         let overlays = tempfile::tempdir().unwrap();
         let mut check = NextRuntimeHealthCheck {
@@ -157,10 +188,16 @@ mod tests {
             resolve: || Err(io::Error::from(io::ErrorKind::NotFound)),
             overlays: overlays.path().to_owned(),
         };
+        let missing_unused = check.check().await.unwrap();
+        assert_eq!(missing_unused.status, HealthCheckStatus::Fail);
+        assert!(missing_unused.brief_message.contains("executable"));
+        check.resolve = || Ok(PathBuf::from("synthetic-engine"));
         assert_eq!(
             check.check().await.unwrap().status,
-            HealthCheckStatus::NotApplicable
+            HealthCheckStatus::Pass,
+            "runtime availability is mandatory before a Next channel exists; profile checks are not"
         );
+        check.resolve = || Err(io::Error::from(io::ErrorKind::NotFound));
         sqlx::query(r#"UPDATE "Channel" SET "StreamingEngine"=1, "IsEnabled"=1"#)
             .execute(&pool)
             .await
@@ -195,6 +232,41 @@ mod tests {
             HealthCheckStatus::Fail,
             "health must reject MPEG-2 without the bitrate required by Next"
         );
+        sqlx::query(r#"UPDATE "FFmpegProfile" SET "VideoFormat"=99, "AudioFormat"=99"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            check.check().await.unwrap().status,
+            HealthCheckStatus::Pass,
+            "copy profiles retain supported transcode fallback settings"
+        );
+    }
+
+    #[tokio::test]
+    async fn overlays_require_the_pinned_runtimes_compatible_schema() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("default.json");
+        for version in ["0.1.0", "0.1.1", "0.01.01"] {
+            let value = serde_json::json!({
+                "version": format!("https://ersatztv.org/channel/version/{version}")
+            });
+            std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+            check_overlay(&path).await.unwrap();
+        }
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({"version": null}),
+            serde_json::json!({"version": 1}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.0.5"}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.1.2"}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/0.2.0"}),
+            serde_json::json!({"version": "https://ersatztv.org/channel/version/1.1.0"}),
+            serde_json::json!({"normalization": {"video": {"format": null}}}),
+        ] {
+            std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+            assert_eq!(check_overlay(&path).await, Err(OverlayCheckError::Schema));
+        }
     }
 
     #[tokio::test]
@@ -208,12 +280,12 @@ mod tests {
         std::fs::write(folder.path().join("99.json"), b"not JSON").unwrap();
         std::fs::write(
             folder.path().join("default.json"),
-            br#"{"normalization":{"video":{"width":640}}}"#,
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"video":{"width":640}}}"#,
         )
         .unwrap();
         std::fs::write(
             folder.path().join("12.3.json"),
-            br#"{"normalization":{"video":{"width":1280}}}"#,
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.0","normalization":{"video":{"width":1280}}}"#,
         )
         .unwrap();
         overlays_available(folder.path(), &channels).await.unwrap();
@@ -257,7 +329,11 @@ mod tests {
         assert!(!result
             .message
             .contains(&folder.path().display().to_string()));
-        std::fs::write(folder.path().join("default.json"), b"{}").unwrap();
+        std::fs::write(
+            folder.path().join("default.json"),
+            br#"{"version":"https://ersatztv.org/channel/version/0.1.0"}"#,
+        )
+        .unwrap();
         assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
         std::fs::File::create(folder.path().join("default.json"))
             .unwrap()

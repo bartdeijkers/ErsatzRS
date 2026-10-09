@@ -135,43 +135,85 @@ async fn hdhr_routes_remain_available_without_jwt() {
 #[tokio::test]
 async fn public_iptv_routes_never_dispatch_internal_callbacks_for_forged_local_headers() {
     let state = AppState::for_tests(IptvAccessTokenVerifier::enabled("synthetic-iptv-secret"));
-    let app = super::build_iptv_router(&state).with_state(state.clone());
-    for path in [
-        "/ffmpeg/concat/900",
-        "/ffmpeg/stream/900",
-        "/ffmpeg/next-media/1/2/3",
-        "/ffmpeg/next-item/1/2/digest/3",
-        "/ffmpeg/next-prepared/instance/transfer",
-        "/ffmpeg/next-canvas?binding=invalid",
-        "/ffmpeg/next-fallback/1/2/3",
-        "/ffmpeg/next-credits/1/2/3/4/5",
+    for app in [
+        super::build_iptv_router(&state).with_state(state.clone()),
+        super::build_streaming_app(state.clone()),
+        super::build_app(state.clone()),
     ] {
-        for host in ["localhost", "localhost.evil.test", "127.0.0.1", "[::1]"] {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(path)
-                        .header("host", host)
-                        .header("forwarded", "for=127.0.0.1;host=localhost;proto=http")
-                        .header("x-forwarded-for", "127.0.0.1")
-                        .header("x-forwarded-host", "localhost")
-                        .header("x-forwarded-proto", "http")
-                        .extension(ConnectInfo(
-                            "192.0.2.17:42000".parse::<SocketAddr>().unwrap(),
-                        ))
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}, {host}");
-            assert_eq!(
-                state.pool.size(),
-                0,
-                "public callback reached the database: {path}"
-            );
+        for path in [
+            "/ffmpeg/external-media/1/2",
+            "/ffmpeg/concat/900",
+            "/ffmpeg/stream/900",
+            "/ffmpeg/next-media/1/2/3",
+            "/ffmpeg/next-item/1/2/digest/3",
+            "/ffmpeg/next-prepared/instance/transfer",
+            "/ffmpeg/next-canvas?binding=invalid",
+            "/ffmpeg/next-song-background?binding=invalid",
+            "/ffmpeg/next-fallback/1/2/3",
+            "/ffmpeg/next-credits/1/2/3/4/5",
+        ] {
+            for host in ["localhost", "localhost.evil.test", "127.0.0.1", "[::1]"] {
+                for method in ["GET", "HEAD", "POST"] {
+                    let response = app
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .method(method)
+                                .uri(path)
+                                .header("host", host)
+                                .header("forwarded", "for=127.0.0.1;host=localhost;proto=http")
+                                .header("x-forwarded-for", "127.0.0.1")
+                                .header("x-forwarded-host", "localhost")
+                                .header("x-forwarded-proto", "http")
+                                .extension(ConnectInfo(
+                                    "192.0.2.17:42000".parse::<SocketAddr>().unwrap(),
+                                ))
+                                .body(Body::empty())
+                                .unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        response.status(),
+                        StatusCode::NOT_FOUND,
+                        "{method} {path}, {host}"
+                    );
+                    assert_eq!(
+                        state.pool.size(),
+                        0,
+                        "public callback reached the database: {path}"
+                    );
+                }
+            }
         }
+    }
+}
+
+#[test]
+fn public_ffmpeg_profile_shapes_keep_both_existing_admin_aliases() {
+    for path in [
+        "/ffmpeg",
+        "/ffmpeg/",
+        "/ffmpeg/add",
+        "/ffmpeg/profiles",
+        "/ffmpeg/profiles/add",
+        "/ffmpeg/42",
+        "/ffmpeg/profiles/42",
+        "/ffmpeg/profiles/42/",
+    ] {
+        assert!(super::is_public_ffmpeg_profile_path(path), "{path}");
+    }
+    for path in [
+        "/ffmpeg/next-song-background",
+        "/ffmpeg/next-canvas",
+        "/ffmpeg/next-media/1/2/3",
+        "/ffmpeg/external-media/1/2",
+        "/ffmpeg/unknown-callback",
+        "/ffmpeg/profiles/42/callback",
+        "/api/ffmpeg/profiles",
+        "/admin-api/ffmpeg/save",
+    ] {
+        assert!(!super::is_public_ffmpeg_profile_path(path), "{path}");
     }
 }
 
@@ -187,21 +229,26 @@ async fn internal_routes_require_actual_loopback_peer_and_keep_capability_checks
         (Some("[::1]:42000"), StatusCode::UNAUTHORIZED),
         (Some("[::ffff:127.0.0.1]:42000"), StatusCode::UNAUTHORIZED),
     ] {
-        let mut request = Request::builder()
-            .uri("/ffmpeg/next-media/1/2/3")
-            .header("host", "localhost")
-            .header("forwarded", "for=127.0.0.1;host=localhost")
-            .header("x-forwarded-for", "127.0.0.1");
-        if let Some(peer) = peer {
-            request = request.extension(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        for path in [
+            "/ffmpeg/next-media/1/2/3",
+            "/ffmpeg/next-song-background?binding=invalid",
+        ] {
+            let mut request = Request::builder()
+                .uri(path)
+                .header("host", "localhost")
+                .header("forwarded", "for=127.0.0.1;host=localhost")
+                .header("x-forwarded-for", "127.0.0.1");
+            if let Some(peer) = peer {
+                request = request.extension(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+            }
+            let response = app
+                .clone()
+                .oneshot(request.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected, "peer: {peer:?}");
+            assert_eq!(state.pool.size(), 0);
         }
-        let response = app
-            .clone()
-            .oneshot(request.body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), expected, "peer: {peer:?}");
-        assert_eq!(state.pool.size(), 0);
     }
 }
 
@@ -259,17 +306,51 @@ async fn streaming_listener_omits_management_and_keeps_public_iptv_authenticatio
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
         }
     }
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/iptv/channel/7.ts")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(state.pool.size(), 0);
+    for suffix in [
+        "ts",
+        "ts?mode=ts-legacy",
+        "ts?mode=mpegts",
+        "ts?mode=mpeg-ts",
+        "m3u8?mode=hls-direct",
+        "m3u8?mode=hls-direct-raw",
+        "m3u8?mode=ts-legacy",
+    ] {
+        for method in ["GET", "HEAD"] {
+            for credential in [None, Some("invalid")] {
+                let mut uri = format!("/iptv/channel/7.{suffix}");
+                if let Some(credential) = credential {
+                    let separator = if uri.contains('?') { '&' } else { '?' };
+                    uri.push(separator);
+                    uri.push_str("access_token=");
+                    uri.push_str(credential);
+                }
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(method)
+                            .uri(uri)
+                            .header("X-Ers-Api-Key", "synthetic-fixture-key")
+                            .header("cookie", "management=synthetic-session")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::UNAUTHORIZED,
+                    "{method} {suffix}"
+                );
+                assert_eq!(
+                    state.pool.size(),
+                    0,
+                    "cached URL authentication must precede channel discovery"
+                );
+                assert!(state.hls_sessions.active_channels().await.is_empty());
+            }
+        }
+    }
 }
 
 #[tokio::test]

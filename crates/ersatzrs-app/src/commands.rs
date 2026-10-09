@@ -683,6 +683,7 @@ pub async fn delete_custom_resolution(
 pub async fn save_ffmpeg_profile(
     mut command: SaveFfmpegProfile,
     repository: &dyn FfmpegProfileRepository,
+    runtime: &dyn ChannelRuntime,
 ) -> crate::Result<EntityId> {
     if command.form.id < 0 {
         return validation_error("profile_id", "must be zero or greater");
@@ -709,12 +710,12 @@ pub async fn save_ffmpeg_profile(
             ),
         );
     }
-    if command.form.id > 0
-        && repository
-            .get_optional_admin(command.form.id)
-            .await?
-            .is_none()
-    {
+    let previous = if command.form.id > 0 {
+        repository.get_optional_admin(command.form.id).await?
+    } else {
+        None
+    };
+    if command.form.id > 0 && previous.is_none() {
         return Err(ApplicationError::NotFound {
             kind: "ffmpeg profile",
             id: command.form.id,
@@ -722,7 +723,7 @@ pub async fn save_ffmpeg_profile(
     }
 
     let profile = normalize_ffmpeg_profile(command.form, repository).await?;
-    repository.save_admin(&profile).await.map_err(Into::into)
+    save_profile_and_refresh(&profile, previous.as_ref(), repository, runtime).await
 }
 
 /// Validate the machine profile mutation before any write. Mixed known upstream
@@ -730,6 +731,7 @@ pub async fn save_ffmpeg_profile(
 pub async fn save_ffmpeg_profile_for_api(
     mut command: SaveFfmpegProfileForApi,
     repository: &dyn FfmpegProfileRepository,
+    runtime: &dyn ChannelRuntime,
 ) -> crate::Result<EntityId> {
     command.form.name = command.form.name.trim().to_owned();
     let form = &command.form;
@@ -762,9 +764,12 @@ pub async fn save_ffmpeg_profile_for_api(
             message: "Resolution does not exist".into(),
         });
     }
-    if command.is_update
-        && (form.id <= 0 || repository.get_optional_admin(form.id).await?.is_none())
-    {
+    let previous = if command.is_update && form.id > 0 {
+        repository.get_optional_admin(form.id).await?
+    } else {
+        None
+    };
+    if command.is_update && previous.is_none() {
         errors.push(ApplicationError::NotFound {
             kind: "ffmpeg profile",
             id: form.id,
@@ -787,7 +792,34 @@ pub async fn save_ffmpeg_profile_for_api(
     if profile.hardware_acceleration == HardwareAccelerationKind::Qsv {
         profile.qsv_extra_hardware_frames = command.qsv_extra_hardware_frames;
     }
-    repository.save_admin(&profile).await.map_err(Into::into)
+    save_profile_and_refresh(&profile, previous.as_ref(), repository, runtime).await
+}
+
+async fn save_profile_and_refresh(
+    profile: &FFmpegProfile,
+    previous: Option<&FFmpegProfile>,
+    repository: &dyn FfmpegProfileRepository,
+    runtime: &dyn ChannelRuntime,
+) -> crate::Result<EntityId> {
+    let id = repository.save_admin(profile).await?;
+    if previous.is_some_and(|previous| {
+        (
+            previous.video_format == FFmpegProfileVideoFormat::Copy,
+            previous.resolution_id,
+        ) != (
+            profile.video_format == FFmpegProfileVideoFormat::Copy,
+            profile.resolution_id,
+        )
+    }) {
+        runtime
+            .refresh_profile_playouts(id)
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "refresh saved profile playouts",
+                message: error.to_string(),
+            })?;
+    }
+    Ok(id)
 }
 
 pub async fn delete_ffmpeg_profile(
@@ -9460,6 +9492,35 @@ mod tests {
         assert_eq!(legacy_nvenc_tune("LLHQ"), Some("ll"));
     }
 
+    struct UnusedProfileRuntime;
+
+    #[async_trait::async_trait]
+    impl crate::ChannelRuntime for UnusedProfileRuntime {
+        async fn active_channel_numbers(&self) -> Result<Vec<String>, crate::ChannelRuntimeError> {
+            unimplemented!()
+        }
+        async fn session_models(
+            &self,
+        ) -> Result<Vec<ersatzrs_core::hls::HlsSessionModel>, crate::ChannelRuntimeError> {
+            unimplemented!()
+        }
+        async fn stop_channel_session(
+            &self,
+            _number: &str,
+        ) -> Result<bool, crate::ChannelRuntimeError> {
+            unimplemented!()
+        }
+        fn request_subtitle_extraction(&self, _ids: Vec<ersatzrs_domain::EntityId>) {
+            unimplemented!()
+        }
+        async fn refresh_profile_playouts(
+            &self,
+            _id: ersatzrs_domain::EntityId,
+        ) -> Result<(), crate::ChannelRuntimeError> {
+            panic!("a failed save must not notify consumers")
+        }
+    }
+
     #[tokio::test]
     async fn ffmpeg_profile_lookup_preserves_typed_repository_failures() {
         for (optional, expected_unavailable) in [
@@ -9471,6 +9532,7 @@ mod tests {
                     form: existing_ffmpeg_profile_form(),
                 },
                 &FailingFfmpegRepository { optional },
+                &UnusedProfileRuntime,
             )
             .await
             .unwrap_err();
@@ -9492,6 +9554,7 @@ mod tests {
             &FailingFfmpegRepository {
                 optional: OptionalFfmpegProfile::Missing,
             },
+            &UnusedProfileRuntime,
         )
         .await
         .unwrap_err();

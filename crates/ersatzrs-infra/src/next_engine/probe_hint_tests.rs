@@ -164,6 +164,59 @@ fn ordinary_producer_preserves_detected_container_codecs_and_subtitles_without_d
     );
 }
 
+#[test]
+fn ordinary_producer_excludes_cover_art_without_weakening_playable_stream_validation() {
+    for real_video in [false, true] {
+        let mut probe = metadata();
+        probe.format_name = Some("matroska,webm".into());
+        if !real_video {
+            probe.streams.remove(0);
+        }
+        // Artwork requires no playable geometry, rate or codec metadata. Its
+        // actual bytes remain untouched in the original producer stream.
+        probe.streams.insert(
+            0,
+            MediaStream {
+                index: 0,
+                kind: MediaStreamKind::Video,
+                attached_pic: true,
+                ..Default::default()
+            },
+        );
+        let hint = producer(&probe).unwrap();
+        assert_eq!(hint.video.len(), usize::from(real_video));
+        assert_eq!(hint.audio[0].stream_index, 23);
+        assert_eq!(hint.audio[0].codec, "pcm_f32le");
+        assert!(!hint.video.iter().any(|video| video.stream_index == 0));
+        if real_video {
+            assert_eq!(hint.video[0].stream_index, 17);
+            let mut malformed = probe.clone();
+            malformed.streams[1].pixel_format = None;
+            assert!(producer(&malformed).is_err());
+        }
+        assert!(
+            retained(&probe, 1000).is_err(),
+            "retained rawvideo/PCM contract stays strict"
+        );
+        let mut duplicate = probe.clone();
+        duplicate.streams[0].index = 23;
+        assert!(
+            producer(&duplicate).is_err(),
+            "artwork does not excuse duplicate indexes"
+        );
+        let audio = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.kind == MediaStreamKind::Audio)
+            .unwrap();
+        audio.channels = Some(0);
+        assert!(
+            producer(&probe).is_err(),
+            "playable audio still needs channels"
+        );
+    }
+}
+
 #[tokio::test]
 async fn dolby_vision_profiles_survive_persisted_and_producer_hints() {
     let pool = super::super::selection::tests::fixture_pool().await;
@@ -241,7 +294,7 @@ async fn persisted_still_image_keeps_image_container_identity() {
     }
     let hint = persisted(&pool, 100).await.unwrap().unwrap();
     assert_eq!(hint.format_name.as_deref(), Some("png_pipe"));
-    assert_eq!(hint.duration_ms, None);
+    assert_eq!(hint.duration_ms, Some(15_000));
     assert_eq!(hint.video[0].pix_fmt, "rgb24");
 }
 
@@ -265,5 +318,55 @@ fn ordinary_producer_rejects_incomplete_and_ambiguous_prefix_metadata() {
             _ => probe.streams.clear(),
         }
         assert!(producer(&probe).is_err(), "invalid producer case {case}");
+    }
+}
+
+#[tokio::test]
+async fn persisted_image_formats_and_avi_use_the_selected_container() {
+    let (pool, _, _) = crate::playout_duration::tests::image_fixture().await;
+    for (codec, format) in [
+        ("png", "png_pipe"),
+        ("mjpeg", "jpeg_pipe"),
+        ("bmp", "bmp_pipe"),
+        ("tiff", "tiff_pipe"),
+        ("webp", "webp_pipe"),
+        ("webp_anim", "webp_anim"),
+        ("gif", "gif"),
+    ] {
+        sqlx::query(
+            r#"UPDATE "MediaStream" SET "Codec"=? WHERE "MediaVersionId"=100 AND "Index"=0"#,
+        )
+        .bind(codec)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let hint = persisted(&pool, 100).await.unwrap().unwrap();
+        assert_eq!(hint.format_name.as_deref(), Some(format));
+        assert_eq!(hint.video[0].codec, codec);
+    }
+    sqlx::query(
+        r#"UPDATE "MediaStream" SET "Codec"='unknown' WHERE "MediaVersionId"=100 AND "Index"=0"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(persisted(&pool, 100).await.unwrap().is_none());
+    let (pool, _, _, _) = super::super::schedule::tests::fixture().await;
+    for (path, expected) in [
+        ("synthetic.avi", Some("avi")),
+        ("synthetic.AVI", Some("avi")),
+        ("synthetic.mkv", None),
+        ("synthetic.avi/file", None),
+        ("avi", None),
+    ] {
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path"=? WHERE "Id"=1"#)
+            .bind(path)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let hint = persisted(&pool, 100).await.unwrap().unwrap();
+        assert_eq!(hint.format_name.as_deref(), expected);
+        assert_eq!(hint.audio.len(), 2);
+        assert_eq!(hint.subtitle.len(), 2);
     }
 }

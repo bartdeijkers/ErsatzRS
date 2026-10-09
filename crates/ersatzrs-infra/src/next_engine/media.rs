@@ -23,6 +23,8 @@ pub const ACCESS_HEADER: &str = "x-ersatzrs-next-media";
 pub const SESSION_HEADER: &str = "x-ersatzrs-next-session";
 /// Integrity of the occurrence carried by a private canvas request.
 pub const CANVAS_HEADER: &str = "x-ersatzrs-next-canvas";
+/// Integrity and purpose of one generated song background occurrence.
+pub const SONG_HEADER: &str = "x-ersatzrs-next-song";
 pub(super) const SESSION_ENV: &str = "ERSATZRS_NEXT_SESSION";
 const OPEN_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -157,6 +159,86 @@ impl MediaRelay {
             in_point_ms: None,
             out_point_ms: None,
         })
+    }
+
+    /// Publish one finite song image for an admitted process and exact occurrence.
+    /// # Errors
+    /// Refuses an unconfigured listener, invalid dimensions or interval.
+    pub fn song_source(
+        &self,
+        binding: &super::song_background::SongBinding,
+        probe_hint: super::protocol::ProbeHint,
+    ) -> Result<Source> {
+        let occurrence = &binding.occurrence;
+        if binding.width <= 0
+            || binding.height <= 0
+            || occurrence.finish <= occurrence.start
+            || occurrence.expires <= occurrence.start
+            || occurrence.in_point_ms < 0
+            || occurrence.out_point_ms < 0
+        {
+            return Err(unavailable("invalid song binding"));
+        }
+        let address = self
+            .address
+            .get()
+            .ok_or_else(|| unavailable("media listener not configured"))?;
+        let encoded =
+            serde_json::to_string(binding).map_err(|_| unavailable("invalid song binding"))?;
+        let mut uri = url::Url::parse(&format!("http://{address}/ffmpeg/next-song-background"))
+            .map_err(|_| unavailable("invalid song listener"))?;
+        uri.query_pairs_mut().append_pair("binding", &encoded);
+        Ok(Source::Http {
+            uri: uri.to_string(),
+            probe_hint: Some(probe_hint),
+            is_live: Some(false),
+            headers: vec![
+                format!("{ACCESS_HEADER}: {}", self.capability),
+                format!(
+                    "{SESSION_HEADER}: {}",
+                    occurrence.session.map_or_else(
+                        || format!("{{{{{SESSION_ENV}}}}}"),
+                        |session| session.to_string()
+                    )
+                ),
+                format!("{SONG_HEADER}: {}", self.song_ticket(binding)?),
+            ],
+            user_agent: None,
+            keep_alive: Some(true),
+            reconnect: Some(false),
+            reconnect_delay_max: None,
+            timeout_us: Some(20_000_000),
+            in_point_ms: None,
+            out_point_ms: None,
+        })
+    }
+
+    /// Authenticate song purpose and expiry before opening a session or database.
+    #[must_use]
+    pub fn authorized_song(
+        &self,
+        binding: &super::song_background::SongBinding,
+        ticket: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> bool {
+        binding.occurrence.expires > now
+            && self
+                .song_ticket(binding)
+                .is_ok_and(|expected| expected.as_bytes().ct_eq(ticket.as_bytes()).into())
+    }
+
+    fn song_ticket(&self, binding: &super::song_background::SongBinding) -> Result<String> {
+        let encoded =
+            serde_json::to_vec(binding).map_err(|_| unavailable("invalid song binding"))?;
+        let mut digest = Sha256::new();
+        digest.update(b"ersatzrs-next-song-v1");
+        digest.update(self.capability.as_bytes());
+        digest.update(encoded);
+        let mut ticket = String::with_capacity(64);
+        for byte in digest.finalize() {
+            write!(ticket, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        Ok(ticket)
     }
 
     /// Authenticate expiry and occurrence integrity before any database work.

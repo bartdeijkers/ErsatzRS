@@ -2441,6 +2441,13 @@ mod epg_preview_query_tests {
 
     #[async_trait]
     impl ChannelRuntime for Runtime {
+        async fn refresh_profile_playouts(
+            &self,
+            _profile_id: EntityId,
+        ) -> Result<(), ChannelRuntimeError> {
+            unimplemented!()
+        }
+
         async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError> {
             if self.fail {
                 Err(ChannelRuntimeError::unavailable("injected failure"))

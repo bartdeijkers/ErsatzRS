@@ -1,4 +1,4 @@
-# ADR 0095: Add ErsatzTV Next as an optional second streaming engine
+# ADR 0095: Integrate ErsatzTV Next with automatic runtime availability
 
 ## Status
 
@@ -8,14 +8,38 @@ The maintainer rejected the native-only proposal and selected Next as an
 optional second engine. The existing filename is retained for stable links;
 its original native-only wording is superseded by this decision.
 
+Amended and accepted 2026-10-07: Next may become the default for new channels
+and standalone playback previews only when ErsatzRS always bundles the accepted
+engine or downloads and verifies it automatically. Existing channel selections
+and the explicit native option remain unchanged. This conditional decision
+supersedes the earlier new-channel native default; acceptance of the decision
+does not prove its implementation or runtime availability.
+
+Amended and accepted 2026-10-07: distribute the exact accepted Next packages
+through the public, package-only `bartdeijkers/ErsatzRS-next` repository. This
+destination allows automatic acquisition without GitHub credentials while the
+application repository retains its visibility. Preserve every accepted source,
+patch, version and package hash when changing the distribution pin.
+
 ## Implementation
 
-Partial — the optional engine is integrated through persisted selection,
-managed package discovery, supervised processes, authenticated provider/remote
-inputs, selected tracks, fallback, graphics, troubleshooting and health. The
-UCU-09 final window gates pass; approved platform acceptance debt remains open. The
-owning [catch-up milestone](../progress/milestones.toml) records current proof.
-Linux and native Windows application playback tests pass
+Partial — Next is integrated through persisted selection, managed package
+discovery, supervised processes, authenticated provider/remote inputs, selected
+tracks, fallback, graphics, troubleshooting and health. Row200's conditional
+Next default and automatic runtime acquisition are accepted with exact
+six-platform staging and affected lint. The public package-only repository
+contains all19 unchanged accepted assets; six anonymous archive downloads match
+their pinned checksums. Frozen source08 proves public cold acquisition before
+listening and decoded Linux/native Windows TS/HLS with selected Dutch audio and
+captions, reconnect, preview and idle cleanup. Bundled playback and all six
+read-only/offline/override/failure startup cases pass on available platforms.
+Packages and ACLs remain unchanged; owned hosts exit. Matched Chromium31 and
+Firefox30 pass, with one unchanged older skip and all changed no-JS preservation
+and diagnostics cases executed. This establishes row200's availability condition.
+Final UCU-09 window gates through v26.11.1 and approved platform acceptance debt
+remain open; the owning [catch-up milestone](../progress/milestones.toml) records
+exact canonical proof, independent reviews and the remaining gates.
+Historical Linux and native Windows application playback tests passed
 with Next `6b49dae` and published ErsatzRS-ffmpeg v2.0.4, including selected
 subtitles/audio and graphics. Direct RGB image opacity is now proven; the
 older limitation described below is superseded. Accepted live embedded-text
@@ -126,11 +150,15 @@ prove that the optional Next path provides those capabilities.
 
 ## Decision
 
-Add Next as an optional second streaming engine. Preserve the native engine
-and existing channels' behavior; installing or upgrading must not silently
-switch them to Next. Port upstream engine selection and its persisted contract
-through the ordered catch-up ledger, with an explicit operator choice to use
-Next.
+Integrate Next alongside the native streaming engine. Make Next the default
+for newly created channels and standalone playback previews only after its
+runtime is automatically available under the accepted condition below. Preserve
+the native option, existing channel selections and native AV1 behavior under
+ADR 0106. Installing or upgrading must not silently convert existing channels,
+rewrite their profiles or choose another engine after a runtime failure.
+Channel-bound playback previews retain their stored channel engine unless the
+operator explicitly selects another one. Port the accepted behavior through
+the ordered catch-up ledger.
 
 Next integration is in scope: package/runtime discovery, child-process
 supervision, channel configuration and playout JSON exchange, engine/version
@@ -150,6 +178,38 @@ adapters, following ADR 0051. Infrastructure owns external-process/runtime
 integration; the web host composes it through the existing application/core
 boundaries. Derive the exact exchange and lifecycle contracts from upstream
 before implementation rather than introducing a second independent scheduler.
+
+### Accepted automatic availability condition
+
+Official application archives and Docker images must carry the exact accepted
+Next package. A standalone or source-built host must acquire that same package
+automatically before composing application state or accepting requests. Reuse
+the existing six-platform mapping and one pinned release manifest for acquisition
+and package staging; no new engine build or mutable release tag is implied.
+Verify archive and payload SHA-256, source/patch provenance, licenses and platform
+companions before executing an automatic runtime. Report the accepted runtime's
+version and acquisition source through the existing diagnostics and health check.
+
+Prefer a verified shipped copy, then a verified persistent installation; both
+must work without network access. Otherwise download the exact immutable package
+with bounded time, size and installation locking, validate it in owned staging,
+and publish it atomically. Keep managed state separate from read-only package
+files. A failed or invalid acquisition is an actionable startup failure, not an
+implicit native fallback. Do not discard unrelated caches or running processes.
+
+An explicit `ETV_NEXT_FOLDER` remains an operator-owned override with strict
+precedence: an invalid override must fail rather than trigger a different runtime.
+The existing bounded version check establishes launch/output for custom builds,
+not equivalence to the accepted distribution or its channel schema. Mark that
+source as unverified against the published pin; do not present it as package
+acceptance. Automatic copies always require the exact published identity.
+
+Acceptance requires actual Linux x64 and native Windows cold acquisition,
+offline bundle/cache reuse, failure and concurrent-install safety, retained
+selected audio/subtitles, and the real hydrated/no-JS creation and preview flows.
+Every supported RID needs exact archive/payload integrity coverage. The existing
+approved ARM/macOS application and hardware debt remains explicit and unchanged.
+The final UCU-09 integrated gates and exact-SHA CI still own release acceptance.
 
 ### Existing architecture contracts
 
@@ -251,13 +311,18 @@ builds notify dependent Next channels and mirrors after persistence; native
 sessions retain their existing continuation behavior without restart.
 HTTP master playlists preserve existing token propagation. Next Hybrid channels
 use the existing HLS-to-MPEG-TS wrapper; explicit segmenter requests remain HLS
-to avoid redirect loops. Explicit legacy-concat requests remain rejected for
-Next, preserving the selected engine instead of falling back to native playback.
+to avoid redirect loops. At initial UCU-02 acceptance, explicit legacy-concat
+requests were rejected for Next to prevent native fallback. UCU-09 row198 ports
+upstream #3062: cached legacy TS requests now use the existing Next wrapper,
+preserving the selected engine and stored settings. Native concat entrypoints
+continue to reject Next; implicit Hybrid redirects retain the accepted contract.
+Row198's available platform verification and remaining gates live in UCU-09.
 Accepted ADR 0099 selects the session media playlist for the Next wrapper,
 keeping converted text on HLS and Burn text visible in MPEG-TS. Decoded
 Burn/Convert and lifecycle checks pass; UCU-02 window gates remain open.
-The health engine checks executable availability and profile compatibility only
-when an enabled channel selects Next. These checks are not playback acceptance.
+The health engine checks the required Next runtime's executable and accepted
+identity even when no enabled channel selects it. Profile and overlay checks
+apply only to enabled Next channels. These checks are not playback acceptance.
 Local-library sources reuse native path replacement and track selectors. Provider
 inputs use the authenticated media-open integration described above. Permanent
 and intermittent watermarks and image graphics share stable ZIndex ordering and
@@ -287,7 +352,7 @@ The native pipeline remains available while Next is implemented; that does
 not satisfy acceptance of the optional engine.
 
 The catch-up milestones retain their per-row review and window acceptance
-requirements. Prove configuration roundtrips, retained native defaults,
+requirements. Prove configuration roundtrips, retained native channel choices,
 operator selection, actual Next process execution and served playback, including
 subtitle/audio handling and recovery. Reuse existing verification tools where
 they cover these requirements; record any missing evidence in the owning parity

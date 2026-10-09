@@ -189,6 +189,19 @@ pub async fn run() {
         );
     }
 
+    let next_config =
+        ersatzrs_infra::next_engine::manager::NextRuntimeManagerConfig::from_startup()
+            .unwrap_or_else(|error| panic!("Next runtime configuration failed: {error}"));
+    let next_runtime = ersatzrs_infra::next_engine::manager::ensure(next_config)
+        .await
+        .unwrap_or_else(|error| panic!("Next runtime acquisition failed: {error}"));
+    tracing::info!(
+        source = ?next_runtime.source,
+        rid = %next_runtime.rid,
+        published_pin_verified = next_runtime.published_pin_verified,
+        "Next runtime ready"
+    );
+
     let mut app_state = build_app_state(
         startup.pool,
         startup.database_backend,

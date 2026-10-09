@@ -82,6 +82,7 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     let report = scan_local_library(
         &pool,
         &LocalScanConfig {
+            deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe,
         },
@@ -213,6 +214,7 @@ async fn rescan_repairs_same_title_original_and_reboot_collision() {
     let pool = test_db().await;
     seed_local_library(&pool, &library, 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -282,6 +284,386 @@ async fn rescan_repairs_same_title_original_and_reboot_collision() {
     }
 }
 
+/// Row195: source bytes, names and mtimes remain unchanged throughout. Normal
+/// scans retain the season fast path; explicit deep scans repair stale stored
+/// metadata/statistics and complete international stream selection data.
+#[tokio::test]
+#[ignore = "requires exact published FFmpeg/ffprobe paths; generates its own synthetic media"]
+async fn local_deep_scan_refreshes_unchanged_season_without_duplicate_streams() {
+    use futures_util::FutureExt as _;
+    let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
+    let ffprobe = ersatzrs_ffmpeg::ffprobe_path();
+    assert!(
+        Path::new(&ffmpeg).is_file(),
+        "set the exact published FFMPEG_PATH"
+    );
+    assert!(
+        Path::new(&ffprobe).is_file(),
+        "set the exact published FFPROBE_PATH"
+    );
+    let temp = tempfile::tempdir().expect("owned synthetic deep-scan fixture");
+    let pool = test_db().await;
+    let proof = std::panic::AssertUnwindSafe(async {
+        let season = temp.path().join("library").join("Synthetic Show").join("Season 01");
+        std::fs::create_dir_all(&season).unwrap();
+        let episode = season.join("Synthetic.Show.S01E01.mkv");
+        let nfo = episode.with_extension("nfo");
+        generate_deep_scan_episode(&ffmpeg, temp.path(), &episode).await;
+        std::fs::write(&nfo, "<episodedetails><title>Fresh episode</title><season>1</season><episode>1</episode><genre>Drama</genre><tag>deep-scan</tag></episodedetails>").unwrap();
+        let originals = [&episode, &nfo].map(|path| (
+            path.clone(), std::fs::read(path).unwrap(),
+            std::fs::metadata(path).unwrap().modified().unwrap(),
+        ));
+        seed_local_library(&pool, &temp.path().join("library"), 2).await;
+        let mut config = LocalScanConfig { library_id: 1, ffprobe_path: ffprobe, deep_scan: false };
+        assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 1);
+        let baseline = deep_scan_projection(&pool).await;
+        assert_eq!(baseline.duration, "00:00:01");
+        assert_eq!(baseline.title, "Fresh episode");
+        assert_eq!(baseline.streams.len(), 4);
+        assert_eq!(baseline.streams[1].3.as_deref(), Some("eng"));
+        assert_eq!(baseline.streams[2].3.as_deref(), Some("nld"));
+        assert_eq!(baseline.streams[3].0, 3);
+        assert_eq!(baseline.streams[3].1, 3);
+        assert_eq!(baseline.streams[3].3.as_deref(), Some("nld"));
+        assert_eq!(baseline.subtitles.len(), 1);
+        let etag = season_etag(&pool, &season).await.expect("successful season etag");
+        pool.execute(r#"UPDATE "EpisodeMetadata" SET "Title"='Stale projection'"#).await.unwrap();
+        pool.execute(r#"UPDATE "MediaVersion" SET "Duration"='00:00:20' WHERE "EpisodeId" IS NOT NULL"#).await.unwrap();
+        pool.execute(r#"UPDATE "MediaStream" SET "Language"='und', "Codec"='mp3' WHERE "MediaStreamKind"=2 AND "Index"=2"#).await.unwrap();
+        pool.execute(r#"UPDATE "MediaStream" SET "Language"='und' WHERE "MediaStreamKind"=3"#).await.unwrap();
+        pool.execute(r#"UPDATE "Subtitle" SET "Language"='und'"#).await.unwrap();
+        let stale = deep_scan_projection(&pool).await;
+        assert_ne!(stale, baseline);
+        assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 0);
+        assert_eq!(deep_scan_projection(&pool).await, stale, "ordinary unchanged scan must retain the existing fast path");
+        config.deep_scan = true;
+        assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 1);
+        assert_eq!(deep_scan_projection(&pool).await, baseline, "deep scan restores metadata and track data without re-keying media or duplicating related rows");
+        assert_eq!(season_etag(&pool, &season).await.as_deref(), Some(etag.as_str()));
+        assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 1);
+        assert_eq!(deep_scan_projection(&pool).await, baseline, "repeated deep scan is idempotent");
+        config.deep_scan = false;
+        assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 0);
+        deep_scan_recovers_prior_success_after_same_mtime_nfo_failure(
+            &pool, &mut config, &season, &nfo, &baseline,
+        ).await;
+        for (path, bytes, modified) in originals {
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+            assert_eq!(std::fs::metadata(path).unwrap().modified().unwrap(), modified);
+        }
+    }).catch_unwind().await;
+    pool.close().await;
+    if let Err(panic) = proof {
+        eprintln!(
+            "retained synthetic deep-scan fixture: {}",
+            temp.keep().display()
+        );
+        std::panic::resume_unwind(panic);
+    }
+    let path = temp.path().to_path_buf();
+    temp.close().unwrap();
+    assert!(!path.exists(), "confirmed successful fixture cleanup");
+}
+
+async fn deep_scan_recovers_prior_success_after_same_mtime_nfo_failure(
+    pool: &SqlitePool,
+    config: &mut LocalScanConfig,
+    season: &Path,
+    nfo: &Path,
+    baseline: &DeepScanProjection,
+) {
+    let etag = season_etag(pool, season)
+        .await
+        .expect("prior successful etag");
+    let bytes = std::fs::read(nfo).unwrap();
+    let modified = std::fs::metadata(nfo).unwrap().modified().unwrap();
+    config.deep_scan = true;
+
+    assert_deep_scan_invalidation_failure_propagates(pool, config, season, baseline, &etag).await;
+
+    std::fs::write(nfo, "<episodedetails><title>Broken</episodedetails>").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(nfo)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
+    assert_eq!(
+        scan_local_library(pool, config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    assert_eq!(
+        season_etag(pool, season).await,
+        None,
+        "incomplete deep scan must discard the prior successful checkpoint"
+    );
+    let fallback = deep_scan_projection(pool).await;
+    assert_eq!(fallback.title, "Synthetic.Show.S01E01");
+    assert_eq!(fallback.identities, baseline.identities);
+    assert_eq!(fallback.duration, baseline.duration);
+    assert_eq!(fallback.streams, baseline.streams);
+    assert_eq!(fallback.subtitles, baseline.subtitles);
+    for (table, expected) in &baseline.related_counts {
+        if table != "Genre" && table != "Tag" {
+            assert_eq!(
+                count(pool, table).await,
+                *expected,
+                "fallback preserves {table} cardinality"
+            );
+        }
+    }
+
+    config.deep_scan = false;
+    assert_eq!(
+        scan_local_library(pool, config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1,
+        "ordinary retry must revisit the incomplete season without changing mtime"
+    );
+    assert_eq!(season_etag(pool, season).await, None);
+    std::fs::write(nfo, &bytes).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(nfo)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
+    assert_eq!(
+        scan_local_library(pool, config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    assert_eq!(
+        &deep_scan_projection(pool).await,
+        baseline,
+        "ordinary recovery restores all original identities, metadata, tracks and row counts"
+    );
+    assert_eq!(
+        season_etag(pool, season).await.as_deref(),
+        Some(etag.as_str())
+    );
+    assert_eq!(
+        scan_local_library(pool, config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0,
+        "successful recovery restores the unchanged-season fast path"
+    );
+}
+
+async fn assert_deep_scan_invalidation_failure_propagates(
+    pool: &SqlitePool,
+    config: &LocalScanConfig,
+    season: &Path,
+    baseline: &DeepScanProjection,
+    etag: &str,
+) {
+    pool.execute(
+        r#"CREATE TRIGGER reject_completion_invalidation BEFORE UPDATE OF "Etag" ON "LibraryFolder"
+           WHEN OLD."Etag" IS NOT NULL AND NEW."Etag" IS NULL
+           BEGIN SELECT RAISE(ABORT, 'synthetic etag invalidation failure'); END"#,
+    )
+    .await
+    .unwrap();
+    let failure = scan_local_library(pool, config)
+        .await
+        .expect_err("invalidation failure must propagate");
+    assert!(failure
+        .to_string()
+        .contains("synthetic etag invalidation failure"));
+    assert_eq!(season_etag(pool, season).await.as_deref(), Some(etag));
+    assert_eq!(
+        &deep_scan_projection(pool).await,
+        baseline,
+        "do not process episodes after failed checkpoint invalidation"
+    );
+    pool.execute("DROP TRIGGER reject_completion_invalidation")
+        .await
+        .unwrap();
+}
+
+type TrackProjection = (
+    i32,
+    i32,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+    bool,
+);
+
+#[derive(Debug, PartialEq, Eq)]
+struct DeepScanProjection {
+    identities: (i64, i64, i64, i64, i64, i64),
+    duration: String,
+    title: String,
+    streams: Vec<TrackProjection>,
+    subtitles: Vec<(i32, Option<String>, Option<String>)>,
+    related_counts: Vec<(String, i64)>,
+}
+
+async fn deep_scan_projection(pool: &SqlitePool) -> DeepScanProjection {
+    let (episode, version, file, metadata, season, show, duration, title): (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        String,
+        String,
+    ) = sqlx::query_as(
+        r#"SELECT e."Id", v."Id", f."Id", m."Id", e."SeasonId", s."ShowId", v."Duration", m."Title"
+           FROM "Episode" e JOIN "Season" s ON s."Id"=e."SeasonId"
+           JOIN "MediaVersion" v ON v."EpisodeId"=e."Id"
+           JOIN "MediaFile" f ON f."MediaVersionId"=v."Id"
+           JOIN "EpisodeMetadata" m ON m."EpisodeId"=e."Id"
+        "#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let streams = sqlx::query_as(r#"SELECT "Index", "MediaStreamKind", "Codec", "Language", "Title", "Default", "Forced" FROM "MediaStream" ORDER BY "Index""#).fetch_all(pool).await.unwrap();
+    let subtitles = sqlx::query_as(
+        r#"SELECT "StreamIndex", "Language", "Codec" FROM "Subtitle" ORDER BY "StreamIndex""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let mut related_counts = Vec::new();
+    for table in [
+        "Show",
+        "ShowMetadata",
+        "Season",
+        "SeasonMetadata",
+        "Episode",
+        "EpisodeMetadata",
+        "MediaVersion",
+        "MediaFile",
+        "MediaStream",
+        "Subtitle",
+        "Genre",
+        "Tag",
+    ] {
+        related_counts.push((table.to_owned(), count(pool, table).await));
+    }
+    DeepScanProjection {
+        identities: (episode, version, file, metadata, season, show),
+        duration,
+        title,
+        streams,
+        subtitles,
+        related_counts,
+    }
+}
+
+async fn generate_deep_scan_episode(ffmpeg: &str, root: &Path, episode: &Path) {
+    let subtitle = root.join("source.nl.srt");
+    std::fs::write(
+        &subtitle,
+        "1\n00:00:00,000 --> 00:00:01,000\nSynthetic Dutch caption\n",
+    )
+    .unwrap();
+    let mut command = tokio::process::Command::new(ffmpeg);
+    command
+        .args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=blue:s=64x64:r=25:d=1",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=1",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=880:sample_rate=48000:duration=1",
+            "-i",
+        ])
+        .arg(&subtitle)
+        .args([
+            "-map",
+            "0:v",
+            "-map",
+            "1:a",
+            "-map",
+            "2:a",
+            "-map",
+            "3:s",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-c:s",
+            "srt",
+            "-metadata:s:a:0",
+            "language=eng",
+            "-metadata:s:a:0",
+            "title=English",
+            "-metadata:s:a:1",
+            "language=nld",
+            "-metadata:s:a:1",
+            "title=Dutch",
+            "-metadata:s:s:0",
+            "language=nld",
+            "-metadata:s:s:0",
+            "title=Dutch",
+        ])
+        .arg(episode);
+    run_deep_scan_generator(&mut command).await;
+}
+
+async fn run_deep_scan_generator(command: &mut tokio::process::Command) {
+    use tokio::io::AsyncReadExt as _;
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut stderr = child.stderr.take().unwrap().take(128 * 1024 + 1);
+    let reader = tokio::spawn(async move {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).await.unwrap();
+        bytes
+    });
+    let waited = tokio::time::timeout(std::time::Duration::from_secs(30), child.wait()).await;
+    if !matches!(&waited, Ok(Ok(_))) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), child.kill())
+            .await
+            .expect("synthetic generator cleanup deadline")
+            .expect("synthetic generator must be reaped before removing source assets");
+    }
+    let errors = reader.await.unwrap();
+    assert!(errors.len() <= 128 * 1024, "bounded fixture stderr");
+    assert!(
+        waited
+            .expect("bounded synthetic generation")
+            .unwrap()
+            .success(),
+        "{}",
+        String::from_utf8_lossy(&errors)
+    );
+}
+
 /// Step 5 parity: a second scan of an unchanged season folder hits the etag
 /// fast path (no episode probing, `scanned_files == 0`), while touching a
 /// file under the season folder changes the etag and forces a rescan.
@@ -311,6 +693,7 @@ async fn second_scan_skips_unchanged_season_via_etag() {
     seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
 
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -401,6 +784,7 @@ async fn failed_episode_scan_does_not_publish_season_etag() {
             .unwrap();
         }
         let config = LocalScanConfig {
+            deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe.clone(),
         };
@@ -519,6 +903,7 @@ async fn hdr_metadata_upgrade_reenters_unchanged_local_scan() {
     .unwrap();
     seed_local_library(&pool, &temp.path().join("library"), 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -660,6 +1045,7 @@ async fn subtitle_collision_upgrade_reenters_scan_and_restores_language_selectio
     .unwrap();
     seed_local_library(&pool, &temp.path().join("library"), 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -784,6 +1170,7 @@ async fn trashed_episode_disables_etag_skip_and_restores_normal() {
     let pool = test_db().await;
     seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -857,6 +1244,7 @@ async fn stale_library_folders_cleaned_after_scan() {
     let pool = test_db().await;
     seed_local_library(&pool, library_dir.as_path(), 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };
@@ -920,6 +1308,7 @@ async fn television_discovery_mpeg_transport_rescan_preserves_tracks_and_identit
     let pool = test_db().await;
     seed_local_library(&pool, temp.path(), 2).await;
     let config = LocalScanConfig {
+        deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
     };

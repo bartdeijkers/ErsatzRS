@@ -58,7 +58,7 @@ pub struct NextHost {
 pub(super) struct DynamicContext {
     pub started_at: chrono::DateTime<Utc>,
     pub request: NextStart,
-    pub troubleshooting: Option<Arc<super::troubleshooting::Context>>,
+    pub troubleshooting: Option<Arc<super::troubleshooting::Session>>,
     pub transfers: Arc<super::session_transfers::SessionTransfers>,
     pub fallback: Arc<Mutex<Option<super::fallback::Occurrence>>>,
     pub gaps: Arc<Mutex<Vec<super::fallback::Gap>>>,
@@ -163,7 +163,7 @@ impl NextHost {
         true
     }
 
-    async fn configuration(
+    pub(super) async fn configuration(
         &self,
         request: &NextStart,
     ) -> Result<super::protocol::ChannelConfig, ProcessError> {
@@ -193,6 +193,10 @@ impl NextHost {
             &request.ffprobe,
         )
         .map_err(|_| ProcessError::Preparation("profile conversion"))?;
+        configuration.normalization.video.frame_rate =
+            config::channel_frame_rate(&self.pool, &channel, &profile)
+                .await
+                .map_err(|_| ProcessError::Preparation("target frame rate read"))?;
         configuration.normalization.subtitle.fonts_folder = Some(
             crate::file_system_layout::fonts_cache_folder()
                 .to_str()
@@ -431,19 +435,11 @@ fn unavailable(message: &str) -> RepositoryError {
     RepositoryError::unavailable("Next projection", message)
 }
 
-/// Resolve the installed runtime only when a Next channel is requested.
+/// Resolve the same validated startup runtime for every Next consumer.
 /// # Errors
-/// Returns a redacted error when the configured/bundled executable is unavailable.
+/// Returns a redacted error when the accepted executable is unavailable.
 pub fn channel_binary() -> std::io::Result<PathBuf> {
-    let host = std::env::current_exe()
-        .map_err(|e| std::io::Error::new(e.kind(), "host executable is unavailable"))?;
-    super::runtime::resolve_channel_binary(
-        crate::startup_config::next_folder().as_deref(),
-        &host,
-        crate::startup_config::StartupConfig::load()
-            .home_dir
-            .as_deref(),
-    )
+    super::manager::channel_binary()
 }
 
 #[cfg(test)]

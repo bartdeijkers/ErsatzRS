@@ -67,9 +67,11 @@ pub(super) async fn seed(pool: &ersatzrs_infra::db::DbPool, root: &Path) {
             playout_id: 1,
             media_item_id: 10,
             start,
-            finish: start + chrono::Duration::seconds(24),
+            // Keep the finite source alive through the admitted 30s startup
+            // window so these fixtures prove explicit Stop, rather than EOF.
+            finish: start + chrono::Duration::seconds(54),
             in_point: chrono::Duration::seconds(6),
-            out_point: chrono::Duration::seconds(30),
+            out_point: chrono::Duration::seconds(60),
             ..Default::default()
         })
         .await

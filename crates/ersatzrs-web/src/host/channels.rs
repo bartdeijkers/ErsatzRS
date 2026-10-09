@@ -31,6 +31,24 @@ impl NativeChannelRuntime {
 
 #[async_trait]
 impl ChannelRuntime for NativeChannelRuntime {
+    async fn refresh_profile_playouts(
+        &self,
+        profile_id: EntityId,
+    ) -> Result<(), ChannelRuntimeError> {
+        let numbers = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Number" FROM "Channel" WHERE "FFmpegProfileId" = ? AND "StreamingEngine" = 1"#,
+        )
+        .bind(profile_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| ChannelRuntimeError::unavailable("profile channels could not be loaded"))?;
+        for number in numbers {
+            // The normal registry forwards updates to its preview registry.
+            self.hls_sessions.playout_updated(&number).await;
+        }
+        Ok(())
+    }
+
     async fn active_channel_numbers(&self) -> Result<Vec<String>, ChannelRuntimeError> {
         let mut active = self.hls_sessions.active_channels().await;
         active.extend(self.preview_hls_sessions.active_channels().await);

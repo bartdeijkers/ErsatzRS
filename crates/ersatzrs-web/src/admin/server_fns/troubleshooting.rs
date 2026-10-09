@@ -72,6 +72,8 @@ pub struct PlaybackTroubleshootingContext {
     pub mode: PlaybackTroubleshootingMode,
     pub media_item_id: i64,
     pub channel_id: i64,
+    #[serde(default)]
+    pub streaming_engine: ersatzrs_domain::StreamingEngine,
     pub preferred_audio_title: String,
     pub selected_subtitle_id: i64,
     pub title: String,
@@ -1958,6 +1960,7 @@ fn playback_context_from_admin(
             .ok_or_else(|| ServerFnError::new("Media item does not exist"))?;
         return Ok(PlaybackTroubleshootingContext {
             mode: PlaybackTroubleshootingMode::MediaItem,
+            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
             media_item_id,
             channel_id: 0,
             preferred_audio_title: preferred_audio_title.trim().to_owned(),
@@ -1992,6 +1995,7 @@ fn playback_context_from_admin(
             .ok_or_else(|| ServerFnError::new("Channel does not exist"))?;
         return Ok(PlaybackTroubleshootingContext {
             mode: PlaybackTroubleshootingMode::Channel,
+            streaming_engine: channel.streaming_engine,
             media_item_id: 0,
             channel_id,
             preferred_audio_title: String::new(),
@@ -2058,6 +2062,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
         let subtitles = load_playback_subtitles(pool, media_item_id).await?;
         return Ok(PlaybackTroubleshootingContext {
             mode: PlaybackTroubleshootingMode::MediaItem,
+            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
             media_item_id,
             channel_id: 0,
             preferred_audio_title: preferred_audio_title.trim().to_owned(),
@@ -2085,6 +2090,7 @@ pub async fn load_playback_troubleshooting_context_with_pool(
         };
         return Ok(PlaybackTroubleshootingContext {
             mode: PlaybackTroubleshootingMode::Channel,
+            streaming_engine: channel.streaming_engine,
             media_item_id: 0,
             channel_id,
             preferred_audio_title: String::new(),
@@ -2128,6 +2134,7 @@ struct PlaybackMediaItemRow {
 #[derive(Debug)]
 struct PlaybackChannelRow {
     name: String,
+    streaming_engine: ersatzrs_domain::StreamingEngine,
     ffmpeg_profile_id: i64,
 }
 
@@ -2207,7 +2214,7 @@ async fn load_playback_channel_row(
     use sqlx::Row;
 
     let row = sqlx::query(
-        r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId"
+        r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId", "StreamingEngine"
            FROM "Channel"
            WHERE "Id" = ?"#,
     )
@@ -2215,10 +2222,18 @@ async fn load_playback_channel_row(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|row| PlaybackChannelRow {
-        name: row.try_get("Name").unwrap_or_default(),
-        ffmpeg_profile_id: row.try_get("FFmpegProfileId").unwrap_or_default(),
-    }))
+    row.map(|row| {
+        Ok(PlaybackChannelRow {
+            streaming_engine: match row.try_get::<i32, _>("StreamingEngine")? {
+                0 => ersatzrs_domain::StreamingEngine::Legacy,
+                1 => ersatzrs_domain::StreamingEngine::Next,
+                _ => return Err(ServerFnError::new("invalid channel streaming engine")),
+            },
+            name: row.try_get("Name").unwrap_or_default(),
+            ffmpeg_profile_id: row.try_get("FFmpegProfileId").unwrap_or_default(),
+        })
+    })
+    .transpose()
 }
 
 #[cfg(all(test, feature = "ssr"))]
@@ -2769,5 +2784,49 @@ content:
                 .any(|message| message.contains("playout")),
             "{full_messages:?}"
         );
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod default_engine_tests {
+    use super::*;
+
+    #[test]
+    fn playback_context_uses_next_for_media_and_the_owning_engine_for_channels() {
+        use ersatzrs_core::repositories::{PlaybackChannelSummaryAdmin, PlaybackMediaSummaryAdmin};
+        for engine in [
+            ersatzrs_domain::StreamingEngine::Legacy,
+            ersatzrs_domain::StreamingEngine::Next,
+        ] {
+            let mut read = ersatzrs_app::queries::PlaybackTroubleshootingReadModel {
+                data: ersatzrs_core::repositories::PlaybackTroubleshootingAdmin::default(),
+                stream_selectors: Vec::new(),
+                music_video_credits_templates: Vec::new(),
+            };
+            read.data.channel = Some(PlaybackChannelSummaryAdmin {
+                name: "Channel".to_owned(),
+                ffmpeg_profile_id: 7,
+                streaming_engine: engine,
+            });
+            let context = playback_context_from_admin(read, 0, 10, "", 0).unwrap();
+            assert_eq!(context.streaming_engine, engine);
+            assert_eq!(context.channel_id, 10);
+        }
+        let mut read = ersatzrs_app::queries::PlaybackTroubleshootingReadModel {
+            data: ersatzrs_core::repositories::PlaybackTroubleshootingAdmin::default(),
+            stream_selectors: Vec::new(),
+            music_video_credits_templates: Vec::new(),
+        };
+        read.data.media = Some(PlaybackMediaSummaryAdmin {
+            title: "Media".to_owned(),
+            ..PlaybackMediaSummaryAdmin::default()
+        });
+        let context = playback_context_from_admin(read, 12, 0, "Dutch", 5).unwrap();
+        assert_eq!(
+            context.streaming_engine,
+            ersatzrs_domain::StreamingEngine::Next
+        );
+        assert_eq!(context.preferred_audio_title, "Dutch");
+        assert_eq!(context.selected_subtitle_id, 5);
     }
 }

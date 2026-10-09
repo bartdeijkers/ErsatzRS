@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 823
+expression: graph
+---
+[0:0]sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA,hwupload=derive_device=vaapi,hwmap=derive_device=opencl,tonemap_opencl=tonemap=linear,hwmap=derive_device=vaapi:reverse=1,scale_vaapi=format=p010le,scale_vaapi=format=nv12,hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload[v];[1:1]aresample=async=1,apad[a]

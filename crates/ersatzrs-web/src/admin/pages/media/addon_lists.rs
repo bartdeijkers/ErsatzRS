@@ -1564,7 +1564,10 @@ fn AddonMediaListsIsland(
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
-    let add_refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
+    let any_adaptive_provider = providers
+        .iter()
+        .any(|provider| provider.supports_adaptive_refresh);
+    let add_refresh_cadence = RwSignal::new(new_list_refresh_cadence(any_adaptive_provider));
     let add_load_item_details = RwSignal::new(true);
     let add_selection_review = RwSignal::new(false);
     let add_open = RwSignal::new(false);
@@ -1651,7 +1654,7 @@ fn AddonMediaListsIsland(
                     add_addon_chosen.set(false);
                     add_load_item_details.set(true);
                     add_selection_review.set(false);
-                    add_refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
+                    add_refresh_cadence.set(new_list_refresh_cadence(any_adaptive_provider));
                     add_open.set(false);
                     data.refetch();
                 }
@@ -2044,10 +2047,28 @@ fn AddAddonMediaListDialog(
             .map(|provider| provider.addon_id.clone())
             .collect::<BTreeSet<_>>(),
     );
-    let supports_adaptive_refresh =
-        Memo::new(move |_| adaptive_provider_ids.with_value(|ids| ids.contains(&addon_id.get())));
+    let cadence_chosen = RwSignal::new(false);
+    let supports_adaptive_refresh = Memo::new(move |_| {
+        let selected = addon_id.get();
+        adaptive_provider_ids.with_value(|ids| {
+            if selected.is_empty() {
+                !ids.is_empty()
+            } else {
+                ids.contains(&selected)
+            }
+        })
+    });
     Effect::new(move |_| {
-        if !supports_adaptive_refresh.get()
+        let supports_adaptive = supports_adaptive_refresh.get();
+        let chosen = if open.get() {
+            cadence_chosen.get()
+        } else {
+            cadence_chosen.set(false);
+            false
+        };
+        if !chosen {
+            refresh_cadence.set(new_list_refresh_cadence(supports_adaptive));
+        } else if !supports_adaptive
             && refresh_cadence.get_untracked() == AddonMediaListRefreshCadence::Adaptive
         {
             refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
@@ -2191,6 +2212,7 @@ fn AddAddonMediaListDialog(
                                 cadence=refresh_cadence
                                 supports_adaptive=Signal::derive(move || supports_adaptive_refresh.get())
                                 preserve_unavailable_adaptive=false
+                                on_change=Callback::new(move |()| cadence_chosen.set(true))
                                 class_name=""
                             />
                         </label>
@@ -2360,12 +2382,21 @@ const fn refresh_cadence_icon(cadence: AddonMediaListRefreshCadence) -> IconName
     }
 }
 
+const fn new_list_refresh_cadence(supports_adaptive: bool) -> AddonMediaListRefreshCadence {
+    if supports_adaptive {
+        AddonMediaListRefreshCadence::Adaptive
+    } else {
+        AddonMediaListRefreshCadence::Daily
+    }
+}
+
 #[component]
 fn RefreshCadenceSelect(
     cadence: RwSignal<AddonMediaListRefreshCadence>,
     supports_adaptive: Signal<bool>,
     preserve_unavailable_adaptive: bool,
     class_name: &'static str,
+    #[prop(optional)] on_change: Option<Callback<()>>,
 ) -> impl IntoView {
     view! {
         <select
@@ -2375,6 +2406,9 @@ fn RefreshCadenceSelect(
             prop:value=move || refresh_cadence_value(cadence.get())
             on:change=move |event| {
                 cadence.set(refresh_cadence_from_value(&event_target_value(&event)));
+                if let Some(on_change) = on_change {
+                    on_change.run(());
+                }
             }
         >
             <option
@@ -2475,18 +2509,34 @@ fn AddAddonMediaListPageIsland(
     let source_url = RwSignal::new(String::new());
     let folder_name = RwSignal::new(String::new());
     let presentation = RwSignal::new(AddonMediaListPresentationKind::TelevisionShow);
-    let refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
+    let refresh_cadence = RwSignal::new(new_list_refresh_cadence(if initial_addon_id.is_empty() {
+        any_adaptive_provider
+    } else {
+        adaptive_provider_ids.with_value(|ids| ids.contains(&initial_addon_id))
+    }));
+    let cadence_chosen = RwSignal::new(false);
     let generate_playlist = RwSignal::new(false);
     let load_item_details = RwSignal::new(true);
     let initial_selection_review = RwSignal::new(false);
     let resolved_name = RwSignal::new(String::new());
     let hydrated = RwSignal::new(false);
-    let supports_adaptive_refresh =
-        Memo::new(move |_| adaptive_provider_ids.with_value(|ids| ids.contains(&addon_id.get())));
+    let supports_adaptive_refresh = Memo::new(move |_| {
+        let selected = addon_id.get();
+        adaptive_provider_ids.with_value(|ids| {
+            if selected.is_empty() {
+                !ids.is_empty()
+            } else {
+                ids.contains(&selected)
+            }
+        })
+    });
     Effect::new(move |_| hydrated.set(true));
     Effect::new(move |_| {
-        if !supports_adaptive_refresh.get()
-            && refresh_cadence.get() == AddonMediaListRefreshCadence::Adaptive
+        let supports_adaptive = supports_adaptive_refresh.get();
+        if !cadence_chosen.get() {
+            refresh_cadence.set(new_list_refresh_cadence(supports_adaptive));
+        } else if !supports_adaptive
+            && refresh_cadence.get_untracked() == AddonMediaListRefreshCadence::Adaptive
         {
             refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
         }
@@ -2715,6 +2765,7 @@ fn AddAddonMediaListPageIsland(
                                 })
                                 preserve_unavailable_adaptive=false
                                 class_name=style::boxed_input
+                                on_change=Callback::new(move |()| cadence_chosen.set(true))
                             />
                         </label>
                     </div>

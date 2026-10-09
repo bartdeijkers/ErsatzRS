@@ -167,6 +167,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Own the candidate for the entire suite. A concurrent local Leptos build can
+# otherwise replace/remove pkg files while this host is serving its pages.
+log "snapshotting the matched server and site into the isolated test runtime"
+cp "$SERVER_BIN" "$TMP_ROOT/$(basename "$SERVER_BIN")"
+mkdir -p "$TMP_ROOT/site"
+cp -R "$SITE_ROOT/." "$TMP_ROOT/site/"
+SERVER_BIN="$TMP_ROOT/$(basename "$SERVER_BIN")"
+SITE_ROOT="$TMP_ROOT/site"
+SITE_ROOT_ENV="$(native_env_path "$SITE_ROOT")"
+
 log "starting ersatzrs-web on $BASE_URL"
 log "database: $DB_PATH"
 log "site root: $SITE_ROOT"

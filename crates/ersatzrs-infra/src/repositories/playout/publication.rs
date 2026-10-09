@@ -266,14 +266,15 @@ impl SqlitePlayoutRepository {
                     .await
                     .repository()?;
             }
-        } else {
-            for &history_id in &result.history_to_remove {
-                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)
-                    .bind(history_id)
-                    .execute(&mut *tx)
-                    .await
-                    .repository()?;
-            }
+        }
+        // A preserving rebuild can retain a programme's prefix while explicitly
+        // discarding orphaned future history inside that same prefix.
+        for &history_id in &result.history_to_remove {
+            sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)
+                .bind(history_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
         }
         for entry in &result.added_history {
             sqlx::query(

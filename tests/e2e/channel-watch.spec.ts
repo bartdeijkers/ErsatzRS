@@ -89,9 +89,12 @@ async function expectStepScrollsTimeline(page: Page, button: string): Promise<vo
     .toBeGreaterThan(before);
 }
 
-async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<void> {
+async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<string> {
   const workingDirectory = join(tmpdir(), 'ersatzrs-hls-preview', channelNumber);
-  expect(existsSync(workingDirectory)).toBe(true);
+  await expect.poll(() => existsSync(workingDirectory)).toBe(true);
+  const preview = page.locator('.channel-watch-js [data-channel-preview]');
+  const stopPreview = preview.getByRole('button', { name: 'Stop Preview', exact: true });
+  if (await stopPreview.isVisible()) await stopPreview.click();
   // Stop Preview releases the browser, while the server keeps its idle lease.
   // Explicitly stop this fixture through the real administration action so the
   // next browser's channel does not wait behind the previous fixture's lease.
@@ -109,9 +112,9 @@ async function stopFixtureTranscode(page: Page, channelNumber: string): Promise<
   // shutdown and proves this fixture no longer occupies a transcode slot.
   await expect.poll(() => existsSync(workingDirectory)).toBe(false);
   await expect(dialog).not.toBeVisible();
-  const preview = page.locator('.channel-watch-js [data-channel-preview]');
   await expect(preview).toHaveAttribute('data-preview-state', 'stopped');
   await expect(preview.locator('video')).not.toHaveAttribute('src');
+  return response.url();
 }
 
 function makeCalibrationClip(
@@ -507,7 +510,7 @@ test.describe('finding 04 programme graphics acceptance', () => {
       .toHaveText('EXPLICIT|FIRST PROGRAMME|SECOND PROGRAMME|FIRST PROGRAMME|JUNCTION');
     await page.setViewportSize({ width: 390, height: 844 });
     const navigation = page.getByRole('button', { name: 'Navigatie omschakelen' });
-    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await page.keyboard.press('Escape');
     await expect(navigation).toHaveAttribute('aria-expanded', 'false');
     await expect.poll(() => page.locator('[data-nav-drawer]')
       .evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
@@ -824,6 +827,14 @@ test.describe('channel preview modal and watch route', () => {
     );
     await page.getByRole('button', { name: 'Open Full Player' }).click();
     await expect(page).toHaveURL(new RegExp(`/channels/${second.id}/watch$`));
+    await waitForHydration(page);
+    const stopUrl = await stopFixtureTranscode(page, second.number);
+    // The first modal can also have acquired a lease before its delayed
+    // projection resolves. Cancel only these two channels owned by this test.
+    const firstStopped = await page.request.post(stopUrl, { form: { number: first.number } });
+    expect(firstStopped.ok()).toBe(true);
+    await expect.poll(() => existsSync(join(tmpdir(), 'ersatzrs-hls-preview', first.number)))
+      .toBe(false);
   });
 
   for (const failure of [
@@ -974,6 +985,8 @@ WHERE "Id" = ${source.id + 3};
     await expect(page.getByRole('gridcell').filter({ hasText: 'E2E Preview Programme' }).first())
       .toBeVisible();
 
+    await stopFixtureTranscode(page, mirror.number);
+
     await page.goto('/epg');
     await waitForHydration(page);
     const sourceLane = page.locator(`[data-channel-id="${source.id}"]`);
@@ -1074,7 +1087,7 @@ WHERE "Id" = ${source.id + 3};
     }
   });
 
-  test('Next burns unextracted embedded text independently of native extraction settings', async ({ page }, testInfo) => {
+  test('Next burns explicitly pinned unextracted text independently of native extraction settings', async ({ page }, testInfo) => {
     test.skip(!process.env.ETV_NEXT_FOLDER, 'Requires the real Next engine');
     test.setTimeout(120_000);
     const clipPath = makeCalibrationClip(testInfo, 'color=c=blue:size=640x360:rate=30');
@@ -1096,7 +1109,9 @@ WHERE "Id" = ${source.id + 3};
 UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=4,
   "NextEngineTextSubtitleMode"=0, "SubtitleMode"=2,
   "PreferredSubtitleLanguageCode"='nld' WHERE "Id"=${channel.id};
-UPDATE "PlayoutItem" SET "OutPoint"='00:01:00' WHERE "PlayoutId"=${channel.id + 1};
+UPDATE "PlayoutItem" SET "OutPoint"='00:01:00', "MediaVersionId"=${channel.id + 105},
+  "VideoStreamIndex"=0, "AudioStreamIndex"=1, "SubtitleStreamIndex"=2
+  WHERE "PlayoutId"=${channel.id + 1};
 INSERT INTO "MediaStream" ("MediaVersionId", "Index", "MediaStreamKind", "Codec",
   "Language", "Title", "Default", "Forced", "Channels")
 VALUES (${channel.id + 105}, 2, 3, 'subrip', 'nld', 'Dutch', 1, 0, 0);
@@ -1142,11 +1157,13 @@ ${keys.map((key) => `INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VAL
       await expect(root.getByRole('button', { name: 'Captions', exact: true })).toBeDisabled();
       expect(sqlite(`SELECT "IsExtracted", "Path" IS NULL FROM "Subtitle"
         WHERE "MovieMetadataId"=${channel.id + 104};`)).toBe('0|1');
-      await root.getByRole('button', { name: 'Stop Preview', exact: true }).click();
-      await stopFixtureTranscode(page, channel.number);
       expect(errors).toEqual([]);
     } finally {
-      sqlite(`DELETE FROM "ConfigElement" WHERE "Key" IN (${keys.map(sqlString).join(',')});\n${restoreSettings}`);
+      try {
+        await stopFixtureTranscode(page, channel.number);
+      } finally {
+        sqlite(`DELETE FROM "ConfigElement" WHERE "Key" IN (${keys.map(sqlString).join(',')});\n${restoreSettings}`);
+      }
     }
   });
 
@@ -1375,10 +1392,14 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
   });
 });
 
+const jpegXlProgressPeriodSeconds = 0.1;
+
 async function captureJpegXlStream(ffmpeg: string, url: string, output: string) {
-  const started = Date.now();
+  // Wall-clock synchronization can step Date.now() while a live stream runs.
+  // Measure delivery against a monotonic clock, like Playwright's trace timing.
+  const started = performance.now();
   const samples: { wallSeconds: number; mediaSeconds: number }[] = [];
-  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', '0.1',
+  const child = spawn(ffmpeg, ['-nostdin', '-v', 'error', '-y', '-stats_period', String(jpegXlProgressPeriodSeconds),
     '-progress', 'pipe:1', '-analyzeduration', '1000000', '-probesize', '1000000',
     '-rw_timeout', '15000000', '-i', url, '-t', '8', '-c', 'copy', output],
     { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -1392,7 +1413,7 @@ async function captureJpegXlStream(ffmpeg: string, url: string, output: string) 
       if (line.startsWith('out_time_us=')) {
         const mediaSeconds = Number(line.slice('out_time_us='.length)) / 1_000_000;
         if (Number.isFinite(mediaSeconds) && mediaSeconds > 0) {
-          samples.push({ wallSeconds: (Date.now() - started) / 1000, mediaSeconds });
+          samples.push({ wallSeconds: (performance.now() - started) / 1000, mediaSeconds });
         }
       }
     }
@@ -1409,7 +1430,7 @@ async function captureJpegXlStream(ffmpeg: string, url: string, output: string) 
       else resolve();
     });
   });
-  return { wallSeconds: (Date.now() - started) / 1000, samples };
+  return { wallSeconds: (performance.now() - started) / 1000, samples };
 }
 
 test('finding 09 decodes compact JPEG XL in a full native broadcast graph', async ({ page }, testInfo) => {
@@ -1505,7 +1526,21 @@ INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") V
     expect(firstSourceFrame).toBeGreaterThanOrEqual(10);
     expect(Math.min(...scores), 'decoded served glyph must match an actual source animation frame').toBeLessThan(5);
     expect(Math.max(...peaks.slice(0,40))).toBeGreaterThan(180);
-    expect(Math.max(...peaks.slice(0,40))).toBeLessThan(250);
+    // H.264 ringing can brighten an isolated pixel. Check the matched white
+    // glyph's mean compositing error to distinguish transparency from opacity.
+    let foregroundPixels = 0, foregroundError = 0;
+    for (let pixel=0;pixel<300*150;pixel++) {
+      const sourcePixel = firstSourceFrame*300*150*4+pixel*4;
+      if (sourceFrames[sourcePixel] > 250 && sourceFrames[sourcePixel+1] > 250 &&
+          sourceFrames[sourcePixel+2] > 250 && sourceFrames[sourcePixel+3] >= 127) {
+        const alpha = sourceFrames[sourcePixel+3]/255;
+        const predicted = sourceFrames[sourcePixel]*(1-Math.pow(1-alpha,3));
+        foregroundError += Math.abs(frames[pixel*3]-predicted);
+        foregroundPixels++;
+      }
+    }
+    expect(foregroundPixels, 'matched source frame must contain a white glyph').toBeGreaterThan(0);
+    expect(foregroundError/foregroundPixels, 'served glyph must preserve the three-layer alpha blend').toBeLessThan(5);
     expect(new Set(white.slice(0,40)).size).toBeGreaterThan(5);
     expect(Math.max(...peaks.slice(-40))).toBeLessThan(35);
     // Measure live delivery while all three carriers are active. The total
@@ -1520,9 +1555,11 @@ INSERT INTO "PlayoutItemGraphicsElement" ("PlayoutItemId","GraphicsElementId") V
     if (label === 'producer') {
       expect(speed, 'actual full native HTTP graph capacity with all three carriers active').toBeGreaterThanOrEqual(1);
     } else {
-      // The public wrapper uses -readrate 1.0. At 25 fps, reported media progress
-      // is quantized to 40 ms; require realtime delivery within one output frame.
-      expect(measuredMediaSeconds + 1 / 25).toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
+      // The public wrapper uses -readrate 1.0. Progress reports sample mixed
+      // audio/video timestamps every 100 ms; their receipt times are not frame
+      // clocks. Bound realtime delivery by one report interval plus one frame.
+      expect(measuredMediaSeconds + jpegXlProgressPeriodSeconds + 1 / 25)
+        .toBeGreaterThanOrEqual(lastSample.wallSeconds - firstSample.wallSeconds);
     }
     expect(programmeTimeline(playout)).toBe(before);
     for(const [time,state] of [['0.4','visible'],['7.2','clear']]) {

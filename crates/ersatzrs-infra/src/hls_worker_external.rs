@@ -93,7 +93,7 @@ pub(super) async fn load(
         .map_err(|error| selection_failure(channel_id, error))?
     {
         media::ExternalPlayoutSelection::NotConfigured => {
-            return load_active_hls_item(pool, channel_id, replacements, now).await
+            return load_active_hls_item(pool, channel_id, replacements, now).await;
         }
         media::ExternalPlayoutSelection::Unavailable => return Ok(None),
         media::ExternalPlayoutSelection::Item(item) => *item,

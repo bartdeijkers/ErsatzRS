@@ -175,6 +175,60 @@ async fn playout_ids(pool: &DbPool, channel_id: i64) -> Result<Vec<i64>> {
         .repository()
 }
 
+/// Sample only versions selected by the same binding as Next publication.
+/// No preparation, provider calls, media probing or persisted mutations occur.
+///
+/// # Errors
+/// Returns database/metadata errors or unavailable selected media bindings.
+pub(super) async fn frame_rates(pool: &DbPool, source_channel_id: i64) -> Result<Vec<String>> {
+    let rows = sqlx::query(r#"SELECT DISTINCT pi."MediaItemId", pi."MediaVersionId", pi."VideoStreamIndex", pi."AudioStreamIndex", pi."SubtitleStreamIndex"
+        FROM "Playout" p JOIN "PlayoutItem" pi ON pi."PlayoutId"=p."Id"
+        WHERE p."ChannelId"=?"#)
+        .bind(source_channel_id).fetch_all(pool).await.repository()?;
+    let mut versions = std::collections::BTreeSet::new();
+    for row in rows {
+        let pinned = match (
+            row.try_get::<Option<i64>, _>("MediaVersionId")
+                .repository()?,
+            row.try_get::<Option<i32>, _>("VideoStreamIndex")
+                .repository()?,
+        ) {
+            (Some(media_version_id), Some(video_stream_index)) => {
+                Some(ersatzrs_domain::PinnedStreamSelection {
+                    media_version_id,
+                    video_stream_index,
+                    audio_stream_index: row.try_get("AudioStreamIndex").repository()?,
+                    subtitle_stream_index: row.try_get("SubtitleStreamIndex").repository()?,
+                })
+            }
+            _ => None,
+        };
+        let selected = bind_media(
+            pool,
+            PlayoutItem {
+                media_item_id: row.try_get("MediaItemId").repository()?,
+                pinned_stream_selection: pinned,
+                ..Default::default()
+            },
+        )
+        .await?;
+        versions.insert(selected.media_version_id);
+    }
+    let mut rates = Vec::with_capacity(versions.len());
+    for version in versions {
+        let rate: Option<String> =
+            sqlx::query_scalar(r#"SELECT "RFrameRate" FROM "MediaVersion" WHERE "Id"=?"#)
+                .bind(version)
+                .fetch_one(pool)
+                .await
+                .repository()?;
+        if let Some(rate) = rate {
+            rates.push(rate);
+        }
+    }
+    Ok(rates)
+}
+
 const MEDIA_QUERY: &str = r#"
     SELECT mv."Id" AS "VersionId", mf."Id" AS "FileId", mf."Path", mv."RemoteStreamId"
     FROM "MediaVersion" mv

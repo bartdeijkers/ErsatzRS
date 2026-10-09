@@ -34,7 +34,9 @@ async fn failed_streaming_bind_releases_the_new_admin_socket() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+// The public SSR 404 fallback loads locale settings with block_in_place, as on
+// the production multithreaded runtime. LocalSet still owns Leptos local tasks.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn actual_ipv4_and_ipv6_listeners_isolate_routes_and_shut_down_together() {
     tokio::task::LocalSet::new()
         .run_until(async {
@@ -81,6 +83,17 @@ async fn actual_ipv4_and_ipv6_listeners_isolate_routes_and_shut_down_together() 
                     (internal, "/healthz", 404),
                     (internal, "/lineup_status.json", 404),
                     (internal, "/ffmpeg/next-media/1/2/3", 401),
+                    (
+                        streaming,
+                        "/ffmpeg/next-song-background?binding=invalid",
+                        404,
+                    ),
+                    (admin, "/ffmpeg/next-song-background?binding=invalid", 404),
+                    (
+                        internal,
+                        "/ffmpeg/next-song-background?binding=invalid",
+                        401,
+                    ),
                     (streaming, "/ffmpeg/external-media/1/2", 404),
                     (admin, "/ffmpeg/external-media/1/2", 404),
                     (internal, "/ffmpeg/external-media/1/2", 401),

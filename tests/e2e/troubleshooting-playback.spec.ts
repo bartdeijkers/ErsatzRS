@@ -1,12 +1,16 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const db = process.env.E2E_DB_PATH;
 const id = 935_001;
 const musicId = id + 10;
+const seekId = id + 30;
+const watchId = id + 100;
+const ffmpegPath = () => process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
+  ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
 const quote = (value: string) => value.replaceAll("'", "''");
 function sql(statement: string): string {
   if (!db) throw new Error('Use the isolated Playwright wrapper (E2E_DB_PATH required)');
@@ -15,11 +19,98 @@ function sql(statement: string): string {
   }).trim();
 }
 
+type FirstFrame = { rgb: number[]; mediaTime: number; whitePixels: number; png: string };
+
+function selectedAudioSpectrum(pcm: Buffer) {
+  const sampleRate = 48_000;
+  const totalSamples = pcm.length / 2;
+  const startSample = Math.min(2_400, Math.floor(totalSamples / 8));
+  const windowSamples = Math.min(19_200, totalSamples - startSample);
+  if (!Number.isInteger(totalSamples) || windowSamples < 9_600) {
+    throw new Error('Spectral audio proof requires at least 200 ms of decoded mono s16 PCM');
+  }
+  const weighted = new Float64Array(windowSamples);
+  let weightSum = 0;
+  let sumSquares = 0;
+  for (let i = 0; i < windowSamples; i++) {
+    const sample = pcm.readInt16LE((startSample + i) * 2);
+    const weight = 0.5 * (1 - Math.cos(2 * Math.PI * i / (windowSamples - 1)));
+    weighted[i] = sample * weight;
+    weightSum += weight;
+    sumSquares += sample * sample;
+  }
+  const amplitude = (frequency: number) => {
+    const coefficient = 2 * Math.cos(2 * Math.PI * frequency / sampleRate);
+    let previous = 0;
+    let preceding = 0;
+    for (const sample of weighted) {
+      const current = sample + coefficient * previous - preceding;
+      preceding = previous;
+      previous = current;
+    }
+    const power = previous * previous + preceding * preceding - coefficient * previous * preceding;
+    return 2 * Math.sqrt(Math.max(0, power)) / weightSum;
+  };
+  return { sampleRate, startSample, windowSamples, pcmFullScale: 32_768,
+    rms: Math.sqrt(sumSquares / windowSamples), dutch880Amplitude: amplitude(880),
+    english440Amplitude: amplitude(440) };
+}
+
+async function captureFirstPresentedFrame(page: Page) {
+  // Register before the actual player exists/autoplays, rather than polling a
+  // later currentTime or sampling a frame after an HLS live-edge seek.
+  await page.addInitScript(() => {
+    const armed = new WeakSet<HTMLVideoElement>();
+    const attach = () => {
+      for (const video of document.querySelectorAll('video')) {
+        if (armed.has(video)) continue;
+        armed.add(video);
+        if (typeof video.requestVideoFrameCallback !== 'function') {
+          throw new Error('First presented-frame acceptance requires requestVideoFrameCallback');
+        }
+        video.requestVideoFrameCallback((_now, metadata) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 320; canvas.height = 180;
+          const context = canvas.getContext('2d')!;
+          context.drawImage(video, 0, 0, 320, 180);
+          const rgb = [...context.getImageData(160, 90, 1, 1).data].slice(0, 3);
+          const caption = context.getImageData(40, 130, 240, 50).data;
+          let whitePixels = 0;
+          for (let i = 0; i < caption.length; i += 4) {
+            if (caption[i] > 180 && caption[i + 1] > 180 && caption[i + 2] > 180) whitePixels++;
+          }
+          (window as Window & { __previewFirstFrame?: FirstFrame }).__previewFirstFrame = {
+            rgb, mediaTime: metadata.mediaTime, whitePixels, png: canvas.toDataURL('image/png'),
+          };
+        });
+      }
+    };
+    new MutationObserver(attach).observe(document, { childList: true, subtree: true });
+    attach();
+  });
+}
+
+async function firstPresentedFrame(page: Page, info: TestInfo): Promise<FirstFrame> {
+  await page.waitForFunction(() =>
+    Boolean((window as Window & { __previewFirstFrame?: FirstFrame }).__previewFirstFrame));
+  const frame = await page.evaluate(() =>
+    (window as Window & { __previewFirstFrame?: FirstFrame }).__previewFirstFrame!);
+  await info.attach('first-presented-frame', {
+    body: Buffer.from(frame.png.split(',')[1], 'base64'), contentType: 'image/png',
+  });
+  await info.attach('first-presented-frame-measurements', {
+    body: JSON.stringify({ rgb: frame.rgb, mediaTime: frame.mediaTime, whitePixels: frame.whitePixels }),
+    contentType: 'application/json',
+  });
+  return frame;
+}
+
 test.describe('playback troubleshooting engines', () => {
   test.describe.configure({ mode: 'serial' });
   let root: string;
   let profile: string;
   let selectorFile: string;
+  let liveFixture: string;
   test.beforeAll(() => {
     if (!process.env.E2E_APP_STATE_DIR) throw new Error('Isolated E2E_APP_STATE_DIR required');
     root = mkdtempSync(path.join(tmpdir(), 'ersatzrs-preview-e2e-'));
@@ -44,6 +135,25 @@ test.describe('playback troubleshooting engines', () => {
       '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=nld',
       '-metadata:s:a:0', 'title=Dutch', musicClip]);
+    const seekClip = path.join(root, 'seek-colors.mkv');
+    execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', "color=blue:s=320x180:r=25:d=32,drawbox=c=green:t=fill:enable='lt(t,3)',drawbox=c=red:t=fill:enable='between(t,3,8.999)'",
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=32',
+      '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=32',
+      '-map', '0:v', '-map', '1:a', '-map', '2:a', '-c:v', 'libx264', '-preset', 'ultrafast',
+      '-g', '50', '-keyint_min', '50', '-sc_threshold', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+      '-metadata:s:a:0', 'language=eng', '-metadata:s:a:0', 'title=English',
+      '-metadata:s:a:1', 'language=nld', '-metadata:s:a:1', 'title=Dutch', seekClip]);
+    const seekSubtitle = path.join(root, 'seek-colors.nl.srt');
+    writeFileSync(seekSubtitle, '1\n00:00:01,000 --> 00:00:08,000\nDutch first frame proof\n');
+    liveFixture = path.join(root, 'player-live');
+    mkdirSync(liveFixture);
+    execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', '3', '-i', seekClip,
+      '-t', '16', '-map', '0:v:0', '-map', '0:a:1', '-c:v', 'libx264', '-preset', 'ultrafast',
+      '-g', '50', '-keyint_min', '50', '-sc_threshold', '0', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+      '-f', 'hls', '-hls_time', '2', '-hls_list_size', '0',
+      '-hls_segment_filename', path.join(liveFixture, 'calibration%06d.ts'),
+      path.join(liveFixture, 'live.m3u8')]);
     writeFileSync(subtitle, '1\n00:00:01,000 --> 00:00:06,000\nPreview subtitle proof\n');
     for (const color of ['red', 'lime', 'blue']) {
       execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y',
@@ -88,6 +198,17 @@ INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channel
 VALUES (0,'h264',1,NULL,0,NULL,1,0,${id}),(1,'aac',2,'nld',1,'Dutch',1,0,${id});
 INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated")
 VALUES (${id},${id},1,'Dutch',9,'subrip',1,0,0,'nld',0,'${quote(subtitle)}','2026-09-26 00:00:00','2026-09-26 00:00:00');
+INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (${seekId},${id},0);
+INSERT INTO "Movie" ("Id") VALUES (${seekId});
+INSERT INTO "MovieMetadata" ("Id","MovieId","Title","MetadataKind","DateAdded","DateUpdated")
+VALUES (${seekId},${seekId},'Seek color fixture',0,'2026-10-07 00:00:00','2026-10-07 00:00:00');
+INSERT INTO "MediaVersion" ("Id","MovieId","Duration","Width","Height","VideoScanKind","DateAdded","DateUpdated")
+VALUES (${seekId},${seekId},'00:00:32',320,180,0,'2026-10-07 00:00:00','2026-10-07 00:00:00');
+INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES (${seekId},${seekId},'${quote(seekClip)}','seek-color-fixture');
+INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Title","Default","Forced","MediaVersionId")
+VALUES (0,'h264',1,NULL,0,NULL,1,0,${seekId}),(1,'aac',2,'eng',1,'English',1,0,${seekId}),(2,'aac',2,'nld',1,'Dutch',0,0,${seekId});
+INSERT INTO "Subtitle" ("Id","MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated")
+VALUES (${seekId},${seekId},1,'Dutch',9,'subrip',0,0,0,'nld',0,'${quote(seekSubtitle)}','2026-10-07 00:00:00','2026-10-07 00:00:00');
 INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (${musicId},${id},0),(${musicId + 1},${id},0);
 INSERT INTO "Artist" ("Id") VALUES (${musicId + 1});
 INSERT INTO "ArtistMetadata" ("Id","ArtistId","Title","MetadataKind","DateAdded","DateUpdated")
@@ -141,6 +262,146 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     }
   });
 
+  test('ordinary channel preview keeps its default live-edge start in the first displayed frame', async ({ page }, info) => {
+    const start = new Date(Date.now() - 2_000).toISOString().replace('T', ' ').replace('Z', '');
+    const finish = new Date(Date.now() + 30_000).toISOString().replace('T', ' ').replace('Z', '');
+    sql(`INSERT INTO "Channel" (
+      "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
+      "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
+      "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
+    ) VALUES (${watchId},'00000000-0000-0000-0000-000000935101','935101',935101,'Live-edge fixture',
+      'ErsatzRS',${id},4,0,0,0,0,0,0,0,0,1,1);
+    INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed") VALUES (${watchId},${watchId},1,0);
+    INSERT INTO "PlayoutItem" ("Id","DisableWatermarks","FillerKind","Finish","GuideGroup",
+      "InPoint","MediaItemId","OutPoint","PlayoutId","Start")
+    VALUES (${watchId},0,0,'${finish}',0,'00:00:00',${seekId},'00:00:32',${watchId},'${start}');`);
+    const manifest = readFileSync(path.join(liveFixture, 'live.m3u8'), 'utf8')
+      .replace('#EXT-X-ENDLIST', '');
+    expect((manifest.match(/#EXTINF:/g) ?? []).length).toBeGreaterThanOrEqual(8);
+    const segmentRequests: string[] = [];
+    await page.route('**/iptv/**', async route => {
+      const filename = path.posix.basename(new URL(route.request().url()).pathname);
+      if (filename.endsWith('.m3u8')) {
+        await route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: manifest });
+      } else if (/^calibration\d{6}\.ts$/.test(filename)) {
+        segmentRequests.push(filename);
+        await route.fulfill({ contentType: 'video/mp2t', body: readFileSync(path.join(liveFixture, filename)) });
+      } else {
+        await route.fulfill({ status: 404 });
+      }
+    });
+    try {
+      await captureFirstPresentedFrame(page);
+      // This hydrated page invokes the production shared player with two
+      // arguments. Only its media response is a deterministic live fixture.
+      await page.goto(`/channels/${watchId}/watch`);
+      const frame = await firstPresentedFrame(page, info);
+      expect(frame.rgb[2]).toBeGreaterThan(180);
+      expect(frame.rgb[0]).toBeLessThan(50);
+      expect(frame.rgb[1]).toBeLessThan(50);
+      expect(segmentRequests.length).toBeGreaterThan(0);
+      expect(segmentRequests[0]).not.toBe('calibration000000.ts');
+      await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-preview-engine', 'hlsjs');
+      await info.attach('live-window-and-segment-requests', {
+        body: JSON.stringify({ manifest, segmentRequests }), contentType: 'application/json',
+      });
+      await page.getByRole('button', { name: 'Stop Preview', exact: true }).click();
+    } finally {
+      await page.goto('/channels');
+      sql(`DELETE FROM "PlayoutItem" WHERE "PlayoutId"=${watchId};
+        DELETE FROM "Playout" WHERE "Id"=${watchId}; DELETE FROM "Channel" WHERE "Id"=${watchId};`);
+    }
+  });
+
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} troubleshooting first displayed frame matches a nonzero seek before the live edge`, async ({ page }, info) => {
+      test.setTimeout(60_000);
+      test.skip(engine === 'Next' && !process.env.ETV_NEXT_FOLDER,
+        'Official Next runtime acceptance requires ETV_NEXT_FOLDER.');
+      await captureFirstPresentedFrame(page);
+      const segmentRequests: string[] = [];
+      page.on('request', request => {
+        if (/\/api\/troubleshoot\/playback\/previews\/[^/]+\/files\/[^/]+\.ts$/.test(new URL(request.url()).pathname)) {
+          segmentRequests.push(path.posix.basename(new URL(request.url()).pathname));
+        }
+      });
+      let finalPlaylist = '';
+      let ownedUrl = '';
+      let releaseEndlist = false;
+      await page.route('**/api/troubleshoot/playback/previews/*/files/live.m3u8', async route => {
+        ownedUrl = route.request().url();
+        // Keep the real generated segments and exact seek result. A benchmark
+        // may finish before Hls imports; hold ENDLIST off only in the browser
+        // response so that an incorrect live-edge start still fails reliably.
+        await expect.poll(async () => {
+          const response = await page.request.get(ownedUrl);
+          if (!response.ok()) return false;
+          finalPlaylist = await response.text();
+          return finalPlaylist.includes('#EXT-X-ENDLIST');
+        }, { timeout: 15_000 }).toBe(true);
+        await route.fulfill({ contentType: 'application/vnd.apple.mpegurl',
+          body: releaseEndlist ? finalPlaylist : finalPlaylist.replace('#EXT-X-ENDLIST', '') });
+      });
+      try {
+        await page.goto(`/system/troubleshooting/playback?mediaItem=${seekId}&preferredAudioTitle=Dutch&subtitleId=${seekId}`);
+        await page.getByRole('combobox', { name: 'Streaming Engine', exact: true }).selectOption(engine);
+        await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
+        await page.locator('select[name="streamSelector"]').selectOption('preview-fixture.yml');
+        await page.locator('input[name="seekSeconds"]').fill('3');
+        await page.getByRole('button', { name: 'Play', exact: true }).click();
+        const frame = await firstPresentedFrame(page, info);
+        expect(frame.rgb[0]).toBeGreaterThan(180);
+        expect(frame.rgb[1]).toBeLessThan(50);
+        expect(frame.rgb[2]).toBeLessThan(50);
+        expect(frame.whitePixels).toBeGreaterThan(10);
+        expect(releaseEndlist).toBe(false);
+        expect((finalPlaylist.match(/#EXTINF:/g) ?? []).length).toBeGreaterThanOrEqual(4);
+        expect(ownedUrl).toMatch(/\/files\/live\.m3u8$/);
+        const firstSegment = finalPlaylist.split('\n').find(line => line.endsWith('.ts'))!;
+        expect(segmentRequests[0]).toBe(firstSegment);
+        await expect(page.locator('[data-channel-preview]')).toHaveAttribute('data-preview-engine', 'hlsjs');
+
+        // Decode the server's unchanged final playlist independently of the
+        // browser response. Red proves seek=3, while 880 Hz proves the selected
+        // Dutch track rather than the default 440 Hz English track.
+        const decoded = execFileSync(ffmpegPath(), ['-nostdin', '-v', 'error', '-i', ownedUrl,
+          '-map', '0:v:0', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
+        expect(decoded.length).toBe(320 * 180 * 3);
+        const pixel = [...decoded.subarray((90 * 320 + 160) * 3, (90 * 320 + 160) * 3 + 3)];
+        expect(pixel[0]).toBeGreaterThan(180);
+        expect(pixel[1]).toBeLessThan(50);
+        expect(pixel[2]).toBeLessThan(50);
+        const audio = execFileSync(ffmpegPath(), ['-nostdin', '-v', 'error', '-i', ownedUrl,
+          '-t', '0.5', '-map', '0:a:0', '-ac', '1', '-ar', '48000', '-f', 's16le', 'pipe:1']);
+        // AAC ringing can add zero crossings. Compare the two actual fixture
+        // tones with a bounded Hann/Goertzel window, rejecting silence or the
+        // default English track instead of treating crossings as a frequency.
+        const audioSpectrum = selectedAudioSpectrum(audio);
+        await info.attach('decoded-selected-audio-spectrum', {
+          body: JSON.stringify(audioSpectrum), contentType: 'application/json',
+        });
+        expect(audioSpectrum.rms).toBeGreaterThan(100);
+        expect(audioSpectrum.dutch880Amplitude).toBeGreaterThan(100);
+        expect(audioSpectrum.dutch880Amplitude).toBeGreaterThan(audioSpectrum.english440Amplitude * 10);
+        await info.attach('seek-output-and-live-window', {
+          body: JSON.stringify({ requestedSeek: 3, playlistPath: new URL(ownedUrl).pathname,
+            finalPlaylist, browserPlaylist: finalPlaylist.replace('#EXT-X-ENDLIST', ''),
+            firstSegment, segmentRequests, decodedFirstPixel: pixel, selectedAudioSpectrum: audioSpectrum }),
+          contentType: 'application/json',
+        });
+        releaseEndlist = true;
+        await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+        const jobId = await page.locator('form[data-playback-troubleshooting]').getAttribute('data-preview-id');
+        const status = await (await page.request.get(`/api/troubleshoot/playback/previews/${jobId}`)).json();
+        expect(status.state).toBe('completed');
+        expect(status.cleanup_confirmed).toBe(true);
+      } finally {
+        releaseEndlist = true;
+        await page.goto('/system/troubleshooting');
+      }
+    });
+  }
+
   test('switches engine controls, preserves watermarks and graphics and fits narrow screens', async ({ page }, info) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -157,7 +418,8 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     const disabled = await selector.isDisabled();
     expect(disabled).toBe(false);
     await selector.selectOption('preview-fixture.yml');
-    await expect(engine).toHaveValue('Legacy');
+    await expect(engine).toHaveValue('Next');
+    await engine.selectOption('Legacy');
     await expect(page.locator('select[name="graphicsElement"]')).toBeVisible();
     await watermarks.selectOption([`${id}`, `${id + 1}`]);
     await page.locator('select[name="graphicsElement"]').selectOption(`${id}`);
@@ -222,6 +484,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         sql(`UPDATE "Channel" SET "StreamingMode"=${mode} WHERE "Id"=${id};`);
         const channel = sql(`SELECT * FROM "Channel" WHERE "Id"=${id};`);
         await page.goto(`/system/troubleshooting/playback?channel=${id}`);
+        await expect(page.locator('select[name="streamingEngine"]')).toHaveValue('Legacy');
         await page.waitForFunction(() =>
           (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
         await page.locator('input[name="start"]').fill('2026-10-02T12:00');
@@ -252,21 +515,24 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     }
   });
 
-  test('startup failures show actionable status before a producer starts', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
-    await page.waitForFunction(() =>
-      (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
-    await page.locator('select[name="ffmpegProfile"]').evaluate((select: HTMLSelectElement) => {
-      select.value = '';
+  for (const engine of ['Legacy', 'Next']) {
+    test(`${engine} startup failures show actionable status before a producer starts`, async ({ page }) => {
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(`/system/troubleshooting/playback?mediaItem=${id}`);
+      await page.waitForFunction(() =>
+        (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true);
+      await page.locator('select[name="streamingEngine"]').selectOption(engine);
+      await page.locator('select[name="ffmpegProfile"]').evaluate((select: HTMLSelectElement) => {
+        select.value = '';
+      });
+      await page.getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(page.locator('[data-preview-status]')).toContainText('preview could not start');
+      await expect(page.locator('textarea')).toHaveValue(/Check the server log/);
+      await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
+      expect(errors).toEqual([]);
     });
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(page.locator('[data-preview-status]')).toContainText('preview could not start');
-    await expect(page.locator('textarea')).toHaveValue(/Check the server log/);
-    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled();
-    expect(errors).toEqual([]);
-  });
+  }
 
   test('failed native playback completes promptly and leaves diagnostics for the next request', async ({ page }) => {
     const invalid = path.join(root, 'invalid-preview.mkv');
@@ -341,6 +607,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
 
   test('lost admission response allows retry without cancelling an unknown producer', async ({ page }) => {
     await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+    await page.locator('select[name="streamingEngine"]').selectOption('Legacy');
     await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
     await page.locator('input[name="seekSeconds"]').fill('0');
     let owned: string | undefined;
@@ -372,6 +639,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
     try {
       const page = await context.newPage();
       await page.goto(`/system/troubleshooting/playback?mediaItem=${musicId}`);
+      await expect(page.locator('select[name="streamingEngine"]')).toHaveValue('Next');
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
       await page.locator('input[name="seekSeconds"]').fill('0');
       await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -471,7 +739,7 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
         };
       })).toEqual({ red: true, green: true, blue: true });
       await expect(page).toHaveURL(/\/system\/troubleshooting\/playback/);
-      const playlist = engine === 'Next' ? 'ffmpeg.m3u8' : 'live.m3u8';
+      const playlist = 'live.m3u8';
       await expect.poll(async () => {
         const response = await page.request.get(`/iptv/session/.troubleshooting/${playlist}`);
         return (await response.text()).includes('#EXT-X-ENDLIST');
@@ -508,10 +776,18 @@ DELETE FROM "Resolution" WHERE "Id"=${id};`);
       await page.locator('select[name="ffmpegProfile"]').selectOption(profile);
       await page.locator('input[name="seekSeconds"]').fill('3');
       await page.locator('select[name="graphicsElement"]').selectOption([`${id + 20}`, `${id + 21}`]);
+      const form = page.locator('form[data-playback-troubleshooting]');
+      expect(await form.getAttribute('data-preview-id')).toBeFalsy();
       await page.getByRole('button', { name: 'Play', exact: true }).click();
-      const playlist = engine === 'Next' ? 'ffmpeg.m3u8' : 'live.m3u8';
-      const url = `${baseURL}/iptv/session/.troubleshooting/${playlist}`;
-      await expect.poll(async () => (await (await page.request.get(url)).text()).includes('#EXT-X-ENDLIST')).toBe(true);
+      await expect(form).toHaveAttribute('data-preview-id', /^[0-9a-f-]{36}$/);
+      const previewId = await form.getAttribute('data-preview-id');
+      // Shared compatibility output may still contain the preceding preview's
+      // ENDLIST. Only this admitted job's owned URL proves fresh readiness.
+      const url = `${baseURL}/api/troubleshoot/playback/previews/${previewId}/files/live.m3u8`;
+      await expect.poll(async () => {
+        const response = await page.request.get(url);
+        return response.ok() && (await response.text()).includes('#EXT-X-ENDLIST');
+      }).toBe(true);
       const ffmpeg = process.env.ErsatzRS_FFMPEG__PATH ?? process.env.ERSATZRS_FFMPEG__PATH
         ?? process.env.FFMPEG_PATH ?? 'ffmpeg';
       for (const [seek, blue] of [['0', true], ['2.25', false]] as const) {

@@ -81,11 +81,23 @@ fn classic_preservation_retains_prefetched_programmes_without_advancing_cleanup_
         let now = rebuild.start;
         rebuild.reference_data.preservation_not_before =
             Some(full.added_items[2].start + Duration::seconds(1));
+        for (index, history) in rebuild
+            .reference_data
+            .existing_history
+            .iter_mut()
+            .enumerate()
+        {
+            history.id = i64::try_from(index + 1).unwrap();
+        }
         let seam = full.added_items[2].finish;
         let result = ClassicSchedulingEngine.schedule(rebuild).unwrap();
         assert_eq!(result.retain_through, Some(seam));
         assert_eq!(result.added_items[0].start, seam);
         assert_eq!(result.remove_before, Some(now - Duration::hours(4)));
+        assert!(
+            result.history_to_remove.is_empty(),
+            "{mode:?} must retain current and prefetched history identities"
+        );
         if mode == PlayoutBuildMode::Refresh {
             assert_eq!(result.added_items, full.added_items[3..]);
         }

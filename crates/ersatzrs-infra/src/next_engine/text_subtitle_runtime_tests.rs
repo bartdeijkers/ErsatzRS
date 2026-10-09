@@ -209,7 +209,7 @@ fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) {
 pub(super) struct CallbackListener(tokio::task::JoinHandle<()>);
 
 impl CallbackListener {
-    async fn stop(&mut self) {
+    pub(super) async fn stop(&mut self) {
         self.0.abort();
         assert!((&mut self.0)
             .await

@@ -39,21 +39,10 @@ filtergraph stream-specifier error (observed live on the MTV channel);
 covered by the `pipeline_uses_persisted_stream_indexes_when_audio_precedes_video`
 snapshot.
 
-The 2026-06-19 ADR 0017 slice retuned fresh database FFmpeg defaults from the
-single conservative `1920x1080 x264 aac` seed to five ready-to-use AC-3 6ch
-profiles (720p, 1080p default, 1080p HDR, 4K, 4K HDR). Web startup now applies
-the preferred available hardware encoder (Nvenc > Qsv > Vaapi > VideoToolbox >
-Amf > None) to that fresh seed after the FFmpeg runtime report is captured,
-using hardware-compatible presets (`p7` plus tune `ll` for NVENC, `veryfast`
-for QSV, unset where platform encoders reject software-style presets), without rewriting
-existing profile tables. HLS segmenter output now emits `-max_delay 500000`
-only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
-idempotence, seed hardware update, hardware preference selection, and AC-3
-max-delay gating.
-
-Closed 2026-07-02 (ADR 0017 v3): the fresh-database seed halves the seeded video
-bitrates while keeping video buffer sizes unchanged, and existing databases are
-still not rewritten; see `default-profile-video-bitrate-halving` below.
+ADR 0017 supplies five fresh-database AC-3 6ch profiles, selects available
+hardware without rewriting saved profiles, and gates HLS multichannel AC-3
+max-delay. The resolved default-profile, bitrate, preset-retune and max-delay
+debt entries below preserve the exact seed evolution and focused evidence.
 
 The 2026-08-05 ADR 0063 slice upgrades command generation to the exact FFmpeg
 9.x contract. Frame-rate normalization emits `-fps_mode:v cfr`, NVENC presets
@@ -65,7 +54,22 @@ their specific filter-gating behavior rather than the current runtime version.
 A 2026-08-07 differential review found the emitted command surface unaffected by
 the 8.1.2 to 9.0 upgrade; see `ffmpeg-9-differential-review` below.
 
+Resolved 2026-10-07: complete metadata confirms absent audio before the shared
+native lavfi/index0 fallback. Unknown Automatic, explicit Disabled/Exact,
+selected tracks, source seek and fresh retained metadata remain preserved.
+Copy/None audio encodes AAC with profile constraints and video copy intact.
+Genuine video-only Linux/Windows HLS/direct decoding, silent PCM and Stop/cleanup
+pass. UCU-09 owns exact evidence; historical row194 failure/duration proof and
+approved platform/hardware debt remain.
+
 '''
+
+[[debt]]
+id          = 'native-video-only-null-audio-fallback'
+description = 'Normally scanned video-only media falls back to Automatic audio selection, but PipelineRequest always retains source audio stream index1 when the known audio list is empty. Native HLS therefore fails instead of using the upstream NullAudioInputFile silence source. Reuse existing lavfi audio input support for confirmed source-audio absence, shared across native HLS/direct construction; preserve explicit Disabled, exact pinned and alternate-language selection, unknown/unprobed pipe inputs, retained transport indexes, source seek and programme duration bounds.'
+discovered  = '2026-10-07'
+evidence    = 'UCU-09 row194 source03 application run ebea3819-0a16-40ee-93e5-92e68f3143ef, source receipt 927cc750b66eba7df3d3825782600f2fbe10377a99a7cabcde2b06912bdf3d9d, uses checksum-verified ErsatzRS-ffmpeg v2.0.6 and normal scanner/scheduler/HlsSessionWorker. Correct persisted1s/5s durations and adjacent schedule items precede real FFmpeg exit234: [0:1]aresample=async=1,apad[a] matches no streams. The retained synthetic probe has video index0 and subtitle index1, no audio. At upstream fb75ce8ccbc5570bf0e3c12533d87fe359b2d517, FFmpegLibraryProcessService replaces a version with no audio streams using NullAudioInputFile(anullsrc, stream0, lavfi). PipelineRequest constructor/missing-stream behavior predates row194 in prerequisite2fdd126c. Canonical UCU-09 evidence owns closeout; adding ordinary audio to the independent duration fixture does not resolve this defect. Original required proof: generated-silence argv plus decoded genuine video-only native HLS/direct playback, programme handoff and confirmed owned cleanup, with existing Disabled/selected-audio regressions preserved. Resolved 2026-10-07 by the shared AutomaticSilence helper and complete-metadata native consumers, independently verified generated argv and genuine video-only Linux/Windows HLS/direct playback, finite HLS Direct source-copy output, decoded silent AAC and confirmed Stop/cleanup. UCU-09 owns canonical proof tmp/ucu09-native-null-audio/acceptance-proof.json SHA256164d177616f15b95796a44b3f20b806dccc635f92b9a597c81b5465dc012c482, native Windows source01/runtime and source02/preview, both drivers terminal0; UCU-09 owns source01 native HTTP smoke/HLS lifecycle, TSDuck87/0 and final source02 affected all-target strict Clippy/format. No runtime binary amendment or row advance is included; approved platform/hardware debt remains explicit.'
+resolved    = true
 
 [[debt]]
 id          = 'nvenc-filter-gate-live-proof'

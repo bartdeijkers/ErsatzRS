@@ -366,6 +366,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "blurhash"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e79769241dcd44edf79a732545e8b5cec84c247ac060f5252cd51885d093a8fc"
+
+[[package]]
 name = "borrow-or-share"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1276,6 +1282,7 @@ version = "1.1.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
+ "blurhash",
  "bytes",
  "chrono",
  "directories",
@@ -1285,6 +1292,7 @@ dependencies = [
  "ersatzrs-core",
  "ersatzrs-domain",
  "ersatzrs-ffmpeg",
+ "flate2",
  "fs4",
  "futures-util",
  "getrandom 0.4.3",
@@ -1308,6 +1316,7 @@ dependencies = [
  "sha2 0.11.0",
  "sqlx",
  "subtle",
+ "tar",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

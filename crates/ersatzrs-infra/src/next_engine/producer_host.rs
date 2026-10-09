@@ -36,6 +36,8 @@ impl NextHost {
     ) -> Result<protocol::PlayoutItem> {
         let (image, subtitle) =
             producer_subtitles(&before.projection, &context.media.path, now, deadline).await?;
+        let generated = context.origin.credits_at(&before.projection, now)?;
+        let subtitle = subtitle.or(generated.clone());
         let seek = (context.media.item.in_point + (now - context.media.item.start))
             .to_std()
             .map_err(|_| unavailable())?;
@@ -58,7 +60,7 @@ impl NextHost {
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let preparation = ProducerPreparation {
             pool: self.pool.clone(),
-            media_id: context.media.item.media_item_id,
+            media_id: super::remote_projection::remote_owner(&context.media)?,
             ffmpeg: request.ffmpeg.to_str().ok_or_else(unavailable)?.into(),
             ffprobe: request.ffprobe.to_str().ok_or_else(unavailable)?.into(),
             number: request.number.clone(),
@@ -81,21 +83,6 @@ impl NextHost {
         };
         let result = async {
             let (remaining_seek, liveness) = timing_rx.await.map_err(|_| unavailable())?;
-            let after = Box::pin(context.origin.snapshot(
-                &self.pool,
-                &self.locker,
-                request.channel_id,
-                &context.media.item,
-                audio,
-            ))
-            .await?;
-            if after.identity.descriptor != before.identity.descriptor
-                || after.prepared
-                || after.retained
-                || !self.dynamic_contexts.lock().await.contains_key(&instance)
-            {
-                return Err(unavailable());
-            }
             let source =
                 self.producer_source(instance, ready.id, &ready.probe, liveness, remaining_seek)?;
             let subtitle = if let Some(selected) = image.as_ref() {
@@ -104,9 +91,21 @@ impl NextHost {
                     &ready.probe,
                     source.clone(),
                 )?)
+            } else if let Some(generated) = generated.as_ref() {
+                super::live_subtitles::prepare_generated_for_source(
+                    &self.burn_cache,
+                    generated,
+                    &source,
+                    &before.identity.descriptor,
+                    before.projection.item.finish,
+                    deadline,
+                )
+                .await?
             } else {
                 subtitle
             };
+            self.validate_producer_publication(&before, &context, request, instance, audio)
+                .await?;
             let mut item = install_fresh_tracks(
                 before.projection.item,
                 &ready.probe,
@@ -130,6 +129,32 @@ impl NextHost {
         }
         result
     }
+    async fn validate_producer_publication(
+        &self,
+        before: &Snapshot,
+        context: &ProducerContext,
+        request: &NextStart,
+        instance: uuid::Uuid,
+        audio: Option<usize>,
+    ) -> Result<()> {
+        let after = Box::pin(context.origin.clone().snapshot(
+            &self.pool,
+            &self.locker,
+            request.channel_id,
+            &context.media.item,
+            audio,
+        ))
+        .await?;
+        if after.identity.descriptor != before.identity.descriptor
+            || after.prepared
+            || after.retained
+            || !self.dynamic_contexts.lock().await.contains_key(&instance)
+        {
+            return Err(unavailable());
+        }
+        Ok(())
+    }
+
     fn producer_source(
         &self,
         instance: uuid::Uuid,
@@ -371,6 +396,13 @@ mod tests {
     fn projection(path: &str) -> DeferredProjection {
         let start = Utc::now();
         DeferredProjection {
+            original_source: protocol::Source::Local {
+                path: path.into(),
+                in_point_ms: Some(6000),
+                out_point_ms: Some(36000),
+                probe_hint: None,
+            },
+            song: None,
             canvas: None,
             selected_subtitle: Some(PlaybackSubtitle {
                 id: 1,

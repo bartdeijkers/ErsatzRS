@@ -218,29 +218,35 @@ async fn rejection_checks(
 }
 
 async fn capture(state: &AppState, output: &Path, saved: &Path) {
-    timeout(Duration::from_secs(20), async {
-        let handle = state.hls_sessions.try_get("1").await.unwrap();
-        loop {
-            match handle.startup_readiness() {
-                HlsStartupReadiness::Ready => break,
-                HlsStartupReadiness::Failed => panic!("routed session failed"),
-                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+    let handle = state.hls_sessions.try_get("1").await.unwrap();
+    loop {
+        match handle.startup_readiness() {
+            HlsStartupReadiness::Ready => break,
+            HlsStartupReadiness::Failed => {
+                panic!("routed {:?} session failed", output.file_name());
+            }
+            HlsStartupReadiness::Legacy => panic!("routed session must use Next readiness"),
+            HlsStartupReadiness::Pending { deadline } => {
+                // Honor the admitted startup deadline, including the time
+                // needed for Next's four complete real-time HLS segments.
+                tokio::time::sleep_until(
+                    (Instant::now() + Duration::from_millis(10)).min(deadline.into()),
+                )
+                .await;
             }
         }
-        let playlist = handle.trim_playlist().await.unwrap();
-        let segment = playlist
-            .lines()
-            .find(|line| {
-                !line.starts_with('#')
-                    && Path::new(line)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-            })
-            .unwrap();
-        tokio::fs::copy(output.join(segment), saved).await.unwrap();
-    })
-    .await
-    .expect("routed segment readiness");
+    }
+    let playlist = handle.trim_playlist().await.unwrap();
+    let segment = playlist
+        .lines()
+        .find(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+        })
+        .unwrap();
+    tokio::fs::copy(output.join(segment), saved).await.unwrap();
 }
 
 async fn decode(ffmpeg: &Path, segment: &Path) {

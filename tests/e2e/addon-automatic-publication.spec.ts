@@ -56,7 +56,7 @@ test('automatically projects thirteen episodes and applies native saved edits', 
   try {
     const plain = await context.newPage();
     await plain.goto(`/media/addon-lists/${listId}/settings`);
-    const title = plain.getByLabel('Title', { exact: true });
+    const title = plain.getByRole('textbox', { name: 'Title', exact: true });
     await title.fill('Saved automatically without JavaScript');
     expect(sqlite(`SELECT "Title" FROM "ShowMetadata" WHERE "ShowId"=(SELECT "ShowId" FROM "AddonMediaListTelevisionShow" WHERE "AddonMediaListId"=${listId});`)).not.toBe('Saved automatically without JavaScript');
     await Promise.all([

@@ -1479,6 +1479,7 @@ pub enum TextKey {
     AddonListDiskWarningFailed,
     NextRuntimeAvailability,
     NextOverlayInvalid,
+    NextOverlaySchema,
     NextOverlayIncomplete,
     JavascriptAudioSelectionTitle,
     JavascriptAudioSelectionHealthy,
@@ -1630,6 +1631,7 @@ pub enum TextKey {
     Stretch,
     TargetLoudnessLufs,
     ThreadCountAuto,
+    NativeEngineOnlyHelp,
     TonemapAlgorithm,
     VaapiDevicePath,
     VaapiDisplay,
@@ -1702,6 +1704,9 @@ pub enum TextKey {
     Connection,
     DeepScanCollections,
     DeepScanLibrary,
+    DeepScanConfirmationQuestion,
+    DeepScanConfirmationWarning,
+    LibraryScanJavascriptRequired,
     DeepScan,
     EditLibrary,
     EnterOnePathPerLine,
@@ -3660,6 +3665,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonListDiskWarningFailed,
     TextKey::NextRuntimeAvailability,
     TextKey::NextOverlayInvalid,
+    TextKey::NextOverlaySchema,
     TextKey::NextOverlayIncomplete,
     TextKey::JavascriptAudioSelectionTitle,
     TextKey::JavascriptAudioSelectionHealthy,
@@ -3809,6 +3815,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Stretch,
     TextKey::TargetLoudnessLufs,
     TextKey::ThreadCountAuto,
+    TextKey::NativeEngineOnlyHelp,
     TextKey::TonemapAlgorithm,
     TextKey::VaapiDevicePath,
     TextKey::VaapiDisplay,
@@ -3881,6 +3888,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Connection,
     TextKey::DeepScanCollections,
     TextKey::DeepScanLibrary,
+    TextKey::DeepScanConfirmationQuestion,
+    TextKey::DeepScanConfirmationWarning,
+    TextKey::LibraryScanJavascriptRequired,
     TextKey::DeepScan,
     TextKey::EditLibrary,
     TextKey::EnterOnePathPerLine,
@@ -5126,6 +5136,11 @@ fn runtime_health_message(
             "Next configuration overlay is unavailable or invalid",
             _,
         ) => TextKey::NextOverlayInvalid,
+        (
+            "Next Runtime Availability",
+            "Next configuration overlay needs a supported version URI (0.1.0 or 0.1.1); review copy settings before upgrading an older overlay",
+            _,
+        ) => TextKey::NextOverlaySchema,
         ("Next Runtime Availability", "Next configuration overlay validation is incomplete", _) => {
             TextKey::NextOverlayIncomplete
         }
@@ -6129,6 +6144,10 @@ mod tests {
                     TextKey::NextOverlayInvalid,
                 ),
                 (
+                    "Next configuration overlay needs a supported version URI (0.1.0 or 0.1.1); review copy settings before upgrading an older overlay",
+                    TextKey::NextOverlaySchema,
+                ),
+                (
                     "Next configuration overlay validation is incomplete",
                     TextKey::NextOverlayIncomplete,
                 ),
@@ -6145,6 +6164,7 @@ mod tests {
             for key in [
                 TextKey::NextRuntimeAvailability,
                 TextKey::NextOverlayInvalid,
+                TextKey::NextOverlaySchema,
                 TextKey::NextOverlayIncomplete,
             ] {
                 assert!(!text(language, key).is_empty());

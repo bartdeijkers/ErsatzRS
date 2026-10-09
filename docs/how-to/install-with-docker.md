@@ -1,11 +1,9 @@
 # Install with Docker
 
-Use this guide for a release tag that publishes the GHCR image. The current
-Windows beta tags publish only `win-x64` archives; they do not publish a Docker
-image.
-
-When a normal release image is available, this procedure runs it with
-persistent state and a read-only media mount.
+Use this guide for a release that includes a Docker image, with persistent
+state and a read-only media mount. **v1.1.0 has no Docker image:** use its native
+Linux or Windows archive instead. Check the chosen release's notes before using
+a GHCR tag. Windows beta tags publish only `win-x64` archives.
 
 ## Prerequisites
 

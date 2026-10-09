@@ -154,22 +154,13 @@ async fn render_context(
             .ok_or(RemoteStreamError::PreparedProducerFailed)
     };
     let frame_size = FrameSize::new(dimension(resolution.width)?, dimension(resolution.height)?);
-    let source = playback::load_source_video_stream_by_index(
+    let square_pixel_frame_size = content_size(
         pool,
         session.media.media_version_id,
         session.video_stream_index,
+        &session.profile,
     )
-    .await
-    .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
-    if session.video_stream_index.is_some() && source.is_none() {
-        return Err(RemoteStreamError::PreparedProducerFailed);
-    }
-    let square_pixel_frame_size = match session.profile.profile.scaling_behavior {
-        ScalingBehavior::Stretch | ScalingBehavior::Crop => frame_size,
-        ScalingBehavior::ScaleAndPad => source
-            .and_then(|source| source.square_pixel_frame_size(frame_size))
-            .unwrap_or(frame_size),
-    };
+    .await?;
     Ok(PlaybackGraphicsRenderContext {
         channel_id: session.channel.id,
         render_time: session.timeline.now,
@@ -185,6 +176,43 @@ async fn render_context(
         frame_size,
         square_pixel_frame_size,
         frame_rate: Some(timing.graphics_frame_rate()),
+    })
+}
+
+async fn content_size(
+    pool: &DbPool,
+    version_id: i64,
+    video_index: Option<i32>,
+    profile: &playback::PlaybackProfile,
+) -> Result<FrameSize, RemoteStreamError> {
+    let frame_size = FrameSize::new(
+        u32::try_from(profile.resolution.width)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or(RemoteStreamError::PreparedProducerFailed)?,
+        u32::try_from(profile.resolution.height)
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or(RemoteStreamError::PreparedProducerFailed)?,
+    );
+    let generated = super::selection::has_generated_video(pool, version_id)
+        .await
+        .map_err(|_| RemoteStreamError::PreparedProducerFailed)?;
+    let source = if generated {
+        None
+    } else {
+        super::selection::source_video(pool, version_id, video_index)
+            .await
+            .map_err(|_| RemoteStreamError::PreparedProducerFailed)?
+    };
+    if !generated && video_index.is_some() && source.is_none() {
+        return Err(RemoteStreamError::PreparedProducerFailed);
+    }
+    Ok(match profile.profile.scaling_behavior {
+        ScalingBehavior::Stretch | ScalingBehavior::Crop => frame_size,
+        ScalingBehavior::ScaleAndPad => source
+            .and_then(|source| source.square_pixel_frame_size(frame_size))
+            .unwrap_or(frame_size),
     })
 }
 
@@ -228,5 +256,49 @@ fn output_metadata(
         chapters: Vec::new(),
         format_metadata: BTreeMap::new(),
         format_name: Some("nut".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn generated_canvas_content_ignores_original_artwork_aspect_ratio_and_missing_video() {
+        let pool = super::super::selection::tests::fixture_pool().await;
+        sqlx::query(r#"UPDATE "MediaVersion" SET "SampleAspectRatio"='100:1' WHERE "Id"=100"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE "MediaStream" SET "AttachedPic"=1,"Codec"=NULL WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let profile = playback::PlaybackProfile {
+            profile: ersatzrs_domain::FFmpegProfile {
+                scaling_behavior: ScalingBehavior::ScaleAndPad,
+                ..Default::default()
+            },
+            resolution: ersatzrs_domain::Resolution {
+                width: 640,
+                height: 360,
+                ..Default::default()
+            },
+        };
+        for index in [None, Some(0)] {
+            let size = content_size(&pool, 100, index, &profile).await.unwrap();
+            assert_eq!((size.width, size.height), (640, 360));
+        }
+        sqlx::query(r#"DELETE FROM "MediaStream" WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let size = content_size(&pool, 100, None, &profile).await.unwrap();
+        assert_eq!((size.width, size.height), (640, 360));
+        sqlx::query(r#"INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId") VALUES (5,'h264',1,0,0,0,100)"#).execute(&pool).await.unwrap();
+        assert!(
+            content_size(&pool, 100, Some(0), &profile).await.is_err(),
+            "actual video still rejects missing original pin"
+        );
     }
 }

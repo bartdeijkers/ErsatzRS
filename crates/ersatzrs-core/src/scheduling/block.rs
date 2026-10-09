@@ -369,8 +369,20 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
         super::PlayoutBuildRequest::new(request.playout.id, request.mode)
             .with_preservation(request.reference_data.preservation)
             .validate_preservation(request.playout.schedule_kind)?;
+        // Keep the requested clock before programme preservation advances it.
+        // Future orphan checkpoints must not participate in boundary restore.
+        let requested_start = request.start;
+        let orphaned_history = orphaned_history_ids(&request, requested_start, &[]);
+        let orphaned_ids = orphaned_history.iter().copied().collect::<BTreeSet<_>>();
+        request
+            .reference_data
+            .existing_history
+            .retain(|history| !orphaned_ids.contains(&history.id));
         let preservation = preservation::Preservation::prepare(&mut request)?;
-        let mut result = SchedulingResult::default();
+        let mut result = SchedulingResult {
+            history_to_remove: orphaned_history,
+            ..SchedulingResult::default()
+        };
         let mut smart_shuffle_state = preservation.smart_shuffle.clone();
 
         let mut blocks = request.reference_data.effective_blocks.clone();
@@ -409,6 +421,11 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             &request,
             &result.items_to_remove,
         ));
+        for id in orphaned_history_ids(&request, requested_start, &result.items_to_remove) {
+            if !result.history_to_remove.contains(&id) {
+                result.history_to_remove.push(id);
+            }
+        }
         let block_starts_to_update = change_set
             .blocks_to_update
             .iter()
@@ -1018,6 +1035,30 @@ fn history_to_remove_for_items(
         .collect()
 }
 
+fn orphaned_history_ids(
+    request: &SchedulingRequest,
+    requested_start: DateTime<Utc>,
+    item_ids_to_remove: &[EntityId],
+) -> Vec<EntityId> {
+    let removed = item_ids_to_remove.iter().copied().collect::<BTreeSet<_>>();
+    let retained_starts = request
+        .reference_data
+        .existing_items
+        .iter()
+        .filter(|item| !removed.contains(&item.id))
+        .map(|item| item.start)
+        .collect::<BTreeSet<_>>();
+    request
+        .reference_data
+        .existing_history
+        .iter()
+        .filter(|history| {
+            history.when >= requested_start && !retained_starts.contains(&history.when)
+        })
+        .map(|history| history.id)
+        .collect()
+}
+
 fn apply_block_deco_filler(
     playout_id: EntityId,
     playout_seed: i32,
@@ -1236,7 +1277,15 @@ fn reposition_retained_block_items(
             };
             let mut history = history.clone();
             result.items_to_remove.push(item.id);
-            result.history_to_remove.push(history.id);
+            for duplicate in reference
+                .existing_history
+                .iter()
+                .filter(|entry| entry.when == item.start)
+            {
+                if !result.history_to_remove.contains(&duplicate.id) {
+                    result.history_to_remove.push(duplicate.id);
+                }
+            }
             item.start = next;
             item.finish = next + duration;
             history.when = item.start;
@@ -1506,6 +1555,237 @@ mod tests {
             })
             .collect();
         reference
+    }
+
+    fn rebuild_history_reference(block_start: DateTime<Utc>) -> SchedulingReferenceData {
+        let mut block = effective_block(1, 1, "commercials", block_start);
+        block.duration = Duration::minutes(30);
+        let mut item = block.items[0].clone();
+        item.playback_order = PlaybackOrder::Shuffle;
+        item.collection_key = SchedulingCollectionKey {
+            collection_type: CollectionType::SmartCollection,
+            smart_collection_id: Some(1),
+            ..SchedulingCollectionKey::default()
+        };
+        block.items = (1..=20)
+            .map(|id| EffectiveBlockItem { id, ..item.clone() })
+            .collect();
+        let media = (1..=40)
+            .map(|id| {
+                let mut media = SchedulingMediaItem::new(
+                    id,
+                    Duration::seconds([15, 30, 45][usize::try_from(id % 3).unwrap()]),
+                );
+                media.preferred_audio_language_code = Some("nld".into());
+                media.preferred_subtitle_language_code = Some("eng".into());
+                media
+            })
+            .collect();
+        SchedulingReferenceData {
+            effective_blocks: vec![block],
+            media_by_key: BTreeMap::from([("commercials".into(), media)]),
+            max_playout_offset: Duration::hours(2),
+            ..SchedulingReferenceData::default()
+        }
+    }
+
+    fn refresh_history_reference(
+        reference_data: SchedulingReferenceData,
+        start: DateTime<Utc>,
+    ) -> SchedulingResult {
+        BlockSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 100,
+                    seed: 12345,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::days(1),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect("block history refresh builds")
+    }
+
+    fn save_history_result(reference: &mut SchedulingReferenceData, result: SchedulingResult) {
+        let mut next_id = reference
+            .existing_items
+            .iter()
+            .map(|item| item.id)
+            .chain(reference.existing_history.iter().map(|history| history.id))
+            .max()
+            .unwrap_or_default()
+            + 1;
+        reference
+            .existing_items
+            .retain(|item| !result.items_to_remove.contains(&item.id));
+        reference
+            .existing_history
+            .retain(|history| !result.history_to_remove.contains(&history.id));
+        for mut item in result.added_items {
+            item.id = next_id;
+            next_id += 1;
+            reference.existing_items.push(item);
+        }
+        for mut history in result.added_history {
+            history.id = next_id;
+            next_id += 1;
+            reference.existing_history.push(history);
+        }
+    }
+
+    #[test]
+    fn block_rebuild_changed_collection_removes_orphan_history_and_matches_clean_oracle() {
+        let start = utc("2026-10-02T19:00:00Z");
+        let reference = rebuild_history_reference(start + Duration::hours(1));
+        let first = refresh_history_reference(reference.clone(), start);
+        let mut changed = reference.clone();
+        changed
+            .media_by_key
+            .get_mut("commercials")
+            .unwrap()
+            .push(SchedulingMediaItem::new(41, Duration::seconds(20)));
+        let oracle = refresh_history_reference(changed.clone(), start);
+        assert_eq!(oracle.added_items.len(), 20);
+        for contaminated in [false, true] {
+            let mut rebuilt = changed.clone();
+            save_history_result(&mut rebuilt, first.clone());
+            if contaminated {
+                let mut orphan = rebuilt.existing_history[2].clone();
+                orphan.id = 1001;
+                orphan.when = rebuilt.existing_history[5].when + Duration::seconds(1);
+                orphan.index = 2;
+                let mut duplicate = rebuilt.existing_history[3].clone();
+                duplicate.id = 1002;
+                duplicate.when = rebuilt.existing_history[8].when;
+                duplicate.index = 3;
+                rebuilt.existing_history.extend([orphan, duplicate]);
+            }
+            for attempt in 0..3 {
+                let result = refresh_history_reference(rebuilt.clone(), start);
+                if attempt == 0 {
+                    if contaminated {
+                        assert!(
+                            result.history_to_remove.contains(&1001),
+                            "future orphan must be removed before restoring source cursors"
+                        );
+                        assert!(
+                            result.history_to_remove.contains(&1002),
+                            "every duplicate at a removed item start must be removed"
+                        );
+                    }
+                    assert_eq!(
+                        result.added_items, oracle.added_items,
+                        "complete item/track/settings timeline, contaminated={contaminated}"
+                    );
+                } else {
+                    assert!(
+                        result.added_items.is_empty(),
+                        "unchanged repeat must retain its timeline"
+                    );
+                }
+                save_history_result(&mut rebuilt, result);
+                let mut actual = rebuilt.existing_items.clone();
+                for item in &mut actual {
+                    item.id = 0;
+                }
+                assert_eq!(
+                    actual, oracle.added_items,
+                    "repeat {attempt}, contaminated={contaminated}"
+                );
+                for (index, (history, expected)) in rebuilt
+                    .existing_history
+                    .iter()
+                    .zip(&oracle.added_history)
+                    .enumerate()
+                {
+                    assert_eq!(usize::try_from(history.index).unwrap(), index);
+                    let mut history = history.clone();
+                    history.id = 0;
+                    assert_eq!(history, *expected, "complete cursor/checkpoint oracle");
+                }
+                assert_eq!(rebuilt.existing_history.len(), oracle.added_history.len());
+            }
+        }
+    }
+
+    #[test]
+    fn block_rebuild_orphan_history_cleanup_uses_requested_start_not_earlier_block_start() {
+        let block_start = utc("2026-10-02T18:50:00Z");
+        let requested_start = block_start + Duration::minutes(10) + Duration::seconds(1);
+        let mut reference = rebuild_history_reference(block_start);
+        let first =
+            refresh_history_reference(reference.clone(), block_start - Duration::minutes(1));
+        save_history_result(&mut reference, first);
+        let mut consumed = reference.existing_history[0].clone();
+        consumed.id = 1001;
+        consumed.when = block_start + Duration::seconds(1);
+        consumed.finish = Some(consumed.when + Duration::seconds(30));
+        let mut future = consumed.clone();
+        future.id = 1002;
+        future.when = requested_start;
+        future.finish = Some(future.when + Duration::seconds(30));
+        assert!(!reference
+            .existing_items
+            .iter()
+            .any(|item| item.start == consumed.when || item.start == future.when));
+        reference.existing_history.extend([consumed, future]);
+        let result = refresh_history_reference(reference, requested_start);
+        assert_eq!(result.remove_before, Some(block_start));
+        assert!(
+            !result.history_to_remove.contains(&1001),
+            "consumed history before the request remains without an item"
+        );
+        assert!(
+            result.history_to_remove.contains(&1002),
+            "orphan at the inclusive requested boundary must be removed"
+        );
+        assert!(result.added_items.is_empty());
+    }
+
+    #[test]
+    fn block_preserving_refresh_excludes_future_orphan_before_boundary_restore() {
+        let start = utc("2026-10-02T08:00:00Z");
+        let requested_start = start + Duration::minutes(1);
+        let mut reference = randomized_reference(start, PlaybackOrder::Shuffle);
+        let first = schedule(reference.clone(), start, Duration::hours(6), 100, 127);
+        save_history_result(&mut reference, first);
+        reference.preservation = crate::scheduling::PlayoutPreservation::KeepCurrent;
+        let mut consumed = reference.existing_history[0].clone();
+        consumed.id = 1002;
+        consumed.when = start - Duration::seconds(1);
+        consumed.finish = Some(start);
+        reference.existing_history.push(consumed);
+        let request = SchedulingRequest {
+            playout: Playout {
+                id: 100,
+                seed: 127,
+                schedule_kind: ersatzrs_domain::PlayoutScheduleKind::Block,
+                ..Playout::default()
+            },
+            start: requested_start,
+            finish: start + Duration::hours(6),
+            mode: PlayoutBuildMode::Refresh,
+            reference_data: reference,
+        };
+        let oracle = BlockSchedulingEngine.schedule(request.clone()).unwrap();
+        let mut contaminated = request;
+        let mut orphan = contaminated.reference_data.existing_history[0].clone();
+        orphan.id = 1001;
+        orphan.when = requested_start + Duration::seconds(1);
+        orphan.finish = Some(orphan.when + Duration::seconds(30));
+        orphan.details = "malformed stale checkpoint".into();
+        contaminated.reference_data.existing_history.push(orphan);
+        let rebuilt = BlockSchedulingEngine
+            .schedule(contaminated)
+            .expect("unmatched future checkpoint must not poison retained-boundary restoration");
+        assert_eq!(rebuilt.retain_through, Some(start + Duration::minutes(20)));
+        assert_eq!(rebuilt.added_items, oracle.added_items);
+        assert_eq!(rebuilt.added_history, oracle.added_history);
+        assert_eq!(rebuilt.anchor, oracle.anchor);
+        assert!(rebuilt.history_to_remove.contains(&1001));
+        assert!(!rebuilt.history_to_remove.contains(&1002));
     }
 
     #[test]
@@ -2262,6 +2542,15 @@ mod tests {
         for (index, entry) in reference.existing_history.iter_mut().enumerate() {
             entry.id = i64::try_from(index + 100).unwrap();
         }
+        let mut duplicate = reference
+            .existing_history
+            .iter()
+            .find(|history| history.when == start + Duration::minutes(2))
+            .expect("generated primary history")
+            .clone();
+        let original_history_id = duplicate.id;
+        duplicate.id = 1001;
+        reference.existing_history.push(duplicate);
         reference.media_by_key.insert(
             "bumper".to_owned(),
             vec![SchedulingMediaItem::new(99, Duration::minutes(3))],
@@ -2284,6 +2573,11 @@ mod tests {
             .unwrap();
         assert_eq!(primary.start, start + Duration::minutes(3));
         assert_eq!(primary.finish, start + Duration::minutes(13));
+        assert!(result.history_to_remove.contains(&original_history_id));
+        assert!(
+            result.history_to_remove.contains(&1001),
+            "moving a primary removes every history row at its old start"
+        );
         assert_eq!(
             primary.preferred_audio_language_code.as_deref(),
             Some("nld")

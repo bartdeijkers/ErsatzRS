@@ -4,9 +4,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
+pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.1";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<Fallback>,
     pub playout: PlayoutFolder,
@@ -65,8 +68,19 @@ pub enum SubtitleMode {
     Convert,
 }
 
+/// Copy eligible source streams and retain encoding settings for fallback items.
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamMode {
+    #[default]
+    Transcode,
+    Copy,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Audio {
+    #[serde(default)]
+    pub mode: StreamMode,
     pub format: AudioFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate_kbps: Option<u32>,
@@ -93,6 +107,11 @@ pub struct Loudness {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Video {
+    /// Output rate: frames are dropped/repeated; copy applies only at this rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<String>,
+    #[serde(default)]
+    pub mode: StreamMode,
     pub format: VideoFormat,
     pub bit_depth: u8,
     pub width: u32,
@@ -343,7 +362,7 @@ pub enum Source {
     Lavfi {
         params: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        probe_hint: Option<AudioOnlyProbeHint>,
+        probe_hint: Option<ProbeHint>,
     },
 }
 
@@ -394,16 +413,6 @@ pub struct VideoProbeHint {
 pub struct SubtitleProbeHint {
     pub codec: String,
     pub stream_index: u32,
-}
-
-/// Finite metadata for generated silence; Next must not probe an infinite lavfi input.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AudioOnlyProbeHint {
-    pub video: [(); 0],
-    pub audio: Vec<AudioProbeHint>,
-    pub subtitle: [(); 0],
-    pub format_name: String,
-    pub duration_ms: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

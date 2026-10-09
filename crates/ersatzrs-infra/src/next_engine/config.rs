@@ -58,6 +58,7 @@ pub fn channel_config(
     ffprobe_path: &Path,
 ) -> Result<wire::ChannelConfig, ConfigError> {
     Ok(wire::ChannelConfig {
+        version: Some(wire::CHANNEL_VERSION.to_owned()),
         fallback: Some(wire::Fallback {
             show_error: Some(true),
         }),
@@ -87,15 +88,19 @@ pub fn channel_config(
 }
 
 fn audio(profile: &FFmpegProfile) -> Result<wire::Audio, ConfigError> {
+    let copy = profile.audio_format == FFmpegProfileAudioFormat::Copy;
     let format = match profile.audio_format {
-        FFmpegProfileAudioFormat::Aac => wire::AudioFormat::Aac,
+        FFmpegProfileAudioFormat::Aac | FFmpegProfileAudioFormat::Copy => wire::AudioFormat::Aac,
         FFmpegProfileAudioFormat::Ac3 => wire::AudioFormat::Ac3,
         _ => return Err(ConfigError::AudioCodec),
     };
     let sample_rate_hz = positive(profile.audio_sample_rate)
         .map(|rate| rate.checked_mul(1_000).ok_or(ConfigError::SampleRate))
         .transpose()?;
-    let normalize_loudness = profile.normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm;
+    // Upstream ChannelConfigConverter suppresses loudness for audio copy;
+    // retain AAC settings for items that the engine must transcode instead.
+    let normalize_loudness =
+        !copy && profile.normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm;
     if normalize_loudness
         && profile
             .target_loudness
@@ -104,6 +109,11 @@ fn audio(profile: &FFmpegProfile) -> Result<wire::Audio, ConfigError> {
         return Err(ConfigError::Loudness);
     }
     Ok(wire::Audio {
+        mode: if copy {
+            wire::StreamMode::Copy
+        } else {
+            wire::StreamMode::Transcode
+        },
         format,
         bitrate_kbps: positive(profile.audio_bitrate),
         buffer_kbps: positive(profile.audio_buffer_size),
@@ -124,7 +134,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         return Err(ConfigError::HdrOutput);
     }
     let format = match profile.video_format {
-        FFmpegProfileVideoFormat::H264 => wire::VideoFormat::H264,
+        FFmpegProfileVideoFormat::H264 | FFmpegProfileVideoFormat::Copy => wire::VideoFormat::H264,
         FFmpegProfileVideoFormat::Hevc => wire::VideoFormat::Hevc,
         FFmpegProfileVideoFormat::Mpeg2Video => {
             if positive(profile.video_bitrate).is_none() {
@@ -164,7 +174,13 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         FFmpegProfileTonemapAlgorithm::Hable => "hable",
     };
     Ok(wire::Video {
+        mode: if profile.video_format == FFmpegProfileVideoFormat::Copy {
+            wire::StreamMode::Copy
+        } else {
+            wire::StreamMode::Transcode
+        },
         format,
+        frame_rate: None,
         bit_depth: match (profile.video_format, profile.bit_depth) {
             (FFmpegProfileVideoFormat::Mpeg2Video, _) | (_, FFmpegProfileBitDepth::EightBit) => 8,
             (_, FFmpegProfileBitDepth::TenBit) => 10,
@@ -200,6 +216,102 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
     })
 }
 
+/// Sample the effective scheduled source using the requested channel's profile.
+/// A preview supplies its transient selected profile, ignoring the stored profile flag.
+///
+/// # Errors
+/// Returns scheduled metadata read errors or malformed rate values.
+pub(super) async fn channel_frame_rate(
+    pool: &crate::db::DbPool,
+    channel: &ersatzrs_domain::Channel,
+    playback: &PlaybackProfile,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    if !playback.profile.normalize_framerate {
+        return Ok(None);
+    }
+    let context = crate::channel_playout::ChannelPlayoutContext::for_channel(channel);
+    let rates = super::schedule::frame_rates(pool, context.source_channel_id).await?;
+    target_frame_rate(rates)
+}
+
+fn target_frame_rate(
+    mut rates: Vec<String>,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    let mut parsed = Vec::with_capacity(rates.len());
+    for value in &rates {
+        let rate = frame_rate_value(value).ok_or_else(|| {
+            ersatzrs_core::repositories::RepositoryError::Decode {
+                kind: "channel target frame rate",
+                value: value.clone(),
+            }
+        })?;
+        parsed.push((value.clone(), rate));
+    }
+    rates.sort();
+    rates.dedup();
+    if rates.len() <= 1 {
+        return Ok(None);
+    }
+    let target = parsed
+        .iter()
+        .filter(|(_, rate)| *rate > 23.0)
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map_or("24", |(value, _)| value.as_str());
+    Ok(next_frame_rate(target))
+}
+
+fn frame_rate_value(value: &str) -> Option<f64> {
+    let value = value.trim();
+    // ffprobe's unknown-rate sentinel remains valid source metadata. Upstream
+    // FrameRate ranks it as 24; next_frame_rate still rejects it as an output
+    // target, so sampling cannot turn unknown timing into a startup refusal.
+    if value == "0/0" {
+        return Some(24.0);
+    }
+    let rate = if let Some((numerator, denominator)) = value.split_once('/') {
+        numerator.parse::<f64>().ok()? / denominator.parse::<f64>().ok()?
+    } else {
+        value.parse::<f64>().ok()?
+    };
+    rate.is_finite().then_some(rate)
+}
+
+// ChannelConfigConverter.ToNextFrameRate at upstream df6ae228.
+// The pinned Next parser requires every rational component to fit u32.
+fn next_frame_rate(value: &str) -> Option<String> {
+    let value = value.trim();
+    let parts = value.split('/').collect::<Vec<_>>();
+    if parts.len() <= 2
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        let numerator = parts[0].parse::<u32>().ok()?;
+        let denominator = parts.get(1).copied().unwrap_or("1").parse::<u32>().ok()?;
+        if numerator == 0
+            || denominator == 0
+            || numerator < denominator
+            || u64::from(numerator) > u64::from(denominator) * 240
+        {
+            return None;
+        }
+        return Some(value.to_owned());
+    }
+    let rate = value.parse::<f64>().ok()?;
+    if !rate.is_finite() || !(1.0..=240.0).contains(&rate) {
+        return None;
+    }
+    let integer = rate.round_ties_even();
+    if (rate - integer).abs() < 0.001 {
+        return Some(format!("{integer:.0}"));
+    }
+    let ntsc = (rate * 1.001).round_ties_even();
+    if (rate * 1.001 - ntsc).abs() < 0.005 {
+        return Some(format!("{:.0}/1001", ntsc * 1000.0));
+    }
+    Some(format!("{:.0}/1000", (rate * 1000.0).round_ties_even()))
+}
+
 fn positive(value: i32) -> Option<u32> {
     u32::try_from(value).ok().filter(|value| *value > 0)
 }
@@ -214,3 +326,14 @@ fn runtime_path(path: &Path) -> Result<String, ConfigError> {
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
+
+/// Convert the effective channel rate for a transient selected preview profile.
+/// # Errors
+/// Returns scheduled metadata errors or malformed source frame rates.
+pub async fn troubleshooting_channel_frame_rate(
+    pool: &crate::db::DbPool,
+    channel: &ersatzrs_domain::Channel,
+    playback: &PlaybackProfile,
+) -> ersatzrs_core::repositories::Result<Option<String>> {
+    channel_frame_rate(pool, channel, playback).await
+}

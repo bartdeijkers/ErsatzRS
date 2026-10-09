@@ -18,6 +18,7 @@ ARG TARGETVARIANT
 # Optional cache refresh; downloaded bytes remain checksum-pinned.
 ARG NEXT_RELEASE_REFRESH=dev
 COPY scripts/release/stage-next.py /stage-next.py
+COPY scripts/release/next-patches/manifest.json /next-patches/manifest.json
 COPY .next-snapshot/ /next-snapshot/
 RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
     --docker-variant "$TARGETVARIANT" --snapshot-dir /next-snapshot --output /next

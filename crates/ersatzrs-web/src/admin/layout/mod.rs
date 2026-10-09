@@ -321,7 +321,8 @@ fn TopBar() -> impl IntoView {
     view! {
         <header class=style::topbar>
             <a href="/" class=style::logo>
-                <img src="/public/images/ersatzrs.png" alt="ErsatzRS" class=style::logo_image/>
+                <img src="/public/images/ersatzrs-mark.svg" alt="" width="38" height="38" class=style::logo_image/>
+                <span class=style::logo_wordmark>"ErsatzRS"</span>
             </a>
 
             <button

@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
-use ersatzrs_core::repositories::Result as RepositoryResult;
-use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
+use ersatzrs_domain::{MediaStream, MediaStreamKind, Resolution};
 use sqlx::Row;
 
 use crate::db::DbPool;
 use crate::ffprobe::FfprobeMediaVersion;
-use crate::repositories::{common::try_decode_duration_text, SqlxResultExt as _};
+use crate::repositories::SqlxResultExt as _;
 
 use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHint};
 
@@ -16,6 +16,49 @@ use super::protocol::{AudioProbeHint, ProbeHint, SubtitleProbeHint, VideoProbeHi
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[error("Next producer input metadata is incomplete or unsupported")]
 pub struct ProbeHintError;
+
+/// Finite, output-sized video for an audio-only programme. Neither a cover-art
+/// stream nor the original audio seek describes this generated video input.
+pub(super) fn generated_video(
+    resolution: &Resolution,
+    duration_ms: u64,
+    codec: &str,
+    format_name: Option<&str>,
+) -> RepositoryResult<ProbeHint> {
+    let dimension = |value| u32::try_from(value).ok().filter(|value| *value > 0);
+    let invalid =
+        || RepositoryError::unavailable("Next generated video", "invalid geometry or duration");
+    let width = dimension(resolution.width).ok_or_else(invalid)?;
+    let height = dimension(resolution.height).ok_or_else(invalid)?;
+    if duration_ms == 0 {
+        return Err(invalid());
+    }
+    Ok(ProbeHint {
+        video: vec![VideoProbeHint {
+            codec: codec.to_owned(),
+            width,
+            height,
+            pix_fmt: "yuv420p".into(),
+            stream_index: 0,
+            frame_rate: None,
+            profile: None,
+            field_order: None,
+            sample_aspect_ratio: None,
+            display_aspect_ratio: None,
+            color_range: None,
+            color_space: None,
+            color_transfer: None,
+            color_primaries: None,
+            dv_profile: None,
+            has_hdr10_metadata: None,
+            rotation: None,
+        }],
+        audio: Vec::new(),
+        subtitle: Vec::new(),
+        format_name: format_name.map(str::to_owned),
+        duration_ms: Some(duration_ms),
+    })
+}
 
 /// Describe a persisted local or media-server version without opening the
 /// source. Incomplete stream metadata leaves Next's ordinary probe in control.
@@ -27,8 +70,13 @@ pub(crate) async fn persisted(
 ) -> RepositoryResult<Option<ProbeHint>> {
     let version = sqlx::query(
         r#"SELECT "Duration", "Width", "Height", "RFrameRate", "SampleAspectRatio",
-                  "DisplayAspectRatio", "VideoScanKind", "ImageId"
-           FROM "MediaVersion" WHERE "Id"=?"#,
+                  "DisplayAspectRatio", "VideoScanKind", "ImageId",
+                  (SELECT "DurationSeconds" FROM "ImageMetadata" WHERE "ImageId"=mv."ImageId"
+                   ORDER BY "Id" LIMIT 1) AS "ImageDurationSeconds",
+                  (SELECT "Duration" FROM "RemoteStream" WHERE "Id"=mv."RemoteStreamId") AS "RemoteDuration",
+                  (SELECT "Path" FROM "MediaFile" WHERE "MediaVersionId"=mv."Id"
+                   ORDER BY "Id" LIMIT 1) AS "Path"
+           FROM "MediaVersion" mv WHERE "Id"=?"#,
     )
     .bind(version_id)
     .fetch_optional(pool)
@@ -40,18 +88,24 @@ pub(crate) async fn persisted(
     let width: i32 = version.try_get("Width").repository()?;
     let height: i32 = version.try_get("Height").repository()?;
     let frame_rate: Option<String> = version.try_get("RFrameRate").repository()?;
-    let duration: String = version.try_get("Duration").repository()?;
-    let duration_ms = try_decode_duration_text(&duration)
-        .ok()
-        .and_then(|duration| u64::try_from(duration.num_milliseconds()).ok())
-        .filter(|duration| *duration > 0);
+    let duration_ms =
+        u64::try_from(crate::playout_duration::from_row(&version)?.num_milliseconds())
+            .ok()
+            .filter(|duration| *duration > 0);
     let image: Option<i64> = version.try_get("ImageId").repository()?;
     let scan_kind: i64 = version.try_get("VideoScanKind").repository()?;
     let mut hint = ProbeHint {
         video: Vec::new(),
         audio: Vec::new(),
         subtitle: Vec::new(),
-        format_name: None,
+        format_name: version
+            .try_get::<Option<String>, _>("Path")
+            .repository()?
+            .filter(|path| {
+                path.rsplit_once('.')
+                    .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("avi"))
+            })
+            .map(|_| "avi".into()),
         duration_ms,
     };
     let rows = sqlx::query(
@@ -114,6 +168,11 @@ pub(crate) async fn persisted(
                         match codec.as_str() {
                             "png" => "png_pipe",
                             "mjpeg" => "jpeg_pipe",
+                            "bmp" => "bmp_pipe",
+                            "tiff" => "tiff_pipe",
+                            "webp" => "webp_pipe",
+                            "webp_anim" => "webp_anim",
+                            "gif" => "gif",
                             _ => return Ok(None),
                         }
                         .into(),
@@ -251,6 +310,9 @@ pub fn producer(probe: &FfprobeMediaVersion) -> Result<ProbeHint, ProbeHintError
             return Err(ProbeHintError);
         }
         match stream.kind {
+            // Album artwork stays in the producer bytes but cannot be selected
+            // as programme video, just like persisted AttachedPic metadata.
+            MediaStreamKind::Video if stream.attached_pic => {}
             MediaStreamKind::Video if !stream.attached_pic => {
                 hint.video.push(video(probe, stream, index)?);
             }

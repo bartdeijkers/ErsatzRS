@@ -326,11 +326,18 @@ from disposable session output and generated playouts.
 Next merges the files in order, so channel settings override defaults, which
 override the FFmpeg profile. Relative paths in an overlay are resolved by Next
 against that file's directory. Consult the channel configuration schema shipped
-with your Next version for available fields. For example, this default overlay
+with your Next version for available fields. Every overlay must include a
+supported `version` URI; the copy-mode runtime accepts channel schemas 0.1.0
+and 0.1.1. Review older overlays before adding a version: a former
+`"format": null` copy request must become `"mode": "copy"`, retaining a
+supported `format` for transcoding items that cannot be copied. Unversioned
+overlays are rejected rather than silently changing their encoding policy.
+For example, this default overlay
 sets the software deinterlacer's mode:
 
 ```json
 {
+  "version": "https://ersatztv.org/channel/version/0.1.0",
   "normalization": {
     "video": {
       "filters": { "bwdif": { "mode": "send_frame" } }
@@ -346,7 +353,10 @@ independent of selected programme or library fallback captions. To keep plain
 black emergency fallback, set an overlay to:
 
 ```json
-{ "fallback": { "show_error": false } }
+{
+  "version": "https://ersatztv.org/channel/version/0.1.0",
+  "fallback": { "show_error": false }
+}
 ```
 
 Changes take effect when the next engine session starts, including after an idle
@@ -357,7 +367,8 @@ read these overlays. Subtitle and audio overrides are explicit operator choices;
 omit those fields to preserve the channel's selections.
 
 The Next runtime health check inspects active overlay files for readability and
-JSON-object syntax. Inspection is limited to 1 MiB per file and five seconds in
+JSON-object syntax and a compatible schema version. Inspection is limited to
+1 MiB per file and five seconds in
 total; exceeding those limits reports incomplete validation, not an engine
 configuration limit. Next remains responsible for schema validation and the
 merged configuration at session startup.

@@ -92,11 +92,13 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
         "normalization": {
             "subtitle": {"mode": "burn"},
             "audio": {
+                "mode": "transcode",
                 "format": "ac3", "bitrate_kbps": 192, "buffer_kbps": 384,
                 "channels": 2, "sample_rate_hz": 48000, "normalize_loudness": true,
                 "loudness": {"integrated_target": -16.0}
             },
             "video": {
+                "mode": "transcode",
                 "format": "hevc", "bit_depth": 10, "width": 1920, "height": 1080,
                 "scaling_mode": "scale_and_pad", "deinterlace": false,
                 "bitrate_kbps": 2000, "buffer_kbps": 4000, "accel": "vaapi",
@@ -157,4 +159,26 @@ fn canvas_layers_round_trip_without_affecting_legacy_media_layers() {
         "location":"top_left", "kind":"unknown"
     }))
     .is_err());
+}
+
+#[test]
+fn output_frame_rate_wire_accepts_old_video_configs_and_round_trips_optional_rate() {
+    let video = json!({
+        "mode":"copy", "format":"h264", "bit_depth":8, "width":320, "height":180,
+        "filters": { "libplacebo":{"tonemapping":"linear"}, "tonemap":{"tonemap":"linear"}, "tonemap_opencl":{"tonemap":"linear"} }
+    });
+    for rate in [None, Some("25"), Some("24000/1001")] {
+        let mut input = video.clone();
+        if let Some(rate) = rate {
+            input["frame_rate"] = json!(rate);
+        }
+        let parsed: Video = serde_json::from_value(input).unwrap();
+        assert_eq!(parsed.frame_rate.as_deref(), rate);
+        let output = serde_json::to_value(parsed).unwrap();
+        assert_eq!(
+            output.get("frame_rate").and_then(serde_json::Value::as_str),
+            rate
+        );
+        assert_eq!(output["mode"], "copy");
+    }
 }

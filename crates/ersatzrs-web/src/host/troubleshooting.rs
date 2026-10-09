@@ -23,7 +23,7 @@ use ersatzrs_infra::{
         channel_stream_selectors_folder, list_channel_stream_selectors,
         transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
     },
-    hls_worker::build_hls_command_with_opacity_clock,
+    hls_worker::build_hls_command_with_opacity_clock_and_song,
     playback::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
         load_playback_profile, load_playback_subtitle_candidates, load_source_audio_streams,
@@ -32,8 +32,8 @@ use ersatzrs_infra::{
         resolve_playback_watermarks_by_ids, select_custom_playback_streams,
         select_playback_audio_stream_index, select_playback_graphics, select_playback_subtitle,
         select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
-        CustomStreamSelection, PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext,
-        PlaybackProfile, PlaybackSubtitle,
+        CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+        PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     },
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
@@ -271,7 +271,7 @@ fn map_runtime_error(
 async fn start_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: PreviewOwnership,
+    mut ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     if query.channel.is_some_and(|id| id > 0) {
         return start_channel_playback_preview(state, query, ownership).await;
@@ -401,6 +401,20 @@ async fn start_playback_preview(
             selector_channel.preferred_audio_title.as_deref(),
         )
     });
+    // Projected add-on items can share their ordinary media kind while still
+    // carrying an eager-unprobed RemoteStream version. Read exact ownership.
+    let source_audio_complete: bool =
+        sqlx::query_scalar(r#"SELECT "RemoteStreamId" IS NULL FROM "MediaVersion" WHERE "Id" = ?"#)
+            .bind(media.media_version_id)
+            .fetch_one(&state.pool)
+            .await?;
+    let audio_selection = native_preview_audio_selection(
+        selected_audio_stream_index,
+        false,
+        None,
+        &source_audio_streams,
+        source_audio_complete,
+    )?;
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
     if lifecycle::job(&ownership).is_some_and(|job| job.cancel.is_cancelled()) {
@@ -429,7 +443,7 @@ async fn start_playback_preview(
         preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        selected_audio_stream_index,
+        audio_selection,
     );
     let spawn_time = Utc::now();
     let opacity_clock = watermark_opacity_clock_at_spawn(
@@ -438,7 +452,16 @@ async fn start_playback_preview(
         Some(Duration::from_secs_f64(media.duration_seconds.max(0.0))),
         spawn_time,
     );
-    let command = build_hls_command_with_opacity_clock(
+    let song = prepare_native_song(
+        state,
+        media_item_id,
+        selector_channel.id,
+        &playback_profile.resolution,
+        &runtime_capabilities,
+        &mut ownership,
+    )
+    .await?;
+    let command = build_hls_command_with_opacity_clock_and_song(
         &media_path,
         &working_dir,
         output_format,
@@ -454,11 +477,12 @@ async fn start_playback_preview(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
+        song.as_ref(),
     );
 
     start_native_command(
@@ -468,6 +492,7 @@ async fn start_playback_preview(
         dynamic_text_controllers,
         ownership,
         output_format,
+        song,
     )
     .await
 }
@@ -476,7 +501,7 @@ async fn start_playback_preview(
 async fn start_channel_playback_preview(
     state: &NativeAdminTroubleshootingRuntime,
     query: &PlaybackPreviewQuery,
-    ownership: PreviewOwnership,
+    mut ownership: PreviewOwnership,
 ) -> ApiResult<()> {
     let channel_id = query.channel.filter(|id| *id > 0).ok_or(PreviewNotFound(
         "channel troubleshooting preview requires channel",
@@ -684,6 +709,13 @@ async fn start_channel_playback_preview(
             preferred_audio_title,
         )
     });
+    let audio_selection = native_preview_audio_selection(
+        selected_audio_stream_index,
+        active.has_pinned_stream_selection,
+        active.audio_stream_index,
+        &source_audio_streams,
+        active.remote_stream.is_none(),
+    )?;
     let watermark_inputs = preview_channel_watermark_inputs(
         &state.pool,
         &channel,
@@ -740,7 +772,7 @@ async fn start_channel_playback_preview(
         preferred_audio_language.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
-        selected_audio_stream_index,
+        audio_selection,
     );
     let opacity_clock = watermark_opacity_clock_at_spawn(
         start_time,
@@ -748,7 +780,16 @@ async fn start_channel_playback_preview(
         active.content_duration,
         content_start_time,
     );
-    let command = build_hls_command_with_opacity_clock(
+    let song = prepare_native_song(
+        state,
+        active.media_item_id,
+        channel.id,
+        &playback_profile.resolution,
+        &runtime_capabilities,
+        &mut ownership,
+    )
+    .await?;
+    let command = build_hls_command_with_opacity_clock_and_song(
         &media_path,
         &working_dir,
         output_format,
@@ -764,11 +805,12 @@ async fn start_channel_playback_preview(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
-        selected_audio_stream_index,
+        audio_selection,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
         Some(opacity_clock),
+        song.as_ref(),
     );
 
     start_native_command(
@@ -778,8 +820,34 @@ async fn start_channel_playback_preview(
         dynamic_text_controllers,
         ownership,
         output_format,
+        song,
     )
     .await
+}
+
+fn native_preview_audio_selection(
+    selected: Option<usize>,
+    has_pinned_stream_selection: bool,
+    pinned: Option<i32>,
+    streams: &[ersatzrs_ffmpeg::SourceAudioStream],
+    complete: bool,
+) -> ApiResult<PlaybackAudioSelection> {
+    let selection = match (has_pinned_stream_selection, pinned) {
+        (true, Some(index)) => {
+            let index = usize::try_from(index)?;
+            if !streams.iter().any(|stream| stream.index == index) {
+                return Err("pinned preview audio stream is unavailable".into());
+            }
+            PlaybackAudioSelection::Exact(index)
+        }
+        (true, None) => PlaybackAudioSelection::Disabled,
+        (false, _) => PlaybackAudioSelection::from(selected),
+    };
+    Ok(if complete {
+        selection.with_complete_source_audio(streams)
+    } else {
+        selection
+    })
 }
 
 fn programme_preview_time(
@@ -1663,6 +1731,106 @@ fn preview_command_arguments(command: &FfmpegCommand) -> Vec<String> {
     arguments
 }
 
+async fn prepare_native_song(
+    state: &NativeAdminTroubleshootingRuntime,
+    media_item_id: i64,
+    channel_id: i64,
+    resolution: &ersatzrs_domain::Resolution,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+    ownership: &mut PreviewOwnership,
+) -> ApiResult<Option<ersatzrs_infra::song_background::NativeSongBackground>> {
+    let is_song: i64 = sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "Song" WHERE "Id" = ?)"#)
+        .bind(media_item_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if is_song == 0 {
+        return Ok(None);
+    }
+    let job = lifecycle::job(ownership);
+    let reservation =
+        if let Some(reservation) = job.as_ref().and_then(|job| job.preparation_reservation()) {
+            reservation
+        } else {
+            let reservation = reserve_native_preview(state).await?;
+            if let Some(job) = &job {
+                job.retain_reservation(reservation.clone());
+            }
+            reservation
+        };
+    let id = job
+        .as_ref()
+        .and_then(|job| uuid::Uuid::parse_str(&job.read().id).ok())
+        .unwrap_or_else(uuid::Uuid::new_v4);
+    let seed =
+        i64::from_le_bytes(id.as_bytes()[..8].try_into().expect("UUID seed prefix")) & i64::MAX;
+    let executable = capabilities
+        .runtime_identity
+        .as_ref()
+        .map_or_else(ersatzrs_ffmpeg::ffmpeg_path, |identity| {
+            identity.ffmpeg_path.clone()
+        });
+    let (sender, receiver) = oneshot::channel();
+    let operation = ersatzrs_infra::song_background::prepare_native_with_reservation(
+        &state.pool,
+        media_item_id,
+        channel_id,
+        resolution,
+        seed,
+        FsPath::new(&executable),
+        tokio::time::Instant::now() + Duration::from_secs(15),
+        receiver,
+        Some(reservation),
+    );
+    tokio::pin!(operation);
+    let cancellation = job
+        .as_ref()
+        .map(|job| job.cancel.clone())
+        .unwrap_or_default();
+    let result = tokio::select! {
+        result = &mut operation => result,
+        () = cancellation.cancelled() => {
+            let _ = sender.send(());
+            operation.await
+        }
+    };
+    if result.as_ref().is_err_and(
+        ersatzrs_infra::song_background::NativeSongPreparationError::termination_unconfirmed,
+    ) {
+        **ownership = PreviewAvailability::CleanupUnconfirmed {
+            _reservation: job.as_ref().and_then(|job| job.take_reservation()),
+        };
+        if let Some(job) = &job {
+            job.fail("cleanup");
+            job.finish(false, false, None);
+        }
+    } else if result.is_err() {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
+    }
+    result.map_err(Into::into)
+}
+
+async fn reserve_native_preview(
+    state: &NativeAdminTroubleshootingRuntime,
+) -> ApiResult<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation> {
+    use ersatzrs_infra::transcode_capacity::{
+        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
+        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    };
+    let limit = load_active_transcode_limit(&state.pool)
+        .await?
+        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+    try_reserve_active_transcode(
+        limit,
+        ActiveTranscodeSlot::new_next_hls_with_capacity_key(
+            TRANSCODE_TROUBLESHOOTING_CHANNEL,
+            "troubleshooting",
+        ),
+    )
+    .ok_or_else(|| "troubleshooting capacity is unavailable".into())
+}
+
 async fn start_native_command(
     state: &NativeAdminTroubleshootingRuntime,
     working: &FsPath,
@@ -1670,45 +1838,37 @@ async fn start_native_command(
     controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
     output_format: OutputFormat,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> ApiResult<()> {
-    use ersatzrs_infra::transcode_capacity::{
-        load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
-        DEFAULT_ACTIVE_TRANSCODE_LIMIT,
-    };
     let job = lifecycle::job(&ownership);
     let command = match command {
         Ok(command) => command,
         Err(error) => {
+            if let Some(job) = &job {
+                drop(job.take_reservation());
+            }
             shutdown_dynamic_text_controllers(controllers).await;
             return Err(error.into());
         }
     };
     if job.as_ref().is_some_and(|job| job.cancel.is_cancelled()) {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
         shutdown_dynamic_text_controllers(controllers).await;
         return Err("troubleshooting playback cancelled".into());
     }
     if let Err(error) = write_ffmpeg_arguments(working, &command).await {
+        if let Some(job) = &job {
+            drop(job.take_reservation());
+        }
         shutdown_dynamic_text_controllers(controllers).await;
         return Err(error);
     }
-    let admission = async {
-        let limit = load_active_transcode_limit(&state.pool)
-            .await?
-            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
-        try_reserve_active_transcode(
-            limit,
-            ActiveTranscodeSlot::new_next_hls_with_capacity_key(
-                TRANSCODE_TROUBLESHOOTING_CHANNEL,
-                "troubleshooting",
-            ),
-        )
-        .ok_or_else(|| {
-            Box::<dyn std::error::Error + Send + Sync>::from(
-                "troubleshooting capacity is unavailable",
-            )
-        })
-    }
-    .await;
+    let admission = match job.as_ref().and_then(|job| job.preparation_reservation()) {
+        Some(reservation) => Ok(reservation),
+        None => reserve_native_preview(state).await,
+    };
     let reservation = match admission {
         Ok(reservation) => reservation,
         Err(error) => {
@@ -1719,7 +1879,7 @@ async fn start_native_command(
     if let Some(job) = job {
         job.retain_reservation(reservation);
     }
-    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership).await?;
+    let completion = spawn_preview_ffmpeg(working, command, controllers, ownership, song).await?;
     wait_for_preview_output(&working.to_path_buf(), output_format, completion).await
 }
 
@@ -1728,6 +1888,7 @@ async fn spawn_preview_ffmpeg(
     command: FfmpegCommand,
     dynamic_text_controllers: Vec<DynamicTextController>,
     ownership: PreviewOwnership,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> ApiResult<oneshot::Receiver<bool>> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
@@ -1746,9 +1907,15 @@ async fn spawn_preview_ffmpeg(
         process.env(variable.name, variable.value);
     }
 
+    if let Some(song) = &song {
+        song.mark_in_use();
+    }
     let mut child = match ManagedProcess::spawn(process) {
         Ok(child) => child,
         Err(error) => {
+            if let Some(song) = &song {
+                song.confirm_reaped();
+            }
             shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
             if let Some(job) = lifecycle::job(&ownership) {
                 drop(job.take_reservation());
@@ -1772,6 +1939,7 @@ async fn spawn_preview_ffmpeg(
             dynamic_text_controllers,
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            song,
         )
         .await;
         // Diagnostics and owner cleanup complete even if the request disconnected.
@@ -1780,6 +1948,10 @@ async fn spawn_preview_ffmpeg(
     Ok(completion)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bounded preview cleanup owns process pipes, controllers, admission and song assets together"
+)]
 async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
@@ -1788,6 +1960,7 @@ async fn write_preview_logs(
     dynamic_text_controllers: Vec<DynamicTextController>,
     mut ownership: PreviewOwnership,
     deadline: tokio::time::Instant,
+    song: Option<ersatzrs_infra::song_background::NativeSongBackground>,
 ) -> bool {
     let mut logs = Vec::new();
     let mut progress_output = Vec::new();
@@ -1829,6 +2002,11 @@ async fn write_preview_logs(
         )
     {
         *ownership = PreviewAvailability::CleanupUnconfirmed { _reservation: None };
+    }
+    if let Some(song) = &song {
+        if !matches!(*ownership, PreviewAvailability::CleanupUnconfirmed { .. }) {
+            song.confirm_reaped();
+        }
     }
     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
     if let Some(speed) = progress::parse_speed(&String::from_utf8_lossy(&progress_output)) {
@@ -1892,15 +2070,15 @@ async fn wait_for_preview_output(
     loop {
         match completion.try_recv() {
             Ok(succeeded) => {
-                return completed_preview_output(working_dir, segment_extension, succeeded).await
+                return completed_preview_output(working_dir, segment_extension, succeeded).await;
             }
             Err(oneshot::error::TryRecvError::Closed) => {
-                return Err("troubleshooting worker ended without completion".into())
+                return Err("troubleshooting worker ended without completion".into());
             }
             Err(oneshot::error::TryRecvError::Empty) => {}
         }
         if tokio::fs::try_exists(&playlist_path).await?
-            && count_segments(working_dir, segment_extension).await? >= 1
+            && count_segments(working_dir, segment_extension).await? >= 2
         {
             return Ok(());
         }
@@ -2245,6 +2423,31 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn native_null_audio_preview_preserves_complete_metadata_and_pinned_silence() {
+        use super::*;
+        use ersatzrs_ffmpeg::{SourceAudioCodec, SourceAudioStream};
+        let audio = [SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3)];
+        assert_eq!(
+            native_preview_audio_selection(None, false, None, &[], true).unwrap(),
+            PlaybackAudioSelection::AutomaticSilence
+        );
+        assert_eq!(
+            native_preview_audio_selection(Some(3), true, None, &audio, true).unwrap(),
+            PlaybackAudioSelection::Disabled
+        );
+        assert_eq!(
+            native_preview_audio_selection(None, true, Some(3), &audio, true).unwrap(),
+            PlaybackAudioSelection::Exact(3)
+        );
+        assert_eq!(
+            native_preview_audio_selection(None, false, None, &[], false).unwrap(),
+            PlaybackAudioSelection::Automatic
+        );
+        assert!(native_preview_audio_selection(None, true, Some(3), &[], true).is_err());
+        assert!(native_preview_audio_selection(None, true, Some(-1), &audio, true).is_err());
+    }
+
+    #[test]
     fn media_sample_extension_excludes_url_credentials_and_fragments() {
         for (input, expected) in [
             ("https://example.test/video.mp4?sig=synthetic.secret", "mp4"),
@@ -2378,6 +2581,7 @@ mod tests {
             Vec::new(),
             ownership,
             tokio::time::Instant::now() + Duration::from_mins(2),
+            None,
         );
         assert!(lock.try_lock().is_err());
         completion.await;
@@ -2410,6 +2614,7 @@ mod tests {
                     Vec::new(),
                     ownership,
                     tokio::time::Instant::now() + Duration::from_mins(2),
+                    None,
                 )
                 .await;
                 let _ = finished.send(succeeded);
@@ -2432,12 +2637,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn running_preview_readiness_requires_two_matching_ts_or_m4s_segments() {
+        for (format, extension, other) in [
+            (OutputFormat::Hls, "ts", "m4s"),
+            (OutputFormat::HlsMp4, "m4s", "ts"),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            tokio::fs::write(
+                root.path().join("live.m3u8"),
+                format!("#EXTM3U\n#EXTINF:1,\nfirst.{extension}\n#EXTINF:1,\nsecond.{extension}\n"),
+            )
+            .await
+            .unwrap();
+            tokio::fs::write(root.path().join(format!("first.{extension}")), b"output")
+                .await
+                .unwrap();
+            tokio::fs::write(root.path().join(format!("other.{other}")), b"other output")
+                .await
+                .unwrap();
+            let directory = root.path().to_path_buf();
+            let (finished, completion) = oneshot::channel();
+            let waiting = wait_for_preview_output(&directory, format, completion);
+            tokio::pin!(waiting);
+            assert!(
+                tokio::time::timeout(Duration::from_millis(250), &mut waiting)
+                    .await
+                    .is_err(),
+                "one matching segment cannot ready a running {extension} preview"
+            );
+            tokio::fs::write(root.path().join(format!("second.{extension}")), b"output")
+                .await
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(1), &mut waiting)
+                .await
+                .unwrap()
+                .unwrap();
+            drop(finished);
+        }
+    }
+
+    #[tokio::test]
     async fn completed_preview_requires_success_and_matching_segments() {
         for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
             let root = tempfile::tempdir().unwrap();
-            tokio::fs::write(root.path().join("live.m3u8"), b"#EXTM3U")
-                .await
-                .unwrap();
+            tokio::fs::write(
+                root.path().join("live.m3u8"),
+                format!("#EXTM3U\n#EXTINF:1,\nsegment.{extension}\n#EXT-X-ENDLIST\n"),
+            )
+            .await
+            .unwrap();
             tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
                 .await
                 .unwrap();
@@ -2458,6 +2706,78 @@ mod tests {
                     .await
                     .is_err()
             );
+            tokio::fs::remove_file(root.path().join(format!("segment.{extension}")))
+                .await
+                .unwrap();
+            let wrong_extension = if extension == "ts" { "m4s" } else { "ts" };
+            tokio::fs::write(
+                root.path().join(format!("other.{wrong_extension}")),
+                b"wrong format",
+            )
+            .await
+            .unwrap();
+            let (finished, completion) = oneshot::channel();
+            finished.send(true).unwrap();
+            assert!(
+                wait_for_preview_output(&root.path().to_path_buf(), format, completion)
+                    .await
+                    .is_err(),
+                "successful exit still needs a matching {extension} segment"
+            );
+        }
+    }
+
+    // The shell only supplies an owned finite child; completion/reaping uses
+    // the production supervisor shared by every supported platform.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn completed_preview_one_segment_is_ready_only_after_successful_reaped_eof() {
+        for (format, extension) in [(OutputFormat::Hls, "ts"), (OutputFormat::HlsMp4, "m4s")] {
+            for exit in [0, 1] {
+                let root = tempfile::tempdir().unwrap();
+                tokio::fs::write(
+                    root.path().join("live.m3u8"),
+                    format!("#EXTM3U\n#EXTINF:1,\nsegment.{extension}\n#EXT-X-ENDLIST\n"),
+                )
+                .await
+                .unwrap();
+                tokio::fs::write(root.path().join(format!("segment.{extension}")), b"output")
+                    .await
+                    .unwrap();
+                let lock = Arc::new(Mutex::new(PreviewAvailability::default()));
+                let ownership = Arc::clone(&lock).try_lock_owned().unwrap();
+                let mut command = Command::new("sh");
+                command.args(["-c", &format!("exit {exit}")]);
+                let child = ManagedProcess::spawn(command).unwrap();
+                let log_path = root.path().join("logs.txt");
+                let (finished, completion) = oneshot::channel();
+                tokio::spawn(async move {
+                    let succeeded = write_preview_logs(
+                        log_path,
+                        None,
+                        None,
+                        child,
+                        Vec::new(),
+                        ownership,
+                        tokio::time::Instant::now() + Duration::from_mins(2),
+                        None,
+                    )
+                    .await;
+                    let _ = finished.send(succeeded);
+                });
+                let result = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    wait_for_preview_output(&root.path().to_path_buf(), format, completion),
+                )
+                .await
+                .unwrap();
+                assert_eq!(result.is_ok(), exit == 0, "{extension} exit {exit}");
+                assert!(
+                    lock.try_lock().is_ok(),
+                    "finite output cannot release readiness before ownership cleanup"
+                );
+                assert!(root.path().join("logs.txt").exists());
+            }
         }
     }
 
@@ -2481,6 +2801,7 @@ mod tests {
             Vec::new(),
             ownership,
             tokio::time::Instant::now(),
+            None,
         )
         .await;
         assert!(matches!(

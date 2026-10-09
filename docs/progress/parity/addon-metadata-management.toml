@@ -64,6 +64,38 @@ and independent public ZIP verification. Separate debts below remain open.
 '''
 
 [[debt]]
+id          = 'new-list-adaptive-refresh-default'
+description = 'New add-on-list forms default to Daily even when the provider supports adaptive source checks; the maintainer requires Adaptive for capable providers while preserving explicit and saved cadence.'
+discovered  = '2026-10-09'
+resolved    = true
+adr         = '0085'
+evidence    = '''
+Hydration source map: /media/addon-lists/add uses AddAddonMediaListPage and
+AddAddonMediaListPageIsland; the list-page dialog uses AddonMediaListsIsland
+and AddAddonMediaListDialog. Provider DTO supports_adaptive_refresh supplies
+the capability boundary. RefreshCadenceSelect carries the native form value
+and an optional local choice callback; create server functions and the
+add_addon_media_list_form fallback keep the submitted cadence. Saved editors
+still initialize from persisted state. Browser target: focused default and
+existing import/editor cases in hydration-pending-routes.spec.ts, including
+JavaScript-disabled provider contexts.
+
+The 22 focused add-on-list Rust tests pass (run
+96f6080a-fcde-47ae-b9be-597ec8928bfd). The matched SSR/WASM build succeeds.
+Four Chromium/Firefox cases pass in 48.0 seconds, including no-JS defaults,
+capability changes, explicit Monthly preservation, persisted cadence, import
+and saved-editor fallback. Evidence:
+test-results/addon-adaptive-default-final/playwright-results.json.
+The first runtime launch lacked sandbox network access for pinned Next
+acquisition; the same bundle passed with authorized runtime network access.
+Two initial workflow failures were fixture ID/title collisions introduced by
+the new test; separate ID ranges and title prefixes corrected both.
+Strict affected all-target Clippy, formatting and hydration lint pass.
+Deployment remains separate.
+'''
+resolution  = 'New-list defaults follow provider adaptive capability until the operator explicitly selects a cadence. Capable providers default to Adaptive; unsupported providers retain Daily. URL resolution and provider switching use the same signal boundary, both creation forms reset coherently, and saved editor cadence is unchanged. Defaults/workflow fixture IDs and titles are isolated.'
+
+[[debt]]
 id          = 'windows-ytdlp-batch-import-error-record'
 description = 'The installed yt-dlp 0.11.3 Windows package loses the structured import error record on an unmappable v2 item: cmd.exe cannot find the fail batch label with the shipped LF line endings.'
 discovered  = '2026-09-20'
@@ -999,3 +1031,27 @@ discovered  = '2026-10-02'
 resolved    = true
 adr         = '0113'
 evidence    = 'Locally accepted in v111-findings-01 with ADR 0113: real SQLite upgrade/restart/retry, 3853 native tests and doctests, strict workspace lint, eight localized browser flows, real-worker decode/archive/failure preservation, smoke, web parity and final matched bundle. Packaged/platform deployment and publication are not claimed.'
+
+[[debt]]
+id = 'preparation-progress-counts-items-as-tasks'
+description = 'Add-on list preparation divides completed operations by affected items, so a video requiring both interval metadata and subtitles can produce an impossible progress fraction.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Headed Windows Activity displayed 84/46 although authoritative readiness reports 46 interval tasks and 46 subtitle tasks, with 84 complete and eight failed.'
+resolution = 'The shared localized preparation line now sums interval, download and subtitle task counts. UI map: /media/addon-lists/:id and /media/addon-lists/:id/activity -> AddonListWorkspacePage -> PublicationRecoveryIsland/preparation_view; readiness comes from get_addon_media_list_publication_readiness, and native workspace forms retain the SSR/no-JS recovery path. Focused fraction regressions pass. The matched SSR/WASM bundle passes the failed-preparation recovery scenario in headed Chromium and Firefox, including hydrated and no-JS guidance and Retry. The current task-count regression also passes in both browsers; evidence: test-results/windows-admin-fixes-20261009/editor-chromium/playwright-results.json and editor-firefox/playwright-results.json. The installed Windows candidate also renders the authoritative 46 interval plus 46 subtitle tasks on the real Activity page. Updating the provider invalidates older preparation fingerprints; this does not establish new subtitle success.'
+
+[[debt]]
+id = 'legacy-published-television-missing-version-attachments'
+description = 'An existing published add-on television list retains owned projected episodes but lacks MediaVersion.EpisodeId attachments to its canonical Remote Streams, leaving scheduling durations unresolved.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Read-only Windows aggregates show 166 published owned episodes without version attachments, 165 canonical positive-duration versions and one provider-unavailable zero-duration version. Eighteen persisted zero-length programme rows map to positive canonical durations. A guarded isolated repair changes exactly 166 attachments, is idempotent and preserves every other media-version field, canonical files/tracks, metadata, draft/published revisions and scheduling tables. Integrity and foreign keys pass. Current publication code attaches and verifies both ownership links; the historical sequencing cause remains unproven.'
+resolution = 'Copied production builds now prove the narrow repair and approved Classic Reset. With the existing skip-missing policy enabled, only the affected Classic source set changes; all 156 eligible sources appear across three restarted Continue builds, without zero-length programmes or unrelated state changes. The native guarded offline helper changes exactly 166 episode attachments and one policy row on its fixture, then changes zero rows on repeat. The maintainer-authorized offline Windows repair has now applied exactly 166 attachments and enabled the existing skip-missing policy, followed by packaged restart and actual UI Reset of the affected Classic playout. Native final data proof preserves published revision 4 and draft 176; integrity_check is ok and foreign_key_check is empty. Nine other Classic Refreshes preserve their seeds. Evidence: test-results/windows-admin-fixes-20261009/native/live-final-data-proof.json. Existing broad reprojection/republish paths also touch NFOs or accept the newer draft and are unsuitable as narrow repair. Preserve the accepted published revision and operator metadata; do not add a guessed scheduling-duration fallback. Evidence: test-results/windows-admin-fixes-20261009/episode-links-copy-proof.json and skip-missing-copy-proof.json.'
+
+[[debt]]
+id = 'historical-caption-exhaustion-without-causal-diagnostics'
+description = 'Eight existing required caption tasks exhausted their attempt budget without retained causal provider diagnostics, leaving preparation recovery unproven.'
+discovered = '2026-10-09'
+resolved = false
+evidence = 'Native read-only inspection preserves eight failed revision-specific caption jobs from October 3-4. Their closed result is AttemptsExhausted with three attempts; original stderr is not retained. A normal access test succeeds once, but does not prove subtitle download or conversion. Absence of requested manual captions is a successful empty result, not an adequate explanation for exhaustion.'
+resolution = 'The installed provider is now 0.11.8; historical failed and successful preparation jobs have prior-package fingerprints. Normal bulk preparation would refresh additional interval and caption requirements, not only eight failures, and no per-item caption retry is exposed. Preserve published selection, operator metadata and existing artifacts. Next: capture current-package causal diagnostics through a bounded normal preparation retry before claiming caption recovery. Evidence: test-results/windows-admin-fixes-20261009/native/live-addon-diagnostics.json.'

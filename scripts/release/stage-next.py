@@ -13,30 +13,21 @@ import tempfile
 import urllib.request
 import zipfile
 
-REPOSITORY = "ErsatzTV/next"
-DISTRIBUTION_REPOSITORY = "bartdeijkers/ErsatzRS"
-DISTRIBUTION_TAG = "next-4ad282f"
+# Rust startup acquisition and Python release staging share this pin authority.
+MANIFEST = json.loads((Path(__file__).resolve().parent / "next-patches" / "manifest.json").read_text())
+REPOSITORY = MANIFEST["upstream_repository"]
+DISTRIBUTION_REPOSITORY = MANIFEST["distribution_repository"]
+DISTRIBUTION_TAG = MANIFEST["distribution_tag"]
 RELEASE_URL = f"https://api.github.com/repos/{DISTRIBUTION_REPOSITORY}/releases/tags/{DISTRIBUTION_TAG}"
 DOWNLOAD_BASE = f"https://github.com/{DISTRIBUTION_REPOSITORY}/releases/download/{DISTRIBUTION_TAG}"
-# Update only after source review and runtime acceptance, then rerun candidate CI.
-PINNED_REVISION = "4ad282fae7f49d488aa40e5b6bb092dbe9c4018f"
-SOURCE_ARCHIVE_SHA256 = "c956e3ced52aeb113e31fd81c723c646f1e3c5cedd4aef2a87f4f4b50db81115"
-SOURCE_LOCK_SHA256 = "6b95c68db4cc615426ca20d7b0cec909bfa2d0169a37109eb428c152ad7f6901"
-PLATFORMS = {
-    "linux-x64": "linux-x64", "linux-arm64": "linux-arm64",
-    "linux-arm": "linux-arm", "win-x64": "windows-x64",
-    "osx-x64": "macos-x64", "osx-arm64": "macos-arm64",
-}
-PINNED_HASHES = {
-    "LICENSE": "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55",
-    "ersatzrs-next-4ad282f-linux-arm.tar.gz": "725e87e352ce72cf21349e0d0b77801375c9fc80bb303720f1b80c4a854c26ac",
-    "ersatztv-next-v0.1.0-4ad282f-linux-arm64.tar.gz": "e17bdd917557dda78d14e4c72330e676f789a9dfac08e4e84c14c84e919a27a8",
-    "ersatztv-next-v0.1.0-4ad282f-linux-x64.tar.gz": "010306bfd8bac43c88d88f4a4117255ea5f22db60660c546921ee4fad1680bc8",
-    "ersatztv-next-v0.1.0-4ad282f-macos-arm64.tar.gz": "755a338fd861c0cbb72f14ac10e571473d8708b5dc0b9e00052edb20f6f0b366",
-    "ersatztv-next-v0.1.0-4ad282f-macos-x64.tar.gz": "5f2397826d629f7213ead07f6d89aef07db6199003bf22a4a205a4cfc28cfd86",
-    "ersatztv-next-v0.1.0-4ad282f-windows-x64.zip": "80707906eec50974a8b875e3e9794251637037f68afe5c7dfa436d3d52523126",
-    "provenance.json": "08839cce6ce142e89a6d6c79e36c3057eaeb7fae0e1931233ec5c9ff4bb78e84"
-}
+PINNED_REVISION = MANIFEST["upstream_revision"]
+SOURCE_ARCHIVE_SHA256 = MANIFEST["source_archive_sha256"]
+SOURCE_LOCK_SHA256 = MANIFEST["source_lock_sha256"]
+PATCHED_DISTRIBUTION_VERSION = MANIFEST["distribution_version"]
+PINNED_PATCHES = [{"file": p["file"], "sha256": p["sha256"]} for p in MANIFEST["patches"]]
+TARGETS = {rid: package["target"] for rid, package in MANIFEST["runtime_packages"].items()}
+PLATFORMS = {rid: package["platform"] for rid, package in MANIFEST["runtime_packages"].items()}
+PINNED_HASHES = MANIFEST["artifact_sha256"]
 
 BINARIES = ("ersatztv-channel",)
 WINDOWS_COMPANIONS = ("libvpl.dll", "libvpl-LICENSE.txt")
@@ -97,11 +88,13 @@ def select_asset(metadata, rid):
     return asset, match[2], asset["name"][:-len(suffix)]
 
 
-def read_binaries(payload, rid, root):
+def read_binaries(payload, rid, root, extra_names=()):
     names = [n + (".exe" if rid == "win-x64" else "") for n in BINARIES]
     result = {}
     if rid == "win-x64":
         names.extend(WINDOWS_COMPANIONS)
+    names.extend(extra_names)
+    if rid == "win-x64":
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
             for name in names:
                 matches = [i for i in archive.infolist() if i.filename == f"{root}/{name}"]
@@ -123,7 +116,62 @@ def read_binaries(payload, rid, root):
     return result
 
 
+def verify_patched_payload(files, rid):
+    origin = json.loads(files["origin.json"])
+    expected = {
+        "kind": "patched-source-build", "repository": REPOSITORY,
+        "source_revision": PINNED_REVISION, "rid": rid, "target": TARGETS[rid],
+        "source_archive_sha256": SOURCE_ARCHIVE_SHA256,
+        "cargo_lock_sha256": SOURCE_LOCK_SHA256,
+        "distribution_version": PATCHED_DISTRIBUTION_VERSION, "patches": PINNED_PATCHES,
+    }
+    if any(origin.get(key) != value for key, value in expected.items()):
+        raise ValueError("Next source/patch provenance differs from the accepted snapshot")
+    payload = {name: data for name, data in files.items() if name != "origin.json"}
+    if origin.get("payload_sha256") != {name: hashlib.sha256(data).hexdigest() for name, data in payload.items()}:
+        raise ValueError("Next payload SHA-256 mismatch")
+    if hashlib.sha256(files["LICENSE"]).hexdigest() != PINNED_HASHES["LICENSE"]:
+        raise ValueError("Next license SHA-256 mismatch")
+    return origin
+
+
+def stage_patched_snapshot(rid, output, archive_path=None, fetch=download):
+    """Stage the reviewed ADR 0117 distribution without executing or extracting it."""
+    if not PATCHED_DISTRIBUTION_VERSION or not PINNED_PATCHES:
+        raise ValueError("No patched Next snapshot is accepted")
+    output = Path(output)
+    if output.exists():
+        raise ValueError("Next staging destination already exists")
+    root = f"ersatzrs-next-{PATCHED_DISTRIBUTION_VERSION}-{rid}"
+    name = root + (".zip" if rid == "win-x64" else ".tar.gz")
+    expected_hash = PINNED_HASHES.get(name)
+    if not expected_hash:
+        raise ValueError("No accepted Next archive for this platform")
+    payload = Path(archive_path).read_bytes() if archive_path else fetch(f"{DOWNLOAD_BASE}/{name}", MAX_ARCHIVE)
+    if not 0 < len(payload) <= MAX_ARCHIVE or hashlib.sha256(payload).hexdigest() != expected_hash:
+        raise ValueError("Next snapshot SHA-256 mismatch")
+    files = read_binaries(payload, rid, root, ("LICENSE", "origin.json"))
+    origin = verify_patched_payload(files, rid)
+    origin.update(distribution_repository=DISTRIBUTION_REPOSITORY,
+                  distribution_tag=DISTRIBUTION_TAG, asset=name, sha256=expected_hash)
+    files["origin.json"] = (json.dumps(origin, indent=2) + "\n").encode()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=".next-", dir=output.parent))
+    try:
+        for name, data in files.items():
+            path = temporary / name
+            path.write_bytes(data)
+            path.chmod(0o755 if name in ("ersatztv-channel", "ersatztv-channel.exe") else 0o644)
+        temporary.rename(output)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    print(f"Staged patched Next {PATCHED_DISTRIBUTION_VERSION} for {rid}: sha256:{expected_hash}")
+
+
 def stage(metadata, rid, output, archive_path=None, fetch=download):
+    if PATCHED_DISTRIBUTION_VERSION:
+        raise ValueError("The accepted Next pin requires the patched snapshot")
     if rid == "linux-arm":
         raise ValueError("ARMv7 requires the accepted source build, not an official artifact")
     output = Path(output)
@@ -188,7 +236,9 @@ def main():
             if not path.is_file() or path.is_symlink() or not 0 < path.stat().st_size <= limit:
                 raise ValueError("Missing or invalid snapshot file")
             return path.read_bytes()
-        if rid == "linux-arm":
+        if PATCHED_DISTRIBUTION_VERSION:
+            stage_patched_snapshot(rid, args.output, fetch=local_fetch)
+        elif rid == "linux-arm":
             stage_arm_snapshot(args.output, fetch=local_fetch)
         else:
             metadata = {"id": None, "assets": [
@@ -199,6 +249,11 @@ def main():
                 if name.startswith("ersatztv-next-") and (args.snapshot_dir / name).is_file()
             ]}
             stage(metadata, rid, args.output, fetch=local_fetch)
+        return
+    if PATCHED_DISTRIBUTION_VERSION:
+        if args.source_build or args.release_metadata:
+            parser.error("Patched snapshots require an accepted archive or snapshot directory")
+        stage_patched_snapshot(rid, args.output, args.archive)
         return
     if args.source_build:
         if args.release_metadata or args.archive:
@@ -220,9 +275,11 @@ def stage_arm_snapshot(output, archive_path=None, fetch=download):
     """Stage the exact accepted ARMv7 build, preserving source-build provenance."""
     if Path(output).exists():
         raise ValueError("Next staging destination already exists")
-    name = "ersatzrs-next-4ad282f-linux-arm.tar.gz"
+    if PATCHED_DISTRIBUTION_VERSION:
+        raise ValueError("The accepted Next pin requires the patched snapshot")
+    name = f"ersatzrs-next-{PINNED_REVISION[:7]}-linux-arm.tar.gz"
     payload = Path(archive_path).read_bytes() if archive_path else fetch(f"{DOWNLOAD_BASE}/{name}", MAX_ARCHIVE)
-    if hashlib.sha256(payload).hexdigest() != PINNED_HASHES[name]:
+    if hashlib.sha256(payload).hexdigest() != PINNED_HASHES.get(name):
         raise ValueError("ARMv7 snapshot SHA-256 mismatch")
     with tempfile.TemporaryDirectory() as temporary:
         source = Path(temporary)
@@ -238,6 +295,8 @@ def stage_arm_snapshot(output, archive_path=None, fetch=download):
 
 def stage_source_build(source, rid, output):
     """Keep the accepted ARMv7 exception explicit and preserve its provenance."""
+    if PATCHED_DISTRIBUTION_VERSION:
+        raise ValueError("The accepted Next pin requires the patched snapshot")
     source, output = Path(source), Path(output)
     if rid != "linux-arm" or output.exists():
         raise ValueError("Source builds require ARMv7 and a new staging destination")

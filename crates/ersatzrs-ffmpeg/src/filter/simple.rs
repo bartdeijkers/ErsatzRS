@@ -208,6 +208,32 @@ pub fn pad_filter(current: &FrameState, padded_size: FrameSize) -> String {
     )
 }
 
+/// Download the concrete VAAPI surface before software padding.
+///
+/// `vaapi` is an opaque hardware format, not a valid software transfer format.
+/// Ten-bit surfaces transfer as P010; `FFmpeg`'s software pad supports that
+/// layout directly, avoiding a color conversion before padding.
+#[must_use]
+pub fn pad_vaapi_software_filter(
+    current: &FrameState,
+    padded_size: FrameSize,
+    ten_bit: bool,
+) -> String {
+    let pad = format!(
+        "pad={}:{}:-1:-1:color=black",
+        padded_size.width, padded_size.height
+    );
+    if current.frame_data_location == FrameDataLocation::Hardware {
+        if ten_bit {
+            format!("hwdownload,format=p010le,{pad}")
+        } else {
+            format!("hwdownload,format=nv12,{pad}")
+        }
+    } else {
+        pad
+    }
+}
+
 #[must_use]
 pub fn pad_vaapi_filter(current: &FrameState, padded_size: FrameSize) -> String {
     let pad = format!(
@@ -1030,14 +1056,14 @@ pub fn song_progress_filter(
     start: Option<Duration>,
     duration: Option<Duration>,
 ) -> String {
-    let Some(duration) = duration else {
+    let Some(duration) = duration.filter(|duration| !duration.is_zero()) else {
         return String::new();
     };
 
     let start = start.unwrap_or_default();
     let finish = start + duration;
-    let width = f64::from(frame_size.width) * 0.9;
-    let height = f64::from(frame_size.height) * 0.025;
+    let width = (f64::from(frame_size.width) * 0.9).round().max(1.0);
+    let height = (f64::from(frame_size.height) * 0.025).round().max(1.0);
     let seconds = duration.as_secs_f64();
     let already_played = start.as_secs_f64() / finish.as_secs_f64();
     let scale = 1.0 - already_played;
@@ -1050,7 +1076,7 @@ pub fn song_progress_filter(
     let overlay_bar = "overlay=W*0.05:H-h-H*0.05:shortest=1:enable='gt(t,0.1)'";
 
     format!(
-        "loop=-1:1[si],{generate_gray_bar}[gray];{generate_white_bar},format=rgba,colorchannelmixer=aa=0.9,{scale_to_full_width}[sbar];[si][gray]{overlay_bar}[sgray];[sgray][sbar]{overlay_bar}"
+        "loop=-1:1[si];{generate_gray_bar}[gray];{generate_white_bar},format=rgba,colorchannelmixer=aa=0.9,{scale_to_full_width}[sbar];[si][gray]{overlay_bar}[sgray];[sgray][sbar]{overlay_bar}"
     )
 }
 

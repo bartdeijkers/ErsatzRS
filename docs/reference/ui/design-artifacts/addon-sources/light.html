@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Add-ons · ErsatzRS Sources design v0.1</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="light">
+<a class="skip" href="#main">Skip to content</a>
+<div class="review-bar" id="preview-note"><strong>DESIGN v0.1 · Locked</strong><span>Static preview · illustrative data · changes are not saved</span><nav aria-label="Design scenarios"><a href="index.html">First run</a><a href="files.html">Install from file</a><a href="states.html">States & decisions</a><a href="light.html" aria-current="page">Light theme</a></nav></div>
+<header class="appbar"><div class="brand"><span class="brand-mark" aria-hidden="true">▣</span>ErsatzRS</div><span class="muted small">Settings / Add-ons</span></header>
+<div class="layout">
+<aside class="sidebar" aria-label="Application context (static)"><ul><li>Channels</li><li>EPG Preview</li><li>FFmpeg Profiles</li><li>Watermarks</li><li>Graphics Elements</li><li class="nav-section">Media sources</li><li>Local libraries</li><li>Remote streams</li><li class="nav-section">Scheduling</li><li>Schedules</li><li>Playouts</li><li class="nav-section">Administration</li><li>Support</li><li class="selected">Settings</li></ul></aside>
+<main id="main" tabindex="-1">
+<div class="settings-nav" aria-label="Settings context (static)"><span class="selected">Add-ons</span><span>FFmpeg</span><span>Logging</span><span>HDHomeRun</span><span>Scanner</span><span>Playout</span><span>UI</span><span>XMLTV</span></div>
+<header class="page-heading"><div><h1>Add-ons</h1><p>Choose where your add-ons come from.</p></div></header>
+<nav class="tabs" aria-label="Add-on manager"><span>Installed <small>&nbsp;0</small></span><a href="states.html#browse">Browse add-ons</a><span>Updates <small>&nbsp;0</small></span><a href="index.html" aria-current="page">Sources</a></nav>
+<div class="stack"><section class="panel official" aria-labelledby="official-title"><div class="panel-head"><div><p class="eyebrow">Included with ErsatzRS</p><h2 id="official-title">Official ErsatzRS add-ons</h2><p>Ready to browse, even before your first online check.</p></div><span class="badge">Enabled</span></div>
+<dl class="facts"><div><dt>Repository version</dt><dd>0.12.0 · Bundled</dd></div><div><dt>Available add-ons</dt><dd>1</dd></div><div><dt>Last online check</dt><dd>Not checked yet</dd></div></dl>
+<div class="policy"><div class="policy-label"><label for="auto-update">Automatically update this repository</label><p id="auto-help">Keep available add-ons up to date. You choose when to update installed add-ons.</p></div><label class="switch" for="auto-update"><input id="auto-update" type="checkbox" role="switch" checked aria-describedby="auto-help"></label></div>
+<div class="actions"><a class="button primary" href="states.html#browse">Browse add-ons</a><a class="button" href="states.html#checking">Check for updates</a><span class="muted small">Automatic updates are on by default.</span></div>
+</section><section class="panel" aria-labelledby="file-title"><div class="panel-head"><div><h2 id="file-title">Install from file</h2><p>Add an individual add-on or a complete repository from a ZIP file.</p></div><span class="badge neutral">ZIP packages</span></div><div class="trust-row"><div><strong>Unknown sources are off</strong><p>Enable them to install a ZIP you trust. Add-ons run with the server account’s access.</p></div><a class="button" href="states.html#trust">Enable unknown sources…</a></div><div class="actions"><button class="button" type="button" disabled aria-describedby="file-disabled-help">Choose ZIP file…</button><span id="file-disabled-help" class="muted small">Enable unknown sources above to choose a file.</span></div></section><details class="disclosure"><summary>Advanced: local Git repositories</summary><div class="disclosure-body"><p>Manage a repository with your own Git tools on the ErsatzRS server, then rescan it here.</p><div><strong class="small">Checkout folder on the ErsatzRS server</strong><code class="path">&lt;profile&gt;/addons/checkouts</code></div><p class="muted small">Clone repositories into this folder. Run git pull yourself when you want newer versions. Installed add-ons keep their current files until you update them.</p><div class="actions"><button class="button" type="button" disabled>Copy folder path</button><button class="button" type="button" disabled>Rescan folder</button></div><p class="muted small">This preview shows a placeholder folder. Real folder actions require an active server and enabled unknown sources.</p></div></details></div>
+<footer class="review-foot">Design reference only. Scenario links show proposed outcomes; no files are uploaded and no server settings change. <a href="README.md">Review guide</a></footer>
+</main></div>
+</body></html>

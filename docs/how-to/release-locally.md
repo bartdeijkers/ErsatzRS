@@ -95,6 +95,30 @@ Copy-Item LICENSE $Stage\
 Copy-Item README.md $Stage\
 ```
 
+Stage the exact pinned Next runtime with the same checksum, payload and provenance
+validation as release CI. Move its executable and Windows companions beside the
+server; keep the license and origin record under `next/`:
+
+```powershell
+python scripts/release/stage-next.py --rid win-x64 --output "$Stage/next"
+if ($LASTEXITCODE -ne 0) { throw 'Next runtime staging failed' }
+Move-Item "$Stage/next/ersatztv-channel.exe" "$Stage/ersatztv-channel.exe" -ErrorAction Stop
+Move-Item "$Stage/next/libvpl.dll" "$Stage/libvpl.dll" -ErrorAction Stop
+Move-Item "$Stage/next/libvpl-LICENSE.txt" "$Stage/libvpl-LICENSE.txt" -ErrorAction Stop
+foreach ($Required in @('ersatztv-channel.exe', 'libvpl.dll', 'libvpl-LICENSE.txt', 'next/LICENSE', 'next/origin.json')) {
+    $File = Get-Item "$Stage/$Required" -ErrorAction Stop
+    if ($File.Length -eq 0) { throw "Required Next runtime file is empty: $Required" }
+}
+```
+
+The staging helper takes the release identity and hashes from the application's
+pinned runtime manifest. Its package-only distribution destination is the public
+`bartdeijkers/ErsatzRS-next` repository; ordinary runtime downloads require no
+GitHub credentials. Preserve exact package/source/patch checksums when publishing
+a new accepted runtime there. Do not substitute a mutable tag or locally compiled
+Next binary. A standalone source-built installation acquires the same pinned
+runtime during startup when no explicit override or bundled runtime is present.
+
 Create the zip:
 
 ```powershell

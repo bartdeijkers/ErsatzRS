@@ -3,13 +3,13 @@
 ErsatzRS turns media from local folders, Plex, Jellyfin, or Emby into linear
 channels for IPTV, HLS, and HDHomeRun-compatible clients.
 
-ErsatzRS is beta software. Back up persistent state before every update, and
-do not expose the unauthenticated admin UI directly to the public internet.
+The stable release line starts at v1.1.0. Back up persistent state before every
+update, and use a trusted LAN, VPN, or authenticated reverse proxy for the admin UI.
 
 ## New to ErsatzRS?
 
 Follow [Build your first channel](tutorials/getting-started.md). It uses the
-currently published Windows beta archive and leads from first startup to a
+Windows release archive and leads from first startup to a
 playable local-media channel.
 
 Already know the basic workflow? Choose the result you need below.
@@ -19,8 +19,7 @@ Already know the basic workflow? Choose the result you need below.
 - [Install on Windows](how-to/install-on-windows.md)
 - [Install on Linux with systemd](how-to/install-on-linux.md) for a native
   service installed from a normal release archive
-- [Install with Docker](how-to/install-with-docker.md) when a normal release
-  publishes a container image
+- [Install with Docker](how-to/install-with-docker.md)
 - [Back up and restore ErsatzRS](how-to/back-up-and-restore.md)
 
 Before installing, check the [system requirements](reference/system-requirements.md)
@@ -37,10 +36,9 @@ and [release bundle reference](reference/release-bundle.md).
 
 ## Extend ErsatzRS with add-ons
 
-The add-on host exists in the current development tree. The private official
-repository is acquired through an operator-managed checkout or complete
-offline bundle; check the [add-on reference](reference/addons.md) before
-relying on this workflow in a release build.
+Install add-ons from an operator-managed checkout or a complete offline
+repository bundle. Check the [add-on reference](reference/addons.md) for
+package requirements and the separately installed tools each add-on needs.
 
 - [Install and manage an add-on](how-to/manage-addons.md)
 - [Understand the add-on trust boundary](explanation/addon-trust-boundary.md)

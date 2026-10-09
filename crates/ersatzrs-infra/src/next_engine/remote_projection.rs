@@ -16,7 +16,7 @@ use sha2::{Digest as _, Sha256};
 
 use super::{
     dynamic_projection::Identity,
-    protocol::Source,
+    protocol::{self, Source},
     schedule::{self, ScheduledMedia},
     selection,
 };
@@ -46,6 +46,17 @@ pub(super) enum Origin {
 }
 
 impl Origin {
+    pub(super) fn credits_at(
+        &self,
+        projection: &selection::DeferredProjection,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<protocol::Track>> {
+        match self {
+            Self::Troubleshooting(context) => context.credits_at(projection, now),
+            Self::Persisted | Self::Fallback(_) => Ok(None),
+        }
+    }
+
     pub(super) async fn snapshot(
         self,
         pool: &DbPool,
@@ -71,6 +82,22 @@ impl Origin {
                 super::fallback::remote_snapshot(pool, locker, channel_id, item, gap, audio).await
             }
             Self::Troubleshooting(context) => {
+                if let Some(gap) = context.fallback_gap {
+                    let _locked =
+                        super::fallback::validate_preview_gap(pool, locker, &context.channel, gap)
+                            .await?;
+                    let candidates = crate::fallback_playback::load_candidates(
+                        pool,
+                        &context.channel,
+                        context.media.item.start,
+                        gap.finish,
+                    )
+                    .await?
+                    .ok_or_else(unavailable)?;
+                    if !super::fallback::candidate_matches(&candidates, &context.media.item) {
+                        return Err(unavailable());
+                    }
+                }
                 let media = schedule::bind_media(pool, context.media.item.clone()).await?;
                 if media.media_version_id != context.media.media_version_id
                     || media.media_file_id != context.media.media_file_id
@@ -123,7 +150,7 @@ pub(crate) async fn materialize_prepared(
     let resolved = Box::pin(
         crate::addon_media_list_playback::resolve_persisted_remote_stream(
             pool,
-            context.media.item.media_item_id,
+            remote_owner(&context.media)?,
             &crate::addons::AddonRuntimeContext::default(),
             root,
         ),
@@ -397,10 +424,7 @@ pub(super) async fn project_for_origin(
     audio: selection::AudioDirective,
     origin: Origin,
 ) -> Result<Snapshot> {
-    let remote_id = media
-        .remote_stream_id
-        .filter(|id| *id == media.item.media_item_id)
-        .ok_or_else(unavailable)?;
+    let remote_id = remote_owner(media)?;
     let binding = load_binding(pool, remote_id).await?;
     if binding.script.is_some() {
         return Err(unavailable());
@@ -413,26 +437,36 @@ pub(super) async fn project_for_origin(
     .await?;
     let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
         .source_time(media.item.start)?;
-    let (graphics, watermarks) = match &origin {
-        Origin::Persisted => {
-            let (watermarks, graphics) = media.overlays(pool, channel).await?;
-            (graphics, watermarks)
+    let profile = match &origin {
+        Origin::Troubleshooting(context) => context.profile.clone(),
+        _ => playback::load_channel_playback_profile(pool, channel.id)
+            .await?
+            .ok_or_else(unavailable)?,
+    };
+    let (graphics, watermarks) = if super::graphics::enabled(&profile) {
+        match &origin {
+            Origin::Persisted => {
+                let (watermarks, graphics) = media.overlays(pool, channel).await?;
+                (graphics, watermarks)
+            }
+            Origin::Fallback(_) => (
+                playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
+                playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
+                    .await?,
+            ),
+            Origin::Troubleshooting(context) => (
+                context.graphics(pool).await?,
+                context.watermarks(pool).await?,
+            ),
         }
-        Origin::Fallback(_) => (
-            playback::select_fallback_graphics(pool, &media.item, selection_time).await?,
-            playback::select_fallback_watermarks(pool, channel, &media.item, selection_time)
-                .await?,
-        ),
-        Origin::Troubleshooting(context) => (
-            context.graphics(pool).await?,
-            context.watermarks(pool).await?,
-        ),
+    } else {
+        (Vec::new(), Vec::new())
     };
     projection.canvas = super::graphics::project(
         pool,
         channel,
         media,
-        resolution,
+        &profile,
         &mut projection.item,
         &watermarks,
         &graphics,
@@ -441,14 +475,9 @@ pub(super) async fn project_for_origin(
     let material = fingerprint_material(pool, media, &binding, publication).await?;
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
-    let profile = match &origin {
-        Origin::Troubleshooting(context) => context.profile.clone(),
-        _ => playback::load_channel_playback_profile(pool, channel.id)
-            .await?
-            .ok_or_else(unavailable)?,
-    };
     let descriptor = digest(&json!({
-        "binding":material, "item":media.item, "selection":projection.item, "canvas": projection.canvas,
+        "binding":material, "item":media.item, "selection":projection.item,
+        "canvas": projection.canvas, "song": projection.song,
         "channel":channel, "resolution":resolution, "profile":profile.profile,
         "audio_script":script, "audio_language":preferences.default_audio_language,
         "subtitle_language":preferences.default_subtitle_language,
@@ -492,7 +521,7 @@ async fn project_selection(
         Origin::Troubleshooting(context) => (context.subtitle_id, context.diagnostics.clone()),
         Origin::Persisted | Origin::Fallback(_) => (None, None),
     };
-    selection::project_troubleshooting_item_with_audio(
+    let mut projection = selection::project_troubleshooting_item_with_audio(
         pool,
         selection::TroubleshootingSelection {
             channel,
@@ -506,7 +535,11 @@ async fn project_selection(
         },
         audio,
     )
-    .await
+    .await?;
+    if let Origin::Troubleshooting(context) = origin {
+        context.attach_credits(&mut projection)?;
+    }
+    Ok(projection)
 }
 
 async fn load_binding(pool: &DbPool, id: i64) -> Result<Binding> {
@@ -673,8 +706,13 @@ async fn fingerprint_material(
 ) -> Result<Value> {
     let version: String = sqlx::query_scalar(r#"SELECT json_array(v."Id",v."DateUpdated",v."Duration",v."Width",v."Height",v."VideoScanKind",f."Id",f."Path",f."PathHash")
         FROM "MediaVersion" v JOIN "MediaFile" f ON f."MediaVersionId"=v."Id"
-        WHERE v."Id"=? AND f."Id"=? AND f."Path"=? AND v."RemoteStreamId"=?"#)
+        WHERE v."Id"=? AND f."Id"=? AND f."Path"=? AND v."RemoteStreamId"=?
+          AND (v."RemoteStreamId"=? OR v."MovieId"=? OR v."EpisodeId"=?
+               OR v."MusicVideoId"=? OR v."OtherVideoId"=? OR v."SongId"=? OR v."ImageId"=?)"#)
         .bind(media.media_version_id).bind(media.media_file_id).bind(&media.path).bind(binding.id)
+        .bind(media.item.media_item_id).bind(media.item.media_item_id).bind(media.item.media_item_id)
+        .bind(media.item.media_item_id).bind(media.item.media_item_id).bind(media.item.media_item_id)
+        .bind(media.item.media_item_id)
         .fetch_optional(pool).await.repository()?.ok_or_else(unavailable)?;
     let streams: Vec<String> = sqlx::query_scalar(r#"SELECT json_array(s."Index",s."Codec",s."Profile",s."Language",s."Title",s."Default",s."Forced",s."Channels",s."MediaStreamKind",s."PixelFormat",s."ColorPrimaries",s."ColorRange",s."ColorSpace",s."ColorTransfer",s."Rotation",s."BitsPerRawSample",s."AttachedPic")
         FROM "MediaStream" s WHERE s."MediaVersionId"=? ORDER BY s."Index",s."Id""#)
@@ -689,6 +727,13 @@ async fn fingerprint_material(
     Ok(
         json!({"schema":1,"source":binding,"publication":publication,"version":version,"streams":streams,"subtitles":subtitles,"package":package,"settings":settings}),
     )
+}
+
+/// Projected songs/videos share their original Remote Stream version. The
+/// occurrence retains its visible media identity; provider preparation uses the
+/// version's remote owner, whose relationship is revalidated in the fingerprint.
+pub(super) fn remote_owner(media: &ScheduledMedia) -> Result<i64> {
+    media.remote_stream_id.ok_or_else(unavailable)
 }
 
 fn digest(value: &Value) -> Result<String> {

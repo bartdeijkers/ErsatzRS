@@ -1,68 +1,143 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..960421e8 (fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..46118d43 (v26.11.1; fixed UCU-09 boundary)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-183/183 accepted; feature remains In progress for approved acceptance debt.
-UCU-00 through UCU-09 are Complete. Final window local gates and terminal
-green exact-SHA CI 36900396649 at b76d11c6 pass. Stable v1.1.0 package acceptance remains separate.
-UCU-09 now has native Windows application proof for Next, JavaScript selection
-and chapter expressions, including all four chapter-profile language environments.
+208/208 accepted through v26.11.1; UCU-09 is Complete. Stable v1.1.0 is
+published with four verified archives, exact-source green CI and Linux/Windows
+package startup, browser and decoded playback proof. Docker is excluded by
+explicit maintainer release-scope approval (2026-10-09), not claimed verified.
+UCU-09 owns current proof; this feature remains In progress only for the
+explicit ongoing patch-retirement, accepted limitations and unverified debt.
+201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
+202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
+200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
+199 Port: rate/copy/mirror/Dutch tracks; UCU-09 owns Linux/Windows proof.
+198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
+196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
+195 Port: deep scan/artwork; UCU-09 owns runtime/browser/restart proof.
+194 Adapt (0117): content duration/native-Next handoff and generated silence
+pass on Linux/Windows; final window gates and package publication pass.
+193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
+190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
+Rows209 onward remain outside UCU-09.
+Next0362692 six-RID pins and independent retirement for both patches remain;
+row186 owns package CI and runtime/cleanup.
+Windows Next/JavaScript/chapter proof passes in all four profile languages.
 ARM/macOS application proof is explicit maintainer-approved unverified debt
 (2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
-136-137 Port; 138 Covered; 139 Adapt (0095/0103).
-140 Port: published v2.0.3; approved hardware debt remains unverified.
-141-142/144/152-153 N/A; AAC surround decoding is proven.
-143/145 Port: HDR/Media Info and external JSON playback/guide/fallback.
+189 Adapt (0005/0102/0105): shared deterministic song rendering, strict track
+pins and private owned Next callbacks; Linux/Windows decoded runtime, actual
+private HTTP, affected regressions, strict lint and independent review pass.
+187 Port: original-clock orphan cleanup and restart-safe Block history;
+33 core/10 SQLite checks, lint and independent review pass.
 146 Adapt (0105): graphics canvas, owned clocks/cleanup and 87 TSDuck checks.
 147-151 Port: YAML roll/graphics state, provider subtitles/availability,
 Plex folder tags, Next error cards and both-engine credits troubleshooting.
 154 Adapt (0005/0105): motion EOF/expiry/loops and preview clocks; decoded,
 argv, browser and both-engine smoke evidence is recorded in UCU-09.
 155 Port: optional Next AMF protocol; hardware acceptance remains open.
-156 Port: machine CRUD/deletion/localization; 33 focused, 15 browser, lint
-and native smoke pass.
-157 Port: native completion/sample ownership, URI redaction and smart 409;
-53 focused checks, 24 browser cases and lint pass.
-158 Covered: atomic admission, Plex fencing; Trakt retired.
-22 checks and lint pass.
-159 Port: maintenance failure isolation/retry, health and cancellation;
-24 checks and lint pass.
-160 Port: movie order/save recovery, atomic validation and legacy repair;
-13 checks, eight browser cases and strict lint pass.
-161 Covered: FFmpeg font ownership replaces shared mapper; nine checks pass.
-162 Port: fresh script choices, selection recovery and no-JS settings;
-19 checks, six browser cases, strict lint and native smoke pass.
-163 Port: shared script path validation/execution and Lua arguments;
-46 focused checks and strict lint pass.
-164 Port: dependent choices and template hydration; four browser cases pass.
-165 Covered: credits fallback and worker/graphics ownership; 18 checks pass.
-166 Covered: case-insensitive YAML discovery; three scanner checks pass.
+156-166 Port/Covered: machine management, troubleshooting completion,
+maintenance isolation, movie recovery, font ownership, script validation and
+settings/template hydration, credits fallback and YAML discovery pass their
+focused/runtime/browser gates. UCU-09 owns per-row counts and review evidence.
 
 UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
 chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
 the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
 
-Row 23 is Port: version-bound image selection preserves Dutch subtitles,
-explicit off and alternate audio in decoded two-track PGS playback.
-
-Rows 24-25 port Burn/Convert, bounded version-bound preparation, authenticated
-WebVTT and preview captions, with browser/runtime/native smoke proof. Cache reuse,
-blank-path repair and absolute partial-extraction indices have SQL regressions.
-Rows 26-27: decoded permanent/intermittent watermark geometry, fades, joined
-timing, audio/subtitles and Dynamic/deco fallback pass. Row28: pad/stretch/crop.
-Row29: authenticated provider Convert, EIA-608 exclusion and content watermark placement.
-Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
-Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
+UCU-02 owns rows23-30 decoded/browser evidence; ADR0099 retains converted HLS text.
 68-71: Plex/Classic continuity. 75: NVIDIA overlay passes; AMD live unproven.
 76-77: Classic anchors/checkpoints.
 RGB opacity is proven; UCU-09 owns evidence.
-Remote Stream/add-on support now has row-39 runtime acceptance for direct,
-prepared, retained and ordinary sources, including supported captions and
-independent normal/preview lifecycle. ADR 0100 embedded text limitations remain
-explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. Later endpoint/platform acceptance remains open under ADR 0095. Refresh upstream; p9a-01 waits for ucu-09.
+Row39 owns Remote Stream/add-on source, caption and normal/preview lifecycle acceptance. ADR 0100 embedded text limitations remain
+explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. UCU-09 is Complete; approved platform debt remains.
 """
+
+[[debt]]
+id = 'ucu09-row201-channel-troubleshooting-window'
+description = 'Prove the complete historical 30-second Next channel-preview window with configured gap filler, immutable occurrence callbacks, selected profiles, protected international tracks and live-generated caption timing.'
+discovered = '2026-10-07'
+evidence = 'Resolved as Port. UCU-09 owns canonical f418022b: Linux118/Windows116 ordinary cases,26 named regressions each, nine complete decoded30s windows and Stop per OS, direct HTTP/RTSP/installed Live/Finite caption controls, exact source/runtime hashes, state/revocation/cleanup and strict lint/format. Compiler/fixture failures remain failed history; valid passing cases are reused explicitly. Final window gates/CI and approved hardware/ARM/macOS debt remain unverified.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row200-managed-next-default'
+adr = '0095'
+description = 'Make Next the new-channel and standalone-preview default only with exact bundled or automatic verified runtime acquisition, retaining stored engine choices and explicit Native.'
+discovered = '2026-10-07'
+evidence = 'Resolved as Adapt under accepted ADR0095. UCU-09 owns source08 proof and independent review: public six-RID checksum/provenance staging, focused default/health/repository/lifecycle and strict lint, Linux/native Windows actual cold decoded TS/HLS with Dutch tracks/reconnect/preview/idle cleanup, native bundled playback, six real read-only/offline/override/failure startup cases per platform and matched Chromium31/Firefox30 with one unchanged older skip. Stored engines, explicit Native/AV1 and profile values remain; no bulk migration. Historical private404, responsive/diagnostic failures and pre-host standalone fixture failures remain retained. Canonical row200 acceptance-proof.json SHA256d5df6734452cb08d75f9bf83b7860c32b8b8c898dfafa6c7e9494ab772233cfe; final integrated/window/exact-SHA CI and approved platform/hardware debt remain open.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row193-troubleshooting-seek'
+description = 'Use generated troubleshooting playlists, current Next readiness and first-segment player start while preserving successful short-preview EOF and owned cancellation/cleanup.'
+discovered = '2026-10-07'
+evidence = 'Row193 is Port. Both engines serve the generated playlist; Next requires its current marker while running and permits successful reaped short EOF only with a referenced final segment. Native running readiness requires two matching segments. First-presented sought frames, Dutch captions and independently decoded selected audio pass in Chromium and Firefox; normal player live edge is preserved. UCU-09 owns 34 focused/831 web checks, six real Linux previews, complete corrected Windows 7 process/21 portable/5 real checks, strict lint, exact source identities and independently reviewed correction deltas. Original failed attempts remain retained. Final window gates and exact-SHA CI are open.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row187-block-history'
+description = 'Remove orphaned future Block history before cursor restoration, retaining consumed pre-request history and accepted programme-preservation boundaries.'
+discovered = '2026-10-07'
+evidence = 'Row187 is Port: orphaned future history is classified against the original requested clock before preservation restores state, with a second retained-start pass and complete preroll duplicate removal. Exact history deletion publishes even for preserving clear-items transactions. UCU-09 owns 33 core checks, 10 selected SQLite/publication checks, clean-oracle restart/current/track/settings/seed/health proof, strict affected lint and independent review. Existing consumed history and current programmes remain; final window gates/CI stay open.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row186-media-duration'
+adr = '0117'
+description = 'Unify image and remote-stream durations across scheduling, dynamic fallback, troubleshooting and Next hints; preserve image/AVI container identity.'
+discovered = '2026-10-06'
+evidence = 'UCU-09 owns 18 focused and 64 scheduling checks, AVI fallback and the accepted ADR0117 correction policy. Candidate Next patch 0002 passes 222 pipeline tests, strict lint and seven image runtime cases: six static formats, complete GIF repetition, local/HTTP 500 ms seeking, six-second handoff and exact eight-second finite termination. Live EOF is preserved by the repeat guard. The reviewed six-platform next-0362692-ersatzrs.1 snapshot is published and production staging pins its exact source, both patches and all archive hashes. Linux and Windows optimized executables each pass 20 focused checks, and both macOS package CI jobs pass at 4b5b1523. Finite/infinite animated WebP now passes Linux application seek/handoff checks with the corrected FFmpeg runtime. The maintainer accepted the consolidated ADR0117 extension with the condition to update the separate ErsatzRS-ffmpeg repository to v2.0.6, including that correction plus upstream ICC/EXIF short-read hardening for all four currently published RID payloads; ARM archives share the affected source and must not retain the known defect. Full remaining-row and 15-patch source audits establish no further binary amendment with current dependency pins. All four corrected v2.0.6 packages are published at b221a3d after terminal green package CI37539516801; all published asset hashes match the verified archives. Production HTTP smoke with the independently downloaded release passes normal/preview playback, decoded Dutch audio and rendered captions, reconnect and idle cleanup. Independent review finds no concrete runtime or packaging blocker. Row186 is accepted as Adapt under ADR0117; UCU-09 owns exact evidence and final window CI remains open.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row194-content-duration'
+adr = '0117'
+description = 'Use selected content-stream duration for local scans, guarding against FFmpeg 9 Matroska numeric durations synthesized from a longer subtitle/container; preserve video selection and complete-audio fallback.'
+discovered = '2026-10-06'
+evidence = 'Resolved as Adapt under ADR0117: UCU-09 owns unchanged parser/test identity and valid earlier evidence, exact v2.0.6 conflict proof, new normal scan/rescan persistence and Dutch track preservation, adjacent 1s/5s scheduling and actual decoded native/Next handoff on Linux and native Windows. Source05 passes one selected application test per platform (706f8776/370d035c), both engines blue0.25/red1.25, Next6s ENDLIST, bounded packet gaps and owned cleanup. Exact source/tool checks, strict scanner all-target lint, format and independent review pass. At row194 acceptance the separate demonstrated native-video-only-null-audio-fallback remained unresolved required work, not waived by that duration acceptance. The subsequent non-row native checkpoint resolves it with independent genuine video-only Linux/Windows HLS/direct, generated-silence and cleanup proof; UCU-09 owns final evidence. The audio-bearing source05 duration result remains valid independent history. No FFmpeg binary amendment or browser/schema change is included.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row207-vaapi-padding'
+adr = '0117'
+description = 'Adopt upstream Next VAAPI padding correction and repair native driver eligibility, color-state preservation and padding fallback without assuming that every VAAPI driver honors black padding.'
+discovered = '2026-10-06'
+evidence = 'Next0362692 and the native pipeline now gate hardware padding to explicit compatible Intel iHD, restore effective BT.2020 tags without changing range, and retain software fallback for other drivers/HDR tonemapping. NV12/P010 transfers preserve depth through subtitle/graphics composition. Twenty-one focused VAAPI checks, four reviewed snapshots, strict affected lint and four decoded software range/depth cases pass; independent review finds no concrete source/graph regression. UCU-09 owns exact evidence. VAAPI hardware execution remains unverified; ordered row207 is Covered under ADR0117 with no additional FFmpeg binary patch. UCU-09 owns final gates/CI; hardware execution remains approved unverified debt.'
+resolved = true
+
+[[debt]]
+id = 'ucu09-row185-copy-projection'
+description = 'Match upstream copy-mode cleanup: refresh affected Next projections after profile copy/resolution changes, suppress copied-video overlays, and omit fixed HLS resolution.'
+discovered = '2026-10-06'
+evidence = 'UCU-09 owns row185 acceptance: editor/API notifications preserve schedules, every projection path skips copied-video overlays, normal/preview Next playlists omit fixed resolution, decoded copy/non-copy graphics and Convert HTTP lifecycle pass. A later compatibility check exposed a stale row184 assertion expecting resize/overlay fallback. It is corrected to prove original dimensions, absent overlays and unchanged compressed H.264/AAC payloads; both the published runtime and row186 candidate pass, with strict lint. UCU-09 records exact results. Baseline remains accepted at e1d2cac0.'
+resolved = true
+
+[[debt]]
+id = 'ucu-next-rtsp-patch-retirement'
+description = 'At every Next update, verify the unpatched candidate against live RTSP startup and EOF/handoff acceptance; remove the temporary buffer patch and return to official artifacts when an equivalent upstream correction passes.'
+discovered = '2026-10-06'
+adr = '0116'
+evidence = 'Explicit maintainer condition attached to patch approval. Unpatched0362692 still fails the unchanged RTSP source-clock/startup regression; both source/patch manifests retain patch0001 with its exact hash and reject unreviewed revisions. Retain regression tests after retirement. ADRs 0116/0117 own the removal contract; UCU-09 owns executable identities and failure evidence.'
+resolved = false
+
+[[debt]]
+id = 'ucu-next-image-patch-retirement'
+description = 'At every Next update, verify unpatched static/animated WebP and GIF seek, complete repetition and schedule-boundary handoff; independently remove patch0002 when equivalent upstream behavior passes, retaining the regressions.'
+discovered = '2026-10-07'
+adr = '0117'
+evidence = 'Unpatched0362692 fails the static-WebP regression while the published six-platform next-0362692-ersatzrs.1 snapshot passes required available Linux/Windows compatibility. The active source/patch manifest records the exact correction hash, reviewed upstream revision, failing regression and retirement condition. UCU-09 retains synthetic comparison evidence and executable hashes.'
+resolved = false
+
+[[debt]]
+id = 'ucu09-row184-copy-runtime'
+description = 'Accept and distribute a copy-capable Next runtime without regressing existing RTSP startup.'
+discovered = '2026-10-06'
+adr = '0116'
+evidence = 'Resolved with published next-e88b2d7-ersatzrs.1: all six verified source builds, 328 Linux compatibility checks, decoded RTSP handoff/EOF, six Windows application checks, Burn/Convert HTTP, 83 TSDuck checks and strict lint pass. Candidate build CI 37503854054 is green. Production staging pins exact source, patch and archive hashes. UCU-09 owns detailed evidence; separate patch-retirement debt remains open and hardware/platform debt is unchanged.'
+resolved = true
 
 [[debt]]
 id = 'ucu09-row181-legacy-qsv-runtime'

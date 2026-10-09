@@ -1003,12 +1003,22 @@ impl ApplicationServices {
         &self,
         command: commands::SaveFfmpegProfileForApi,
     ) -> Result<i64> {
-        commands::save_ffmpeg_profile_for_api(command, self.ports.ffmpeg_profiles()).await
+        commands::save_ffmpeg_profile_for_api(
+            command,
+            self.ports.ffmpeg_profiles(),
+            self.ports.channel_runtime(),
+        )
+        .await
     }
 
     /// Validate and persist one `FFmpeg` profile.
     pub async fn save_ffmpeg_profile(&self, command: commands::SaveFfmpegProfile) -> Result<i64> {
-        commands::save_ffmpeg_profile(command, self.ports.ffmpeg_profiles()).await
+        commands::save_ffmpeg_profile(
+            command,
+            self.ports.ffmpeg_profiles(),
+            self.ports.channel_runtime(),
+        )
+        .await
     }
 
     /// Delete one `FFmpeg` profile.

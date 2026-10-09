@@ -35,6 +35,18 @@ pub struct CanvasSession {
     pub transfers: Arc<SessionTransfers>,
 }
 
+/// An exact active occurrence shared by private canvas and song callbacks.
+/// This snapshot performs no overlay selection and starts no producer.
+pub(super) struct OccurrenceSession {
+    pub request: NextStart,
+    pub started_at: DateTime<Utc>,
+    pub channel: Channel,
+    pub profile: PlaybackProfile,
+    pub media: ScheduledMedia,
+    pub troubleshooting: Option<Arc<super::troubleshooting::Context>>,
+    pub transfers: Arc<SessionTransfers>,
+}
+
 impl NextHost {
     /// Prepare and claim a finite canvas in the owning session's transfer registry.
     /// The HTTP boundary must validate capability, ticket and headers first.
@@ -115,12 +127,78 @@ impl NextHost {
         binding: &CanvasBinding,
         timing: &CanvasRequest,
     ) -> Result<CanvasSession> {
+        let timeline = binding.timeline(timing).map_err(|_| unavailable())?;
+        let session = self.occurrence_session(instance, binding).await?;
+        let (graphics, watermarks) = if let Some(preview) = &session.troubleshooting {
+            let offset = timeline.now - timeline.content_start;
+            (
+                preview.graphics_at(&self.pool, offset).await?,
+                preview.watermarks_at(&self.pool, offset).await?,
+            )
+        } else {
+            let at =
+                ChannelPlayoutContext::for_channel(&session.channel).source_time(timeline.now)?;
+            if binding.item == 0 {
+                (
+                    playback::select_fallback_graphics(&self.pool, &session.media.item, at).await?,
+                    playback::select_fallback_watermarks(
+                        &self.pool,
+                        &session.channel,
+                        &session.media.item,
+                        at,
+                    )
+                    .await?,
+                )
+            } else {
+                (
+                    playback::select_playback_graphics(
+                        &self.pool,
+                        &session.channel,
+                        session.media.item.id,
+                        at,
+                    )
+                    .await?,
+                    playback::select_playback_watermarks(
+                        &self.pool,
+                        &session.channel,
+                        session.media.item.id,
+                        session.media.item.disable_watermarks,
+                        at,
+                    )
+                    .await?,
+                )
+            }
+        };
+        if !binding.matches(session.channel.id, &session.media, Utc::now())
+            || !self.dynamic_contexts.lock().await.contains_key(&instance)
+        {
+            return Err(unavailable());
+        }
+        Ok(CanvasSession {
+            video_stream_index: binding.video_stream_index,
+            request: session.request,
+            started_at: session.started_at,
+            timeline,
+            channel: session.channel,
+            profile: session.profile,
+            media: session.media,
+            graphics,
+            watermarks,
+            transfers: session.transfers,
+        })
+    }
+
+    /// Revalidate an exact occurrence in its target channel and process context.
+    pub(super) async fn occurrence_session(
+        &self,
+        instance: Uuid,
+        binding: &CanvasBinding,
+    ) -> Result<OccurrenceSession> {
         if binding.expires <= Utc::now()
             || binding.session.is_some_and(|expected| expected != instance)
         {
             return Err(unavailable());
         }
-        let timeline = binding.timeline(timing).map_err(|_| unavailable())?;
         let (request, started_at, preview, fallback, transfers) = {
             let contexts = self.dynamic_contexts.lock().await;
             let context = contexts
@@ -135,24 +213,27 @@ impl NextHost {
                 context.transfers.clone(),
             )
         };
-        let (channel, profile, media, graphics, watermarks) = if let Some(preview) = preview {
-            if binding.session != Some(instance) {
-                return Err(unavailable());
-            }
-            if !binding.matches(preview.channel.id, &preview.media, Utc::now()) {
+        let preview = if let Some(session) = preview {
+            let context = if binding.item == 0 && session.window.is_some() {
+                let current = fallback.lock().await;
+                let occurrence = current.as_ref().ok_or_else(unavailable)?;
+                let media = schedule::bind_media(&self.pool, occurrence.item.clone()).await?;
+                session.fallback(media, occurrence.gap)?
+            } else {
+                session.occurrence(binding.item, binding.start)?
+            };
+            Some(context)
+        } else {
+            None
+        };
+        let (channel, profile, media) = if let Some(preview) = &preview {
+            if binding.session != Some(instance)
+                || !binding.matches(preview.channel.id, &preview.media, Utc::now())
+            {
                 return Err(unavailable());
             }
             let media = schedule::bind_media(&self.pool, preview.media.item.clone()).await?;
-            let offset = timeline.now - timeline.content_start;
-            let graphics = preview.graphics_at(&self.pool, offset).await?;
-            let watermarks = preview.watermarks_at(&self.pool, offset).await?;
-            (
-                preview.channel.clone(),
-                preview.profile.clone(),
-                media,
-                graphics,
-                watermarks,
-            )
+            (preview.channel.clone(), preview.profile.clone(), media)
         } else {
             if binding.item == 0 && binding.session != Some(instance) {
                 return Err(unavailable());
@@ -173,44 +254,20 @@ impl NextHost {
             let profile = playback::load_channel_playback_profile(&self.pool, channel.id)
                 .await?
                 .ok_or_else(unavailable)?;
-            let at = ChannelPlayoutContext::for_channel(&channel).source_time(timeline.now)?;
-            let (graphics, watermarks) = if binding.item == 0 {
-                (
-                    playback::select_fallback_graphics(&self.pool, &media.item, at).await?,
-                    playback::select_fallback_watermarks(&self.pool, &channel, &media.item, at)
-                        .await?,
-                )
-            } else {
-                (
-                    playback::select_playback_graphics(&self.pool, &channel, media.item.id, at)
-                        .await?,
-                    playback::select_playback_watermarks(
-                        &self.pool,
-                        &channel,
-                        media.item.id,
-                        media.item.disable_watermarks,
-                        at,
-                    )
-                    .await?,
-                )
-            };
-            (channel, profile, media, graphics, watermarks)
+            (channel, profile, media)
         };
         if !binding.matches(channel.id, &media, Utc::now())
             || !self.dynamic_contexts.lock().await.contains_key(&instance)
         {
             return Err(unavailable());
         }
-        Ok(CanvasSession {
-            video_stream_index: binding.video_stream_index,
+        Ok(OccurrenceSession {
             request,
             started_at,
-            timeline,
             channel,
             profile,
             media,
-            graphics,
-            watermarks,
+            troubleshooting: preview,
             transfers,
         })
     }

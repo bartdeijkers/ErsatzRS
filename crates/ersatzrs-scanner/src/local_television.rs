@@ -1220,6 +1220,7 @@ pub(crate) async fn sync_local_show_library(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     extractor: &FfprobeExtractor,
+    deep_scan: bool,
     mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
     let repaired_aliases =
@@ -1319,12 +1320,25 @@ pub(crate) async fn sync_local_show_library(
                 "tv-discovery-v2:{}",
                 crate::folder_etag::folder_etag_with_subfolders(&season.folder)
             );
-            let etag_match = season_etag_match(
-                season_folder.etag.as_deref(),
-                &current_etag,
-                &season.folder,
-                &trashed_paths,
-            );
+            // ErsatzTV row195: a deep scan refreshes even unchanged seasons.
+            let etag_match = !deep_scan
+                && season_etag_match(
+                    season_folder.etag.as_deref(),
+                    &current_etag,
+                    &season.folder,
+                    &trashed_paths,
+                );
+
+            // Reprocessing invalidates the previous completion checkpoint
+            // before any work can fail or be interrupted. In particular, a
+            // deep scan with unchanged mtimes must not leave an old matching
+            // etag that hides its incomplete episode metadata on the next scan.
+            if !etag_match && season_folder.etag.is_some() {
+                sqlx::query(r#"UPDATE "LibraryFolder" SET "Etag" = NULL WHERE "Id" = ?"#)
+                    .bind(season_folder.id)
+                    .execute(pool)
+                    .await?;
+            }
 
             // Always run the season upsert so season metadata and poster
             // refresh still happen on unchanged folders.

@@ -645,9 +645,10 @@ See the disk-space note in
 ## Optional Next engine artifacts
 
 Release archive staging requires Python 3.12 and access to the pinned
-[Next dependency snapshot](https://github.com/bartdeijkers/ErsatzRS/releases/tag/next-4ad282f).
-The snapshot preserves five unchanged official upstream archives and the
-accepted ARMv7 source build. While this repository is private, host staging
+[Next dependency snapshot](https://github.com/bartdeijkers/ErsatzRS/releases/tag/next-e88b2d7-ersatzrs.1).
+The snapshot contains six verified source builds with the temporary live RTSP
+correction accepted in ADR 0116. Every archive records source, lockfile, patch
+and payload hashes. While this repository is private, host staging
 uses the existing GitHub CLI login or the CI job token. Credentials never enter
 Docker build arguments, layers or containers.
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
@@ -664,24 +665,13 @@ when upstream replaces the mutable develop release. Review upstream changes,
 validate the selected runtime, update the pin and obtain green exact-SHA CI
 before releasing a new pin. Missing artifacts, invalid checksums or missing
 licenses fail packaging. A new accepted snapshot requires new pinned hashes.
-All six supported RIDs are mapped, including the currently unpublished macOS
-archive targets. Upstream publishes no ARMv7 binary. The accepted ADR 0100
-exception builds its pinned, unmodified source with Rust 1.97.1 and the
-Bookworm cross compiler, verifies the source archive and Cargo.lock hashes,
-and rejects a GLIBC requirement newer than 2.36. Build and stage it with:
-
-```sh
-docker buildx build --platform linux/arm/v7 --file Dockerfile \
-  --target next-armv7-source-export --output type=local,dest=tmp/next-armv7 .
-python3 scripts/release/stage-next.py --rid linux-arm \
-  --source-build tmp/next-armv7 --output tmp/staged-next-armv7
-```
-
-The exported directory contains the executable, license and source-build
-provenance. Release archives and Docker images reuse its published binary. This recipe
-is retained for reproduction; it is not rerun during ordinary packaging.
-Docker is invoked from the host and requires no socket mount in a container.
-The other platform branches retain official checksum-verified downloads.
+All six supported RIDs use the same reviewed source and patch. Source and
+lockfile hashes are pinned alongside the archive hashes; altered provenance
+fails staging. Reproduction instructions are below. The former unmodified
+ARMv7 source helper remains available for future patch retirement, but refuses
+the active patched pin. Ordinary application packaging downloads existing
+artifacts and never rebuilds Next. Docker runs from the host without mounting
+its socket in a container.
 Run `python3 scripts/release/test-stage-next.py` for offline
 archive, provenance and failure-path regressions.
 
@@ -690,7 +680,7 @@ executable into `/usr/local/bin`, retaining license/provenance under
 `/usr/local/bin/next`; Python is not added to the runtime image. Bake
 passes `VERSION` as `NEXT_RELEASE_REFRESH` for explicit cache refreshes;
 archive hashes remain fixed. Before a Docker build, stage the snapshot on the
-host with `gh release download next-4ad282f --repo bartdeijkers/ErsatzRS --dir .next-snapshot`.
+host with `gh release download next-e88b2d7-ersatzrs.1 --repo bartdeijkers/ErsatzRS --dir .next-snapshot`.
 The gitignored directory is copied only into the staging layer; runtime
 images receive the selected executable, license and provenance. For repeated manual builds of the same
 version, use `--no-cache-filter next-official` with buildx, or change
@@ -701,6 +691,81 @@ Engine selection and process supervision follow
 Current playback acceptance and approved platform debt are recorded in the
 [structured progress records](docs/progress/README.md); a successful artifact
 staging test does not prove playback acceptance.
+
+### Temporary Next source correction (ADR 0116)
+
+The accepted dependency snapshot uses a narrowly scoped live RTSP buffering
+patch. Application milestone and release gates remain separate. Prepare its
+exact reviewed source with:
+
+```sh
+python3 scripts/release/prepare-next-source.py \
+  --source-archive tmp/next-source.tar.gz --output tmp/next-reviewed-source
+python3 scripts/release/test-prepare-next-source.py
+python3 scripts/release/test-package-next-source.py
+```
+
+The source archive must match `scripts/release/next-patches/manifest.json`.
+Preparation checks the source archive, Cargo.lock and each patch SHA-256,
+applies patches without fuzzy context fallback, and writes
+`ersatzrs-source.json`. Build all platform packages from this same source with
+the recorded distribution version; preserve source/patch provenance, licenses
+and Windows companions. A prepared source tree alone does not prove package
+or playback acceptance.
+
+Package the built executable and license directory with
+`scripts/release/package-next-source.py`; supply the generated source provenance,
+RID and build's exact `rustc --version`. It verifies licenses, patch provenance
+and Windows companions, records each payload hash, and refuses to overwrite an
+existing archive. The candidate macOS workflow builds both supported targets
+and uploads artifacts without publishing a release. macOS binaries receive an
+ad-hoc signature for loader integrity; rebuilt executables do not inherit the
+upstream publisher's signing/notarization identity.
+
+Reproduce a Linux payload with host Docker and a directory containing the
+checksum-pinned `source.tar.gz`:
+
+```sh
+docker buildx build --file docker/next-source.Dockerfile \
+  --build-context next-source=tmp/next-source-input \
+  --build-arg NEXT_TARGET=armv7-unknown-linux-gnueabihf \
+  --output type=local,dest=tmp/next-source-output .
+python3 scripts/release/package-next-source.py \
+  --payload tmp/next-source-output \
+  --source-provenance tmp/next-source-output/ersatzrs-source.json \
+  --rid linux-arm --output tmp/next-packages \
+  --rustc "$(cat tmp/next-source-output/rustc-version.txt)"
+```
+
+The same recipe accepts `x86_64-unknown-linux-gnu` and
+`aarch64-unknown-linux-gnu` with their corresponding package RIDs. It builds
+only the Next channel executable, keeps the upstream lockfile, uses the
+reviewed Rust/Bookworm base and checks the GLIBC 2.36 ceiling. Windows uses
+the prepared source with Rust 1.97.1 and MSVC:
+`cargo build --locked --release --all-features --target x86_64-pc-windows-msvc --bin ersatztv-channel`.
+Set `ETV_VERSION` to the prepared provenance's `distribution_version`, and
+package the resulting executable and source license with the exact verified
+`libvpl.dll` and `libvpl-LICENSE.txt` companion hashes enforced by the packager.
+The previous unmodified ARMv7 helper refuses a patched pin to prevent
+accidentally shipping an unpatched executable under the new distribution.
+
+For every Next revision update, first prepare the comparison with
+`--unpatched` and run the existing
+`real_next_direct_http_and_rtsp_preserve_audio_and_source_clock` and
+`real_next_rtsp_handoff_preserves_tracks_and_stops_padded_audio_at_video_eof`
+application regressions. Review the upstream diff and run compatibility
+acceptance. When an equivalent upstream correction passes, remove the patch
+from the build and manifest, return to verified official artifacts where
+available, and resolve ADR 0116's retirement debt. Retain the regression tests.
+If upstream still fails, record the new unpatched evidence and explicitly
+review the patch for that revision; changing the source pin alone is rejected.
+
+For package cleanup, retain the accepted snapshot, current candidate and any
+artifacts required by release recovery or the chosen rollback. Check references
+and active processes first; verify duplicate payload hashes before deleting
+their local copies. Remove a published dependency snapshot only after no
+retained consumer requires it. Test logs and provenance remain useful even
+after obsolete binaries are removed.
 
 ## Intel container userspace verification
 

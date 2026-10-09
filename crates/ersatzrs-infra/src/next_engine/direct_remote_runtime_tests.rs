@@ -3,10 +3,11 @@ use super::*;
 use ersatzrs_core::repositories::PlayoutRepository as _;
 use std::sync::Arc;
 
+#[path = "direct_remote_endings.rs"]
+mod endings;
 #[path = "direct_remote_images.rs"]
 mod images;
-#[path = "direct_remote_servers.rs"]
-mod servers;
+use super::super::direct_remote_servers as servers;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CaptionSource {
@@ -188,7 +189,11 @@ async fn fixture_child_direct_remote() {
     )
     .await;
     rtsp.stop().await;
-    result.expect("live RTSP callback playback");
+    assert!(
+        result.is_ok(),
+        "live RTSP callback playback: {result:?}; retained at {}",
+        root.keep().display()
+    );
 }
 
 async fn configure(pool: &crate::db::DbPool, uri: &str, live: bool) {

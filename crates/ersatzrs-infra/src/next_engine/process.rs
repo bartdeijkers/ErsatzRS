@@ -55,7 +55,8 @@ impl NextProcess {
     ///
     /// A short successful run can exit before the live readiness marker exists.
     /// The caller owns a bounded wait for completion and retains its playlist and
-    /// reports. Only the default overlay applies to this isolated preview.
+    /// reports. Real channels use default then channel overlays; standalone
+    /// media previews use only the default overlay.
     /// The caller must exclusively own and clear the preview output directory
     /// before startup; troubleshooting preserves existing diagnostic inputs there.
     ///
@@ -337,26 +338,36 @@ async fn channel_command(
         .arg(format!("--number={number}"))
         .arg("-");
     if let Some(directory) = overlay_directory {
-        // Channel numbers are numeric, optionally with a decimal subchannel.
-        // Validate on every platform, including Windows separators on Unix.
-        if number.is_empty()
-            || !number
-                .split('.')
-                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
-            || number.matches('.').count() > 1
-        {
-            return Err(ProcessError::Preparation("invalid overlay channel number"));
-        }
-        timeout_at(deadline, async {
-            for filename in ["default.json".to_owned(), format!("{number}.json")] {
-                append_overlay(&mut command, &directory.join(filename)).await?;
-            }
-            Ok(())
-        })
-        .await
-        .map_err(|_| ProcessError::StartupTimeout)??;
+        append_channel_overlays(&mut command, number, directory, deadline).await?;
     }
     Ok(command)
+}
+
+async fn append_channel_overlays(
+    command: &mut Command,
+    number: &str,
+    directory: &Path,
+    deadline: Instant,
+) -> Result<(), ProcessError> {
+    // Channel numbers are numeric, optionally with a decimal subchannel.
+    // Validate on every platform, including Windows separators on Unix.
+    if number.is_empty()
+        || !number
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        || number.matches('.').count() > 1
+    {
+        return Err(ProcessError::Preparation("invalid overlay channel number"));
+    }
+    timeout_at(deadline, async {
+        for filename in ["default.json".to_owned(), format!("{number}.json")] {
+            append_overlay(command, &directory.join(filename)).await?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| ProcessError::StartupTimeout)??;
+    Ok(())
 }
 
 async fn troubleshooting_command(
@@ -369,12 +380,16 @@ async fn troubleshooting_command(
     let mut command = channel_command(executable, number, output_folder, None, deadline).await?;
     command.arg("--troubleshoot");
     if let Some(directory) = overlay_directory {
-        timeout_at(
-            deadline,
-            append_overlay(&mut command, &directory.join("default.json")),
-        )
-        .await
-        .map_err(|_| ProcessError::StartupTimeout)??;
+        if number == ".troubleshooting" {
+            timeout_at(
+                deadline,
+                append_overlay(&mut command, &directory.join("default.json")),
+            )
+            .await
+            .map_err(|_| ProcessError::StartupTimeout)??;
+        } else {
+            append_channel_overlays(&mut command, number, directory, deadline).await?;
+        }
     }
     Ok(command)
 }

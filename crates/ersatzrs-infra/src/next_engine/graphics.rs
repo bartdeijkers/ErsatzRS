@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, TimeDelta, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
-use ersatzrs_domain::{Channel, ChannelWatermarkMode, Resolution};
+use ersatzrs_domain::{Channel, ChannelWatermarkMode, FFmpegProfileVideoFormat};
 use serde::Serialize;
 
 use crate::{
@@ -20,6 +20,30 @@ pub(crate) struct CanvasProjection {
     hint: protocol::ProbeHint,
 }
 
+pub(super) fn enabled(profile: &playback::PlaybackProfile) -> bool {
+    profile.profile.video_format != FFmpegProfileVideoFormat::Copy
+}
+
+pub(super) async fn select_fallback(
+    pool: &DbPool,
+    channel: &Channel,
+    item: &ersatzrs_domain::PlayoutItem,
+    profile: &playback::PlaybackProfile,
+) -> Result<(
+    Vec<ResolvedPlaybackWatermark>,
+    Vec<ResolvedPlaybackGraphicsElement>,
+)> {
+    if !enabled(profile) {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(channel)
+        .source_time(item.start)?;
+    Ok((
+        playback::select_fallback_watermarks(pool, channel, item, selection_time).await?,
+        playback::select_fallback_graphics(pool, item, selection_time).await?,
+    ))
+}
+
 impl CanvasProjection {
     pub(super) fn publish(
         &self,
@@ -33,6 +57,11 @@ impl CanvasProjection {
         }
         binding.playout_start = (start != binding.start).then_some(start);
         binding.session = session;
+        // Expiry is renewed only after immutable projection validation; it is
+        // part of the fingerprint and must not drift during a second snapshot.
+        if session.is_some() {
+            binding.expires = super::troubleshooting::callback_expiry(binding.finish)?;
+        }
         if binding.item == 0 && session.is_none() {
             return Err(unavailable());
         }
@@ -57,11 +86,19 @@ pub(super) async fn project(
     pool: &DbPool,
     channel: &Channel,
     media: &ScheduledMedia,
-    resolution: &Resolution,
+    profile: &playback::PlaybackProfile,
     projected: &mut protocol::PlayoutItem,
     watermarks: &[ResolvedPlaybackWatermark],
     graphics: &[ResolvedPlaybackGraphicsElement],
 ) -> Result<Option<Box<CanvasProjection>>> {
+    // Upstream PlayoutItemConverter never overlays copied video: an overlay
+    // would force Next to transcode every item despite the selected copy mode.
+    if !enabled(profile) {
+        projected.graphics.clear();
+        projected.watermark = None;
+        return Ok(None);
+    }
+    let resolution = &profile.resolution;
     if graphics.is_empty()
         && !watermarks
             .iter()
@@ -93,16 +130,24 @@ pub(super) async fn project(
         .ok()
         .filter(|value| *value > 0)
         .ok_or_else(unavailable)?;
-    let index = projected
-        .tracks
-        .as_ref()
-        .and_then(|tracks| tracks.video.as_ref())
-        .and_then(|video| video.stream_index)
-        .map(i32::try_from)
-        .transpose()
-        .map_err(|_| unavailable())?;
-    let video =
-        playback::load_source_video_stream_by_index(pool, media.media_version_id, index).await?;
+    let generated = super::selection::has_generated_video(pool, media.media_version_id).await?;
+    let index = if generated {
+        None
+    } else {
+        projected
+            .tracks
+            .as_ref()
+            .and_then(|tracks| tracks.video.as_ref())
+            .and_then(|video| video.stream_index)
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|_| unavailable())?
+    };
+    let video = if generated {
+        None
+    } else {
+        super::selection::source_video(pool, media.media_version_id, index).await?
+    };
     let expires = media
         .item
         .finish

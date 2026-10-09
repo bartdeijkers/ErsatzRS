@@ -1,5 +1,36 @@
 # TSDuck playback gate (E2E)
 
+## Next copy-mode transport acceptance
+
+Use the existing calibration playout with the accepted Next executable and
+FFmpeg runtime staged locally:
+
+```bash
+ETV_NEXT_FOLDER=/path/to/staged-next \
+ERSATZRS_FFMPEG__PATH=/path/to/ffmpeg \
+ERSATZRS_FFPROBE__PATH=/path/to/ffprobe \
+ERSATZRS_SMOKE_PORT=18409 \
+scripts/e2e/tsduck-playback-gate.sh gate --next-copy --keep
+```
+
+This selects copy for both video and audio and captures Next Hybrid MPEG-TS and
+HLS across eight-second programme boundaries. It retains the existing
+continuity, clock, PSI, audio/video structure and audio-pip checks. Next does
+not expose the native legacy/direct transports, so those remain in the default
+native gate. The server uses an isolated database and application data/state
+directories. The gate refuses an occupied port and leaves existing servers
+alone. Select a free `ERSATZRS_SMOKE_PORT` when the default 8409 is in use.
+
+Next HLS captures retain the served playlist and unchanged segment bytes,
+grouped only at explicit `EXT-X-DISCONTINUITY` markers. Each group runs the same
+zero-error TSDuck checks, including across every unmarked segment boundary.
+This follows [RFC 8216 section 3](https://www.rfc-editor.org/rfc/rfc8216.html#section-3):
+counter resets are allowed at a declared discontinuity. Raw concatenation loses
+that information and reports valid programme transitions as packet loss.
+The joined capture still checks decoded audio-pip cadence across transitions.
+Run `python3 scripts/e2e/test-capture-hls-groups.py` with TSDuck installed to
+prove that unmarked resets and packet loss inside a declared group still fail.
+
 ## Next RTSP input fixture
 
 The separate Next CI job stages a pinned, checksum-verified MediaMTX v1.21.1

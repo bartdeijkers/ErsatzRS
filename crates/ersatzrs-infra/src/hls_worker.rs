@@ -49,14 +49,14 @@ use crate::hls_delivery::{
     HlsDeliveryState,
 };
 use crate::playback::{
-    enrich_source_video_stream_for_playback, load_channel_playback_profile,
-    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
-    render_playback_graphics_overlays, select_channel_playback_subtitle,
-    select_custom_playback_streams, select_pinned_playback_subtitle,
-    select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
-    subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
-    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    apply_automatic_null_audio, enrich_source_video_stream_for_playback,
+    load_channel_playback_profile, load_channel_target_frame_rate, load_source_audio_streams,
+    load_source_video_stream_by_index, render_playback_graphics_overlays,
+    select_channel_playback_subtitle, select_custom_playback_streams,
+    select_pinned_playback_subtitle, select_playback_audio_stream_index, select_playback_graphics,
+    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
+    watermark_inputs_for_stream, CustomStreamSelection, PlaybackAudioSelection,
+    PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::remote_stream::{
     decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
@@ -324,6 +324,7 @@ impl HlsDeliveryTracker {
 }
 
 struct HlsProcessCapacity<'a> {
+    song: Option<&'a crate::song_background::NativeSongBackground>,
     active_transcode_slot_id: Option<u64>,
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
     delivery_pool: Option<&'a DbPool>,
@@ -1616,6 +1617,15 @@ impl HlsSessionWorker {
                 audio_selection =
                     retained_hls_audio_selection(audio_selection, &source_audio_streams);
             }
+            // Persisted media/external probes and fresh retained transports have
+            // complete metadata. An eager unprobed RemoteStream can have no
+            // stored audio rows without proving that its actual input is silent.
+            if active.remote_stream.is_none()
+                || active.external.is_some()
+                || interval_playback.is_some()
+            {
+                audio_selection = audio_selection.with_complete_source_audio(&source_audio_streams);
+            }
             let subtitle = if active.has_pinned_stream_selection {
                 if let Some(stream_index) = active.subtitle_stream_index {
                     match self
@@ -2057,6 +2067,63 @@ impl HlsSessionWorker {
                 }
                 break;
             }
+            let song = {
+                let executable = runtime_capabilities
+                    .runtime_identity
+                    .as_ref()
+                    .map_or_else(ffmpeg_path, |identity| identity.ffmpeg_path.clone());
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                let operation = crate::song_background::prepare_native_with_reservation(
+                    &pool,
+                    active.media_item_id,
+                    self.channel_id,
+                    &playback_profile.resolution,
+                    active.playout_item_id,
+                    Path::new(&executable),
+                    interval_startup.map_or(
+                        tokio::time::Instant::now() + Duration::from_secs(15),
+                        |(_, deadline)| {
+                            deadline.min(tokio::time::Instant::now() + Duration::from_secs(15))
+                        },
+                    ),
+                    receiver,
+                    Some(active_transcode_reservation.clone()),
+                );
+                tokio::pin!(operation);
+                let result = tokio::select! {
+                    biased;
+                    () = self.cancel.notified() => {
+                        let _ = sender.send(());
+                        if let Ok(Some(song)) = operation.await { song.confirm_reaped(); }
+                        if let Some(playback) = interval_playback.take() {
+                            let _ = playback.prepared.cancel().await;
+                        }
+                        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                        if let Some(path) = graphics_cleanup_dir { let _ = cleanup_working_dir(&path).await; }
+                        break;
+                    },
+                    result = &mut operation => result,
+                };
+                match result {
+                    Ok(song) => song,
+                    Err(error) => {
+                        tracing::warn!(channel_id = self.channel_id, %error, "song image preparation failed");
+                        if let Some(playback) = interval_playback.take() {
+                            let _ = playback.prepared.cancel().await;
+                        }
+                        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                        if let Some(path) = graphics_cleanup_dir {
+                            let _ = cleanup_working_dir(&path).await;
+                        }
+                        if error.termination_unconfirmed() {
+                            // The owned renderer retained admission until restart.
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+            };
             let command = build_hls_command_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
@@ -2083,6 +2150,7 @@ impl HlsSessionWorker {
                 } else {
                     HlsInputTimeline::Original
                 },
+                song.as_ref(),
             );
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (outcome, selected_graph_for_denial) = match command {
@@ -2123,6 +2191,7 @@ impl HlsSessionWorker {
                                 ),
                             }),
                             HlsProcessCapacity {
+                                song: song.as_ref(),
                                 active_transcode_slot_id: Some(active_transcode_slot_id),
                                 work_ahead_reservation: (is_continuous_remote
                                     && decision.working_ahead)
@@ -2145,13 +2214,28 @@ impl HlsSessionWorker {
                         reason = %error,
                         "refusing to transcode an unsupported source"
                     );
+                    if let Some(song) = &song {
+                        song.confirm_reaped();
+                    }
                     (refused_hls_process_outcome(&error), None)
                 }
             };
+            if let Some(song) = &song {
+                if outcome == HlsProcessOutcome::Success {
+                    song.confirm_reaped();
+                }
+            }
             if let Some(playback) = interval_playback.take() {
                 let _ = playback.prepared.cancel().await;
             }
             shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+            if song
+                .as_ref()
+                .is_some_and(crate::song_background::NativeSongBackground::cleanup_unconfirmed)
+            {
+                active_transcode_reservation.retain_until_restart();
+                break;
+            }
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }
@@ -2539,6 +2623,7 @@ impl HlsSessionWorker {
             None,
             None,
             HlsProcessCapacity {
+                song: None,
                 active_transcode_slot_id,
                 work_ahead_reservation: None,
                 delivery_pool: None,
@@ -2722,29 +2807,43 @@ impl HlsSessionWorker {
             .as_ref()
             .map(|retained| Arc::clone(&retained.failure));
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
-        let (spawn, retained_diagnostics) = if let Some(retained) = retained {
-            let child = crate::remote_stream::spawn_ffmpeg_with_prepared_remote_input(
-                &command,
-                Some(&self.working_dir),
-                retained.prepared,
-                RemoteStreamSpawnContext::hls(&self.channel_number),
-            )
-            .await
-            .map_err(std::io::Error::other);
-            (
-                child,
-                Some((
-                    retained.failure,
-                    retained.graph,
-                    retained.source,
-                    retained.acceleration,
-                )),
-            )
-        } else {
-            (self.spawn_hls_child_with_remote(&command, producer), None)
-        };
+        if let Some(song) = capacity.song {
+            song.mark_in_use();
+        }
+        let (spawn, retained_diagnostics, failed_spawn_cleanup_confirmed) =
+            if let Some(retained) = retained {
+                let child = crate::remote_stream::spawn_ffmpeg_with_prepared_remote_input(
+                    &command,
+                    Some(&self.working_dir),
+                    retained.prepared,
+                    RemoteStreamSpawnContext::hls(&self.channel_number),
+                )
+                .await;
+                let cleanup_confirmed = child.as_ref().is_err_and(|error| {
+                    matches!(error, crate::remote_stream::RemoteStreamError::Spawn(_))
+                });
+                (
+                    child.map_err(std::io::Error::other),
+                    Some((
+                        retained.failure,
+                        retained.graph,
+                        retained.source,
+                        retained.acceleration,
+                    )),
+                    cleanup_confirmed,
+                )
+            } else {
+                (
+                    self.spawn_hls_child_with_remote(&command, producer),
+                    None,
+                    producer.is_none(),
+                )
+            };
         let Ok(mut child) = spawn else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
+            if let Some(song) = capacity.song.filter(|_| failed_spawn_cleanup_confirmed) {
+                song.confirm_reaped();
+            }
             return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
         };
         let stderr_remote_stream = remote_stream.clone();
@@ -2768,6 +2867,8 @@ impl HlsSessionWorker {
         loop {
             tokio::select! {
                 result = child.wait() => {
+                    let cleanup_confirmed = result.is_ok() || matches!(tokio::time::timeout(Duration::from_secs(5), child.kill()).await, Ok(Ok(())));
+                    if cleanup_confirmed { if let Some(song) = capacity.song { song.confirm_reaped(); } }
                     let outcome = self.hls_process_wait_outcome(result, stderr_task.take()).await;
                     if let Some(failure) = &retained_failure_state {
                         let published = playlist_segment_uris(&self.working_dir).await.map_or(true, |uris| uris.iter().any(|uri| !burst_baseline.contains(uri)));
@@ -2784,9 +2885,7 @@ impl HlsSessionWorker {
                     self.observe_startup_reserve(&burst_baseline, retained_remaining.unwrap_or_default(), false).await;
                 }
                 () = self.cancel.notified() => {
-                    self
-                        .terminate_hls_child(&mut child, stderr_task.take(), "channel stream cancelled")
-                        .await;
+                    if self.terminate_hls_child(&mut child, stderr_task.take(), "channel stream cancelled").await { if let Some(song) = capacity.song { song.confirm_reaped(); } }
                     return HlsProcessOutcome::Cancelled;
                 }
                 () = self.wait_for_idle_timeout(idle_timeout) => {
@@ -2794,9 +2893,7 @@ impl HlsSessionWorker {
                         channel_number = %self.channel_number,
                         "stopping idle HLS session while ffmpeg is running"
                     );
-                    self
-                        .terminate_hls_child(&mut child, stderr_task.take(), "channel stream idle timeout")
-                        .await;
+                    if self.terminate_hls_child(&mut child, stderr_task.take(), "channel stream idle timeout").await { if let Some(song) = capacity.song { song.confirm_reaped(); } }
                     return HlsProcessOutcome::Cancelled;
                 }
                 () = self.wait_for_idle_timeout(watch_idle_timeout) => {
@@ -2804,9 +2901,7 @@ impl HlsSessionWorker {
                         channel_number = %self.channel_number,
                         "reclaiming HLS transcode slot because the session is outside the watch window"
                     );
-                    self
-                        .terminate_hls_child(&mut child, stderr_task.take(), "channel stream outside watch window")
-                        .await;
+                    if self.terminate_hls_child(&mut child, stderr_task.take(), "channel stream outside watch window").await { if let Some(song) = capacity.song { song.confirm_reaped(); } }
                     if retained_remaining.is_some() && retained_media_was_published(&self.working_dir, &burst_baseline).await {
                         return HlsProcessOutcome::Cancelled;
                     }
@@ -2818,6 +2913,7 @@ impl HlsSessionWorker {
                             capacity.active_transcode_slot_id,
                             &mut child,
                             &mut stderr_task,
+                            capacity.song,
                         )
                         .await
                     {
@@ -2842,6 +2938,7 @@ impl HlsSessionWorker {
                                         &mut fallback_verified,
                                         &mut child,
                                         &mut stderr_task,
+                                        capacity.song,
                                     )
                                     .await
                                 {
@@ -2900,6 +2997,10 @@ impl HlsSessionWorker {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Delivery recovery carries the same bounded HLS inputs and owned song picture as initial playback"
+    )]
     async fn apply_hls_delivery_recovery(
         &self,
         pool: &DbPool,
@@ -2908,15 +3009,22 @@ impl HlsSessionWorker {
         fallback_verified: &mut bool,
         child: &mut RemoteStreamProcess,
         stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
+        song: Option<&crate::song_background::NativeSongBackground>,
     ) -> Option<HlsProcessOutcome> {
         match hls_delivery_recovery_action(recovery, observation, *fallback_verified) {
             HlsDeliveryRecoveryAction::RestartWithSoftware(software_video_scope) => {
-                self.terminate_hls_child(
-                    child,
-                    stderr_task.take(),
-                    "live HLS software video fallback",
-                )
-                .await;
+                if self
+                    .terminate_hls_child(
+                        child,
+                        stderr_task.take(),
+                        "live HLS software video fallback",
+                    )
+                    .await
+                {
+                    if let Some(song) = song {
+                        song.confirm_reaped();
+                    }
+                }
                 Some(HlsProcessOutcome::DeliverySoftwareFallback {
                     detected_at: observation.observed_at,
                     max_video_height: recovery.max_video_height,
@@ -2924,8 +3032,14 @@ impl HlsSessionWorker {
                 })
             }
             HlsDeliveryRecoveryAction::RestartAtFallback => {
-                self.terminate_hls_child(child, stderr_task.take(), "live HLS delivery fallback")
-                    .await;
+                if self
+                    .terminate_hls_child(child, stderr_task.take(), "live HLS delivery fallback")
+                    .await
+                {
+                    if let Some(song) = song {
+                        song.confirm_reaped();
+                    }
+                }
                 Some(HlsProcessOutcome::DeliveryFallback {
                     detected_at: observation.observed_at,
                     software_video_scope: recovery.software_video_scope,
@@ -3113,6 +3227,7 @@ impl HlsSessionWorker {
         active_transcode_slot_id: Option<u64>,
         child: &mut RemoteStreamProcess,
         stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
+        song: Option<&crate::song_background::NativeSongBackground>,
     ) -> Option<HlsProcessOutcome> {
         let slot_id = active_transcode_slot_id?;
         if !self.take_reclaim_request(slot_id) {
@@ -3123,8 +3238,14 @@ impl HlsSessionWorker {
             active_transcode_slot_id = slot_id,
             "reclaiming HLS transcode slot for admission control"
         );
-        self.terminate_hls_child(child, stderr_task.take(), "hls transcode capacity reclaim")
-            .await;
+        if self
+            .terminate_hls_child(child, stderr_task.take(), "hls transcode capacity reclaim")
+            .await
+        {
+            if let Some(song) = song {
+                song.confirm_reaped();
+            }
+        }
         Some(HlsProcessOutcome::Reclaimed)
     }
 
@@ -3193,8 +3314,9 @@ impl HlsSessionWorker {
         child: &mut RemoteStreamProcess,
         stderr_task: Option<tokio::task::JoinHandle<String>>,
         reason: &str,
-    ) {
-        if let Err(error) = child.kill().await {
+    ) -> bool {
+        let killed = child.kill().await;
+        if let Err(error) = &killed {
             tracing::warn!(
                 %error,
                 channel_number = %self.channel_number,
@@ -3212,6 +3334,7 @@ impl HlsSessionWorker {
                 "ffmpeg hls segmenter stderr after termination"
             );
         }
+        killed.is_ok()
     }
 
     async fn probe_output_ts_offset(&self, is_first: bool) -> Option<Duration> {
@@ -3383,7 +3506,7 @@ fn retained_hls_audio_selection(
     audio: &[SourceAudioStream],
 ) -> PlaybackAudioSelection {
     match selection {
-        PlaybackAudioSelection::Automatic => audio
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => audio
             .iter()
             .find(|audio| audio.default)
             .or_else(|| audio.first())
@@ -3703,6 +3826,58 @@ pub fn build_hls_command_with_opacity_clock(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+    build_hls_command_with_opacity_clock_and_song(
+        media_path,
+        working_dir,
+        output_format,
+        is_first_transcode,
+        troubleshooting,
+        hls_realtime,
+        start_position,
+        duration,
+        output_ts_offset,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        opacity_clock,
+        None,
+    )
+}
+
+/// Build native HLS with the shared occurrence-owned song picture.
+/// # Errors
+/// Returns an unsupported-source error for uncharacterized conversions.
+#[allow(clippy::too_many_arguments)] // Preserve the existing HLS adapter arguments plus its owned song picture.
+pub fn build_hls_command_with_opacity_clock_and_song(
+    media_path: &str,
+    working_dir: &Path,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    troubleshooting: bool,
+    hls_realtime: bool,
+    start_position: Duration,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    audio_selection: impl Into<PlaybackAudioSelection>,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+    song: Option<&crate::song_background::NativeSongBackground>,
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let audio_selection = audio_selection.into();
     build_hls_command_with_explicit_discontinuity(
         media_path,
@@ -3731,6 +3906,7 @@ pub fn build_hls_command_with_opacity_clock(
             false,
         )),
         opacity_clock,
+        song,
     )
 }
 
@@ -3779,6 +3955,7 @@ fn build_hls_command_with_explicit_discontinuity(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
+    song: Option<&crate::song_background::NativeSongBackground>,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     build_hls_command_with_input_explicit_discontinuity(
         InputFile::video(media_path.to_string()),
@@ -3802,6 +3979,7 @@ fn build_hls_command_with_explicit_discontinuity(
         hls_discontinuity,
         opacity_clock,
         HlsInputTimeline::Original,
+        song,
     )
 }
 
@@ -3834,6 +4012,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
     input_timeline: HlsInputTimeline,
+    song: Option<&crate::song_background::NativeSongBackground>,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
@@ -3863,7 +4042,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
             }
         }
         PlaybackAudioSelection::Disabled => request = request.without_audio(),
-        PlaybackAudioSelection::Automatic => {}
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => {}
     }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
@@ -3918,6 +4097,13 @@ fn build_hls_command_with_input_explicit_discontinuity(
         troubleshooting,
     });
 
+    apply_automatic_null_audio(&mut request, playback_profile, audio_selection);
+    if let Some(song) = song {
+        if input_timeline == HlsInputTimeline::RetainedIntervals {
+            request.state.song_progress_start = Some(start_position);
+        }
+        song.apply(&mut request);
+    }
     ersatzrs_ffmpeg::build_pipeline_command(playback_profile.profile.hardware_acceleration, request)
 }
 
@@ -5486,7 +5672,7 @@ fn playback_output_metadata(
             .and_then(trimmed_string)
     });
     let audio_language = match audio_selection {
-        PlaybackAudioSelection::Disabled => None,
+        PlaybackAudioSelection::Disabled | PlaybackAudioSelection::AutomaticSilence => None,
         PlaybackAudioSelection::Exact(_) => selected_language,
         PlaybackAudioSelection::Automatic => selected_language
             .or_else(|| preferred_audio_language.and_then(trimmed_string))
@@ -6688,6 +6874,284 @@ mod tests {
     }
 
     #[test]
+    fn retained_hls_automatic_null_audio_classifies_only_fresh_complete_metadata() {
+        let absent = PlaybackAudioSelection::Automatic.with_complete_source_audio(&[]);
+        assert_eq!(
+            retained_hls_audio_selection(absent, &[]),
+            PlaybackAudioSelection::AutomaticSilence
+        );
+        let mut dutch = SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(3);
+        dutch.default = true;
+        dutch.language = Some("nld".into());
+        let fresh = [dutch];
+        let selection = absent.with_complete_source_audio(&fresh);
+        assert_eq!(
+            retained_hls_audio_selection(selection, &fresh),
+            PlaybackAudioSelection::Exact(3)
+        );
+        assert_eq!(
+            retained_hls_audio_selection(PlaybackAudioSelection::Automatic, &[]),
+            PlaybackAudioSelection::Automatic,
+            "empty unclassified metadata is still unknown"
+        );
+        assert!(
+            playback_output_metadata(None, None, Some("nld"), &[], None, absent)
+                .audio_language
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_maps_independent_stream_zero_and_preserves_seek() {
+        let command = build_hls_command(
+            "synthetic-video-with-subtitle.mkv",
+            Path::new("synthetic-hls"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            Duration::from_secs(3),
+            Some(Duration::from_secs(5)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(0)),
+            Vec::new(),
+            PlaybackAudioSelection::Automatic.with_complete_source_audio(&[]),
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let arguments = command.arguments.join(" ");
+        assert!(
+            arguments.contains("[1:0]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(!arguments.contains("[0:1]aresample"), "{arguments}");
+        assert_eq!(
+            command
+                .arguments
+                .iter()
+                .filter(|argument| *argument == "-ss")
+                .count(),
+            1
+        );
+        assert!(arguments.contains("-t 00:00:05"), "{arguments}");
+        let input_contract = command
+            .arguments
+            .windows(2)
+            .filter(|pair| matches!(pair[0].as_str(), "-ss" | "-f" | "-i"))
+            .map(|pair| pair.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(input_contract, @"
+        -ss 00:00:03.0000000
+        -i synthetic-video-with-subtitle.mkv
+        -f lavfi
+        -i anullsrc=channel_layout=stereo:sample_rate=48000
+        -f hls
+        ");
+        insta::assert_snapshot!(arguments);
+    }
+
+    #[test]
+    fn automatic_null_audio_retained_hls_preserves_fresh_video_index_and_clock() {
+        let mut profile = playback_profile();
+        profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+        profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
+        let video = InputFile::video("pipe:0")
+            .with_stream_index(7)
+            .with_input_options(["-f", "nut"]);
+        let command = build_hls_command_with_input_explicit_discontinuity(
+            video,
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            Duration::from_secs(90),
+            Some(Duration::from_secs(20)),
+            Some(Duration::from_mins(5)),
+            &profile,
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(SourceVideoStream::new(SourceVideoCodec::RawVideo).with_index(7)),
+            Vec::new(),
+            PlaybackAudioSelection::AutomaticSilence,
+            None,
+            Vec::new(),
+            Vec::new(),
+            HlsDiscontinuity::Absent,
+            None,
+            HlsInputTimeline::RetainedIntervals,
+            None,
+        )
+        .unwrap();
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("0:7"), "{arguments}");
+        let source_input = command
+            .arguments
+            .iter()
+            .position(|argument| argument == "pipe:0")
+            .unwrap();
+        let audio_input = command
+            .arguments
+            .iter()
+            .position(|argument| argument.starts_with("anullsrc="))
+            .unwrap();
+        assert!(
+            command.arguments[..source_input]
+                .iter()
+                .any(|argument| argument == "-readrate"),
+            "retained source must retain its pacing: {arguments}"
+        );
+        assert!(
+            !command.arguments[source_input + 1..audio_input]
+                .iter()
+                .any(|argument| argument.starts_with("-readrate")),
+            "generated silence must not acquire independent readrate: {arguments}"
+        );
+        assert!(
+            arguments.contains("[1:0]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(
+            command
+                .arguments
+                .iter()
+                .any(|argument| argument == "-copyts"),
+            "{arguments}"
+        );
+        assert!(
+            !command.arguments.iter().any(|argument| argument == "-ss"),
+            "{arguments}"
+        );
+        assert!(
+            !arguments.contains("-codec:v copy") && !arguments.contains("-codec:a copy"),
+            "{arguments}"
+        );
+        let input_contract = command
+            .arguments
+            .windows(2)
+            .filter(|pair| matches!(pair[0].as_str(), "-f" | "-i"))
+            .map(|pair| pair.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(input_contract, @"
+        -f nut
+        -i pipe:0
+        -f lavfi
+        -i anullsrc=channel_layout=stereo:sample_rate=48000
+        -f hls
+        ");
+        insta::assert_snapshot!(arguments);
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_does_not_repair_unknown_or_explicit_selection() {
+        for selection in [
+            PlaybackAudioSelection::Automatic,
+            PlaybackAudioSelection::Disabled,
+            PlaybackAudioSelection::Exact(99),
+        ] {
+            let command = build_hls_command(
+                "pipe:0",
+                Path::new("synthetic-hls"),
+                OutputFormat::Hls,
+                true,
+                false,
+                false,
+                Duration::ZERO,
+                Some(Duration::from_secs(5)),
+                None,
+                &playback_profile(),
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                None,
+                Vec::new(),
+                selection,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+            let arguments = command.arguments.join(" ");
+            assert!(
+                !arguments.contains("anullsrc"),
+                "{selection:?}: {arguments}"
+            );
+            if selection.is_disabled() {
+                assert!(
+                    !arguments.contains("-codec:a") && !arguments.contains("-map [a]"),
+                    "{arguments}"
+                );
+            } else if let Some(index) = selection.stream_index() {
+                assert!(
+                    arguments.contains(&format!("[0:{index}]aresample")),
+                    "{arguments}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn automatic_null_audio_hls_copy_video_uses_profile_audio_encoder() {
+        for (format, encoder) in [
+            (FFmpegProfileAudioFormat::Copy, "aac"),
+            (FFmpegProfileAudioFormat::None, "aac"),
+            (FFmpegProfileAudioFormat::Ac3, "ac3"),
+            (FFmpegProfileAudioFormat::AacLatm, "aac"),
+        ] {
+            let mut profile = playback_profile();
+            profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+            profile.profile.audio_format = format;
+            profile.profile.audio_channels = 6;
+            profile.profile.audio_sample_rate = 44;
+            let command = build_hls_command(
+                "synthetic-copy-video.mkv",
+                Path::new("synthetic-hls"),
+                OutputFormat::Hls,
+                true,
+                false,
+                false,
+                Duration::ZERO,
+                Some(Duration::from_secs(5)),
+                None,
+                &profile,
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(SourceVideoStream::new(SourceVideoCodec::H264)),
+                Vec::new(),
+                PlaybackAudioSelection::AutomaticSilence,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+            let arguments = command.arguments.join(" ");
+            assert!(arguments.contains("-codec:v copy"), "{arguments}");
+            assert!(
+                arguments.contains(&format!("-codec:a {encoder}")),
+                "{arguments}"
+            );
+            assert!(
+                arguments.contains("-ac 6") && arguments.contains("-ar 44k"),
+                "{arguments}"
+            );
+            assert!(
+                arguments.contains("anullsrc=channel_layout=stereo:sample_rate=44000"),
+                "{arguments}"
+            );
+            assert!(!arguments.contains("-codec:a copy"), "{arguments}");
+        }
+    }
+
+    #[test]
     fn retained_hls_failure_classification_keeps_only_typed_results() {
         let source = SourceVideoStream::new(SourceVideoCodec::H264);
         let failure = classify_retained_hls_failure(
@@ -6841,6 +7305,7 @@ mod tests {
                 HlsDiscontinuity::Absent,
                 None,
                 HlsInputTimeline::RetainedIntervals,
+                None,
             )
             .unwrap();
             let args = command.arguments.join(" ");
@@ -9206,6 +9671,7 @@ mod tests {
             Vec::new(),
             HlsDiscontinuity::Present,
             None,
+            None,
         )
         .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
@@ -9282,6 +9748,7 @@ mod tests {
             HlsDiscontinuity::Absent,
             None,
             HlsInputTimeline::Original,
+            None,
         )
         .expect("the remote fixture source is playable");
         let arguments = command.arguments.join(" ");

@@ -1,0 +1,13 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 711
+expression: "graphs.join(\"\\n\")"
+---
+Auto EightBit: [0:0]scale_vaapi=format=nv12,hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload[v];[1:1]aresample=async=1,apad[a]
+Auto TenBit: [0:0]scale_vaapi=format=p010le,hwdownload,format=p010le,pad=1920:1080:-1:-1:color=black,format=p010le,hwupload[v];[1:1]aresample=async=1,apad[a]
+I965 EightBit: [0:0]scale_vaapi=format=nv12,hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload[v];[1:1]aresample=async=1,apad[a]
+I965 TenBit: [0:0]scale_vaapi=format=p010le,hwdownload,format=p010le,pad=1920:1080:-1:-1:color=black,format=p010le,hwupload[v];[1:1]aresample=async=1,apad[a]
+RadeonSI EightBit: [0:0]scale_vaapi=format=nv12,hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload[v];[1:1]aresample=async=1,apad[a]
+RadeonSI TenBit: [0:0]scale_vaapi=format=p010le,hwdownload,format=p010le,pad=1920:1080:-1:-1:color=black,format=p010le,hwupload[v];[1:1]aresample=async=1,apad[a]
+Nouveau EightBit: [0:0]scale_vaapi=format=nv12,hwdownload,format=nv12,pad=1920:1080:-1:-1:color=black,format=nv12,hwupload[v];[1:1]aresample=async=1,apad[a]
+Nouveau TenBit: [0:0]scale_vaapi=format=p010le,hwdownload,format=p010le,pad=1920:1080:-1:-1:color=black,format=p010le,hwupload[v];[1:1]aresample=async=1,apad[a]

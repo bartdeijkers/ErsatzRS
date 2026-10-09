@@ -40,3 +40,9 @@ in place instead of adding separate jump links to the same disclosure. Productio
 native forms retain task drafts across submissions and use all supported cultures.
 The pattern remains a shared-component candidate: its scoped production markup
 and styling currently belong to the add-on list task pages. AMM-N-01B records the completed local visual and capability acceptance.
+
+The locked [Sources prototype v0.1](../design-artifacts/addon-sources/LOCK.md)
+also proposes this pattern for optional manual Git instructions and the server
+checkout location. Official update controls and installation from either ZIP
+remain visible outside the disclosure. This is prototype reuse only, not broader
+production adoption or a new shared Rust primitive.

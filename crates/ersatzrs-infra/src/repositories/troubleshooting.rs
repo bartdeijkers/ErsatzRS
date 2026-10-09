@@ -15,6 +15,17 @@ use crate::repositories::SqlxResultExt as _;
 #[derive(Clone)]
 pub struct SqliteTroubleshootingRepository(pub Pool<crate::db::Db>);
 
+fn decode_playback_streaming_engine(value: i64) -> Result<ersatzrs_domain::StreamingEngine> {
+    match value {
+        0 => Ok(ersatzrs_domain::StreamingEngine::Legacy),
+        1 => Ok(ersatzrs_domain::StreamingEngine::Next),
+        _ => Err(RepositoryError::Decode {
+            kind: "channel streaming engine",
+            value: value.to_string(),
+        }),
+    }
+}
+
 fn decode_channel_subtitle_mode(value: i64) -> Result<ChannelSubtitleMode> {
     match value {
         0 => Ok(ChannelSubtitleMode::None),
@@ -332,7 +343,7 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
     ) -> Result<PlaybackTroubleshootingAdmin> {
         let channel = if channel_id > 0 {
             sqlx::query(
-                r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId"
+                r#"SELECT COALESCE("Name", '') AS "Name", "FFmpegProfileId", "StreamingEngine"
                    FROM "Channel" WHERE "Id" = ?"#,
             )
             .bind(channel_id)
@@ -341,6 +352,9 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
             .repository()?
             .map(|row| {
                 Ok(PlaybackChannelSummaryAdmin {
+                    streaming_engine: decode_playback_streaming_engine(
+                        row.try_get("StreamingEngine").repository()?,
+                    )?,
                     name: row.try_get("Name").repository()?,
                     ffmpeg_profile_id: row.try_get("FFmpegProfileId").repository()?,
                 })
@@ -463,6 +477,10 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
             r#"SELECT mv."Id" AS "MediaVersionId",
                       mf."Path" AS "Path",
                       mv."Duration" AS "Duration",
+                      mv."ImageId",
+                      (SELECT "DurationSeconds" FROM "ImageMetadata" WHERE "ImageId"=mv."ImageId"
+                       ORDER BY "Id" LIMIT 1) AS "ImageDurationSeconds",
+                      (SELECT "Duration" FROM "RemoteStream" WHERE "Id"=mv."RemoteStreamId") AS "RemoteDuration",
                       CASE
                         WHEN mv."MovieId" IS NOT NULL THEN 'Movie'
                         WHEN mv."EpisodeId" IS NOT NULL THEN 'Episode'
@@ -499,13 +517,11 @@ impl TroubleshootingRepository for SqliteTroubleshootingRepository {
         .await
         .repository()?;
         row.map(|row| {
-            let duration = row.try_get::<Option<String>, _>("Duration").repository()?;
-            let duration =
-                super::common::try_decode_duration_text(duration.as_deref().unwrap_or("00:00:00"))?
-                    .to_std()
-                    .map_err(|_| {
-                        RepositoryError::unavailable("preview duration", "invalid time span")
-                    })?;
+            let duration = crate::playout_duration::from_row(&row)?
+                .to_std()
+                .map_err(|_| {
+                    RepositoryError::unavailable("preview duration", "invalid time span")
+                })?;
             Ok(TroubleshootingPreviewMediaAdmin {
                 media_item_id,
                 media_version_id: row.try_get("MediaVersionId").repository()?,

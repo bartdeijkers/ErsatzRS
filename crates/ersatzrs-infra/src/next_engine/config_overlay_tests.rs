@@ -157,3 +157,73 @@ async fn spawned_engine_receives_overlay_paths_after_stdin_and_failed_startup_is
     );
     assert!(!output.join(".ready").exists());
 }
+
+async fn preview_arguments(
+    directory: Option<&Path>,
+    number: &str,
+) -> Result<Vec<OsString>, ProcessError> {
+    let command = troubleshooting_command(
+        Path::new("next-engine"),
+        number,
+        Path::new("output"),
+        directory,
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await?;
+    Ok(command.as_std().get_args().map(OsString::from).collect())
+}
+
+#[tokio::test]
+async fn channel_troubleshooting_keeps_default_then_channel_overlay_precedence() {
+    let directory = tempfile::tempdir().unwrap();
+    let default = directory.path().join("default.json");
+    let channel = directory.path().join("12.3.json");
+    let mut base = base_arguments();
+    base.push("--troubleshoot".into());
+    assert_eq!(
+        preview_arguments(Some(&directory.path().join("absent")), "12.3")
+            .await
+            .unwrap(),
+        base
+    );
+    for existing in [vec![&default], vec![&channel], vec![&default, &channel]] {
+        for path in &existing {
+            tokio::fs::write(path, b"{}").await.unwrap();
+        }
+        let mut expected = base.clone();
+        expected.extend(existing.iter().map(|path| path.as_os_str().to_owned()));
+        assert_eq!(
+            preview_arguments(Some(directory.path()), "12.3")
+                .await
+                .unwrap(),
+            expected
+        );
+        for path in existing {
+            tokio::fs::remove_file(path).await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn channel_troubleshooting_rejects_unsafe_names_without_touching_other_overlays() {
+    let directory = tempfile::tempdir().unwrap();
+    for number in ["", "../1", "1/2", r"1\2", "1.2.3", "1.", ".other", "-1"] {
+        assert!(matches!(
+            preview_arguments(Some(directory.path()), number).await,
+            Err(ProcessError::Preparation(_))
+        ));
+    }
+    tokio::fs::write(directory.path().join("default.json"), b"{}")
+        .await
+        .unwrap();
+    tokio::fs::create_dir(directory.path().join(".troubleshooting.json"))
+        .await
+        .unwrap();
+    let actual = preview_arguments(Some(directory.path()), ".troubleshooting")
+        .await
+        .unwrap();
+    assert_eq!(
+        actual.last().unwrap(),
+        directory.path().join("default.json").as_os_str()
+    );
+}

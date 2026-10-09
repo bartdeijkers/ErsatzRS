@@ -28,6 +28,12 @@ storage thresholds and managed locations stay visible. Compact Help and
 row-command popovers remain distinct patterns. This
 does not change the production adoption counts above.
 
+The locked [official Sources v0.1](design-artifacts/addon-sources/LOCK.md)
+reuses action, resource-state, confirmation and native disclosure semantics.
+Its repository/policy panel is page-local composition, not an implemented new
+generic component. Proposed contrast tokens and switch styling remain scoped
+to the artifact; production adoption counts are unchanged.
+
 - A raw-element count is a discovery queue. It does not require every match to
   migrate to one abstraction.
 - `Implemented` means a shared Rust/CSS surface exists. Adoption and quality

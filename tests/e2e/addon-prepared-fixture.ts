@@ -36,6 +36,8 @@ export async function waitForPreparedImport(dbPath: string, listId: number, disc
 /** DB completion precedes the landing page's own reload; let that navigation finish. */
 export async function preparedWorkspaceReady(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
+  // The import landing shares that heading but can still reload the page.
+  await expect(page.getByTestId('addon-import-landing')).toHaveCount(0, { timeout: 30000 });
   await hydrated(page);
 }
 

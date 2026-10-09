@@ -216,3 +216,12 @@ discovered = '2026-10-04'
 resolved = true
 adr = '0110'
 evidence = 'Findings 11 and 12 are locally accepted. Canonical evidence in v111-findings-11 and v111-findings-12 covers actual fresh-process maintenance, preserved state and rotation, midnight overlap prevention, atomic rollback, Health, localization, complete Rust closeout and native/browser/bundle checks. No live repair or native package acceptance is claimed.'
+
+[[debt]]
+id = 'expired-classic-row-blocks-checkpoint-refresh'
+description = 'Classic publication checks whether a legacy row crosses the restore boundary before excluding rows that its existing retention policy will remove, unnecessarily blocking a checkpoint-preserving Refresh.'
+discovered = '2026-10-09'
+resolved = true
+adr = '0010'
+evidence = 'The production builder on an isolated native Windows backup refused ReplaceCurrent Refresh at a complete checkpoint because an already-expired midnight overlap crossed that checkpoint. Items, history, checkpoints, seed and anchors remained unchanged. A disposable Reset succeeds but rewinds consumed source order, so it is not the proposed recovery.'
+resolution = 'Skip only Finish values strictly before the effective cutoff before evaluating the cut guard, exactly matching publication deletion and delayed-channel offset rules. Synthetic SQLite tests protect recent rows, positive offsets and cutoff equality. All four synthetic retention regressions pass in focused run aac51426-f699-46f0-988d-5f43b68acd4f. Production copied-database Refresh succeeds for all nine affected Classic playouts: seed and selected checkpoint rotation context remain unchanged, every interval is positive/nonoverlapping, anchors match the tail and unrelated timelines are unchanged. The installed native Windows candidate now passes actual UI Refresh for all nine affected Classic playouts, preserving their seeds and producing positive, nonoverlapping timelines with matching anchors. The separately approved affected Classic Reset changes only its seed. Evidence: test-results/windows-admin-fixes-20261009/native/live-seed-status-proof.json and live-final-data-proof.json. KeepCurrent prefix validation remains unchanged.'

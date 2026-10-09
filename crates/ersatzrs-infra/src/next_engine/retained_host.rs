@@ -49,6 +49,7 @@ impl NextHost {
         if now < before.projection.item.start || now >= before.projection.item.finish {
             return Err(unavailable());
         }
+        let credits = context.origin.credits_at(&before.projection, now)?;
         let programme_ms = u64::try_from(
             (context.media.item.in_point + (now - context.media.item.start)).num_milliseconds(),
         )
@@ -75,7 +76,7 @@ impl NextHost {
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let preparation = RetainedPreparation {
             pool: self.pool.clone(),
-            media_id: context.media.item.media_item_id,
+            media_id: super::remote_projection::remote_owner(&context.media)?,
             ffprobe: request.ffprobe.to_str().ok_or_else(unavailable)?.to_owned(),
             number: request.number.clone(),
             selected_subtitle: before.projection.selected_subtitle.clone(),
@@ -116,7 +117,7 @@ impl NextHost {
             let source = self
                 .media
                 .prepared_source(instance, ready.id, hint, false)?;
-            install_fresh_tracks(
+            let mut item = install_fresh_tracks(
                 before.projection.item,
                 &ready.probe,
                 &context.previous_audio,
@@ -124,7 +125,9 @@ impl NextHost {
                 source,
                 subtitle,
                 now,
-            )
+            )?;
+            install_generated_credits(&mut item, credits)?;
+            Ok(item)
         }
         .await;
         if result.is_err() {
@@ -246,8 +249,33 @@ pub(super) fn install_fresh_tracks(
     subtitle: Option<String>,
     now: DateTime<Utc>,
 ) -> Result<protocol::PlayoutItem> {
-    let video = playback::source_video_stream_from_probe(probe)?.ok_or_else(unavailable)?;
+    // A cover-art attachment is not a programme video. Ordinary audio-only
+    // producers keep their already published, occurrence-authenticated picture.
+    let mut playable = probe.clone();
+    playable.streams.retain(|stream| !stream.attached_pic);
+    let generated = item
+        .tracks
+        .as_ref()
+        .and_then(|tracks| tracks.video.as_ref())
+        .filter(|track| {
+            track.stream_index == Some(0) && generated_video_source(track.source.as_ref())
+        });
+    let video = if let Some(picture) = generated {
+        // Retained input can have a normalized black video leg. Keep the song
+        // picture selected by the exact original publication.
+        picture.clone()
+    } else if let Some(video) = playback::source_video_stream_from_probe(&playable)? {
+        protocol::Track {
+            source: Some(source.clone()),
+            stream_index: Some(u32::try_from(video.index).map_err(|_| unavailable())?),
+        }
+    } else {
+        return Err(unavailable());
+    };
     let fresh = playback::source_audio_streams_from_probe(probe)?;
+    if generated.is_some() && fresh.is_empty() {
+        return Err(unavailable());
+    }
     let selection = selected.map_or(
         PlaybackAudioSelection::Disabled,
         PlaybackAudioSelection::Exact,
@@ -257,19 +285,18 @@ pub(super) fn install_fresh_tracks(
         u64::try_from((item.finish - now).num_milliseconds()).map_err(|_| unavailable())?;
     let audio = match mapped {
         PlaybackAudioSelection::Exact(index) => protocol::Track {
-            source: Some(source.clone()),
+            source: Some(source),
             stream_index: Some(u32::try_from(index).map_err(|_| unavailable())?),
         },
         PlaybackAudioSelection::Disabled => super::selection::silent_audio(duration),
-        PlaybackAudioSelection::Automatic => return Err(unavailable()),
+        PlaybackAudioSelection::Automatic | PlaybackAudioSelection::AutomaticSilence => {
+            return Err(unavailable());
+        }
     };
     item.start = now;
     item.source = None;
     item.tracks = Some(protocol::Tracks {
-        video: Some(protocol::Track {
-            source: Some(source),
-            stream_index: Some(u32::try_from(video.index).map_err(|_| unavailable())?),
-        }),
+        video: Some(video),
         audio: Some(audio),
         subtitle: subtitle.map(|path| protocol::Track {
             source: Some(protocol::Source::Local {
@@ -283,6 +310,44 @@ pub(super) fn install_fresh_tracks(
         }),
     });
     Ok(item)
+}
+
+/// Restore only the exact generated preview caption after fresh media remapping.
+pub(super) fn install_generated_credits(
+    item: &mut protocol::PlayoutItem,
+    credits: Option<protocol::Track>,
+) -> Result<()> {
+    if let Some(credits) = credits {
+        item.tracks.as_mut().ok_or_else(unavailable)?.subtitle = Some(credits);
+    }
+    Ok(())
+}
+
+fn generated_video_source(source: Option<&protocol::Source>) -> bool {
+    match source {
+        Some(protocol::Source::Lavfi {
+            params,
+            probe_hint: Some(hint),
+        }) => {
+            params.starts_with("color=c=black:s=")
+                && hint.video.len() == 1
+                && hint.video[0].stream_index == 0
+                && hint.video[0].codec == "rawvideo"
+        }
+        Some(protocol::Source::Http {
+            uri,
+            probe_hint: Some(hint),
+            ..
+        }) => {
+            hint.format_name.as_deref() == Some("png_pipe")
+                && hint.video.len() == 1
+                && hint.video[0].stream_index == 0
+                && hint.video[0].codec == "png"
+                && url::Url::parse(uri)
+                    .is_ok_and(|url| url.path() == "/ffmpeg/next-song-background")
+        }
+        _ => false,
+    }
 }
 
 fn unavailable() -> RepositoryError {

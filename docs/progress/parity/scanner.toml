@@ -180,3 +180,19 @@ discovered = '2026-10-02'
 adr = '0108'
 resolved = true
 evidence = 'Milestone v111-findings-03 owns completed local acceptance: shared expanded discovery, explicit diagnostics, bounded read-only nine-language SSR preview, native MPEG/TS upgrade/rescan and identity/track preservation, API and Chromium/Firefox JS/no-JS proof, plus strict lint and structural checks.'
+
+[[debt]]
+id = 'ucu09-local-deep-scan-refresh'
+description = 'Local deep scan did not bypass unchanged television seasons or consistently propagate through local CLI and durable admission.'
+discovered = '2026-10-07'
+resolved = true
+evidence = 'UCU-09 row195 owns exact source receipts, real scanner/durable restart on Linux and Windows, twelve Chromium/Firefox cases, focused regressions, lint and substantive review.'
+resolution = 'Resolved at row195 checkpoint. Required final integrated Linux/Windows and window acceptance remains open; no new native Windows artwork execution is claimed. Existing approved platform/hardware debt is unchanged.'
+
+[[debt]]
+id = 'managed-scan-heartbeat-stalls-its-writer'
+description = 'The managed scan worker stops polling execution while a selected heartbeat awaits SQLite, so a scan transaction can hold the writer lock needed by its own heartbeat.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Read-only native Windows diagnosis correlated a managed-library heartbeat SQLITE_BUSY failure with interrupted work and a contemporaneous metadata-worker lock failure. One web host and its normal private worker were running; integrity_check passed and foreign_key_check was empty. A deterministic two-connection WAL regression reproduces the causal poll ordering without provider requests.'
+resolution = 'The claimed execution and heartbeat futures are polled independently and dropped together on shutdown or lease loss. All seven focused scan-worker cases pass in run aac51426-f699-46f0-988d-5f43b68acd4f, including writer progress, shutdown, heartbeat failure, lease loss and interrupted replay. The candidate is now installed on Windows. Normal playlist synchronization holds work across multiple heartbeat windows and completes successfully after the producer wire correction in official add-on 0.11.8. Both managed operations complete on their first attempt with resolved scan-impact state and no retained diagnostic. Evidence: test-results/windows-admin-fixes-20261009/native/live-playlist-sync-proof.json.'

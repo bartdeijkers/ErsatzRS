@@ -84,15 +84,6 @@ tr:last-child td {
     color: var(--color-gray-300);
 }
 
-/* Fixed-width spacer that keeps the icon column aligned when an action is
- * not applicable (e.g. Deep Scan on a Local library). Matches ETV's empty 48px
- * placeholder div pattern in Libraries.razor. */
-.icon-slot {
-    display: inline-block;
-    width: 2.25rem;
-    height: 2.25rem;
-}
-
 .empty {
     padding: 2rem;
     text-align: center;

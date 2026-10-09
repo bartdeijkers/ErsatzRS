@@ -715,7 +715,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
         noJsPage.getByText(/artwork must use a valid bounded HTTPS URL/i),
       ).toBeVisible();
       await noJsPage.locator('button[formaction$="/settings"]').click();
-      await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS collection title');
+      await noJsPage.getByRole('textbox', { name: 'Title', exact: true }).fill('No-JS collection title');
       await expect(noJsPage.locator('input[name="refresh_publication_policy"]')).toHaveValue('automatic');
       await saveAndWait(noJsPage,seed.listId,false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);

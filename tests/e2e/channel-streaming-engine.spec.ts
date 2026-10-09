@@ -25,10 +25,32 @@ test.describe('channel streaming engine', () => {
         await page.goto('/channels/add');
         const engine = page.locator('select[name="streaming_engine"]');
         const mode = page.locator('select[name="streaming_mode"]');
+        await expect(engine).toHaveValue('1');
+        await expect(mode).toHaveValue('5');
+        const slug = page.locator('select[name="slug_seconds"]');
+        await expect(slug).toBeHidden();
+        // Save the actual default before selecting native explicitly.
+        await page.locator('input[name="name"]').fill(name);
+        await page.getByRole('button', { name: 'Add Channel' }).click();
+        await expect(page).toHaveURL(/\/channels$/);
+        const id = sqlite(`SELECT "Id" FROM "Channel" WHERE "Name" = '${name}';`);
+        expect(id).toMatch(/^\d+$/);
+        expect(sqlite(`SELECT "StreamingEngine", "StreamingMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('1|5');
+        await page.goto(`/channels/${id}`);
+        await expect(engine).toHaveValue('1');
+        await engine.selectOption('0');
+        await page.getByRole('button', { name: 'Save Channel' }).click();
+        await expect(page).toHaveURL(/\/channels$/);
+        await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('0');
+        await expect(slug).toBeVisible();
+        await slug.selectOption('2');
         await mode.selectOption('1');
         await engine.selectOption('1');
         if (javaScriptEnabled) {
+          await expect(slug).toBeHidden();
+          await expect(slug).toHaveValue('2');
+          expect(await slug.evaluate((select: HTMLSelectElement) => select.disabled)).toBe(false);
           await expect(mode).toHaveValue('4');
           await expect(mode.locator('option[value="5"]')).toBeEnabled();
           await expect(mode.locator('option[value="1"]')).toBeDisabled();
@@ -38,13 +60,14 @@ test.describe('channel streaming engine', () => {
           await expect(mode).toHaveValue('1');
         }
         await page.locator('input[name="name"]').fill(name);
-        await page.getByRole('button', { name: 'Add Channel' }).click();
+        await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
-        const id = sqlite(`SELECT "Id" FROM "Channel" WHERE "Name" = '${name}';`);
-        expect(id).toMatch(/^\d+$/);
         expect(sqlite(`SELECT "StreamingEngine", "StreamingMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('1|4');
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('1');
+        await expect(slug).toBeHidden();
+        await expect(slug).toHaveValue('2');
+        expect(Number(sqlite(`SELECT "SlugSeconds" FROM "Channel" WHERE "Id" = ${id};`))).toBe(2);
         await expect(mode).toHaveValue('4');
         const subtitles = page.locator('select[name="next_engine_text_subtitle_mode"]');
         await expect(subtitles).toBeVisible();
@@ -85,12 +108,19 @@ test.describe('channel streaming engine', () => {
         await expect(mode).toHaveValue('4');
         expect(sqlite(`SELECT "StreamingMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('4');
         await engine.selectOption('0');
-        if (javaScriptEnabled) await expect(subtitles).toBeHidden();
+        if (javaScriptEnabled) {
+          await expect(subtitles).toBeHidden();
+          await expect(slug).toBeVisible();
+          await expect(slug).toHaveValue('2');
+        }
         if (javaScriptEnabled) await mode.selectOption('5');
         await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('0');
+        await expect(slug).toBeVisible();
+        await expect(slug).toHaveValue('2');
+        expect(Number(sqlite(`SELECT "SlugSeconds" FROM "Channel" WHERE "Id" = ${id};`))).toBe(2);
         await expect(subtitles).toHaveValue('1');
         await expect(subtitles).toBeHidden();
         await expect(subtitleHelp).toBeHidden();

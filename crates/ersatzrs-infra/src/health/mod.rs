@@ -731,7 +731,9 @@ mod tests {
             .iter()
             .any(|result| result.title == "ErsatzTV Downgrade"
                 && result.status == HealthCheckStatus::Fail));
-        assert_eq!(run.summary.errors, 1);
+        // Runtime availability depends on the host; the seeded downgrade must
+        // fail, and the persisted summary must include every reported result.
+        assert_eq!(run.summary, HealthCheckSummary::from_results(&run.results));
 
         let store = SqlHealthCheckStore::new(pool);
         assert_eq!(
@@ -739,8 +741,8 @@ mod tests {
             run.summary
         );
         assert_eq!(
-            store.load_results().await.expect("load results").len(),
-            run.results.len()
+            store.load_results().await.expect("load results"),
+            run.results
         );
     }
 
@@ -832,6 +834,27 @@ mod tests {
         ] {
             assert!(failed.message.contains(missing), "{missing}");
         }
+        let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(ready.status, HealthCheckStatus::NotApplicable);
+    }
+
+    #[tokio::test]
+    async fn null_audio_capability_health_reports_missing_filter() {
+        let pool = test_pool().await;
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.capabilities.filters.remove("anullsrc");
+        report.issues = vec![FfmpegRuntimeIssue::RequiredFilter {
+            name: "anullsrc".to_owned(),
+        }];
+        let failed = FFmpegCapabilitiesHealthCheck::new(report, pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(failed.status, HealthCheckStatus::Fail);
+        assert!(failed.message.contains("anullsrc"));
         let ready = FFmpegCapabilitiesHealthCheck::new(FfmpegRuntimeReport::for_tests(), pool)
             .check()
             .await
