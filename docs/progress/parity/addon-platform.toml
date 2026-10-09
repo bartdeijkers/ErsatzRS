@@ -22,7 +22,7 @@ Existing catalog installations remain runnable as legacy unmanaged packages;
 an explicit adoption confirmation can bind one to a local offer while
 preserving settings and its data namespace.
 
-The separate private official repository is itself the complete local source
+The official repository (public again on 2026-10-09) is the local source
 for the operator-supplied yt-dlp adapter on all six release RIDs. Beeld & Geluid
 is retired under ADR 0092; prior evidence below is historical, not current
 support. Its CI validates manifests and publishes an offline bundle

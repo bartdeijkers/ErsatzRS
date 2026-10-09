@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "revision": "v0.1",
+  "status": "Locked",
+  "accepted_on": "2026-10-09",
+  "authority": "Explicit maintainer request: Lock design v0.1",
+  "milestone": "oad-03",
+  "files": {
+    "index.html": "a45288c97fab94bebd518351cc7ba8ab33a01a123fbe9762673430dd77cf5c38",
+    "files.html": "45065d8acfbaa975f3ec7a03f35f4c6370464b15f961b738f34c79168b66e41f",
+    "states.html": "241b01cebb806b12d25d4b217302a078b371852ba8de288c37d2353f09f39fbe",
+    "light.html": "e97c990982927c7c05020f7ccf5779797e47e3714903e520b5eba989b404f5d7",
+    "styles.css": "f0568c843c277da0b6a62e3cc38e880320e4392f894c50caa4c6e7d4aaf4b573",
+    "verify.cjs": "e0808ff4817794c7eb78364db0850355bb7f8eb89f9767abb931665439b8bd43",
+    "verification.json": "a4b913234aceef3d2170eb293765044b61d7a09cc8778949a0b6c2d1d79812b1",
+    "previews/desktop-dark.png": "78ef421e07899c0b8f7e69c4486050913063de134352ca085c039eb9decc103d",
+    "previews/desktop-light.png": "4d9ca91e4a527e55dc6424c1203f59355bbcef3aaa34b0a89e2fad56a1d68902",
+    "previews/mobile-files.png": "d7921f1574a011f7b1696e65c8253d07d34d9cac272e5bfd4e4a4b251a20eb7f"
+  }
+}

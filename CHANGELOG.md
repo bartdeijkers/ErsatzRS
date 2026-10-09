@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Record the deferred official add-on distribution plan after teletext and video
+  jukebox: a bundled repository, automatic repository updates enabled for new
+  profiles, and retained installation from both ZIP formats. Include the
+  maintainer-locked Sources design v0.1; runtime behavior is unchanged.
+
 ### Fixed
 
 - Reuse installed Python 3.12 or newer on Windows release runners, avoiding

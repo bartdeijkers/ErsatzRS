@@ -6,6 +6,7 @@ historical review outcomes belong to `docs/progress/milestones.toml` and the
 owning parity TOMLs. The milestone and ADR determine which reference is active.
 
 - [Locked add-on workspace](admin-ux-organize/LOCK.md)
+- [Locked add-on Sources v0.1](addon-sources/LOCK.md) — accepted OAD reference; first run, ZIP installation, state review and light theme. Use the [review guide](addon-sources/README.md) for new revisions before post-jukebox implementation.
 - [Workspace design reference](admin-ux-organize/design.md)
 - [Production source and capability map](admin-ux-organize/production-source-map.md)
 - [Other layout artifacts](artifacts/README.md)

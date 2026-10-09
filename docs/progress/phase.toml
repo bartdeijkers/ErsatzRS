@@ -1099,6 +1099,16 @@ native/Next source ownership, page identity, SQLite and current runtime/admin
 boundaries. Accept the product/standards ADR and engine/source/output matrix
 before implementation; UCU platform exceptions do not waive teletext gates.
 
+Deferred product work accepted 2026-10-09: after both p9b-02 (teletext) and
+p10b-02 (video jukebox), resume oad-01 through oad-04 for bundled official
+add-ons, automatic repository updates On at first run and improved Sources UX.
+The official-addon-distribution parity record and plans/official-addon-distribution.md
+own the queue; dependency edges prevent early implementation. The maintainer
+locked docs/reference/ui/design-artifacts/addon-sources/ v0.1 on 2026-10-09;
+further refinement uses new revisions alongside phase work. Preserve both ZIP kinds;
+repository enablement does not authorize automatic yt-dlp installation. This
+does not change current focus or Phase 11 numbering.
+
 Deferred maintainer tooling (retained from the former plan index): evaluate
 mdBook or another documentation build system, and validate the Claude hook
 schema before enabling further hook automation. Neither item is active product

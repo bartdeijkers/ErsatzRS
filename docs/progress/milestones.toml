@@ -1201,6 +1201,129 @@ restart survival, exactly-once scheduling, and Played completion.
 evidence = ''
 
 [[milestone]]
+id         = 'oad-01'
+phase      = 'Post-Phase 10 — Official add-on distribution and Sources UX'
+title      = 'Start new profiles with a bundled official add-on repository'
+status     = 'Not started'
+feature    = 'official-addon-distribution'
+plan       = 'plans/official-addon-distribution.md'
+depends_on = ['p9b-02', 'p10b-02']
+acceptance = '''
+After both Phase 9 and Phase 10 acceptance milestones are Complete, implement
+ADR 0118 with a pinned compatible official repository in native archives and
+Docker distributions. Offline first run exposes offers with the official source
+enabled and its automatic repository updates On, while Unknown sources stays
+Off. Initialization is idempotent and distinguishes a new profile from an
+existing profile missing new fields. Restarts/upgrades preserve saved opt-out,
+source disablement/removal, newer contents, installed add-ons, settings and data.
+Official trust derives from application-owned provenance, never uploaded names
+or IDs. Existing bundle/checkout/legacy adoption preserves source ownership and
+requires an explicit transition without duplicate identities or lost state.
+Scope excludes automatic executable installation/enablement, tool maintenance
+changes and arbitrary third-party online catalogs. Prove bundle validation,
+profile classification, retry after interrupted initialization, identity
+conflicts and state-preserving adoption with focused native/package tests.
+'''
+evidence = '''
+2026-10-09: planning accepted; ADR 0118 and the deferred feature/plan are recorded.
+Production implementation has not started. Both prerequisites remain required;
+visual artifact refinement may proceed independently before they close.
+'''
+
+[[milestone]]
+id         = 'oad-02'
+phase      = 'Post-Phase 10 — Official add-on distribution and Sources UX'
+title      = 'Keep official repository offers current under a saved update policy'
+status     = 'Not started'
+feature    = 'official-addon-distribution'
+plan       = 'plans/official-addon-distribution.md'
+depends_on = ['oad-01']
+acceptance = '''
+A persisted per-repository automatic-update setting defaults On only for new
+official-source initialization. Off suppresses scheduled refresh across restart
+and application upgrade while a manual check remains available. Source disabled
+suppresses source discovery and checks without resetting its saved policy.
+Bounded background work selects eligible published compatible releases, verifies
+origin/integrity and complete contents, then promotes atomically with duplicate
+work and stale-promotion guards. Network/validation/rate-limit failures, opt-out
+during work, cancellation and process death retain the last usable repository;
+startup and playback do not wait for a remote check. Reuse existing worker and
+HTTP capabilities. Persist due/retry and success/failure state; expose accurate
+Health findings without labelling intentional opt-out as failure. Repository
+refresh changes offers only; installed package bytes, permissions, enablement,
+settings and native tool maintenance remain unchanged. Focused tests prove
+manual/automatic concurrency, restart/failure recovery and these invariants.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'oad-03'
+phase      = 'Post-Phase 10 — Official add-on distribution and Sources UX'
+title      = 'Make official sources and installation from either ZIP easy to use'
+status     = 'Not started'
+feature    = 'official-addon-distribution'
+plan       = 'plans/official-addon-distribution.md'
+depends_on = ['oad-02']
+acceptance = '''
+Use maintainer-locked v0.1 from
+docs/reference/ui/design-artifacts/addon-sources/LOCK.md before production UI work;
+verify design-lock.json and require a new accepted revision for design changes.
+Show official availability, source kind/version, automatic policy, manual check
+and honest freshness first. Keep unknown-source installation from both an
+individual add-on ZIP and complete repository ZIP visible and functional, with
+contextual enablement, validation and next actions. Do not conflate repository
+import with installation or automatically trust an uploaded official-named ZIP.
+Move manual Git instructions and the labelled read-only server checkout path
+into Advanced. Use clear Remove source consequences and equivalent confirmation
+and cancellation with/without JavaScript; preserve installed packages and data.
+All supported cultures, loading/empty/disabled/error/success states, persistent
+labels, focus, status announcements, 4.5:1 normal-text contrast, 320-pixel reflow,
+200-percent zoom and both themes are verified. Matched Chromium/Firefox hydrated
+and no-JS flows exercise first-run discovery, update opt-out/error, both ZIP
+kinds, wrong-package recovery and removal. Existing shared primitives and native
+forms remain the implementation boundary; broad shell redesign is excluded.
+'''
+evidence = '''
+2026-10-09: the maintainer explicitly locked v0.1 after reviewing the semantic
+HTML/CSS artifact. LOCK.md and design-lock.json pin the accepted reference;
+verify_lock.py checks the frozen bytes. Further design work uses new revisions.
+This is not production UI, hydration, localization or backend acceptance.
+The artifact verification.json retains 66 passing Chromium/Firefox checks and
+the tested HTML/CSS hashes: four documents, two themes, widths 320/390/768/1440,
+plus keyboard switch/disclosure, enlarged-text and file-label checks. Dark/light
+desktop and mobile previews were visually inspected and retained. Live browser
+zoom, assistive technology and production state changes remain unverified.
+'''
+
+[[milestone]]
+id         = 'oad-04'
+phase      = 'Post-Phase 10 — Official add-on distribution and Sources UX'
+title      = 'Verify packaged first run, upgrades and safe repository refresh'
+status     = 'Not started'
+feature    = 'official-addon-distribution'
+plan       = 'plans/official-addon-distribution.md'
+depends_on = ['oad-03']
+acceptance = '''
+Record exact host/bundle identities and validate all six supported native
+distribution layouts and applicable Docker images. Platform-appropriate runtime
+proof covers fresh offline/online profiles, persistent-profile restart/application
+upgrade, read-only installation files, compatible bootstrap and preserved user
+choices. Missing native evidence remains a blocker unless separately accepted;
+unrelated phase exceptions do not waive this scope. Integrated fault/restart and
+concurrent manual/automatic tests preserve the last complete repository and
+installed package hashes, settings, enablement, saved lists and publication.
+Actual playback remains uninterrupted by repository refresh. Both ZIP formats
+and existing-profile adoption pass through the delivered admin/API flows.
+Run the required closeout, strict Clippy, matched Leptos/browser, web parity,
+runtime smoke, packaging and progress gates on the final candidate; select any
+additional changed-playback gates from the actual diff. Update current references
+and changelog only with delivered behavior. Local acceptance, exact-SHA CI and
+release publication remain separately evidenced; this plan does not authorize
+publishing a release or bypassing prerequisite phases.
+'''
+evidence = ''
+
+[[milestone]]
 id         = 'ab-01'
 phase      = 'Add-on boundary — host/package contract hygiene'
 title      = 'Return provider availability vocabulary to the add-on'

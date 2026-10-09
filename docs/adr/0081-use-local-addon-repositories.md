@@ -8,6 +8,11 @@ Accepted (2026-08-28)
 
 Implemented (2026-08-28)
 
+[ADR 0118](0118-bundle-and-refresh-official-addon-repository.md) accepts a future
+replacement of the official source's local-only acquisition policy after Phase 9
+and Phase 10. It is not implemented yet. The manual checkout/ZIP and immutable
+execution contracts below remain in effect; the new feature owns future debt.
+
 ## Context
 
 ADR 0066 introduced public HTTPS catalogs, detached signatures, repository

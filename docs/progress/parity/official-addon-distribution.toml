@@ -1,0 +1,59 @@
+feature    = 'Bundled official add-on repository, automatic refresh and Sources UX'
+etv_source = 'ErsatzRS product extension; no repository-backed ErsatzTV equivalent'
+rs_target  = 'Release/Docker packaging; ersatzrs-app source ports; ersatzrs-infra add-on storage and Health; ersatzrs-web bootstrap and Sources; separate ErsatzRS-addons repository'
+status     = 'Deferred'
+adr        = ['0081', '0118']
+summary    = '''
+Accepted for future delivery on 2026-10-09, after Phase 9 teletext p9b-02 and
+Phase 10 video-jukebox p10b-02. Milestones oad-01 through oad-04 own acceptance
+and evidence; their dependency edges keep implementation out of the runnable
+queue until both phases finish. plans/official-addon-distribution.md owns future
+implementation detail.
+
+ADR 0118 accepts a pinned official repository bundled with ErsatzRS, source
+enablement and automatic repository updates On for new profiles, preserved
+operator choices and explicit existing-profile adoption. Installed add-on
+updates and native tool maintenance remain separate. Individual and repository
+ZIP installation from unknown sources are required, with contextual trust
+controls and an accessible Sources page. No auto-install/enable decision for
+yt-dlp or all contained add-ons has been accepted.
+
+The maintainer locked HTML/CSS design v0.1 on 2026-10-09 under
+docs/reference/ui/design-artifacts/addon-sources/LOCK.md. New design revisions
+may be refined while teletext/jukebox coding continues. It is synthetic design
+evidence only; it does not implement or accept runtime behavior. The active
+local-only source contract remains implemented under addon-platform until this
+work is delivered. Phase numbering and current corrective focus are unchanged.
+'''
+
+[[debt]]
+id          = 'official-repository-bootstrap-and-adoption'
+description = 'Bundle a compatible official repository and initialize new profiles with the accepted defaults, preserving source provenance and existing-profile state.'
+discovered  = '2026-10-09'
+adr         = '0118'
+resolved    = false
+evidence    = 'OAD-01 owns delivery. Current startup only scans gated local sources; no bundled official bootstrap or reviewed official adoption path exists.'
+
+[[debt]]
+id          = 'official-repository-automatic-refresh'
+description = 'Persist the per-repository automatic update toggle and refresh published compatible offers in bounded background work without changing installed executables.'
+discovered  = '2026-10-09'
+adr         = '0118'
+resolved    = false
+evidence    = 'OAD-02 owns delivery. Current Refresh rescans local sources and does not discover public repository releases.'
+
+[[debt]]
+id          = 'sources-task-hierarchy-and-file-installation'
+description = 'Deliver the reviewed Sources design: official availability first, visible installation of both ZIP kinds, labelled subordinate Git details, honest freshness and accessible state/recovery handling.'
+discovered  = '2026-10-09'
+adr         = '0118'
+resolved    = false
+evidence    = 'OAD-03 owns production delivery. Screenshot and source audit identified an unlabelled code-styled checkout path, upload friction, ambiguous Refresh/status labels, low-contrast source tokens and inconsistent no-JS removal confirmation. Maintainer-locked v0.1 is the accepted design reference, not production proof.'
+
+[[debt]]
+id          = 'official-distribution-integrated-acceptance'
+description = 'Prove exact native/Docker packages, offline first run, persisted choices, adoption, cancellation/restart recovery and installed-state/playback preservation.'
+discovered  = '2026-10-09'
+adr         = '0118'
+resolved    = false
+evidence    = 'OAD-04 owns integrated acceptance. No package, migration, updater, production browser or playback acceptance is claimed by this planning checkpoint.'
