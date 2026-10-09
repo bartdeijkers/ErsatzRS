@@ -999,3 +999,19 @@ discovered  = '2026-10-02'
 resolved    = true
 adr         = '0113'
 evidence    = 'Locally accepted in v111-findings-01 with ADR 0113: real SQLite upgrade/restart/retry, 3853 native tests and doctests, strict workspace lint, eight localized browser flows, real-worker decode/archive/failure preservation, smoke, web parity and final matched bundle. Packaged/platform deployment and publication are not claimed.'
+
+[[debt]]
+id = 'preparation-progress-counts-items-as-tasks'
+description = 'Add-on list preparation divides completed operations by affected items, so a video requiring both interval metadata and subtitles can produce an impossible progress fraction.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Headed Windows Activity displayed 84/46 although authoritative readiness reports 46 interval tasks and 46 subtitle tasks, with 84 complete and eight failed.'
+resolution = 'The shared localized preparation line now sums interval, download and subtitle task counts. UI map: /media/addon-lists/:id and /activity -> AddonListWorkspacePage -> PublicationRecoveryIsland/preparation_view; readiness comes from get_addon_media_list_publication_readiness, and native workspace forms retain the SSR/no-JS recovery path. Focused fraction regressions pass. The matched SSR/WASM bundle passes the failed-preparation recovery scenario in headed Chromium and Firefox, including hydrated and no-JS guidance and Retry. Evidence: test-results/windows-admin-fixes-20261009/playwright-results.json. Live Windows installation acceptance remains separate.'
+
+[[debt]]
+id = 'legacy-published-television-missing-version-attachments'
+description = 'An existing published add-on television list retains owned projected episodes but lacks MediaVersion.EpisodeId attachments to its canonical Remote Streams, leaving scheduling durations unresolved.'
+discovered = '2026-10-09'
+resolved = false
+evidence = 'Read-only Windows aggregates show 166 published owned episodes without version attachments, 165 canonical positive-duration versions and one provider-unavailable zero-duration version. Eighteen persisted zero-length programme rows map to positive canonical durations. A guarded isolated repair changes exactly 166 attachments, is idempotent and preserves every other media-version field, canonical files/tracks, metadata, draft/published revisions and scheduling tables. Integrity and foreign keys pass. Current publication code attaches and verifies both ownership links; the historical sequencing cause remains unproven.'
+resolution = 'Copied production builds now prove the narrow repair and approved Classic Reset. With the existing skip-missing policy enabled, only the affected Classic source set changes; all 156 eligible sources appear across three restarted Continue builds, without zero-length programmes or unrelated state changes. The native guarded offline helper changes exactly 166 episode attachments and one policy row on its fixture, then changes zero rows on repeat. Live repair and restart await separate approval. Existing broad reprojection/republish paths also touch NFOs or accept the newer draft and are unsuitable as narrow repair. Preserve the accepted published revision and operator metadata; do not add a guessed scheduling-duration fallback. Evidence: test-results/windows-admin-fixes-20261009/episode-links-copy-proof.json and skip-missing-copy-proof.json.'

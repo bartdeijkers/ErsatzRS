@@ -297,6 +297,22 @@ fn heartbeat_keeps_operation_running<E>(result: &Result<bool, E>) -> bool {
     matches!(result, Ok(true))
 }
 
+async fn run_claimed_operation(
+    execution: impl std::future::Future<Output = ExecuteManagedLibraryOperationOutcome>,
+    heartbeat: impl std::future::Future<Output = ()>,
+    shutdown: &CancellationToken,
+) -> Option<ExecuteManagedLibraryOperationOutcome> {
+    // Keep polling execution while a heartbeat waits for SQLite's writer lock:
+    // execution may own that lock and must be able to finish its transaction.
+    // Owning both futures also drops in-flight work on lease loss or shutdown.
+    tokio::pin!(execution, heartbeat);
+    tokio::select! {
+        () = shutdown.cancelled() => None,
+        outcome = &mut execution => Some(outcome),
+        () = &mut heartbeat => Some(ExecuteManagedLibraryOperationOutcome::LeaseLost),
+    }
+}
+
 struct WorkerLifecycle {
     application: Arc<ApplicationServices>,
 }
@@ -344,33 +360,30 @@ pub async fn run_scan_worker(
         let operation_id = claim.operation.id;
         let library_id = claim.operation.library_id;
         let execution = application.execute_managed_library_operation(claim.clone());
-        tokio::pin!(execution);
-        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
-        heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        heartbeat.tick().await;
-        let outcome = loop {
-            tokio::select! {
-                () = shutdown.cancelled() => break None,
-                outcome = &mut execution => break Some(outcome),
-                _ = heartbeat.tick() => {
-                    let heartbeat_result = application
-                        .heartbeat_managed_library_operation(&claim)
-                        .await;
-                    match &heartbeat_result {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            tracing::warn!(operation_id, library_id, "managed-library lease was lost");
-                        }
-                        Err(error) => {
-                            tracing::warn!(operation_id, library_id, error = %error, "managed-library heartbeat failed");
-                        }
+        let heartbeat = async {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                let heartbeat_result = application
+                    .heartbeat_managed_library_operation(&claim)
+                    .await;
+                match &heartbeat_result {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        tracing::warn!(operation_id, library_id, "managed-library lease was lost");
                     }
-                    if !heartbeat_keeps_operation_running(&heartbeat_result) {
-                        break Some(ExecuteManagedLibraryOperationOutcome::LeaseLost);
+                    Err(error) => {
+                        tracing::warn!(operation_id, library_id, error = %error, "managed-library heartbeat failed");
                     }
+                }
+                if !heartbeat_keeps_operation_running(&heartbeat_result) {
+                    return;
                 }
             }
         };
+        let outcome = run_claimed_operation(execution, heartbeat, &shutdown).await;
         let Some(outcome) = outcome else {
             break;
         };
@@ -414,8 +427,11 @@ pub async fn run_scan_worker(
 mod tests {
     use super::*;
     use ersatzrs_domain::ScanPlayoutRefreshReason;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
     use sqlx::Executor as _;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+    use tokio::sync::oneshot;
 
     #[test]
     fn heartbeat_error_stops_the_claimed_operation() {
@@ -424,6 +440,160 @@ mod tests {
         assert!(!heartbeat_keeps_operation_running(&Err::<bool, _>(
             "heartbeat unavailable"
         )));
+    }
+
+    async fn worker_test_pool() -> (tempfile::TempDir, DbPool) {
+        let directory = tempfile::tempdir().expect("temporary scan worker database");
+        let options = SqliteConnectOptions::new()
+            .filename(directory.path().join("worker.sqlite"))
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(Duration::from_millis(100));
+        let pool = SqlitePoolOptions::new()
+            .min_connections(2)
+            .max_connections(2)
+            .connect_with(options)
+            .await
+            .expect("connect two SQLite workers");
+        pool.execute(r#"CREATE TABLE "WorkerWrite" ("Value" INTEGER NOT NULL)"#)
+            .await
+            .expect("create worker regression table");
+        (directory, pool)
+    }
+
+    #[tokio::test]
+    async fn heartbeat_writer_wait_keeps_scan_execution_polled() {
+        let (_directory, pool) = worker_test_pool().await;
+        let (acquired_sender, acquired_receiver) = oneshot::channel();
+        let (started_sender, started_receiver) = oneshot::channel();
+        let (committed_sender, committed_receiver) = oneshot::channel();
+        let execution = async {
+            let mut transaction = pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .expect("scan owns SQLite writer lock");
+            sqlx::query(r#"INSERT INTO "WorkerWrite" VALUES (1)"#)
+                .execute(&mut *transaction)
+                .await
+                .expect("write scan progress");
+            acquired_sender.send(()).expect("signal scan writer lock");
+            started_receiver.await.expect("heartbeat started writing");
+            transaction.commit().await.expect("commit scan transaction");
+            committed_receiver.await.expect("heartbeat committed");
+            ExecuteManagedLibraryOperationOutcome::Completed
+        };
+        let heartbeat = async {
+            acquired_receiver.await.expect("scan acquired writer lock");
+            started_sender.send(()).expect("signal heartbeat start");
+            let mut transaction = pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .expect("heartbeat acquires writer lock while scan stays polled");
+            sqlx::query(r#"INSERT INTO "WorkerWrite" VALUES (2)"#)
+                .execute(&mut *transaction)
+                .await
+                .expect("write heartbeat");
+            transaction.commit().await.expect("commit heartbeat");
+            committed_sender.send(()).expect("signal heartbeat commit");
+            std::future::pending::<()>().await;
+        };
+        let shutdown = CancellationToken::new();
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            run_claimed_operation(execution, heartbeat, &shutdown),
+        )
+        .await
+        .expect("scan and heartbeat do not deadlock");
+        assert!(matches!(
+            outcome,
+            Some(ExecuteManagedLibraryOperationOutcome::Completed)
+        ));
+        let values: Vec<i64> =
+            sqlx::query_scalar(r#"SELECT "Value" FROM "WorkerWrite" ORDER BY "Value""#)
+                .fetch_all(&pool)
+                .await
+                .expect("read committed scan and heartbeat writes");
+        assert_eq!(values, [1, 2]);
+        pool.close().await;
+    }
+
+    struct ExecutionDropGuard(Arc<AtomicBool>);
+
+    impl Drop for ExecutionDropGuard {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+
+    async fn assert_cancelled_execution_rolls_back(heartbeat_result: Option<Result<bool, &str>>) {
+        let (_directory, pool) = worker_test_pool().await;
+        let shutdown = CancellationToken::new();
+        let dropped = Arc::new(AtomicBool::new(false));
+        let (acquired_sender, acquired_receiver) = oneshot::channel();
+        let execution = async {
+            let _drop_guard = ExecutionDropGuard(dropped.clone());
+            let mut transaction = pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .expect("scan acquires writer lock before cancellation");
+            sqlx::query(r#"INSERT INTO "WorkerWrite" VALUES (1)"#)
+                .execute(&mut *transaction)
+                .await
+                .expect("write uncommitted scan progress");
+            acquired_sender.send(()).expect("signal scan write");
+            std::future::pending::<ExecuteManagedLibraryOperationOutcome>().await
+        };
+        let heartbeat = async {
+            acquired_receiver.await.expect("scan wrote before stopping");
+            if let Some(result) = heartbeat_result {
+                assert!(!heartbeat_keeps_operation_running(&result));
+                return;
+            }
+            shutdown.cancel();
+            std::future::pending::<()>().await;
+        };
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            run_claimed_operation(execution, heartbeat, &shutdown),
+        )
+        .await
+        .expect("cancellation drops in-flight scan");
+        if heartbeat_result.is_some() {
+            assert!(matches!(
+                outcome,
+                Some(ExecuteManagedLibraryOperationOutcome::LeaseLost)
+            ));
+        } else {
+            assert!(outcome.is_none());
+        }
+        assert!(dropped.load(Ordering::SeqCst), "execution was dropped");
+        let mut transaction =
+            tokio::time::timeout(Duration::from_secs(2), pool.begin_with("BEGIN IMMEDIATE"))
+                .await
+                .expect("cancelled scan releases SQLite writer lock")
+                .expect("next writer acquires SQLite lock");
+        let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "WorkerWrite""#)
+            .fetch_one(&mut *transaction)
+            .await
+            .expect("read rolled-back scan write");
+        assert_eq!(count, 0, "cancelled scan did not commit its write");
+        transaction.rollback().await.expect("release next writer");
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn worker_shutdown_drops_execution_and_rolls_back() {
+        assert_cancelled_execution_rolls_back(None).await;
+    }
+
+    #[tokio::test]
+    async fn heartbeat_failure_drops_execution_and_rolls_back() {
+        assert_cancelled_execution_rolls_back(Some(Err("heartbeat unavailable"))).await;
+    }
+
+    #[tokio::test]
+    async fn heartbeat_lease_loss_drops_execution_and_rolls_back() {
+        assert_cancelled_execution_rolls_back(Some(Ok(false))).await;
     }
 
     async fn seed_local_library(pool: &DbPool, root: &std::path::Path, media_kind: i32) {

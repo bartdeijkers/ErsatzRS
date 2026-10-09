@@ -61,6 +61,27 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-09 Windows admin incident: four demonstrated defects are corrected:
+scan execution now progresses while its heartbeat waits for SQLite; preparation
+counts tasks consistently; unavailable owned add-on episodes are classified as
+remote; Classic Refresh ignores expired rows when validating its restore seam.
+Workspace 4021 tests plus doctests, strict workspace Clippy, native IPTV/HLS
+smoke, focused headed
+Chromium/Firefox recovery and isolated native headed Edge acceptance pass.
+Native direct debug packaging must use the same erase_components mode as the
+WASM build; the corrected candidate and exact assembled bundle pass.
+The guarded native offline helper proves exactly 166 owned episode attachments
+and one skip-missing policy change, with idempotency and state preservation.
+Nine copied Classic Refresh builds preserve seeds/checkpoint rotation. The
+approved Classic reset with unavailable media skipped covers all 156 eligible
+sources across restarts and repeated Continue builds. Live installation and
+offline repair await the separately requested restart approval; production is
+unchanged. Preserve the accepted list revision and operator metadata. Eight
+historical subtitle failures lack retained causal diagnostics; do not claim
+them fixed by the separate native playlist-title correction in the add-on repo.
+The retired disabled add-on compatibility failure and Scripted checkpoint
+readiness remain explicit runtime findings. No milestone scope is changed.
+
 2026-10-09: UCU-09 is Complete through v26.11.1/row208. Stable v1.1.0 is
 published with the four completed Linux/Windows archives and verified checksums.
 Exact application97aa48a0 and Windows recipe3ac69586 have terminal full green CI;

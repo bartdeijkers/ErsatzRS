@@ -163,3 +163,11 @@ description = 'Source Orientation selects persisted audio kind 2 instead of vide
 discovered = '2026-09-30'
 evidence = 'UCU-09 row169 corrects the persisted video kind to 1. The fixture now uses the production stream writer; a76578f9-f005-48a6-8fce-f71547472fae passes copied rotated video, transcoded/unrotated exclusions and a negative audio case. Strict affected lint passes. UCU-09 owns complete evidence.'
 resolved = true
+
+[[debt]]
+id = 'versionless-addon-episode-unavailable-classification'
+description = 'Unavailable projected add-on episodes without their own media version are reported as missing disk files even when their owned canonical Remote Streams explain the provider-unavailable state.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Headed native Windows health showed ten missing-disk items plus ten unavailable Remote Streams. A consistent read-only database backup proved all ten episodes belong to canonical streams through the authoritative add-on projection mapping. The corrected SQL removes the ten false local findings while retaining ten distinct unavailable streams; the query plan uses existing projection and primary-key indexes.'
+resolution = 'Classification and stream aggregation now consult the owned add-on item mapping as well as shared media versions. Synthetic SQLite coverage preserves actual local missing-file warnings and deduplicates multiple projections. Both classification regressions and the aggregate database-health contract pass in focused run aac51426-f699-46f0-988d-5f43b68acd4f; no live deployment is claimed.'

@@ -381,7 +381,7 @@ fn preparation_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> 
 }
 
 /// Preparation progress appended to the Items counts line: completed of
-/// affected work plus every other non-zero counter. The counts already name
+/// required tasks plus every other non-zero counter. The counts already name
 /// "Preparation tasks" while prepared media is required.
 fn preparation_line(readiness: &AddonMediaListPublicationReadiness) -> String {
     let p = &readiness.preparation;
@@ -394,7 +394,7 @@ fn preparation_line(readiness: &AddonMediaListPublicationReadiness) -> String {
         " · {label}{} {}/{}",
         tr(TextKey::Completed),
         p.completed_tasks,
-        p.affected_items
+        p.interval_tasks + p.download_tasks + p.subtitle_tasks
     );
     for (key, count) in [
         (TextKey::PreparationRunning, p.running_tasks),
@@ -524,6 +524,21 @@ mod tests {
         AddonMediaListPreparationFailure, AddonMediaListPublicationBlocker,
         AddonMediaListPublicationBlockerKind,
     };
+
+    #[test]
+    fn preparation_line_counts_tasks_when_items_need_multiple_operations() {
+        let mut readiness = AddonMediaListPublicationReadiness::default();
+        readiness.preparation.affected_items = 46;
+        readiness.preparation.interval_tasks = 46;
+        readiness.preparation.subtitle_tasks = 46;
+        readiness.preparation.completed_tasks = 84;
+        readiness.preparation.failed_tasks = 8;
+        let line = preparation_line(&readiness);
+        assert!(line.contains("84/92"), "{line}");
+        assert!(!line.contains("84/46"), "{line}");
+        readiness.preparation.download_tasks = 3;
+        assert!(preparation_line(&readiness).contains("84/95"));
+    }
 
     #[test]
     fn terminal_detail_progress_explains_skipped_items() {

@@ -22,6 +22,18 @@ release section when tagging a release.
 
 ### Fixed
 
+- Allow Classic Refresh to discard expired legacy rows before checking a
+  restoration boundary, so old overlaps do not block checkpoint recovery. Keep
+  current programmes and delayed-channel retention protected.
+- Classify unavailable add-on episodes through their owned Remote Stream even
+  when the episode has no media version, avoiding false missing-disk warnings
+  and counting each unavailable stream once.
+- Keep scans running while their lease heartbeat waits for SQLite, preventing
+  the worker from blocking its own transaction and losing progress. Retain
+  cancellation and transaction rollback on lease loss or shutdown.
+- Count all required operations in add-on list preparation progress when one
+  video needs both interval metadata and subtitles, so completed task counts
+  cannot exceed the displayed total.
 - Reuse installed Python 3.12 or newer on Windows release runners, avoiding
   installer failures under restricted PowerShell execution policies. Recover a
   failed Windows draft archive from its accepted immutable source and web bundle

@@ -4,16 +4,18 @@ use super::super::{
 };
 
 /// Media items backed by a Remote Stream: the stream itself and any projected
-/// episode sharing its media version. Their `Unavailable` state comes from the
-/// provider's declared availability, not from a missing file.
-const REMOTE_BACKED: &str = r#"AND EXISTS (
+/// episode sharing its media version or owned add-on item mapping. Projected
+/// episodes can have no media version of their own. Their `Unavailable` state
+/// comes from the provider's declared availability, not from a missing file.
+const NOT_REMOTE_BACKED: &str = r#"AND NOT (EXISTS (
     SELECT 1 FROM "MediaVersion" AS remote
     WHERE remote."RemoteStreamId" IS NOT NULL
-      AND (remote."RemoteStreamId" = mi."Id" OR remote."EpisodeId" = mi."Id"))"#;
-const NOT_REMOTE_BACKED: &str = r#"AND NOT EXISTS (
-    SELECT 1 FROM "MediaVersion" AS remote
-    WHERE remote."RemoteStreamId" IS NOT NULL
-      AND (remote."RemoteStreamId" = mi."Id" OR remote."EpisodeId" = mi."Id"))"#;
+      AND (remote."RemoteStreamId" = mi."Id" OR remote."EpisodeId" = mi."Id"))
+    OR EXISTS (
+        SELECT 1 FROM "AddonMediaListItemEpisode" AS projection
+        JOIN "AddonMediaListItem" AS item ON item."Id" = projection."AddonMediaListItemId"
+        JOIN "RemoteStream" AS stream ON stream."Id" = item."MediaItemId"
+        WHERE projection."EpisodeId" = mi."Id"))"#;
 
 pub(crate) struct UnavailableHealthCheck {
     pool: Pool<Db>,
@@ -72,12 +74,17 @@ impl HealthCheck for UnavailableHealthCheck {
 /// Count unavailable Remote Streams once each, even when a television
 /// presentation also projects them as episodes, and name up to five by path.
 async fn unavailable_remote_streams(pool: &Pool<Db>) -> Result<(i64, Vec<String>)> {
-    let from = format!(
-        r#"FROM "MediaItem" AS mi
+    let from = r#"FROM "MediaItem" AS mi
            JOIN "MediaVersion" AS mv ON mv."RemoteStreamId" IS NOT NULL
-                AND (mv."RemoteStreamId" = mi."Id" OR mv."EpisodeId" = mi."Id")
-           WHERE mi."State" = ? {REMOTE_BACKED}"#
-    );
+                AND (mv."RemoteStreamId" = mi."Id" OR mv."EpisodeId" = mi."Id"
+                     OR EXISTS (
+                         SELECT 1 FROM "AddonMediaListItemEpisode" AS projection
+                         JOIN "AddonMediaListItem" AS item
+                              ON item."Id" = projection."AddonMediaListItemId"
+                         JOIN "RemoteStream" AS stream ON stream."Id" = item."MediaItemId"
+                         WHERE projection."EpisodeId" = mi."Id"
+                           AND stream."Id" = mv."RemoteStreamId"))
+           WHERE mi."State" = ?"#;
     let count = sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(format!(
         r#"SELECT COUNT(DISTINCT mv."RemoteStreamId") {from}"#
     )))
@@ -142,6 +149,8 @@ mod tests {
             "Song\" (\"Id\" INTEGER PRIMARY KEY",
             "Image\" (\"Id\" INTEGER PRIMARY KEY",
             "RemoteStream\" (\"Id\" INTEGER PRIMARY KEY",
+            "AddonMediaListItem\" (\"Id\" INTEGER PRIMARY KEY, \"MediaItemId\" INTEGER",
+            "AddonMediaListItemEpisode\" (\"AddonMediaListItemId\" INTEGER PRIMARY KEY, \"EpisodeId\" INTEGER UNIQUE",
             "MediaVersion\" (\"Id\" INTEGER PRIMARY KEY, \"MovieId\" INTEGER, \"EpisodeId\" INTEGER, \"MusicVideoId\" INTEGER, \"OtherVideoId\" INTEGER, \"SongId\" INTEGER, \"ImageId\" INTEGER, \"RemoteStreamId\" INTEGER",
             "MediaFile\" (\"Id\" INTEGER PRIMARY KEY, \"MediaVersionId\" INTEGER, \"Path\" TEXT",
         ] {
@@ -152,6 +161,56 @@ mod tests {
                 .expect("fixture table");
         }
         pool
+    }
+
+    #[tokio::test]
+    async fn versionless_addon_episodes_report_the_owned_remote_stream_once() {
+        let pool = fixture_pool().await;
+        pool.execute(
+            r#"INSERT INTO "MediaItem" VALUES (10, 2), (11, 2), (12, 2), (20, 2);
+               INSERT INTO "RemoteStream" VALUES (10);
+               INSERT INTO "Episode" VALUES (11), (12), (20);
+               INSERT INTO "MediaVersion" ("Id", "RemoteStreamId") VALUES (100, 10);
+               INSERT INTO "MediaVersion" ("Id", "EpisodeId") VALUES (200, 20);
+               INSERT INTO "MediaFile" VALUES (1000, 100, 'streams/Projected.yml'),
+                   (2000, 200, 'media/Local.mkv');
+               INSERT INTO "AddonMediaListItem" VALUES (1, 10), (2, 10), (3, 20);
+               INSERT INTO "AddonMediaListItemEpisode" VALUES (1, 11), (2, 12), (3, 20);"#,
+        )
+        .await
+        .expect("versionless add-on projection fixture");
+
+        for stream_state in [2, 0] {
+            sqlx::query(r#"UPDATE "MediaItem" SET "State" = ? WHERE "Id" = 10"#)
+                .bind(stream_state)
+                .execute(&pool)
+                .await
+                .expect("update stream availability");
+            let result = UnavailableHealthCheck::new(pool.clone())
+                .check()
+                .await
+                .expect("health result");
+            assert_eq!(result.status, HealthCheckStatus::Warning);
+            assert_eq!(
+                result.brief_message,
+                "There are 1 items and 1 Remote Streams that are unavailable"
+            );
+            assert!(result.message.contains(
+                "1 items that are unavailable because ErsatzRS cannot find them on disk, including the following: media/Local.mkv"
+            ));
+            assert!(result.message.contains(
+                "1 Remote Streams that are unavailable because their provider reports them as not playable, including the following: streams/Projected.yml"
+            ));
+        }
+
+        pool.execute(r#"UPDATE "MediaItem" SET "State" = 0 WHERE "Id" IN (11, 12, 20)"#)
+            .await
+            .expect("restore availability");
+        let result = UnavailableHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
     #[tokio::test]

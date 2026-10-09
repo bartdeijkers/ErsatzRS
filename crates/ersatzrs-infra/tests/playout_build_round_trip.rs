@@ -237,6 +237,150 @@ async fn apply_build_result_retains_source_items_until_delayed_mirror_finishes()
 }
 
 #[tokio::test]
+async fn classic_refresh_publication_removes_expired_seam_straddler() {
+    // A negative mirror offset must not shorten the ordinary retention window.
+    for offset in [Duration::zero(), Duration::minutes(-30)] {
+        assert_classic_refresh_seam_retention(Duration::minutes(60), offset, true).await;
+    }
+}
+
+#[tokio::test]
+async fn classic_refresh_publication_refuses_retained_seam_straddler() {
+    assert_classic_refresh_seam_retention(Duration::minutes(15), Duration::zero(), false).await;
+}
+
+#[tokio::test]
+async fn classic_refresh_publication_protects_seam_straddler_needed_by_delayed_mirror() {
+    assert_classic_refresh_seam_retention(Duration::minutes(60), Duration::minutes(45), false)
+        .await;
+}
+
+#[tokio::test]
+async fn classic_refresh_publication_protects_seam_straddler_at_exact_cutoff() {
+    assert_classic_refresh_seam_retention(Duration::minutes(30), Duration::zero(), false).await;
+}
+
+// These persistence tests isolate the expired-row predicate. Scheduler-generated
+// checkpoint restoration and rotation are covered by the continuity tests.
+#[allow(clippy::too_many_lines)] // Compare publication and atomic refusal with the same complete SQLite fixture.
+async fn assert_classic_refresh_seam_retention(
+    cutoff_after_seam: Duration,
+    offset: Duration,
+    succeeds: bool,
+) {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (1, 1, 'Classic', 42)"#,
+    )
+    .await
+    .unwrap();
+    let seam = common::fixed_time();
+    let mut old = common::playout_item(0, 1, 1);
+    old.start = seam - Duration::minutes(30);
+    old.finish = seam + Duration::minutes(30);
+    old.guide_start = Some(old.start);
+    old.guide_finish = Some(old.finish);
+    old.custom_title = Some("Published programme".into());
+    let mut history = common::playout_history(0, 1);
+    history.when = old.start;
+    history.finish = Some(old.finish);
+    let playout = repos.playout.get_with_anchor(1).await.unwrap();
+    repos
+        .playout
+        .apply_build_result(
+            &SchedulingResult {
+                clear_items: true,
+                added_items: vec![old.clone()],
+                added_history: vec![history],
+                anchor: Some(PlayoutAnchor {
+                    next_start: old.finish,
+                    context: Some("published continuation".into()),
+                    ..PlayoutAnchor::default()
+                }),
+                classic_checkpoints: vec![PlayoutClassicCheckpoint {
+                    playout_id: 1,
+                    checkpoint_date: seam,
+                    context: "published checkpoint".into(),
+                }],
+                ..SchedulingResult::default()
+            },
+            &playout,
+            Duration::zero(),
+        )
+        .await
+        .unwrap();
+    let before = repos.playout.get_with_anchor(1).await.unwrap();
+    let items_before = repos
+        .playout
+        .items_in_range(1, old.start, seam + Duration::hours(2))
+        .await
+        .unwrap();
+    let mut new = common::playout_item(0, 1, 1);
+    new.start = seam;
+    new.finish = seam + Duration::hours(2);
+    let candidate = SchedulingResult {
+        clear_items: true,
+        retain_through: Some(seam),
+        remove_before: Some(seam + cutoff_after_seam),
+        added_items: vec![new.clone()],
+        anchor: Some(PlayoutAnchor {
+            next_start: new.finish,
+            context: Some("replacement continuation".into()),
+            ..PlayoutAnchor::default()
+        }),
+        classic_checkpoints: vec![PlayoutClassicCheckpoint {
+            playout_id: 1,
+            checkpoint_date: seam,
+            context: "replacement checkpoint".into(),
+        }],
+        ..SchedulingResult::default()
+    };
+    let result = repos
+        .playout
+        .apply_build_result(&candidate, &before, offset)
+        .await;
+    let after = repos.playout.get_with_anchor(1).await.unwrap();
+    let items_after = repos
+        .playout
+        .items_in_range(1, old.start, new.finish)
+        .await
+        .unwrap();
+    let checkpoint: String = sqlx::query_scalar(
+        r#"SELECT "Context" FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    if succeeds {
+        result.expect("an expired legacy row cannot prevent checkpoint publication");
+        assert_eq!(items_after.len(), 1);
+        assert_eq!(items_after[0].start, new.start);
+        assert_eq!(items_after[0].finish, new.finish);
+        assert_ne!(items_after[0].id, items_before[0].id);
+        assert_eq!(after.seed, before.seed, "Refresh must preserve the seed");
+        assert_eq!(after.anchor, candidate.anchor);
+        assert!(after.playout_history_ids.is_empty());
+        assert_eq!(checkpoint, "replacement checkpoint");
+    } else {
+        let error = result.expect_err("a still-retained programme must not be cut");
+        assert!(
+            error.to_string().contains("retention boundary cuts"),
+            "{error}"
+        );
+        assert_eq!(
+            items_after, items_before,
+            "guide and published items changed"
+        );
+        assert_eq!(after, before, "history or continuation state changed");
+        assert_eq!(checkpoint, "published checkpoint");
+    }
+}
+
+#[tokio::test]
 async fn apply_build_result_persists_graphics_variables_for_generated_items() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
