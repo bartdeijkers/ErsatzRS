@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { waitForHydration as waitForIslandHydration } from './hydration';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -185,6 +186,80 @@ async function waitForHydration(page: Page): Promise<void> {
 
 test.describe('playout rebuild feedback', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed a playout');
+
+  test('kind editors hydrate resolved forms and attach Scripted and Block controls', async ({ page, browser }, testInfo) => {
+    test.setTimeout(90_000);
+    const seed = seedDetailedPlayoutWorkflow(testInfo);
+    const originalScript = 'synthetic/original-playout-editor.lua';
+    sqlite(`
+      UPDATE "Playout" SET "ScheduleKind" = 2, "ScheduleFile" = NULL WHERE "Id" = ${seed.externalPlayoutId};
+      UPDATE "Playout" SET "ScheduleKind" = 4, "ScheduleFile" = '${originalScript}' WHERE "Id" = ${seed.deletePlayoutId};
+    `);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (/failed_to_cast_marker_node|hydration.*mismatch/i.test(message.text())) errors.push(message.text());
+    });
+    await forceEnglish(page);
+    const noJs = await browser.newContext({ javaScriptEnabled: false, baseURL: process.env.ERSATZRS_BASE_URL ?? 'http://127.0.0.1:8409' });
+    try {
+      const fallback = await noJs.newPage();
+      await fallback.goto(`/playouts/scripted/${seed.deletePlayoutId}`);
+      await expect(fallback.getByLabel('Scripted Schedule', { exact: true })).toBeVisible();
+      await expect(fallback.getByRole('button', { name: 'Save Scripted Schedule', exact: true })).toBeVisible();
+      await expect(fallback.locator('[data-admin-resource]')).toHaveAttribute('data-state', 'ready');
+    } finally {
+      await noJs.close();
+    }
+    try {
+      for (const [language, width] of [['en-us', 1440], ['nl', 390]] as const) {
+        await page.request.post('/admin-api/settings/ui/save', { form: { is_dark_mode: 'false', language }, maxRedirects: 0 });
+        await page.setViewportSize({ width, height: 900 });
+        for (const [kind, id] of [
+          ['scripted', seed.deletePlayoutId],
+          ['classic', seed.classicPlayoutId],
+          ['block', seed.externalPlayoutId],
+        ] as const) {
+          await page.goto(`/playouts/${kind}/${id}`);
+          await waitForIslandHydration(page);
+          await expect.poll(() => page.evaluate(
+            () => (window as Window & { __ersatzrs_hydration_phase?: string }).__ersatzrs_hydration_phase,
+          ), { timeout: 15_000, message: `${kind} editor island traversal did not complete` }).toBe('ready');
+          await expect(page.locator('[data-admin-resource]')).toHaveAttribute('data-state', 'ready');
+          if (kind === 'scripted') {
+            const field = page.locator('#scripted-schedule');
+            await expect(field).toHaveValue(originalScript);
+            const missingScript = `synthetic/not-present-playout-editor-${id}.lua`;
+            await field.fill(missingScript);
+            const response = page.waitForResponse(result => result.url().includes('/admin-api/save_scripted_playout'));
+            await page.getByRole('button', { name: language === 'nl' ? 'Scripted schema opslaan' : 'Save Scripted Schedule', exact: true }).click();
+            const result = await response;
+            const body = new URLSearchParams(result.request().postData() ?? '');
+            expect(body.get('id')).toBe(String(id));
+            expect(body.get('schedule_file')).toBe(missingScript);
+            await expect(page.getByText(language === 'nl' ? /^Opslaan mislukt:/ : /^Save failed:/)).toBeVisible();
+            expect(sqlite(`SELECT "ScheduleFile" FROM "Playout" WHERE "Id" = ${id};`)).toBe(originalScript);
+            await page.screenshot({ path: testInfo.outputPath(`scripted-editor-${language}.png`), fullPage: true });
+          } else if (kind === 'block') {
+            const toggle = page.locator('#enable-default-deco');
+            await expect(toggle).not.toBeChecked();
+            await expect(page.locator('#deco-group')).toBeHidden();
+            await toggle.check();
+            await expect(page.locator('#deco-group')).toBeVisible();
+            await toggle.uncheck();
+            await expect(page.locator('#deco-group')).toBeHidden();
+          } else {
+            await expect(page.getByRole('link', { name: language === 'nl' ? "Alternatieve schema's bewerken" : 'Edit Alternate Schedules', exact: true }))
+              .toHaveAttribute('href', `/playouts/${id}/alternate-schedules`);
+          }
+        }
+      }
+      await page.waitForTimeout(2_000);
+      expect(errors).toEqual([]);
+    } finally {
+      await forceEnglish(page);
+    }
+  });
 
   test('Add Playout opens and closes the creation menu', async ({ page }) => {
     await forceEnglish(page);

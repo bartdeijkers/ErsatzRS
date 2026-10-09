@@ -25,3 +25,11 @@ description = 'Build completion must publish item-derived positive gaps, and on-
 discovered = '2026-09-25'
 resolved = true
 evidence = 'Upstream 3d24c3f0; repository regression 316b876c reproduced missing gaps. Transactional projection passes 12 round-trip tests (0e41e37d); all three on-demand trimming/shift/rollback tests pass (2e430162). Final 33 persistence/continuity tests pass (e3b11655); strict infra Clippy and matched-bundle Chromium/Firefox detail workflows pass. UCU-05 owns evidence and remaining window gates; row 87 is Port.'
+
+[[debt]]
+id = 'kind-editor-streamed-fallback-hydration'
+description = 'Classic, Block and Scripted editors can hydrate a pending resource placeholder against a streamed fallback section and panic before their controls attach.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'Actual headed Windows Scripted detail returns HTTP 200 but fails island traversal with failed_to_cast_marker_node, expecting a placeholder and finding the root SECTION. All 35 main navigation routes hydrate; this is a scoped editor boundary failure.'
+resolution = 'The SSR wrapper directly awaits its joined loaders through Suspend before emitting the concrete-data island, with no unresolved parent Suspense. The three editor routes use in-order SSR so no-JS forms arrive populated. The island initializes the existing document-language context for callback feedback. Headed Chromium and Firefox prove concrete SSR, completed island traversal, Scripted validation/persistence and Block interaction on English desktop and Dutch mobile. Native bundle verification and the actual installed Scripted editor also pass. Source map: admin/routes.rs -> scheduling/playout_kind_editor.rs -> PlayoutKindEditorPage -> PlayoutKindEditorIsland -> existing get_playout_kind_editor/list_locked_playouts and save actions. Evidence: test-results/windows-admin-fixes-20261009/editor-chromium/playwright-results.json and editor-firefox/playwright-results.json.'

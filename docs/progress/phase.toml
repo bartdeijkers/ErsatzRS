@@ -61,26 +61,35 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-09 Windows admin incident: four demonstrated defects are corrected:
-scan execution now progresses while its heartbeat waits for SQLite; preparation
-counts tasks consistently; unavailable owned add-on episodes are classified as
-remote; Classic Refresh ignores expired rows when validating its restore seam.
-Workspace 4021 tests plus doctests, strict workspace Clippy, native IPTV/HLS
-smoke, focused headed
-Chromium/Firefox recovery and isolated native headed Edge acceptance pass.
-Native direct debug packaging must use the same erase_components mode as the
-WASM build; the corrected candidate and exact assembled bundle pass.
-The guarded native offline helper proves exactly 166 owned episode attachments
-and one skip-missing policy change, with idempotency and state preservation.
-Nine copied Classic Refresh builds preserve seeds/checkpoint rotation. The
-approved Classic reset with unavailable media skipped covers all 156 eligible
-sources across restarts and repeated Continue builds. Live installation and
-offline repair await the separately requested restart approval; production is
-unchanged. Preserve the accepted list revision and operator metadata. Eight
-historical subtitle failures lack retained causal diagnostics; do not claim
-them fixed by the separate native playlist-title correction in the add-on repo.
-The retired disabled add-on compatibility failure and Scripted checkpoint
-readiness remain explicit runtime findings. No milestone scope is changed.
+2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
+installed and running. The authorized native offline repair attaches exactly
+166 owned episodes and enables the existing skip-missing policy, preserving
+published revision 4 and draft 176. Nine actual Classic Refreshes preserve
+seeds; separately approved Classic and Scripted Resets produce positive,
+nonoverlapping timelines. The operator Lua now adopts its external resume
+clock and SQLite tail only during Continue; the Scripted reset covers the
+present with complete compatible checkpoints.
+Official add-on 0.11.8 fixes missing Windows playlist titles and contradictory
+unknown-liveness hints. Normal synchronization completes both affected
+libraries and resolves their scan-impact state. Settings, enablement and the
+original disabled Unknown sources policy are preserved. The unused disabled
+legacy add-on was removed with no other media/list/library count changes.
+Fresh Health reports zero errors and five truthful warnings: unavailable or
+unknown-duration media, an unpublished empty playlist, local add-on trust and
+historical subtitle preparation. Eight old caption failures lack retained
+causal diagnostics; current-package caption recovery remains unproven. The
+upgrade invalidates older preparation fingerprints, so bulk preparation is
+broader than retrying eight jobs; no blind bulk retry was performed.
+All 35 advertised admin navigation routes hydrate. A reproduced kind-editor
+marker crash is corrected by resolving data before emitting the island and
+using in-order SSR on its three routes; the island initializes the existing
+locale context for callbacks. Headed Chromium and Firefox pass concrete no-JS
+forms, three editor kinds, real validation/persistence, English desktop and
+Dutch mobile feedback, and corrected 330-task totals. Native bundle consistency
+and actual installed Scripted editor readiness pass. The four earlier runtime
+corrections retain full Rust, strict lint and IPTV/HLS smoke evidence; final
+editor closeout and exact-commit CI are recorded in the session. No release or
+milestone scope change is claimed.
 
 2026-10-09: UCU-09 is Complete through v26.11.1/row208. Stable v1.1.0 is
 published with the four completed Linux/Windows archives and verified checksums.

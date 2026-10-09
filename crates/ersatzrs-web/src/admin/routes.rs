@@ -193,14 +193,17 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("playouts"), StaticSegment("classic"), ParamSegment("id"))
                 view=ClassicPlayoutEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("playouts"), StaticSegment("block"), ParamSegment("id"))
                 view=BlockPlayoutEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("playouts"), StaticSegment("scripted"), ParamSegment("id"))
                 view=ScriptedPlayoutEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(

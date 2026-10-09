@@ -44,3 +44,11 @@ description = 'UCU-08 row 123 covers parent and independently shuffled child cyc
 discovered  = '2026-09-27'
 evidence    = 'UCU-08 row 123: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c), 55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy migration (66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected lint pass. Real SQL later-cycle restart matches 100 uninterrupted items, including independently wrapping children. Source map records substantive review and remaining milestone gates.'
 resolved    = true
+
+[[debt]]
+id = 'operator-script-resume-overrides-reset-clock'
+description = 'A legacy operator Lua script unconditionally adopts an external resume clock and SQLite future tail, overriding the native Reset clock and leaving no current programme.'
+discovered = '2026-10-09'
+resolved = true
+evidence = 'The first authorized native Reset publishes only ten programmes at the former future tail despite complete checkpoints. Read-only source inspection proves both external resume branches ignore build_mode; the native builder itself selects the correct Reset clock.'
+resolution = 'A hash-fenced native edit guards the existing resume block with build_mode() == continue, preserving its existing Continue behavior and allowing native Reset/Refresh start selection. Text-only Lua syntax compilation passes without execution or provider requests. The repeated actual UI Reset publishes 436 positive, nonoverlapping programmes spanning the present, with 436 compatible boundary checkpoints and matching latest checkpoint/tail/anchor. No Rust scheduling behavior or private script content is changed in this repository. Evidence: test-results/windows-admin-fixes-20261009/native/live-scripted17-resume-guard-proof.json and live-scripted17-reset-proof.json.'

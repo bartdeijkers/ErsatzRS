@@ -24,6 +24,9 @@ release section when tagging a release.
 
 - Render the admin logo with a transparent vector TV/R-cog mark and theme-aware
   lettering, keeping it sharp and readable in both light and dark mode.
+- Resolve Classic, Block and Scripted editor data before mounting their
+  hydration islands, preventing missing-marker crashes and restoring their
+  interactive editing controls.
 - Allow Classic Refresh to discard expired legacy rows before checking a
   restoration boundary, so old overlaps do not block checkpoint recovery. Keep
   current programmes and delayed-channel retention protected.

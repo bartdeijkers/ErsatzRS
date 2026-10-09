@@ -17,9 +17,7 @@ use crate::admin::server_fns::playouts::{
     list_locked_playouts, save_playout_default_deco, save_scripted_playout, PlayoutDecoOption,
     PlayoutKindEditorForm, KIND_BLOCK, KIND_CLASSIC, KIND_SCRIPTED,
 };
-use crate::admin::ui::primitives::resource_state::{
-    admin_loading_resource_view, admin_result_view,
-};
+use crate::admin::ui::primitives::resource_state::admin_result_view;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(
@@ -50,36 +48,28 @@ fn PlayoutKindEditorPage(schedule_kind: i32) -> impl IntoView {
     let playout_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
 
-    view! { <PlayoutKindEditorIsland playout_id=playout_id() schedule_kind=schedule_kind/> }
+    let playout_id = playout_id();
+    // Resolve before emitting the island, without a parent Suspense. Streaming
+    // a fallback inside the island races its initial hydration placeholders.
+    let content = Suspend::new(async move {
+        let result = tokio::try_join!(
+            get_playout_kind_editor(playout_id, schedule_kind),
+            list_locked_playouts()
+        );
+        admin_result_view(result, |(maybe, locked_ids)| match maybe {
+            Some(form) => view! { <PlayoutKindEditorIsland form locked_ids/> }.into_any(),
+            None => view! { <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p> }.into_any(),
+        })
+    });
+    view! { {content} }
 }
 
 #[island]
-fn PlayoutKindEditorIsland(playout_id: i64, schedule_kind: i32) -> impl IntoView {
-    let data = Resource::new_blocking(
-        move || (playout_id, schedule_kind),
-        |(id, kind)| async move {
-            tokio::try_join!(get_playout_kind_editor(id, kind), list_locked_playouts())
-        },
-    );
-
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || {
-                data.get().map(|result| admin_result_view(result, |(maybe, locked_ids)| {
-                    match maybe {
-                        Some(form) => view! {
-                            <PlayoutKindEditorForm form=form locked_ids/>
-                        }
-                            .into_any(),
-                        None => view! {
-                            <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
-                        }
-                            .into_any(),
-                    }
-                }))
-            }}
-        </Suspense>
-    }
+fn PlayoutKindEditorIsland(form: PlayoutKindEditorForm, locked_ids: Vec<i64>) -> impl IntoView {
+    // Hydrated islands do not inherit the SSR application's language context.
+    #[cfg(target_arch = "wasm32")]
+    crate::admin::i18n::provide_i18n_context();
+    view! { <PlayoutKindEditorForm form locked_ids/> }
 }
 
 #[component]

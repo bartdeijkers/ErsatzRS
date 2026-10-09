@@ -455,9 +455,9 @@ test('166-entry overview reports overlapping preparation tasks separately from i
   // The worker can finish a task between the import and the hold above, and
   // a finished result stays complete. Tasks, not items, must add up: 165 items
   // with an interval and a subtitle task each are 330 tasks.
-  await expect(preparation).toContainText(/Completed \d+\/165/);
+  await expect(preparation).toContainText(/Completed \d+\/330/);
   const counts = (await preparation.textContent()) ?? '';
-  const completed = Number(/Completed (\d+)\/165/.exec(counts)?.[1]);
+  const completed = Number(/Completed (\d+)\/330/.exec(counts)?.[1]);
   const notQueued = Number(/Not queued (\d+)/.exec(counts)?.[1]);
   expect(completed + notQueued).toBe(330);
   await expect(page.locator('[name="category"] option[value="unknown"]')).toHaveText('Unknown (1)');
