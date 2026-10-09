@@ -67,9 +67,15 @@ jobs:
           ERSATZRS_WEB_BIN: ${{ github.workspace }}/target/x86_64-pc-windows-msvc/release/ersatzrs-web.exe
           ERSATZRS_SITE_ROOT: ${{ github.workspace }}/target/site
         run: scripts/release/verify-web-bundle.sh
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
+      - name: Use installed Python on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.version_info >= (3, 12), 'Python 3.12 or newer is required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer on the Windows release runner' }
+          $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
+          $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Verify Next staging (offline)
         run: python scripts/release/test-stage-next.py
       - name: Stage archive
@@ -371,8 +377,19 @@ jobs:
           timestamp-digest: SHA256
       # -------------------------------------------------------------------------
       - uses: actions/setup-python@v7
+        if: ${{ matrix.rid != 'win-x64' }}
         with:
           python-version: '3.12'
+      - name: Use installed Python on Windows
+        if: ${{ matrix.rid == 'win-x64' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.version_info >= (3, 12), 'Python 3.12 or newer is required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer on the Windows release runner' }
+          $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
+          $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Verify Next staging (offline)
         run: python scripts/release/test-stage-next.py
       - name: Stage archive

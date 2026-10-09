@@ -1,0 +1,245 @@
+name: Recover release Windows archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing unpublished stable release tag
+        required: true
+        type: string
+      source_sha:
+        description: Full application commit already accepted by CI
+        required: true
+        type: string
+      assets_run:
+        description: Release run with successful web assets and failed Windows Python setup
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+  id-token: write
+
+concurrency:
+  group: release-windows-recovery-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Recover tagged Windows archive
+    runs-on: [self-hosted, ersatzrs-windows-release]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CARGO_BUILD_JOBS: "1"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      LEPTOS_HASH_FILES: "false"
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      ASSETS_RUN: ${{ inputs.assets_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          # Keep the accepted native build; do not delete the runner's warm target.
+          clean: false
+          fetch-depth: 1
+      - name: Prefer Git Bash on Windows
+        shell: pwsh
+        run: |
+          "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Use installed Python on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.version_info >= (3, 12), 'Python 3.12 or newer is required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer on the Windows release runner' }
+          $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
+          $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Verify source, draft and original Windows failure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          import json, os, re, subprocess
+
+          def gh(*args):
+              return json.loads(subprocess.check_output(['gh', *args], text=True))
+
+          tag, source, run_id = (os.environ[key] for key in ('TAG', 'SOURCE_SHA', 'ASSETS_RUN'))
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
+              raise SystemExit('Recovery requires a stable release tag')
+          if not re.fullmatch(r'[0-9a-f]{40}', source) or not re.fullmatch(r'[0-9]+', run_id):
+              raise SystemExit('Recovery requires a full source SHA and numeric release run')
+          if subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() != source:
+              raise SystemExit('Checked-out application source does not match acceptance')
+          repo = os.environ['GITHUB_REPOSITORY']
+          release = gh('release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease')
+          if not release['isDraft'] or release['isPrerelease']:
+              raise SystemExit('Recovery requires an unpublished stable draft')
+          ref = gh('api', f'repos/{repo}/git/ref/tags/{tag}')['object']
+          while ref['type'] == 'tag':
+              ref = gh('api', f"repos/{repo}/git/tags/{ref['sha']}")['object']
+          if ref['type'] != 'commit' or ref['sha'] != source:
+              raise SystemExit('Release tag no longer matches the accepted source')
+          endpoint = f'repos/{repo}/actions/runs/{run_id}'
+          run = gh('api', endpoint)
+          expected = {'head_sha': source, 'head_branch': tag, 'path': '.github/workflows/release.yml'}
+          if any(run.get(key) != value for key, value in expected.items()):
+              raise SystemExit('Original release does not match the accepted tag/source')
+          jobs = gh('api', endpoint + '/jobs?per_page=100')['jobs']
+          if not any(j['name'] == 'Build web assets' and j['status'] == 'completed'
+                     and j['conclusion'] == 'success' for j in jobs):
+              raise SystemExit('Matching web-assets job did not succeed')
+          windows = [j for j in jobs if j['name'] == 'Release archive (win-x64)']
+          if len(windows) != 1 or windows[0]['status'] != 'completed' or windows[0]['conclusion'] != 'failure':
+              raise SystemExit('Original Windows job must have failed and must not be rerunning')
+          steps = windows[0]['steps']
+          for name in ('Build (cargo)', 'Test Windows startup registration'):
+              if not any(s['name'] == name and s['conclusion'] == 'success' for s in steps):
+                  raise SystemExit('Original native build/startup acceptance is missing: ' + name)
+          if [s['name'] for s in steps if s['conclusion'] == 'failure'] != ['Run actions/setup-python@v7']:
+              raise SystemExit('Recovery is limited to the demonstrated Windows Python setup failure')
+          required = {'Preflight', 'Format', 'Clippy', 'Test', 'Playwright E2E (chromium)',
+                      'Playwright E2E (firefox)', 'Cargo deny', 'Documentation links', 'Next engine'}
+          ci_runs = gh('run', 'list', '--repo', repo, '--workflow', 'ci.yml', '--commit', source,
+                       '--limit', '100', '--json', 'databaseId,headSha,status,conclusion')
+          for ci in ci_runs:
+              if ci['headSha'] != source or ci['status'] != 'completed' or ci['conclusion'] != 'success':
+                  continue
+              ci_jobs = gh('run', 'view', str(ci['databaseId']), '--repo', repo, '--json', 'jobs')['jobs']
+              passed = {j['name'] for j in ci_jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
+              if required <= passed:
+                  print('Accepted application CI:', ci['databaseId'])
+                  break
+          else:
+              raise SystemExit('No complete successful source CI gate found')
+          print('Immutable application source:', source)
+          print('Original release run:', run_id, 'Windows job:', windows[0]['id'])
+          print('Recovery workflow revision:', os.environ['GITHUB_SHA'])
+          '@ | Set-Content -Encoding utf8 "$env:RUNNER_TEMP/release-windows-guard.py"
+          python "$env:RUNNER_TEMP/release-windows-guard.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows archive recovery guard failed' }
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Download accepted web assets
+        uses: actions/download-artifact@v8
+        with:
+          name: web-assets
+          path: release-web-assets
+          run-id: ${{ inputs.assets_run }}
+          github-token: ${{ github.token }}
+      - name: Build accepted Windows source
+        shell: bash
+        env:
+          ERSATZRS_SKIP_STYLANCE: "1"
+        run: |
+          set -euo pipefail
+          cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --bin ersatzrs-launcher --target x86_64-pc-windows-msvc
+      - name: Test Windows startup registration
+        shell: pwsh
+        env:
+          ERSATZRS_SKIP_STYLANCE: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test -p ersatzrs-platform --target x86_64-pc-windows-msvc windows_startup
+          if ($LASTEXITCODE -ne 0) { throw 'Windows startup registration tests failed' }
+      - name: Verify web bundle (wasm checksum gate)
+        shell: bash
+        env:
+          ERSATZRS_WEB_BIN: ${{ github.workspace }}/target/x86_64-pc-windows-msvc/release/ersatzrs-web.exe
+          ERSATZRS_SITE_ROOT: ${{ github.workspace }}/release-web-assets/site
+        run: scripts/release/verify-web-bundle.sh
+      - name: Azure login for signing (optional)
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign Windows binaries (optional)
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
+        uses: azure/trusted-signing-action@v2
+        with:
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: ErsatzRS
+          certificate-profile-name: ErsatzRS
+          files-folder: ${{ github.workspace }}/target/x86_64-pc-windows-msvc/release
+          files-folder-filter: ersatzrs-web.exe,ersatzrs-scanner.exe,ersatzrs-healthcheck.exe,ersatzrs-launcher.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify Next staging (offline)
+        shell: bash
+        run: python scripts/release/test-stage-next.py
+      - name: Stage archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RID: win-x64
+          TARGET: x86_64-pc-windows-msvc
+          VERSION: ${{ inputs.tag }}
+          ARCHIVE: zip
+        run: |
+          set -euo pipefail
+          stage="ersatzrs-${VERSION}-${RID}"
+          rm -rf -- "$stage"
+          rm -f -- "${stage}.zip"
+          mkdir -p "$stage"
+          if [ "$RID" = "win-x64" ]; then
+            cp "target/${TARGET}/release/ersatzrs-web.exe" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-healthcheck.exe" "$stage/"
+            # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
+            cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
+          else
+            cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-healthcheck" "$stage/"
+          fi
+          cp -R release-web-assets/site "$stage/site"
+          cp -R assets "$stage/assets"
+          cp LICENSE "$stage/"
+          cp README.md "$stage/"
+          if find "$stage" \( -iname 'ffmpeg*' -o -iname 'ffprobe*' \) -print -quit | grep -q .; then
+            echo "release archives must not bundle ffmpeg or ffprobe" >&2
+            exit 1
+          fi
+          if [ "$RID" = "win-x64" ] && [ ! -s "$stage/ErsatzRS.exe" ]; then
+            echo "Windows release archive must contain a non-empty ErsatzRS.exe startup launcher" >&2
+            exit 1
+          fi
+          python scripts/release/stage-next.py --rid "$RID" --output "$stage/next"
+          next_binary="ersatztv-channel"
+          if [ "$RID" = "win-x64" ]; then next_binary="${next_binary}.exe"; fi
+          mv "$stage/next/$next_binary" "$stage/$next_binary"
+          if [ "$RID" = "win-x64" ]; then
+            mv "$stage/next/libvpl.dll" "$stage/libvpl.dll"
+            mv "$stage/next/libvpl-LICENSE.txt" "$stage/libvpl-LICENSE.txt"
+          fi
+          if [ "$ARCHIVE" = "zip" ]; then
+            7z a -tzip "${stage}.zip" "$stage" >/dev/null
+            if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then
+              echo "Windows zip must contain ErsatzRS.exe at its package root" >&2
+              exit 1
+            fi
+            echo "ARCHIVE_PATH=${stage}.zip" >> "$GITHUB_ENV"
+          else
+            tar -czf "${stage}.tar.gz" "$stage"
+            echo "ARCHIVE_PATH=${stage}.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - name: Recheck draft and upload Windows archive only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python "$env:RUNNER_TEMP/release-windows-guard.py"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows archive recovery guard failed before upload' }
+          gh release upload $env:TAG $env:ARCHIVE_PATH --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Windows draft archive upload failed' }
+          $hash = (Get-FileHash -Algorithm SHA256 $env:ARCHIVE_PATH).Hash.ToLowerInvariant()
+          "Archive: $env:ARCHIVE_PATH`nSHA256: $hash`nApplication source: $env:SOURCE_SHA`nRecovery workflow: $env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

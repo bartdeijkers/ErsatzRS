@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reuse installed Python 3.12 or newer on Windows release runners, avoiding
+  installer failures under restricted PowerShell execution policies. Recover a
+  failed Windows draft archive from its accepted immutable source and web bundle
+  without rebuilding successful Linux archives or changing the release tag.
+
 ## [1.1.0] - 2026-10-09
 
 ### Security
