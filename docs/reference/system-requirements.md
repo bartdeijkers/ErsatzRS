@@ -10,7 +10,7 @@ updating and review the release notes for migration or packaging changes.
 
 ## Published packages
 
-Normal releases currently publish:
+The v1.1.0 stable release publishes:
 
 | Package | Platform |
 |---|---|
@@ -18,16 +18,25 @@ Normal releases currently publish:
 | `ersatzrs-<tag>-linux-arm64.tar.gz` | Linux AArch64 |
 | `ersatzrs-<tag>-linux-arm.tar.gz` | Linux ARMv7 |
 | `ersatzrs-<tag>-win-x64.zip` | Windows x86-64 |
-| `ghcr.io/bartdeijkers/ersatzrs:<tag>` | Linux amd64, arm64, and arm/v7 |
 
-Beta tags may publish only the Windows archive. Stable release tags use the
-table above. macOS x86-64 and Apple Silicon remain
+No Docker image is included in v1.1.0. Existing GHCR tags must not be treated as
+images of this release. Other releases may include images for Linux amd64,
+arm64 and arm/v7; check their release notes before using them.
+
+Beta tags may publish only the Windows archive. macOS x86-64 and Apple Silicon remain
 supported build targets, but the active release workflow does not currently
 publish macOS archives.
 
 ARMv7, ARM64, Intel macOS, and Apple Silicon macOS application acceptance for
 Next, JavaScript audio selection, and chapter expressions remains explicitly
 unverified. Building or publishing an archive does not establish that acceptance.
+
+## Linux runtime baseline
+
+The v1.1.0 Linux x64, ARM64 and ARMv7 application archives require glibc 2.39
+or newer, such as Ubuntu 24.04 or Debian 13. Debian 12 (Bookworm), with glibc
+2.36, cannot run these application archives. The managed FFmpeg runtime has
+its own compatibility requirements; its minimum does not lower this baseline.
 
 ## Network requirements
 

@@ -11424,7 +11424,7 @@ row136 after refreshing upstream. No new release is implied.
 id         = 'ucu-09'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through release v26.11.1'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
@@ -11442,8 +11442,11 @@ Maintainer-approved exception (2026-10-01): outstanding ARMv7, ARM64, Intel
 macOS and Apple Silicon macOS application acceptance under ADRs 0095/0096/0098
 may remain explicit unverified debt at UCU-09 closeout. Linux x64 and Windows
 x64 application checks remain required; supported platforms are unchanged.
-Preserve
-subtitle and alternate-audio parity. Focused checks and substantive Codex review
+Release scope amended by the maintainer on 2026-10-09: publish the completed
+Linux x64, ARM64, ARMv7 and Windows x64 archives without Docker. The failed
+Docker job is excluded, not accepted as green; its prepared recovery was never
+dispatched. This does not waive any package, source-CI or runtime requirement.
+Preserve subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
 TSDuck passes if the pipeline changed. After local acceptance, push to remote
@@ -11458,6 +11461,63 @@ cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
+2026-10-09 final closeout: all208 rows through the immutable upstream
+v26.11.1 tag46118d43313b7828780fbfcfb46e980390ea8b0d are accepted. Later rows
+remain outside UCU-09. Stable v1.1.0 is published with the four accepted archives
+and a replaced, verified SHA256SUMS; Docker is excluded by explicit maintainer
+scope amendment. The immutable application tag points to
+97aa48a044f6517be9c709fed09b13337732f62b. Complete candidate CI37857408616
+passed all nine required jobs:3687 ordinary Rust tests,412 Next tests and
+actual playback smokes,335 Chromium passes/5 existing skips,310 Firefox
+passes/30 existing conditional skips, strict Clippy, formatting, dependency
+audit and documentation/progress gates. These are exact-source results;
+the original release workflow37863563954 is not wholly green.
+Its shared web bundle and three Linux archive jobs succeeded. Docker timed
+out after six hours; Windows Python setup failed after its native build and
+tests. Guarded Windows recovery37887297964 completed successfully using the
+same application source and installed Python without changing execution policy.
+Recipe3ac6958676e22bc1d4e7cdfe0bc5492130471244 has complete green CI37887267400;
+21 offline Next staging tests pass natively on Windows and POSIX.
+Fresh archive checksums:linux-x64
+68de97722778002a062555f5060f26be0cc2e507080c4da445f751ac3e61126e;
+linux-arm64
+351196a266737195a5864b1956ef66a1d8f8ca0685ec37f20fc336b7fe574801;
+linux-arm
+31aad7da565c84bc4da417eaa91ac6fa17ae4576f73e65c68420cf1e02a22511;
+win-x64
+f608b75dc32f199c4db58203e8959160a9a4b1f5e40a3dec3e96bfa1f3aa6a25.
+All four archive digests match GitHub asset metadata and independent draft
+and published downloads. Layout, executable architecture, source README/LICENSE,
+shared CSS/JS/WASM and exact bundled Next036 payload/provenance are verified.
+All three Linux application archives require glibc2.39; Bookworm2.36 is not
+compatible. FFmpeg2.0.6 and Next036 are existing pinned, checksum-verified
+releases; no additional dependency publication is needed.
+Actual Linux x64 packaged startup and matched web bundle pass. Chromium/Firefox
+package interactions have5 passes/1 existing conditional skip; AV1 health has
+4 hydrated/no-JS passes. Native AV1 fMP4 output decodes12s at320x180 with Dutch
+878.49Hz audio and47 caption pixels, rejects MPEG-TS with415 and retains the
+profile. Bundled Next H264 output decodes12s at320x180 with Dutch880.07Hz audio
+and48 caption pixels, serves HLS after wrapper disconnect and preserves settings.
+Actual Windows ZIP launches through ErsatzRS.exe with the extracted server hash
+matched, a new isolated database, successful bootstrap/health and matching web
+bundle. Native Edge has2 hydration cases and1 language case passing with no
+console/page errors. Native AV1 decodes12s at320x180 with Dutch880.13Hz audio
+and47 caption pixels; bundled Next H264 decodes12s with Dutch880.40Hz audio
+and48 caption pixels. Unsupported AV1 transports are refused, HLS survives
+Next wrapper disconnect, and engine/profile/audio/subtitle settings remain intact.
+Owned package servers and children are absent; acceptance ports are free.
+Canonical receipts/logs are retained under tmp/release-v1.1.0-97aa48a0:
+linux-package-acceptance.json,windows-package-acceptance.json,
+archive-*-verification.json,archive-elf-runtime-requirements.json,
+final-ci-*.json,package-only-scope.json and published-release-verification.json.
+Earlier final local Clippy,4011 nextest tests plus doctests, parity/progress/
+architecture/hydration gates, HTTP smoke and87 TSDuck checks remain valid for
+unchanged production code. Approved Intel QSV,AMD AMF,native Linux NVIDIA
+interop and ARM/macOS application acceptance remain explicitly unverified.
+Temporary Next/FFmpeg patch retirement remains mandatory independently per fix.
+Publication:https://github.com/bartdeijkers/ErsatzRS/releases/tag/v1.1.0.
+
+Earlier corrective evidence, retained for provenance:
 2026-10-09 CI37850083492 at ea8e2839 passes all3687 ordinary Rust tests,
 all412 Next tests and actual Burn/preview and Hybrid Convert playback smokes.
 Chromium has334 passes, five existing skips and one import navigation race.

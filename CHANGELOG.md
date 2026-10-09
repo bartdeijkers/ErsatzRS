@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ## [1.1.0] - 2026-10-09
 
+This stable release includes Windows x64, Linux x64, ARM64 and ARMv7 archives.
+Docker is excluded with maintainer approval after its build timed out. Linux
+application archives require glibc 2.39 or newer. Approved hardware/platform
+acceptance debt remains explicitly unverified.
+
 ### Security
 
 - Update the transitive CI tooling dependency `fast-uri` to 3.1.8 to fix URI

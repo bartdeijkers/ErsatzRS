@@ -4,8 +4,12 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
 summary    = """
-208/208 accepted; local gates and both-browser clock/import checks pass.
-UCU-09 owns proof; final exact-SHA CI and package publication remain open.
+208/208 accepted through v26.11.1; UCU-09 is Complete. Stable v1.1.0 is
+published with four verified archives, exact-source green CI and Linux/Windows
+package startup, browser and decoded playback proof. Docker is excluded by
+explicit maintainer release-scope approval (2026-10-09), not claimed verified.
+UCU-09 owns current proof; this feature remains In progress only for the
+explicit ongoing patch-retirement, accepted limitations and unverified debt.
 201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
 202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
 200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
@@ -14,7 +18,7 @@ UCU-09 owns proof; final exact-SHA CI and package publication remain open.
 196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
 195 Port: deep scan/artwork; UCU-09 owns runtime/browser/restart proof.
 194 Adapt (0117): content duration/native-Next handoff and generated silence
-pass on Linux/Windows; final window gates remain open.
+pass on Linux/Windows; final window gates and package publication pass.
 193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
 190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
 Rows209 onward remain outside UCU-09.
@@ -34,24 +38,10 @@ Plex folder tags, Next error cards and both-engine credits troubleshooting.
 154 Adapt (0005/0105): motion EOF/expiry/loops and preview clocks; decoded,
 argv, browser and both-engine smoke evidence is recorded in UCU-09.
 155 Port: optional Next AMF protocol; hardware acceptance remains open.
-156 Port: machine CRUD/deletion/localization; 33 focused, 15 browser, lint
-and native smoke pass.
-157 Port: native completion/sample ownership, URI redaction and smart 409;
-53 focused checks, 24 browser cases and lint pass.
-158 Covered: atomic admission, Plex fencing; Trakt retired.
-22 checks and lint pass.
-159 Port: maintenance failure isolation/retry, health and cancellation;
-24 checks and lint pass.
-160 Port: movie order/save recovery, atomic validation and legacy repair;
-13 checks, eight browser cases and strict lint pass.
-161 Covered: FFmpeg font ownership replaces shared mapper; nine checks pass.
-162 Port: fresh script choices, selection recovery and no-JS settings;
-19 checks, six browser cases, strict lint and native smoke pass.
-163 Port: shared script path validation/execution and Lua arguments;
-46 focused checks and strict lint pass.
-164 Port: dependent choices and template hydration; four browser cases pass.
-165 Covered: credits fallback and worker/graphics ownership; 18 checks pass.
-166 Covered: case-insensitive YAML discovery; three scanner checks pass.
+156-166 Port/Covered: machine management, troubleshooting completion,
+maintenance isolation, movie recovery, font ownership, script validation and
+settings/template hydration, credits fallback and YAML discovery pass their
+focused/runtime/browser gates. UCU-09 owns per-row counts and review evidence.
 
 UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
 chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
@@ -62,7 +52,7 @@ UCU-02 owns rows23-30 decoded/browser evidence; ADR0099 retains converted HLS te
 76-77: Classic anchors/checkpoints.
 RGB opacity is proven; UCU-09 owns evidence.
 Row39 owns Remote Stream/add-on source, caption and normal/preview lifecycle acceptance. ADR 0100 embedded text limitations remain
-explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. p9a-01 waits for UCU-09; approved platform debt remains.
+explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. UCU-09 is Complete; approved platform debt remains.
 """
 
 [[debt]]

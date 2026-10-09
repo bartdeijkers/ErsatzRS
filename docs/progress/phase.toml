@@ -61,6 +61,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-09: UCU-09 is Complete through v26.11.1/row208. Stable v1.1.0 is
+published with the four completed Linux/Windows archives and verified checksums.
+Exact application97aa48a0 and Windows recipe3ac69586 have terminal full green CI;
+actual Linux/Windows packaged startup, hydrated controls and decoded native/Next
+playback pass. The maintainer excludes Docker from this release after its timeout;
+no Docker recovery was dispatched and no v1.1.0 image is claimed. Approved
+hardware/platform debt stays explicitly unverified. This current closeout
+supersedes historical pending UCU-09 CI/package notes below. Later upstream
+rows and existing v1.1.1 channel findings remain outside this completed window.
+
 2026-10-09 UCU-09: candidate ea8e2839 passes all3687 Rust and all412 Next CI
 cases plus both actual Next smokes. Chromium334/five skips has one import
 navigation race, now corrected with unchanged assertions and both-browser proof.

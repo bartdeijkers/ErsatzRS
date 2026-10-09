@@ -29,13 +29,15 @@ The stable release line starts at **v1.1.0**. Read the
 ## Install and start
 
 Download an archive from [ErsatzRS releases](https://github.com/bartdeijkers/ErsatzRS/releases),
-or use the versioned Docker image. Follow the guide for your deployment:
+then follow the guide for your deployment. **v1.1.0 includes Windows x64 and
+Linux x64, ARM64 and ARMv7 archives; it does not include a Docker image.**
+The Linux archives require glibc 2.39 or newer.
 
 | Deployment | Start here |
 |---|---|
 | Windows | [Install on Windows](docs/how-to/install-on-windows.md); extract the complete archive and run `ErsatzRS.exe` |
 | Linux | [Install on Linux with systemd](docs/how-to/install-on-linux.md) |
-| Docker | [Install with Docker](docs/how-to/install-with-docker.md) |
+| Docker | [Install with Docker](docs/how-to/install-with-docker.md), for a release that includes an image; unavailable for v1.1.0 |
 
 The release includes its pinned Next engine. On first startup, ErsatzRS
 downloads and checksum-verifies its matching first-party FFmpeg runtime.

@@ -16,6 +16,13 @@ macOS archives are intentionally omitted for now. Keep this release line focused
 on Linux and Windows archives plus GHCR Docker images; restore the two `osx-*`
 matrix entries only in a future macOS-targeted release.
 
+For v1.1.0, the maintainer explicitly approved publishing the four completed
+archives without Docker after the Docker job timed out. Candidate CI and the
+Windows recovery recipe passed; native Linux x64 and Windows x64 package
+acceptance passed. The release notes identify the omitted image, glibc 2.39
+minimum and approved unverified hardware/platform debt. This exception does not
+make the failed Docker job green or waive Docker gates for another release.
+
 Beta tags (`v*.*.*-beta` or `v*.*.*-beta.*`) intentionally take a separate
 Windows-only path.
 They run only on `[self-hosted, ersatzrs-windows-release]`, stage the

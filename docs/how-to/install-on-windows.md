@@ -16,8 +16,9 @@ the official ErsatzRS release page before continuing. Windows signing is
 release-dependent; never bypass the warning for an archive from another
 source.
 
-Beta tags may publish only the Windows archive. Normal release tags publish the
-active Linux and Windows archives plus the Docker image.
+Beta tags may publish only the Windows archive. v1.1.0 includes the Windows
+archive and three Linux archives, without a Docker image. Check each release's
+notes for its available packages.
 
 ## Start ErsatzRS
 
