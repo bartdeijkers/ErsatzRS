@@ -22,6 +22,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Render the admin logo with a transparent vector TV/R-cog mark and theme-aware
+  lettering, keeping it sharp and readable in both light and dark mode.
 - Allow Classic Refresh to discard expired legacy rows before checking a
   restoration boundary, so old overlaps do not block checkpoint recovery. Keep
   current programmes and delayed-channel retention protected.
