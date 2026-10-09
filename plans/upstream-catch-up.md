@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-08): `cef9793aaba701178ad402d5ec2cb0f7943b632b`
-  — refactor: remove imagesharp dependency; update others (#3072).
+- Latest fetched target (`origin/main`, 2026-10-09): `7861f2c3cb278db16a137ea8f6d63c2f9d74afec`
+  — chore: update next (#3073).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -628,6 +628,8 @@ remain. See `post-publication-cleanup.json`.
   exact prefix.
   The 2026-10-08 refresh appends the ImageSharp removal as pending row 213; all
   212 existing SHA/subject pairs remain an exact prefix.
+  The 2026-10-09 refresh appends the Next engine pin bump as pending row 214; all
+  213 existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5788,3 +5790,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 211 | `9d60b28e` | build: scope app tokens (#3069) | | | | ucu-10; provisional: N/A (upstream-only GitHub Actions change: the release-repository input becomes a name under the same owner and each app token is scoped to that repository). ErsatzRS publishes from its own repository with its own CI, as rows 191, 192 and 202 recorded. Claude 2026-10-07 triage. |
 | 212 | `5f5d2815` | build: pin a specific next version (#3070) | | | | ucu-10; provisional: N/A for the diff, with one thing to compare. Upstream adds a NEXT_PIN file plus scripts that download exactly that Next build per target (currently `v0.2.0-96aa6cb6-develop`) instead of the latest one. ErsatzRS already acquires a pinned Next engine before startup (`af7eb835`) with verified bytes, and its wire contracts are pinned in `crates/ersatzrs-infra/src/next_engine/protocol.rs:6` (playout 0.0.5, channel 0.1.1), so the workflow has no counterpart; what is worth checking is whether our pinned build matches the one upstream now pins. Claude 2026-10-07 triage. |
 | 213 | `cef9793a` | refactor: remove imagesharp dependency; update others (#3072) | | | | ucu-10; provisional: N/A (upstream dependency work). The graphics image element drops ImageSharp and decodes through SkiaSharp's SKCodec instead, with a hand-written APNG decoder added because SKCodec does not animate APNG; the rest is NuGet version bumps. ErsatzRS has no Skia or ImageSharp: images reach the graphics path through FFmpeg demuxers under the accepted drawvg design, and animated formats are already treated as animation-capable (`crates/ersatzrs-infra/src/health/checks/zero_duration.rs:89` names .gif, .webp, .apng and .avif). The audit only has to confirm APNG animation actually plays through that path, which belongs with the animated-graphics work rather than this row. Claude 2026-10-09 triage. |
+| 214 | `7861f2c3` | chore: update next (#3073) | | | | ucu-10; provisional: Adapt, and the first row of this window with real runtime consequences. The diff only moves the pinned Next build from `v0.2.0-96aa6cb6-develop` to `v0.2.1-e3dcde41-develop`, but the changelog says what that build fixes: output is now always 4:2:0, where still images and song backgrounds were encoded 4:4:4 by software encoders and many clients reject that, plus two NVIDIA watermark failures (a `yuva420p` watermark below 100% opacity, and a watermark while encoding in software such as mpeg2video). ErsatzRS pins its own reviewed distribution under ADR 0117 (`scripts/release/next-patches/manifest.json:6`, `0.1.0-0362692-ersatzrs.1`), which is older than both, so the decision is whether to rebase that pin rather than copy a tag. The 4:2:0 behaviour is worth checking against our still-image and song paths either way. Claude 2026-10-09 triage. |
