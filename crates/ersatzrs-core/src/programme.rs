@@ -3,10 +3,11 @@
 //! Source: `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/RefreshChannelDataHandler.cs`.
 
 use std::collections::BTreeMap;
+use std::num::NonZeroU8;
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{FillerKind, PlayoutScheduleKind};
-use jiff::{tz::TimeZone, Timestamp};
+use jiff::{tz::TimeZone, Span, Timestamp};
 
 use crate::xmltv::{project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme};
 
@@ -344,6 +345,56 @@ impl ProgrammeClock {
             .tomorrow()?
             .to_zoned(self.0.clone())?
             .timestamp();
+        Ok((
+            DateTime::from_timestamp(start.as_second(), 0).expect("Jiff fits Chrono"),
+            DateTime::from_timestamp(finish.as_second(), 0).expect("Jiff fits Chrono"),
+        ))
+    }
+
+    /// Return UTC bounds for one through 255 civil dates starting with today.
+    ///
+    /// The end date is computed directly from the capture instant's local date,
+    /// rather than adding elapsed hours or advancing through zoned days. This
+    /// preserves civil date counting across skipped dates. Jiff's compatible
+    /// gap/fold resolution and `start_of_day` select each actual boundary; an
+    /// entirely skipped end date resolves to the following existing date.
+    ///
+    /// # Errors
+    /// Returns an error for unsupported timestamps (including leap seconds) or
+    /// end dates, or if resolution produces an empty or reversed interval.
+    ///
+    /// # Panics
+    /// Panics if a valid Jiff timestamp cannot be represented by Chrono, whose
+    /// supported year range includes Jiff's entire supported range.
+    pub fn calendar_day_bounds(
+        &self,
+        captured_at: DateTime<Utc>,
+        days: NonZeroU8,
+    ) -> Result<(DateTime<Utc>, DateTime<Utc>), jiff::Error> {
+        if captured_at.timestamp_subsec_nanos() >= 1_000_000_000 {
+            return Err(jiff::Error::from_args(format_args!(
+                "civil calendar capture cannot represent a leap second"
+            )));
+        }
+        let nanoseconds = i32::try_from(captured_at.timestamp_subsec_nanos()).map_err(|_| {
+            jiff::Error::from_args(format_args!(
+                "civil calendar capture nanoseconds are unsupported"
+            ))
+        })?;
+        // This constructor checks Jiff's seconds range before construction.
+        let zoned = Timestamp::new(captured_at.timestamp(), nanoseconds)?.to_zoned(self.0.clone());
+        let start = zoned.start_of_day()?.timestamp();
+        let finish = zoned
+            .date()
+            .checked_add(Span::new().days(days.get()))?
+            .to_zoned(self.0.clone())?
+            .start_of_day()?
+            .timestamp();
+        if finish <= start {
+            return Err(jiff::Error::from_args(format_args!(
+                "civil calendar window must have increasing UTC boundaries"
+            )));
+        }
         Ok((
             DateTime::from_timestamp(start.as_second(), 0).expect("Jiff fits Chrono"),
             DateTime::from_timestamp(finish.as_second(), 0).expect("Jiff fits Chrono"),

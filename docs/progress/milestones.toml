@@ -1490,6 +1490,24 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory civil-window checkpoint: the existing programme clock
+now computes one through 255 civil dates from the capture instant's local date,
+using direct end-date arithmetic and actual timezone day starts. Three-date
+windows retain 71/73-hour DST differences, midnight gaps/folds and skipped dates.
+Unsupported capture/end ranges and leap-second captures fail explicitly; the
+existing single-day API and all runtime callers remain unchanged.
+All 14 focused programme regressions pass in Nextest
+cf2aaf38-9c60-43e1-9905-332fad7da7eb: six new civil-window tests and eight
+existing baselines. The initial range regression exposed
+Jiff's unchecked nanosecond constructor; checked seconds/nanoseconds construction
+now rejects upper/lower unsupported ranges without panic. Strict core
+all-target Clippy, formatting, architecture-lint and progress validation pass;
+independent review is clean. This is a guide-window primitive only: named
+request timezone acquisition, complete bounded guide projection and producer
+invocation remain open. Existing encoder/transport/scanner/UI/runtime paths are
+unchanged; previous applicable evidence is reused. No milestone status,
+dependency or acceptance changes.
+
 2026-10-10 preparatory page-response checkpoint: closed response-only v1 DTOs
 and a raw-byte parser enforce the 8 MiB input cap before parsing, complete
 recursive duplicate-key rejection, required fields, schema/generation checks

@@ -398,6 +398,14 @@ a three-calendar-day guide window for the TV-guide consumer; timezone/DST
 conversion must use the existing programme clock. The add-on has no database
 connection or scheduling write authority.
 
+Anchor the three-date guide window to the capture instant's local calendar date:
+start at that date's actual beginning and end at the beginning of the date three
+civil dates later. Reuse `ProgrammeClock::calendar_day_bounds` with a count of
+three. Direct date arithmetic preserves DST and skipped-date behavior; it does
+not add 72 elapsed hours. The helper is preparatory and is not yet wired to
+request construction. Named timezone acquisition and complete guide projection
+remain required host checks.
+
 The response echoes the generation token and contains service language,
 initial page, page/subpage identities, typed row content and navigation links.
 The host checks identity, compatibility, bounded size, duplicate keys, encoding,

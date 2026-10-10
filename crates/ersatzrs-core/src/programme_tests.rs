@@ -236,3 +236,155 @@ fn historical_local_days_resolve_each_dst_boundary_independently() {
         "2015-10-18T03:00:00Z".parse::<DateTime<Utc>>().unwrap()
     );
 }
+
+#[test]
+fn civil_three_day_windows_follow_spring_and_fall_dst() {
+    let clock = ProgrammeClock::named("Europe/Amsterdam").unwrap();
+    for (capture, start, finish, hours) in [
+        (
+            "2026-03-28T12:00:00Z",
+            "2026-03-27T23:00:00Z",
+            "2026-03-30T22:00:00Z",
+            71,
+        ),
+        (
+            "2026-10-24T12:00:00Z",
+            "2026-10-23T22:00:00Z",
+            "2026-10-26T23:00:00Z",
+            73,
+        ),
+    ] {
+        let bounds = clock
+            .calendar_day_bounds(capture.parse().unwrap(), NonZeroU8::new(3).unwrap())
+            .unwrap();
+        assert_eq!(bounds, (start.parse().unwrap(), finish.parse().unwrap()));
+        assert_eq!((bounds.1 - bounds.0).num_hours(), hours);
+    }
+}
+
+#[test]
+fn civil_window_resolves_midnight_gap_and_fold_boundaries() {
+    for (zone, capture, start, finish, hours) in [
+        (
+            "America/Sao_Paulo",
+            "2015-10-18T12:00:00Z",
+            "2015-10-18T03:00:00Z",
+            "2015-10-21T02:00:00Z",
+            71,
+        ),
+        (
+            "America/Sao_Paulo",
+            "2015-10-15T12:00:00Z",
+            "2015-10-15T03:00:00Z",
+            "2015-10-18T03:00:00Z",
+            72,
+        ),
+        (
+            "America/Havana",
+            "2020-11-01T12:00:00Z",
+            "2020-11-01T04:00:00Z",
+            "2020-11-04T05:00:00Z",
+            73,
+        ),
+    ] {
+        let clock = ProgrammeClock::named(zone).unwrap();
+        let bounds = clock
+            .calendar_day_bounds(capture.parse().unwrap(), NonZeroU8::new(3).unwrap())
+            .unwrap();
+        assert_eq!(bounds, (start.parse().unwrap(), finish.parse().unwrap()));
+        assert_eq!((bounds.1 - bounds.0).num_hours(), hours);
+    }
+}
+
+#[test]
+fn civil_window_counts_skipped_dates_without_iterating_zoned_days() {
+    let clock = ProgrammeClock::named("Pacific/Apia").unwrap();
+    let capture = "2011-12-29T12:00:00Z".parse().unwrap();
+    // December 30 did not exist: two requested civil dates span 24 hours.
+    for (days, finish, hours) in [
+        (1, "2011-12-30T10:00:00Z", 24),
+        (2, "2011-12-30T10:00:00Z", 24),
+        (3, "2011-12-31T10:00:00Z", 48),
+    ] {
+        let bounds = clock
+            .calendar_day_bounds(capture, NonZeroU8::new(days).unwrap())
+            .unwrap();
+        assert_eq!(
+            bounds.0,
+            "2011-12-29T10:00:00Z".parse::<DateTime<Utc>>().unwrap()
+        );
+        assert_eq!(bounds.1, finish.parse::<DateTime<Utc>>().unwrap());
+        assert_eq!((bounds.1 - bounds.0).num_hours(), hours);
+    }
+}
+
+#[test]
+fn civil_one_day_window_preserves_existing_day_bounds_and_nanosecond_date() {
+    for (zone, capture) in [
+        ("UTC", "1969-12-31T23:59:59.999999999Z"),
+        ("Europe/Amsterdam", "2026-03-29T10:00:00.123456789Z"),
+        ("Europe/Amsterdam", "2026-10-25T10:00:00.999999999Z"),
+        ("Europe/Amsterdam", "2026-10-05T21:59:59.999999999Z"),
+        ("America/Sao_Paulo", "2015-10-18T12:00:00.000000001Z"),
+        ("America/Havana", "2020-11-01T12:00:00.999999999Z"),
+        ("Pacific/Apia", "2011-12-29T12:00:00.123456789Z"),
+    ] {
+        let clock = ProgrammeClock::named(zone).unwrap();
+        let capture = capture.parse().unwrap();
+        assert_eq!(
+            clock.calendar_day_bounds(capture, NonZeroU8::MIN).unwrap(),
+            clock.day_bounds(capture).unwrap()
+        );
+    }
+    let clock = ProgrammeClock::named("Europe/Amsterdam").unwrap();
+    let bounds = clock
+        .calendar_day_bounds(
+            "2026-10-05T21:59:59.999999999Z".parse().unwrap(),
+            NonZeroU8::new(3).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        bounds.0,
+        "2026-10-04T22:00:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+    assert_eq!(
+        bounds.1,
+        "2026-10-07T22:00:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+}
+
+#[test]
+fn civil_window_rejects_unsupported_capture_and_end_date_ranges() {
+    let clock = ProgrammeClock::named("UTC").unwrap();
+    assert!(clock
+        .calendar_day_bounds(DateTime::<Utc>::MAX_UTC, NonZeroU8::MIN)
+        .is_err());
+    assert!(clock
+        .calendar_day_bounds(DateTime::<Utc>::MIN_UTC, NonZeroU8::MIN)
+        .is_err());
+    assert!(clock
+        .calendar_day_bounds(
+            "9999-12-30T12:00:00Z".parse().unwrap(),
+            NonZeroU8::new(3).unwrap()
+        )
+        .is_err());
+    let capture = "2026-01-01T12:00:00Z".parse().unwrap();
+    let bounds = clock
+        .calendar_day_bounds(capture, NonZeroU8::new(255).unwrap())
+        .unwrap();
+    assert_eq!((bounds.1 - bounds.0).num_days(), 255);
+}
+
+#[test]
+fn civil_window_rejects_leap_second_capture_without_shifting_its_date() {
+    let clock = ProgrammeClock::named("UTC").unwrap();
+    let capture = DateTime::from_timestamp(1_483_228_799, 1_500_000_000).unwrap();
+    assert_eq!(capture.timestamp_subsec_nanos(), 1_500_000_000);
+    let error = clock
+        .calendar_day_bounds(capture, NonZeroU8::new(3).unwrap())
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "civil calendar capture cannot represent a leap second"
+    );
+}

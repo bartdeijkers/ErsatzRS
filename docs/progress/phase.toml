@@ -1292,6 +1292,8 @@ Strict response-v1 wire parsing and application conversion now validate complete
 unpublished page drafts. Twenty focused tests and independent review pass;
 request/guide projection, capability admission/invocation, native encoding checks
 and generation publication remain open. P9A-04 records preparatory evidence only.
+The shared programme clock now computes civil guide windows directly across
+DST, midnight gaps/folds and skipped dates; request construction remains open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.
