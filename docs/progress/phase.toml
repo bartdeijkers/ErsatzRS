@@ -1202,8 +1202,11 @@ x64 and emulated ARM64/ARMv7; the complete Windows FFmpeg interop case now
 passes after bounding only the fixture's independent audio input probe. Raw
 PCM, both tracks, tone criteria and tool deadlines remain unchanged. Full routed
 item/source selection, capacity-slate topology/ownership and native platform
-acceptance remain open. Next implement compatible slate/programme handover and
-automatic publication selection; native Windows host acceptance remains open.
+acceptance remain open. The existing capacity registry now has a regression-
+proven atomic wrapper/first-encoder reservation primitive with distinct leases.
+Next wire owner-bound one-time encoder handoff through immediate admission and
+capacity retries, then prove compatible slate/programme handover and automatic
+publication selection. Native Windows host acceptance remains open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

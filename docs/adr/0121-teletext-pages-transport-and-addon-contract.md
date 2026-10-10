@@ -125,6 +125,12 @@ delay and sink lateness. This prevents downstream pipe backpressure from
 starving the realtime concat wrapper without relaxing its delivery fences.
 No extra task, source opening or arrival-age reset is introduced; EOF sealing
 follows pending flush/acknowledgement.
+The existing transcode registry now provides atomic reservation of two distinct
+MPEG-TS leases for a wrapper and its first encoder. Failure retains neither;
+independent release and uncertain-process quarantine remain unchanged. This is
+a preparatory admission primitive. The legacy routes and capacity-wait retries
+still require exact owner-bound, one-time encoder handoff. Limit-one handling,
+other consumers, fairness and compatible slate handover remain unproven.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

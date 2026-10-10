@@ -45,6 +45,8 @@ release section when tagging a release.
   refill between writes and drain validated short-source EOF. Enforce first-byte,
   idle-source and sink deadlines, and retain cleanup uncertainty through startup
   and hardware retries. Reject incompatible rate, holding or allocation policies.
+  Prepare atomic wrapper/first-encoder capacity admission with separate leases
+  and independent cleanup quarantine; route integration remains pending.
   Synthetic multi-program and real looping-wrapper audiovisual tests preserve
   programme packets, incoming audio languages, source captions and decoded
   frames/timestamps; live channel

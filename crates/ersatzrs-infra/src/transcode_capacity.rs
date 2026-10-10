@@ -302,19 +302,58 @@ pub fn try_reserve_active_transcode(
         return None;
     }
 
+    Some(insert_active_transcode(&mut slots, slot))
+}
+
+/// Atomically reserve independent slots for a legacy wrapper and its first
+/// content encoder, in that order. Admission fails without retaining either
+/// slot when two free places are unavailable.
+///
+/// A wrapper-only admission can consume the last free place and leave every
+/// wrapper waiting for an encoder. Callers must keep the first lease with the
+/// wrapper owner and move the second to exactly one content producer. Later
+/// producers still reserve their own slots. Each lease retains its existing
+/// independent drop and uncertain-process quarantine behavior.
+///
+/// This primitive does not admit an unreserved wrapper or grant a content
+/// process an exemption from the configured active-transcode limit.
+#[must_use]
+pub fn try_reserve_mpeg_ts_wrapper_capacity(
+    limit: i32,
+    channel_number: &str,
+) -> Option<(ActiveTranscodeReservation, ActiveTranscodeReservation)> {
+    let available_before_pair = usize::try_from(limit.checked_sub(2)?).ok()?;
+    let mut slots = active_transcode_slots()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if slots.len() > available_before_pair {
+        return None;
+    }
+    let wrapper = ActiveTranscodeSlot::new_mpeg_ts(channel_number);
+    let encoder = ActiveTranscodeSlot::new_mpeg_ts(channel_number);
+    Some((
+        insert_active_transcode(&mut slots, wrapper),
+        insert_active_transcode(&mut slots, encoder),
+    ))
+}
+
+fn insert_active_transcode(
+    slots: &mut HashMap<String, ActiveTranscodeSlot>,
+    slot: ActiveTranscodeSlot,
+) -> ActiveTranscodeReservation {
     let key = slot.key.clone();
     let slot_id = slot.slot_id;
     slots.insert(key.clone(), slot);
     let active = i32::try_from(slots.len()).unwrap_or(i32::MAX);
     ACTIVE_TRANSCODE_PEAK.fetch_max(active, Ordering::AcqRel);
 
-    Some(ActiveTranscodeReservation {
+    ActiveTranscodeReservation {
         lease: Arc::new(ActiveTranscodeLease {
             key,
             slot_id,
             release_on_drop: AtomicBool::new(true),
         }),
-    })
+    }
 }
 
 pub fn request_active_transcode_reclaim(
@@ -436,6 +475,84 @@ pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrapper_pair_rejects_insufficient_capacity_without_partial_admission() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        for limit in [i32::MIN, -1, 0, 1] {
+            assert!(try_reserve_mpeg_ts_wrapper_capacity(limit, "pair").is_none());
+            assert_eq!(active_transcode_snapshot(limit).active, 0);
+            assert_eq!(active_transcode_snapshot(limit).peak, 0);
+        }
+        let occupied =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("other")).unwrap();
+        assert!(try_reserve_mpeg_ts_wrapper_capacity(2, "pair").is_none());
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        assert_eq!(active_transcode_snapshot(2).peak, 1);
+        drop(occupied);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
+
+    #[test]
+    fn wrapper_pair_keeps_last_encoder_place_available_between_items() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let (wrapper, first_encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "first").unwrap();
+        assert_ne!(wrapper.slot_id(), first_encoder.slot_id());
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(first_encoder);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        assert!(try_reserve_mpeg_ts_wrapper_capacity(2, "second").is_none());
+        let next_encoder =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("first"))
+                .expect("the admitted wrapper can reserve its next independent encoder");
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(next_encoder);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+        assert_eq!(active_transcode_snapshot(2).peak, 2);
+    }
+
+    #[test]
+    fn competing_wrapper_pairs_cannot_each_take_one_slot() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let contenders = ["first", "second"].map(|channel| {
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                try_reserve_mpeg_ts_wrapper_capacity(2, channel)
+            })
+        });
+        barrier.wait();
+        let results = contenders.map(|thread| thread.join().unwrap());
+        assert_eq!(results.iter().filter(|pair| pair.is_some()).count(), 1);
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        assert_eq!(active_transcode_snapshot(2).peak, 2);
+        drop(results);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
+
+    #[test]
+    fn wrapper_pair_quarantines_only_the_uncertain_process_slot() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "pair").unwrap();
+        wrapper.retain_until_restart();
+        drop(wrapper);
+        drop(encoder);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        assert!(try_reserve_mpeg_ts_wrapper_capacity(2, "other").is_none());
+        let independent =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("other")).unwrap();
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(independent);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        reset_active_transcode_state_for_tests();
+    }
 
     #[test]
     fn preparation_clone_holds_one_slot_until_its_last_owner_finishes() {

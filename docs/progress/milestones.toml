@@ -1212,6 +1212,21 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory wrapper/encoder capacity checkpoint: the existing
+registry now atomically reserves two distinct MPEG-TS leases, failing without
+partial admission when two places are unavailable. A new wrapper cannot claim
+an existing wrapper's sole free encoder place. Independent release/quarantine
+retains the configured limit. All 12 focused capacity regressions pass in
+Nextest f6d0b9aa-0eb3-4f07-a0ba-7e4da481101e, including competing admissions,
+insufficient/invalid limits, between-item encoder availability and quarantine.
+The function is not wired into legacy immediate admission or capacity retries;
+no production deadlock resolution or continuous slate handover is claimed.
+Next implement exact per-wrapper ownership and one-time first-encoder handoff
+through both paths, with cancellation/startup cleanup and visible limit-one
+incompatibility. Compatible stream topology, source preservation, fairness with
+other consumers and full routed/runtime acceptance remain open. No milestone
+status, dependency or acceptance changes.
+
 2026-10-10 bounded decoder-oracle follow-up to the final-wrapper checkpoint:
 Windows FFmpeg interop now passes the complete A/B/A wrapper fixture in Nextest
 b5632a18-0a45-4b9b-a9ee-3583dfcf32b2 (17.173 seconds). The exact captured finite
