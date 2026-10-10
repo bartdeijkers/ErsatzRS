@@ -1300,6 +1300,9 @@ wire/public tests pass; host guide acquisition/semantics and invocation stay ope
 A pure supplied-context host builder now returns bounded complete guide requests,
 retaining grouped segments and shared roles without locale fallback. Eleven
 focused/public tests pass; acquisition and generation ownership remain open.
+A preparatory owned teletext command runner bounds preflight, stdin, process and
+output under one deadline, with early pipe overflow and caller-drop cleanup.
+Package admission, producer activation and publication remain open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

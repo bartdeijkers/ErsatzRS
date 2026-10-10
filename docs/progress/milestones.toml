@@ -1490,6 +1490,28 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory command-owner checkpoint: an infrastructure primitive
+executes already host-resolved commands with strict request preflight before
+spawn. One absolute 30-second execution deadline covers stdin, process wait and
+complete pipes; retained stdout/stderr limits are 8 MiB/16 KiB with early
+overflow. An owned worker keeps managed group/job and pipe ownership after
+caller abandonment. Cancellation/failure kills/reaps and aborts/joins pipes;
+process and pipe cleanup budgets retain a distinct CleanupUnconfirmed outcome,
+including native-tool quarantine errors. Thirteen focused/public tests pass in
+Nextest 55c4163e-8ab7-4c14-bf59-4ae174f77d7d, including exact byte limits,
+invalid preflight, blocked stdin, early overflow, static diagnostics and Linux
+isolated descendant cleanup across leader exit, cancellation, sender drop,
+timeout and caller abandonment. Descendants are confirmed alive before fault
+injection. Independent review is clean; strict infrastructure all-target Clippy,
+workspace formatting, architecture-lint and progress validation pass. These
+bounds do not certify RSS, escaped groups or native Windows acceptance. Public
+stdio proof uses a manually supplied synthetic command, not an installed package
+or a valid page response. Resolver/operation admission, explicit service selection,
+generation ownership, response/encoding validation and publication remain open.
+The capability is still inert; generic invocation helpers are unchanged.
+Existing process/tool ownership is reused; earlier applicable proof remains valid.
+No milestone status/dependency/acceptance changes or production content work.
+
 2026-10-10 preparatory supplied-guide builder checkpoint: a pure application
 boundary returns complete bounded request bytes from supplied grouped programme
 occurrences. Exact host locale membership, named timezone and independent

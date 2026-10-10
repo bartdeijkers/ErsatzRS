@@ -92,7 +92,10 @@ release section when tagging a release.
   roles. Keep full-guide limits separate from Later Today; reject inexact source
   offsets without changing content. Prepare civil guide windows through the
   shared programme clock across daylight-saving boundaries and skipped dates. Guide
-  acquisition, execution, encoding validation and publication remain pending.
+  acquisition, encoding validation and publication remain pending. Add a
+  preparatory owned command runner with one execution deadline, bounded pipes
+  and cancellation cleanup across caller abandonment. Keep uncertain cleanup
+  distinct; package admission and producer activation remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

@@ -451,6 +451,20 @@ projection completeness, source association, generation ownership, capability
 activation, producer invocation, native encoding and publication remain open
 host gates.
 
+A preparatory infrastructure command primitive accepts an already host-resolved
+command and strict request bytes. An owned worker retains the managed native
+process and all pipe tasks across caller abandonment. One absolute 30-second
+execution deadline covers preflight, stdin, process wait and complete output;
+stdout and stderr have independent 8 MiB and 16 KiB retained-byte limits with
+immediate overflow failure. Stderr is discarded without exposing producer text.
+Cancellation and failures kill/reap the managed group/job and abort/join pipe
+tasks; five-second process and one-second pipe cleanup budgets preserve a
+distinct cleanup-uncertain outcome and existing native-tool quarantine. These
+bounds do not certify RSS or escaped descendants. Raw successful output still
+requires response, generation and encoding validation. Installed-package
+resolution/admission, explicit service selection, generation ownership and
+publication remain separate host gates; the capability is not yet activated.
+
 ### Persistence and publication lifecycle
 
 Use SQLite for source-page metadata, service configuration, generation identity

@@ -4,6 +4,9 @@
 //! process, and their manifests can only select host-controlled launch modes.
 
 mod tool_execution;
+
+#[path = "addon_teletext_command.rs"]
+pub mod teletext_command;
 pub(crate) use tool_execution::acquire_tool_lease;
 pub use tool_execution::invoke_tool_update;
 
