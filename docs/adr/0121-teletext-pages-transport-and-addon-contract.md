@@ -11,8 +11,9 @@ browser viewer. The separate TV-guide add-on still starts after P9A-04.
 
 Partial. The selected-runtime capability report now runs bounded decoder-option,
 exact-page text and colour bitmap probes against an independent synthetic DVB
-fixture. This does not establish engine, six-RID packaging, scanner, UI or client
-acceptance. The
+fixture. Decoder outcomes have localized Health guidance and runtime-bound
+troubleshooting export. This does not establish engine, six-RID packaging,
+scanner, page-management UI or client acceptance. The
 `teletext-support` parity record and P9A-01 through P9B-02 own those claims.
 
 ## Context

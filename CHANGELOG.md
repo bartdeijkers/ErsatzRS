@@ -20,6 +20,9 @@ release section when tagging a release.
   text and colour bitmap output within bounded processes. Missing support is
   recorded without rejecting unrelated playback; full teletext delivery remains
   in progress.
+- Show teletext decoder availability and failed checks in Health with translated
+  guidance for every supported culture. Include the probe outcome, runtime
+  generation and executable checksums in the troubleshooting report.
 
 ### Changed
 
@@ -42,6 +45,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep Health links readable in both themes by using the table's text colour
+  and an underline instead of an accent colour with insufficient dark contrast.
 - Keep the on-demand checkpoint regression test's virtual clock stationary
   during SQLite I/O, avoiding intermittent CI write timeouts while preserving
   its checkpoint timing and viewer-position assertions.

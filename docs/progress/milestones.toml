@@ -1101,6 +1101,38 @@ it contains neither macOS RID. Windows/ARM native functional proof, both macOS
 packages or a separately accepted platform decision, packaged dependency/license
 review and visible operator capability/health integration remain due. No UCU
 exception, full engine, client/output timing or Phase 9 acceptance is claimed.
+2026-10-10 decoder/operator follow-up: ZIP integrity and published archive/
+executable hashes pass for win-x64; the same bounded Rust probe passes against
+the native Windows ffmpeg.exe through WSL interop (1.374 seconds). Its archive
+SHA256 is 3e2100218d2c0290f53607c3ae0a68402ef46727711531166f78e8858c25fb80;
+ffmpeg SHA256 is 77cae740e61c1cebbd5d5b3eb032bc55e4249455a6accd2c1cf8f324a05d9e79.
+Exact linux-arm64 and linux-arm archives/executables match the published v2.0.6
+manifest. Both pass the same options/text/colour-bitmap probe under QEMU 8.2.2
+(0.625 and 0.740 seconds), using separate Debian Bookworm sysroots with libc6
+2.36-9+deb12u14 and libgcc-s1 12.2.0-14+deb12u1. Codec libraries are statically
+linked; ELF dependencies are the host glibc/libgcc set. No system package or
+binfmt handler was installed. This is emulated exact-artifact proof, not an
+unqualified native ARM claim. Linux-arm requires GLIBC_2.36; a preliminary
+older sysroot failed honestly and was replaced with the recorded baseline.
+The dedicated Teletext decoding health check shows optional absence as Info,
+failed options/help/text/bitmap probes as Warning, and proven decode as Pass.
+All six outcomes have guidance in all nine supported cultures and a settings
+link. Troubleshooting exports the result with runtime generation and executable
+digests, retaining unknown identity as null. All 141 affected infra health
+tests and 43 web i18n/troubleshooting tests pass; strict affected Clippy passes
+and hydration lint has no new findings. Headed Chromium/Firefox proof passes
+all eight cases with no skips, flaky results or browser errors: English/Dutch,
+dark/light themes, hydrated Refresh and its no-JS fallback, persisted health
+results and runtime identity tied to the pinned Linux executable checksum.
+The existing dark-theme Health link measured 3.55:1 contrast; inheriting the
+table text colour and underlining the link fixes it. Both themes now pass the
+4.5:1 contrast assertion. Evidence: tests/e2e/teletext-decoder-health.spec.ts,
+test-results/teletext-decoder-health/playwright-results.json and the associated
+teletext-health-row screenshots. The current FFmpeg recipe at
+b221a3d32d3169fc563d2443af7f897d2259b1e8
+explicitly excludes macOS, and only Linux/Windows project runners are registered.
+Both macOS packages/native decoder proof and dependency/license provenance remain
+open; runtime readiness alone does not accept the authored engine or phase.
 '''
 
 [[milestone]]

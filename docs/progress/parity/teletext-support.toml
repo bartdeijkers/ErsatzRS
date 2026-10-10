@@ -19,8 +19,11 @@ is claimed.
 Current ErsatzRS scanning and playback have no teletext-specific model or
 selection path. The selected FFmpeg runtime now has an optional bounded
 libzvbi decoder-options/text/colour-bitmap probe, independently proven on the
-pinned Linux x64 package. Six-RID packaging, operator visibility and health
-acceptance remain open in P9A-02. The active sequence in
+pinned Linux x64 and native Windows executables, plus ARM64/ARMv7 under QEMU
+with the Bookworm host-library baseline. The decoder result now has a dedicated
+localized Health check and runtime-bound troubleshooting export. Six-RID
+packaging, dependency/licensing and remaining platform acceptance remain open
+in P9A-02. The active sequence in
 `plans/teletext-support.md` covers six-RID packaging, SQLite stream/page
 persistence and an explicit native/Next engine/source/output matrix. It reuses
 existing selection, provider identity, bounded preparation, programme context
@@ -41,9 +44,9 @@ resolution  = 'P9A-01 accepted ADR 0121 on 2026-10-10; the plan source map and m
 
 [[debt]]
 id          = 'teletext-runtime-capability-is-unproven'
-description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, but first-party FFmpeg packages are not yet accepted across all six RIDs. Complete packaging, dependency/licensing and operator-visible capability/health evidence without making missing optional support fatal to unrelated playback.'
+description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, localized Health guidance and runtime-bound troubleshooting export, but first-party FFmpeg packages are not yet accepted across all six RIDs. Complete macOS packaging, dependency/licensing and remaining platform evidence without making missing optional support fatal to unrelated playback.'
 discovered  = '2026-08-07'
-evidence    = 'P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 Linux x64 hashes and functional proof, and the missing macOS package/native platform acceptance. Package presence and UCU exceptions do not satisfy six-RID acceptance.'
+evidence    = 'P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 package hashes and functional Linux x64/Windows plus emulated ARM64/ARMv7 proof, Health/troubleshooting checks and the missing macOS packaging/platform acceptance. Package presence and UCU exceptions do not satisfy six-RID acceptance.'
 resolved    = false
 
 [[debt]]
@@ -64,7 +67,7 @@ resolved    = false
 id          = 'teletext-management-health-and-runtime-proof-is-missing'
 description = 'P9B-02 owns localized page/type/language/capability management, existing health/troubleshooting integration and licensed or redistributable decoded fixtures. Prove the accepted engine/source/output matrix, scan/rescan, multiple pages, seek/restart, edited timelines, cancellation, stale/missing capability failures, route isolation and client-visible output; require PSI/PID and client proof for separate carriage.'
 discovered  = '2026-08-07'
-evidence    = 'An original synthetic decoder fixture and option/text/bitmap probes now exist under P9A-02. Teletext admin labels, health integration, browser workflows and audiovisual smoke/TSDuck output gates remain absent; p9a-04 owns independent engine acceptance and p9b-02 integrated closeout evidence.'
+evidence    = 'An original synthetic decoder fixture, option/text/bitmap probes, localized decoder Health check and exact-runtime troubleshooting export now exist under P9A-02. Page/source management, source selection, authored-service health and audiovisual smoke/TSDuck output gates remain absent; p9a-04 owns independent engine acceptance and p9b-02 integrated closeout evidence.'
 resolved    = false
 
 [[debt]]

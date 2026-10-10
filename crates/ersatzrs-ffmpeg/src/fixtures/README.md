@@ -11,6 +11,20 @@ python3 scripts/calibration/generate-teletext-fixture.py /tmp/teletext.ts
 cmp /tmp/teletext.ts crates/ersatzrs-ffmpeg/src/fixtures/teletext.ts
 ```
 
+Run the bounded functional probe against an explicitly selected package:
+
+```bash
+ERSATZRS_TELETEXT_TEST_FFMPEG="<exact-package-ffmpeg-executable>" \
+  ./run.sh test -p ersatzrs-ffmpeg real_runtime_decodes_exact_pages \
+  --run-ignored ignored-only
+```
+
+Record the package manifest and archive/executable digests before this check.
+For ARM testing under QEMU, the test wrapper must `exec` the selected emulator
+and exact package executable, using a matching target-architecture sysroot with
+the host glibc/libgcc baseline. Report emulated execution separately from native
+platform proof; do not change the production runtime selection to the wrapper.
+
 The teletext-only MPEG-TS has programme 1, PMT PID 4096 and teletext/PCR PID
 256. Its descriptor distinguishes initial page 200 and subtitle page 888.
 Page 201 is an independently transmitted ordinary page. Eight cycles exercise

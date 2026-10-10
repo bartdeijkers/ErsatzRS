@@ -1477,6 +1477,13 @@ pub enum TextKey {
     AddonListsCombinedDiskWarningGb,
     AddonListDiskWarningHelp,
     AddonListDiskWarningFailed,
+    TeletextDecoderTitle,
+    TeletextDecoderReady,
+    TeletextDecoderMissing,
+    TeletextDecoderOptions,
+    TeletextDecoderHelpFailed,
+    TeletextDecoderTextFailed,
+    TeletextDecoderBitmapFailed,
     NextRuntimeAvailability,
     NextOverlayInvalid,
     NextOverlaySchema,
@@ -3663,6 +3670,13 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonListsCombinedDiskWarningGb,
     TextKey::AddonListDiskWarningHelp,
     TextKey::AddonListDiskWarningFailed,
+    TextKey::TeletextDecoderTitle,
+    TextKey::TeletextDecoderReady,
+    TextKey::TeletextDecoderMissing,
+    TextKey::TeletextDecoderOptions,
+    TextKey::TeletextDecoderHelpFailed,
+    TextKey::TeletextDecoderTextFailed,
+    TextKey::TeletextDecoderBitmapFailed,
     TextKey::NextRuntimeAvailability,
     TextKey::NextOverlayInvalid,
     TextKey::NextOverlaySchema,
@@ -4950,6 +4964,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
+        "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
             text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
@@ -5293,6 +5308,18 @@ pub fn health_check_message_text(
         runtime_health_message(language, title, displayed_message, brief_message)
     {
         return localized.to_owned();
+    }
+    if title == "Teletext decoding" {
+        let key = match displayed_message {
+            "The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding." => TextKey::TeletextDecoderReady,
+            "Teletext decoding is unavailable. Select an FFmpeg 9 runtime with libzvbi teletext support." => TextKey::TeletextDecoderMissing,
+            "The teletext decoder lacks required page-selection or rendering options. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderOptions,
+            "The teletext decoder check could not finish. Review FFmpeg runtime availability and permissions." => TextKey::TeletextDecoderHelpFailed,
+            "Teletext page and subtitle text decoding failed. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderTextFailed,
+            "Teletext colour bitmap decoding failed. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderBitmapFailed,
+            _ => return displayed_message.to_owned(),
+        };
+        return text(language, key).to_owned();
     }
     if title == "Unavailable" {
         if let Some(localized) = unavailable_health_message(language, displayed_message) {
@@ -6124,6 +6151,41 @@ mod tests {
                             text(UiLanguage::English, TextKey::AddonToolCleanupHelp)
                         );
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn teletext_decoder_health_is_localized_for_every_language() {
+        let outcomes = [
+            TextKey::TeletextDecoderReady,
+            TextKey::TeletextDecoderMissing,
+            TextKey::TeletextDecoderOptions,
+            TextKey::TeletextDecoderHelpFailed,
+            TextKey::TeletextDecoderTextFailed,
+            TextKey::TeletextDecoderBitmapFailed,
+        ];
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, "Teletext decoding"),
+                text(language, TextKey::TeletextDecoderTitle)
+            );
+            for key in outcomes {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert!(!localized.is_empty());
+                assert_eq!(
+                    health_check_message_text(language, "Teletext decoding", canonical, canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, "Teletext decoding", "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
                 }
             }
         }

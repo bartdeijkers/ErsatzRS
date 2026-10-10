@@ -1049,6 +1049,7 @@ struct RuntimeSummary {
 struct FfmpegSettingsSummary {
     ffmpeg_path: String,
     ffprobe_path: String,
+    teletext_decoder: TeletextDecoderSummary,
     default_ffmpeg_profile_id: i32,
     save_reports: bool,
     use_embedded_subtitles: bool,
@@ -1061,6 +1062,31 @@ struct FfmpegSettingsSummary {
     initial_segment_count: i32,
     hls_direct_output_format: i32,
     default_mpeg_ts_script: String,
+}
+
+#[cfg(feature = "ssr")]
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct TeletextDecoderSummary {
+    capability: ersatzrs_ffmpeg::TeletextDecoderCapability,
+    runtime_generation: Option<u64>,
+    #[serde(rename = "FFmpegSha256")]
+    ffmpeg_sha256: Option<String>,
+    #[serde(rename = "FFprobeSha256")]
+    ffprobe_sha256: Option<String>,
+}
+
+#[cfg(feature = "ssr")]
+impl From<&ersatzrs_ffmpeg::FfmpegCapabilityReport> for TeletextDecoderSummary {
+    fn from(report: &ersatzrs_ffmpeg::FfmpegCapabilityReport) -> Self {
+        let identity = report.runtime_identity.as_ref();
+        Self {
+            capability: report.teletext_decoder.clone(),
+            runtime_generation: identity.map(|identity| identity.generation),
+            ffmpeg_sha256: identity.and_then(|identity| identity.ffmpeg_sha256.clone()),
+            ffprobe_sha256: identity.and_then(|identity| identity.ffprobe_sha256.clone()),
+        }
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -1097,6 +1123,7 @@ fn ffmpeg_settings_summary_from_application(
     Ok(FfmpegSettingsSummary {
         ffmpeg_path: form.ffmpeg_path,
         ffprobe_path: form.ffprobe_path,
+        teletext_decoder: capabilities.into(),
         default_ffmpeg_profile_id: i32::try_from(form.default_ffmpeg_profile_id)
             .map_err(ServerFnError::new)?,
         save_reports: form.save_reports,
@@ -1131,6 +1158,7 @@ async fn load_ffmpeg_settings(
     Ok(FfmpegSettingsSummary {
         ffmpeg_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "").await?,
         ffprobe_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH, "").await?,
+        teletext_decoder: capabilities.into(),
         default_ffmpeg_profile_id: load_i32(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
@@ -2324,6 +2352,43 @@ fn parse_duration_seconds(value: &str) -> i64 {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn teletext_troubleshooting_keeps_probe_status_bound_to_runtime_identity() {
+        use ersatzrs_ffmpeg::{
+            FfmpegCapabilityReport, FfmpegRuntimeIdentity, TeletextDecoderCapability,
+            TeletextDecoderStatus,
+        };
+        let mut report = FfmpegCapabilityReport {
+            runtime_identity: Some(FfmpegRuntimeIdentity {
+                generation: 12,
+                ffmpeg_path: "ffmpeg".into(),
+                ffmpeg_sha256: Some("a".repeat(64)),
+                ffprobe_path: "ffprobe".into(),
+                ffprobe_sha256: Some("b".repeat(64)),
+                selected_nvidia_device: None,
+            }),
+            teletext_decoder: TeletextDecoderCapability {
+                status: TeletextDecoderStatus::MissingOptions,
+                missing_options: vec!["txt_page".into()],
+            },
+            ..FfmpegCapabilityReport::default()
+        };
+        let json = serde_json::to_value(TeletextDecoderSummary::from(&report)).unwrap();
+        assert_eq!(json["RuntimeGeneration"], 12);
+        assert_eq!(json["FFmpegSha256"], "a".repeat(64));
+        assert_eq!(json["FFprobeSha256"], "b".repeat(64));
+        assert_eq!(json["Capability"]["status"], "missing_options");
+        assert_eq!(json["Capability"]["missing_options"][0], "txt_page");
+
+        report.runtime_identity = None;
+        report.teletext_decoder = TeletextDecoderCapability::default();
+        let json = serde_json::to_value(TeletextDecoderSummary::from(&report)).unwrap();
+        assert!(json["RuntimeGeneration"].is_null());
+        assert!(json["FFmpegSha256"].is_null());
+        assert_eq!(json["Capability"]["status"], "missing_decoder");
+    }
+
     #[test]
     fn hardware_report_marks_available_and_missing_capabilities() {
         let hwaccels = std::collections::BTreeSet::from(["qsv".to_owned()]);
@@ -2643,6 +2708,7 @@ mod tests {
             ffmpeg_settings: FfmpegSettingsSummary {
                 ffmpeg_path: String::new(),
                 ffprobe_path: String::new(),
+                teletext_decoder: TeletextDecoderSummary::default(),
                 default_ffmpeg_profile_id: 0,
                 save_reports: false,
                 use_embedded_subtitles: true,

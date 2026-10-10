@@ -239,7 +239,7 @@ fn render_row(row: AdminHealthRow) -> AnyView {
             <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-300)">
                 {match link {
                     Some(href) => view! {
-                        <a href=href.clone() target=link_target(&href) rel="noopener" style="color:var(--color-primary)">
+                        <a href=href.clone() target=link_target(&href) rel="noopener" style="color:inherit;text-decoration:underline">
                             {message}
                         </a>
                     }.into_any(),
