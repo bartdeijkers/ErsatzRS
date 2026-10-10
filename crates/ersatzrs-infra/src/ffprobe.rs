@@ -1,3 +1,7 @@
+/// Bounded interpretation of explicitly supplied packed teletext descriptors.
+/// Production probe acquisition and ordinary track projection remain separate.
+pub mod teletext;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{ExitStatus, Stdio};

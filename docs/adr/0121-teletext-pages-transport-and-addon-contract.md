@@ -145,6 +145,17 @@ page 200 plus clean TSDuck transport. P9A-04 owns the exact evidence. Full route
 source captions/alternate audio, native Windows/ARM host acceptance, other
 platforms/consumers, fairness and compatible continuous slate handover remain
 unproven.
+The preparatory pure `ffprobe::teletext::project_packed_descriptors` API projects
+explicitly supplied two-byte packed metadata or n9.0 LF-wrapped base64. Its
+1,024-entry resource bound is not a DVB service limit. It retains language order,
+raw type/magazine/page and optional decimal display addresses, distinguishing
+missing, unusable and usable-prefix outcomes. `TrailingUnpairedPairs` reports
+the potentially stale tail after FFmpeg descriptor shrink; even equal counts
+cannot prove a complete descriptor or transmitted-page inventory. Subcode,
+charset/region and source provenance remain unknown. Probe argv/JSON fields,
+scanner/schema/UI and ordinary audio/subtitle projection are unchanged. P9A-03
+owns focused/synthetic projection proof, bounded probe acquisition and persistent
+source/page identity; production probe integration remains open.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

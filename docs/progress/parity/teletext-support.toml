@@ -4,49 +4,49 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121']
 summary    = '''
-ADR 0120 requires the generic ErsatzRS teletext engine first, independently
-accepted at p9a-04 with synthetic pages, then exactly one new tvguide teletext
-add-on in ErsatzRS-Addons at p9b-01. That add-on owns page structure/navigation
-inspired only by NOS TV-guide pages 200–299 and actual guide content. The host
-owns validation, publication, rendering/delivery and read-only programme
-context. Source subtitle requirements remain. P9A-01 is Complete under ADR
-0121; P9A-02 is In progress; the other four milestones are Not started. No
-engine/content acceptance is claimed.
+ADR 0120 requires generic engine acceptance with synthetic pages at p9a-04,
+then exactly one tvguide teletext add-on in ErsatzRS-Addons at p9b-01. It owns
+NOS-guide-inspired pages 200–299 and guide content; the host owns validation,
+publication, rendering/delivery and read-only programme context. Source subtitle
+requirements remain. P9A-01 is Complete under ADR 0121; P9A-02 is In progress;
+the other four milestones are Not started. No engine/content acceptance is claimed.
 
-Scanning/playback still lack the source stream/page model and exact selection
-path. Typed page drafts validate runs/styles/navigation. Bounded Western Latin
-DVB encoding preserves spacing, X/26 accents, X/27 links and X/28 national
-options. Independent decoding proves seven repertoires, captions and colours.
-Other regions, link CRC/client proof, versioned DTOs, persistence and generation
-publication remain open.
+Typed drafts validate runs/styles/navigation. Western Latin DVB encoding preserves
+spacing, X/26 accents, X/27 links and X/28 national options; decoding proves seven
+repertoires, captions and colours. Other regions, link CRC/client proof, versioned
+DTOs, persistence and publication remain open. The pure
+ffprobe::teletext::project_packed_descriptors API accepts supplied two-byte packed
+metadata or n9.0 LF-wrapped base64. Its 1,024-entry resource bound is not a service
+limit. Usable entries retain language order, raw type/wire addresses and optional
+decimal display pages; missing/unusable/usable-prefix outcomes remain distinct.
+TrailingUnpairedPairs flags possibly stale tails after shrink; equal counts
+never prove complete inventory. Metadata differs from observed pages; subcode/
+charset/region and provenance remain unknown. P9A-03 owns exact synthetic
+proof. Probe argv/JSON fields, scanner/schema/UI and ordinary audio/subtitles
+are unchanged.
 
 Carousel/PES/TS and all-program PAT/CAT/PMT discovery validate ownership and
-continuity. Atomic null-slot replacement and fragmented/growing PMT installation
-preserve source metadata and AV/PCR. Continuing PSI/PID monitoring holds partial
-sections and fences source changes, malformed input and incomplete EOF. Explicit
-PCR/CBR policy validates physical packet distance, wrap, gaps and readiness.
-Bounded retention shares raw/prepared capacity, preserves original arrival ages
-and one packet clock, preflights complete intervals and enforces first-byte,
-source/sink deadlines and epoch-bound writer acknowledgement. Finite EOF drains
-complete packets at unchanged positions/timing after a flushed acknowledged
-cycle; incomplete TS/PSI and impossible tail capacity fail. Immutable page
-repeats omit C4 erasure; replacement restarts it. Milestone p9a-04 owns exact
-synthetic/runtime audiovisual, decoder and TSDuck evidence.
+continuity. Atomic null-slot replacement and fragmented/growing PMTs preserve
+metadata and AV/PCR. PSI/PID monitoring holds partial sections and fences changes,
+malformed input and incomplete EOF. PCR/CBR checks packet distance, wrap, gaps
+and readiness. Retention shares raw/prepared capacity, arrival ages and one clock,
+preflights intervals and enforces first-byte/source/sink deadlines and epoch-bound
+writer acknowledgement. Finite EOF drains complete packets at original positions/
+timing after an acknowledged cycle; incomplete transport or impossible capacity
+fails. Immutable repeats omit C4 erasure; replacement restarts it. P9A-04 owns
+exact audiovisual/runtime/decoder/TSDuck evidence.
 
-Native supervision accepts immutable bindings only for final MPEG-TS roles,
-with paced I/O, fresh child epochs, terminal body errors and zero-byte hardware
-fallback. Retained composition preserves arrival age, refill and validated short
-EOF. Unconfirmed startup/process/retry cleanup quarantines admission/assets.
-Legacy admission and capacity retries reserve distinct wrapper/first-encoder
-leases atomically. Private wrapper UUID callbacks transfer the first encoder
-once; later items reserve independently. Owned startup and scoped body disposal
-fence cancellation through song rendering and retry preparation/spawn. Localized
-Health reports limit-one capacity only for applicable enabled legacy defaults.
-The Linux-hosted production-route fixture passes with exact Linux x64 FFmpeg,
-Windows FFmpeg interop and ARM64/ARMv7 FFmpeg under QEMU, proving admission,
-token rejection, cancellation/reaping, decoded video/selected English audio,
-authored Dutch page 200 and clean TSDuck transport. This does not prove native
-Windows/ARM Rust hosts or full routed source captions/alternate audio.
+Authored bindings belong only to final MPEG-TS roles, with paced I/O, fresh epochs,
+body errors and zero-byte hardware fallback. Retained output supports refill/short
+EOF. Uncertain startup/process/retry cleanup quarantines admission/assets. Legacy
+admission/retries atomically reserve distinct wrapper/first-encoder leases;
+private UUID callbacks transfer the first encoder once, later items reserve
+independently. Owned startup/scoped disposal preserve song/retry cancellation.
+Localized Health reports limit one only for applicable enabled legacy defaults.
+Linux-hosted route proof uses Linux x64 FFmpeg, Windows interop and QEMU ARM64/
+ARMv7: admission, token rejection, cancellation/reaping, video/selected English
+audio, Dutch page 200 and clean TSDuck. Native Windows/ARM Rust hosts and full
+routed source captions/alternate audio remain unproven.
 
 The bounded optional libzvbi text/bitmap probe has localized Health and
 runtime-bound troubleshooting. P9A-02 owns six-RID packaging, licensing and
@@ -83,7 +83,7 @@ resolved    = false
 id          = 'teletext-stream-and-page-metadata-is-not-modeled'
 description = 'Scanning persists generic subtitle codec/language/index fields but no teletext service/page, subtitle flag/type, national option/default region, or character-set semantics. P9A-03 owns SQLite source/version/stream/page identity, multiple pages per stream and rescan/source-change behavior while preserving provider identity, ordinary subtitles and alternate audio.'
 discovered  = '2026-08-07'
-evidence    = '`crates/ersatzrs-infra/src/subtitles.rs` extracts only SubRip/SRT, MOV text, ASS, and WebVTT text codecs and explicitly recognizes selected image codecs; workspace searches found no dvb_teletext classification or selection branch.'
+evidence    = 'P9A-03 owns the preparatory pure `ffprobe::teletext::project_packed_descriptors` API for explicitly supplied two-byte packed metadata or n9.0 LF-wrapped base64. Its 1,024-entry bound is resource policy, not a DVB service limit. It preserves language order, raw type/wire addresses and optional decimal display pages, with missing/unusable/usable-prefix outcomes and `TrailingUnpairedPairs` after FFmpeg descriptor shrink. Equal counts do not prove complete descriptor inventory; metadata and observed pages remain distinct. Subcode/charset/region and provenance remain unknown. P9A-03 records 40 passing focused FFprobe regressions, exact synthetic projection and strict infra Clippy. Probe argv/JSON fields, scanner/schema/UI and ordinary audio/subtitle projection are unchanged. SQLite source/page identity, stale invalidation and selection remain open; `subtitles.rs` still lacks page-aware extraction.'
 resolved    = false
 
 [[debt]]

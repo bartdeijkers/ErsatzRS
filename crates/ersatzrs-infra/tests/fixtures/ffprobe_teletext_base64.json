@@ -1,0 +1,110 @@
+{
+  "programs": [
+    {
+      "program_id": 1,
+      "program_num": 1,
+      "pmt_pid": 4096,
+      "pcr_pid": 256,
+      "streams": [
+        {
+          "index": 0
+        },
+        {
+          "index": 1
+        },
+        {
+          "index": 2
+        },
+        {
+          "index": 3
+        },
+        {
+          "index": 4
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "mpeg2video",
+      "codec_type": "video",
+      "id": "0x100",
+      "extradata": "\nAAABswoAWjP//+AYAAABtRSKAAEAAA==\n",
+      "extradata_size": 22,
+      "width": 160,
+      "height": 90,
+      "disposition": {
+        "default": 0,
+        "forced": 0
+      }
+    },
+    {
+      "index": 1,
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "id": "0x101",
+      "extradata": "\n",
+      "channels": 1,
+      "disposition": {
+        "default": 0,
+        "forced": 0
+      },
+      "tags": {
+        "language": "eng"
+      }
+    },
+    {
+      "index": 2,
+      "codec_name": "dvb_teletext",
+      "codec_type": "subtitle",
+      "id": "0x102",
+      "extradata": "\nCgAQiA==\n",
+      "extradata_size": 4,
+      "width": 492,
+      "height": 250,
+      "disposition": {
+        "default": 0,
+        "forced": 0
+      },
+      "tags": {
+        "language": "eng,eng"
+      }
+    },
+    {
+      "index": 3,
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "id": "0x103",
+      "extradata": "\n",
+      "channels": 1,
+      "disposition": {
+        "default": 0,
+        "forced": 0
+      },
+      "tags": {
+        "language": "nld"
+      }
+    },
+    {
+      "index": 4,
+      "codec_name": "dvb_teletext",
+      "codec_type": "subtitle",
+      "id": "0x200",
+      "extradata": "\nCgA=\n",
+      "extradata_size": 2,
+      "width": 492,
+      "height": 250,
+      "disposition": {
+        "default": 0,
+        "forced": 0
+      },
+      "tags": {
+        "language": "nld"
+      }
+    }
+  ],
+  "format": {
+    "format_name": "mpegts"
+  }
+}

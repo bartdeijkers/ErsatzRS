@@ -1181,7 +1181,31 @@ source/version/stream/page identities and selection. Source replacement and
 rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
-evidence = ''
+evidence = '''
+2026-10-10 preparatory packed-metadata projection: the pure
+`ffprobe::teletext::project_packed_descriptors` API accepts explicitly supplied
+two-byte packed metadata or the identified n9.0 LF-wrapped base64 writer format.
+The 1,024-entry bound limits implementation resources, not DVB service size.
+Projection retains language order, raw type/magazine/page and optional decimal
+display addresses. Missing metadata, unusable supplied fields and a usable
+paired prefix remain distinct. `TrailingUnpairedPairs` warns about potentially
+stale pairs after FFmpeg descriptor shrink; no language is invented for them.
+Equal language/pair counts still cannot establish complete descriptor inventory,
+and advertised metadata is not an observed/transmitted-page inventory. Subcode,
+charset/region and source provenance remain unknown.
+All 40 selected FFprobe regressions pass in Nextest
+fc39c9fc-8269-4812-bda0-d5c7fe8fa9d7: 17 new unit checks, three new fixture
+integration checks and 20 existing regressions. Independent capture with the
+previously pinned Linux FFprobe 9 candidate projects original synthetic pages
+200/888 in English and authored page 200 in Dutch. Ordinary projection retains
+both audio and both subtitle rows; malformed additional metadata does not erase
+them. Strict affected infra all-target Clippy passes (1 minute 23 seconds).
+Production probe argv and JSON fields, scanner/schema/UI and ordinary
+audio/subtitle projection are unchanged. Next add bounded local probe acquisition
+before enabling additional FFprobe output. SQLite source/version/stream/page
+identity, provenance, stale-state invalidation and native/Next selection
+acceptance remain open. No milestone status, dependency or acceptance changes.
+'''
 
 [[milestone]]
 id         = 'p9a-04'

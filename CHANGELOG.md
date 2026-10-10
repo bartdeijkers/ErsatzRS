@@ -56,6 +56,10 @@ release section when tagging a release.
   admission, cancellation, selected audio and authored pages. Full routed source
   captions/alternate audio, compatible slate/programme handover, native platform
   acceptance and generation publication remain pending.
+  Prepare bounded interpretation of explicitly supplied packed teletext
+  descriptors, preserving page addresses, language order and raw types. Report
+  stale unpaired metadata without altering ordinary tracks; automatic acquisition,
+  page discovery and persistence remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

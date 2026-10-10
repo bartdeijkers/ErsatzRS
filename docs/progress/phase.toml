@@ -1213,8 +1213,17 @@ Windows FFmpeg through interop and ARM64/ARMv7 FFmpeg under QEMU. It proves
 admission, token rejection, cancellation/reaping, decoded video/selected English
 audio and authored Dutch page 200 with clean TSDuck transport; 19 shared
 supervisor regressions and final strict web Clippy pass. This does
-not prove native Windows/ARM Rust host acceptance. Next implement bounded typed
-FFprobe teletext descriptor projection without changing ordinary track metadata.
+not prove native Windows/ARM Rust host acceptance. A preparatory pure FFprobe
+packed-metadata projector now preserves language order and raw type/wire page
+addresses, distinguishing missing, unusable and usable-prefix outcomes. Its
+1,024-entry bound is resource policy; trailing pairs may be stale after FFmpeg
+descriptor shrink, and equal counts do not prove complete page inventory.
+Forty selected FFprobe regressions, exact synthetic projection proof and strict
+infra Clippy pass. Next add bounded local probe acquisition before enabling
+additional FFprobe output, then persistent source/page provenance, keeping
+observed pages and unknown subcode/charset/region distinct.
+Probe argv/JSON fields, scanner/schema/UI and ordinary track projection are
+unchanged; stale-state invalidation and source selection remain open.
 Full routed source captions/alternate audio, compatible continuous
 slate/programme handover and automatic publication selection remain open.
 Native Windows host acceptance remains open.
