@@ -77,7 +77,7 @@ pub async fn run(
     .await
 }
 
-async fn run_with_deadline(
+pub(super) async fn run_with_deadline(
     command: ResolvedAddonCommand,
     input: Vec<u8>,
     cancellation: Option<oneshot::Receiver<()>>,

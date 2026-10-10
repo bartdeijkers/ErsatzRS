@@ -95,7 +95,9 @@ release section when tagging a release.
   acquisition, encoding validation and publication remain pending. Add a
   preparatory owned command runner with one execution deadline, bounded pipes
   and cancellation cleanup across caller abandonment. Keep uncertain cleanup
-  distinct; package admission and producer activation remain pending.
+  distinct. A dedicated adapter checks enabled installed packages under the same
+  deadline and retains native resolution jobs after cancellation; generic invokers
+  still refuse teletext. Profile-specific service activation remains pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

@@ -461,8 +461,8 @@ before returning an unpublished draft, preserving literal text, mosaics, styles
 and links without partial results. The 1,024-byte generation-token bound is host
 resource policy. Authoritative locale composition and guide acquisition,
 projection completeness, source association, generation ownership, capability
-activation, producer invocation, native encoding and publication remain open
-host gates.
+profile-specific service activation/invocation, native encoding and publication
+remain open host gates.
 
 A preparatory infrastructure command primitive accepts an already host-resolved
 command and strict request bytes. An owned worker retains the managed native
@@ -476,7 +476,23 @@ distinct cleanup-uncertain outcome and existing native-tool quarantine. These
 bounds do not certify RSS or escaped descendants. Raw successful output still
 requires response, generation and encoding validation. Installed-package
 resolution/admission, explicit service selection, generation ownership and
-publication remain separate host gates; the capability is not yet activated.
+publication remain separate host gates; no channel service activation is wired.
+
+A dedicated preparatory installed-package adapter now resolves only
+`teletext.pages.v1/pages`; generic invocation helpers still reject that operation.
+It reuses enabled/compatible manifest, dependencies, content hash, contained
+entrypoint, global settings and native-tool leases, then reloads enabled state
+and the exact StateRevision before launch. The absolute execution deadline starts
+before request preflight and is passed unchanged through resolution and command
+execution. Cooperative fences check between native filesystem stages and hash
+entries/64 KiB reads. On stop the owner retains the complete resolver future and
+joins every started blocking call. Native calls are not interruptible: settlement
+may return CleanupUnconfirmed after five seconds while the owner keeps awaiting
+the original job, with no later stage or child launch. Genuine tool uncertainty
+is never collapsed into cancellation, timeout or admission failure. Raw stdout
+and the observed revision do not certify immutable package bytes or grant
+promotion. Profile-specific setting snapshots, channel/configuration fencing,
+service activation, response/encoding validation and publication remain open.
 
 ### Persistence and publication lifecycle
 

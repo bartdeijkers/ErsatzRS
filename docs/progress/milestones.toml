@@ -1501,6 +1501,37 @@ and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
 '''
 evidence = '''
+2026-10-10 preparatory installed-invocation checkpoint: a dedicated fixed
+teletext.pages.v1/pages adapter validates bounded request bytes before resolution,
+then reuses enabled/compatible manifest, dependency, content hash, containment,
+platform entrypoint, global settings and native-tool lease checks. Generic resolve
+and invocation helpers still reject teletext. Enabled state and StateRevision
+are reloaded before launch. One absolute deadline spans preflight, resolution
+and command; cancelled native jobs remain owned through their original joins,
+with no later stage or spawn. Five-second settlement may report uncertainty
+while the worker retains noninterruptible work; this is not a native-call time
+bound. Genuine cleanup uncertainty remains distinct from confirmed cancellation,
+timeout or admission rejection. All 37 selected tests pass in Nextest
+f732e0c1-46d7-4053-92b3-913a76b1268a: 12 new invocation regressions, one
+independent public installed-record fixture, 13 command/public baselines, six
+content-hash and five tool-resolution/lease regressions. Proof includes partial
+deadline consumption, stale enabled/revision rejection, blocked-job retention
+past early uncertainty and actual process cancellation. The public fixture uses
+an original page 123 response, exact captured stdin and the public enable check;
+strict wire parsing accepts its raw response. Strict Clippy requested unit
+pending futures, borrowed admission errors and a smaller hash function. The
+extracted traversal preserves exact digest framing/order/fences; independent
+review is clean. All 24 affected invocation/public/hash/tool tests pass again on
+final source in Nextest c096da86-be73-4918-9146-e5b273df8cdf; the 13 unchanged
+command baselines from the preceding 37-test run remain valid. This is not ZIP acquisition,
+profile isolation, native Windows or service-generation/publication acceptance.
+Strict infrastructure all-target Clippy, workspace formatting, architecture-lint
+and progress validation pass; independent review is clean. The receipt carries
+raw stdout and an observed revision, not immutable package provenance. Profile/channel
+controls, response/encoding validation and promotion remain open;
+applicable earlier runtime evidence is reused. No milestone status, dependency
+or acceptance changes in this implementation checkpoint.
+
 2026-10-10 preparatory command-owner checkpoint: an infrastructure primitive
 executes already host-resolved commands with strict request preflight before
 spawn. One absolute 30-second execution deadline covers stdin, process wait and

@@ -61,6 +61,16 @@ pub(super) async fn resolve_tool_paths(
     environment: &mut BTreeMap<String, String>,
     working_directory: &Path,
 ) -> Result<Vec<PathBuf>, AddonError> {
+    resolve_tool_paths_with_fence(manifest, environment, working_directory, None).await
+}
+
+pub(super) async fn resolve_tool_paths_with_fence(
+    manifest: &AddonManifest,
+    environment: &mut BTreeMap<String, String>,
+    working_directory: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<Vec<PathBuf>, AddonError> {
+    check_resolution_fence(fence)?;
     let mut paths = Vec::new();
     for setting in manifest
         .settings
@@ -72,7 +82,8 @@ pub(super) async fn resolve_tool_paths(
             if value.trim().is_empty() {
                 continue;
             }
-            let path = executable_path(&value, working_directory)
+            check_resolution_fence(fence)?;
+            let path = executable_path_with_fence(&value, working_directory, fence)
                 .await?
                 .ok_or_else(|| {
                     AddonError::operation(
@@ -93,6 +104,7 @@ pub(super) async fn resolve_tool_paths(
             paths.push(path);
         }
     }
+    check_resolution_fence(fence)?;
     paths.sort();
     paths.dedup();
     Ok(paths)
@@ -102,6 +114,15 @@ async fn executable_path(
     value: &str,
     working_directory: &Path,
 ) -> Result<Option<PathBuf>, AddonError> {
+    executable_path_with_fence(value, working_directory, None).await
+}
+
+async fn executable_path_with_fence(
+    value: &str,
+    working_directory: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<Option<PathBuf>, AddonError> {
+    check_resolution_fence(fence)?;
     let path = Path::new(value);
     let candidates = if path.is_absolute() {
         vec![path.to_path_buf()]
@@ -124,10 +145,17 @@ async fn executable_path(
         candidates
     };
     for candidate in candidates {
-        match tokio::fs::metadata(&candidate).await {
+        check_resolution_fence(fence)?;
+        let metadata = addon_filesystem_work(fence, "tool metadata", {
+            let path = candidate.clone();
+            move || std::fs::metadata(path)
+        })
+        .await?;
+        match metadata {
             Ok(metadata) if metadata.is_file() => {
-                return canonicalize_addon_path(&candidate)
-                    .await
+                let canonical = canonicalize_addon_path_with_fence(&candidate, fence).await;
+                check_resolution_fence(fence)?;
+                return canonical
                     .map(Some)
                     .map_err(|_| AddonError::ToolCleanupRequired);
             }

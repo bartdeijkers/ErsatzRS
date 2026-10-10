@@ -7,6 +7,8 @@ mod tool_execution;
 
 #[path = "addon_teletext_command.rs"]
 pub mod teletext_command;
+#[path = "addon_teletext_invocation.rs"]
+pub mod teletext_invocation;
 pub(crate) use tool_execution::acquire_tool_lease;
 pub use tool_execution::invoke_tool_update;
 
@@ -3331,9 +3333,34 @@ async fn resolve_addon_command(
     require_enabled: bool,
 ) -> Result<ResolvedAddonCommand, AddonError> {
     validate_supported_operation(capability, operation)?;
+    resolve_addon_command_body(
+        pool,
+        addon_id,
+        capability,
+        operation,
+        runtime,
+        require_enabled,
+        None,
+    )
+    .await
+}
+
+// The generic allowlist remains mandatory above. The dedicated teletext adapter
+// supplies its fixed capability/operation and an owned resolution fence here.
+async fn resolve_addon_command_body(
+    pool: &DbPool,
+    addon_id: &str,
+    capability: &str,
+    operation: &str,
+    runtime: &AddonRuntimeContext,
+    require_enabled: bool,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<ResolvedAddonCommand, AddonError> {
+    check_resolution_fence(fence)?;
     let installation = load_installed_addon(pool, addon_id)
         .await?
         .ok_or_else(|| AddonError::NotFound("add-on is not installed".to_owned()))?;
+    check_resolution_fence(fence)?;
     if require_enabled && !installation.enabled {
         return Err(AddonError::Validation("add-on is disabled".to_owned()));
     }
@@ -3347,47 +3374,37 @@ async fn resolve_addon_command(
             "installed add-on is incompatible with this ErsatzRS version".to_owned(),
         ));
     }
+    check_resolution_fence(fence)?;
     validate_installed_dependencies(pool, &installation.manifest).await?;
+    check_resolution_fence(fence)?;
     let rid = current_rid()?;
-    let entrypoint = installation.manifest.entrypoint_for(rid).ok_or_else(|| {
-        AddonError::Validation("installed add-on has no entrypoint for this platform".to_owned())
-    })?;
-    let install_root = verify_installed_addon_contents(&installation).await?;
-    let entrypoint_path = installation.install_path.join(&entrypoint.path);
-    // The command keeps the `dunce` form, which `cmd.exe` can resolve for batch
-    // entrypoints; only the containment check compares raw canonical forms.
-    let executable = canonicalize_addon_path(&entrypoint_path)
-        .await
-        .map_err(package_io_error)?;
-    let contained_executable = containment_path_async(&entrypoint_path)
-        .await
-        .map_err(package_io_error)?;
-    let contained_root = containment_path_async(&install_root)
-        .await
-        .map_err(package_io_error)?;
-    if !contained_executable.starts_with(&contained_root) || !contained_executable.is_file() {
-        tracing::warn!(
-            addon_id,
-            entrypoint = %contained_executable.display(),
-            root = %contained_root.display(),
-            "add-on entrypoint resolved outside its package root"
-        );
-        return Err(AddonError::Validation(
-            "installed entrypoint escapes or is missing from package".to_owned(),
-        ));
-    }
+    let (install_root, executable, kind) =
+        resolve_verified_entrypoint(&installation, rid, fence).await?;
+    check_resolution_fence(fence)?;
     let settings = load_addon_settings(pool, addon_id).await?;
+    check_resolution_fence(fence)?;
     let mut environment = resolve_setting_environment(
         &installation.manifest,
         &installation.data_namespace,
         &settings,
         runtime,
     )?;
-    let (program, mut args) = platform_command(entrypoint.kind, &executable)?;
+    check_resolution_fence(fence)?;
+    let (program, mut args) = platform_command(kind, &executable)?;
     args.push(operation.to_owned());
-    let tool_paths =
+    let tool_paths = if fence.is_some() {
+        tool_execution::resolve_tool_paths_with_fence(
+            &installation.manifest,
+            &mut environment,
+            &install_root,
+            fence,
+        )
+        .await?
+    } else {
         tool_execution::resolve_tool_paths(&installation.manifest, &mut environment, &install_root)
-            .await?;
+            .await?
+    };
+    check_resolution_fence(fence)?;
     Ok(ResolvedAddonCommand {
         addon_id: addon_id.to_owned(),
         program,
@@ -3397,6 +3414,52 @@ async fn resolve_addon_command(
         state_revision: installation.state_revision,
         tool_paths,
     })
+}
+
+async fn resolve_verified_entrypoint(
+    installation: &InstalledAddon,
+    rid: &str,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<(PathBuf, PathBuf, AddonEntrypointKind), AddonError> {
+    let entrypoint = installation.manifest.entrypoint_for(rid).ok_or_else(|| {
+        AddonError::Validation("installed add-on has no entrypoint for this platform".to_owned())
+    })?;
+    let install_root = verify_installed_addon_contents_with_fence(installation, fence).await?;
+    let entrypoint_path = installation.install_path.join(&entrypoint.path);
+    // The command keeps the `dunce` form, which `cmd.exe` can resolve for batch
+    // entrypoints; only the containment check compares raw canonical forms.
+    let executable = canonicalize_addon_path_with_fence(&entrypoint_path, fence)
+        .await
+        .map_err(package_io_error)?;
+    let contained_executable = containment_path_async_with_fence(&entrypoint_path, fence)
+        .await
+        .map_err(package_io_error)?;
+    let contained_root = containment_path_async_with_fence(&install_root, fence)
+        .await
+        .map_err(package_io_error)?;
+    check_resolution_fence(fence)?;
+    let metadata = addon_filesystem_work(fence, "entrypoint metadata", {
+        let path = contained_executable.clone();
+        move || std::fs::metadata(path)
+    })
+    .await?;
+    if !contained_executable.starts_with(&contained_root)
+        || !metadata.is_ok_and(|metadata| metadata.is_file())
+    {
+        if fence.is_none() {
+            tracing::warn!(
+                addon_id = %installation.addon_id,
+                entrypoint = %contained_executable.display(),
+                root = %contained_root.display(),
+                "add-on entrypoint resolved outside its package root"
+            );
+        }
+        return Err(AddonError::Validation(
+            "installed entrypoint escapes or is missing from package".to_owned(),
+        ));
+    }
+    check_resolution_fence(fence)?;
+    Ok((install_root, executable, entrypoint.kind))
 }
 
 fn validate_supported_operation(capability: &str, operation: &str) -> Result<(), AddonError> {
@@ -4002,17 +4065,37 @@ async fn validated_install_path_for_removal(stored_path: &Path) -> Result<PathBu
 pub async fn verify_installed_addon_contents(
     installation: &InstalledAddon,
 ) -> Result<PathBuf, AddonError> {
-    verify_addon_content_path(&installation.install_path, &installation.content_sha256).await
+    verify_installed_addon_contents_with_fence(installation, None).await
+}
+
+async fn verify_installed_addon_contents_with_fence(
+    installation: &InstalledAddon,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<PathBuf, AddonError> {
+    verify_addon_content_path_with_fence(
+        &installation.install_path,
+        &installation.content_sha256,
+        fence,
+    )
+    .await
 }
 
 pub(crate) async fn verify_addon_content_path(
     stored_path: &Path,
     expected_sha256: &str,
 ) -> Result<PathBuf, AddonError> {
-    let install_root = canonicalize_addon_path(stored_path)
+    verify_addon_content_path_with_fence(stored_path, expected_sha256, None).await
+}
+
+async fn verify_addon_content_path_with_fence(
+    stored_path: &Path,
+    expected_sha256: &str,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<PathBuf, AddonError> {
+    let install_root = canonicalize_addon_path_with_fence(stored_path, fence)
         .await
         .map_err(package_io_error)?;
-    let actual = hash_addon_tree(install_root.clone()).await?;
+    let actual = hash_addon_tree_with_fence(install_root.clone(), fence).await?;
     if !actual.eq_ignore_ascii_case(expected_sha256) {
         return Err(AddonError::Trust(
             "installed add-on content no longer matches the verified package".to_owned(),
@@ -4042,13 +4125,17 @@ pub async fn calculate_addon_content_sha256(root: &Path) -> Result<String, Addon
 /// whole add-on install path has to stay on `dunce`, which keeps the ordinary
 /// form whenever Windows accepts it.
 async fn canonicalize_addon_path(path: &Path) -> std::io::Result<PathBuf> {
+    canonicalize_addon_path_with_fence(path, None).await
+}
+
+async fn canonicalize_addon_path_with_fence(
+    path: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> std::io::Result<PathBuf> {
     let path = path.to_path_buf();
-    match tokio::task::spawn_blocking(move || dunce::canonicalize(&path)).await {
-        Ok(result) => result,
-        Err(_) => Err(std::io::Error::other(
-            "package path canonicalization task failed",
-        )),
-    }
+    addon_filesystem_work(fence, "canonicalize", move || dunce::canonicalize(path))
+        .await
+        .map_err(|_| std::io::Error::other("package path canonicalization task failed"))?
 }
 
 /// Canonicalize a path purely to compare it against a package root.
@@ -4065,22 +4152,80 @@ fn containment_path(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 async fn containment_path_async(path: &Path) -> std::io::Result<PathBuf> {
+    containment_path_async_with_fence(path, None).await
+}
+
+async fn containment_path_async_with_fence(
+    path: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> std::io::Result<PathBuf> {
     let path = path.to_path_buf();
-    match tokio::task::spawn_blocking(move || containment_path(&path)).await {
-        Ok(result) => result,
-        Err(_) => Err(std::io::Error::other(
-            "package path canonicalization task failed",
-        )),
+    addon_filesystem_work(fence, "containment", move || containment_path(&path))
+        .await
+        .map_err(|_| std::io::Error::other("package path canonicalization task failed"))?
+}
+
+fn check_resolution_fence(
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<(), AddonError> {
+    if let Some(fence) = fence {
+        fence.check()?;
     }
+    Ok(())
+}
+
+// Callers with a fence retain their resolution future until this join completes.
+// Native filesystem calls cannot be interrupted; check before and after each
+// submitted job and never start a later stage after cancellation/deadline.
+async fn addon_filesystem_work<T: Send + 'static>(
+    fence: Option<&teletext_invocation::ResolutionFence>,
+    stage: &'static str,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, AddonError> {
+    check_resolution_fence(fence)?;
+    let owned_fence = fence.cloned();
+    let result = tokio::task::spawn_blocking(move || {
+        check_resolution_fence(owned_fence.as_ref())?;
+        #[cfg(test)]
+        if let Some(fence) = &owned_fence {
+            fence.filesystem_hook(stage);
+        }
+        check_resolution_fence(owned_fence.as_ref())?;
+        let result = work();
+        check_resolution_fence(owned_fence.as_ref())?;
+        Ok::<_, AddonError>(result)
+    })
+    .await
+    .map_err(|_| AddonError::Package(format!("{stage} filesystem task failed")))??;
+    check_resolution_fence(fence)?;
+    Ok(result)
 }
 
 async fn hash_addon_tree(root: PathBuf) -> Result<String, AddonError> {
-    tokio::task::spawn_blocking(move || hash_addon_tree_sync(&root))
-        .await
-        .map_err(|_| AddonError::Package("package hashing task failed".to_owned()))?
+    hash_addon_tree_with_fence(root, None).await
+}
+
+async fn hash_addon_tree_with_fence(
+    root: PathBuf,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<String, AddonError> {
+    let owned_fence = fence.cloned();
+    addon_filesystem_work(fence, "hash", move || match owned_fence.as_ref() {
+        Some(fence) => hash_addon_tree_sync_with_fence(&root, Some(fence)),
+        None => hash_addon_tree_sync(&root),
+    })
+    .await?
 }
 
 fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
+    hash_addon_tree_sync_with_fence(root, None)
+}
+
+fn hash_addon_tree_sync_with_fence(
+    root: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<String, AddonError> {
+    check_resolution_fence(fence)?;
     // The walk starts at `root` but re-canonicalizes every file it reads, so the
     // root itself must already be canonical or every file looks like an escape:
     // `\\?\C:\...` vs `C:\...` on Windows, `/private/var` vs `/var` on macOS.
@@ -4090,65 +4235,34 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
     // Prefix checks compare raw canonical forms so a long or reserved file name
     // inside a short package root cannot look like an escape; see
     // `containment_path`.
+    check_resolution_fence(fence)?;
     let containment_root = containment_path(root).map_err(package_io_error)?;
-    let mut directories = vec![root.to_path_buf()];
-    let mut files = Vec::new();
-    let mut entry_count = 0_usize;
-    let mut total_size = 0_u64;
-    while let Some(directory) = directories.pop() {
-        for entry in std::fs::read_dir(&directory).map_err(package_io_error)? {
-            let entry = entry.map_err(package_io_error)?;
-            entry_count = entry_count.saturating_add(1);
-            if entry_count > MAX_ARCHIVE_ENTRIES {
-                return Err(AddonError::Package(
-                    "installed package contains too many files".to_owned(),
-                ));
-            }
-            let file_type = entry.file_type().map_err(package_io_error)?;
-            if file_type.is_symlink() {
-                return Err(AddonError::Package(
-                    "installed package contains a symlink".to_owned(),
-                ));
-            }
-            if file_type.is_dir() {
-                directories.push(entry.path());
-            } else if file_type.is_file() {
-                let size = entry.metadata().map_err(package_io_error)?.len();
-                total_size = total_size.saturating_add(size);
-                if total_size > MAX_EXTRACTED_BYTES {
-                    return Err(AddonError::Package(
-                        "installed package exceeds its size limit".to_owned(),
-                    ));
-                }
-                files.push(entry.path());
-            } else {
-                return Err(AddonError::Package(
-                    "installed package contains an unsupported file type".to_owned(),
-                ));
-            }
-        }
-    }
-    files.sort();
+    let files = collect_addon_hash_files(root, fence)?;
 
     let mut digest = Sha256::new();
     digest.update(b"ersatzrs-addon-content-v1\0");
     let mut buffer = vec![0_u8; 64 * 1024];
     for path in files {
+        check_resolution_fence(fence)?;
         let relative = path.strip_prefix(root).map_err(|_| {
-            tracing::warn!(
-                path = %path.display(),
-                root = %root.display(),
-                "package file is not below the package root"
-            );
+            if fence.is_none() {
+                tracing::warn!(
+                    path = %path.display(),
+                    root = %root.display(),
+                    "package file is not below the package root"
+                );
+            }
             AddonError::Package("installed package path escaped its root".to_owned())
         })?;
         let mut encoded_path = Vec::new();
         for (index, component) in relative.components().enumerate() {
             let std::path::Component::Normal(component) = component else {
-                tracing::warn!(
-                    path = %path.display(),
-                    "package file path contains a component that is not a plain name"
-                );
+                if fence.is_none() {
+                    tracing::warn!(
+                        path = %path.display(),
+                        "package file path contains a component that is not a plain name"
+                    );
+                }
                 return Err(AddonError::Package(
                     "installed package path escaped its root".to_owned(),
                 ));
@@ -4164,22 +4278,30 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
                 .to_le_bytes(),
         );
         digest.update(&encoded_path);
+        check_resolution_fence(fence)?;
         let canonical_file = containment_path(&path).map_err(package_io_error)?;
+        check_resolution_fence(fence)?;
         if !canonical_file.starts_with(&containment_root) || !canonical_file.is_file() {
-            tracing::warn!(
-                path = %canonical_file.display(),
-                root = %containment_root.display(),
-                "package file resolved outside the package root"
-            );
+            if fence.is_none() {
+                tracing::warn!(
+                    path = %canonical_file.display(),
+                    root = %containment_root.display(),
+                    "package file resolved outside the package root"
+                );
+            }
             return Err(AddonError::Package(
                 "installed package path escaped its root".to_owned(),
             ));
         }
+        check_resolution_fence(fence)?;
         let mut file = std::fs::File::open(canonical_file).map_err(package_io_error)?;
+        check_resolution_fence(fence)?;
         let file_size = file.metadata().map_err(package_io_error)?.len();
         digest.update(file_size.to_le_bytes());
         loop {
+            check_resolution_fence(fence)?;
             let read = file.read(&mut buffer).map_err(package_io_error)?;
+            check_resolution_fence(fence)?;
             if read == 0 {
                 break;
             }
@@ -4187,7 +4309,64 @@ fn hash_addon_tree_sync(root: &Path) -> Result<String, AddonError> {
         }
         digest.update([0]);
     }
+    check_resolution_fence(fence)?;
     Ok(hex_digest(digest.finalize()))
+}
+
+// Preserve the bounded walk and platform path sort used by the v1 digest.
+fn collect_addon_hash_files(
+    root: &Path,
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<Vec<PathBuf>, AddonError> {
+    let mut directories = vec![root.to_path_buf()];
+    let mut files = Vec::new();
+    let mut entry_count = 0_usize;
+    let mut total_size = 0_u64;
+    while let Some(directory) = directories.pop() {
+        check_resolution_fence(fence)?;
+        let mut entries = std::fs::read_dir(&directory).map_err(package_io_error)?;
+        loop {
+            check_resolution_fence(fence)?;
+            let Some(entry) = entries.next() else {
+                break;
+            };
+            let entry = entry.map_err(package_io_error)?;
+            check_resolution_fence(fence)?;
+            entry_count = entry_count.saturating_add(1);
+            if entry_count > MAX_ARCHIVE_ENTRIES {
+                return Err(AddonError::Package(
+                    "installed package contains too many files".to_owned(),
+                ));
+            }
+            let file_type = entry.file_type().map_err(package_io_error)?;
+            if file_type.is_symlink() {
+                return Err(AddonError::Package(
+                    "installed package contains a symlink".to_owned(),
+                ));
+            }
+            if file_type.is_dir() {
+                directories.push(entry.path());
+            } else if file_type.is_file() {
+                check_resolution_fence(fence)?;
+                let size = entry.metadata().map_err(package_io_error)?.len();
+                total_size = total_size.saturating_add(size);
+                if total_size > MAX_EXTRACTED_BYTES {
+                    return Err(AddonError::Package(
+                        "installed package exceeds its size limit".to_owned(),
+                    ));
+                }
+                files.push(entry.path());
+            } else {
+                return Err(AddonError::Package(
+                    "installed package contains an unsupported file type".to_owned(),
+                ));
+            }
+        }
+    }
+    check_resolution_fence(fence)?;
+    files.sort();
+
+    Ok(files)
 }
 
 async fn read_limited(

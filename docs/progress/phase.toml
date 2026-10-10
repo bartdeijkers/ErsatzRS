@@ -1302,7 +1302,9 @@ retaining grouped segments and shared roles without locale fallback. Eleven
 focused/public tests pass; acquisition and generation ownership remain open.
 A preparatory owned teletext command runner bounds preflight, stdin, process and
 output under one deadline, with early pipe overflow and caller-drop cleanup.
-Package admission, producer activation and publication remain open.
+A dedicated installed-package adapter now fences resolution and execution with
+one deadline and retains native jobs through cancellation; generic dispatch stays
+blocked. Profile-specific service activation and publication remain open.
 The maintainer accepted ADR 0122's channel/add-on profiles, add-on-owned themes
 and custom zones, and shared admin/Lua controls. P9A-04/9B-01/9B-02 now include
 synthetic then integrated isolation, interval/rollback/restart and invalid-profile
