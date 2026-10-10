@@ -987,6 +987,22 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 resource/DRCS checkpoint: checked raw magazine/page and logical-S1
+identities enforce Annex A.10's exact reserved purposes and derive function/coding
+from kind. MIP S1 is fixed to zero under 11.3.2; nonzero MOT S1 and decimal-looking
+resource addresses remain permitted. Closed identity JSON rejects shape/field
+bypasses. Checked DRCS definitions preserve sparse slots/bitmaps; the bounded
+catalog rejects exact logical address collisions regardless of kind. Supplied
+display references resolve normal/global links and exact subtables/slots with
+located failures; repeated glyph use does not consume extra distinct slots.
+Normative two-subtable/24-distinct-glyph limits are enforced per display.
+All 50 focused teletext tests pass (17 new, 33 unchanged) after correcting one
+test-fixture macro syntax error; strict domain all-target Clippy passes.
+Independent identity and DRCS source/test reviews are clean. Complete service
+allocation, object-derived reference collection/expansion, enhanced transport,
+operational v2/editor/draft/publication and client/browser proof remain open.
+No v1 wire, encoder, runtime, admin or ordinary playback behavior changed.
+
 2026-10-11 enhanced-value checkpoint: ADR 0123 fixes explicit v2 request/response
 selection, unchanged v1 compatibility, semantic resource/compiler ownership and
 durable design revision/head-CAS/export-receipt boundaries. Read-only audits found

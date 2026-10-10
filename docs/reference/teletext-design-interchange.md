@@ -11,6 +11,38 @@ The domain now provides checked colour references/RGB, editable CLUT2/3 and
 monochrome DRCS bitmap/slot/subtable values. They reject malformed construction
 and JSON; they do not validate resource graphs, per-display usage or native
 encoding. No current addon interface accepts these new values yet.
+Checked raw resource identities and a DRCS catalog now validate definitions and
+supplied display references. Object expansion, complete service allocation and
+enhanced carriage remain open.
+
+## Resource identity and DRCS lookup
+
+The implemented authored resource identity uses a raw magazine/page byte and
+logical S1, not the display page number or a physical resource-header subcode:
+
+```json
+{"kind":"drcs","page":{"magazine":2,"page":160},"logical_subpage":15}
+```
+
+Magazines are 1–8; page bytes 0–254 and logical S1 values 0–15. Resource kinds
+are `pop`, `gpop`, `drcs`, `gdrcs`, `mot` and `mip`. Identity objects reject unknown,
+duplicate or missing fields and positional arrays. Kinds require strings.
+Page function/coding is derived, not independently editable.
+
+Annex A.10 reserves 1BE for ACI, 1F0 for Basic TOP, every magazine's FD for MIP,
+FE for MOT and FF as a terminator. Object/DRCS resources cannot use those addresses;
+other magazines' BE/F0 and decimal-looking resource addresses remain available.
+MIP requires S1 zero (§11.3.2); nonzero MOT S1 remains valid because Annex A.1's
+zero convention is advisory. Physical update and last-packet metadata remain
+compiler-owned.
+
+DRCS subtables preserve sparse, unique slots and monochrome bitmaps. The catalog
+checks exact page/S1 collisions independently of kind and the host record budget.
+Supplied per-display references resolve through normal/global links to exact
+subtables/glyphs. §14.4.1 permits at most two selected subtables and 24 distinct
+glyphs; repeats do not increase the count. Failures retain display/raw subcode
+and reference ordinal. The caller still must collect complete object-derived
+references and validate full service/display allocation and encoding.
 
 ## Standards audit
 

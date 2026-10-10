@@ -11,7 +11,10 @@ playback, output, profile/Lua and engine-first obligations remain in force.
 ## Implementation
 
 Partial — checked colour references, four-bit RGB, editable CLUT2/3 declarations
-and monochrome DRCS bitmap/slot/subtable values exist. The full enhanced service
+and monochrome DRCS bitmap/slot/subtable values exist. Checked raw resource
+identities and a DRCS catalog resolve supplied display references with normative
+subtable/glyph limits. Complete object-derived reference collection is still open.
+The full enhanced service
 model, encoder and editor/publication workflow remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
@@ -59,6 +62,16 @@ are authored values; physical update and last-packet header bits belong to the
 compiler. Validate reserved-purpose addresses, collisions and dependencies over
 the complete service, including transitively invoked objects and DRCS.
 
+Raw resource magazines are 1–8 and data-page bytes 00–FE. Respect Annex A.10's
+exact reserved purposes: 1BE (ACI), 1F0 (Basic TOP), each magazine's FD (MIP), FE
+(MOT) and FF (terminator/null). MIP fixes logical S1 to zero; MOT's zero convention
+is a recommendation, so retain other valid S1 values. Object/DRCS addresses may
+contain only decimal digits; a hexadecimal digit is recommended, not mandatory.
+Derive function/coding from kind and keep logical S1 separate from physical
+update/last-packet bits. Exact resource page/S1 collisions cannot be hidden by
+different kind tags. Do not infer whole-page-number function exclusivity across
+different logical subpages without a normative or actual encoding constraint.
+
 Use checked five-bit colour references and four-bit RGB components. Only CLUT2/3
 are editable in Level 2.5; fixed CLUT0/1 and transparency retain their standard
 meaning. DRCS glyphs have ten rows of twelve monochrome pixels, checked glyph
@@ -68,6 +81,10 @@ glyphs. Objects retain local/public/global identity and active/adaptive/passive
 semantics; structured non-spacing operations retain their position and character
 designation. Side panels and page/magazine defaults remain explicit model data,
 not browser-only styling. Packet ordering and header synthesis are compiler work.
+DRCS links resolve normal/global scope before checking exact subtable and slot.
+Repeated use of the same glyph does not consume additional distinct-glyph budget.
+A catalog validator supplied with references does not itself prove complete
+transitive reference collection, object expansion or display/resource allocation.
 
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;
