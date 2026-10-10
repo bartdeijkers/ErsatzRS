@@ -2,26 +2,58 @@
 
 ## Status
 
-Queued and not implemented. The 2026-10-07 planning refresh retains the five
-teletext milestones and the blocking `p9a-01` product/standards ADR. Implementation
+Queued and not implemented. The 2026-10-10 maintainer decision in
+[ADR 0120](../docs/adr/0120-separate-teletext-engine-from-addon-content.md)
+sets two stages: first the generic ErsatzRS teletext engine, then one new
+TV-guide content add-on in ErsatzRS-Addons. Six milestones include a separate
+engine acceptance gate (`p9a-04`); `p9a-01` still blocks implementation until
+the technical standards and host/add-on contract are accepted. Implementation
 starts after `ucu-09` and the other recorded prerequisites are Complete. UCU-09
 has a fixed upstream v26.11.1 boundary; later upstream releases do not extend
-that gate. This refresh updates planning, not product scope, schemas, APIs, or
-runtime capability. The authoritative execution state lives in
+that gate. This refresh changes planned ownership and sequencing; it delivers
+no schema, API, runtime capability or add-on. The authoritative execution state
+lives in
 [`docs/progress/milestones.toml`](../docs/progress/milestones.toml) and
 [`docs/progress/parity/teletext-support.toml`](../docs/progress/parity/teletext-support.toml);
 this plan owns future sequencing and acceptance boundaries.
 
 ## Goal
 
-Add deliberate, accessible teletext support without conflating three different
-products: DVB teletext subtitle pages embedded in source transport streams,
+Deliver a reusable teletext engine and then an add-on-authored TV guide inspired
+by NOS Teletekst. Keep three distinct concerns explicit: DVB teletext subtitle
+pages embedded in source transport streams,
 interactive full-page teletext browsing, and an authored teletext service
 carried in ErsatzRS output. Scan and persist the accepted source metadata,
 provide predictable selection and playback behavior, and expose capability or
 failure through health and troubleshooting on every supported platform.
 
-## Current evidence
+## Ownership and content scope
+
+ADR 0120 owns the engine/content split. The planned boundary is:
+
+| Owner | Responsibility |
+|---|---|
+| ErsatzRS engine | Generic page/service model, validation, character/layout primitives, navigation, page publication, supported rendering/transport, capability, admin and health. |
+| Existing add-on boundary | Versioned read-only guide input and typed page output, compatibility, bounded invocation, cancellation and failure handling; concrete schemas are a P9A-01 decision. |
+| One new tvguide teletext add-on in ErsatzRS-Addons | Page map, index and navigation links, TV-guide layout and actual page content using host-supplied programme context. |
+
+The first stage uses synthetic pages to prove the engine without production
+content. The second stage defines the guide's numbered index, channel/programme
+pages and compact colour/text presentation using only the TV-guide-related
+[NOS Teletekst pages 200–299](https://nos.nl/teletekst/200) as the design example.
+This includes guide index/subpage navigation and programme listings. Other NOS
+sections and unrelated information pages within that range are outside scope.
+It does not include scraping NOS, republishing its news or copying its branding.
+The reference range does not fix the add-on's page numbering; detailed page
+numbers and layouts belong to the add-on design.
+
+Reuse existing add-on packaging, trust, explicit installation/enablement and
+bounded process execution. No new renderer process, direct database access,
+general-purpose public add-on HTTP API or automatic repository distribution is
+required by this plan. Current checkout/ZIP installation avoids a dependency
+cycle with OAD-01 through OAD-04, which remain after Phase 9 and Phase 10.
+
+## Evidence from the 2026-10-07 planning review
 
 - ErsatzRS currently has no teletext-specific domain model, scanner branch,
   selection policy, FFmpeg capability requirement, admin surface, or runtime
@@ -66,14 +98,14 @@ failure through health and troubleshooting on every supported platform.
 - Do not expose raw page bytes or undecoded character-set data through public
   APIs as a temporary contract.
 
-## Phase 9A: Contract and ingest
+## Phase 9A: Generic teletext engine
 
 ### P9A-01: Product and standards decision
 
 Accept an ADR before schema, runtime-package, or pipeline work. It must decide:
 
-- whether Phase 9 supports subtitle pages, full-page browsing, authored channel
-  pages, or a staged subset;
+- how required generic full-page browsing and authored-page delivery coexist
+  with the retained source subtitle requirements under ADR 0120;
 - page-number, magazine/service, subtitle flag, language, national-option/
   default-region, character-set, transparency, and duration semantics;
 - whether source teletext is burned into video, extracted to a cached text/ASS
@@ -83,8 +115,12 @@ Accept an ADR before schema, runtime-package, or pipeline work. It must decide:
   preferences interact with multiple teletext pages;
 - HLS behavior, because browser HLS clients do not gain teletext-page support
   merely because an MPEG-TS input contains teletext;
-- whether full-page browsing needs a dedicated authenticated endpoint and UI,
-  and whether generated pages need a separate authoring/data model;
+- the authenticated full-page browsing surface and distinct generic authored
+  page model, with synthetic fixture proof before production content;
+- the versioned host/add-on input and page-output contract, read-only programme
+  context, page ownership, layout limits, compatibility and validation;
+- refresh and atomic publication, restart, expiry/last-good behavior, resource
+  bounds, and visible missing/disabled/incompatible/failing add-on outcomes;
 - the six-RID libzvbi packaging, licensing, capability, and operator-runtime
   fallback contract; and
 - health behavior for unsupported pages, missing decoder capability, malformed
@@ -102,7 +138,7 @@ The ADR must fill an engine/source/output matrix using these independent axes:
 | Source | Reopenable local files; authenticated provider/finite remote sources; prepared add-on files; one-shot producers; live HTTP/RTSP |
 | Output | Native MPEG-TS and HLS modes; Next HLS and hybrid MPEG-TS; browser/client delivery |
 | Video processing | Transcode/burn-in; video-copy policy and its effect on selected captions |
-| Teletext behavior | Subtitle pages; full-page browsing; authored services, as selected by the ADR |
+| Teletext behavior | Subtitle pages; full-page browsing; authored services, with explicit supported delivery |
 
 For each accepted combination, identify page selection, decoder/preparation
 ownership, delivery, failure behavior and required runtime proof; explicitly
@@ -154,9 +190,7 @@ search/detail projections. Preserve alternate-audio and ordinary subtitle
 behavior while adding teletext; a codec that cannot be decoded must remain
 visible rather than disappear from selection.
 
-## Phase 9B: Delivery and runtime proof
-
-### P9B-01: Selection and output
+### P9A-04: Engine delivery and independent acceptance
 
 Thread exact stream/page selection through collection/schedule entries and the
 native and Next adapters. Implement the P9A-01 matrix through the existing
@@ -170,21 +204,48 @@ application ports, selection rules and source owners:
 - MPEG-TS passthrough or carriage is enabled only after PMT/PID and client proof;
 - HLS/browser playback uses the accepted burn-in or sidecar fallback and never
   advertises native teletext controls that do not exist; and
-- full-page browsing or authored pages, if accepted, use a separate stable
-  application/API boundary rather than scraping FFmpeg logs or cached files.
+- required full-page browsing and authored pages use a stable generic
+  application/add-on boundary with typed page validation and host rendering.
 
 Preserve subtitle timing through retained source intervals, mid-cue seeks,
 programme handoffs and chunk restarts. Define video-copy behavior explicitly;
 copying video must not accidentally promise burned-in captions or carry a
 teletext stream solely through automatic mapping.
 
-If authored pages are accepted, reuse the read-only programme occurrence
+For the host-supplied add-on input, reuse the read-only programme occurrence
 projection from [ADR 0112](../docs/adr/0112-programme-aware-graphics-context.md)
 for current/next/continuing programmes and Later Today, including filler and
 DST boundaries. Reuse the native preview boundary from
 [ADR 0114](../docs/adr/0114-author-graphics-with-the-native-renderer.md) where
 appropriate. A rendered page preview does not prove an encoded teletext service;
 the ADR must still select that service's authoring and transport contract.
+
+Before P9B-01 starts, demonstrate synthetic multi-page publication, navigation,
+character/layout fidelity, update/restart and invalid-page/failure handling
+through the accepted outputs. Prove the versioned add-on boundary with a test
+fixture producer, not the production TV-guide implementation. Localized engine
+management, health, supported-platform runtime proof, source-subtitle regressions
+and applicable browser, smoke and TSDuck gates must pass at this checkpoint.
+
+## Phase 9B: TV-guide add-on and integrated acceptance
+
+### P9B-01: One tvguide teletext content add-on
+
+After P9A-04 is Complete, implement one new add-on in ErsatzRS-Addons. Define
+its exact package identity and NOS-inspired page map, then produce typed pages
+through the engine's accepted contract. The add-on owns the index, channel and
+programme page composition and navigation links. Consume the host's read-only
+programme occurrence context rather than querying SQLite or duplicating
+scheduling logic. Cover current/next/continuing and Later Today, filler,
+empty guides, timezone/DST boundaries, long titles and multilingual text.
+
+Verify explicit package installation and enablement, compatible host/add-on
+versions, settings and bounded refresh. Show actual guide pages changing after
+playout/guide changes without embedding their content rules in ErsatzRS. Prove
+disabled/missing packages, incompatible output, timeouts and failed refresh
+follow P9A-01's visible stale/last-good policy and preserve unrelated playback.
+Record exact host and package revisions for integrated acceptance; publication
+or automatic distribution is not implied by this implementation milestone.
 
 ### P9B-02: Admin, health, and end-to-end acceptance
 
@@ -201,8 +262,12 @@ existing API policy, and decoder/media callbacks on the internal listener under
 or sidecar endpoint needs an explicit route and access-policy classification;
 do not expose management through the streaming-only listener.
 
-Use licensed or redistributable fixtures for subtitle pages and, if accepted,
-full-page services. Runtime acceptance covers scan/rescan, exact selection,
+Use licensed or redistributable fixtures for subtitle pages and full-page
+services. Install the exact tvguide add-on through the existing package flow;
+prove its guide-driven page content, navigation, refresh/restart, capability
+and failure behavior through the actual engine and supported client outputs.
+Engine-only or mock-provider evidence cannot close this milestone. Runtime
+acceptance covers scan/rescan, exact selection,
 seek and chunk restart, mixed subtitle types, direct MPEG-TS, HLS fallback,
 HDHomeRun clients where applicable, malformed input, runtime refresh, and
 decoded visual/text comparison. Include multiple pages in one stream,
@@ -219,10 +284,14 @@ or DVB-subtitle stream.
    complete product/standards/runtime contract and engine/source/output matrix.
 2. `p9a-02`: package and functionally probe the decoder.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
-4. `p9b-01`: implement only the accepted selection/output matrix.
-5. `p9b-02`: close localized management, health, and end-to-end proof.
+4. `p9a-04`: implement and accept the generic engine and selection/output matrix
+   using synthetic pages, with localized management, health and runtime proof.
+5. `p9b-01`: implement the single tvguide teletext add-on in ErsatzRS-Addons,
+   including its NOS-inspired page structure and host-supplied guide content.
+6. `p9b-02`: close integrated host/add-on management, health and end-to-end proof.
 
-Phase 10 video-jukebox work remains dependency-gated behind `p9b-02`.
+Phase 10 video-jukebox work remains dependency-gated behind `p9b-02`, including
+the working content add-on. Official add-on distribution remains later work.
 
 ## Closeout gates
 
@@ -232,6 +301,9 @@ session log. Phase 9 closes only after:
 - runtime packaging/probing is verified for all six RIDs or an ADR records an
   intentional supported-platform exception;
 - SQLite scanner and persistence tests pass;
+- P9A-04 independently proves the engine before production content starts;
+- the exact compatible tvguide add-on is installed and its real guide pages,
+  navigation, refresh, restart and failure behavior pass integrated proof;
 - FFmpeg argv snapshots and decoded subtitle/page fixtures pass;
 - changed admin surfaces are localized and hydration/browser-proven;
 - `./run.sh test-closeout`, the workspace Clippy configuration,

@@ -1,7 +1,7 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'Phase 9A — Teletext contract and ingest'
+current_phase = 'Phase 9A — Generic teletext engine'
 current_focus = 'All channel setup findings locally accepted for v1.1.1; release and deployment gates remain separate'
 
 summary = '''
@@ -17,7 +17,8 @@ controller, localized editor, health coverage, and decoded Windows/WSL runtime
 proof. AMM-I closes the add-on-list import/review UX correction with automatic
 Ready materialization, authoritative publication readiness, faithful no-JS
 forms, compact responsive review cards, and keyboard-safe navigation. Phase 9
-teletext now also waits for the latest-upstream catch-up program.
+follows the recorded UCU prerequisites: generic teletext engine first, then one
+NOS-inspired tvguide teletext content add-on in ErsatzRS-Addons (ADR 0120).
 Redacted Windows dogfood reopened the atomic
 add-on-list publication contract under AMM-J: an interrupted scan followed by
 a one-shot directory-rename failure can leave a valid journal permanently
@@ -1122,12 +1123,18 @@ AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is
 historical evidence, not CI proof for this working tree. After AMM-N-03 is done
 and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
-Resume Phase 9A at p9a-01 after UCU-09 and its other recorded prerequisites
-close. The 2026-10-07 teletext planning refresh preserves all five milestones
-and the undecided product scope; plans/teletext-support.md now accounts for
-native/Next source ownership, page identity, SQLite and current runtime/admin
-boundaries. Accept the product/standards ADR and engine/source/output matrix
-before implementation; UCU platform exceptions do not waive teletext gates.
+Resume Phase 9A at p9a-01 under its recorded prerequisites. The 2026-10-10
+maintainer decision in ADR 0120 fixes the sequence: generic ErsatzRS teletext
+engine first, then one new tvguide teletext add-on in ErsatzRS-Addons for the
+page structure inspired only by TV-guide-related NOS Teletekst pages 200–299
+and actual guide content. Accept the technical
+standards/runtime and versioned host/add-on contract at p9a-01. P9A-02/03 cover
+runtime and source metadata; new p9a-04 independently accepts the engine with
+synthetic pages and retained selection/output proof. Only then implement the
+content add-on at p9b-01 and close integrated acceptance at p9b-02. All six
+milestones remain Not started. Existing native/Next, source subtitle, six-RID,
+localized admin, health and runtime gates remain; UCU platform exceptions do
+not waive them. plans/teletext-support.md owns detailed future sequencing.
 
 Deferred product work accepted 2026-10-09: after both p9b-02 (teletext) and
 p10b-02 (video jukebox), resume oad-01 through oad-04 for bundled official
@@ -1146,7 +1153,7 @@ scope or a prerequisite for the current corrective milestone.
 '''
 
 [[blocking_decision]]
-note = 'Milestone p9a-01 must accept the teletext product and standards ADR before Phase 9 schema, runtime packaging, selection, or output work starts.'
+note = 'ADR 0120 accepts engine-first delivery followed by one tvguide content add-on. Milestone p9a-01 must still accept the technical teletext standards/runtime and host/add-on contract before schema, runtime packaging, selection or output work starts; p9a-04 must close before production content work.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'

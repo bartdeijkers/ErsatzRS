@@ -21,7 +21,7 @@ acceptance from implementation notes or from the presence of a release.
 These plans include proposals and deferred work, not blanket implementation approval.
 
 - [Local replacement workflow](addon-list-replacement-ux.md) — discovery, suggestions and reverse assignment; bulk matching remains a product choice.
-- [Teletext](teletext-support.md) — Phase 9 after UCU-09, starting with the product/standards ADR and native/Next compatibility matrix.
+- [Teletext](teletext-support.md) — Phase 9 after UCU-09: accept the technical contract, prove the generic ErsatzRS engine, then implement one tvguide teletext content add-on in ErsatzRS-Addons, inspired only by NOS Teletekst TV-guide pages 200–299 (ADR 0120).
 - [Video jukebox](application-layer-and-video-jukebox.md) — Phase 10, after teletext.
 - [Official add-on distribution and Sources design](official-addon-distribution.md) — OAD-01 through OAD-04, after both teletext and jukebox acceptance; visual design v0.1 is locked, with further refinement in new revisions.
 - [Channel packages](channel-packages.md) — Phase 11 draft; product/feed ADR first.

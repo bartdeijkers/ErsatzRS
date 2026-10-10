@@ -1,15 +1,19 @@
 feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-08-07 search or the 2026-10-07 local `$ERSATZTV_SRC` checkout at df6ae228; milestone p9a-01 must revalidate the completed UCU baseline and classify each accepted behavior as parity or an ErsatzRS extension'
-rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging'
+rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'Not started'
-adr        = []
+adr        = ['0120']
 summary    = '''
 Not started and queued as Phase 9 after UCU-09 and the other p9a-01 prerequisites.
-The 2026-10-07 maintainer-authorized planning refresh retains the five milestones
-and the undecided product scope. The phase deliberately distinguishes DVB
-teletext subtitle pages, interactive full-page browsing, and authored output
-services. Milestone p9a-01 must accept the standards/product/runtime contract
-before schema or pipeline work decides which of those products ErsatzRS supports.
+The 2026-10-10 maintainer decision (ADR 0120) requires a generic ErsatzRS
+teletext engine first, independently accepted at p9a-04 using synthetic pages,
+then one new tvguide teletext add-on in ErsatzRS-Addons at p9b-01. The add-on
+owns page structure/navigation inspired only by the TV-guide-related NOS
+Teletekst pages 200–299, plus actual TV-guide content. The host owns validation,
+publication, rendering/delivery and read-only programme
+context. Source subtitle requirements remain. P9A-01 still must accept the
+technical standards/runtime and versioned host/add-on contract before code.
+The six milestones remain Not started; this is accepted planning, not delivery.
 
 Current ErsatzRS scanning and playback have no teletext-specific model or
 selection path, and the FFmpeg runtime contract does not require or functionally
@@ -24,7 +28,8 @@ to teletext. Phase 10 video-jukebox work begins only after p9b-02 closes.
 
 [[debt]]
 id          = 'teletext-product-and-standards-contract-is-undecided'
-description = 'Decide whether Phase 9 supports DVB teletext subtitles, full-page browsing, generated channel pages, burn-in, extraction, MPEG-TS carriage/passthrough, and HLS/browser fallback. P9A-01 owns page/language/region/accessibility semantics and the native/Next source/output matrix, including Burn/Convert, copy, finite/prepared/live/one-shot inputs, endpoint boundaries, packaging and visible unsupported behavior.'
+adr         = '0120'
+description = 'ADR 0120 settles engine-first ownership and required authored full-page support followed by one TV-guide content add-on. Decide the technical page model, versioned guide-input/page-output contract, validation, compatibility, refresh/publication/restart and stale-page/failure policy, plus source subtitles, burn-in, extraction, MPEG-TS carriage/passthrough and HLS/browser delivery. P9A-01 owns page/language/region/accessibility semantics and the native/Next source/output matrix, including Burn/Convert, copy, finite/prepared/live/one-shot inputs, endpoint boundaries, packaging and visible unsupported behavior.'
 discovered  = '2026-08-07'
 evidence    = 'Milestone p9a-01 and `plans/teletext-support.md` enumerate the decision surface. FFmpeg documents optional libzvbi decoding for DVB teletext pages/subtitles but no DVB teletext encoder; decoder availability alone cannot settle the product or output contract.'
 resolved    = false
@@ -45,9 +50,9 @@ resolved    = false
 
 [[debt]]
 id          = 'teletext-selection-and-output-is-unimplemented'
-description = 'No application or pipeline contract selects a teletext page/stream, decodes or extracts it, burns it into video, carries it through MPEG-TS, or defines an HLS/browser fallback. P9B-01 owns the accepted native/Next matrix and source-bound page-aware preparation, preserving timing, copy policy, subtitle/audio selection, HDR/SDR, overlays, cancellation and explicit failure without implicit engine fallback.'
+description = 'No application or pipeline contract selects a teletext page/stream, decodes or extracts it, burns it into video, carries it through MPEG-TS, or defines an HLS/browser fallback. P9A-04 owns the accepted native/Next matrix and source-bound page-aware preparation, preserving timing, copy policy, subtitle/audio selection, HDR/SDR, overlays, cancellation and explicit failure without implicit engine fallback.'
 discovered  = '2026-08-07'
-evidence    = 'Current playback paths have no txt_page/txt_default_region/txt_format contract. Next Track and SubtitleProbeHint in `crates/ersatzrs-infra/src/next_engine/protocol.rs` have no page selection; existing burn_cache/live_subtitles ownership and ADR 0100 constrain preparation. Decoder support does not prove authored-service encoding. P9B-01 owns implementation evidence.'
+evidence    = 'Current playback paths have no txt_page/txt_default_region/txt_format contract. Next Track and SubtitleProbeHint in `crates/ersatzrs-infra/src/next_engine/protocol.rs` have no page selection; existing burn_cache/live_subtitles ownership and ADR 0100 constrain preparation. Decoder support does not prove authored-service encoding. P9A-04 owns implementation evidence.'
 resolved    = false
 
 [[debt]]
@@ -55,4 +60,20 @@ id          = 'teletext-management-health-and-runtime-proof-is-missing'
 description = 'P9B-02 owns localized page/type/language/capability management, existing health/troubleshooting integration and licensed or redistributable decoded fixtures. Prove the accepted engine/source/output matrix, scan/rescan, multiple pages, seek/restart, edited timelines, cancellation, stale/missing capability failures, route isolation and client-visible output; require PSI/PID and client proof for separate carriage.'
 discovered  = '2026-08-07'
 evidence    = 'No teletext admin labels, health check, browser workflow, FFmpeg fixture, smoke scenario, or TSDuck gate exists in the workspace. Milestone p9b-02 owns the closeout evidence.'
+resolved    = false
+
+[[debt]]
+id          = 'teletext-generic-engine-and-addon-boundary-is-unimplemented'
+adr         = '0120'
+description = 'P9A-04 must independently prove generic typed pages, validation, navigation, publication, rendering/delivery, localized management and health with synthetic pages and a fixture producer before the production content add-on begins. P9A-01 owns the technical contract and bounded lifecycle decisions.'
+discovered  = '2026-10-10'
+evidence    = 'ADR 0120 accepts ownership and sequencing only. No teletext add-on capability currently exists; milestone p9a-04 owns engine implementation and acceptance evidence.'
+resolved    = false
+
+[[debt]]
+id          = 'teletext-tvguide-content-addon-and-integrated-proof-is-missing'
+adr         = '0120'
+description = 'P9B-01 must deliver one new tvguide teletext add-on in ErsatzRS-Addons with NOS-inspired page structure/navigation and host-supplied guide content. P9B-02 must prove exact compatible host/package installation, real pages, refresh/restart and missing/disabled/incompatible/failure outcomes. Existing manual acquisition is sufficient; later official distribution remains separately gated.'
+discovered  = '2026-10-10'
+evidence    = 'Maintainer-authorized planning on 2026-10-10; production content starts only after p9a-04 is Complete. No add-on implementation or integrated runtime acceptance is claimed.'
 resolved    = false

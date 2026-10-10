@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Plan Phase 9 as a generic teletext engine followed by one new TV-guide
+  teletext add-on in ErsatzRS-Addons, with pages and navigation inspired only
+  by the TV-guide-related NOS Teletekst pages 200–299.
+  Require independent engine acceptance before content work and integrated
+  host/add-on proof before phase closeout; runtime behavior is unchanged.
+
 - Update 21 Rust dependencies, including Leptos hydration, JSON Schema
   validation, scheduling parsers and platform process support; refresh CI
   actions while preserving the pinned Unicode case-mapping dependency.

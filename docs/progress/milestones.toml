@@ -950,7 +950,7 @@ both transitions, save, and reload.
 
 [[milestone]]
 id         = 'p9a-01'
-phase      = 'Phase 9A — Teletext contract and ingest'
+phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Decide the teletext product and standards contract'
 status     = 'Not started'
 feature    = 'teletext-support'
@@ -967,8 +967,12 @@ native/Next engine, source-lifecycle and output matrix, including Next
 Burn/Convert, video copy, finite/prepared inputs and live/one-shot sources.
 Preserve exact selection and source ownership under ADR 0100; classify any
 browsing/sidecar endpoint under existing listener and API policies. Authored
-pages, if selected, reuse shared programme context while retaining a distinct
-teletext encoding/carriage decision.
+pages reuse shared programme context while retaining a distinct teletext
+encoding/carriage decision. ADR 0120 fixes engine-first ownership followed by
+one tvguide teletext add-on; accept the technical page and versioned add-on
+contract, validation, compatibility, bounded refresh/publication, restart and
+visible stale/last-good/failure policy. Full-page support is required. This
+standards gate remains open despite acceptance of the ownership decision.
 '''
 evidence = '''
 2026-10-07 maintainer-authorized planning refresh accounts for current Next,
@@ -978,6 +982,14 @@ No teletext schema, API, runtime capability or implementation is delivered.
 Planning validation passes: progress check, local documentation links and diff
 whitespace checks. Scoped comparison preserves all other milestone records,
 teletext statuses/dependencies and the active phase/focus.
+2026-10-10 maintainer decision: ADR 0120 accepts engine-first delivery followed
+by one NOS-inspired tvguide teletext add-on in ErsatzRS-Addons. Add p9a-04 for
+independent engine acceptance and move production content to p9b-01. Existing
+selection/output acceptance moves to p9a-04; p9b-02 remains integrated closeout.
+All Phase 9 milestones remain Not started; the technical ADR is still required.
+Planning checks pass: progress validation, local Markdown links, retained output
+acceptance and scoped milestone comparison. Non-Phase-9 records, including
+Phase 10 and OAD dependencies, are unchanged. No runtime proof is claimed.
 '''
 
 [[milestone]]
@@ -1039,7 +1051,7 @@ same-process reload gates passed with ErsatzRS FFmpeg 9 on Windows and WSL/Linux
 
 [[milestone]]
 id         = 'p9a-02'
-phase      = 'Phase 9A — Teletext contract and ingest'
+phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Package and probe teletext decoding'
 status     = 'Not started'
 feature    = 'teletext-support'
@@ -1059,7 +1071,7 @@ evidence = ''
 
 [[milestone]]
 id         = 'p9a-03'
-phase      = 'Phase 9A — Teletext contract and ingest'
+phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Scan and persist teletext services and pages'
 status     = 'Not started'
 feature    = 'teletext-support'
@@ -1078,9 +1090,9 @@ ordinary subtitle/alternate-audio metadata.
 evidence = ''
 
 [[milestone]]
-id         = 'p9b-01'
-phase      = 'Phase 9B — Teletext delivery and runtime proof'
-title      = 'Deliver selectable teletext through supported outputs'
+id         = 'p9a-04'
+phase      = 'Phase 9A — Generic teletext engine'
+title      = 'Accept the generic teletext engine before content work'
 status     = 'Not started'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
@@ -1096,13 +1108,47 @@ without silent caption loss, engine switching or double consumption of a
 one-shot source. Existing bounded preparation gains page-aware identity,
 deadlines, cancellation and atomic artifact publication. Mid-cue seek, edited
 source timelines and chunk/programme handoff retain caption timing and audio.
+Implement typed authored-page publication, navigation and rendering through the
+accepted host/add-on boundary. Synthetic redistributable pages and a fixture
+producer prove the generic engine without production TV-guide content. Verify
+validation, refresh/restart, failure policy and visible unsupported delivery.
+Localized engine management and health, supported-platform probes, changed UI
+browser/hydration proof, source-subtitle regressions and applicable smoke/TSDuck
+checks pass before the production add-on begins. A preview alone is not
+teletext carriage proof.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'p9b-01'
+phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
+title      = 'Deliver TV-guide pages through one teletext add-on'
+status     = 'Not started'
+feature    = 'teletext-support'
+plan       = 'plans/teletext-support.md'
+depends_on = ['p9a-04']
+acceptance = '''
+After generic engine acceptance, implement one new tvguide teletext add-on in
+ErsatzRS-Addons under ADR 0120. Only TV-guide-related NOS Teletekst pages
+200–299 (https://nos.nl/teletekst/200) are the design reference; other sections
+and unrelated information pages are excluded. The add-on owns the numbered
+page map, index/subpage navigation, layout and TV-guide content, using host-supplied
+read-only programme context. The host retains generic validation, publication,
+rendering and delivery; no hard-coded TV-guide content or external renderer.
+Prove current/next/continuing and Later Today, filler, empty guides, long titles,
+multilingual text and timezone/DST behavior. Exact compatible host and package
+revisions demonstrate explicit install/enable, guide-driven page refresh and
+restart. Missing/disabled/incompatible packages and failed/timed-out refresh
+follow the accepted visible stale/last-good policy without harming playback.
+Use existing checkout/ZIP distribution; automatic repository updates, NOS data
+scraping and broader editorial/news services are excluded.
 '''
 evidence = ''
 
 [[milestone]]
 id         = 'p9b-02'
-phase      = 'Phase 9B — Teletext delivery and runtime proof'
-title      = 'Expose teletext management, health, and end-to-end proof'
+phase      = 'Phase 9B — TV-guide add-on and integrated acceptance'
+title      = 'Accept integrated teletext engine and TV-guide add-on'
 status     = 'Not started'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
@@ -1119,6 +1165,11 @@ stream, multilingual text, alternate audio, source changes, stale artifacts,
 cancellation, runtime refresh, missing capabilities and the accepted engine/copy
 matrix. TSDuck and client evidence verify separate subtitle/teletext carriage
 when it is selected by the ADR.
+Install the exact compatible tvguide add-on and verify real guide-driven pages,
+NOS-inspired index/navigation, content refresh, restart, and missing/disabled/
+incompatible/failing package behavior through the actual engine and clients.
+Engine-only or fixture-producer proof cannot close Phase 9. Record both host
+and add-on identities; automatic repository distribution remains out of scope.
 Existing workspace closeout, Clippy, Leptos, parity-check, smoke, changed-output
 TSDuck and progress validation gates remain required.
 '''
