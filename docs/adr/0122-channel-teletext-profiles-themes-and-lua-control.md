@@ -10,9 +10,11 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 
 Partially implemented: neutral profile/binding types and an additive SQLite
 repository provide isolated, revision-fenced configuration. Shared application
-controls and profile-scoped invocation prepare structurally validated unpublished
-drafts through the native host adapter. Lua intervals, localized administration,
-automatic service activation, encoding and publication remain open. P9A-04 owns
+controls prepare profile-scoped and complete channel-wide unpublished candidates.
+The native host encodes their exact retained draft using the existing Western
+Latin encoder. Lua intervals, localized administration, automatic service
+activation, durable generation ownership/publication and full encoding/client
+acceptance remain open. P9A-04 owns
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide
 add-on and integrated proof.
 
@@ -131,6 +133,32 @@ generation, not 1,024 per active binding. Retain one in-flight invocation per
 configured channel service; multiple bindings compose serially, with at most
 one invocation for any `(channel, add-on)` binding. Channel admission and
 invalidation coalescing stay bounded.
+The caller explicitly selects one enabled entry add-on for channel preparation.
+Its validated initial page and service language become the aggregate metadata;
+other pages retain their own language, national option and navigation. Sorting
+bindings for stable invocation order does not choose the entry. An absent or
+unselected entry fails before invocation. If no binding is enabled, preparation
+returns an explicit Off candidate with no entry or page set, including when a
+previous entry argument is retained. Persisted live-service entry policy and
+requested/applied state remain part of later activation work.
+
+Channel-wide preparation captures all enabled bindings in one read transaction
+and uses the same selection validation as individual profile invocation.
+Membership is bounded before loading settings: at most 1,024 enabled bindings,
+because each successful producer must return at least one of the aggregate's
+1,024 page/subpage records. Disabled configuration does not join that generation.
+One original 30-second deadline is passed through all serial producer invocations;
+no producer receives a fresh channel budget. Cleanup is awaited through the
+existing owned resolver/process path, retaining uncertainty. After the last
+producer, a new full transaction checks every identity, effective settings and
+the entire enabled membership before accepting the complete aggregate.
+
+Native candidate encoding runs off async workers and retains the exact immutable
+logical draft beside the complete encoded pages and host-derived descriptor.
+Charset/control-cell failures or an expired original budget return no candidate.
+These preparations do not establish single-flight service admission, restart
+state, source completeness or promotion authority. Publication must revalidate
+membership, entry policy, generation ownership and revisions after encoding.
 Stream and browser consume exactly the same immutable validated channel
 generation and page content. Neither reconstructs a separate theme or zone view.
 

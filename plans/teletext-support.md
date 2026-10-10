@@ -70,6 +70,13 @@ It is required Phase 9 work, with implementation and independent acceptance open
   selections after profile deletion or package uninstall, and allow a binding
   to be switched Off even when its profile or package is unavailable. ADR 0122
   owns storage bounds, inheritance and revision-fence details.
+- Prepare multiple bindings as one channel candidate with an explicitly selected
+  entry add-on for its initial page/service language. Reject overlapping page/
+  subpage addresses and more than 1,024 records across all producers. Capture
+  and recheck the complete enabled membership and effective settings around
+  serial invocation under one shared deadline. Validate the whole native encoding
+  and retain the same immutable logical pages for future browser delivery;
+  service admission, persisted entry policy and atomic publication remain gates.
 - The TV-guide add-on declares named colour/layout themes, permitted overrides
   and defined page zones accepting custom values. A profile selects those values.
   Presentation and zone semantics stay in the add-on; the host validates complete

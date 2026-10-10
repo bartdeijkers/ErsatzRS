@@ -152,7 +152,33 @@ pub async fn invoke_profile(
     input: Vec<u8>,
     cancellation: Option<oneshot::Receiver<()>>,
 ) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
-    let fence = ResolutionFence::new(Instant::now() + EXECUTION_TIMEOUT);
+    invoke_profile_with_deadline(
+        pool,
+        selection,
+        runtime,
+        input,
+        std::time::Instant::now() + EXECUTION_TIMEOUT,
+        cancellation,
+    )
+    .await
+}
+
+/// Invoke a profile within the earlier of a supplied shared deadline and the
+/// existing 30-second per-invocation ceiling. Resolution, process and pipes use
+/// that same deadline; cancellation and settlement ownership are unchanged.
+///
+/// # Errors
+/// Returns the existing static invocation failures, including cleanup uncertainty.
+pub async fn invoke_profile_with_deadline(
+    pool: DbPool,
+    selection: TeletextSelectionSnapshot,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    cancellation: Option<oneshot::Receiver<()>>,
+) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
+    let fence =
+        ResolutionFence::new(Instant::from_std(deadline).min(Instant::now() + EXECUTION_TIMEOUT));
     let receipt = invoke_with_fence(
         Invocation {
             pool,

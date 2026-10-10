@@ -15,5 +15,6 @@ pub mod scanning;
 pub mod settings;
 pub mod state;
 pub mod tasks;
+pub mod teletext;
 pub mod tool_recovery;
 pub mod troubleshooting;

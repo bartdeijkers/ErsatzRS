@@ -103,8 +103,12 @@ release section when tagging a release.
   controls can turn a binding Off even when its package or profile is unavailable.
   Profile-specific execution uses the effective settings before native-tool
   resolution, checks selection identity around execution and returns only complete
-  structurally validated unpublished page drafts. Localized admin, Lua controls,
-  automatic service activation, encoding and publication remain pending.
+  structurally validated unpublished page drafts. Compose multiple bindings with
+  an explicit entry page, one shared producer deadline and complete membership
+  checks; reject page collisions and channel-wide resource overflow. Native
+  preparation encodes the whole candidate and retains the same immutable logical
+  pages, with no partial result after a later encoding failure. Localized admin,
+  Lua controls, automatic service activation and publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

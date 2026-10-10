@@ -74,6 +74,12 @@ impl TeletextProfileRepository for Repository {
     ) -> RepositoryResult<Vec<ChannelTeletextBindingRead>> {
         unreachable!("unexpected unscoped read")
     }
+    async fn channel_invocation_snapshot(
+        &self,
+        _: EntityId,
+    ) -> RepositoryResult<Mutation<ersatzrs_domain::TeletextChannelSelectionSnapshot>> {
+        unreachable!("unexpected channel-wide read")
+    }
     async fn invocation_snapshot(
         &self,
         channel_id: EntityId,

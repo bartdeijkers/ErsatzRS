@@ -25,6 +25,9 @@ use ersatzrs_domain::{
     Channel, ChannelTeletextBinding, FFmpegProfile, TeletextColour, TeletextProfile,
     TeletextProfileSetting, TeletextProfileValue, TeletextRunContent,
 };
+use ersatzrs_ffmpeg::teletext::source_header::{
+    observe_dvb_teletext_header, TeletextHeaderObservation,
+};
 use ersatzrs_infra::{
     addons::calculate_addon_content_sha256,
     db::{DatabaseBackend, DatabaseSchemaStatus},
@@ -36,6 +39,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver};
 use uuid::Uuid;
 
 const ADDON: &str = "org.ersatzrs.teletext.native-profile-fixture";
+const SECONDARY: &str = "org.ersatzrs.teletext.native-profile-fixture.secondary";
 const GENERATION: &str = "native-profile-generation";
 const SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
@@ -56,7 +60,28 @@ while test ! -f ../ready-day || test ! -f ../ready-night; do
 done
 generation=native-profile-generation
 test "$ERSATZRS_ADDON_SETTING_RESPONSE" != bad-generation || generation=wrong-generation
-printf '{"schema_version":1,"generation":"%s","language":"nld","initial_page":123,"pages":[{"address":{"page":123,"subcode":0},"kind":"full_page","language":"nld","national_option":0,"rows":[{"row":1,"runs":[{"column":0,"style":{"foreground":"%s","background":"black","height":"normal","boxed":false,"flash":false,"conceal":false},"content":{"kind":"text","text":"Profile %s"}}]}],"navigation":[{"role":"index","target":{"page":123,"subcode":null}}]}]}' "$generation" "$colour" "$theme"
+printf '{"schema_version":1,"generation":"%s","language":"nld","initial_page":123,"pages":[{"address":{"page":123,"subcode":0},"kind":"full_page","language":"nld","national_option":0,"rows":[{"row":1,"runs":[{"column":1,"style":{"foreground":"%s","background":"black","height":"normal","boxed":false,"flash":false,"conceal":false},"content":{"kind":"text","text":"Profile %s"}}]}],"navigation":[{"role":"index","target":{"page":123,"subcode":null}}]}]}' "$generation" "$colour" "$theme"
+"#;
+
+const SECONDARY_SCRIPT: &str = r#"case "$1" in
+check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
+pages) ;;
+*) exit 9;;
+esac
+test "$ERSATZRS_ADDON_CAPABILITY" = teletext.pages.v1 || exit 10
+theme="$ERSATZRS_ADDON_SETTING_THEME"
+case "$theme" in day) colour=red;; night) colour=green;; *) exit 11;; esac
+cat > "../secondary-input-$theme.json"
+printf '1\n' >> "../secondary-calls-$theme"
+page=223
+text="Second $theme"
+case "$ERSATZRS_ADDON_SETTING_RESPONSE" in
+good) ;;
+unencodable) text='🚀';;
+collision) page=123;;
+*) exit 12;;
+esac
+printf '{"schema_version":1,"generation":"native-profile-generation","language":"fra","initial_page":%s,"pages":[{"address":{"page":%s,"subcode":0},"kind":"full_page","language":"fra","national_option":0,"rows":[{"row":1,"runs":[{"column":1,"style":{"foreground":"%s","background":"black","height":"normal","boxed":false,"flash":false,"conceal":false},"content":{"kind":"text","text":"%s"}}]}],"navigation":[{"role":"index","target":{"page":%s,"subcode":null}}]}]}' "$page" "$page" "$colour" "$text" "$page"
 "#;
 
 fn definition(key: &str, default: &str, options: &[&str]) -> AddonSettingDefinition {
@@ -167,6 +192,36 @@ async fn seed_package(pool: &SqlitePool, root: &Path) {
     .unwrap();
 }
 
+async fn install_secondary(fixture: &Fixture) {
+    let package = fixture.root.path().join("secondary");
+    std::fs::create_dir(&package).unwrap();
+    std::fs::write(package.join("fixture.sh"), SECONDARY_SCRIPT).unwrap();
+    let mut manifest = manifest();
+    SECONDARY.clone_into(&mut manifest.id);
+    manifest.settings[1] = definition("RESPONSE", "good", &["good", "unencodable", "collision"]);
+    manifest.validate().unwrap();
+    let hash = calculate_addon_content_sha256(&package).await.unwrap();
+    sqlx::query(
+        r#"INSERT INTO "AddonInstallation"
+        ("AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256", "ManifestJson",
+         "InstallPath", "InstalledAt", "UpdatedAt", "StateRevision")
+        VALUES (?, '1.0.0', 0, 'synthetic-secondary', ?, ?, ?, 'now', 'now', 'before-enable')"#,
+    )
+    .bind(SECONDARY)
+    .bind(hash)
+    .bind(serde_json::to_string(&manifest).unwrap())
+    .bind(package.to_str().unwrap())
+    .execute(&fixture.state.pool)
+    .await
+    .unwrap();
+    fixture
+        .state
+        .application
+        .enable_addon(SECONDARY.to_owned())
+        .await
+        .unwrap();
+}
+
 fn saved<T: std::fmt::Debug>(outcome: TeletextProfileMutation<T>) -> T {
     match outcome {
         TeletextProfileMutation::Saved(value) => value,
@@ -223,10 +278,20 @@ impl Fixture {
     }
 
     async fn profile(&self, name: &str, theme: &str, response: &str) -> TeletextProfile {
+        self.profile_for(ADDON, name, theme, response).await
+    }
+
+    async fn profile_for(
+        &self,
+        addon_id: &str,
+        name: &str,
+        theme: &str,
+        response: &str,
+    ) -> TeletextProfile {
         let installation = self
             .state
             .application
-            .teletext_installation_snapshot(ADDON)
+            .teletext_installation_snapshot(addon_id)
             .await
             .unwrap()
             .snapshot
@@ -235,7 +300,7 @@ impl Fixture {
             self.state
                 .application
                 .save_teletext_profile(&TeletextProfileSave {
-                    addon_id: ADDON.to_owned(),
+                    addon_id: addon_id.to_owned(),
                     name: name.to_owned(),
                     settings: [("THEME", theme), ("RESPONSE", response)]
                         .map(|(key, value)| TeletextProfileSetting {
@@ -263,7 +328,7 @@ impl Fixture {
                 .application
                 .save_channel_teletext_binding(&ChannelTeletextBindingSave {
                     channel_id: channel,
-                    addon_id: ADDON.to_owned(),
+                    addon_id: profile.addon_id.clone(),
                     profile_id: profile.id,
                     enabled: true,
                     expected_installation: profile.validated_installation.clone(),
@@ -436,6 +501,208 @@ async fn native_profile_preparation_keeps_simultaneous_channels_isolated() {
             .unwrap(),
         installation
     );
+    let settings: Vec<(String, Option<String>)> =
+        sqlx::query_as(r#"SELECT "Key", "Value" FROM "AddonSetting" WHERE "AddonId" = ?"#)
+            .bind(ADDON)
+            .fetch_all(&fixture.state.pool)
+            .await
+            .unwrap();
+    assert_eq!(settings, vec![("THEME".to_owned(), Some("day".to_owned()))]);
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+type NativeCandidate = ersatzrs_web::host::teletext::EncodedChannelTeletextCandidate;
+
+async fn configure_composed_profiles(fixture: &Fixture) {
+    install_secondary(fixture).await;
+    for (channel, theme) in [(1, "day"), (2, "night")] {
+        for addon in [ADDON, SECONDARY] {
+            let profile = fixture.profile_for(addon, theme, theme, "good").await;
+            fixture.bind(channel, &profile, None).await;
+        }
+    }
+}
+
+async fn native_candidate(
+    fixture: &Fixture,
+    channel: i64,
+    context: &SuppliedTeletextGuideContext<'_>,
+) -> Result<NativeCandidate, ersatzrs_web::host::teletext::ChannelTeletextEncodingError> {
+    ersatzrs_web::host::teletext::prepare_channel_teletext_candidate(
+        &fixture.state.application,
+        channel,
+        Some(SECONDARY),
+        context,
+        ersatzrs_ffmpeg::teletext::TeletextEncodingRegion::WesternLatin,
+    )
+    .await
+}
+
+fn assert_native_pages(candidate: &NativeCandidate, channel: i64, theme: &str, colours: [u8; 2]) {
+    assert_eq!(candidate.selection().channel_id, channel);
+    assert_eq!(candidate.selection().bindings.len(), 2);
+    assert_eq!(candidate.entry_addon_id(), Some(SECONDARY));
+    assert_eq!(candidate.generation(), GENERATION);
+    let draft = candidate.draft().unwrap();
+    let encoded = candidate.encoded().unwrap();
+    assert_eq!(draft.initial_page.get(), 223);
+    assert_eq!(encoded.initial_page(), draft.initial_page);
+    assert_eq!(encoded.language(), &draft.language);
+    assert_eq!(draft.language.as_str(), "fra");
+    assert_eq!(draft.pages.len(), 2);
+    assert_eq!(encoded.pages().len(), 2);
+    for (index, prefix) in ["Profile", "Second"].iter().enumerate() {
+        let page = &draft.pages[index];
+        let native = &encoded.pages()[index];
+        assert_eq!(native.address(), page.address);
+        assert_eq!(native.language(), &page.language);
+        assert_eq!(page.language.as_str(), ["nld", "fra"][index]);
+        let text = format!("{prefix} {theme}");
+        assert_eq!(
+            page.rows[0].runs[0].content,
+            TeletextRunContent::Text { text: text.clone() }
+        );
+        // Independently inspect the physical row: odd parity, preceding alpha
+        // colour-control cell and exact ASCII glyphs after DVB bit reversal.
+        let unit = native
+            .data_units()
+            .iter()
+            .find(|unit| {
+                matches!(
+                    observe_dvb_teletext_header(unit),
+                    Ok(TeletextHeaderObservation::NotHeader(address))
+                        if address.packet_number == 1
+                            && address.wire_magazine == native.address().page.wire_magazine()
+                )
+            })
+            .unwrap();
+        let physical = &unit[6..];
+        assert!(physical.iter().all(|byte| byte.count_ones() % 2 == 1));
+        let cells: Vec<_> = physical
+            .iter()
+            .map(|byte| byte.reverse_bits() & 0x7f)
+            .collect();
+        assert_eq!(cells[0], colours[index]);
+        assert_eq!(&cells[1..=text.len()], text.as_bytes());
+    }
+    // Exactly the explicit French initial page 223 is advertised as display.
+    assert_eq!(
+        candidate.descriptor().unwrap().bytes(),
+        b"\x56\x05fra\x0a\x23"
+    );
+}
+
+async fn prove_native_rejections(fixture: &Fixture, context: &SuppliedTeletextGuideContext<'_>) {
+    use ersatzrs_app::teletext_channels::ChannelTeletextPagesError;
+    use ersatzrs_ffmpeg::teletext::TeletextEncodingError;
+    use ersatzrs_web::host::teletext::ChannelTeletextEncodingError as Error;
+
+    let unencodable = fixture
+        .profile_for(SECONDARY, "Unencodable", "day", "unencodable")
+        .await;
+    let binding = fixture.bind(1, &unencodable, Some(1)).await;
+    assert!(matches!(
+        native_candidate(fixture, 1, context).await,
+        Err(Error::Encoding(TeletextEncodingError::Character {
+            codepoint: 0x1f680,
+            ..
+        }))
+    ));
+    let collision = fixture
+        .profile_for(SECONDARY, "Collision", "day", "collision")
+        .await;
+    fixture.bind(1, &collision, Some(binding.revision)).await;
+    assert!(matches!(
+        native_candidate(fixture, 1, context).await,
+        Err(Error::Preparation(
+            ChannelTeletextPagesError::AddressCollision
+        ))
+    ));
+    // Both failures require actual secondary producer execution. No partial
+    // native candidate is returned, and the other channel retains its own set.
+    assert_eq!(
+        std::fs::read(fixture.root.path().join("secondary-calls-day")).unwrap(),
+        b"1\n1\n1\n"
+    );
+    assert_native_pages(
+        &native_candidate(fixture, 2, context).await.unwrap(),
+        2,
+        "night",
+        [6, 2],
+    );
+}
+
+async fn prove_native_off(fixture: &Fixture, context: &SuppliedTeletextGuideContext<'_>) {
+    let application = &fixture.state.application;
+    for selected in application.channel_teletext_bindings(1).await.unwrap() {
+        saved(
+            application
+                .disable_channel_teletext_binding(
+                    1,
+                    &selected.binding.addon_id,
+                    selected.binding.revision,
+                )
+                .await
+                .unwrap(),
+        );
+    }
+    let calls = std::fs::read(fixture.root.path().join("secondary-calls-day")).unwrap();
+    let disabled = native_candidate(fixture, 1, context).await.unwrap();
+    assert!(disabled.selection().bindings.is_empty());
+    assert!(disabled.entry_addon_id().is_none());
+    assert!(disabled.draft().is_none());
+    assert!(disabled.encoded().is_none());
+    assert!(disabled.descriptor().is_none());
+    assert_eq!(
+        std::fs::read(fixture.root.path().join("secondary-calls-day")).unwrap(),
+        calls
+    );
+}
+
+#[tokio::test]
+async fn native_channel_preparation_encodes_complete_multi_addon_candidates() {
+    let mut fixture = Fixture::new().await;
+    configure_composed_profiles(&fixture).await;
+    let channels = [
+        TeletextGuideChannel {
+            id: 1,
+            number: "1",
+            name: "Synthetic one",
+            programmes: &[],
+        },
+        TeletextGuideChannel {
+            id: 2,
+            number: "2",
+            name: "Synthetic two",
+            programmes: &[],
+        },
+    ];
+    let context = guide(&channels);
+    let (left, right) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(
+            native_candidate(&fixture, 1, &context),
+            native_candidate(&fixture, 2, &context)
+        )
+    })
+    .await
+    .unwrap();
+    assert_native_pages(&left.unwrap(), 1, "day", [3, 1]);
+    assert_native_pages(&right.unwrap(), 2, "night", [6, 2]);
+    for theme in ["day", "night"] {
+        assert_eq!(
+            std::fs::read(
+                fixture
+                    .root
+                    .path()
+                    .join(format!("secondary-input-{theme}.json"))
+            )
+            .unwrap(),
+            build_request(&context).unwrap()
+        );
+    }
+    prove_native_rejections(&fixture, &context).await;
+    prove_native_off(&fixture, &context).await;
     let settings: Vec<(String, Option<String>)> =
         sqlx::query_as(r#"SELECT "Key", "Value" FROM "AddonSetting" WHERE "AddonId" = ?"#)
             .bind(ADDON)

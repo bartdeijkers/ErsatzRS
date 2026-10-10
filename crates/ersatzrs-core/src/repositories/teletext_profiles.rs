@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use ersatzrs_domain::{
-    ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextInstallationRead,
-    TeletextInstallationSnapshot, TeletextProfile, TeletextProfileRead, TeletextProfileSetting,
-    TeletextSelectionSnapshot,
+    ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
+    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile, TeletextProfileRead,
+    TeletextProfileSetting, TeletextSelectionSnapshot,
 };
 
 use super::Result;
@@ -38,6 +38,7 @@ pub enum TeletextProfileRejection {
     MissingChannel,
     MissingBinding,
     DisabledBinding,
+    BindingLimit,
     MissingProfile,
     WrongAddon,
     DeletedProfile,
@@ -87,6 +88,14 @@ pub trait TeletextProfileRepository: Send + Sync {
         addon_id: &str,
         expected_binding_revision: i64,
     ) -> Result<TeletextProfileMutation<TeletextSelectionSnapshot>>;
+    /// Capture all enabled base bindings in canonical add-on identity order in
+    /// one read transaction. Reuse single-binding validation, reject the whole
+    /// snapshot on any invalid enabled member, and never inspect disabled profiles.
+    /// The page-record budget bounds membership before resolving effective bags.
+    async fn channel_invocation_snapshot(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextChannelSelectionSnapshot>>;
     /// Replace a complete override bag and invalidate only its dependents.
     async fn save_profile(
         &self,

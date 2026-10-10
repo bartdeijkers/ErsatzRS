@@ -154,6 +154,16 @@ pub struct TeletextSelectionSnapshot {
     pub effective_settings: Vec<TeletextProfileSetting>,
 }
 
+/// Complete enabled base membership observed in one channel read transaction.
+/// Bindings are ordered by add-on identity, exclude disabled selections, and
+/// carry no page/publication authority. An empty vector proves no enabled base
+/// bindings in that snapshot, not a missing teletext source inventory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeletextChannelSelectionSnapshot {
+    pub channel_id: EntityId,
+    pub bindings: Vec<TeletextSelectionSnapshot>,
+}
+
 /// Configuration checks only: `Configured` grants no invocation, source-byte,
 /// output/page-set, publication or playback-readiness authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

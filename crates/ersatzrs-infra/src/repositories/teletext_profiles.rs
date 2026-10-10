@@ -8,9 +8,10 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     validate_teletext_profile_values, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
-    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
-    TeletextProfileAvailability as A, TeletextProfileRead, TeletextProfileSetting,
+    TeletextChannelSelectionSnapshot, TeletextInstallationRead, TeletextInstallationSnapshot,
+    TeletextProfile, TeletextProfileAvailability as A, TeletextProfileRead, TeletextProfileSetting,
     TeletextProfileValue, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
+    MAX_TELETEXT_PAGE_RECORDS,
 };
 use sqlx::{Row as _, Transaction};
 
@@ -99,42 +100,45 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         if binding.revision != expected_binding_revision {
             return Ok(M::Rejected(R::Conflict));
         }
-        if !binding.enabled {
-            return Ok(M::Rejected(R::DisabledBinding));
+        selection_for_binding(&mut tx, &binding).await
+    }
+
+    async fn channel_invocation_snapshot(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<M<TeletextChannelSelectionSnapshot>> {
+        // Read-only transaction: capture complete enabled membership and effective settings.
+        let mut tx = self.0.begin().await.repository()?;
+        if !channel_exists(&mut tx, channel_id).await? {
+            return Ok(M::Rejected(R::MissingChannel));
         }
-        let Some(profile) = load_profile(&mut tx, binding.profile_id).await? else {
-            return Ok(M::Rejected(R::MissingProfile));
-        };
-        if profile.addon_id != addon_id {
-            return Ok(M::Rejected(R::WrongAddon));
+        // Limit before decoding profiles/effective settings. Every enabled
+        // producer must contribute at least one page to the eventual union.
+        let limit = i64::try_from(MAX_TELETEXT_PAGE_RECORDS + 1)
+            .map_err(|_| decode_error("binding resource limit"))?;
+        let rows = sqlx::query(
+            r#"SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" = ?
+                AND "Enabled" = 1 ORDER BY "AddonId" LIMIT ?"#,
+        )
+        .bind(channel_id)
+        .bind(limit)
+        .fetch_all(&mut *tx)
+        .await
+        .repository()?;
+        if rows.len() > MAX_TELETEXT_PAGE_RECORDS {
+            return Ok(M::Rejected(R::BindingLimit));
         }
-        if profile.deleted {
-            return Ok(M::Rejected(R::DeletedProfile));
+        let mut bindings = Vec::with_capacity(rows.len());
+        for row in rows {
+            let binding = binding_from_row(&row)?;
+            match selection_for_binding(&mut tx, &binding).await? {
+                M::Saved(selection) => bindings.push(selection),
+                M::Rejected(reason) => return Ok(M::Rejected(reason)),
+            }
         }
-        if validate_teletext_profile_values(&profile.name, &profile.settings).is_err() {
-            return Ok(M::Rejected(R::InvalidSettings));
-        }
-        let configuration =
-            configuration_with_settings(&mut tx, addon_id, Some(&profile.settings)).await?;
-        match configuration.installation.availability {
-            A::Configured => {}
-            A::InvalidSettings => return Ok(M::Rejected(R::InvalidSettings)),
-            _ => return Ok(M::Rejected(R::InstallationUnavailable)),
-        }
-        if configuration.installation.snapshot.as_ref() != Some(&profile.validated_installation) {
-            return Ok(M::Rejected(R::Conflict));
-        }
-        let effective_settings = configuration
-            .effective_settings
-            .ok_or_else(|| decode_error("effective settings missing"))?;
-        Ok(M::Saved(TeletextSelectionSnapshot {
+        Ok(M::Saved(TeletextChannelSelectionSnapshot {
             channel_id,
-            addon_id: addon_id.to_owned(),
-            binding_revision: binding.revision,
-            profile_id: profile.id,
-            profile_revision: profile.revision,
-            installation: profile.validated_installation,
-            effective_settings,
+            bindings,
         }))
     }
 
@@ -353,6 +357,50 @@ async fn profile_rejection(
     } else {
         None
     })
+}
+
+// One validation policy for single producer and complete enabled membership.
+async fn selection_for_binding(
+    tx: &mut Transaction<'_, Db>,
+    binding: &ChannelTeletextBinding,
+) -> Result<M<TeletextSelectionSnapshot>> {
+    if !binding.enabled {
+        return Ok(M::Rejected(R::DisabledBinding));
+    }
+    let Some(profile) = load_profile(tx, binding.profile_id).await? else {
+        return Ok(M::Rejected(R::MissingProfile));
+    };
+    if profile.addon_id != binding.addon_id {
+        return Ok(M::Rejected(R::WrongAddon));
+    }
+    if profile.deleted {
+        return Ok(M::Rejected(R::DeletedProfile));
+    }
+    if validate_teletext_profile_values(&profile.name, &profile.settings).is_err() {
+        return Ok(M::Rejected(R::InvalidSettings));
+    }
+    let configuration =
+        configuration_with_settings(tx, &binding.addon_id, Some(&profile.settings)).await?;
+    match configuration.installation.availability {
+        A::Configured => {}
+        A::InvalidSettings => return Ok(M::Rejected(R::InvalidSettings)),
+        _ => return Ok(M::Rejected(R::InstallationUnavailable)),
+    }
+    if configuration.installation.snapshot.as_ref() != Some(&profile.validated_installation) {
+        return Ok(M::Rejected(R::Conflict));
+    }
+    let effective_settings = configuration
+        .effective_settings
+        .ok_or_else(|| decode_error("effective settings missing"))?;
+    Ok(M::Saved(TeletextSelectionSnapshot {
+        channel_id: binding.channel_id,
+        addon_id: binding.addon_id.clone(),
+        binding_revision: binding.revision,
+        profile_id: profile.id,
+        profile_revision: profile.revision,
+        installation: profile.validated_installation,
+        effective_settings,
+    }))
 }
 
 async fn profile_availability(

@@ -1310,12 +1310,20 @@ and custom zones, and shared admin/Lua controls. P9A-04/9B-01/9B-02 now include
 synthetic then integrated isolation, interval/rollback/restart and invalid-profile
 proof. Preparatory profile/settings/channel-binding persistence now keeps
 settings isolated, checks revisions atomically and retains unavailable selections.
-Shared application controls now prepare profile-scoped unpublished page drafts.
-Complete selection snapshots fence resolution, native tool settings, prelaunch
-and post-producer reads; concurrent channel profiles stay isolated. Guide source
-channels do not determine output ownership. Localized admin, Lua intervals,
-trusted generation ownership and service publication remain open; profiles do
-not mutate global addon settings or activate packages.
+Shared application controls now prepare profile-scoped and channel-wide
+unpublished candidates. Complete selection snapshots fence resolution, native
+tool settings, prelaunch and all enabled membership after serial producers.
+An explicit entry selects service metadata; collisions and aggregate overflow
+reject the whole candidate. Native encoding retains the same immutable logical
+pages beside complete packets/signalling. Guide sources do not determine output
+ownership. Localized admin, Lua intervals, durable service admission, trusted
+generation ownership and publication remain open; profiles do not mutate global
+addon settings or activate packages.
+Next, reuse the complete XMLTV occurrence projection within one read-only SQLite
+snapshot for guide acquisition, including metadata, mirror offsets and accepted
+External JSON revisions. Do not use truncated admin previews or mutable-file
+fallback as verified source facts. Source completeness and durable generation
+ownership require separate proof before publication.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

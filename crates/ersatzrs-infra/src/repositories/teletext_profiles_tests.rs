@@ -1122,3 +1122,174 @@ async fn invocation_snapshot_rejects_disabled_stale_missing_and_unavailable_sele
         M::Rejected(R::InstallationUnavailable)
     );
 }
+
+async fn add_channel_producer(fixture: &Fixture, id: &str) -> ChannelTeletextBinding {
+    let mut manifest = fixture.manifest.clone();
+    manifest.id = id.to_owned();
+    insert_installation(&fixture.repo.0, &manifest).await;
+    let token = fixture
+        .repo
+        .installation_snapshot(id)
+        .await
+        .unwrap()
+        .snapshot
+        .unwrap();
+    let profile = saved(
+        fixture
+            .repo
+            .save_profile(&TeletextProfileSave {
+                addon_id: id.to_owned(),
+                name: "Profile".to_owned(),
+                settings: vec![literal("THEME", "day")],
+                expected_installation: token,
+                existing: None,
+            })
+            .await
+            .unwrap(),
+    )
+    .profile;
+    fixture.bind(1, &profile).await
+}
+
+#[tokio::test]
+async fn channel_invocation_snapshot_canonical_membership_and_effective_changes() {
+    let fixture = Fixture::new().await;
+    let last = add_channel_producer(&fixture, "org.example.z-last").await;
+    let first = add_channel_producer(&fixture, "org.example.a-first").await;
+    let initial = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(initial.channel_id, 1);
+    assert_eq!(
+        initial
+            .bindings
+            .iter()
+            .map(|value| value.addon_id.as_str())
+            .collect::<Vec<_>>(),
+        [first.addon_id.as_str(), last.addon_id.as_str()]
+    );
+    for (selection, binding) in initial.bindings.iter().zip([&first, &last]) {
+        assert_eq!(
+            *selection,
+            saved(
+                fixture
+                    .repo
+                    .invocation_snapshot(1, &binding.addon_id, binding.revision)
+                    .await
+                    .unwrap()
+            )
+        );
+    }
+    sqlx::query(
+        r#"INSERT INTO "AddonSetting" ("AddonId", "Key", "Value") VALUES (?, 'ZONE', 'Changed')"#,
+    )
+    .bind(&first.addon_id)
+    .execute(&fixture.repo.0)
+    .await
+    .unwrap();
+    let inherited = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_ne!(inherited.bindings[0], initial.bindings[0]);
+    assert_eq!(inherited.bindings[1], initial.bindings[1]);
+    assert_eq!(
+        inherited.bindings[0].installation,
+        initial.bindings[0].installation
+    );
+    let selected = &inherited.bindings[0];
+    saved(
+        fixture
+            .repo
+            .save_profile(&TeletextProfileSave {
+                addon_id: selected.addon_id.clone(),
+                name: "Changed profile".to_owned(),
+                settings: vec![literal("THEME", "night")],
+                expected_installation: selected.installation.clone(),
+                existing: Some((selected.profile_id, selected.profile_revision)),
+            })
+            .await
+            .unwrap(),
+    );
+    let edited = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(edited.bindings[0].binding_revision, first.revision + 1);
+    assert_eq!(
+        edited.bindings[0].profile_revision,
+        selected.profile_revision + 1
+    );
+    assert_eq!(edited.bindings[1], initial.bindings[1]);
+    saved(
+        fixture
+            .repo
+            .disable_binding(1, &last.addon_id, last.revision)
+            .await
+            .unwrap(),
+    );
+    let removed = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(removed.bindings, vec![edited.bindings[0].clone()]);
+    assert_ne!(removed, edited);
+    assert_eq!(initial.bindings.len(), 2);
+}
+
+#[tokio::test]
+async fn channel_invocation_snapshot_ignores_disabled_invalid_but_rejects_enabled_invalid() {
+    let fixture = Fixture::new().await;
+    assert_eq!(
+        fixture.repo.channel_invocation_snapshot(99).await.unwrap(),
+        M::Rejected(R::MissingChannel)
+    );
+    assert!(
+        saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap())
+            .bindings
+            .is_empty()
+    );
+    let valid = add_channel_producer(&fixture, "org.example.a-valid").await;
+    let invalid = add_channel_producer(&fixture, "org.example.z-invalid").await;
+    let disabled = saved(
+        fixture
+            .repo
+            .disable_binding(1, &invalid.addon_id, invalid.revision)
+            .await
+            .unwrap(),
+    );
+    // A retained, malformed disabled profile must not be decoded/validated or
+    // prevent healthy enabled producers from preparing their complete union.
+    sqlx::query(
+        r#"UPDATE "TeletextProfileSetting" SET "Value" = 'invalid-enum' WHERE "ProfileId" = ?"#,
+    )
+    .bind(invalid.profile_id)
+    .execute(&fixture.repo.0)
+    .await
+    .unwrap();
+    let snapshot = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(snapshot.bindings.len(), 1);
+    assert_eq!(snapshot.bindings[0].addon_id, valid.addon_id);
+    sqlx::query(r#"UPDATE "ChannelTeletextBinding" SET "Enabled" = 1 WHERE "ChannelId" = 1 AND "AddonId" = ?"#)
+        .bind(&disabled.addon_id).execute(&fixture.repo.0).await.unwrap();
+    assert_eq!(
+        fixture.repo.channel_invocation_snapshot(1).await.unwrap(),
+        M::Rejected(R::InvalidSettings)
+    );
+}
+
+#[tokio::test]
+async fn channel_invocation_snapshot_binding_limit_precedes_effective_bag_resolution() {
+    let fixture = Fixture::new().await;
+    let mut first = None;
+    for index in 0..MAX_TELETEXT_PAGE_RECORDS {
+        let binding =
+            add_channel_producer(&fixture, &format!("org.example.limit-{index:04}")).await;
+        first.get_or_insert(binding);
+    }
+    let full = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(full.bindings.len(), MAX_TELETEXT_PAGE_RECORDS);
+    // More than the page-record budget rejects before resolving even the first
+    // now-invalid effective bag, never truncating to a partial enabled membership.
+    sqlx::query(
+        r#"UPDATE "TeletextProfileSetting" SET "Value" = 'invalid-enum' WHERE "ProfileId" = ?"#,
+    )
+    .bind(first.unwrap().profile_id)
+    .execute(&fixture.repo.0)
+    .await
+    .unwrap();
+    add_channel_producer(&fixture, "org.example.limit-extra").await;
+    assert_eq!(
+        fixture.repo.channel_invocation_snapshot(1).await.unwrap(),
+        M::Rejected(R::BindingLimit)
+    );
+}

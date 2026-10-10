@@ -766,6 +766,20 @@ pub trait AddonRuntime: Send + Sync {
         Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
     }
 
+    /// Invoke under the channel preparation's original absolute deadline.
+    /// Adapters must enforce the remaining budget, rather than restart it.
+    async fn invoke_teletext_profile_before(
+        &self,
+        _selection: ersatzrs_domain::TeletextSelectionSnapshot,
+        _input: Vec<u8>,
+        _deadline: std::time::Instant,
+    ) -> Result<
+        crate::teletext_profiles::TeletextProfileRuntimeReceipt,
+        crate::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
+    }
+
     /// Whether the enabled package provides access checking and runtime identity.
     async fn supports_media_list_access_check(
         &self,

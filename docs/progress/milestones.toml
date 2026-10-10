@@ -1501,6 +1501,52 @@ and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
 '''
 evidence = '''
+2026-10-11 preparatory channel-composition checkpoint: one read transaction
+captures the complete enabled channel binding membership and every effective
+profile selection using the same validation as individual invocation. Disabled
+configuration is excluded; invalid enabled configuration rejects the whole result.
+The 1,024-binding count is bounded before settings are loaded, since each valid
+producer must contribute at least one aggregate page/subpage record.
+
+Shared application preparation serially invokes that snapshot under one original
+30-second deadline. The explicit entry add-on supplies initial-page/service
+language; other pages retain exact addresses, subcodes, languages, national
+options and navigation. Duplicate page/subpage addresses and aggregate records
+over 1,024 reject without renumbering or overwriting. The final transaction
+compares all identities/effective values and the entire enabled membership after
+the last producer, including Off-to-On and earlier-producer changes.
+
+The native host encodes the whole aggregate off async workers, retaining the exact
+immutable logical pages beside encoded units and host-derived signalling. A late
+unrepresentable character, spacing-control failure or expired original budget
+returns no candidate. Empty enabled membership yields a fenced Off candidate with
+no entry, logical/encoded pages or descriptor. This remains unpublished work;
+durable service admission, persisted entry policy, authoritative generation
+ownership and post-encoding promotion fences remain open.
+
+Focused Nextest run b9919319-44d0-47a7-be63-9b027bd22061 passes all 78 selected
+tests across six binaries. Eighteen new regressions cover complete snapshot
+membership/bounds, shared native deadlines, twelve application composition cases
+and real simultaneous native multi-add-on encoding with exact retained draft,
+colour controls, odd parity and French entry descriptor. The native fixture also
+rejects a later unencodable producer or address collision atomically and proves
+Off does not invoke producers; the other channel remains independent. Review
+corrected the fixture to locate its body packet by observed address rather than
+assuming a fixed unit position. No production encoder or generated FFmpeg command
+changed; applicable earlier transport/playback proof is reused without claiming
+new live-service, client or platform acceptance.
+Clippy requested two fixture-only corrections: borrow the JSON page list and use
+checked subtraction for an already-expired instant. Focused corrected run
+ccc3ee63-de17-48e0-8022-c3bfabfe08d0 passes all thirteen affected application and
+expired-deadline cases. Native fixture import placement and string reuse were
+also corrected; run 2139722a-72a3-4265-8f92-fcb35fcca654 passes its complete
+multi-add-on case again. The other 64 initial passes remain valid, for 78 unique
+passing tests. Production behavior is unchanged. A comment documents the new
+transaction as read-only. Strict affected domain/core/infra/app/web all-target
+Clippy passes; independent review found no remaining behavioral issue.
+Workspace formatting and architecture-lint pass. This baseline does not accept
+the subsequently authorized Level 2.5 or external-editor requirements.
+
 2026-10-11 preparatory profile-preparation checkpoint: shared application base
 controls use the existing transactional repository. An enabled invocation snapshot
 captures output channel, binding/profile revisions, exact installation identity

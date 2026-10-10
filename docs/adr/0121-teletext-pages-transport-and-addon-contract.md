@@ -503,8 +503,13 @@ out-of-band output selection and exact supplied request generation; guide-source
 channels do not confer output ownership. Application preparation rechecks that
 selection after execution and parses the entire response into an unpublished
 draft. Shared application controls mutate only explicit operator base state.
-Trusted generation ownership, automatic channel service activation, Lua overrides,
-localized administration, encoding, composition and publication remain open.
+Channel-wide preparation now serially invokes the complete enabled binding
+snapshot under one shared deadline, validates a bounded aggregate and rechecks
+all membership/settings after the last producer. An explicit entry add-on supplies
+initial-page/service metadata. Native preparation encodes that complete draft
+and retains it unchanged beside its packets and descriptor. Trusted generation
+ownership, automatic channel service activation, Lua overrides, localized
+administration, full encoding/client acceptance and publication remain open.
 
 ### Persistence and publication lifecycle
 

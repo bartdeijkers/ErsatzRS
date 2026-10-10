@@ -941,4 +941,68 @@ mod unix {
             assert!(!fixture.marker.exists());
         }
     }
+    #[tokio::test]
+    async fn expired_shared_profile_deadline_prevents_native_work() {
+        let fixture = Fixture::new("exec cat").await;
+        let [selection, _] = fixture.profile_selections(false).await;
+        assert_eq!(
+            invoke_profile_with_deadline(
+                fixture.pool.clone(),
+                selection.clone(),
+                AddonRuntimeContext::default(),
+                request_bytes(),
+                std::time::Instant::now()
+                    .checked_sub(Duration::from_secs(1))
+                    .unwrap(),
+                None,
+            )
+            .await,
+            Err(TeletextInvocationError::TimedOut)
+        );
+        let blocker = Blocker::new("hash", 1);
+        let _release = ReleaseOnDrop(Arc::clone(&blocker));
+        let mut invocation = fixture.invocation(None);
+        invocation.selection = Some(selection);
+        assert_eq!(
+            invoke_with_fence(
+                invocation,
+                fenced(&blocker, Instant::now()),
+                Duration::from_secs(1)
+            )
+            .await,
+            Err(TeletextInvocationError::TimedOut),
+        );
+        assert!(blocker.stages.lock().unwrap().is_empty());
+        assert!(!fixture.marker.exists());
+    }
+
+    #[tokio::test]
+    async fn shared_profile_deadline_is_carried_into_owned_command() {
+        let fixture = Fixture::new("cat >/dev/null; exec sleep 30").await;
+        let [selection, _] = fixture.profile_selections(false).await;
+        let started = std::time::Instant::now();
+        let task = tokio::spawn(invoke_profile_with_deadline(
+            fixture.pool.clone(),
+            selection,
+            AddonRuntimeContext::default(),
+            request_bytes(),
+            started + Duration::from_secs(3),
+            None,
+        ));
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !fixture.marker.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(8), task)
+                .await
+                .unwrap()
+                .unwrap(),
+            Err(TeletextInvocationError::TimedOut)
+        );
+        assert!(started.elapsed() < Duration::from_secs(8));
+    }
 }
