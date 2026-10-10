@@ -432,4 +432,4 @@ mod tests;
 
 #[cfg(test)]
 #[path = "teletext_retained_runtime_tests.rs"]
-mod runtime_tests;
+pub(super) mod runtime_tests;

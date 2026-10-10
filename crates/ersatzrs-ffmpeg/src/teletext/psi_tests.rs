@@ -6,6 +6,9 @@ use super::{
     *,
 };
 
+#[path = "psi_source_epoch_tests.rs"]
+mod source_epoch_tests;
+
 fn service() -> TeletextServiceDescriptor {
     TeletextServiceDescriptor::from_page_set(&pages(vec![page(200, 0, "nld", false)]))
 }

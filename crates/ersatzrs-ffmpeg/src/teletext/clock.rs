@@ -57,7 +57,8 @@ pub enum TeletextClockError {
     /// The selected PCR field is truncated, reserved bits differ or extension >= 300.
     #[error("teletext source PCR syntax is invalid")]
     Pcr,
-    /// The selected PID signals a clock discontinuity, even without a PCR field.
+    /// The selected PID signals a clock discontinuity outside an explicitly
+    /// admitted first packet, even without a PCR field.
     #[error("teletext source PCR PID signals a discontinuity")]
     Discontinuity,
     /// PCRs repeat, run backwards or have an ambiguous half-wrap delta.
@@ -107,6 +108,7 @@ pub struct TeletextClockValidator {
     report: TeletextClockReport,
     previous: Option<(u64, u64)>,
     failure: Option<TeletextClockError>,
+    initial_discontinuity_allowed: bool,
 }
 
 impl TeletextClockValidator {
@@ -146,7 +148,23 @@ impl TeletextClockValidator {
             report: TeletextClockReport::default(),
             previous: None,
             failure: None,
+            initial_discontinuity_allowed: false,
         })
+    }
+
+    /// Admit a fresh source epoch whose first selected-PCR-PID packet may
+    /// signal its initial discontinuity.
+    ///
+    /// Any first packet on that PID consumes the allowance, including payload
+    /// or adaptation-only packets without PCR. Subsequent discontinuities are
+    /// terminal. This neither resets the clock nor relaxes PCR syntax, gaps,
+    /// ordering, declared rate or readiness; verified intervals are still required.
+    /// # Errors
+    /// Rejects the same invalid policies as [`Self::new`].
+    pub fn new_source_epoch(config: TeletextClockConfig) -> Result<Self, TeletextClockError> {
+        let mut validator = Self::new(config)?;
+        validator.initial_discontinuity_allowed = true;
+        Ok(validator)
     }
 
     /// Inspect new raw packets without modifying them or retaining their bytes.
@@ -191,8 +209,9 @@ impl TeletextClockValidator {
                 return Err(TeletextClockError::PcrGap);
             }
             if u16::from(packet.pid()) == self.config.pcr_pid {
+                let initial = std::mem::replace(&mut self.initial_discontinuity_allowed, false);
                 if let Some(field) = packet.adaptation_field() {
-                    if field.discontinuity_indicator() {
+                    if field.discontinuity_indicator() && !initial {
                         return Err(TeletextClockError::Discontinuity);
                     }
                     match field.pcr() {

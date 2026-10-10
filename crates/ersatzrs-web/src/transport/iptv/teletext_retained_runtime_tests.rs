@@ -26,7 +26,7 @@ use super::*;
 const MUXRATE: u64 = 5_000_000;
 const MAX_FIXTURE_BYTES: usize = 8 * 1024 * 1024;
 const TOOL_TIMEOUT: Duration = Duration::from_secs(15);
-const AV_DIGEST_ARGS: &[&str] = &[
+pub(in crate::transport::iptv) const AV_DIGEST_ARGS: &[&str] = &[
     "-hide_banner",
     "-loglevel",
     "error",
@@ -45,7 +45,7 @@ const AV_DIGEST_ARGS: &[&str] = &[
 ];
 
 #[derive(Debug, thiserror::Error)]
-enum FixtureError {
+pub(in crate::transport::iptv) enum FixtureError {
     #[error("synthetic runtime fixture I/O failed ({0:?})")]
     Io(io::ErrorKind),
     #[error("synthetic runtime fixture exceeded its output bound")]
@@ -68,7 +68,7 @@ impl From<io::Error> for FixtureError {
     clippy::disallowed_methods,
     reason = "Explicit opt-in exact-runtime fixture selection, never production configuration"
 )]
-fn exact_tool(name: &str) -> String {
+pub(in crate::transport::iptv) fn exact_tool(name: &str) -> String {
     std::env::var(name)
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -92,7 +92,7 @@ async fn bounded_read(
 
 // Scoped fixture runner: bounded pipes and owned/reaped process, no raw stderr
 // or command paths in failures. It deliberately has no production API surface.
-async fn probe(
+pub(in crate::transport::iptv) async fn probe(
     executable: &str,
     args: &[&str],
     input: &[u8],
@@ -405,7 +405,7 @@ fn pid(packet: &[u8]) -> u16 {
     (u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2])
 }
 
-fn verify_clock(bytes: &[u8], config: TeletextClockConfig) {
+pub(in crate::transport::iptv) fn verify_clock(bytes: &[u8], config: TeletextClockConfig) {
     let mut validator = TeletextClockValidator::new(config).unwrap();
     for window in bytes.chunks(256 * PACKET_BYTES) {
         let packets: Vec<[u8; PACKET_BYTES]> = window
@@ -419,7 +419,12 @@ fn verify_clock(bytes: &[u8], config: TeletextClockConfig) {
     assert!(report.validated_intervals > 200);
 }
 
-async fn decode_text(ffmpeg: &str, bytes: &[u8], page: &str, stream: &str) -> Vec<u8> {
+pub(in crate::transport::iptv) async fn decode_text(
+    ffmpeg: &str,
+    bytes: &[u8],
+    page: &str,
+    stream: &str,
+) -> Vec<u8> {
     probe(
         ffmpeg,
         &[
@@ -478,7 +483,7 @@ async fn verify_decoders(ffmpeg: &str, source: &[u8], output: &[u8]) {
         .contains("Synthetic television guide"));
 }
 
-async fn verify_tsduck(tsanalyze: &str, output: &[u8]) {
+pub(in crate::transport::iptv) async fn verify_tsduck(tsanalyze: &str, output: &[u8]) {
     let analysis = probe(tsanalyze, &["--json"], output, 256 * 1024)
         .await
         .unwrap();

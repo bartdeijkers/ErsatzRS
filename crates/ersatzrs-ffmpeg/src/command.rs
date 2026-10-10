@@ -114,8 +114,14 @@ pub fn build_mpegts_concat_command(
         fast_start(),
         closed_gop(),
         no_scene_detect(0),
+        // ADR 0121 requires source captions and alternate audio to survive the
+        // final remux. EncoderCopyAll alone still uses FFmpeg's default stream
+        // selection in ErsatzTV's legacy Concat pipeline.
+        map_all_streams(),
         copy_all_streams(),
-        PipelineStep::generic("no_metadata", ["-map_metadata", "-1"]),
+        // Keep the channel's global metadata separate from source language and
+        // subtitle descriptors; FFmpeg 9's unscoped negative map drops both.
+        PipelineStep::generic("no_metadata", ["-map_metadata:g", "-1"]),
     ];
     add_service_metadata_steps(&mut steps, metadata);
     if let Some(muxrate_bps) = muxrate_bps {

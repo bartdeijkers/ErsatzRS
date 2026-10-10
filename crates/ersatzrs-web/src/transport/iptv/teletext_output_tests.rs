@@ -794,7 +794,268 @@ async fn partial_transport_or_psi_at_finite_eof_never_exposes_the_final_tail() {
             pump(&mut source, &mut sink).await,
             Err(TeletextPumpError::Gate(_))
         ));
-        assert_eq!(sink.writes.lock().unwrap().bytes.len(), prefix_bytes);
+        let writes = sink.writes.lock().unwrap();
+        // Lookahead can discover the incomplete table before later windows of
+        // the otherwise valid prefix are admitted. Never require late detection.
+        assert!(writes.bytes.len() <= prefix_bytes);
+        assert_eq!(writes.bytes.len() % 188, 0);
+        for (before, after) in prefix.iter().zip(writes.bytes.chunks_exact(188)) {
+            if before[1] & 0x1f == 1 && before[2] == 44 {
+                assert_eq!(before.as_slice(), after);
+            }
+        }
         assert_eq!(source.position, source.bytes.len());
     }
+}
+
+#[derive(Default)]
+struct ReadTrace {
+    bytes: usize,
+    eof_reads: usize,
+}
+
+struct TrackedSource {
+    inner: Source,
+    trace: Arc<Mutex<ReadTrace>>,
+    progress: Arc<tokio::sync::Notify>,
+}
+
+impl TrackedSource {
+    fn new(bytes: Vec<u8>, chunk: usize, tail: Tail) -> Self {
+        Self {
+            inner: Source::new(bytes, chunk, tail),
+            trace: Arc::default(),
+            progress: Arc::default(),
+        }
+    }
+}
+
+impl AsyncRead for TrackedSource {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let previous = output.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(cx, output);
+        if matches!(&result, Poll::Ready(Ok(()))) {
+            let count = output.filled().len() - previous;
+            let mut trace = self.trace.lock().unwrap();
+            trace.bytes += count;
+            trace.eof_reads += usize::from(count == 0);
+            self.progress.notify_one();
+        }
+        result
+    }
+}
+
+struct NotifiedSink {
+    inner: Sink,
+    entered: Arc<tokio::sync::Notify>,
+}
+
+impl AsyncWrite for NotifiedSink {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        self.entered.notify_one();
+        Pin::new(&mut self.inner).poll_write(cx, bytes)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+#[tokio::test]
+async fn pending_sleep_prefetches_and_stages_finite_eof_until_delivery_is_acknowledged() {
+    let original = fixture(4)[..fixture(3).len() + 17].to_vec();
+    let input = flatten(&original);
+    let mut source = TrackedSource::new(input.clone(), fixture(1).len() * 188, Tail::Eof);
+    let trace = Arc::clone(&source.trace);
+    let progress = Arc::clone(&source.progress);
+    let mut sink = Sink::new(SinkMode::Ready);
+    let writes = Arc::clone(&sink.writes);
+    let mut config = policy();
+    config.playout_delay = Duration::from_millis(250);
+    config.max_hold = Duration::from_secs(1);
+    let operation = forward_teletext_output(
+        &mut source,
+        &mut sink,
+        config,
+        authored_set(),
+        Duration::from_millis(40),
+    );
+    tokio::pin!(operation);
+    tokio::time::timeout(Duration::from_millis(180), async {
+        loop {
+            if trace.lock().unwrap().eof_reads != 0 {
+                break;
+            }
+            tokio::select! {
+                () = progress.notified() => (),
+                result = &mut operation => panic!("EOF cannot finish an unacknowledged window: {result:?}"),
+            }
+        }
+    })
+    .await
+    .expect("source must be drained during the first pending packet sleep");
+    assert!(writes.lock().unwrap().bytes.is_empty());
+    assert_eq!(trace.lock().unwrap().bytes, input.len());
+    assert!(futures_util::poll!(&mut operation).is_pending());
+    let delivered = tokio::time::timeout(Duration::from_secs(2), &mut operation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivered, u64::try_from(input.len()).unwrap());
+    assert_eq!(trace.lock().unwrap().eof_reads, 1);
+    let writes = writes.lock().unwrap();
+    assert_eq!(writes.bytes.len(), input.len());
+    assert_eq!(writes.times.len(), original.len());
+    assert_eq!(
+        &writes.bytes[fixture(3).len() * 188..],
+        &input[fixture(3).len() * 188..]
+    );
+    for (before, after) in original.iter().zip(writes.bytes.chunks_exact(188)) {
+        if before[1] & 0x1f == 1 && before[2] == 44 {
+            assert_eq!(before.as_slice(), after);
+        }
+    }
+}
+
+#[tokio::test]
+async fn blocked_pending_sink_prefetch_respects_shared_capacity_and_remains_cancellable() {
+    use tokio::io::AsyncWriteExt as _;
+
+    let first_window = fixture(1).len();
+    let capacity = first_window + 17;
+    let mut source = TrackedSource::new(flatten(&fixture(6)), first_window * 188, Tail::Stall);
+    let trace = Arc::clone(&source.trace);
+    let progress = Arc::clone(&source.progress);
+    let mut sink = NotifiedSink {
+        inner: Sink::new(SinkMode::Stall),
+        entered: Arc::default(),
+    };
+    let entered = Arc::clone(&sink.entered);
+    let writes = Arc::clone(&sink.inner.writes);
+    let mut config = policy();
+    config.max_buffer_packets = capacity;
+    config.playout_delay = Duration::from_millis(200);
+    config.max_lateness = Duration::from_millis(200);
+    config.max_hold = Duration::from_secs(1);
+    {
+        let operation = forward_teletext_output(
+            &mut source,
+            &mut sink,
+            config,
+            authored_set(),
+            Duration::from_millis(40),
+        );
+        tokio::pin!(operation);
+        tokio::time::timeout(Duration::from_millis(150), async {
+            loop {
+                if trace.lock().unwrap().bytes == capacity * 188 {
+                    break;
+                }
+                tokio::select! {
+                    () = progress.notified() => (),
+                    result = &mut operation => panic!("shared retention must remain pending: {result:?}"),
+                }
+            }
+        })
+        .await
+        .expect("pending output must permit bounded source prefetch before its first due time");
+        assert!(writes.lock().unwrap().bytes.is_empty());
+        tokio::select! {
+            () = entered.notified() => (),
+            result = &mut operation => panic!("blocked sink must remain owned: {result:?}"),
+        }
+        assert!(futures_util::poll!(&mut operation).is_pending());
+        // With no accepted sink bytes, all read bytes remain shared raw/pending
+        // retention. The next read must not exceed this exact capacity.
+        assert_eq!(trace.lock().unwrap().bytes, capacity * 188);
+        assert_eq!(trace.lock().unwrap().eof_reads, 0);
+    }
+    sink.inner.mode = SinkMode::Ready;
+    tokio::task::yield_now().await;
+    assert_eq!(trace.lock().unwrap().bytes, capacity * 188);
+    assert!(writes.lock().unwrap().bytes.is_empty());
+    sink.write_all(b"caller-owned write").await.unwrap();
+    assert_eq!(writes.lock().unwrap().bytes, b"caller-owned write");
+    assert_eq!(source.inner.position, capacity * 188);
+}
+
+#[tokio::test]
+async fn pending_source_prefetch_faults_fence_output_before_its_first_due_time() {
+    let first_window_bytes = fixture(1).len() * 188;
+    let mut malformed = fixture(3);
+    malformed[fixture(1).len()][0] = 0;
+    for (input, tail, source_fault) in [
+        (
+            flatten(&fixture(1)),
+            Tail::Error(io::ErrorKind::ConnectionReset),
+            true,
+        ),
+        (flatten(&malformed), Tail::Eof, false),
+    ] {
+        let mut source = Source::new(input, first_window_bytes, tail);
+        let mut sink = Sink::new(SinkMode::Ready);
+        let mut config = policy();
+        config.playout_delay = Duration::from_millis(250);
+        config.max_hold = Duration::from_secs(1);
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            forward_teletext_output(
+                &mut source,
+                &mut sink,
+                config,
+                authored_set(),
+                Duration::from_millis(40),
+            ),
+        )
+        .await
+        .expect("prefetch fault must terminate the borrowed pump");
+        if source_fault {
+            assert!(matches!(
+                result,
+                Err(TeletextPumpError::Read(io::ErrorKind::ConnectionReset))
+            ));
+        } else {
+            assert!(matches!(result, Err(TeletextPumpError::Gate(_))));
+            assert!(source.position > first_window_bytes);
+        }
+        assert!(sink.writes.lock().unwrap().bytes.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn full_prefetch_capacity_does_not_hide_a_blocked_sink_deadline() {
+    let first_window = fixture(1).len();
+    let capacity = first_window + 17;
+    let mut source = TrackedSource::new(flatten(&fixture(6)), first_window * 188, Tail::Stall);
+    let mut sink = Sink::new(SinkMode::Stall);
+    let mut config = policy();
+    config.max_buffer_packets = capacity;
+    let result = tokio::time::timeout(
+        Duration::from_secs(1),
+        forward_teletext_output(
+            &mut source,
+            &mut sink,
+            config,
+            authored_set(),
+            Duration::from_millis(40),
+        ),
+    )
+    .await
+    .expect("full lookahead must not prevent the pending writer from expiring");
+    assert!(matches!(result, Err(TeletextPumpError::Gate(_))));
+    assert_eq!(source.trace.lock().unwrap().bytes, capacity * 188);
+    assert_eq!(source.inner.position, capacity * 188);
+    assert!(sink.writes.lock().unwrap().bytes.is_empty());
 }

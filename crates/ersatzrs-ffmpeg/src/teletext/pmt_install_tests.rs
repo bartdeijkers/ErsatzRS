@@ -21,6 +21,23 @@ fn av() -> [u8; 188] {
     packet(300, false, 0, &[7; 184])
 }
 
+fn adaptation_flags(mut raw: [u8; 188], flags: u8) -> [u8; 188] {
+    assert!(raw[3] & 0x20 != 0 && raw[4] >= 16);
+    raw[5] = flags;
+    // Well-formed clock fields and zero-length ancillary data ensure rejection
+    // tests exercise the installer policy rather than malformed field framing.
+    raw[6..22].fill(0);
+    raw[10] = 0x7e;
+    raw[16] = 0x7e;
+    raw
+}
+
+fn adaptation_only(flags: u8) -> [u8; 188] {
+    let mut raw = [0xff; 188];
+    raw[..6].copy_from_slice(&[0x47, 0x0d, 0x09, 0x20, 183, flags]);
+    raw
+}
+
 fn decoded_tables(window: &[[u8; 188]], plan: &TeletextPmtPlan) -> Vec<Vec<u8>> {
     let mut assembler = SectionAssembler::default();
     let mut result = Vec::new();
@@ -320,4 +337,229 @@ fn empty_and_unowned_windows_pass_without_fake_installation_or_mutation() {
             TeletextMultiplexError::Window
         ))
     );
+}
+
+#[test]
+fn strict_constructor_rejects_first_source_pmt_startup_reset_atomically() {
+    let plan = plan(&[]);
+    let original = vec![
+        adaptation_flags(one(3337, 15, plan.source_section()), 0x80),
+        null(),
+    ];
+    let mut window = original.clone();
+    let mut installer = TeletextPmtInstaller::new(plan);
+    assert_eq!(
+        installer.install(&mut window),
+        Err(TeletextPmtInstallError::Adaptation)
+    );
+    assert_eq!(window, original);
+    assert_eq!(installer.next_continuity_counter(), None);
+}
+
+#[test]
+fn source_epoch_strips_only_owned_startup_reset_and_preserves_av_pcr() {
+    let plan = plan(&[]);
+    let av_pcr = adaptation_flags(packet(300, false, 0, &[7; 100]), 0x90);
+    let original = vec![
+        av_pcr,
+        adaptation_flags(one(3337, 15, plan.source_section()), 0x80),
+        av(),
+        null(),
+        av_pcr,
+    ];
+    let mut window = original.clone();
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    assert_eq!(installer.install(&mut window).unwrap().repetitions, 1);
+    assert_eq!(installer.next_continuity_counter(), Some(1));
+    assert_eq!(decoded_tables(&window, &plan).len(), 1);
+    for index in [0, 2, 4] {
+        assert_eq!(window[index], original[index]);
+    }
+    for index in [1, 3] {
+        assert!(Packet::new(&window[index])
+            .adaptation_field()
+            .is_none_or(|field| !field.discontinuity_indicator()));
+    }
+    assert_eq!(window[1][3] & 15, 15);
+    assert_eq!(window[3][3] & 15, 0);
+}
+
+#[test]
+fn source_epoch_capacity_retry_keeps_original_first_flag_and_counter() {
+    let plan = plan(&[]);
+    let original = vec![
+        adaptation_flags(one(3337, 7, plan.source_section()), 0x80),
+        av(),
+    ];
+    let mut window = original.clone();
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    assert_eq!(
+        installer.install(&mut window),
+        Err(TeletextPmtInstallError::Multiplex(
+            TeletextMultiplexError::Capacity {
+                needed: 2,
+                available: 1,
+            }
+        ))
+    );
+    assert_eq!(window, original);
+    assert_eq!(installer.next_continuity_counter(), None);
+    window.push(null());
+    installer.install(&mut window).unwrap();
+    assert_eq!(installer.next_continuity_counter(), Some(9));
+    assert_eq!(decoded_tables(&window, &plan).len(), 1);
+}
+
+#[test]
+fn source_epoch_incomplete_retry_keeps_original_first_flag() {
+    let plan = plan(&[]);
+    let source = plan.source_section();
+    let first = adaptation_flags(one(3337, 15, &source[..2]), 0x80);
+    let original = vec![first, av()];
+    let mut window = original.clone();
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    assert_eq!(
+        installer.install(&mut window),
+        Err(TeletextPmtInstallError::Incomplete)
+    );
+    assert_eq!(window, original);
+    assert_eq!(installer.next_continuity_counter(), None);
+    window.push(packet(3337, false, 0, &source[2..]));
+    installer.install(&mut window).unwrap();
+    assert_eq!(decoded_tables(&window, &plan).len(), 1);
+    assert_eq!(window[1], av());
+    assert_eq!(installer.next_continuity_counter(), Some(1));
+}
+
+#[test]
+fn source_epoch_checks_original_pmt_identity_before_stripping_reset() {
+    let plan = plan(&[]);
+    let changed = revise(plan.source_section().to_vec(), |section| section[5] += 2);
+    let original = vec![adaptation_flags(one(3337, 0, &changed), 0x80), null()];
+    let mut window = original.clone();
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    assert_eq!(
+        installer.install(&mut window),
+        Err(TeletextPmtInstallError::SourceChanged)
+    );
+    assert_eq!(window, original);
+    assert_eq!(installer.next_continuity_counter(), None);
+    let mut valid = vec![
+        adaptation_flags(one(3337, 0, plan.source_section()), 0x80),
+        null(),
+    ];
+    installer.install(&mut valid).unwrap();
+}
+
+#[test]
+fn source_epoch_rejects_later_reset_including_duplicate_without_changing_output() {
+    let plan = plan(&[]);
+    let first = adaptation_flags(one(3337, 0, plan.source_section()), 0x80);
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    installer.install(&mut [first, null()]).unwrap();
+    for later in [
+        first,
+        adaptation_flags(one(3337, 1, plan.source_section()), 0x80),
+        adaptation_only(0x80),
+    ] {
+        let original = vec![later, null()];
+        let mut window = original.clone();
+        assert_eq!(
+            installer.install(&mut window),
+            Err(TeletextPmtInstallError::Adaptation)
+        );
+        assert_eq!(window, original);
+        assert_eq!(installer.next_continuity_counter(), Some(2));
+    }
+    installer
+        .install(&mut [one(3337, 1, plan.source_section()), null()])
+        .unwrap();
+    assert_eq!(installer.next_continuity_counter(), Some(4));
+}
+
+#[test]
+fn first_pmt_packet_consumes_epoch_exception_even_without_payload_or_flag() {
+    let plan = plan(&[]);
+    for first in [adaptation_only(0), adaptation_only(0x80)] {
+        let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+        let mut window = [first, av()];
+        assert_eq!(
+            installer.install(&mut window).unwrap().retired_pmt_packets,
+            1
+        );
+        assert_eq!(window, [null(), av()]);
+        assert_eq!(installer.next_continuity_counter(), None);
+        let original = vec![
+            adaptation_flags(one(3337, 0, plan.source_section()), 0x80),
+            null(),
+        ];
+        let mut window = original.clone();
+        assert_eq!(
+            installer.install(&mut window),
+            Err(TeletextPmtInstallError::Adaptation)
+        );
+        assert_eq!(window, original);
+        installer
+            .install(&mut [one(3337, 0, plan.source_section()), null()])
+            .unwrap();
+    }
+    let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+    installer
+        .install(&mut [one(3337, 0, plan.source_section()), null()])
+        .unwrap();
+    let original = vec![
+        adaptation_flags(one(3337, 1, plan.source_section()), 0x80),
+        null(),
+    ];
+    let mut window = original.clone();
+    assert_eq!(
+        installer.install(&mut window),
+        Err(TeletextPmtInstallError::Adaptation)
+    );
+    assert_eq!(window, original);
+    assert_eq!(installer.next_continuity_counter(), Some(2));
+}
+
+#[test]
+fn source_epoch_rejects_all_other_adaptation_flags_even_on_first_packet() {
+    let plan = plan(&[]);
+    // Random access, ES priority, PCR, OPCR, splice, private data, extension.
+    for control in [0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01] {
+        for flags in [control, 0x80 | control] {
+            let original = vec![
+                adaptation_flags(one(3337, 0, plan.source_section()), flags),
+                null(),
+            ];
+            let mut window = original.clone();
+            let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+            assert_eq!(
+                installer.install(&mut window),
+                Err(TeletextPmtInstallError::Adaptation)
+            );
+            assert_eq!(window, original);
+            assert_eq!(installer.next_continuity_counter(), None);
+        }
+    }
+}
+
+#[test]
+fn source_epoch_late_reset_failure_does_not_consume_initial_permission() {
+    let plan = plan(&[]);
+    let first = adaptation_flags(one(3337, 0, plan.source_section()), 0x80);
+    for later in [
+        first,
+        adaptation_flags(one(3337, 1, plan.source_section()), 0x80),
+    ] {
+        let original = vec![first, null(), later, null()];
+        let mut window = original.clone();
+        let mut installer = TeletextPmtInstaller::new_source_epoch(plan.clone());
+        assert_eq!(
+            installer.install(&mut window),
+            Err(TeletextPmtInstallError::Adaptation)
+        );
+        assert_eq!(window, original);
+        assert_eq!(installer.next_continuity_counter(), None);
+        installer.install(&mut [first, null()]).unwrap();
+        assert_eq!(installer.next_continuity_counter(), Some(2));
+    }
 }

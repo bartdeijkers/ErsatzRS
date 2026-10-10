@@ -106,6 +106,25 @@ holding policy are checked before consumer spawn. Startup/retry cleanup
 uncertainty quarantines outer capacity and artifacts. Final transport failure
 closes/drops the raw response and waits for producer completion before reporting
 a body error. Slate/programme handover remains required work.
+The legacy final wrapper now maps every input stream explicitly and disables
+only global metadata copying. This corrects default-selection caption/alternate-
+audio loss and preserves stream language descriptors under FFmpeg 9, while
+retaining independently configured channel service metadata. Actual programme-
+handover verification remains separate from this command correction.
+Fresh final-output admission permits FFmpeg's initial discontinuity indicator
+only on the first physical packet of each relevant PSI/PCR PID. Adaptation-only
+or unflagged first packets consume that allowance. Strict standalone readers
+and sealed monitoring retain their existing rejection behavior; subsequent
+discontinuities remain terminal, with CRC, continuity, clock and capacity
+validation unchanged. Owned PMT rewriting begins a fresh continuity sequence;
+source audiovisual/PCR packets remain untouched.
+Paced final-output forwarding opportunistically reads the same borrowed stdout
+while packet delivery waits. Raw lookahead and immutable pending output share
+capacity; lookahead also fits the existing holding-age budget after delivery
+delay and sink lateness. This prevents downstream pipe backpressure from
+starving the realtime concat wrapper without relaxing its delivery fences.
+No extra task, source opening or arrival-age reset is introduced; EOF sealing
+follows pending flush/acknowledgement.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

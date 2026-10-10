@@ -11,6 +11,10 @@ mod teletext_tests;
 mod retained_teletext_tests;
 
 #[cfg(test)]
+#[path = "stream_wrapper_teletext_runtime_tests.rs"]
+mod wrapper_teletext_runtime_tests;
+
+#[cfg(test)]
 use std::process::Stdio;
 use std::{
     path::PathBuf,

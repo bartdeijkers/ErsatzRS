@@ -175,3 +175,32 @@ These are synthetic borrowed-output and Unix process tests; packaged client
 receipt and the complete native/Next source/output matrix remain separate gates.
 Slate/programme handover, production policies,
 automatic publication selection and full Phase 9 acceptance remain open.
+
+The `real_legacy_wrapper_keeps_one_authored_epoch_across_two_distinct_programmes`
+fixture serves distinct finite programmes through chunked internal HTTP bodies.
+It uses the production looping concat playlist/command and final stdout
+supervisor, with a fixture-only six-second output limit. One authored binding
+remains on the final wrapper while plain internal responses reopen A, B and A.
+Decoded video and both English/Dutch audio tracks must contain both programmes;
+distinct source captions on page 888 and authored page 200 must remain readable.
+Clock and TSDuck checks cover PCR rate, PSI/PIDs, language, PES and continuity.
+The fixture retains the production input readrate. Host pacing reads bounded
+lookahead from the same stdout during packet waits, writes and flushes; raw and
+pending bytes share capacity and retain their first-arrival age. Sink deadlines
+remain unchanged, and observed EOF is sealed after pending acknowledgement.
+
+```bash
+ERSATZRS_TELETEXT_TEST_FFMPEG="<exact-package-ffmpeg-executable>" \
+ERSATZRS_TELETEXT_TEST_TSANALYZE="<tsanalyze-executable>" \
+  ./run.sh test -p ersatzrs-ffmpeg -p ersatzrs-web \
+  -E 'test(real_legacy_wrapper_)' --run-ignored ignored-only
+```
+
+This requires permission to bind temporary loopback HTTP. It checks content
+survival through the existing wrapper, not sample-exact caption handover,
+full routed admission, capacity-slate transitions, Next or native packaged
+client acceptance. The source programmes and temporary server contain only
+original synthetic material; no runtime database or installed service is used.
+The fixture supplies its own item transport streams. The ordinary host item
+builder selects one audio track and does not yet map generic source DVB teletext
+passthrough; wrapper preservation cannot restore tracks omitted upstream.

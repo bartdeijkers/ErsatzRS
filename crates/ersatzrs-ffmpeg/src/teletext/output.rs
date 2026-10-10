@@ -183,7 +183,9 @@ struct PendingOutput {
 /// Compose bounded retention, source PSI/PID, PCR/CBR and atomic page insertion.
 ///
 /// Feed each new raw output byte once. Discovery and clock readiness precede
-/// any prepared output. Later packets go through the sealed PSI monitor; a
+/// any prepared output. This instance owns a fresh source epoch: only the first
+/// physical packet per PSI/PCR PID may carry a startup discontinuity indicator.
+/// Later packets go through the sealed PSI monitor; a
 /// failed generation discards all held/prepared bytes and cannot be retried.
 /// Regular windows cover complete 20 ms intervals; actual EOF can drain a
 /// fractional interval without adding an authored batch. PMT growth is
@@ -294,12 +296,12 @@ impl TeletextOutputGate {
                 config.max_buffer_packets,
                 config.max_hold,
             )?),
-            discovery: Some(TeletextPsiDiscovery::new(
+            discovery: Some(TeletextPsiDiscovery::new_source_epoch(
                 config.program,
                 config.elementary_pid,
             )?),
             monitor: None,
-            clock: TeletextClockValidator::new(config.clock)?,
+            clock: TeletextClockValidator::new_source_epoch(config.clock)?,
             installer: None,
             packetizer: TeletextPacketizer::new(config.elementary_pid)?,
             carousel: TeletextCarousel::new(set),
@@ -582,7 +584,7 @@ impl TeletextOutputGate {
                         if plan.pcr_pid() != self.config.clock.pcr_pid {
                             return Err(TeletextMultiplexError::Clock.into());
                         }
-                        self.installer = Some(TeletextPmtInstaller::new(plan));
+                        self.installer = Some(TeletextPmtInstaller::new_source_epoch(plan));
                         self.monitor = Some(
                             self.discovery
                                 .take()

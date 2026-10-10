@@ -57,6 +57,7 @@ pub struct TeletextPmtInstaller {
     plan: TeletextPmtPlan,
     input: SectionAssembler,
     next_output_cc: Option<u8>,
+    first_source_epoch_packet: bool,
 }
 
 impl TeletextPmtInstaller {
@@ -67,6 +68,23 @@ impl TeletextPmtInstaller {
             plan,
             input: SectionAssembler::default(),
             next_output_cc: None,
+            first_source_epoch_packet: false,
+        }
+    }
+
+    /// Bind a newly started source epoch, permitting its first PMT startup reset.
+    ///
+    /// Only the first physical source PMT packet may carry adaptation flags
+    /// exactly `0x80`. A successful installation consumes that exception even
+    /// when the first packet is unflagged or adaptation-only. Rewritten PMT
+    /// continuity starts a new output sequence, so this initial reset is stripped
+    /// from owned PMT slots; audiovisual and PCR packets remain byte-for-byte
+    /// unchanged. Every later reset and all other adaptation control are rejected.
+    #[must_use]
+    pub fn new_source_epoch(plan: TeletextPmtPlan) -> Self {
+        Self {
+            first_source_epoch_packet: true,
+            ..Self::new(plan)
         }
     }
 
@@ -90,7 +108,8 @@ impl TeletextPmtInstaller {
             return Err(TeletextMultiplexError::Window.into());
         }
         let mut input = self.input.clone();
-        let preflight = self.preflight(window, &mut input)?;
+        let mut first_source_epoch_packet = self.first_source_epoch_packet;
+        let preflight = self.preflight(window, &mut input, &mut first_source_epoch_packet)?;
         let packet_count = self.plan.packets(0)?.len();
         let (allocations, consumed_null_packets) = allocate(&preflight, packet_count, window)?;
         let mut cc = self.next_output_cc;
@@ -127,6 +146,7 @@ impl TeletextPmtInstaller {
         }
         self.input = input;
         self.next_output_cc = cc;
+        self.first_source_epoch_packet = first_source_epoch_packet;
         Ok(report)
     }
 
@@ -134,6 +154,7 @@ impl TeletextPmtInstaller {
         &self,
         window: &[[u8; 188]],
         input: &mut SectionAssembler,
+        first_source_epoch_packet: &mut bool,
     ) -> Result<Preflight, TeletextPmtInstallError> {
         let mut result = Preflight::default();
         let mut transmission: Option<Transmission> = None;
@@ -150,7 +171,12 @@ impl TeletextPmtInstaller {
                 continue;
             }
             result.owned.push(index);
-            if packet.adaptation_field().is_some_and(|_| raw[5] != 0) {
+            let first_epoch_packet = *first_source_epoch_packet;
+            *first_source_epoch_packet = false;
+            if packet
+                .adaptation_field()
+                .is_some_and(|_| raw[5] != 0 && !(first_epoch_packet && raw[5] == 0x80))
+            {
                 return Err(TeletextPmtInstallError::Adaptation);
             }
             if packet.payload().is_some() && !input.is_duplicate(&packet) {
@@ -163,7 +189,7 @@ impl TeletextPmtInstaller {
                     repetitions: 0,
                 });
             }
-            for section in input.push(&packet)? {
+            for section in input.push_source_epoch_packet(&packet, first_epoch_packet)? {
                 if section != self.plan.source_section() {
                     return Err(TeletextPmtInstallError::SourceChanged);
                 }

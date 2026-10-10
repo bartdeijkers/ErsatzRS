@@ -81,6 +81,9 @@ pub struct TeletextPsiDiscovery {
     cat: TableSections,
     cat_seen: bool,
     pmts: BTreeMap<u16, ProgramPmt>,
+    // All 13-bit PIDs are tracked, including packets preceding their PAT entry.
+    // This state is discarded at sealing; the monitor never grants exceptions.
+    epoch_seen_pids: Option<[u64; 128]>,
 }
 
 impl TeletextPsiDiscovery {
@@ -88,6 +91,22 @@ impl TeletextPsiDiscovery {
     /// # Errors
     /// Rejects program zero and reserved/null/out-of-range elementary PIDs.
     pub fn new(program: u16, pid: u16) -> Result<Self, TeletextPsiError> {
+        Self::new_inner(program, pid, false)
+    }
+
+    /// Admit output from an explicitly new producer/muxer source epoch.
+    ///
+    /// Only the first physical packet on each PSI PID may carry an initial
+    /// discontinuity indicator. Adaptation-only packets consume that allowance;
+    /// framing, current tables, CRC, source continuity and readiness remain
+    /// mandatory. Sealing never transfers this allowance to the monitor.
+    /// # Errors
+    /// Rejects program zero and reserved/null/out-of-range elementary PIDs.
+    pub fn new_source_epoch(program: u16, pid: u16) -> Result<Self, TeletextPsiError> {
+        Self::new_inner(program, pid, true)
+    }
+
+    fn new_inner(program: u16, pid: u16, source_epoch: bool) -> Result<Self, TeletextPsiError> {
         if program == 0 {
             return Err(TeletextPsiError::Program);
         }
@@ -103,6 +122,7 @@ impl TeletextPsiDiscovery {
             cat: TableSections::default(),
             cat_seen: false,
             pmts: BTreeMap::new(),
+            epoch_seen_pids: source_epoch.then_some([0; 128]),
         })
     }
 
@@ -212,12 +232,24 @@ impl TeletextPsiDiscovery {
         }
         let packet = valid_packet(raw)?;
         let pid = u16::from(packet.pid());
+        let first_epoch_packet = if let Some(seen) = &mut self.epoch_seen_pids {
+            let index = usize::from(pid) / 64;
+            let bit = 1_u64 << (pid % 64);
+            let first = seen[index] & bit == 0;
+            seen[index] |= bit;
+            first
+        } else {
+            false
+        };
         if pid == self.pid {
             return Err(TeletextMultiplexError::PidCollision { pid }.into());
         }
         match pid {
             0 => {
-                for section in self.pat_assembler.push(&packet)? {
+                for section in self
+                    .pat_assembler
+                    .push_source_epoch_packet(&packet, first_epoch_packet)?
+                {
                     if !current_section(&section, 0)? {
                         continue;
                     }
@@ -231,7 +263,10 @@ impl TeletextPsiDiscovery {
             }
             1 => {
                 self.cat_seen = true;
-                for section in self.cat_assembler.push(&packet)? {
+                for section in self
+                    .cat_assembler
+                    .push_source_epoch_packet(&packet, first_epoch_packet)?
+                {
                     if !current_section(&section, 1)? {
                         continue;
                     }
@@ -241,7 +276,10 @@ impl TeletextPsiDiscovery {
             }
             _ => {
                 if let Some(pmt) = self.pmts.get_mut(&pid) {
-                    for section in pmt.assembler.push(&packet)? {
+                    for section in pmt
+                        .assembler
+                        .push_source_epoch_packet(&packet, first_epoch_packet)?
+                    {
                         if !current_section(&section, 2)? {
                             continue;
                         }

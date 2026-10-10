@@ -160,6 +160,147 @@ fn discontinuity_is_rejected_with_and_without_selected_pcr() {
 }
 
 #[test]
+fn fresh_epoch_initial_pcr_flag_still_requires_verified_intervals() {
+    let mut validator = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+    let mut other = pcr(300, 999);
+    other[5] |= 0x80;
+    validator.observe(&[other]).unwrap();
+    let mut first = pcr(256, 100);
+    first[5] |= 0x80;
+    let report = validator.observe(&[first]).unwrap();
+    assert_eq!(report.pcr_samples, 1);
+    assert_eq!(report.validated_intervals, 0);
+    assert!(!report.ready);
+    validator.observe(&[payload(8191); 4]).unwrap();
+    let report = validator.observe(&[pcr(256, 100 + FIVE_PACKETS)]).unwrap();
+    assert_eq!(report.validated_intervals, 1);
+    assert!(!report.ready);
+    validator.observe(&[payload(8191); 4]).unwrap();
+    let report = validator
+        .observe(&[pcr(256, 100 + 2 * FIVE_PACKETS)])
+        .unwrap();
+    assert_eq!(report.validated_intervals, 2);
+    assert!(report.ready);
+}
+
+#[test]
+fn fresh_epoch_adaptation_only_flag_consumes_allowance_without_creating_a_pcr() {
+    let mut validator = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+    let mut first = pcr(256, 0);
+    first[5] = 0x80;
+    let report = validator.observe(&[first]).unwrap();
+    assert_eq!(report.pcr_samples, 0);
+    assert!(!report.ready);
+    assert!(!validator.observe(&[pcr(256, 100)]).unwrap().ready);
+    validator.observe(&[payload(8191); 4]).unwrap();
+    assert!(
+        !validator
+            .observe(&[pcr(256, 100 + FIVE_PACKETS)])
+            .unwrap()
+            .ready
+    );
+    validator.observe(&[payload(8191); 4]).unwrap();
+    assert!(
+        validator
+            .observe(&[pcr(256, 100 + 2 * FIVE_PACKETS)])
+            .unwrap()
+            .ready
+    );
+    assert_eq!(
+        validator.observe(&[first]),
+        Err(TeletextClockError::Discontinuity)
+    );
+    assert_fenced(&mut validator, TeletextClockError::Discontinuity);
+}
+
+#[test]
+fn fresh_epoch_first_unflagged_selected_packet_consumes_the_allowance() {
+    let mut adaptation_only = pcr(256, 0);
+    adaptation_only[5] = 0;
+    for first in [payload(256), pcr(256, 100), adaptation_only] {
+        let mut validator = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+        validator.observe(&[first]).unwrap();
+        let mut flagged = pcr(256, 100 + FIVE_PACKETS);
+        flagged[5] |= 0x80;
+        assert_eq!(
+            validator.observe(&[flagged]),
+            Err(TeletextClockError::Discontinuity)
+        );
+        assert_fenced(&mut validator, TeletextClockError::Discontinuity);
+    }
+}
+
+#[test]
+fn fresh_epoch_late_flag_without_pcr_is_terminal_even_after_readiness() {
+    let mut validator = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+    let mut window = interval(100, 5, FIVE_PACKETS);
+    window[0][5] |= 0x80;
+    assert!(!validator.observe(&window).unwrap().ready);
+    validator.observe(&[payload(8191); 4]).unwrap();
+    assert!(
+        validator
+            .observe(&[pcr(256, 100 + 2 * FIVE_PACKETS)])
+            .unwrap()
+            .ready
+    );
+    let mut no_pcr = pcr(256, 0);
+    no_pcr[5] = 0x80;
+    assert_eq!(
+        validator.observe(&[no_pcr]),
+        Err(TeletextClockError::Discontinuity)
+    );
+    assert_fenced(&mut validator, TeletextClockError::Discontinuity);
+}
+
+#[test]
+fn strict_constructor_still_rejects_the_initial_flag_accepted_by_explicit_epoch_admission() {
+    for has_pcr in [true, false] {
+        let mut flagged = pcr(256, 100);
+        flagged[5] = if has_pcr { 0x90 } else { 0x80 };
+        let mut strict = TeletextClockValidator::new(policy()).unwrap();
+        assert_eq!(
+            strict.observe(&[flagged]),
+            Err(TeletextClockError::Discontinuity)
+        );
+        assert_fenced(&mut strict, TeletextClockError::Discontinuity);
+        let mut admitted = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+        assert!(!admitted.observe(&[flagged]).unwrap().ready);
+    }
+}
+
+#[test]
+fn explicit_initial_discontinuity_does_not_waive_syntax_gap_order_or_rate() {
+    let mut invalid_pcr = pcr(256, 0);
+    invalid_pcr[5] |= 0x80;
+    invalid_pcr[10] &= !2;
+    let mut syntax = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+    assert_eq!(syntax.observe(&[invalid_pcr]), Err(TeletextClockError::Pcr));
+    assert_fenced(&mut syntax, TeletextClockError::Pcr);
+    let mut flagged = pcr(256, 100);
+    flagged[5] |= 0x80;
+    let mut gap = TeletextClockValidator::new_source_epoch(TeletextClockConfig {
+        max_pcr_gap_packets: 1,
+        ..policy()
+    })
+    .unwrap();
+    assert_eq!(
+        gap.observe(&[payload(8191), flagged]),
+        Err(TeletextClockError::PcrGap)
+    );
+    assert_fenced(&mut gap, TeletextClockError::PcrGap);
+    for (delta, error) in [
+        (0, TeletextClockError::ClockOrder),
+        (FIVE_PACKETS + 1, TeletextClockError::Muxrate),
+    ] {
+        let mut validator = TeletextClockValidator::new_source_epoch(policy()).unwrap();
+        let mut window = interval(100, 5, delta);
+        window[0][5] |= 0x80;
+        assert_eq!(validator.observe(&window), Err(error));
+        assert_fenced(&mut validator, error);
+    }
+}
+
+#[test]
 fn startup_and_ongoing_packet_gaps_cross_window_boundaries() {
     for startup in [true, false] {
         let mut validator = TeletextClockValidator::new(TeletextClockConfig {

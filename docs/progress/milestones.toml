@@ -1212,6 +1212,41 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 final legacy-wrapper checkpoint after 202acdc1 and ded9f3dc:
+the production concat command explicitly maps every incoming stream and keeps
+channel metadata separate from copied stream metadata, preserving source
+captions and audio languages. Fresh output-epoch admission permits the initial PSI/PCR reset only
+on each relevant PID's first physical packet; strict constructors and later
+monitoring retain their rejection behavior. Twenty-three regressions cover
+first-packet consumption and atomic PMT retry, with audiovisual/PCR bytes intact.
+An actual wrapper fixture exposed read starvation while the borrowed pump paced
+its sink. Bounded opportunistic prefetch now reads the same stdout during packet
+wait/write/flush, sharing raw/pending capacity and fitting original holding age;
+EOF sealing follows pending acknowledgement. Four asynchronous regressions
+cover lookahead, shared bounds, cancellation, source faults and staged EOF.
+All 705 selected FFmpeg/web regular tests pass in Nextest
+051118bb-bc8c-407d-bd82-300eaaa5c746. Production code is unchanged after that run.
+The opt-in real wrapper test reopens synthetic A, B and A through finite chunked
+HTTP under one authored binding, preserving decoded video, exact compressed
+AAC packets, independently decoded tones on both language tracks, source page
+888 and authored page 200. Clock and TSDuck continuity/PSI/PES checks pass on
+exact v2.0.6 Linux x64 (6be41dcf-743a-469e-872f-68ba480564ff), ARM64 under QEMU
+(312b286d-0297-4b3e-b0e9-8ae3fe58dfc7) and ARMv7 under QEMU
+(5b744100-fa2a-4e79-a637-f4e8f13ab189). Windows FFmpeg interop run
+ea4c4a4b-40c9-497d-8a69-925c18abac09 reaches the wrapper and compressed-frame
+checks but times out in the bounded PCM decode probe; that full case is unproven.
+Strict affected FFmpeg/web Clippy passes. Six retained supervisor regressions
+pass after boxing two joined test drivers (Nextest
+15a34311-d65d-46bc-aef8-72a6f46a660c); production behavior is unchanged.
+Separately decoding AAC sources is not a stable decoded-frame checksum oracle
+for continuous handover; packet identity plus independent decoded tones avoids
+that fixture error. Reproduction lives in the existing fixture README.
+The fixture supplies item streams; the ordinary host item builder still selects
+one audio and lacks generic source DVB teletext passthrough. Full routed
+admission, capacity-slate topology/ownership, sample-exact caption handover,
+remaining native/platform/Next/admin/client acceptance and publication remain
+open. No milestone status, dependency or acceptance gate advances.
+
 2026-10-10 preparatory domain checkpoint, while P9A-02/03 prerequisites remain
 open: `crates/ersatzrs-domain/src/teletext/` adds checked decimal page addresses,
 raw subcode identities, language/national-option and mosaic values, plus typed

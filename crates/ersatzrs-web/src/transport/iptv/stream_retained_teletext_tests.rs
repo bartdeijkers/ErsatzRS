@@ -157,9 +157,10 @@ async fn finite_retained_child_authors_once_and_preserves_source_clock_positions
         }
         delivered
     };
-    let (outcome, result, delivered) = tokio::time::timeout(Duration::from_secs(2), async {
-        tokio::join!(produce, forward, receive)
-    })
+    let (outcome, result, delivered) = tokio::time::timeout(
+        Duration::from_secs(2),
+        Box::pin(async { tokio::join!(produce, forward, receive) }),
+    )
     .await
     .unwrap();
     assert!(matches!(outcome, DirectStreamOutcome::Completed));
@@ -240,9 +241,10 @@ async fn malformed_transport_and_nonzero_producer_surface_body_errors_after_reap
             assert!(stream.next().await.is_none());
             error
         };
-        let (outcome, result, _body_error) = tokio::time::timeout(Duration::from_secs(2), async {
-            tokio::join!(produce, forward, receive)
-        })
+        let (outcome, result, _body_error) = tokio::time::timeout(
+            Duration::from_secs(2),
+            Box::pin(async { tokio::join!(produce, forward, receive) }),
+        )
         .await
         .unwrap();
         assert!(result.is_err());

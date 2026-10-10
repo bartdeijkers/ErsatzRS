@@ -1,6 +1,6 @@
 //! Bounded, paced forwarding of one host-owned encoded TS188 epoch.
 
-use std::{io::ErrorKind, time::Duration};
+use std::{future::Future, io::ErrorKind, time::Duration};
 
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextPageSet, TeletextBufferError, TeletextOutputConfig, TeletextOutputError,
@@ -12,6 +12,82 @@ use tokio::{
 };
 
 const READ_BYTES: usize = 256 * 188;
+
+// Read the same borrowed stdout while delivery waits, without another task or
+// resetting arrival ages. Pending output and raw lookahead share gate capacity.
+struct SourcePrefetch<'a, R> {
+    source: &'a mut R,
+    scratch: Box<[u8]>,
+    ended: bool,
+    capacity_bytes: usize,
+    max_held_bytes: usize,
+}
+
+impl<'a, R: AsyncRead + Unpin> SourcePrefetch<'a, R> {
+    fn new(source: &'a mut R, config: TeletextOutputConfig) -> Result<Self, TeletextPumpError> {
+        let capacity_bytes = config.max_buffer_packets * 188;
+        // A fast source must not fill more physical lookahead than can be
+        // delivered within its original holding age, including startup delay
+        // and the allowed sink lateness. A policy with no spare age disables
+        // opportunistic reads; ordinary demand reads retain their old behavior.
+        let age = config
+            .max_hold
+            .checked_sub(config.playout_delay)
+            .and_then(|age| age.checked_sub(config.max_lateness))
+            .unwrap_or(Duration::ZERO);
+        let packets = age
+            .as_nanos()
+            .checked_mul(u128::from(config.clock.muxrate_bps))
+            .ok_or(TeletextPumpError::Configuration)?
+            / (188 * 8_000_000_000_u128);
+        let max_held_bytes = usize::try_from(packets.min(config.max_buffer_packets as u128))
+            .map_err(|_| TeletextPumpError::Configuration)?
+            * 188;
+        Ok(Self {
+            source,
+            scratch: vec![0_u8; READ_BYTES].into_boxed_slice(),
+            ended: false,
+            capacity_bytes,
+            max_held_bytes,
+        })
+    }
+
+    async fn during_delivery<T, F>(
+        &mut self,
+        gate: &mut TeletextOutputGate,
+        epoch: Instant,
+        delivery: F,
+    ) -> Result<T, TeletextPumpError>
+    where
+        F: Future<Output = Result<T, TeletextPumpError>>,
+    {
+        tokio::pin!(delivery);
+        loop {
+            let free = gate.remaining_capacity()?;
+            let held = self.capacity_bytes - free;
+            let available = free
+                .min(self.max_held_bytes.saturating_sub(held))
+                .min(self.scratch.len());
+            if self.ended || available == 0 {
+                return delivery.await;
+            }
+            tokio::select! {
+                biased;
+                result = &mut delivery => return result,
+                read = self.source.read(&mut self.scratch[..available]) => {
+                    let read = read.map_err(|error| TeletextPumpError::Read(error.kind()))?;
+                    if read == 0 {
+                        // Seal only after the current immutable window is
+                        // flushed/acknowledged, then drain the ordinary tail.
+                        self.ended = true;
+                    } else {
+                        gate.push(&self.scratch[..read], epoch.elapsed())?;
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Content-free terminal failure of the encoded-output forwarding epoch.
 #[derive(Debug, thiserror::Error)]
@@ -67,7 +143,7 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
     let first_deadline = absolute(epoch, first_byte_timeout)?;
     absolute(epoch, config.max_hold)?;
     let mut gate = TeletextOutputGate::new(config, set)?;
-    let mut scratch = vec![0_u8; READ_BYTES].into_boxed_slice();
+    let mut prefetch = SourcePrefetch::new(source, config)?;
     let mut started = false;
     let mut emitted = 0_u64;
     let mut intervals = 1;
@@ -82,7 +158,7 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
             if count <= gate.retained_packets()? {
                 if gate.prepare_window(count, epoch.elapsed())? {
                     let schedule = gate.pending_schedule()?;
-                    write_window(sink, &mut gate, &schedule, config, epoch).await?;
+                    write_window(sink, &mut gate, &schedule, config, epoch, &mut prefetch).await?;
                     gate.acknowledge_window(schedule, epoch.elapsed())?;
                     emitted = end;
                     intervals = 1;
@@ -94,7 +170,7 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
                 continue;
             }
         }
-        let available = gate.remaining_capacity()?.min(scratch.len());
+        let available = gate.remaining_capacity()?.min(prefetch.scratch.len());
         if available == 0 {
             return Err(TeletextOutputError::Buffer(TeletextBufferError::Capacity).into());
         }
@@ -108,14 +184,22 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
             .map(|elapsed| absolute(epoch, elapsed))
             .transpose()?
             .map_or(idle_deadline, |holding| holding.min(idle_deadline));
-        let read = timeout_at(deadline, source.read(&mut scratch[..available]))
+        let read = if prefetch.ended {
+            0
+        } else {
+            timeout_at(
+                deadline,
+                prefetch.source.read(&mut prefetch.scratch[..available]),
+            )
             .await
             .map_err(|_| source_deadline_error(started))?
-            .map_err(|error| TeletextPumpError::Read(error.kind()))?;
+            .map_err(|error| TeletextPumpError::Read(error.kind()))?
+        };
         if Instant::now() >= deadline {
             return Err(source_deadline_error(started));
         }
         if read == 0 {
+            prefetch.ended = true;
             if !started {
                 return Err(TeletextPumpError::EmptyOutput);
             }
@@ -123,7 +207,7 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
                 let schedule = gate.pending_schedule()?;
                 let count = u64::try_from(schedule.packet_count())
                     .map_err(|_| TeletextOutputError::Arithmetic)?;
-                write_window(sink, &mut gate, &schedule, config, epoch).await?;
+                write_window(sink, &mut gate, &schedule, config, epoch, &mut prefetch).await?;
                 gate.acknowledge_window(schedule, epoch.elapsed())?;
                 emitted = emitted
                     .checked_add(count)
@@ -135,41 +219,51 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
                 .ok_or_else(|| TeletextOutputError::Arithmetic.into());
         }
         started = true;
-        gate.push(&scratch[..read], epoch.elapsed())?;
+        gate.push(&prefetch.scratch[..read], epoch.elapsed())?;
     }
 }
 
-async fn write_window<W: AsyncWrite + Unpin>(
+async fn write_window<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     sink: &mut W,
     gate: &mut TeletextOutputGate,
     schedule: &TeletextOutputSchedule,
     config: TeletextOutputConfig,
     epoch: Instant,
+    prefetch: &mut SourcePrefetch<'_, R>,
 ) -> Result<(), TeletextPumpError> {
     for index in 0..schedule.packet_count() {
         let packet = gate.pending_packets(epoch.elapsed())?[index];
         let due = schedule.packet_due(index)?;
         let deadline = write_deadline(gate, due, config.max_lateness, epoch)?;
-        timeout_at(deadline, tokio::time::sleep_until(absolute(epoch, due)?))
-            .await
-            .map_err(|_| TeletextOutputError::Deadline)?;
-        if Instant::now() >= deadline {
-            return Err(TeletextOutputError::Deadline.into());
-        }
-        timeout_at(deadline, sink.write_all(&packet))
-            .await
-            .map_err(|_| TeletextOutputError::Deadline)?
-            .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+        let due = absolute(epoch, due)?;
+        prefetch
+            .during_delivery(gate, epoch, async {
+                timeout_at(deadline, tokio::time::sleep_until(due))
+                    .await
+                    .map_err(|_| TeletextOutputError::Deadline)?;
+                if Instant::now() >= deadline {
+                    return Err(TeletextOutputError::Deadline.into());
+                }
+                timeout_at(deadline, sink.write_all(&packet))
+                    .await
+                    .map_err(|_| TeletextOutputError::Deadline)?
+                    .map_err(|error| TeletextPumpError::Write(error.kind()))
+            })
+            .await?;
         if Instant::now() >= deadline {
             return Err(TeletextOutputError::Deadline.into());
         }
         gate.check_deadline(epoch.elapsed())?;
     }
     let deadline = write_deadline(gate, schedule.last_due(), config.max_lateness, epoch)?;
-    timeout_at(deadline, sink.flush())
-        .await
-        .map_err(|_| TeletextOutputError::Deadline)?
-        .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+    prefetch
+        .during_delivery(gate, epoch, async {
+            timeout_at(deadline, sink.flush())
+                .await
+                .map_err(|_| TeletextOutputError::Deadline)?
+                .map_err(|error| TeletextPumpError::Write(error.kind()))
+        })
+        .await?;
     if Instant::now() >= deadline {
         return Err(TeletextOutputError::Deadline.into());
     }

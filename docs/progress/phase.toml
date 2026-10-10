@@ -1142,8 +1142,8 @@ both macOS packages/decoder proof, dependency/license provenance and remaining
 platform acceptance next. The separate FFmpeg checkout has locally checked
 package probes, exact libzvbi
 source/notice helpers and a manual native macOS candidate workflow. Native Mac
-execution remains unproven; its branch publication/build authorization is
-pending. Existing v2.0.6 archives and the managed pin are unchanged, and the
+execution remains unproven. Current checkpoint authorization is local only;
+do not push or publish. Existing v2.0.6 archives and the managed pin are unchanged, and the
 candidate build baseline does not waive existing OS/platform acceptance.
 The published v2.0.6 manifest lacks both macOS packages. Independent preparatory
 domain work adds checked authored-page drafts and structural validation with
@@ -1193,7 +1193,16 @@ short EOF, refill, first-byte/idle/delivery deadlines and terminal body errors
 after producer completion. Policy admission bounds requested allocation payload
 and actual muxrate before consumer spawn. Startup and deferred hardware retry
 preserve cleanup uncertainty instead of releasing outer ownership.
-Next implement slate/programme handover and automatic publication selection.
+The actual legacy final wrapper now preserves incoming streams/languages and
+admits first-packet startup reset markers only in a fresh output epoch. Its
+paced pump reads bounded stdout lookahead during delivery without resetting
+ages, relaxing deadlines or adding tasks. All 705 selected Rust regressions
+pass on the Linux host. The real FFmpeg A/B/A wrapper fixture passes on Linux
+x64 and emulated ARM64/ARMv7; Windows interop reaches wrapper/frame checks but
+its PCM probe times out. Full routed
+item/source selection, capacity-slate topology/ownership and native platform
+acceptance remain open. Next implement compatible slate/programme handover and
+automatic publication selection; resolve the Windows PCM probe separately.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

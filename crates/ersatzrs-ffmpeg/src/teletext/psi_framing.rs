@@ -29,11 +29,27 @@ impl SectionAssembler {
     }
 
     pub(super) fn push(&mut self, packet: &Packet<'_>) -> Result<Vec<Vec<u8>>, TeletextPsiError> {
-        if packet
+        self.push_source_epoch_packet(packet, false)
+    }
+
+    // Explicit discovery/installation can grant this exception for the first
+    // physical packet on this PID in a new source epoch. Sealed monitoring remains
+    // strict, including an exact duplicate of an initially flagged packet.
+    pub(super) fn push_source_epoch_packet(
+        &mut self,
+        packet: &Packet<'_>,
+        first_epoch_packet: bool,
+    ) -> Result<Vec<Vec<u8>>, TeletextPsiError> {
+        let discontinuity = packet
             .adaptation_field()
-            .is_some_and(|field| field.discontinuity_indicator())
-        {
-            return Err(TeletextPsiError::Continuity);
+            .is_some_and(|field| field.discontinuity_indicator());
+        if discontinuity {
+            if !first_epoch_packet {
+                return Err(TeletextPsiError::Continuity);
+            }
+            if packet.payload().is_some() {
+                validate_section_start(packet)?;
+            }
         }
         let Some(payload) = packet.payload() else {
             if packet.payload_unit_start_indicator()

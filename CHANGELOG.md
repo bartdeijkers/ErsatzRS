@@ -79,6 +79,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve every incoming stream and its language metadata through the legacy
+  MPEG-TS channel wrapper, including alternate audio and DVB teletext subtitles.
+  Keep source stream metadata separate from channel service metadata.
+- Admit FFmpeg's startup discontinuity markers only for a fresh teletext output
+  epoch. Keep later timeline resets terminal without weakening PSI, clock or
+  capacity validation.
+- Read bounded final-output lookahead while teletext packets wait for delivery,
+  preventing pipe backpressure from starving FFmpeg's realtime concat wrapper.
+  Preserve source ages, shared capacity, sink deadlines and acknowledged EOF.
 - Preserve paired Remote Stream producer cleanup across cancelled waits and
   report unconfirmed reaping. Retain direct-stream capacity, prepared external
   subtitles and manual artifacts when consuming-process termination remains
