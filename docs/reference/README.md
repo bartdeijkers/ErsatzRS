@@ -37,6 +37,7 @@ supported combinations. Procedures and background are indexed from the
 
 - [Web crate structure](web-crate-structure.md)
 - [Parity compatibility pointer](parity-matrix.md)
+- [Teletext design interchange](teletext-design-interchange.md) — planned Level 2.5 and QTeletextMaker contract; not an operational interface.
 
 The persistence coverage tracker lives with the structured progress sources,
 not in product reference.

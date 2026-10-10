@@ -952,7 +952,7 @@ both transitions, save, and reload.
 id         = 'p9a-01'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Decide the teletext product and standards contract'
-status     = 'Complete'
+status     = 'In progress'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02', 'ucu-09']
@@ -973,8 +973,37 @@ one tvguide teletext add-on; accept the technical page and versioned add-on
 contract, validation, compatibility, bounded refresh/publication, restart and
 visible stale/last-good/failure policy. Full-page support is required. This
 standards gate remains open despite acceptance of the ownership decision.
+ADR 0123 extends authored support through EN 300 706 Level 2.5. Audit the
+normative features and distinguish Level 3.5-only functions, including palettes,
+extended characters/mosaics, non-spacing attributes, DRCS, local/public/global
+objects, side panels and correct Level 1/1.5 fallback. Align typed pages/resources,
+versioned addon payloads, transport and browser rendering. Audit the actual pinned
+QTeletextMaker TTI loader/writer before defining compatibility, identity/navigation
+mapping, external metadata, edit boundaries and separated design/draft/publication.
+Record a structured agent file/validation/preview workflow. Full Level 2.5 cannot
+be accepted while required functions are missing; necessary engine restrictions
+must be explicitly proposed to the maintainer. Kodi is optional: define TSDuck,
+independent decoding and actual display/navigation in a suitable versioned client
+with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 maintainer-authorized scope extension reopens this standards gate.
+ADR 0123 accepts full authored Level 2.5, base fallback, actual QTeletextMaker
+TTI/sidecar design interchange and a suitable-client gate. The Kodi amendment
+permits an equivalent demonstrably suitable client and adds no runtime dependency.
+Primary-source EN 300 706 V1.2.1 and QTeletextMaker 1.0/cac2167 audits are recorded
+in docs/reference/teletext-design-interchange.md. They identify editor identity/
+navigation normalization and lost metadata; no GUI/client/Level 2.5 acceptance.
+Finalize enhanced typed/wire/resource and durable draft/publication contracts
+before extended implementation. Earlier base feasibility and unchanged runtime
+proof remain valid. P9A-04 and P9B-01/02 receive additional acceptance without
+removing existing clauses or changing delivery dependencies.
+Documentation checks pass: progress validation, local links, scoped additive
+criteria/status comparison and diff whitespace. Three independent read-only
+reviews confirm standard/editor scope and contract consistency after correcting
+the informative encoding-guidance wording. No production source changed; prior
+checkpoint verification remains valid. This does not close the expanded gate.
+
 2026-10-07 maintainer-authorized planning refresh accounts for current Next,
 subtitle/provider identity, runtime, SQLite and admin boundaries. The plan and
 owning parity debt are aligned; product/standards acceptance remains open.
@@ -1499,6 +1528,28 @@ wrong-add-on, invalid or unavailable profiles cannot activate packages or damage
 ordinary playback. Safe live transitions expose pending/applied state, and browser
 and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
+Implement the complete authored Level 2.5 target in ADR 0123 with representative
+synthetic palettes, extended characters/mosaics, non-spacing attributes, DRCS,
+local/public/global objects and side panels. Prove correct Level 1/1.5 fallback,
+resource dependencies, bounds, updates and atomic rejection. TSDuck transport
+checks, independent decoding and actual display/page/subpage navigation in a
+demonstrably suitable client are required. Record exact client/decoder versions,
+settings, tested functions and limitations. Kodi is a candidate; equivalent
+suitable clients are allowed. Neither TSDuck alone nor decoder availability
+establishes complete Level 2.5 rendering.
+With a pinned, verified QTeletextMaker artifact, prove page/subpage/supported-set
+export -> actual editor open/edit/save -> draft import -> validation/preview ->
+explicit publication. Preserve supported content, attributes, identities and
+navigation without silent loss; reject Level 3.5-only or ambiguous editor results
+with targeted diagnostics. Versioned external metadata preserves theme/template,
+zone and dynamic-field bindings. Enforce free/zone/generated edit boundaries,
+package immutability and explicit addon-version changes. Import does not change
+broadcast state. Draft persistence, stale export/revision conflicts and explicit
+publication use application validation shared by admin and agent file workflows.
+Preview uses the broadcast's same validated model and reports page/subpage/position
+encoding failures. Localized headed light/dark and hydrated/no-JS Chromium/Firefox
+proof covers all changed admin. Full engine acceptance stays open until all parts
+are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
 2026-10-11 preparatory channel-composition checkpoint: one read transaction
@@ -2368,6 +2419,12 @@ package simultaneously serves different channels/profiles without global setting
 mutation. Unknown themes/zones or invalid/oversized values fail visibly without
 truncation; presentation remains add-on-owned within supported teletext encoding.
 Stream and browser use the host's same validated pages.
+The sole production addon uses the engine's accepted Level 2.5/base-fallback
+contract and declares template revisions, dynamic guide fields and free/zone/
+generated edit permissions for the TTI/sidecar workflow. Preserve profile themes,
+permitted overrides and exact navigation through that workflow. Imported changes
+cannot mutate installed templates or protected generated regions; template
+changes follow explicit addon versions. NOS inspiration remains guide-only 200–299.
 '''
 evidence = ''
 
@@ -2407,6 +2464,14 @@ including custom zones and overrides. Missing, deleted, wrong-add-on or invalid
 profiles and unavailable packages preserve ordinary playback. No script installs
 or enables a package. All changed profile/theme/zone/Lua admin surfaces are
 localized and browser-proven under the existing acceptance gates.
+Repeat the accepted TTI/sidecar editor roundtrip with the exact production addon,
+channel/profile/theme/zone bindings and real guide refresh. Prove draft/import
+isolation, edit-permission and stale-revision rejection, explicit publication and
+matching preview/broadcast content. Preserve template and dynamic-field metadata
+without package mutation. Record TSDuck, independent decoder and suitable actual
+client versions/features/limitations; Kodi is optional, and transport-only proof
+cannot establish Level 2.5 display. Headed localized browser proof covers these
+flows while every existing engine-first, playback, lifecycle and platform gate stays.
 '''
 evidence = ''
 

@@ -6,6 +6,8 @@ Accepted (2026-10-10) as the technical implementation contract for the
 maintainer-authorized Phase 9 engine-first programme in ADR 0120. The selected
 delivery is genuine DVB teletext for MPEG-TS clients plus an authenticated
 browser viewer. The separate TV-guide add-on still starts after P9A-04.
+ADR 0123 extends the authored target through Level 2.5 and adds external-editor
+interchange; it supersedes the Level 1/1.5-only target below, not the other gates.
 
 ## Implementation
 
@@ -285,13 +287,17 @@ that FFmpeg 9 can decode correctly signalled DVB packets into text and bitmaps.
 
 ### Page and service model
 
-Use EN 300 706 Level 1/1.5 semantics: 40 columns, a header with 32 authored
-character positions and body rows 1–24, with navigation sharing row 24 when
+The current base model uses EN 300 706 Level 1/1.5 semantics: 40 columns, a header
+with 32 authored character positions and body rows 1–24, with navigation sharing
+row 24 when
 used. Packet X/25 is not an extra display row (EN 300 706 table 25). A display
 page number is decimal 100–899; magazine 8 has wire value zero. Subcodes retain
 their standards-defined identity independently from a page number. Multiple
 subpages cycle within a page and remain independently addressable in the viewer.
 Reserved non-display addresses cannot be supplied as ordinary authored pages.
+The accepted target now includes Level 2.5 enhancements and separately typed
+non-display resources under [ADR 0123](0123-level-2-5-teletext-and-external-editor-workflows.md).
+Preserve this base as fallback; current encoding does not establish that target.
 
 The public page model contains typed text/mosaic runs, foreground/background
 colour, boxing, height, flash and conceal attributes, language, national option,

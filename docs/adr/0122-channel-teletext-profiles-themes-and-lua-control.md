@@ -17,6 +17,10 @@ activation, durable generation ownership/publication and full encoding/client
 acceptance remain open. P9A-04 owns
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide
 add-on and integrated proof.
+ADR 0123 adds Level 2.5 and TTI design interchange: addon-owned themes, zone edit
+permissions, template/package revisions and dynamic fields survive through an
+external versioned sidecar. Import creates a draft; it cannot mutate installed
+templates, automatically generated guide content or live profile publication.
 
 ## Context
 

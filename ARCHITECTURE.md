@@ -129,6 +129,27 @@ model runnable applications and data stores rather than crates. They include
 the implemented add-on child-process boundary and exclude future teletext and
 video-jukebox components.
 
+## Teletext authoring boundary
+
+[ADR 0123](docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md)
+extends the planned generic engine through EN 300 706 Level 2.5 with a correct
+Level 1/1.5 fallback and QTeletextMaker TTI/sidecar interchange. The existing
+unpublished base encoder/composition is partial implementation, not enhanced
+acceptance. Domain types own checked pages/resources; application commands own
+validation, drafts and explicit publication; infra owns durable state and addon
+trust; the native host composes transport and admin/browser delivery. Version
+enhanced addon payloads explicitly. Stream and preview use the same validated
+model. Import cannot alter a live generation or installed package.
+
+Presentation, themes, declared custom zones and generated guide content remain
+addon-owned under ADR 0122. A versioned external sidecar preserves these bindings
+and exact page/subpage/navigation identities; imported authority is checked
+against the host. QTeletextMaker is an optional external design tool, not a
+server rendering process. Client/decoder evidence records versions and coverage;
+Kodi is optional, and TSDuck transport evidence alone cannot accept Level 2.5
+display. Independent synthetic engine acceptance precedes the sole production
+TV-guide addon, whose reference stays NOS TV-guide pages 200–299.
+
 ## UI Boundary
 
 Leptos is the UI framework. Start server-rendered and add hydration only where

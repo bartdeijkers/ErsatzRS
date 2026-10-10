@@ -6,8 +6,11 @@ In progress. The 2026-10-10 maintainer decision in
 [ADR 0120](../docs/adr/0120-separate-teletext-engine-from-addon-content.md)
 sets two stages: first the generic ErsatzRS teletext engine, then one new
 TV-guide content add-on in ErsatzRS-Addons. Six milestones include a separate
-engine acceptance gate (`p9a-04`). P9A-01 is Complete under accepted
-[ADR 0121](../docs/adr/0121-teletext-pages-transport-and-addon-contract.md);
+engine acceptance gate (`p9a-04`). P9A-01 is reopened for the authorized Level 2.5
+and external-editor contract in
+[ADR 0123](../docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md).
+The earlier [ADR 0121](../docs/adr/0121-teletext-pages-transport-and-addon-contract.md)
+baseline acceptance remains historical evidence;
 P9A-02 has bounded selected-runtime decoder probes, with packaging and platform
 acceptance still open. Implementation follows the completed `ucu-09` and other
 recorded prerequisites. UCU-09
@@ -22,7 +25,9 @@ this plan owns future sequencing and acceptance boundaries.
 ## Goal
 
 Deliver a reusable teletext engine and then an add-on-authored TV guide inspired
-by NOS Teletekst. Keep three distinct concerns explicit: DVB teletext subtitle
+by NOS Teletekst. Authored support must reach EN 300 706 Level 2.5 for design,
+validation, encoding, publication and display, with correct Level 1/1.5 fallback
+and QTeletextMaker TTI interchange. Keep three distinct concerns explicit: DVB teletext subtitle
 pages embedded in source transport streams,
 interactive full-page teletext browsing, and an authored teletext service
 carried in ErsatzRS output. Scan and persist the accepted source metadata,
@@ -54,6 +59,46 @@ bounded process execution. No new renderer process, direct database access,
 general-purpose public add-on HTTP API or automatic repository distribution is
 required by this plan. Current checkout/ZIP installation avoids a dependency
 cycle with OAD-01 through OAD-04, which remain after Phase 9 and Phase 10.
+
+## Level 2.5 authoring and external editing
+
+ADR 0123 owns the accepted scope. The
+[standards/editor audit and interchange reference](../docs/reference/teletext-design-interchange.md)
+records normative clauses, the pinned QTeletextMaker 1.0 source, actual TTI
+normalization/metadata losses and the planned structured file workflow.
+
+- Extend the typed model, versioned addon payloads, native packets/resources and
+  browser renderer through Level 2.5: palettes, extended characters/mosaics,
+  non-spacing attributes, DRCS, local/public/global objects and side panels.
+  Preserve readable, correctly designated base content. Reject Level 3.5-only
+  features with precise diagnostics; no decoder-only or partial-feature acceptance.
+- Export a page, subpages or supported set as editable TTI plus versioned external
+  metadata/dependencies. Pin and verify the real editor version. Restore exact
+  identities/navigation through explicit mapping; reject ambiguous or unsupported
+  changes without silent loss. QTeletextMaker's own limitations do not reduce
+  the engine target.
+- Import only into a separate concept. Validate and preview from the same model
+  used by the broadcast; report page/subpage/position and encoding problems.
+  Keep durable drafts and explicit publication separate. Import cannot change
+  an active generation, profile selection or installed package.
+- Preserve addon-owned templates, theme/override settings, declared zones and
+  dynamic fields in the sidecar. Distinguish free content, fillable zones and
+  automatically generated guide regions. Validate edit permissions against host
+  state; template changes require an explicit addon version workflow.
+- Prove export → actual editor open/edit/save → import → validation/preview →
+  explicit publication. Provide bounded file inputs and structured diagnostics
+  for AI agents through the same validation/application functions. Localize all
+  changed admin with headed, light/dark, hydrated/no-JS browser evidence.
+- Prove representative enhanced functions with TSDuck transport checks,
+  independent decoding and actual display/navigation in a demonstrably suitable
+  client. Record client/decoder versions, settings, coverage and limitations.
+  Kodi is a candidate, not mandatory or a runtime dependency; an equivalent
+  suitable client is allowed. TSDuck alone cannot prove Level 2.5 display.
+
+First prove these with independent synthetic engine pages at P9A-04. Only then
+start the sole production TV-guide addon. Existing source-subtitle, alternate
+audio, native/Next, platform and failure gates remain. Necessary engine limits
+must be proposed explicitly to the maintainer; missing functions remain blockers.
 
 ## Channel profiles, themes and Lua control
 
@@ -373,12 +418,13 @@ or DVB-subtitle stream.
 ## Delivery order
 
 1. `p9a-01`: after UCU-09 closes, revalidate the source baseline and accept the
-   complete product/standards/runtime contract and engine/source/output matrix.
+   expanded Level 2.5/interchange contract, product/runtime and engine/source/output matrix.
 2. `p9a-02`: package and functionally probe the decoder.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
 4. `p9a-04`: implement and accept the generic engine and selection/output matrix
    using synthetic pages, including channel profiles, shared admin/Lua controls,
-   localized management, health and runtime proof.
+   full Level 2.5/base fallback, QTeletextMaker TTI/sidecar roundtrip, localized
+   management, health, independent decoder and suitable-client/runtime proof.
 5. `p9b-01`: implement the single tvguide teletext add-on in ErsatzRS-Addons,
    including its NOS-inspired page structure, host-supplied guide content,
    named themes, permitted overrides and custom zones.

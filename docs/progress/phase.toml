@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-02: verify and package teletext decoding after the accepted technical contract'
+current_focus = 'P9A-01: finalize the expanded Level 2.5 and QTeletextMaker interchange contract'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1123,7 +1123,21 @@ AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is
 historical evidence, not CI proof for this working tree. After AMM-N-03 is done
 and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
-Continue Phase 9A at p9a-02 after the recorded p9a-01 technical acceptance.
+Continue Phase 9A at reopened p9a-01 for the 2026-10-11 authorized expansion.
+ADR 0123 requires authored Level 2.5 design/validation/encoding/publication/display,
+correct Level 1/1.5 fallback and actual QTeletextMaker TTI/sidecar interchange.
+The standards and pinned editor-source audits are recorded; extended typed/wire/
+resource and draft/publication contracts remain to finalize. The editor normalizes
+subcodes/navigation and drops custom metadata, requiring explicit sidecar mapping
+and permission checks rather than silent loss. Import creates a concept, not a
+live update or package edit. Preserve addon-owned templates/themes/zones/dynamic
+fields and the explicit addon-version workflow. Require TSDuck, independent
+decoding and actual display/navigation in a demonstrably suitable versioned
+client, with functions/limitations recorded. Kodi is optional, not a runtime
+dependency; TSDuck alone does not prove Level 2.5 display. All changed admin needs
+localized headed light/dark, hydrated/no-JS browser proof. AI agents use the same
+bounded file/validation/preview boundary. Full Level 2.5 remains unimplemented;
+necessary engine restrictions must be explicitly proposed, not assumed.
 The 2026-10-10
 maintainer decision in ADR 0120 fixes the sequence: generic ErsatzRS teletext
 engine first, then one new tvguide teletext add-on in ErsatzRS-Addons for the
@@ -1133,13 +1147,14 @@ versioned host/add-on contract at p9a-01. P9A-02/03 cover
 runtime and source metadata; new p9a-04 independently accepts the engine with
 synthetic pages and retained selection/output proof. Only then implement the
 content add-on at p9b-01 and close integrated acceptance at p9b-02. P9A-01 is
-Complete under ADR 0121; P9A-02 is In progress with bounded decoder probes and
+reopened as In progress under ADR 0123; P9A-02 remains In progress with bounded
+decoder probes and
 exact pinned Linux x64/Windows proof plus ARM64/ARMv7 under QEMU and Bookworm.
 Localized decoder Health and runtime-bound troubleshooting are implemented;
 eight headed Chromium/Firefox cases pass across both themes and JS/no-JS,
 including persisted Refresh, runtime identity and readable links. Complete
 both macOS packages/decoder proof, dependency/license provenance and remaining
-platform acceptance next. The separate FFmpeg checkout has locally checked
+platform acceptance remains due. The separate FFmpeg checkout has locally checked
 package probes, exact libzvbi
 source/notice helpers and a manual native macOS candidate workflow. Native Mac
 execution remains unproven. Current checkpoint authorization is local only;
@@ -1319,7 +1334,8 @@ pages beside complete packets/signalling. Guide sources do not determine output
 ownership. Localized admin, Lua intervals, durable service admission, trusted
 generation ownership and publication remain open; profiles do not mutate global
 addon settings or activate packages.
-Next, reuse the complete XMLTV occurrence projection within one read-only SQLite
+After the expanded standards/interchange contract, reuse the complete XMLTV
+occurrence projection within one read-only SQLite
 snapshot for guide acquisition, including metadata, mirror offsets and accepted
 External JSON revisions. Do not use truncated admin previews or mutable-file
 fallback as verified source facts. Source completeness and durable generation
@@ -1349,7 +1365,7 @@ scope or a prerequisite for the current corrective milestone.
 '''
 
 [[blocking_decision]]
-note = 'P9A-01 accepts ADR 0121 for technical teletext standards/runtime and host/add-on contracts. P9A-04 must independently close generic engine acceptance before the production tvguide content add-on starts under ADR 0120.'
+note = 'P9A-01 is reopened for ADR 0123 full Level 2.5 and QTeletextMaker TTI/sidecar contracts. P9A-04 requires independent enhanced engine/editor/suitable-client acceptance before the sole NOS-guide-inspired production addon starts. Kodi is optional; existing source/output/platform and ADR 0122 profile/Lua gates remain.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'
