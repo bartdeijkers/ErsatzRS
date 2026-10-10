@@ -4,7 +4,6 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121']
 summary    = '''
-Phase 9 implementation starts after the recorded p9a-01 prerequisites.
 The 2026-10-10 maintainer decision (ADR 0120) requires a generic ErsatzRS
 teletext engine first, independently accepted at p9a-04 using synthetic pages,
 then one new tvguide teletext add-on in ErsatzRS-Addons at p9b-01. The add-on
@@ -16,39 +15,44 @@ P9A-01 is Complete under accepted technical ADR 0121; P9A-02 is In progress.
 The remaining four milestones are Not started. No engine/content acceptance
 is claimed.
 
-Current ErsatzRS scanning and playback have no teletext-specific source model
-or selection path. The domain now has checked authored-page draft identities,
-typed runs/styles/navigation and structural validation. The FFmpeg crate now
-encodes bounded Western Latin DVB page packets with physical spacing controls,
-X/26 accents, X/27 editorial links and explicit X/28 national-set designation.
-Independent decoding proves exact accents, all seven national repertoires,
-boxed captions and colours on Linux x64/Windows and emulated ARM64/ARMv7.
-Other regions, editorial-link CRC/client proof, versioned add-on DTOs,
-publication, persistence and production delivery remain open. A bounded serial
-carousel plans erase/packet intervals and boundary-only set replacement; a
-private PES/TS packetizer retains exact timestamps, stuffing and continuity.
-Independent decoder and TSDuck tests pass with calibration PSI/PCR, including
-a counter-damage negative control. PMT planning now retains source metadata/PCR
-and adds validated service signalling using mpeg2ts-reader. Bounded null-slot
-replacement leaves packets/counters unchanged on preflight failure. A finite
-real FFmpeg CBR fixture preserves AV/PCR packets and decoded frames/timestamps;
-independent TSDuck checks pass on the same four runtimes. Input PSI assembly,
-whole-program PID ownership, actual pacing/buffer/rate admission and live channel
-integration remain open; this is preparatory work, not P9A-04 acceptance.
-The selected FFmpeg runtime now has an optional bounded
-libzvbi decoder-options/text/colour-bitmap probe, independently proven on the
-pinned Linux x64 and native Windows executables, plus ARM64/ARMv7 under QEMU
-with the Bookworm host-library baseline. The decoder result now has a dedicated
-localized Health check and runtime-bound troubleshooting export. Six-RID
-packaging, dependency/licensing and remaining platform acceptance remain open
-in P9A-02. The separate FFmpeg repository has locally checked standalone
-package/source-inventory gates and unpublished native macOS candidate recipes;
-source changes do not establish macOS runtime or package acceptance.
-The active sequence in
+Scanning/playback have no teletext source model or selection path. Checked
+domain drafts retain typed runs/styles/navigation and structural validation.
+Bounded Western Latin DVB encoding preserves spacing, X/26 accents, X/27 links
+and X/28 national designation. Independent decoding proves seven repertoires,
+captions and colours on Linux x64/Windows and emulated ARM64/ARMv7. Other
+regions, link CRC/client proof, versioned DTOs, publication and persistence
+remain open. Serial carousel/PES/TS primitives preserve timing/continuity;
+decoder/TSDuck proof includes deliberate counter damage. PAT/CAT/all-program
+PMT discovery validates ownership; atomic null-slot replacement and growing/
+fragmented PMT installation preserve metadata and input/output continuity.
+A six-second two-program, 33-page fixture retains AV/PCR/other-PMT packets and
+identical decoded video/both audio hashes/timestamps on those four runtimes.
+Continuing PSI/PID monitoring holds partial sections and permanently fences
+source changes, malformed input or incomplete EOF. Independent review corrected
+an admission duplicate gap. Explicit-policy PCR/CBR validation checks physical
+packet distance, wrap, gaps and readiness; removing a null slot fails.
+Bounded byte retention and composed output preparation now preserve first-byte
+age, share raw/prepared capacity, preflight physical intervals and fence stale,
+early or late epoch-bound acknowledgement. Two complete 33-page cycles pass
+incremental-input/runtime/TSDuck proof on those four runtimes with simulated
+monotonic acknowledgement. Native supervision now admits immutable bindings
+only on final MPEG-TS roles, with paced/deadline-bound I/O and fresh child epochs.
+Transport faults surface as body errors; zero-byte hardware rejection preserves
+fallback. Unconfirmed cleanup quarantines capacity/assets. Finite EOF drains
+complete final packets at unchanged positions/timing after a flushed/acknowledged
+cycle; incomplete TS/PSI and impossible tail capacity fail visibly. Immutable
+repeats omit C4 erasure; replacement restarts it. Retained output now shares
+original age, reserve/prepared capacity and one packet schedule, with bounded
+refill/short EOF and producer-completion body errors. Startup/hardware retries
+preserve cleanup uncertainty. Handover, publication and client proof remain open.
+P9A-04 owns independent engine acceptance.
+The selected runtime's bounded optional libzvbi text/colour-bitmap probe has a
+localized Health check and runtime-bound troubleshooting export. P9A-02 owns
+exact decoder/platform evidence; six-RID packaging, dependency/licensing and
+macOS acceptance remain open. Unpublished package recipes do not satisfy them.
 `plans/teletext-support.md` covers six-RID packaging, SQLite stream/page
-persistence and an explicit native/Next engine/source/output matrix. It reuses
-existing selection, provider identity, bounded preparation, programme context
-and listener boundaries. Localized management, health and decoded fixture/client/
+persistence and the native/Next source/output matrix using existing selection,
+provider identity, bounded preparation, programme context and listeners. Localized management, health and decoded fixture/client/
 TSDuck proof remain required. UCU platform exceptions do not automatically apply
 to teletext. Phase 10 video-jukebox work begins only after p9b-02 closes.
 '''
@@ -88,7 +92,7 @@ resolved    = false
 id          = 'teletext-management-health-and-runtime-proof-is-missing'
 description = 'P9B-02 owns localized page/type/language/capability management, existing health/troubleshooting integration and licensed or redistributable decoded fixtures. Prove the accepted engine/source/output matrix, scan/rescan, multiple pages, seek/restart, edited timelines, cancellation, stale/missing capability failures, route isolation and client-visible output; require PSI/PID and client proof for separate carriage.'
 discovered  = '2026-08-07'
-evidence    = 'An original synthetic decoder fixture, option/text/bitmap probes, localized decoder Health check and exact-runtime troubleshooting export now exist under P9A-02. Page/source management, source selection, authored-service health and audiovisual smoke/TSDuck output gates remain absent; p9a-04 owns independent engine acceptance and p9b-02 integrated closeout evidence.'
+evidence    = 'An original synthetic decoder fixture, option/text/bitmap probes, localized decoder Health check and exact-runtime troubleshooting export now exist under P9A-02. Page/source management, source selection, authored-service health and live source/output/client gates remain open; p9a-04 owns independent engine acceptance and p9b-02 integrated closeout evidence.'
 resolved    = false
 
 [[debt]]
@@ -96,7 +100,7 @@ id          = 'teletext-generic-engine-and-addon-boundary-is-unimplemented'
 adr         = '0120'
 description = 'P9A-04 must independently prove generic typed pages, validation, navigation, publication, rendering/delivery, localized management and health with synthetic pages and a fixture producer before the production content add-on begins. P9A-01 owns the technical contract and bounded lifecycle decisions.'
 discovered  = '2026-10-10'
-evidence    = 'ADRs 0120/0121 accept ownership, sequencing and the technical contract. `crates/ersatzrs-domain/src/teletext/` now has typed drafts and structural validation with regression tests, and bounded Western Latin packet encoding with spacing-control validation and independent decoder proof in `crates/ersatzrs-ffmpeg/src/teletext/`. Other regions, editorial-link CRC/client acceptance, versioned add-on capability, generation publication, browser rendering and production multiplexing remain open. Bounded carousel planning and PES/TS packetization now have independent decoder/TSDuck evidence with calibration PSI/PCR; PMT planning and bounded null-slot replacement now preserve a finite real audiovisual fixture with independent signalling/decoder proof. Actual pacing/buffer/rate admission, input PSI assembly, whole-program PID ownership and live channel integration remain unimplemented. Milestone p9a-04 owns independent engine acceptance; prerequisites remain open.'
+evidence    = 'ADRs 0120/0121 accept engine-first sequencing and the technical contract. Domain drafts and bounded Western Latin encoding have structural/decoder proof; other regions, editorial-link CRC/client proof, versioned add-on capability, generation publication and browser rendering remain open. Carousel/PES/TS, bounded all-program PAT/CAT/PMT discovery, atomic null-slot replacement and growing/fragmented PMT installation have synthetic and real 33-page audiovisual/TSDuck proof. Continuing PSI/PID monitoring retains admission continuity, holds partial sections and permanently fences changed/malformed input or incomplete EOF; independent review corrected its duplicate gap. Explicit-policy PCR/CBR validation preserves clock evidence and detects null-slot loss. Bounded retention and the composed output gate enforce first-byte age, total raw/prepared capacity, complete physical intervals and epoch-bound acknowledgement. Incremental-input proof preserves two complete 33-page cycles on Linux x64/Windows and emulated ARM64/ARMv7. The native borrowed-I/O pump now proves absolute packet pacing, bounded reads/writes/flush, short writes, backpressure and cancellation in focused asynchronous regressions, including actual Tokio duplex streams. Sink acknowledgement is writer acceptance only. Explicit final-output bindings now reach the existing supervisor with fresh child epochs, terminal transport/body failures and zero-byte hardware fallback. Cleanup confirmation and quarantine preserve paired-producer ownership. Finite EOF seals input and preserves every complete tail packet at its original position/time; full-cycle evidence commits only at sink ACK, and incomplete TS/PSI/clock/capacity remain terminal. Immutable repeat headers omit C4 erase while replacement restarts it. Retained raw-child/final-response composition now shares original arrival ages, reserve/prepared capacity and one clock, with readiness/start, refill and validated short EOF. First-byte/idle/sink deadlines and producer-completion body errors are bounded; startup and deferred hardware retries quarantine uncertain cleanup. Exact-runtime retained fixtures independently compare AV/source subtitles and decode authored pages. P9A-04 owns their platform evidence; orderly handover, publication selection/policy and client proof remain open. P9A-04 acceptance and its prerequisites remain open.'
 resolved    = false
 
 [[debt]]

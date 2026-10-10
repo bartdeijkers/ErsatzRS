@@ -1158,10 +1158,45 @@ proof on the same four runtimes and TSDuck continuity/PES checks, including a
 counter-damage negative control. PMT planning and bounded atomic null-slot
 replacement now preserve AV/PCR packets and decoded frames/timestamps in a real
 FFmpeg CBR fixture, with independent decoder/TSDuck proof on those four runtimes.
-All 446 domain/FFmpeg regular tests pass; strict affected Clippy, formatting and
-the complete dependency audit pass. Input PSI assembly, whole-program PID
-ownership, actual pacing/buffer/rate admission and live channel integration
-remain open. P9A-04 acceptance and its P9A-02/03 prerequisites are unchanged.
+Bounded PAT/CAT/PMT discovery now assembles split/multiple sections and checks
+all advertised programs before selecting the PMT. Its synthetic two-program
+proof retains both audio streams and the other program's PMT. Bounded PMT
+installation now handles growth/fragmentation with atomic preflight and
+persistent continuity; a 33-page fixture grows the table across repeated
+counter wraps. Continuing source PSI/PID monitoring retains admitted tables and
+input continuity, holds partial sections and permanently fences changed or
+malformed input and incomplete EOF; its admission duplicate gap was corrected
+after independent review. An explicit-policy PCR/CBR checker now validates
+physical packet distances, clock wrap, gap and readiness; the real fixture
+retains its clock evidence and detects a removed null slot. Bounded byte
+retention and a composed output gate now preserve first-byte age, enforce
+shared raw/prepared capacity, preflight complete physical intervals and fence
+stale/early/late sink acknowledgement. The same four runtimes prove two complete
+33-page cycles with incremental input and simulated acknowledgement, preserving
+AV/PCR packets, decoded frames/timestamps and TSDuck signalling. Actual finite
+EOF now seals source input and drains complete tail packets at their original
+positions/timing without padding or a partial-interval carousel batch. At least
+one cycle must be flushed/acknowledged; incomplete TS/PSI/clock/capacity fail.
+Repeated immutable headers omit C4 erase, preserving an acquired page; a new
+generation restarts first-cycle erasure. Orderly handover remains open. A borrowed-I/O native host pump now
+composes bounded source reads, absolute per-packet pacing and write/flush
+deadlines before writer acknowledgement. Cancellation leaves producer/sink
+cleanup with the existing owner. The final MPEG-TS stdout supervisor now accepts
+immutable bindings through explicit final direct/wrapper roles, creates fresh
+epochs per child and reports transport failures through the response body.
+Zero-byte hardware rejection retains its existing fallback; actual transport
+faults cannot retry. Producer cleanup ownership and actual reaping confirmation
+are retained across cancellation, with generic capacity/asset quarantine when
+termination is unconfirmed. Retained output now composes original source ages,
+shared reserve/prepared capacity and one final packet schedule, with validated
+short EOF, refill, first-byte/idle/delivery deadlines and terminal body errors
+after producer completion. Policy admission bounds requested allocation payload
+and actual muxrate before consumer spawn. Startup and deferred hardware retry
+preserve cleanup uncertainty instead of releasing outer ownership.
+Next implement slate/programme handover and automatic publication selection.
+Production policy,
+refresh/publication and live source/output acceptance remain open. P9A-04
+acceptance and its P9A-02/03 prerequisites are unchanged.
 The remaining four milestones are Not started.
 Existing native/Next, source subtitle, six-RID,
 localized admin, health and runtime gates remain; UCU platform exceptions do

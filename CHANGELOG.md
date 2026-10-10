@@ -30,10 +30,21 @@ release section when tagging a release.
   Compose bounded byte retention and atomic output preparation with first-byte
   holding deadlines, physical packet schedules and epoch-bound sink
   acknowledgements; reject stale, late or undelivered output.
+  Add bounded asynchronous encoded-output forwarding with paced packet writes,
+  source/write/flush deadlines and writer acknowledgement before advancing.
   Drain complete packets at finite EOF without padding or shifting their timing;
   require an acknowledged complete cycle and reject incomplete transport/PSI.
   Repeat immutable pages without erasing previously acquired content; a new
   generation retains first-cycle erasure.
+  Bind authored pages only to explicit final MPEG-TS output roles in the
+  existing process supervisor. Preserve zero-output hardware fallback with fresh
+  transport state; expose transport failures through the response body and
+  preserve capacity/assets when process cleanup cannot be confirmed.
+  Compose retained MPEG-TS output through one reserve and teletext packet clock:
+  preserve original arrival ages, defer delivery until reserve/PSI/PCR readiness,
+  refill between writes and drain validated short-source EOF. Enforce first-byte,
+  idle-source and sink deadlines, and retain cleanup uncertainty through startup
+  and hardware retries. Reject incompatible rate, holding or allocation policies.
   Synthetic multi-program audiovisual tests
   preserve programme packets and decoded frames/timestamps; live channel
   publication selection, slate/programme handover and generation publication
@@ -67,6 +78,11 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Preserve paired Remote Stream producer cleanup across cancelled waits and
+  report unconfirmed reaping. Retain direct-stream capacity, prepared external
+  subtitles and manual artifacts when consuming-process termination remains
+  uncertain, including hardware respawn failures.
 
 - Keep Health links readable in both themes by using the table's text colour
   and an underline instead of an accent colour with insufficient dark contrast.

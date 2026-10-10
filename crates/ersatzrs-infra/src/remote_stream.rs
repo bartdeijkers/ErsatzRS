@@ -324,15 +324,16 @@ impl RemoteStreamProcess {
     ///
     /// # Errors
     ///
-    /// Returns an error when waiting for the consumer fails, or when its prepared
-    /// producer failed even though the consumer accepted a partial input.
+    /// Returns an error when waiting for the consumer fails, when producer
+    /// cleanup is unconfirmed, or when its prepared producer failed even though
+    /// the consumer accepted a partial input. A cancelled wait retains cleanup.
     pub async fn wait(&mut self) -> std::io::Result<ExitStatus> {
         let result = self.child.wait().await;
         let prepared_result = self
             .producer_pipe
             .as_ref()
             .and_then(|pipe| pipe.prepared_result.clone());
-        self.shutdown_producer().await;
+        self.shutdown_producer().await?;
         if prepared_result
             .is_some_and(|result| result.load(std::sync::atomic::Ordering::Acquire) == 2)
         {
@@ -345,11 +346,12 @@ impl RemoteStreamProcess {
     ///
     /// # Errors
     ///
-    /// Returns an error when killing or waiting for the consumer fails.
+    /// Returns an error when killing or waiting for the consumer fails, or when
+    /// producer cleanup is unconfirmed. A cancelled kill retains cleanup.
     pub async fn kill(&mut self) -> std::io::Result<()> {
         self.cancel_producer();
         let result = self.child.kill().await;
-        self.shutdown_producer().await;
+        self.shutdown_producer().await?;
         result
     }
 
@@ -369,11 +371,13 @@ impl RemoteStreamProcess {
         }
     }
 
-    async fn shutdown_producer(&mut self) {
+    async fn shutdown_producer(&mut self) -> io::Result<()> {
         self.cancel_producer();
-        if let Some(mut pipe) = self.producer_pipe.take() {
-            pipe.shutdown().await;
+        if let Some(pipe) = self.producer_pipe.as_mut() {
+            pipe.shutdown().await?;
         }
+        self.producer_pipe.take();
+        Ok(())
     }
 }
 
@@ -394,8 +398,9 @@ impl DerefMut for RemoteStreamProcess {
 #[derive(Debug)]
 pub(crate) struct RemoteStreamProducerPipe {
     cancel: Option<oneshot::Sender<()>>,
-    task: Option<JoinHandle<()>>,
+    task: Option<JoinHandle<bool>>,
     prepared_result: Option<std::sync::Arc<std::sync::atomic::AtomicU8>>,
+    cleanup_failed: bool,
 }
 
 impl RemoteStreamProducerPipe {
@@ -405,11 +410,25 @@ impl RemoteStreamProducerPipe {
         }
     }
 
-    pub(crate) async fn shutdown(&mut self) {
+    pub(crate) async fn shutdown(&mut self) -> io::Result<()> {
         self.cancel();
-        if let Some(task) = self.task.take() {
-            let _ = task.await;
+        if self.cleanup_failed {
+            return Err(io::Error::other(
+                "remote stream producer cleanup could not be confirmed",
+            ));
         }
+        let Some(task) = self.task.as_mut() else {
+            return Ok(());
+        };
+        let result = task.await;
+        self.task.take();
+        if !matches!(result, Ok(true)) {
+            self.cleanup_failed = true;
+            return Err(io::Error::other(
+                "remote stream producer cleanup could not be confirmed",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -1328,13 +1347,12 @@ pub(crate) fn pipe_remote_stream_producer(
         cancellation,
         diagnostics,
     );
-    let task = tokio::spawn(async move {
-        let _ = producer_task.await;
-    });
+    let task = tokio::spawn(producer_task);
     Ok(RemoteStreamProducerPipe {
         cancel: Some(cancel),
         task: Some(task),
         prepared_result: None,
+        cleanup_failed: false,
     })
 }
 
@@ -1787,6 +1805,186 @@ mod tests {
                 arguments: vec!["-c".to_owned(), "cat".to_owned()],
             },
         )
+    }
+
+    struct PendingCleanup {
+        pipe: RemoteStreamProducerPipe,
+        started: oneshot::Receiver<()>,
+        release: oneshot::Sender<()>,
+        state: std::sync::Arc<std::sync::atomic::AtomicU8>,
+    }
+
+    fn pending_cleanup() -> PendingCleanup {
+        use std::sync::atomic::{AtomicU8, Ordering};
+        use std::sync::Arc;
+
+        let (cancel, cancellation) = oneshot::channel();
+        let (started, observed) = oneshot::channel();
+        let (release, released) = oneshot::channel();
+        let state = Arc::new(AtomicU8::new(0));
+        let completed = Arc::clone(&state);
+        let task = tokio::spawn(async move {
+            cancellation.await.expect("one cleanup cancellation");
+            completed.store(1, Ordering::Release);
+            started.send(()).expect("cleanup start observer");
+            released.await.expect("cleanup release");
+            completed.store(2, Ordering::Release);
+            true
+        });
+        PendingCleanup {
+            pipe: RemoteStreamProducerPipe {
+                cancel: Some(cancel),
+                task: Some(task),
+                prepared_result: Some(Arc::clone(&state)),
+                cleanup_failed: false,
+            },
+            started: observed,
+            release,
+            state,
+        }
+    }
+
+    fn failed_cleanup(join_failure: bool) -> RemoteStreamProducerPipe {
+        let task = if join_failure {
+            let task = tokio::spawn(std::future::pending::<bool>());
+            task.abort();
+            task
+        } else {
+            tokio::spawn(async { false })
+        };
+        RemoteStreamProducerPipe {
+            cancel: None,
+            task: Some(task),
+            prepared_result: None,
+            cleanup_failed: false,
+        }
+    }
+
+    async fn exited_consumer_with_cleanup(pipe: RemoteStreamProducerPipe) -> RemoteStreamProcess {
+        let (_, consumer) = producer_and_consumer();
+        let mut process = spawn_ffmpeg_with_remote_input(
+            &consumer,
+            None,
+            None,
+            RemoteStreamSpawnContext::probe(),
+        )
+        .expect("spawn stdin-closed consumer");
+        tokio::time::timeout(std::time::Duration::from_secs(2), process.child.wait())
+            .await
+            .expect("consumer exit deadline")
+            .expect("consumer exit");
+        process.producer_pipe = Some(pipe);
+        process
+    }
+
+    #[tokio::test]
+    async fn cancelled_producer_cleanup_retains_and_resumes_the_original_task() {
+        use std::sync::atomic::Ordering;
+
+        let mut cleanup = pending_cleanup();
+        let task_id = cleanup.pipe.task.as_ref().unwrap().id();
+        let mut shutdown = Box::pin(cleanup.pipe.shutdown());
+        assert!(futures_util::poll!(shutdown.as_mut()).is_pending());
+        drop(shutdown);
+        cleanup.started.await.expect("original cleanup started");
+        assert_eq!(cleanup.pipe.task.as_ref().unwrap().id(), task_id);
+        assert_eq!(cleanup.state.load(Ordering::Acquire), 1);
+        let mut resumed = Box::pin(cleanup.pipe.shutdown());
+        assert!(futures_util::poll!(resumed.as_mut()).is_pending());
+        drop(resumed);
+        cleanup.release.send(()).expect("release original cleanup");
+        cleanup.pipe.shutdown().await.expect("confirmed cleanup");
+        assert!(cleanup.pipe.task.is_none());
+        assert_eq!(cleanup.state.load(Ordering::Acquire), 2);
+    }
+
+    #[tokio::test]
+    async fn cancelled_process_wait_retains_producer_cleanup_and_its_prepared_result() {
+        let cleanup = pending_cleanup();
+        let task_id = cleanup.pipe.task.as_ref().unwrap().id();
+        let mut process = exited_consumer_with_cleanup(cleanup.pipe).await;
+        let mut wait = Box::pin(process.wait());
+        assert!(futures_util::poll!(wait.as_mut()).is_pending());
+        drop(wait);
+        cleanup.started.await.expect("original cleanup started");
+        assert_eq!(
+            process
+                .producer_pipe
+                .as_ref()
+                .unwrap()
+                .task
+                .as_ref()
+                .unwrap()
+                .id(),
+            task_id
+        );
+        let mut resumed = Box::pin(process.wait());
+        assert!(futures_util::poll!(resumed.as_mut()).is_pending());
+        drop(resumed);
+        cleanup.release.send(()).expect("release original cleanup");
+        let error = process.wait().await.expect_err("prepared producer failed");
+        assert_eq!(error.to_string(), "prepared media producer failed");
+        assert!(process.producer_pipe.is_none());
+    }
+
+    #[tokio::test]
+    async fn kill_after_cancelled_wait_still_waits_for_the_original_producer_cleanup() {
+        use std::sync::atomic::Ordering;
+
+        let cleanup = pending_cleanup();
+        let task_id = cleanup.pipe.task.as_ref().unwrap().id();
+        let mut process = exited_consumer_with_cleanup(cleanup.pipe).await;
+        let mut wait = Box::pin(process.wait());
+        assert!(futures_util::poll!(wait.as_mut()).is_pending());
+        drop(wait);
+        cleanup.started.await.expect("original cleanup started");
+        let mut kill = Box::pin(process.kill());
+        assert!(futures_util::poll!(kill.as_mut()).is_pending());
+        drop(kill);
+        assert_eq!(
+            process
+                .producer_pipe
+                .as_ref()
+                .unwrap()
+                .task
+                .as_ref()
+                .unwrap()
+                .id(),
+            task_id
+        );
+        assert_eq!(cleanup.state.load(Ordering::Acquire), 1);
+        cleanup.release.send(()).expect("release original cleanup");
+        process.kill().await.expect("confirmed paired cleanup");
+        assert!(process.producer_pipe.is_none());
+        assert_eq!(cleanup.state.load(Ordering::Acquire), 2);
+    }
+
+    #[tokio::test]
+    async fn producer_cleanup_failure_and_join_failure_remain_unconfirmed_on_repeated_shutdown() {
+        for join_failure in [false, true] {
+            let mut pipe = failed_cleanup(join_failure);
+            assert!(pipe.shutdown().await.is_err());
+            assert!(pipe.task.is_none());
+            assert!(pipe.cleanup_failed);
+            assert!(pipe.shutdown().await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn unconfirmed_producer_cleanup_cannot_be_hidden_by_a_later_process_wait_or_kill() {
+        for join_failure in [false, true] {
+            let mut process = exited_consumer_with_cleanup(failed_cleanup(join_failure)).await;
+            assert!(process.wait().await.is_err());
+            let pipe = process
+                .producer_pipe
+                .as_ref()
+                .expect("failed cleanup owner");
+            assert!(pipe.cleanup_failed);
+            assert!(pipe.task.is_none());
+            assert!(process.wait().await.is_err());
+            assert!(process.kill().await.is_err());
+            assert!(process.producer_pipe.is_some());
+        }
     }
 
     #[cfg(not(windows))]

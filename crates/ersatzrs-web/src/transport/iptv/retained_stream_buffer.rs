@@ -89,12 +89,28 @@ impl ReservePolicy {
         })
     }
 
-    fn short(self) -> bool {
+    pub(super) const fn muxrate_bps(self) -> u64 {
+        self.muxrate_bps
+    }
+
+    pub(super) const fn reserve_bytes(self) -> usize {
+        self.reserve_bytes
+    }
+
+    pub(super) const fn capacity_bytes(self) -> usize {
+        self.capacity_bytes
+    }
+
+    pub(super) fn short(self) -> bool {
         self.remaining
             .is_some_and(|remaining| remaining <= RESERVE_DURATION)
     }
 
-    fn validate_eof(self, received: u64, terminal: &AtomicU8) -> Result<(), ReserveError> {
+    pub(super) fn validate_eof(
+        self,
+        received: u64,
+        terminal: &AtomicU8,
+    ) -> Result<(), ReserveError> {
         if terminal.load(Ordering::Acquire) != TERMINAL_SUCCESS
             || received == 0
             || !received.is_multiple_of(PACKET_BYTES as u64)

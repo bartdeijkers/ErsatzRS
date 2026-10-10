@@ -29,9 +29,85 @@ metadata/PCR and adds service descriptors; bounded null-slot replacement fails
 without changing packets or counters when preflight rejects input. It uses
 mpeg2ts-reader for packet/PSI/descriptor parsing and MPEG CRC. A finite real
 FFmpeg audiovisual fixture proves unchanged AV/PCR packets and decoded frames/
-timestamps with independent TSDuck signalling checks. Input PSI assembly,
-whole-program PID ownership, actual output pacing, buffer/rate admission and
-live channel integration remain open. These drafts do not freeze the
+timestamps with independent TSDuck signalling checks. Bounded source discovery
+now assembles split/multiple PAT/CAT/PMT sections, waits for all advertised
+programs, checks their PID references and fences malformed input/continuity
+loss. It derives the selected PMT from an explicit PAT program; a two-program
+fixture preserves both audio streams and the other program's PMT. A small
+framing adapter covers the locked library's split-header/multiple-section gaps;
+field interpretation and CRC remain library-owned. Bounded PMT installation
+now handles growth/fragmentation, preserves exact admitted source bytes and
+preflights all capacity before mutation; source and output continuity remain
+independent across successful windows. A 33-page fixture proves growth from one
+to two table packets and repeated counter wrap without changing AV/PCR or the
+other program. Continuing raw-source monitoring now carries admitted PAT/CAT/
+all-program PMT metadata and input continuity across bounded windows. Changed
+tables, new owned-PID use, malformed sections and incomplete EOF permanently
+fence the generation; split sections require the owner to hold output. An
+independent review identified an admission duplicate-validation gap, corrected
+by rejecting orphan PSI after a complete section establishes framing. A
+constant-memory clock checker validates declared CBR against selected-program
+PCR and all physical packet positions, with explicit owner-selected tolerance,
+gap and readiness limits. It handles PCR wrap and permanently fences syntax,
+order, gap or rate failure. The finite fixture checks unchanged clock evidence
+and rejects a removed null slot. Bounded TS188 byte retention now preserves
+first-byte age across arbitrary reads, incomplete packets and prefix release.
+An output gate composes source admission/monitoring, PCR/CBR readiness, growing
+PMT installation and atomic carousel insertion before exposing a complete
+physical 20 ms window. Prepared and raw bytes share one capacity bound;
+immutable schedules and epoch-bound acknowledgements fence undelivered,
+stale, early or late output. Idle polling enforces holding and delivery limits,
+including exposed windows. Impossible minimum-window capacity/timing policies
+are rejected at construction. The real two-program fixture proves two complete
+33-page cycles with bounded incremental input and simulated monotonic sink
+acknowledgements, preserving AV/PCR packets, decoded frames/timestamps and
+independent teletext/TSDuck results on the same four runtimes. It does not prove
+asynchronous pacing or actual sink/client delivery. Actual source EOF now seals
+input and drains all complete final transport packets at their original physical
+positions and due times. Only complete 20 ms intervals receive carousel batches;
+a fractional interval adds no batch or padding. Incomplete transport/PSI,
+unavailable clock/capacity and an initial incomplete carousel fail visibly.
+Cycle completion is recorded only after actual writer flush and acknowledgement.
+An immutable generation erases pages in its first cycle; repeated headers omit
+C4 while retaining subcode, all other flags and the same spacing. Replacement
+restarts first-cycle erasure. This protects previously acquired content when a
+later repeat ends, without establishing late-join, packet-loss or final client
+cache acceptance. Orderly producer handover remains implementation work. A native host pump now forwards a borrowed encoded
+source to its borrowed response writer without spawning a task or reopening
+media. Bounded reads respect shared capacity; larger complete intervals may
+retain a fragmented PMT while admission remains atomic. Absolute per-packet
+schedules intersect first-byte holding limits and delivery expiry. Every read,
+write and flush is bounded; actual flush precedes the exact epoch/window
+acknowledgement. Post-I/O time checks reject late ready completion as well as
+timer expiry. Dropping the future abandons held data and pending I/O; its caller
+still owns producer termination/reaping and response closure. The gate exposes
+bounded raw capacity, complete interval endpoints and earliest deadlines for
+this composition. The existing stdout supervisor now receives an immutable
+binding through explicit final direct/wrapper roles; internal item streams,
+capacity slates and HLS workers cannot carry it. Every admitted child creates a
+fresh gate, including a hardware respawn before the producer's first byte.
+Actual transport faults dominate process exit and cannot trigger fallback.
+Cancellation has priority over a simultaneously failed writer. Bound responses
+report a content-free body error after buffered bytes rather than successful EOF
+when transport or producer supervision fails. Paired-producer cleanup must
+retain ownership across cancellation and propagate actual reaping failures;
+uncertain termination quarantines capacity and cleanup paths independently of
+song ownership. Retained interval output now admits the same immutable final
+binding while its child supplies raw internal MPEG-TS. One gate owns original
+arrival ages, reserve bytes and prepared windows; a one-shot delivery start
+waits for reserve, PSI and verified PCR readiness without rebasing holding age.
+Source reads refill between paced writes; short-source EOF is validated before
+drain. First-byte, startup, next-packet, holding and write/flush deadlines remain
+independent. Requested retention/processing allocation payload is bounded to
+32 MiB; this excludes allocator overhead/RSS and separately bounded authored
+page/PSI ownership. Larger retention does not enlarge the 32,768-packet
+processing/signalling window limit. Actual child-command rate, capacity and
+holding policy are checked before consumer spawn. Startup/retry cleanup
+uncertainty quarantines outer capacity and artifacts. Final transport failure
+closes/drops the raw response and waits for producer completion before reporting
+a body error. Slate/programme handover remains required work.
+Automatic publication selection, rate/retention policy,
+refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production
 delivery.
 This does not establish engine, six-RID packaging,

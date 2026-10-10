@@ -529,11 +529,13 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
     );
     let directory = prepared.temporary_directory.take();
     let task = tokio::spawn(async move {
-        if producer_task.await {
+        let reaped = producer_task.await;
+        if reaped {
             if let Some(directory) = directory {
                 directory.remove_after_reap().await;
             }
         }
+        reaped
     });
     Ok(RemoteStreamProcess {
         child: consumer,
@@ -542,6 +544,7 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
             cancel: Some(cancel),
             task: Some(task),
             prepared_result: Some(result),
+            cleanup_failed: false,
         }),
     })
 }

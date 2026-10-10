@@ -347,7 +347,7 @@ pub(crate) async fn wait_for_initial_segments(
                         InitialSegmentWaitResult::AtCapacity
                     } else {
                         InitialSegmentWaitResult::Timeout
-                    }
+                    };
                 }
                 HlsStartupReadiness::Pending { deadline } => {
                     poll_at = poll_at.min(deadline.into());

@@ -472,11 +472,15 @@ impl FfprobeExtractor {
             Some(Ok(Ok(status))) => status,
             Some(Ok(Err(source))) => {
                 let _ = child.kill().await;
-                shutdown_remote_producer(&mut producer_pipe).await;
+                let cleanup = shutdown_remote_producer(&mut producer_pipe).await;
                 stdout_task.abort();
                 stderr_task.abort();
                 let _ = stdout_task.await;
                 let _ = stderr_task.await;
+                cleanup.map_err(|source| FfprobeError::Spawn {
+                    path: label.clone(),
+                    source,
+                })?;
                 return Err(FfprobeError::Spawn {
                     path: label,
                     source,
@@ -484,11 +488,15 @@ impl FfprobeExtractor {
             }
             Some(Err(_)) | None => {
                 let _ = child.kill().await;
-                shutdown_remote_producer(&mut producer_pipe).await;
+                let cleanup = shutdown_remote_producer(&mut producer_pipe).await;
                 stdout_task.abort();
                 stderr_task.abort();
                 let _ = stdout_task.await;
                 let _ = stderr_task.await;
+                cleanup.map_err(|source| FfprobeError::Spawn {
+                    path: label.clone(),
+                    source,
+                })?;
                 return Err(if waited.is_none() {
                     FfprobeError::Cancelled { path: label }
                 } else {
@@ -496,7 +504,16 @@ impl FfprobeExtractor {
                 });
             }
         };
-        shutdown_remote_producer(&mut producer_pipe).await;
+        if let Err(source) = shutdown_remote_producer(&mut producer_pipe).await {
+            stdout_task.abort();
+            stderr_task.abort();
+            let _ = stdout_task.await;
+            let _ = stderr_task.await;
+            return Err(FfprobeError::Spawn {
+                path: label,
+                source,
+            });
+        }
         let (stdout, stderr) = Self::collect_remote_ffprobe_output(
             stdout_task,
             stderr_task,
@@ -682,10 +699,14 @@ async fn read_remote_ffprobe_stdout(
     Ok(output)
 }
 
-async fn shutdown_remote_producer(producer: &mut Option<RemoteStreamProducerPipe>) {
-    if let Some(mut producer) = producer.take() {
-        producer.shutdown().await;
+async fn shutdown_remote_producer(
+    producer: &mut Option<RemoteStreamProducerPipe>,
+) -> std::io::Result<()> {
+    if let Some(producer) = producer.as_mut() {
+        producer.shutdown().await?;
     }
+    producer.take();
+    Ok(())
 }
 
 #[must_use]

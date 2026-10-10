@@ -4,6 +4,7 @@ use super::super::{
     FfmpegRuntimeReport, OutputMetadata, PlaybackProfile, StatusCode,
 };
 use super::*;
+use crate::transport::iptv::teletext_binding::{TeletextOutputAdmission, TeletextOutputRole};
 use chrono::Timelike as _;
 use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_core::repositories::FfmpegProfileRepository as _;
@@ -148,6 +149,7 @@ async fn external_native_missing_plex_preconditions_return_unavailable() {
             StreamingMode::TransportStream,
             tokio::time::Instant::now() + Duration::from_secs(5),
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         ))
         .await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -194,6 +196,7 @@ async fn external_native_stream_plays_without_library_rows() {
         StreamingMode::TransportStream,
         tokio::time::Instant::now() + Duration::from_secs(20),
         None,
+        TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
     ))
     .await;
     assert_eq!(response.status(), StatusCode::OK);

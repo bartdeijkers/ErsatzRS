@@ -1314,6 +1314,364 @@ formatting and architecture/progress checks pass; no dependency changes.
 Host forwarding/supervision is a separate checkpoint. Publication selection,
 slate/programme handover, source metadata, remaining platform/native/Next/admin/
 client/add-on acceptance and all open milestone requirements remain unchanged.
+
+2026-10-10 source-PSI checkpoint after `fd66ba88`: `teletext/psi.rs` derives the
+selected PMT from an explicit PAT program rather than a fixture PID. Bounded
+discovery requires every advertised PMT and any observed current CAT to be
+complete, checks their PMT/PCR/ES/CA/NIT references and rejects an observed use
+of the requested PID. Rewriting the selected PMT also rejects another program
+or CAT declaring that table PID as data/PCR/CA. Assembly handles split common/
+syntax headers, multiple sections per payload, pointer completion, exact
+payload duplicates, adaptation-only packets and counter wrap. Missing packets,
+discontinuity, changed same-counter payloads, invalid CRC/framing and conflicting
+same-version tables permanently fence the admission instance. Current PAT
+changes invalidate dependent PMTs; future tables do not replace current data.
+Limits are 32,768 observed packets, 128 programs, 256 sections per PAT/CAT and
+1,024 bytes per section; an incomplete map never admits a partial service.
+Primary mpeg2ts-reader 0.18.2 source documents unimplemented split-header and
+multiple-section support in its assembler. The local framing adapter covers
+those demonstrated gaps while reusing library packet/header/PAT/PMT/descriptor
+interpretation and CRC; no additional dependency or external process is added.
+Twelve focused regressions cover fragmented large PMTs at every initial packet
+cut, table completeness/changes, invalid maps, ownership, permanent fencing and
+bounds. All 458 domain/FFmpeg regular tests pass (25 ignored), plus strict
+FFmpeg Clippy and formatting. The dependency audit at `fd66ba88` remains
+applicable to the unchanged graph.
+`real_runtime_adds_signalled_pages_without_changing_av_packets` now creates
+programs 10/11 with shared video and two audio streams. Source discovery finds
+the PAT-advertised table; the other program's PMT and every AV/PCR/PAT/SDT packet
+remain byte-identical at their original positions. Decoded video and both audio
+frame hashes/timestamps match; authored page/caption text and TSDuck signalling,
+PCR-derived rate, references and continuity/timestamp checks pass. The revised
+test passes on exact P9A-02 Linux x64/Windows executables and emulated ARM64/
+ARMv7. Reproduction remains in the fixture README; native Mac/full application
+acceptance is unproven.
+This is bounded admission evidence, not continuous live ownership: the host
+must fence later source/table/PID changes before output, install growing PMTs,
+validate rate/buffer admission and integrate async session cancellation/restart.
+Source metadata, generation publication, viewer, full native/Next matrix and
+content add-on acceptance remain open. No milestone status or prerequisite
+changes; the current P9A-02 packaging gates remain required.
+
+2026-10-10 growing-PMT checkpoint: `teletext/pmt_install.rs` installs a complete
+admitted source PMT in a bounded packet window using only that table's slots and
+null slots. Exact source matching includes CRC/version/current-next bytes;
+changed/future/corrupt sections cannot be silently overwritten. Fragmented
+headers/sections, pointer completion, multiple sections per payload, exact
+transport duplicates and surplus table slots are handled. Larger tables require
+capacity before the next source transmission; insufficient or incomplete input,
+late malformed packets, owned-PID collisions and ancillary adaptation control
+data leave both the output bytes and all installer state unchanged. Output
+continuity persists across successful calls independently of source packet
+count, including wrap. No bytes are appended and no AV/PCR packet is moved.
+Eleven focused regressions and all 469 domain/FFmpeg regular tests pass (25
+ignored), plus strict FFmpeg Clippy and formatting. Existing dependency-audit
+proof remains applicable to the unchanged graph.
+The revised `real_runtime_adds_signalled_pages_without_changing_av_packets`
+creates six seconds of synthetic two-program MPEG-2/AAC CBR output and 33
+original authored pages, including page 200 and boxed captions. Discovery and
+the actual installer grow the selected PMT from one packet to two for each of
+63 repetitions (126 output PMT packets), with repeated continuity wrap; four
+complete page cycles yield 268 teletext PES packets. FFmpeg decodes the selected
+page/caption texts and identical video/both audio frame hashes/timestamps.
+TSDuck 3.44-4676 confirms exact 5 Mbit/s, valid teletext language/type signalling,
+zero sync/transport/reference errors and zero continuity/PTS/PCR errors. Every
+original AV/PCR/PAT/SDT and other-program PMT packet remains byte-identical at
+its original position. The expanded test passes on exact P9A-02 Linux x64 and
+Windows executables, plus ARM64/ARMv7 under QEMU; native Mac/full application
+acceptance is unproven. Reproduction stays in the fixture README.
+This is synchronous bounded installation proof, not a running channel owner.
+Later live source/table/PID fencing, rate/buffer/deadline admission, async output
+pacing/cancellation/restart, generation publication, source metadata, viewer,
+full native/Next selection matrix and add-on acceptance remain open. No milestone
+status, prerequisite or acceptance requirement changes.
+
+2026-10-10 continuing-PSI checkpoint: `TeletextPsiDiscovery::into_monitor`
+consumes complete current PAT/CAT/all-program PMT evidence and preserves input
+continuity in `teletext/psi_monitor.rs`. Only subsequent raw packets are fed,
+before rewriting or release. Metadata stays immutable; partial sections hold
+readiness until their CRC and exact admitted bytes are validated. Changed
+current tables, newly observed authored-PID use, malformed input, continuity
+loss and incomplete EOF permanently fence this generation. Future selected
+PMTs are rejected rather than overwritten; future other tables never replace
+current ownership. Monitoring has no lifetime packet limit but each window is
+bounded. EOF cannot reopen an old producer/generation.
+An independent subagent review reproduced an admission-to-monitor defect:
+discovery could remember an ignored orphan payload after valid table evidence,
+then an exact duplicate bypassed monitor boundary validation. Framing now
+rejects orphans and non-stuffing pointer prefixes after its first complete
+section; startup joining remains supported. The reviewer verified the fix.
+Thirteen focused monitor regressions and all 482 domain/FFmpeg regular tests
+pass (25 ignored), plus strict affected Clippy, formatting and architecture
+lint. The real two-program fixture seals initial discovery and checks subsequent
+source windows before installation; it passes independent FFmpeg/TSDuck checks
+on exact Linux x64/Windows binaries and emulated ARM64/ARMv7. This proves the
+bounded component and finite fixture, not actual host retention/publication,
+source handover, deadlines, asynchronous pacing or live channel integration.
+
+2026-10-10 PCR/CBR checkpoint: `teletext/clock.rs` validates each selected-PCR
+interval against every physical TS188 packet position, including null and
+other-program packets. PCR is base * 300 + extension, with modulus 2^33 * 300;
+the locked mpeg2ts-reader parses its fields and the adapter checks extension,
+reserved bits and framing. Explicit immutable configuration sets declared
+muxrate, relative bitrate tolerance, absolute interval jitter, maximum packet/
+clock gaps and minimum validated intervals. Constant memory and bounded windows
+support continued observation; all observation failures permanently fence the
+source. No wall-clock delivery, retained buffer or task ownership is implied.
+Seventeen focused tests cover syntax, wrap, order, gap, physical packet loss,
+readiness, bounds, continued input and wide checked arithmetic. Independent
+review found relative tolerance was initially measured against PCR interval
+rather than declared bitrate. The corrected denominator and asymmetric exact
+positive/negative bitrate boundaries now have regression proof; no remaining
+concrete blocker was found. All 499 domain/FFmpeg regular tests pass (25 ignored).
+The existing six-second 5 Mbit/s fixture validates more than 200 PCR intervals
+before installation and identical clock evidence after installation. Removing
+one physical null slot triggers Muxrate failure. The revised test passes on
+exact Linux x64/Windows binaries and ARM64/ARMv7 under QEMU. Its 1,000 ppm,
+14-tick interval-jitter and 40 ms/134-packet PCR gaps are fixture configuration,
+not production admission defaults. Strict affected Clippy, formatting,
+architecture and progress checks pass; dependency audit evidence remains valid
+for the unchanged graph. Next implement bounded retained-output/deadline and
+asynchronous owner composition before claiming live delivery. Source metadata,
+publication/viewer, remaining platform/native/Next/source matrix and add-on
+acceptance remain open; no milestone advances.
+
+2026-10-10 retained-output checkpoint: `teletext/buffer.rs` retains arbitrary
+TS188 byte fragments with a single packet/partial-byte bound and first-byte
+holding age. Prefix release preserves remaining ages; idle expiry, backwards
+time, invalid release and incomplete/undrained EOF permanently fence held data.
+`teletext/output.rs` composes this retention with source discovery/monitoring,
+PCR/CBR readiness, growing PMT installation and atomic carousel insertion.
+Only complete physical 20 ms boundaries become immutable pending windows;
+raw and pending bytes share the capacity bound. Schedules preserve original
+packet positions and bind sink acknowledgement to one epoch/window. Stale,
+foreign, unexposed, early or late acknowledgement cannot advance output.
+Independent subagent review found and verified corrections for pending-byte
+capacity accounting and exposed-window delivery polling. Minimum-window
+capacity/timing policies now reject guaranteed unusable configurations.
+Twenty-five buffer and nineteen composed-output regressions cover these
+boundaries. The new ignored runtime test proves two complete 33-page cycles
+with bounded incremental reads and simulated monotonic acknowledgement,
+unchanged AV/PCR/other-program packets, equal decoded video/both audio hashes/
+timestamps and independent teletext/TSDuck results. Linux x64 passes
+36980738-e8b9-47bf-b19d-a918015349d0; Windows FFmpeg interop passes both runtime
+tests at b01d2adb-b3e0-471f-9255-158cf088fe4d; ARM64 under QEMU passes both at
+fb1c7484-6c3b-4c6d-a150-e8412a414a08 and ARMv7 under QEMU at
+759a6d55-f0b2-400f-964b-96fccedf8a97. The fixture policy is 1,024 retained
+packets, 500 ms hold, 100 ms playout delay and 20 ms lateness, not production
+defaults. This proves component composition, not actual asynchronous pacing
+or sink/client delivery. Strict EOF currently requires drained bytes and an
+acknowledged complete cycle; arbitrary finite tails and orderly handover remain
+implementation work under the unchanged accepted matrix. The existing final
+MPEG-TS stdout supervisor must own paced async reads/writes, deadline polling,
+cancellation and visible transport failure. Explicit roles must distinguish
+final output from internal item streams and separate HLS workers; hardware
+respawns require fresh transport epochs. Live integration, refresh/publication,
+remaining source/platform/admin/viewer and add-on acceptance remain open.
+All 543 domain/FFmpeg regular tests pass (26 ignored), Nextest
+0467f660-92ba-449a-a960-d6e2e881c45a. Strict FFmpeg Clippy, formatting,
+architecture, progress and diff checks pass; dependency audit evidence remains
+valid for the unchanged graph. No milestone advances.
+
+2026-10-10 asynchronous-output checkpoint: the native web host adds
+`transport/iptv/teletext_output.rs`, a bounded forwarding future over the
+existing owner's borrowed source/sink. No producer or detached task is created.
+Its heap-backed read buffer is fixed at 256 TS packets; actual retention and
+pending output share the gate's configured capacity. Larger complete intervals
+can be retained for PMT installation. Each immutable packet is paced by its
+absolute physical position, preserving fractional-rate rounding across windows.
+Read, paced write and flush waits use the earliest holding/delivery deadline;
+post-I/O monotonic checks prevent ready futures from bypassing elapsed deadlines.
+Flush and actual writer acceptance precede epoch-bound acknowledgement. Dropping
+the future discards held data; the existing owner must close/reap the producer
+and end the response. Partial writes never become a resumable transport epoch.
+Twenty-three gate tests now cover deadline/capacity queries and absolute timing.
+Fourteen asynchronous web tests independently serialize PAT/PMT/PCR/CBR input
+and prove pacing, fragmented reads, short writes, source/write errors, startup/
+holding/write/flush deadlines, strict EOF and cancellation. Real Tokio duplex
+streams additionally prove backpressure recovery and cancellation during a
+blocked packet write without a detached writer or reuse of held bytes. These
+tests prove local writer acceptance, not client receipt or FFmpeg supervision.
+Independent subagent review found no remaining actionable forwarding defects.
+The final source passes all 547 domain/FFmpeg regular tests (26 ignored),
+190209d1-b594-4811-8a43-4906e7f6e185, and all 14 focused web tests,
+ce31b9da-d29a-4b14-b0e1-310c0b13441d. The modified output gate's 33-page AV/
+TSDuck fixture passes again on the unchanged exact v2.0.6 candidates: Linux x64
+6221b033-b96e-448a-810d-98d8905da849, ARM64 under QEMU
+127280f2-be63-470b-bb05-827cf9ea9b44, ARMv7 under QEMU
+3c093fba-68b8-4d90-be99-7aee06d46b5f and Windows FFmpeg interop
+821938ec-ae5d-4a0b-8b23-6e80a57b48ca. Executable hashes match the existing
+candidate manifest. This remains simulated acknowledgement in the AV fixture;
+native Windows host and macOS acceptance remain unproven. Strict affected
+FFmpeg/web Clippy and formatting pass without new lint suppressions.
+Next integrate the future into the existing final MPEG-TS stdout supervisor,
+propagate explicit final/internal/HLS/container roles and immutable binding,
+create fresh epochs for respawns, preserve cancellation/reaping/capacity cleanup
+and prevent transport failure from becoming success or a hardware retry.
+Retained-output composition, arbitrary finite tails/handover, production policy,
+generation publication, source/platform/admin/browser/viewer acceptance and
+the separately gated content add-on remain open. No milestone advances.
+
+2026-10-10 stdout-supervisor checkpoint: immutable authored bindings now enter
+the existing final direct/wrapper MPEG-TS process owner through explicit
+admission. Internal item, HLS worker, other-container and capacity-slate roles
+cannot carry a binding. Actual format is checked before producer startup.
+Each native child creates a fresh forwarding gate; genuine transport faults
+remain terminal even with a zero exit or hardware-denial stderr. Only an empty
+stdout with a classified nonzero hardware rejection permits the existing
+one-shot fallback. Authored responses expose content-free terminal body errors
+after buffered output, and body disposal has priority over failed-write races.
+Ordinary routes still supply no binding until durable publication selection
+exists; these explicit host entry points do not establish a live service.
+Retained-interval output visibly refuses admission until its final reserve and
+pacer are composed. Arbitrary finite tails and slate/programme handover remain
+required work under the unchanged matrix.
+
+Independent process-lifetime review found a cancellation defect in paired
+producer cleanup: taking the producer pipe or JoinHandle before awaiting it
+could detach shutdown and later report consumer-only cleanup as successful.
+The existing owner now retains both across cancellation, propagates actual
+producer reaping failures, and keeps failed cleanup sticky. FFprobe follows
+the same ownership rule. Every hardware respawn error propagates uncertainty
+to the outer supervisor. Unconfirmed consuming-process cleanup quarantines
+capacity and manual artifacts; external subtitle TempDirs are explicitly kept
+on startup and terminal uncertainty paths instead of being implicitly deleted.
+Confirmed termination preserves normal cleanup. Independent scoped review
+found no further concrete defects in the changed paths.
+Five binding, thirteen Unix owned-child, five paired-cleanup and one subtitle
+lifetime regressions complement the existing fourteen asynchronous forwarding
+tests. They cover constructor/format/role boundaries, actual supervisor and
+duplex bodies, zero/nonzero exit classification, fresh gates on retry,
+cancellation/reaping, visible failure, and cancellation-owned cleanup.
+Unix shell/duplex fixtures do not replace packaged Windows/macOS, native/Next,
+viewer or complete accepted output-matrix evidence. Automatic publication,
+production policy, metadata/selection, retained composition and remaining
+source/platform/admin/add-on acceptance remain open. No milestone advances.
+
+The final focused infra/web run passes all 103 selected tests, Nextest
+23d139e5-1713-42f8-9677-85b29606a5d5. This includes the fourteen asynchronous
+forwarding tests after introducing explicit empty-output classification, all
+new role/supervisor/cleanup regressions and existing stream-capacity,
+cancellation and hardware-graph controls. The unchanged domain/FFmpeg and
+four-candidate output-gate AV/TSDuck evidence above remains valid.
+Strict affected infra/web all-target Clippy, formatting and architecture lint
+pass. `cargo xtask smoke --hls-lifecycle` passes against a throwaway SQLite
+database and the same exact v2.0.6 Linux x64 FFmpeg candidate: HLS serves real
+segments, both HLS and MPEG-TS wrapper sessions drain after idle timeout, and
+the wrapper restarts with output. Public internal callbacks return HTTP 404.
+Startup acquires and verifies the unchanged accepted Linux x64 Next package
+(`published_pin_verified=true`). The first sandbox attempt could neither
+download that package nor use loopback HTTP; the successful run had the
+required network permission and made no live installation or database change.
+This is ordinary unbound native playback/lifecycle regression proof, not live
+authored-page delivery, Next matrix, viewer or phase acceptance.
+
+2026-10-10 finite-EOF checkpoint: actual source EOF seals further input and
+regular preparation. The gate preflights and retains every complete final TS
+packet, including a fractional last interval, at its original position and due
+time. Only full 20 ms intervals receive batches; no padding or extra programme
+duration is invented. Partial TS/PSI, missing clock readiness and insufficient
+final PMT/null capacity remain terminal. Empty EOF after an acknowledged cycle
+creates no empty window. A pending terminator cannot establish completion:
+at least one complete immutable-generation cycle must be flushed and exactly
+acknowledged before successful closure. Later repetitions may end midcycle.
+The asynchronous owner writes and flushes the final window under the same
+holding/delivery deadlines before acknowledgement and response completion.
+
+Review identified a decoder-cache erasure risk from repeating C4. The carousel
+now erases each page in the first cycle of a generation, omits C4 on immutable
+repeats by correctly recoding the Hamming-protected subcode nibble, and restarts
+first-cycle erasure on boundary replacement. All other flags/units, subpage
+identities, spacing and programme clock remain unchanged. Historical completion
+never grants replacement authority; current boundary and delivery confirmation
+remain required. This protects acquired content, not late-join, packet-loss or
+final client-cache acceptance. Independent source review found no remaining
+concrete EOF, header or fixture defect.
+
+Thirteen new gate, four carousel and six asynchronous regressions cover tail
+extent/timing, sealing, acknowledgement, incomplete input/capacity, header flags/
+subcodes/immutability, and tail-only write/flush failure, deadline and cancellation.
+All 564 domain/FFmpeg regular and 38 focused web tests pass, Nextest
+02fe2154-e2e5-410c-a5a7-5166401b7271. A Newsflash regression fixture initially
+omitted required boxing; the existing validator rejected it, and the corrected
+fixture passes without changing production validation. The real 33-page,
+two-program fixture now also composes natural finite FFmpeg EOF, preserving
+exact source extent, AV/PCR/other-program packets and decoded video/both audio
+hashes/timestamps, with independent teletext and TSDuck checks. Both prefix and
+finite tests pass on the unchanged exact v2.0.6 candidates: Linux x64
+477df0c1-098f-4ec7-b135-6ddd6fb73c09, ARM64 under QEMU
+6542b875-87a6-4a62-a0fd-39768ebcfcaa, ARMv7 under QEMU
+4733220a-b196-4b64-89b5-b56af04a0eeb, Windows FFmpeg interop
+ee76cb3b-2727-405a-9a08-c77bf8a47819. Executable hashes still match the candidate
+manifest. Windows required WSL-socket permission after a sandbox-only failure.
+Runtime fixture acknowledgements remain simulated; the async tests prove writer
+acceptance, not client receipt. Strict affected all-target Clippy, formatting,
+architecture and progress checks pass. The dependency graph is unchanged.
+Retained reserve/gate age, shared capacity and one final pacing timeline,
+slate/programme handover, production/publication selection, remaining native/
+Next/platform/source/admin/client and add-on acceptance remain open. No milestone
+advances and no commit or deployment is implied.
+
+2026-10-10 retained-composition checkpoint: retained native MPEG-TS now passes
+raw InternalItem child output through one final authored gate. Its deferred
+one-shot start waits for reserve plus complete PSI/verified PCR; original
+packet arrival ages never rebase. Read-ahead refills between physical packet
+writes. The same owner validates short-source EOF, writes/flushes every final
+packet and acknowledges the immutable window without a second reserve/pacer.
+Retention has an independent 32 MiB transport-byte ceiling; processing and PSI
+retain their 32,768-packet bound. The web admission derives a conservative
+32 MiB requested retention/processing allocation-payload budget, excluding
+allocator overhead/RSS and separately bounded page/PSI ownership. It verifies
+actual child-command muxrate, capacity and holding policy before consumer spawn.
+
+Independent review found and corrected empty-source indefinite waiting, an
+ignored binding first-byte timeout and late Ready-read completion. All reads,
+writes and flushes now retain absolute startup/first-byte/holding/next-physical-
+packet deadlines. Transport failure drops/closes raw response ownership and
+waits for actual producer completion before reporting a public body error.
+Startup aborts preserve capacity/subtitle/graphics ownership when prepared
+producer reaping is unconfirmed. Deferred hardware rebuilds now propagate that
+uncertainty explicitly across graph/decode/encode retries; ordinary refusal
+cannot turn an uncertain cleanup into released capacity/artifacts.
+
+All 710 selected regular tests pass, Nextest
+93db5bc0-3854-45da-b63b-99b5b7ee7c18: all domain/FFmpeg regular tests and focused
+web teletext, stream and ordinary reserve regressions. Nine deferred-gate tests,
+three larger-buffer tests, twelve retained asynchronous tests and six Unix
+process/retry regressions cover readiness, original ages, bounds, reserve/refill,
+short EOF, source/sink faults, deadlines, cancellation, single final injection,
+reaping/body error and controlled producer-completion waiting. One new fixture
+initially deadlocked by polling its bounded reader only once before waiting for
+reaping; driving reader and supervisor concurrently fixes that test, without a
+production change or relaxed timeout. No test failure is hidden by a retry.
+
+Two new exact-runtime web tests use actual Tokio duplex write/flush/ACK for six
+seconds of short EOF and nine seconds of finite reserve/refill. Source AV/PCR,
+PAT/SDT and subtitle packets retain exact positions and extent; decoded video,
+both audio hashes/timestamps and subtitle page 888 are identical. Authored page
+200 decodes and TSDuck validates PCR rate, referenced PIDs, service/language,
+PES and continuity. These borrowed-source fixtures generate encoded source
+before forwarding; Unix shell fixtures independently own process/HTTP-body
+lifecycle. They do not prove a served add-on-owned source or packaged client.
+Both retained tests and the unchanged 33-page prefix/finite tests pass on exact
+v2.0.6 candidates with manifest-matching checksums: Linux x64
+33a42b58-93df-405b-b915-81cfe8d3688c, ARM64 under QEMU
+73683893-284c-48ad-90ce-001093ea5a56, ARMv7 under QEMU
+fdda9bc0-64de-447f-9f39-77df19026d76 and Windows FFmpeg interop
+751883f0-a40c-4a34-a405-4bc32494a438. Windows interop requires its previously
+established WSL socket permission; it is not native Windows host acceptance.
+Strict affected all-target Clippy, formatting, architecture/progress and scoped
+Clippy-allowance checks pass. Final test-only lint corrections do not change
+production code, runtime inputs or the reused decoder evidence. Ordinary native
+playback/lifecycle smoke passes against a throwaway database and the same exact
+FFmpeg candidate: public internal callbacks return 404, HLS serves a 5,190,868-
+byte segment, both session types drain after idle and MPEG-TS wrapper restart
+delivers 8,192 bytes. The unchanged accepted Next package is verified at startup.
+This unbound regression is separate from live authored-page/client acceptance.
+Six-RID/macOS packaging, orderly slate/programme handover, production/publication
+selection, native/Next/source/admin/client matrix and add-on acceptance remain
+open. Milestone states and accepted requirements are unchanged; no commit,
+push, installation or deployment is implied.
 '''
 
 [[milestone]]

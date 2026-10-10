@@ -30,13 +30,20 @@ pub enum PreparationError {
 /// No Debug implementation: paths may be private.
 pub struct PreparedSubtitle {
     subtitle: PlaybackSubtitle,
-    _directory: tempfile::TempDir,
+    directory: tempfile::TempDir,
 }
 
 impl PreparedSubtitle {
     #[must_use]
     pub fn subtitle(&self) -> &PlaybackSubtitle {
         &self.subtitle
+    }
+
+    /// Consume this guard while preserving its prepared files when cleanup of
+    /// the consuming `FFmpeg` process could not be confirmed. That process may
+    /// still need the file; discarding the retained path avoids exposing it.
+    pub fn preserve_after_unconfirmed_cleanup(self) {
+        let _retained = self.directory.keep();
     }
 
     /// Download a selected Plex sidecar using the current server credential.
@@ -182,7 +189,7 @@ fn write_sidecar(
     subtitle.is_extracted = true;
     Ok(PreparedSubtitle {
         subtitle,
-        _directory: directory,
+        directory,
     })
 }
 
@@ -267,13 +274,47 @@ async fn prepare(
     subtitle.codec = Some(if ass { "ass" } else { "subrip" }.into());
     Ok(PreparedSubtitle {
         subtitle,
-        _directory: directory,
+        directory,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prepared_subtitle_drop_removes_files_but_unconfirmed_cleanup_preserves_them() {
+        let bytes = b"1\n00:00:00,000 --> 00:00:01,000\nSynthetic subtitle\n";
+        for preserve in [false, true] {
+            let subtitle = PlaybackSubtitle {
+                id: 0,
+                subtitle_kind: subtitle_kind::SIDECAR,
+                title: None,
+                stream_index: 0,
+                codec: Some("subrip".into()),
+                default: false,
+                forced: false,
+                sdh: false,
+                language: Some("nld".into()),
+                is_extracted: false,
+                path: None,
+            };
+            let prepared = write_sidecar(subtitle, bytes).expect("write synthetic sidecar");
+            let directory = prepared.directory.path().to_owned();
+            let file = PathBuf::from(prepared.subtitle().path.as_ref().unwrap());
+            assert_eq!(std::fs::read(&file).unwrap(), bytes);
+            if preserve {
+                prepared.preserve_after_unconfirmed_cleanup();
+                assert_eq!(std::fs::read(&file).unwrap(), bytes);
+                // Only this test's newly created temporary fixture is removed.
+                std::fs::remove_dir_all(&directory).expect("remove retained test fixture");
+            } else {
+                drop(prepared);
+                assert!(!file.exists());
+            }
+            assert!(!directory.exists());
+        }
+    }
 
     #[test]
     fn plex_sidecar_uri_cannot_escape_the_streams_endpoint() {

@@ -1,6 +1,15 @@
 #[path = "stream_external.rs"]
 mod external;
 
+// POSIX process fixtures complement, but do not replace, native Windows acceptance.
+#[cfg(all(test, unix))]
+#[path = "stream_teletext_tests.rs"]
+mod teletext_tests;
+
+#[cfg(all(test, unix))]
+#[path = "stream_retained_teletext_tests.rs"]
+mod retained_teletext_tests;
+
 #[cfg(test)]
 use std::process::Stdio;
 use std::{
@@ -83,6 +92,8 @@ use tokio_util::io::ReaderStream;
 use super::retained_stream_buffer::{
     forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
+use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, TeletextOutputRole};
+use super::teletext_output::{forward_teletext_output, TeletextPumpError};
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::{hls, hls::HlsQuery};
@@ -97,6 +108,24 @@ const MPEG_TS_HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_
 const MPEG_TS_HLS_RECLAIM_GRACE: Duration = Duration::from_secs(6);
 const MPEG_TS_HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 
+fn teletext_output_unavailable() -> Response {
+    (
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        "teletext is unavailable for this output",
+    )
+        .into_response()
+}
+
+fn admit_stream_teletext(
+    role: TeletextOutputRole,
+    binding: Option<Arc<TeletextOutputBinding>>,
+) -> Result<TeletextOutputAdmission, TeletextPumpError> {
+    match binding {
+        Some(binding) => TeletextOutputAdmission::with_binding(role, binding),
+        None => Ok(TeletextOutputAdmission::plain(role)),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MpegTsScriptRenderData {
     hls_url: String,
@@ -109,8 +138,30 @@ struct MpegTsScriptRenderData {
 pub async fn serve_transport_stream(
     state: &AppState,
     channel_number: &str,
+    headers: &HeaderMap,
+    query: &HlsQuery,
+) -> Response {
+    serve_transport_stream_with_binding(state, channel_number, headers, query, None).await
+}
+
+/// Serve a final MPEG-TS wrapper with an immutable authored-page snapshot.
+/// Publication selection remains the host caller's responsibility.
+pub async fn serve_transport_stream_with_teletext(
+    state: &AppState,
+    channel_number: &str,
+    headers: &HeaderMap,
+    query: &HlsQuery,
+    binding: Arc<TeletextOutputBinding>,
+) -> Response {
+    serve_transport_stream_with_binding(state, channel_number, headers, query, Some(binding)).await
+}
+
+async fn serve_transport_stream_with_binding(
+    state: &AppState,
+    channel_number: &str,
     _headers: &HeaderMap,
     query: &HlsQuery,
+    binding: Option<Arc<TeletextOutputBinding>>,
 ) -> Response {
     let channel = match state
         .repositories
@@ -127,6 +178,13 @@ pub async fn serve_transport_stream(
     };
 
     let mode = channel_transport_stream_mode(query.mode.as_deref(), &channel);
+
+    if binding.is_some() && matches!(mode, TransportStreamMode::RedirectToHls) {
+        return teletext_output_unavailable();
+    }
+    let Ok(output) = admit_stream_teletext(TeletextOutputRole::FinalWrapperMpegTs, binding) else {
+        return teletext_output_unavailable();
+    };
 
     if !matches!(mode, TransportStreamMode::RedirectToHls) {
         if let Err(response) = super::validate_profile_output(
@@ -150,19 +208,46 @@ pub async fn serve_transport_stream(
             );
             axum::response::Redirect::temporary(&target).into_response()
         }
-        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel).await,
+        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, output).await,
         TransportStreamMode::HybridWrapper => {
-            serve_segmenter_wrapper_stream(state, &channel, query).await
+            serve_segmenter_wrapper_stream(state, &channel, query, output).await
         }
     }
 }
 
-#[allow(clippy::too_many_lines)]
 pub async fn serve_channel_stream(
     state: &AppState,
     channel_number: &str,
     output_format: OutputFormat,
 ) -> Response {
+    serve_channel_stream_with_binding(state, channel_number, output_format, None).await
+}
+
+/// Serve a final direct stream with an immutable authored-page snapshot.
+/// Container and retained-output admission are checked before producer startup.
+pub async fn serve_channel_stream_with_teletext(
+    state: &AppState,
+    channel_number: &str,
+    output_format: OutputFormat,
+    binding: Arc<TeletextOutputBinding>,
+) -> Response {
+    serve_channel_stream_with_binding(state, channel_number, output_format, Some(binding)).await
+}
+
+async fn serve_channel_stream_with_binding(
+    state: &AppState,
+    channel_number: &str,
+    output_format: OutputFormat,
+    binding: Option<Arc<TeletextOutputBinding>>,
+) -> Response {
+    let role = if output_format == OutputFormat::MpegTs {
+        TeletextOutputRole::FinalDirectMpegTs
+    } else {
+        TeletextOutputRole::OtherContainer
+    };
+    let Ok(output) = admit_stream_teletext(role, binding) else {
+        return teletext_output_unavailable();
+    };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     let lookup = tokio::time::timeout_at(
         deadline,
@@ -189,6 +274,7 @@ pub async fn serve_channel_stream(
         output_format,
         effective_streaming_mode,
         deadline,
+        output,
     )
     .await
 }
@@ -263,6 +349,7 @@ pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str
         OutputFormat::MpegTs,
         StreamingMode::TransportStream,
         deadline,
+        TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
     )
     .await
 }
@@ -274,7 +361,11 @@ async fn serve_channel_stream_with_channel(
     output_format: OutputFormat,
     effective_streaming_mode: StreamingMode,
     deadline: tokio::time::Instant,
+    output: TeletextOutputAdmission,
 ) -> Response {
+    if output.validate_format(output_format).is_err() {
+        return teletext_output_unavailable();
+    }
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -294,6 +385,7 @@ async fn serve_channel_stream_with_channel(
         effective_streaming_mode,
         deadline,
         None,
+        output,
     )
     .await
 }
@@ -302,6 +394,7 @@ struct IntervalStreamAdmission {
     reservation: ActiveTranscodeReservation,
     deadline: tokio::time::Instant,
     cancellation: tokio::sync::oneshot::Receiver<()>,
+    teletext: Option<Arc<TeletextOutputBinding>>,
 }
 
 async fn await_retained_startup_stage<T, E>(
@@ -356,6 +449,7 @@ fn serve_channel_stream_admitted(
     mode: StreamingMode,
     deadline: tokio::time::Instant,
     admission: Option<IntervalStreamAdmission>,
+    output: TeletextOutputAdmission,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
     Box::pin(serve_channel_stream_admitted_inner(
         state,
@@ -364,6 +458,7 @@ fn serve_channel_stream_admitted(
         mode,
         deadline,
         admission,
+        output,
     ))
 }
 
@@ -376,6 +471,7 @@ fn retained_interval_stream_response(
     output_format: OutputFormat,
     mode: StreamingMode,
     deadline: tokio::time::Instant,
+    output: TeletextOutputAdmission,
 ) -> Response {
     if output_format != OutputFormat::MpegTs {
         tracing::warn!(
@@ -390,10 +486,9 @@ fn retained_interval_stream_response(
     }
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
     let cancel = Arc::new(Notify::new());
-    let body = guarded_stream_body(reader, cancel.clone());
+    let (body, output_completion) = stream_body_for_output(reader, cancel.clone(), &output);
     tokio::spawn(async move {
-        use futures_util::StreamExt as _;
-
+        let final_binding = output.cloned_binding();
         let setup = load_capacity_slate_context(&state, &channel, "retained interval capacity");
         let context = tokio::select! {
             biased;
@@ -406,6 +501,8 @@ fn retained_interval_stream_response(
         };
         let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
         let mut capacity_command = None;
+        let mut slate_cleanup_confirmed = true;
+        let mut output_result = Err("retained output did not start");
         let reservation = loop {
             let limit = tokio::select! {
                 biased;
@@ -451,6 +548,9 @@ fn retained_interval_stream_response(
                     operation.await
                 }
             };
+            if matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed) {
+                slate_cleanup_confirmed = false;
+            }
             if !matches!(outcome, DirectStreamOutcome::Completed) {
                 break None;
             }
@@ -468,7 +568,9 @@ fn retained_interval_stream_response(
                     reservation,
                     deadline,
                     cancellation: receiver,
+                    teletext: output.cloned_binding(),
                 }),
+                TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
             ));
             tokio::pin!(operation);
             let response = tokio::select! {
@@ -487,30 +589,22 @@ fn retained_interval_stream_response(
             if let Some(response) = response {
                 if response.status().is_success() {
                     if let Some(output) = response.extensions().get::<RetainedTsOutput>().cloned() {
-                        if let Ok(policy) = ReservePolicy::new(output.muxrate_bps, output.remaining)
-                        {
-                            let stream = response
-                                .into_body()
-                                .into_data_stream()
-                                .map(|chunk| chunk.map_err(std::io::Error::other));
-                            let mut source = tokio_util::io::StreamReader::new(stream);
-                            if let Err(error) = forward_retained_ts(
-                                &mut source,
-                                &mut writer,
-                                policy,
-                                &output.terminal,
-                                deadline,
-                                &cancel,
-                            )
-                            .await
-                            {
-                                tracing::warn!(channel_id = channel.id, %error, "retained MPEG-TS reserve ended");
-                            }
-                            drop(writer); // Public output ends before asynchronous child cleanup.
-                            drop(source); // Body disposal signals the owned encoder supervisor.
-                            if output.terminal.load(Ordering::Acquire) == 0 {
-                                output.completed.notified().await;
-                            }
+                        output_result = forward_retained_response(
+                            response,
+                            writer,
+                            &output,
+                            deadline,
+                            &cancel,
+                            // The inner child owns raw output; this final writer owns pages.
+                            final_binding.as_deref(),
+                        )
+                        .await;
+                        if let Err(reason) = output_result {
+                            tracing::warn!(
+                                channel_id = channel.id,
+                                reason,
+                                "retained MPEG-TS reserve ended"
+                            );
                         }
                     } else {
                         tracing::warn!(
@@ -524,7 +618,12 @@ fn retained_interval_stream_response(
                 }
             }
         }
-        cleanup_stream_artifact(&slate_dir).await;
+        if slate_cleanup_confirmed {
+            cleanup_stream_artifact(&slate_dir).await;
+        }
+        if let Some(completion) = output_completion {
+            let _ = completion.send(output_result);
+        }
     });
     let mut response = body.into_response();
     response.headers_mut().insert(
@@ -537,6 +636,90 @@ fn retained_interval_stream_response(
     response
 }
 
+async fn forward_retained_response(
+    response: Response,
+    mut writer: tokio::io::DuplexStream,
+    output: &RetainedTsOutput,
+    deadline: tokio::time::Instant,
+    cancel: &Notify,
+    binding: Option<&TeletextOutputBinding>,
+) -> Result<(), &'static str> {
+    use futures_util::StreamExt as _;
+
+    let stream = response
+        .into_body()
+        .into_data_stream()
+        .map(|chunk| chunk.map_err(std::io::Error::other));
+    let mut source = tokio_util::io::StreamReader::new(stream);
+    let result = match ReservePolicy::new(output.muxrate_bps, output.remaining) {
+        Ok(policy) => {
+            if let Some(binding) = binding {
+                super::teletext_retained_output::forward_retained_ts_with_teletext(
+                    &mut source,
+                    &mut writer,
+                    policy,
+                    &output.terminal,
+                    deadline,
+                    cancel,
+                    binding,
+                )
+                .await
+                .map_err(|_| "retained teletext transport failed")
+            } else {
+                forward_retained_ts(
+                    &mut source,
+                    &mut writer,
+                    policy,
+                    &output.terminal,
+                    deadline,
+                    cancel,
+                )
+                .await
+                .map_err(|_| "retained MPEG-TS reserve failed")
+            }
+        }
+        Err(_) => Err("retained MPEG-TS profile exceeds the encoded reserve bound"),
+    };
+    drop(writer);
+    drop(source);
+    if output.terminal.load(Ordering::Acquire) == 0 {
+        output.completed.notified().await;
+    }
+    if output.terminal.load(Ordering::Acquire) != TERMINAL_SUCCESS {
+        return Err("retained encoded output producer failed");
+    }
+    result
+}
+
+/// Release startup-owned artifacts only after the prepared producer stopped.
+async fn cancel_retained_startup(
+    prepared: Option<PreparedRemoteStreamInput>,
+    reservation: Option<&ActiveTranscodeReservation>,
+    subtitle_owner: Option<&mut Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>>,
+    cleanup_paths: &[PathBuf],
+    controllers: Option<&mut Vec<DynamicTextController>>,
+) {
+    let confirmed = match prepared {
+        Some(prepared) => prepared.cancel().await.is_ok(),
+        None => true,
+    };
+    if !confirmed {
+        tracing::warn!("retained startup producer cleanup could not be confirmed");
+        if let Some(reservation) = reservation {
+            reservation.retain_until_restart();
+        }
+        if let Some(owner) = subtitle_owner.and_then(Option::take) {
+            owner.preserve_after_unconfirmed_cleanup();
+        }
+    }
+    if let Some(controllers) = controllers {
+        shutdown_dynamic_text_controllers(std::mem::take(controllers)).await;
+    }
+    if confirmed {
+        cleanup_stream_artifacts(cleanup_paths).await;
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 async fn serve_channel_stream_admitted_inner(
     state: &AppState,
@@ -545,7 +728,14 @@ async fn serve_channel_stream_admitted_inner(
     effective_streaming_mode: StreamingMode,
     startup_deadline: tokio::time::Instant,
     interval_admission: Option<IntervalStreamAdmission>,
+    output: TeletextOutputAdmission,
 ) -> Response {
+    if output.validate_format(output_format).is_err() {
+        return teletext_output_unavailable();
+    }
+    let retained_teletext = interval_admission
+        .as_ref()
+        .and_then(|admission| admission.teletext.clone());
     let now = Utc::now();
     let active = tokio::time::timeout_at(
         startup_deadline,
@@ -590,6 +780,16 @@ async fn serve_channel_stream_admitted_inner(
             RemoteStreamSource::RetainedIntervals(source) => Some(source.clone()),
             _ => None,
         });
+    if interval_admission.is_some() && interval_source.is_none() {
+        tracing::warn!(
+            channel_id = channel.id,
+            "retained source changed during capacity admission"
+        );
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    if interval_source.is_some() && interval_admission.is_some() && output.binding().is_some() {
+        return teletext_output_unavailable();
+    }
     if interval_source.is_some() && interval_admission.is_none() {
         return retained_interval_stream_response(
             state.clone(),
@@ -597,6 +797,7 @@ async fn serve_channel_stream_admitted_inner(
             output_format,
             effective_streaming_mode,
             startup_deadline,
+            output,
         );
     }
 
@@ -699,6 +900,7 @@ async fn serve_channel_stream_admitted_inner(
     let mut interval_reservation = None;
     let mut retained_playback = None;
     let mut retained_cancellation = None;
+    let mut external_subtitle_owner = None;
     let previous_audio_streams = source_audio_streams.clone();
     let source_stream = if let (Some(source), Some(admission)) =
         (&interval_source, interval_admission)
@@ -728,9 +930,24 @@ async fn serve_channel_stream_admitted_inner(
         ))
         .await;
         retained_cancellation = Some(cancellation);
+        if matches!(
+            &result,
+            Err(ersatzrs_infra::addon_media_list_item_runtime::ItemRuntimeError::TerminationUnconfirmed)
+        ) {
+            if let Some(reservation) = &interval_reservation {
+                reservation.retain_until_restart();
+            }
+        }
         if cancelled {
             if let Ok(Some(playback)) = result {
-                let _ = playback.prepared.cancel().await;
+                cancel_retained_startup(
+                    Some(playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
             }
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
@@ -780,9 +997,14 @@ async fn serve_channel_stream_admitted_inner(
                     channel_number = %channel.number,
                     "failed to load channel target frame rate; refusing to build FFmpeg command"
                 );
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
@@ -799,9 +1021,14 @@ async fn serve_channel_stream_admitted_inner(
                 channel_number = %channel.number,
                 "failed to load playback language preferences; refusing to build FFmpeg command"
             );
-            if let Some(playback) = retained_playback.take() {
-                let _ = playback.prepared.cancel().await;
-            }
+            cancel_retained_startup(
+                retained_playback.take().map(|playback| playback.prepared),
+                interval_reservation.as_ref(),
+                Some(&mut external_subtitle_owner),
+                &[],
+                None,
+            )
+            .await;
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -866,9 +1093,14 @@ async fn serve_channel_stream_admitted_inner(
                     media_version_id = active.media_version_id,
                     "failed to execute channel stream selector; refusing fallback stream selection"
                 );
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
@@ -940,9 +1172,14 @@ async fn serve_channel_stream_admitted_inner(
         ) {
             Ok(selection) => selection,
             Err(error) => {
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
                 return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
             }
         }
@@ -996,9 +1233,14 @@ async fn serve_channel_stream_admitted_inner(
                         stream_index,
                         "pinned subtitle stream is unavailable; refusing fallback selection"
                     );
-                    if let Some(playback) = retained_playback.take() {
-                        let _ = playback.prepared.cancel().await;
-                    }
+                    cancel_retained_startup(
+                        retained_playback.take().map(|playback| playback.prepared),
+                        interval_reservation.as_ref(),
+                        Some(&mut external_subtitle_owner),
+                        &[],
+                        None,
+                    )
+                    .await;
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
             }
@@ -1044,14 +1286,18 @@ async fn serve_channel_stream_admitted_inner(
                     media_item_id = active.media_item_id,
                     "failed to select playback subtitle; refusing subtitle-free fallback"
                 );
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     };
-    let mut external_subtitle_owner = None;
     let subtitle = match subtitle {
         Some(selected) if active.external.is_some() => {
             let media = active.external.as_ref().expect("external binding checked");
@@ -1071,6 +1317,14 @@ async fn serve_channel_stream_admitted_inner(
                 }
                 Err(error) => {
                     tracing::warn!(channel_id = channel.id, %error, "external subtitle preparation failed");
+                    cancel_retained_startup(
+                        retained_playback.take().map(|playback| playback.prepared),
+                        interval_reservation.as_ref(),
+                        Some(&mut external_subtitle_owner),
+                        &[],
+                        None,
+                    )
+                    .await;
                     return StatusCode::SERVICE_UNAVAILABLE.into_response();
                 }
             }
@@ -1086,9 +1340,14 @@ async fn serve_channel_stream_admitted_inner(
             )
             .await
             else {
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &[],
+                    None,
+                )
+                .await;
                 return (
                     StatusCode::SERVICE_UNAVAILABLE,
                     "selected provider subtitle is unavailable",
@@ -1124,9 +1383,14 @@ async fn serve_channel_stream_admitted_inner(
             true
         };
     if !retained_subtitle_verified {
-        if let Some(playback) = retained_playback.take() {
-            let _ = playback.prepared.cancel().await;
-        }
+        cancel_retained_startup(
+            retained_playback.take().map(|playback| playback.prepared),
+            interval_reservation.as_ref(),
+            Some(&mut external_subtitle_owner),
+            &[],
+            None,
+        )
+        .await;
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "selected source-clock subtitles are unsupported with retained intervals",
@@ -1155,9 +1419,14 @@ async fn serve_channel_stream_admitted_inner(
             stream_index = active.subtitle_stream_index,
             "pinned subtitle cannot be mapped for this output; refusing subtitle-free playback"
         );
-        if let Some(playback) = retained_playback.take() {
-            let _ = playback.prepared.cancel().await;
-        }
+        cancel_retained_startup(
+            retained_playback.take().map(|playback| playback.prepared),
+            interval_reservation.as_ref(),
+            Some(&mut external_subtitle_owner),
+            &[],
+            None,
+        )
+        .await;
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     let subtitle_input = if interval_source.is_some() {
@@ -1205,9 +1474,14 @@ async fn serve_channel_stream_admitted_inner(
                 )
                 .await;
                 if cancelled {
-                    if let Some(playback) = retained_playback.take() {
-                        let _ = playback.prepared.cancel().await;
-                    }
+                    cancel_retained_startup(
+                        retained_playback.take().map(|playback| playback.prepared),
+                        interval_reservation.as_ref(),
+                        Some(&mut external_subtitle_owner),
+                        &[],
+                        None,
+                    )
+                    .await;
                     return StatusCode::SERVICE_UNAVAILABLE.into_response();
                 }
                 match result {
@@ -1215,9 +1489,14 @@ async fn serve_channel_stream_admitted_inner(
                     Err(error) => {
                         tracing::warn!(channel_id = channel.id, %error,
                             "retained interval watermark preparation failed");
-                        if let Some(playback) = retained_playback.take() {
-                            let _ = playback.prepared.cancel().await;
-                        }
+                        cancel_retained_startup(
+                            retained_playback.take().map(|playback| playback.prepared),
+                            interval_reservation.as_ref(),
+                            Some(&mut external_subtitle_owner),
+                            &[],
+                            None,
+                        )
+                        .await;
                         return StatusCode::SERVICE_UNAVAILABLE.into_response();
                     }
                 }
@@ -1301,10 +1580,14 @@ async fn serve_channel_stream_admitted_inner(
                     if let Ok(artifacts) = result {
                         artifacts.shutdown().await;
                     }
-                    cleanup_stream_artifact(&graphics_cleanup_dir).await;
-                    if let Some(playback) = retained_playback.take() {
-                        let _ = playback.prepared.cancel().await;
-                    }
+                    cancel_retained_startup(
+                        retained_playback.take().map(|playback| playback.prepared),
+                        interval_reservation.as_ref(),
+                        Some(&mut external_subtitle_owner),
+                        std::slice::from_ref(&graphics_cleanup_dir),
+                        Some(&mut dynamic_text_controllers),
+                    )
+                    .await;
                     return StatusCode::SERVICE_UNAVAILABLE.into_response();
                 }
                 result
@@ -1365,11 +1648,14 @@ async fn serve_channel_stream_admitted_inner(
     let media_input = match media_input {
         Ok(input) => input,
         Err(error) => {
-            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-            cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
-            if let Some(playback) = retained_playback.take() {
-                let _ = playback.prepared.cancel().await;
-            }
+            cancel_retained_startup(
+                retained_playback.take().map(|playback| playback.prepared),
+                interval_reservation.as_ref(),
+                Some(&mut external_subtitle_owner),
+                &graphics_cleanup_dirs,
+                Some(&mut dynamic_text_controllers),
+            )
+            .await;
             return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
         }
     };
@@ -1395,11 +1681,15 @@ async fn serve_channel_stream_admitted_inner(
         {
             Ok(song) => song.map(Arc::new),
             Err(error) => {
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
-                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &graphics_cleanup_dirs,
+                    Some(&mut dynamic_text_controllers),
+                )
+                .await;
+
                 tracing::warn!(channel_id = channel.id, %error, "song image preparation failed");
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
@@ -1443,11 +1733,14 @@ async fn serve_channel_stream_admitted_inner(
                 reason = %error,
                 "refusing to transcode an unsupported source"
             );
-            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-            cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
-            if let Some(playback) = retained_playback.take() {
-                let _ = playback.prepared.cancel().await;
-            }
+            cancel_retained_startup(
+                retained_playback.take().map(|playback| playback.prepared),
+                interval_reservation.as_ref(),
+                Some(&mut external_subtitle_owner),
+                &graphics_cleanup_dirs,
+                Some(&mut dynamic_text_controllers),
+            )
+            .await;
             return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
         }
     };
@@ -1487,7 +1780,9 @@ async fn serve_channel_stream_admitted_inner(
                         let extractor = ersatzrs_infra::ffprobe::FfprobeExtractor::new(
                             ersatzrs_ffmpeg::ffprobe_path(),
                         );
-                        let programme_ms = u64::try_from(start_position.as_millis()).ok()?;
+                        let Ok(programme_ms) = u64::try_from(start_position.as_millis()) else {
+                            return Ok(None);
+                        };
                         let (sender, receiver) = tokio::sync::oneshot::channel();
                         let operation = source.prepare_playback_cancellable(
                             IntervalPlaybackContext {
@@ -1505,14 +1800,17 @@ async fn serve_channel_stream_admitted_inner(
                             biased;
                             () = cancel.notified() => {
                                 drop(sender);
-                                if let Ok(Some(playback)) = operation.await {
-                                    let _ = playback.prepared.cancel().await;
+                                if let Some(playback) = retained_retry_input(operation.await)? {
+                                    playback.prepared.cancel().await.map_err(|error| StreamSpawnError::prepared(&error))?;
                                 }
-                                return None;
+                                return Ok(None);
                             },
                             result = &mut operation => result,
                         };
-                        Some(result.ok()??)
+                        match retained_retry_input(result)? {
+                            Some(playback) => Some(playback),
+                            None => return Ok(None),
+                        }
                     } else {
                         None
                     };
@@ -1524,9 +1822,13 @@ async fn serve_channel_stream_admitted_inner(
                         );
                         let Ok(explicit) = explicit else {
                             if let Some(fresh) = fresh.take() {
-                                let _ = fresh.prepared.cancel().await;
+                                fresh
+                                    .prepared
+                                    .cancel()
+                                    .await
+                                    .map_err(|error| StreamSpawnError::prepared(&error))?;
                             }
-                            return None;
+                            return Ok(None);
                         };
                         match explicit {
                             PlaybackAudioSelection::Automatic => {
@@ -1605,21 +1907,29 @@ async fn serve_channel_stream_admitted_inner(
                     );
                     let Ok(command) = command else {
                         if let Some(fresh) = fresh.take() {
-                            let _ = fresh.prepared.cancel().await;
+                            fresh
+                                .prepared
+                                .cancel()
+                                .await
+                                .map_err(|error| StreamSpawnError::prepared(&error))?;
                         }
-                        return None;
+                        return Ok(None);
                     };
                     if fresh.is_some() && tokio::time::Instant::now() >= startup_deadline {
                         if let Some(fresh) = fresh {
-                            let _ = fresh.prepared.cancel().await;
+                            fresh
+                                .prepared
+                                .cancel()
+                                .await
+                                .map_err(|error| StreamSpawnError::prepared(&error))?;
                         }
-                        return None;
+                        return Ok(None);
                     }
-                    Some(StreamRetryAttempt {
+                    Ok(Some(StreamRetryAttempt {
                         command,
                         source_stream,
                         prepared: fresh.map(|fresh| fresh.prepared),
-                    })
+                    }))
                 })
             })
         })),
@@ -1643,9 +1953,15 @@ async fn serve_channel_stream_admitted_inner(
                         .into_response();
                 }
                 if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                    shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-                    cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                    cancel_retained_startup(
+                        Some(playback.prepared),
+                        None,
+                        Some(&mut external_subtitle_owner),
+                        &graphics_cleanup_dirs,
+                        Some(&mut dynamic_text_controllers),
+                    )
+                    .await;
+
                     return StatusCode::SERVICE_UNAVAILABLE.into_response();
                 }
                 return mpeg_ts_capacity_wait_response(
@@ -1661,6 +1977,7 @@ async fn serve_channel_stream_admitted_inner(
                     Some(retry),
                     remote_stream.clone(),
                     external_subtitle_owner,
+                    output,
                 )
                 .await;
             }
@@ -1671,11 +1988,15 @@ async fn serve_channel_stream_admitted_inner(
                     channel_number = %channel.number,
                     "failed to load MPEG-TS transcode capacity"
                 );
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
-                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    None,
+                    Some(&mut external_subtitle_owner),
+                    &graphics_cleanup_dirs,
+                    Some(&mut dynamic_text_controllers),
+                )
+                .await;
+
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
@@ -1685,11 +2006,15 @@ async fn serve_channel_stream_admitted_inner(
 
     let cleanup_on_spawn_failure = graphics_cleanup_dirs.clone();
     if retained_playback.is_some() && tokio::time::Instant::now() >= startup_deadline {
-        if let Some(playback) = retained_playback.take() {
-            let _ = playback.prepared.cancel().await;
-        }
-        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-        cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+        cancel_retained_startup(
+            retained_playback.take().map(|playback| playback.prepared),
+            capacity_reservation.as_ref(),
+            Some(&mut external_subtitle_owner),
+            &graphics_cleanup_dirs,
+            Some(&mut dynamic_text_controllers),
+        )
+        .await;
+
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             "retained interval startup deadline expired",
@@ -1700,7 +2025,16 @@ async fn serve_channel_stream_admitted_inner(
         match RetainedTsOutput::from_command(
             &command,
             stream_duration.or_else(|| active.remaining_duration(now)),
-        ) {
+        )
+        .and_then(|output| {
+            if let Some(binding) = &retained_teletext {
+                let policy = ReservePolicy::new(output.muxrate_bps, output.remaining)
+                    .map_err(|_| "retained MPEG-TS profile exceeds the encoded reserve bound")?;
+                super::teletext_retained_output::validate_policy(policy, binding.config())
+                    .map_err(|_| "retained teletext output policies are incompatible")?;
+            }
+            Ok(output)
+        }) {
             Ok(output) => Some(output),
             Err(reason) => {
                 tracing::warn!(
@@ -1708,11 +2042,15 @@ async fn serve_channel_stream_admitted_inner(
                     reason,
                     "retained MPEG-TS reserve refused"
                 );
-                if let Some(playback) = retained_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
-                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    capacity_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &graphics_cleanup_dirs,
+                    Some(&mut dynamic_text_controllers),
+                )
+                .await;
+
                 return (StatusCode::UNSUPPORTED_MEDIA_TYPE, reason).into_response();
             }
         }
@@ -1733,6 +2071,7 @@ async fn serve_channel_stream_admitted_inner(
         retained_output
             .as_ref()
             .map(|output| (output.terminal.clone(), output.completed.clone())),
+        output,
     )
     .await
     {
@@ -1809,7 +2148,11 @@ async fn serve_segmenter_wrapper_stream(
     state: &AppState,
     channel: &Channel,
     query: &HlsQuery,
+    output: TeletextOutputAdmission,
 ) -> Response {
+    if output.validate_format(OutputFormat::MpegTs).is_err() {
+        return teletext_output_unavailable();
+    }
     let Some(streaming_addr) = state.streaming_http_addr.get() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -1904,6 +2247,7 @@ async fn serve_segmenter_wrapper_stream(
                 None,
                 None,
                 None,
+                output,
             )
             .await;
         }
@@ -1927,6 +2271,7 @@ async fn serve_segmenter_wrapper_stream(
         capacity_reservation,
         None,
         None,
+        output,
     )
     .await
     {
@@ -2004,7 +2349,14 @@ fn segmenter_wrapper_wait_failure_response(
     }
 }
 
-async fn serve_legacy_concat_stream(state: &AppState, channel: &Channel) -> Response {
+async fn serve_legacy_concat_stream(
+    state: &AppState,
+    channel: &Channel,
+    output: TeletextOutputAdmission,
+) -> Response {
+    if output.validate_format(OutputFormat::MpegTs).is_err() {
+        return teletext_output_unavailable();
+    }
     let Some(internal_addr) = state.internal_http_addr.get() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -2034,6 +2386,7 @@ async fn serve_legacy_concat_stream(state: &AppState, channel: &Channel) -> Resp
                 None,
                 None,
                 None,
+                output,
             )
             .await;
         }
@@ -2057,6 +2410,7 @@ async fn serve_legacy_concat_stream(state: &AppState, channel: &Channel) -> Resp
         capacity_reservation,
         None,
         None,
+        output,
     )
     .await
     {
@@ -2191,6 +2545,7 @@ async fn mpeg_ts_capacity_wait_response(
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
+    output: TeletextOutputAdmission,
 ) -> Response {
     let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
     let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
@@ -2232,6 +2587,7 @@ async fn mpeg_ts_capacity_wait_response(
         retry,
         remote_stream,
         subtitle_owner,
+        output,
     );
     let mut response = body.into_response();
     response
@@ -3540,12 +3896,36 @@ struct StreamRetryAttempt {
     prepared: Option<PreparedRemoteStreamInput>,
 }
 
+fn retained_retry_input(
+    result: Result<
+        Option<ersatzrs_infra::published_interval_source::RetainedIntervalPlayback>,
+        ersatzrs_infra::addon_media_list_item_runtime::ItemRuntimeError,
+    >,
+) -> Result<
+    Option<ersatzrs_infra::published_interval_source::RetainedIntervalPlayback>,
+    StreamSpawnError,
+> {
+    match result {
+        Ok(playback) => Ok(playback),
+        Err(
+            ersatzrs_infra::addon_media_list_item_runtime::ItemRuntimeError::TerminationUnconfirmed,
+        ) => Err(StreamSpawnError::CleanupUnconfirmed(
+            "retained retry producer cleanup could not be confirmed".into(),
+        )),
+        Err(_) => Ok(None),
+    }
+}
+
 type DeferredStreamRetry = Box<
     dyn FnOnce(
             StreamRetryMode,
             Arc<Notify>,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Option<StreamRetryAttempt>> + Send>,
+            Box<
+                dyn std::future::Future<
+                        Output = Result<Option<StreamRetryAttempt>, StreamSpawnError>,
+                    > + Send,
+            >,
         > + Send,
 >;
 
@@ -3556,7 +3936,7 @@ impl StreamRetryBuilder {
         self,
         mode: StreamRetryMode,
         cancel: &Arc<Notify>,
-    ) -> Option<StreamRetryAttempt> {
+    ) -> Result<Option<StreamRetryAttempt>, StreamSpawnError> {
         (self.0)(mode, cancel.clone()).await
     }
 }
@@ -3568,11 +3948,11 @@ fn immediate_stream_retry(
 ) -> StreamRetryBuilder {
     StreamRetryBuilder(Box::new(move |mode, _| {
         Box::pin(async move {
-            build(mode).map(|command| StreamRetryAttempt {
+            Ok(build(mode).map(|command| StreamRetryAttempt {
                 command,
                 source_stream: None,
                 prepared: None,
-            })
+            }))
         })
     }))
 }
@@ -3632,6 +4012,8 @@ enum DirectStreamOutcome {
     Completed,
     Cancelled,
     Failed(DirectStreamFailure),
+    TransportFailed(TeletextPumpError),
+    CleanupUnconfirmed,
 }
 
 #[derive(Default)]
@@ -3720,6 +4102,7 @@ async fn spawn_stream_body(
     capacity_reservation: Option<ActiveTranscodeReservation>,
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
+    output: TeletextOutputAdmission,
 ) -> Result<Body, StreamSpawnError> {
     spawn_stream_body_with_prepared_input(
         command,
@@ -3733,6 +4116,7 @@ async fn spawn_stream_body(
         None,
         None,
         None,
+        output,
     )
     .await
 }
@@ -3785,6 +4169,7 @@ async fn spawn_stream_body_with_prepared_input(
     prepared: Option<PreparedRemoteStreamInput>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
+    output: TeletextOutputAdmission,
 ) -> Result<Body, StreamSpawnError> {
     if let Some(song) = retry.as_ref().and_then(|retry| retry.song.clone()) {
         render_stream_song(song, capacity_reservation.clone(), None).await?;
@@ -3815,16 +4200,19 @@ async fn spawn_stream_body_with_prepared_input(
                 if let Some(song) = song {
                     song.confirm_reaped();
                 }
-            } else if song.is_some() {
+            } else {
                 if let Some(reservation) = &capacity_reservation {
                     reservation.retain_until_restart();
+                }
+                if let Some(owner) = subtitle_owner {
+                    owner.preserve_after_unconfirmed_cleanup();
                 }
             }
             return Err(error);
         }
     };
     if child.stdout.is_none() {
-        return match child.kill().await {
+        return match reap_stream_process(&mut child).await {
             Ok(()) => {
                 if let Some(song) = song {
                     song.confirm_reaped();
@@ -3832,10 +4220,11 @@ async fn spawn_stream_body_with_prepared_input(
                 Err(StreamSpawnError::MissingStdout)
             }
             Err(error) => {
-                if song.is_some() {
-                    if let Some(reservation) = &capacity_reservation {
-                        reservation.retain_until_restart();
-                    }
+                if let Some(reservation) = &capacity_reservation {
+                    reservation.retain_until_restart();
+                }
+                if let Some(owner) = subtitle_owner {
+                    owner.preserve_after_unconfirmed_cleanup();
                 }
                 Err(StreamSpawnError::CleanupUnconfirmed(error.to_string()))
             }
@@ -3846,9 +4235,9 @@ async fn spawn_stream_body_with_prepared_input(
     let handle_cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let (body, output_completion) = stream_body_for_output(reader, handle_cancel, &output);
 
     tokio::spawn(async move {
-        let _subtitle_owner = subtitle_owner;
         let capacity_guard = capacity_reservation;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
@@ -3860,16 +4249,22 @@ async fn spawn_stream_body_with_prepared_input(
             &channel_number,
             &mut retry,
             remote_stream.as_ref(),
+            &output,
         )
         .await;
-        let cleanup_unconfirmed = song_owner
-            .as_ref()
-            .is_some_and(|song| song.cleanup_unconfirmed());
+        let cleanup_unconfirmed = matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed)
+            || song_owner
+                .as_ref()
+                .is_some_and(|song| song.cleanup_unconfirmed());
         if cleanup_unconfirmed {
             if let Some(reservation) = &capacity_guard {
                 reservation.retain_until_restart();
             }
+            if let Some(owner) = subtitle_owner {
+                owner.preserve_after_unconfirmed_cleanup();
+            }
         }
+        let close_output = terminal.is_some() || output_completion.is_some();
         if let Some((terminal, completed)) = terminal {
             terminal.store(
                 if matches!(outcome, DirectStreamOutcome::Completed) {
@@ -3880,6 +4275,11 @@ async fn spawn_stream_body_with_prepared_input(
                 Ordering::Release,
             );
             completed.notify_one();
+        }
+        if let Some(completion) = output_completion {
+            let _ = completion.send(stream_output_result(&outcome));
+        }
+        if close_output {
             drop(writer);
         }
         session_registry.unregister_direct(&handle).await;
@@ -3891,7 +4291,7 @@ async fn spawn_stream_body_with_prepared_input(
         }
     });
 
-    Ok(guarded_stream_body(reader, handle_cancel))
+    Ok(body)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3910,18 +4310,21 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
+    output: TeletextOutputAdmission,
 ) -> Body {
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let (body, output_completion) = stream_body_for_output(reader, handle_cancel, &output);
 
     tokio::spawn(async move {
-        let _subtitle_owner = subtitle_owner;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
         let staged_song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
+        let mut output_result = Err("encoded output ended before producer startup");
+        let mut cleanup_unconfirmed = false;
         loop {
             let limit = match load_active_transcode_limit(&pool).await {
                 Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
@@ -3954,19 +4357,23 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(child) => {
                         let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
-                        let _ = supervise_stream_command_with_retry(
+                        let outcome = supervise_stream_command_with_retry(
                             child,
                             &mut writer,
                             &cancel,
                             &channel_number,
                             &mut retry,
                             remote_stream.as_ref(),
+                            &output,
                         )
                         .await;
-                        if song_owner
-                            .as_ref()
-                            .is_some_and(|song| song.cleanup_unconfirmed())
-                        {
+                        output_result = stream_output_result(&outcome);
+                        cleanup_unconfirmed =
+                            matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed)
+                                || song_owner
+                                    .as_ref()
+                                    .is_some_and(|song| song.cleanup_unconfirmed());
+                        if cleanup_unconfirmed {
                             capacity_guard.retain_until_restart();
                         }
                     }
@@ -3976,7 +4383,8 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                             {
                                 song.confirm_reaped();
                             }
-                        } else if retry.as_ref().is_some_and(|retry| retry.song.is_some()) {
+                        } else {
+                            cleanup_unconfirmed = true;
                             capacity_guard.retain_until_restart();
                         }
                         tracing::warn!(
@@ -4032,21 +4440,38 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                     );
                     break;
                 }
+                DirectStreamOutcome::TransportFailed(error) => {
+                    tracing::warn!(%error, channel_number, "MPEG-TS slate transport failed");
+                    break;
+                }
+                DirectStreamOutcome::CleanupUnconfirmed => {
+                    cleanup_unconfirmed = true;
+                    break;
+                }
             }
+        }
+        if let Some(completion) = output_completion {
+            let _ = completion.send(output_result);
+            drop(writer);
         }
         session_registry.unregister_direct(&handle).await;
         shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-        if !staged_song_owner
-            .as_ref()
-            .is_some_and(|song| song.cleanup_unconfirmed())
-        {
+        let cleanup_unconfirmed = cleanup_unconfirmed
+            || staged_song_owner
+                .as_ref()
+                .is_some_and(|song| song.cleanup_unconfirmed());
+        if cleanup_unconfirmed {
+            if let Some(owner) = subtitle_owner {
+                owner.preserve_after_unconfirmed_cleanup();
+            }
+        } else {
             for path in cleanup_paths {
                 cleanup_stream_artifact(&path).await;
             }
         }
     });
 
-    guarded_stream_body(reader, handle_cancel)
+    body
 }
 
 // One linear failure-classification ladder: graph denial, then decode denial,
@@ -4061,6 +4486,7 @@ async fn supervise_stream_command_with_retry(
     channel_number: &str,
     retry: &mut Option<StreamDenialRetry>,
     remote_stream: Option<&ResolvedRemoteStream>,
+    output: &TeletextOutputAdmission,
 ) -> DirectStreamOutcome {
     let song = retry.as_ref().and_then(|retry| retry.song.clone());
     loop {
@@ -4086,18 +4512,20 @@ async fn supervise_stream_command_with_retry(
                         source: Some(song.stream.clone()),
                     })
                 }),
+            output,
         )
         .await;
         let DirectStreamOutcome::Failed(mut stderr) = outcome else {
             return outcome;
         };
         if stderr.wrote_media
-            && remote_stream.is_some_and(|stream| {
-                matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
-            })
+            && (output.binding().is_some()
+                || remote_stream.is_some_and(|stream| {
+                    matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
+                }))
         {
-            // The outer reserve may already contain this attempt's TS prefix.
-            // Never concatenate a restarted programme clock onto those bytes.
+            // The reserve or authored response may already contain this attempt's
+            // TS prefix. Never concatenate a restarted clock onto those bytes.
             return DirectStreamOutcome::Failed(stderr);
         }
         let Some(mut context) = retry.take() else {
@@ -4143,20 +4571,27 @@ async fn supervise_stream_command_with_retry(
                 evidence,
                 "retrying channel stream once through the next proven graph after a runtime graph failure"
             );
-            let Some(retry_command) = build_retry_command
+            let retry_command = match build_retry_command
                 .build(
                     StreamRetryMode::HardwareGraphDenied(context.runtime_capabilities.clone()),
                     cancel,
                 )
                 .await
-            else {
-                tracing::warn!(
-                    channel_number = %channel_number,
-                    "rebuilt command was refused; not retrying after graph denial"
-                );
-                return DirectStreamOutcome::Failed(
-                    "rebuilt command was refused".to_owned().into(),
-                );
+            {
+                Ok(Some(attempt)) => attempt,
+                Ok(None) => {
+                    tracing::warn!(
+                        channel_number = %channel_number,
+                        "rebuilt command was refused; not retrying after graph denial"
+                    );
+                    return DirectStreamOutcome::Failed(
+                        "rebuilt command was refused".to_owned().into(),
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel_number, "retained retry preparation failed");
+                    return failed_stream_spawn_outcome(&error);
+                }
             };
             let next_graph_operation =
                 ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
@@ -4192,7 +4627,7 @@ async fn supervise_stream_command_with_retry(
                         }
                     }
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after graph denial");
-                    return DirectStreamOutcome::Failed(error.to_string().into());
+                    return failed_stream_spawn_outcome(&error);
                 }
             }
             continue;
@@ -4227,20 +4662,27 @@ async fn supervise_stream_command_with_retry(
             let Some(rebuild) = context.rebuild.take() else {
                 return DirectStreamOutcome::Failed(stderr);
             };
-            let Some(retry_command) = rebuild
+            let retry_command = match rebuild
                 .build(
                     StreamRetryMode::HardwareDecodeDenied(context.runtime_capabilities.clone()),
                     cancel,
                 )
                 .await
-            else {
-                tracing::warn!(
-                    channel_number = %channel_number,
-                    "rebuilt command was refused; not retrying after hardware decode denial"
-                );
-                return DirectStreamOutcome::Failed(
-                    "rebuilt command was refused".to_owned().into(),
-                );
+            {
+                Ok(Some(attempt)) => attempt,
+                Ok(None) => {
+                    tracing::warn!(
+                        channel_number = %channel_number,
+                        "rebuilt command was refused; not retrying after hardware decode denial"
+                    );
+                    return DirectStreamOutcome::Failed(
+                        "rebuilt command was refused".to_owned().into(),
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel_number, "retained retry preparation failed");
+                    return failed_stream_spawn_outcome(&error);
+                }
             };
             let next_graph_operation =
                 ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
@@ -4276,7 +4718,7 @@ async fn supervise_stream_command_with_retry(
                         }
                     }
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
-                    return DirectStreamOutcome::Failed(error.to_string().into());
+                    return failed_stream_spawn_outcome(&error);
                 }
             }
             continue;
@@ -4301,18 +4743,27 @@ async fn supervise_stream_command_with_retry(
             acceleration = ?context.acceleration,
             "retrying channel stream once with software video encode after runtime hardware encoder rejection"
         );
-        let Some(retry_command) = build_retry_command
+        let retry_command = match build_retry_command
             .build(
                 StreamRetryMode::HardwareEncodeDenied(context.runtime_capabilities),
                 cancel,
             )
             .await
-        else {
-            tracing::warn!(
-                channel_number = %channel_number,
-                "rebuilt command was refused; not retrying after hardware encoder rejection"
-            );
-            return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned().into());
+        {
+            Ok(Some(attempt)) => attempt,
+            Ok(None) => {
+                tracing::warn!(
+                    channel_number = %channel_number,
+                    "rebuilt command was refused; not retrying after hardware encoder rejection"
+                );
+                return DirectStreamOutcome::Failed(
+                    "rebuilt command was refused".to_owned().into(),
+                );
+            }
+            Err(error) => {
+                tracing::warn!(%error, channel_number = %channel_number, "retained retry preparation failed");
+                return failed_stream_spawn_outcome(&error);
+            }
         };
         if let Some(song) = &song {
             song.mark_in_use();
@@ -4332,9 +4783,17 @@ async fn supervise_stream_command_with_retry(
                     }
                 }
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
-                return DirectStreamOutcome::Failed(error.to_string().into());
+                return failed_stream_spawn_outcome(&error);
             }
         }
+    }
+}
+
+fn failed_stream_spawn_outcome(error: &StreamSpawnError) -> DirectStreamOutcome {
+    if error.cleanup_confirmed() {
+        DirectStreamOutcome::Failed(error.to_string().into())
+    } else {
+        DirectStreamOutcome::CleanupUnconfirmed
     }
 }
 
@@ -4351,6 +4810,47 @@ fn guarded_stream_body(reader: tokio::io::DuplexStream, cancel: Arc<Notify>) -> 
     }))
 }
 
+type StreamOutputCompletion = tokio::sync::oneshot::Sender<Result<(), &'static str>>;
+
+fn stream_output_result(outcome: &DirectStreamOutcome) -> Result<(), &'static str> {
+    match outcome {
+        DirectStreamOutcome::Completed => Ok(()),
+        DirectStreamOutcome::Cancelled => Err("encoded output was cancelled"),
+        DirectStreamOutcome::Failed(_) => Err("encoded output producer failed"),
+        DirectStreamOutcome::TransportFailed(_) => Err("teletext transport failed"),
+        DirectStreamOutcome::CleanupUnconfirmed => Err("encoded output cleanup is unconfirmed"),
+    }
+}
+
+fn stream_body_for_output(
+    reader: tokio::io::DuplexStream,
+    cancel: Arc<Notify>,
+    output: &TeletextOutputAdmission,
+) -> (Body, Option<StreamOutputCompletion>) {
+    use futures_util::StreamExt as _;
+
+    if output.binding().is_none() {
+        return (guarded_stream_body(reader, cancel), None);
+    }
+    let (sender, completion) = tokio::sync::oneshot::channel();
+    let terminal = futures_util::stream::once(async move {
+        match completion.await {
+            Ok(Ok(())) => None,
+            Ok(Err(message)) => Some(Err(std::io::Error::other(message))),
+            Err(_) => Some(Err(std::io::Error::other(
+                "encoded output supervisor ended",
+            ))),
+        }
+    })
+    .filter_map(std::future::ready);
+    let guard = StreamBodyDisposeGuard { cancel };
+    let body = Body::from_stream(ReaderStream::new(reader).chain(terminal).map(move |chunk| {
+        let _held_until_body_drop = &guard;
+        chunk
+    }));
+    (body, Some(sender))
+}
+
 async fn supervise_stream_process(
     child: &mut RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
@@ -4365,8 +4865,15 @@ async fn supervise_stream_process(
         channel_number,
         remote_stream,
         None,
+        &TeletextOutputAdmission::plain(TeletextOutputRole::CapacitySlate),
     )
     .await
+}
+
+async fn reap_stream_process(child: &mut RemoteStreamProcess) -> std::io::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), child.kill())
+        .await
+        .unwrap_or_else(|_| Err(std::io::ErrorKind::TimedOut.into()))
 }
 
 #[expect(
@@ -4380,6 +4887,7 @@ async fn supervise_stream_process_with_retry_context(
     channel_number: &str,
     remote_stream: Option<&ResolvedRemoteStream>,
     retry: Option<StreamFailureContext>,
+    output: &TeletextOutputAdmission,
 ) -> DirectStreamOutcome {
     let mut stdout = child.stdout.take();
     let stderr_remote_stream = remote_stream.cloned();
@@ -4411,48 +4919,84 @@ async fn supervise_stream_process_with_retry_context(
     // write failure (client gone), or session cancellation.
     let pump = async {
         match stdout.as_mut() {
-            Some(stdout) => tokio::io::copy(stdout, writer).await,
+            Some(stdout) => match output.binding() {
+                Some(binding) => {
+                    // Every child gets fresh PSI/PCR/continuity and timing state.
+                    forward_teletext_output(
+                        stdout,
+                        writer,
+                        binding.config(),
+                        binding.pages().clone(),
+                        binding.first_byte_timeout(),
+                    )
+                    .await
+                }
+                None => tokio::io::copy(stdout, writer)
+                    .await
+                    .map_err(|error| TeletextPumpError::Write(error.kind())),
+            },
+            None if output.binding().is_some() => Err(TeletextPumpError::EmptyOutput),
             None => Ok(0),
         }
     };
-    let wrote_media = tokio::select! {
+    let (wrote_media, transport_error) = tokio::select! {
+        biased;
+        () = cancel.notified() => {
+            tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
+            let reaped = match reap_stream_process(child).await {
+                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } true },
+                Err(error) => { tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream"); false },
+            };
+            let stderr = await_stderr_tail(stderr_task).await;
+            if !stderr.redacted_stderr.is_empty() {
+                tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
+            }
+            return if reaped { DirectStreamOutcome::Cancelled } else { DirectStreamOutcome::CleanupUnconfirmed };
+        }
         result = pump => {
-            if result.is_err() {
+            let empty_output = matches!(&result, Err(TeletextPumpError::EmptyOutput));
+            if result.is_err() && !empty_output {
                 // The body side is gone; stop the process instead of letting
                 // it block on a pipe nobody drains.
                 tracing::debug!(channel_number = %channel_number, "channel stream body writer failed; killing ffmpeg");
                 let _ = child.start_kill();
             }
-            result.map_or(true, |bytes| bytes > 0)
-        }
-        () = cancel.notified() => {
-            tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
-            match child.kill().await {
-                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } },
-                Err(error) => tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream"),
-            }
-            let stderr = await_stderr_tail(stderr_task).await;
-            if !stderr.redacted_stderr.is_empty() {
-                tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
-            }
-            return DirectStreamOutcome::Cancelled;
+            let wrote_media = !empty_output && result.as_ref().map_or(true, |bytes| *bytes > 0);
+            (wrote_media, output.binding().and_then(|_| result.err()))
         }
     };
 
+    // Close our pipe after forwarding/cancellation, including shell-producer
+    // failures, so an inherited stdout cannot retain an abandoned output epoch.
+    drop(stdout);
+
+    let mut cleanup_confirmed = false;
     let waited = tokio::select! {
         biased;
         () = cancel.notified() => {
-            match child.kill().await {
-                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } },
+            match reap_stream_process(child).await {
+                Ok(()) => { if let Some(song) = &song { song.confirm_reaped(); } cleanup_confirmed = true; },
                 Err(error) => tracing::warn!(%error, channel_number, "failed to reap cancelled channel stream after stdout closed"),
             }
             None
         },
-        result = child.wait() => Some(result),
+        result = async {
+            if output.binding().is_some() {
+                tokio::time::timeout(Duration::from_secs(5), child.wait())
+                    .await
+                    .unwrap_or_else(|_| Err(std::io::ErrorKind::TimedOut.into()))
+            } else {
+                child.wait().await
+            }
+        } => Some(result),
     };
     let Some(waited) = waited else {
         let _ = await_stderr_tail(stderr_task).await;
-        return DirectStreamOutcome::Cancelled;
+        return if cleanup_confirmed {
+            DirectStreamOutcome::Cancelled
+        } else {
+            DirectStreamOutcome::CleanupUnconfirmed
+        };
     };
     if waited.is_ok() {
         if let Some(song) = &song {
@@ -4462,16 +5006,34 @@ async fn supervise_stream_process_with_retry_context(
     match waited {
         Ok(status) if status.success() => {
             let _ = await_stderr_tail(stderr_task).await;
-            DirectStreamOutcome::Completed
+            transport_error.map_or(
+                DirectStreamOutcome::Completed,
+                DirectStreamOutcome::TransportFailed,
+            )
         }
         Ok(status) => {
             let mut stderr = await_stderr_tail(stderr_task).await;
             stderr.wrote_media = wrote_media;
+            if let Some(error) = transport_error {
+                // No transport existed when FFmpeg rejected a hardware graph
+                // before its first byte. Preserve that proven producer failure;
+                // all actual transport faults remain terminal, regardless of stderr.
+                if matches!(error, TeletextPumpError::EmptyOutput)
+                    && (stderr.graph_failure.is_some()
+                        || stderr.decode_denial.is_some()
+                        || stderr.encoder_open_failure)
+                {
+                    return DirectStreamOutcome::Failed(stderr);
+                }
+                tracing::warn!(%error, channel_number, "teletext transport ended unsuccessfully");
+                return DirectStreamOutcome::TransportFailed(error);
+            }
             if legacy_disconnect_is_success(
                 stderr.client_disconnect,
-                remote_stream.is_some_and(|stream| {
-                    matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
-                }),
+                output.binding().is_some()
+                    || remote_stream.is_some_and(|stream| {
+                        matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
+                    }),
             ) {
                 tracing::debug!(%status, stderr = %stderr, "ffmpeg channel stream ended after client disconnect");
                 DirectStreamOutcome::Completed
@@ -4481,10 +5043,8 @@ async fn supervise_stream_process_with_retry_context(
             }
         }
         Err(error) => {
-            if matches!(
-                tokio::time::timeout(Duration::from_secs(5), child.kill()).await,
-                Ok(Ok(()))
-            ) {
+            let reaped = reap_stream_process(child).await.is_ok();
+            if reaped {
                 if let Some(song) = &song {
                     song.confirm_reaped();
                 }
@@ -4492,7 +5052,13 @@ async fn supervise_stream_process_with_retry_context(
             let mut stderr = await_stderr_tail(stderr_task).await;
             stderr.wrote_media = wrote_media;
             tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
-            DirectStreamOutcome::Failed(stderr)
+            if !reaped {
+                return DirectStreamOutcome::CleanupUnconfirmed;
+            }
+            transport_error.map_or_else(
+                || DirectStreamOutcome::Failed(stderr),
+                DirectStreamOutcome::TransportFailed,
+            )
         }
     }
 }
@@ -6452,6 +7018,7 @@ mod tests {
             None,
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await
         .expect("spawn stream body");
@@ -6521,6 +7088,7 @@ mod tests {
             Some(reservation),
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await
         .expect("spawn stream body");
@@ -6550,6 +7118,7 @@ mod tests {
             Some(reservation),
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await
         .expect("spawn stream body");
@@ -6583,6 +7152,7 @@ mod tests {
             None,
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         );
         let release = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -6658,6 +7228,7 @@ mod tests {
             None,
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         );
 
         let bytes = axum::body::to_bytes(body, 64 * 1024)
@@ -6747,6 +7318,7 @@ mod tests {
             None,
             Some(owner),
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await
         .expect("spawn stream body");
@@ -7259,6 +7831,7 @@ mod tests {
             Some(reservation),
             None,
             None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await
         .expect("spawn genuine video-only native body");
@@ -7871,6 +8444,7 @@ mod tests {
             "1",
             &mut retry,
             None,
+            &TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await;
 
@@ -7972,6 +8546,7 @@ mod tests {
             "1",
             &mut retry,
             None,
+            &TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await;
 
@@ -8086,6 +8661,7 @@ mod tests {
             "1",
             &mut retry,
             None,
+            &TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
         )
         .await;
 
