@@ -17,6 +17,7 @@ pub mod locator;
 pub mod options;
 pub mod pipeline;
 pub mod runtime;
+pub mod teletext;
 pub mod teletext_probe;
 pub mod version;
 

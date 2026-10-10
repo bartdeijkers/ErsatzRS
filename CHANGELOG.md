@@ -17,7 +17,13 @@ release section when tagging a release.
 
 - Add typed teletext page/subpage drafts with checked identities, literal text
   and mosaic runs, style and navigation. Validate layout and internal references
-  without truncating content; character encoding and publication remain pending.
+  without truncating content. Encode bounded Western Latin DVB page packets with
+  explicit national subsets, accents and spacing controls; reject unsupported
+  text or attributes without replacing content. Add bounded serial page
+  carousels, timestamped DVB PES/TS packetization, validated PMT service
+  signalling and atomic null-packet replacement. Synthetic audiovisual tests
+  preserve programme packets and decoded frames/timestamps; live channel
+  integration and generation publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

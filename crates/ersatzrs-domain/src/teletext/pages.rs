@@ -13,8 +13,9 @@ use super::{
 pub const MAX_TELETEXT_PAGE_RECORDS: usize = 1_024;
 /// Physical columns; the first eight header cells belong to the address/control area.
 pub const TELETEXT_COLUMNS: usize = 40;
-/// Rows zero through twenty-five: header, body and optional navigation data.
-pub const TELETEXT_ROWS: usize = 26;
+/// Display rows zero through twenty-four; navigation shares row twenty-four.
+/// Packet X/25 carries non-display data and is not an extra authored display row.
+pub const TELETEXT_ROWS: usize = 25;
 
 /// Basic colour intent; DVB representability is checked by the encoder.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -319,7 +320,7 @@ impl TeletextPageDraft {
                 }
             }
         }
-        for row in 0_u8..25 {
+        for row in 0_u8..24 {
             let index = usize::from(row);
             if double_height[index] && content[index + 1] {
                 return Err(TeletextStructureError::DoubleHeight {

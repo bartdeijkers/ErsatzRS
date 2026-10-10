@@ -59,7 +59,7 @@ impl TeletextDecoderCapability {
     }
 }
 
-const TEXT_PROBE_ARGUMENTS: &[&str] = &[
+pub(crate) const TEXT_PROBE_ARGUMENTS: &[&str] = &[
     "-hide_banner",
     "-loglevel",
     "error",
@@ -83,7 +83,7 @@ const TEXT_PROBE_ARGUMENTS: &[&str] = &[
     "srt",
     "pipe:1",
 ];
-const BITMAP_PROBE_ARGUMENTS: &[&str] = &[
+pub(crate) const BITMAP_PROBE_ARGUMENTS: &[&str] = &[
     "-hide_banner",
     "-loglevel",
     "error",
@@ -239,7 +239,12 @@ async fn bounded_read(
     Ok(bytes)
 }
 
-async fn run_probe(ffmpeg: &str, args: &[&str], input: &[u8], limit: usize) -> io::Result<Vec<u8>> {
+pub(crate) async fn run_probe(
+    ffmpeg: &str,
+    args: &[&str],
+    input: &[u8],
+    limit: usize,
+) -> io::Result<Vec<u8>> {
     let mut child = Command::new(ffmpeg)
         .args(args)
         .kill_on_drop(true)

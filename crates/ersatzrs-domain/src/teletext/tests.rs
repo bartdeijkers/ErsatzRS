@@ -159,10 +159,13 @@ fn header_ownership_and_row_bounds_are_validated_without_truncation() {
         value.validate_structure(),
         Err(TeletextStructureError::Run { row: 1, .. })
     ));
-    value.rows[1].row = 26;
+    value.rows[1].runs[0].column = 0;
+    value.rows[1].row = 24;
+    assert_eq!(value.validate_structure(), Ok(()));
+    value.rows[1].row = 25;
     assert!(matches!(
         value.validate_structure(),
-        Err(TeletextStructureError::Row { row: 26, .. })
+        Err(TeletextStructureError::Row { row: 25, .. })
     ));
 }
 
@@ -194,7 +197,7 @@ fn double_height_cannot_hide_authored_lower_row_content() {
     ));
     value.rows[1].runs.clear();
     assert_eq!(value.validate_structure(), Ok(()));
-    for row in [23, 24, 25] {
+    for row in [23, 24] {
         value.rows[0].row = row;
         assert!(matches!(
             value.validate_structure(),

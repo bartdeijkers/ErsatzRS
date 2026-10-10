@@ -178,7 +178,9 @@ impl From<TeletextLanguage> for String {
     }
 }
 
-/// The three national-option bits, kept separate from language/region identity.
+/// Three-bit national selection, in C12/C13/C14 order with C12 most significant.
+/// This value stays separate from language/region identity; encoders place the
+/// bits into their standards-defined header positions.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "u8", into = "u8")]
 pub struct TeletextNationalOption(u8);
@@ -195,7 +197,7 @@ impl TeletextNationalOption {
         }
     }
 
-    /// Original header bit value.
+    /// Original three-bit selection value.
     #[must_use]
     pub const fn get(self) -> u8 {
         self.0

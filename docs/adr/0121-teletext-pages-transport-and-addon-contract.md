@@ -14,8 +14,26 @@ exact-page text and colour bitmap probes against an independent synthetic DVB
 fixture. Decoder outcomes have localized Health guidance and runtime-bound
 troubleshooting export. Domain drafts now retain checked page/subpage identities,
 typed text/mosaic runs, attributes and navigation, with structural validation.
-These drafts do not freeze the versioned add-on schema or prove character-set
-encoding, spacing-control occupancy, generation publication or transport.
+The FFmpeg crate now encodes bounded Western Latin page packets, including
+physical spacing controls, X/26 character enhancements, X/27 editorial links
+and X/28 character-set designation. Independent FFmpeg decoding verifies exact
+accented text, all seven national repertoires, boxed captions and colour output
+on Linux x64/Windows and emulated ARM64/ARMv7. Other regions, older-receiver
+compatibility and editorial-link CRC/client acceptance remain unproven.
+The bounded serial carousel now plans 20 ms erase/packet intervals, uses reserved
+mFF termination and permits set replacement only at a cycle boundary. Its PES/TS
+packetizer preserves exact PTS, structured stuffing and continuity across cycles.
+Independent decoder and TSDuck checks exercise this packetization in calibration
+PSI/PCR. PMT planning now validates complete sections, preserves existing
+metadata/PCR and adds service descriptors; bounded null-slot replacement fails
+without changing packets or counters when preflight rejects input. It uses
+mpeg2ts-reader for packet/PSI/descriptor parsing and MPEG CRC. A finite real
+FFmpeg audiovisual fixture proves unchanged AV/PCR packets and decoded frames/
+timestamps with independent TSDuck signalling checks. Input PSI assembly,
+whole-program PID ownership, actual output pacing, buffer/rate admission and
+live channel integration remain open. These drafts do not freeze the
+versioned add-on schema or establish generation publication or production
+delivery.
 This does not establish engine, six-RID packaging,
 scanner, page-management UI or client acceptance. The
 `teletext-support` parity record and P9A-01 through P9B-02 own those claims.
@@ -34,7 +52,8 @@ that FFmpeg 9 can decode correctly signalled DVB packets into text and bitmaps.
 ### Page and service model
 
 Use EN 300 706 Level 1/1.5 semantics: 40 columns, a header with 32 authored
-character positions, 24 body rows and an optional navigation row. A display
+character positions and body rows 1–24, with navigation sharing row 24 when
+used. Packet X/25 is not an extra display row (EN 300 706 table 25). A display
 page number is decimal 100–899; magazine 8 has wire value zero. Subcodes retain
 their standards-defined identity independently from a page number. Multiple
 subpages cycle within a page and remain independently addressable in the viewer.

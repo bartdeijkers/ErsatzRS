@@ -1223,6 +1223,79 @@ All 32 domain tests pass, including 11 teletext regressions. This is not a
 frozen versioned add-on schema, charset or spacing-control encoding, generation
 publication, persistence, viewer or DVB transport. No runtime behavior or
 milestone acceptance is claimed; status and prerequisites remain unchanged.
+
+2026-10-10 packet-encoding checkpoint: `crates/ersatzrs-ffmpeg/src/teletext/`
+validates physical spacing-control cells and exact Western Latin representation,
+then emits bounded EN 300 472 units with header/subcode identity, X/26 accents,
+X/27 links and explicit X/28 national-set designation. Display rows are 0–24;
+X/25 is non-display data. The reviewed wire snapshot, exhaustive Hamming parity
+checks, enhancement limits and all-or-nothing page-set tests pass. All 433 domain/
+FFmpeg regular tests pass; 22 ignored tests are not included in that claim.
+The separate authored-packet decoder test passes exact accented text, all seven
+national repertoires, boxed captions and cyan/green pixels with default decoder
+settings on the P9A-02 exact v2.0.6 Linux x64 and Windows executables, plus ARM64/
+ARMv7 under QEMU with matching Bookworm sysroots. Native Windows FFmpeg execution
+through WSL interop is not full native application acceptance; QEMU is emulated
+proof. Strict affected Clippy, architecture lint and dependency licenses pass.
+Other regions, older receivers, editorial-link CRC/client proof, production
+carousel/PES/PSI/PID/capacity ownership, generation publication, viewer, source
+persistence and the versioned add-on contract remain open. No production output,
+content add-on, milestone acceptance or prerequisite completion is claimed.
+
+2026-10-10 carousel/PES checkpoint: `teletext/carousel.rs` plans bounded batches
+with 20 ms erase/packet spacing, exact page/subpage order, reserved mFF closing
+headers and whole-set replacement only at a cycle boundary. `transport.rs`
+emits private_stream_1 PES with the fixed 45-byte header, exact 33-bit PTS,
+structured stuffing and payload-only TS packets, at most eight per batch, with
+continuity across cycles. Packet ordering follows EN 300 706 annex B.2.
+All 439 domain/FFmpeg regular tests pass (24 ignored); strict FFmpeg Clippy and
+the reviewed wire snapshot pass. Both authored and packetized decoder tests
+pass on the exact P9A-02 four-RID executables, with the previously recorded
+native/emulated boundaries. TSDuck 3.44-4676 reports zero invalid syncs,
+transport errors, unreferenced PIDs, invalid PES prefixes, discontinuities and
+PTS/PCR leaps for the independently wrapped calibration stream; its regression
+also detects an intentionally damaged counter. Reproduction commands live in
+`crates/ersatzrs-ffmpeg/src/fixtures/README.md`; test names are
+`real_runtime_decodes_carousel_and_packetized_pes` and
+`real_tsduck_checks_packetized_pes_and_detects_counter_damage`.
+Protocol-library evaluation: dvb-vbi covers the typed VBI data field, while
+mpeg2ts-reader 0.18.2 covers borrowing packet/PSI/PES reads. Neither is selected
+for this fixed teletext-specific serializer; production PSI parsing/multiplexer
+work must reuse a suitable library where warranted under ADR 0121. Context7
+had no credible mpeg2ts-reader match; primary crate documentation was consulted.
+Calibration PAT/PMT/PCR is fixture-owned; actual programme pacing, buffer/rate
+admission, PMT/PID ownership, null-packet replacement, output integration and
+host generation fencing/publication are not implemented or accepted. This
+checkpoint does not waive the audiovisual/TSDuck playback gate, six-RID proof,
+source metadata, native/Next matrix, browser viewer or add-on acceptance.
+
+2026-10-10 PMT/null-slot checkpoint: `teletext/signalling.rs` uses
+mpeg2ts-reader 0.18.2 for packet/PSI/descriptor parsing and MPEG CRC. Complete
+current PMTs require valid CRC, exact record consumption, usable PCR, no owned
+PID/CA collision and sufficient section capacity. Rewriting preserves all
+existing descriptors and stream/PCR identities, increments version and adds
+host-derived initial-page/subtitle language descriptors. Bounded null-slot
+preflight rejects malformed/scrambled packets, observed PID collisions or
+insufficient capacity without changing input bytes or packetizer continuity.
+Seven focused regressions and all 446 domain/FFmpeg regular tests pass (25
+ignored). Strict affected Clippy, formatting, architecture lint and all cargo-deny
+checks pass. The selected library and its locked dependencies are license-audited;
+primary registry source informed the wrapper's exact-consumption validation.
+`real_runtime_adds_signalled_pages_without_changing_av_packets` creates real
+synthetic MPEG-2/AAC CBR output at 5 Mbit/s, installs the PMT and replaces only
+available null slots across four page cycles. Every original AV/PCR/PAT/SDT
+packet remains byte-identical at its original position; decoded AV frame hashes
+and timestamps match. TSDuck 3.44-4676 confirms the PCR-derived rate, Dutch
+initial-page/subtitle descriptors, private_stream_1 and zero sync, transport,
+reference, continuity or timestamp errors. FFmpeg decodes both authored texts.
+The test passes on the exact P9A-02 Linux x64/Windows executables and emulated
+ARM64/ARMv7. Native application and macOS acceptance remain unproven.
+Reproduction lives in the fixture README. This is a finite single-program,
+one-packet source-PMT fixture, not production PSI assembly, whole-program PID
+ownership, growing-PMT installation, asynchronous pacing/buffer/rate admission
+or live output integration. Generation fencing/publication, source metadata,
+viewer and add-on implementation remain open; no milestone status or required
+acceptance gate changes.
 '''
 
 [[milestone]]

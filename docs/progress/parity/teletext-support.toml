@@ -18,9 +18,23 @@ is claimed.
 
 Current ErsatzRS scanning and playback have no teletext-specific source model
 or selection path. The domain now has checked authored-page draft identities,
-typed runs/styles/navigation and structural validation. Character-set and
-spacing-control validation, versioned add-on DTOs, publication, persistence and
-delivery remain unimplemented; this is preparatory work, not P9A-04 acceptance.
+typed runs/styles/navigation and structural validation. The FFmpeg crate now
+encodes bounded Western Latin DVB page packets with physical spacing controls,
+X/26 accents, X/27 editorial links and explicit X/28 national-set designation.
+Independent decoding proves exact accents, all seven national repertoires,
+boxed captions and colours on Linux x64/Windows and emulated ARM64/ARMv7.
+Other regions, editorial-link CRC/client proof, versioned add-on DTOs,
+publication, persistence and production delivery remain open. A bounded serial
+carousel plans erase/packet intervals and boundary-only set replacement; a
+private PES/TS packetizer retains exact timestamps, stuffing and continuity.
+Independent decoder and TSDuck tests pass with calibration PSI/PCR, including
+a counter-damage negative control. PMT planning now retains source metadata/PCR
+and adds validated service signalling using mpeg2ts-reader. Bounded null-slot
+replacement leaves packets/counters unchanged on preflight failure. A finite
+real FFmpeg CBR fixture preserves AV/PCR packets and decoded frames/timestamps;
+independent TSDuck checks pass on the same four runtimes. Input PSI assembly,
+whole-program PID ownership, actual pacing/buffer/rate admission and live channel
+integration remain open; this is preparatory work, not P9A-04 acceptance.
 The selected FFmpeg runtime now has an optional bounded
 libzvbi decoder-options/text/colour-bitmap probe, independently proven on the
 pinned Linux x64 and native Windows executables, plus ARM64/ARMv7 under QEMU
@@ -82,7 +96,7 @@ id          = 'teletext-generic-engine-and-addon-boundary-is-unimplemented'
 adr         = '0120'
 description = 'P9A-04 must independently prove generic typed pages, validation, navigation, publication, rendering/delivery, localized management and health with synthetic pages and a fixture producer before the production content add-on begins. P9A-01 owns the technical contract and bounded lifecycle decisions.'
 discovered  = '2026-10-10'
-evidence    = 'ADRs 0120/0121 accept ownership, sequencing and the technical contract. `crates/ersatzrs-domain/src/teletext/` now has typed drafts and structural validation with regression tests, but no versioned add-on capability, charset/control-cell encoding, generation publication, rendering or transport exists. Milestone p9a-04 owns independent engine acceptance; prerequisites remain open.'
+evidence    = 'ADRs 0120/0121 accept ownership, sequencing and the technical contract. `crates/ersatzrs-domain/src/teletext/` now has typed drafts and structural validation with regression tests, and bounded Western Latin packet encoding with spacing-control validation and independent decoder proof in `crates/ersatzrs-ffmpeg/src/teletext/`. Other regions, editorial-link CRC/client acceptance, versioned add-on capability, generation publication, browser rendering and production multiplexing remain open. Bounded carousel planning and PES/TS packetization now have independent decoder/TSDuck evidence with calibration PSI/PCR; PMT planning and bounded null-slot replacement now preserve a finite real audiovisual fixture with independent signalling/decoder proof. Actual pacing/buffer/rate admission, input PSI assembly, whole-program PID ownership and live channel integration remain unimplemented. Milestone p9a-04 owns independent engine acceptance; prerequisites remain open.'
 resolved    = false
 
 [[debt]]

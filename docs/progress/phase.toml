@@ -1147,10 +1147,22 @@ pending. Existing v2.0.6 archives and the managed pin are unchanged, and the
 candidate build baseline does not waive existing OS/platform acceptance.
 The published v2.0.6 manifest lacks both macOS packages. Independent preparatory
 domain work adds checked authored-page drafts and structural validation with
-11 teletext regressions among 32 passing domain tests. Charset/control-cell
-encoding, versioned add-on DTOs, publication and transport remain open; P9A-04
-acceptance and its P9A-02/03 prerequisites are unchanged. The remaining four
-milestones are Not started.
+11 teletext regressions among 32 passing domain tests. The FFmpeg crate now
+encodes bounded Western Latin DVB packets with spacing controls, X/26 accents,
+X/27 links and X/28 national-set designation. Exact text, all seven national
+repertoires, captions and colours pass independent decoder probes on Linux
+x64/Windows and emulated ARM64/ARMv7. Other regions, editorial-link CRC/client
+proof, versioned add-on DTOs, publication and production transport remain open.
+The bounded serial carousel and PES/TS packetizer now pass independent decoder
+proof on the same four runtimes and TSDuck continuity/PES checks, including a
+counter-damage negative control. PMT planning and bounded atomic null-slot
+replacement now preserve AV/PCR packets and decoded frames/timestamps in a real
+FFmpeg CBR fixture, with independent decoder/TSDuck proof on those four runtimes.
+All 446 domain/FFmpeg regular tests pass; strict affected Clippy, formatting and
+the complete dependency audit pass. Input PSI assembly, whole-program PID
+ownership, actual pacing/buffer/rate admission and live channel integration
+remain open. P9A-04 acceptance and its P9A-02/03 prerequisites are unchanged.
+The remaining four milestones are Not started.
 Existing native/Next, source subtitle, six-RID,
 localized admin, health and runtime gates remain; UCU platform exceptions do
 not waive them. plans/teletext-support.md owns detailed future sequencing.
