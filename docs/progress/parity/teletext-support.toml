@@ -16,14 +16,21 @@ P9A-01 is Complete under accepted technical ADR 0121; P9A-02 is In progress.
 The remaining four milestones are Not started. No engine/content acceptance
 is claimed.
 
-Current ErsatzRS scanning and playback have no teletext-specific model or
-selection path. The selected FFmpeg runtime now has an optional bounded
+Current ErsatzRS scanning and playback have no teletext-specific source model
+or selection path. The domain now has checked authored-page draft identities,
+typed runs/styles/navigation and structural validation. Character-set and
+spacing-control validation, versioned add-on DTOs, publication, persistence and
+delivery remain unimplemented; this is preparatory work, not P9A-04 acceptance.
+The selected FFmpeg runtime now has an optional bounded
 libzvbi decoder-options/text/colour-bitmap probe, independently proven on the
 pinned Linux x64 and native Windows executables, plus ARM64/ARMv7 under QEMU
 with the Bookworm host-library baseline. The decoder result now has a dedicated
 localized Health check and runtime-bound troubleshooting export. Six-RID
 packaging, dependency/licensing and remaining platform acceptance remain open
-in P9A-02. The active sequence in
+in P9A-02. The separate FFmpeg repository has locally checked standalone
+package/source-inventory gates and unpublished native macOS candidate recipes;
+source changes do not establish macOS runtime or package acceptance.
+The active sequence in
 `plans/teletext-support.md` covers six-RID packaging, SQLite stream/page
 persistence and an explicit native/Next engine/source/output matrix. It reuses
 existing selection, provider identity, bounded preparation, programme context
@@ -75,7 +82,7 @@ id          = 'teletext-generic-engine-and-addon-boundary-is-unimplemented'
 adr         = '0120'
 description = 'P9A-04 must independently prove generic typed pages, validation, navigation, publication, rendering/delivery, localized management and health with synthetic pages and a fixture producer before the production content add-on begins. P9A-01 owns the technical contract and bounded lifecycle decisions.'
 discovered  = '2026-10-10'
-evidence    = 'ADR 0120 accepts ownership and sequencing only. No teletext add-on capability currently exists; milestone p9a-04 owns engine implementation and acceptance evidence.'
+evidence    = 'ADRs 0120/0121 accept ownership, sequencing and the technical contract. `crates/ersatzrs-domain/src/teletext/` now has typed drafts and structural validation with regression tests, but no versioned add-on capability, charset/control-cell encoding, generation publication, rendering or transport exists. Milestone p9a-04 owns independent engine acceptance; prerequisites remain open.'
 resolved    = false
 
 [[debt]]

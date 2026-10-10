@@ -1139,8 +1139,17 @@ Localized decoder Health and runtime-bound troubleshooting are implemented;
 eight headed Chromium/Firefox cases pass across both themes and JS/no-JS,
 including persisted Refresh, runtime identity and readable links. Complete
 both macOS packages/decoder proof, dependency/license provenance and remaining
-platform acceptance next;
-the published v2.0.6 manifest lacks both macOS packages. The remaining four
+platform acceptance next. The separate FFmpeg checkout has locally checked
+package probes, exact libzvbi
+source/notice helpers and a manual native macOS candidate workflow. Native Mac
+execution remains unproven; its branch publication/build authorization is
+pending. Existing v2.0.6 archives and the managed pin are unchanged, and the
+candidate build baseline does not waive existing OS/platform acceptance.
+The published v2.0.6 manifest lacks both macOS packages. Independent preparatory
+domain work adds checked authored-page drafts and structural validation with
+11 teletext regressions among 32 passing domain tests. Charset/control-cell
+encoding, versioned add-on DTOs, publication and transport remain open; P9A-04
+acceptance and its P9A-02/03 prerequisites are unchanged. The remaining four
 milestones are Not started.
 Existing native/Next, source subtitle, six-RID,
 localized admin, health and runtime gates remain; UCU platform exceptions do

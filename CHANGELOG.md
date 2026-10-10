@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Add typed teletext page/subpage drafts with checked identities, literal text
+  and mosaic runs, style and navigation. Validate layout and internal references
+  without truncating content; character encoding and publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

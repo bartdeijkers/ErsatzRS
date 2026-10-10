@@ -1133,6 +1133,34 @@ b221a3d32d3169fc563d2443af7f897d2259b1e8
 explicitly excludes macOS, and only Linux/Windows project runners are registered.
 Both macOS packages/native decoder proof and dependency/license provenance remain
 open; runtime readiness alone does not accept the authored engine or phase.
+2026-10-10 package-recipe checkpoint: the separate ErsatzRS-ffmpeg checkout at
+base b221a3d32d3169fc563d2443af7f897d2259b1e8 now has an unpublished standalone
+verify-teletext.py gate using the same original fixture, exact selected/excluded
+pages, caption timing, bitmap dimensions/colours and bounded processes. It
+passes against the four manifest-pinned binaries: direct Linux/Windows FFmpeg
+execution and explicitly emulated ARM64/ARMv7 with the recorded Bookworm
+sysroots. Output-overflow tests exposed an asyncio pipe-cleanup stall; draining
+without retaining output after killing the process corrects it. All 18 process,
+source-inventory and Mac bundle-rule tests pass; these are not native Mac proof.
+Source inspection distinguishes libzvbi 0.2.44 at
+41477c97c8edf7a01f1594b2a95b94f0117eed21 in the pinned x64/Windows recipe from
+0.2.45 at d3a5ee9f2b047bf16cd1ee5ccf6ec05ee75409d0 in the retained ARM recipes.
+The existing four archives lack the exact libzvbi source/notice inventory.
+New stage/verify helpers retain full upstream notices, recipe and Git source
+archive with checksums; both source revisions pass on unpublished temporary
+candidate copies. Their compiler/linkage provenance remains a separate check;
+none of the immutable v2.0.6 archives was modified.
+The same checkout has a manual build-only macOS workflow and native candidate
+recipe with pinned FFmpeg/libzvbi inputs, explicit Homebrew/core revision,
+bundled dylibs, dependency notices and relocated software-output gates. The
+macOS workflow passes actionlint; the existing-package workflow passes with
+only its two pre-existing custom runner labels excluded. Modified existing
+software checks retain passing Linux drawvg/drawtext and two AV1 round trips,
+plus 400 frames, selected alternate audio, PGS and bounded readrate pacing.
+Both macOS native jobs remain unrun, and the candidate macOS 15 build baseline
+does not authorize dropping older supported systems. Repository publication,
+native build results, dependency/source review and managed-pin promotion remain
+pending; source changes are not package or Phase 9 acceptance.
 '''
 
 [[milestone]]
@@ -1183,7 +1211,19 @@ browser/hydration proof, source-subtitle regressions and applicable smoke/TSDuck
 checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
-evidence = ''
+evidence = '''
+2026-10-10 preparatory domain checkpoint, while P9A-02/03 prerequisites remain
+open: `crates/ersatzrs-domain/src/teletext/` adds checked decimal page addresses,
+raw subcode identities, language/national-option and mosaic values, plus typed
+page-set drafts, style and navigation. Structural validation checks bounded
+record counts, unique addresses/rows/roles, logical extents, header ownership,
+overlap, double-height hidden rows and real navigation targets. Literal Unicode
+is preserved; control characters and unknown transport fields are rejected.
+All 32 domain tests pass, including 11 teletext regressions. This is not a
+frozen versioned add-on schema, charset or spacing-control encoding, generation
+publication, persistence, viewer or DVB transport. No runtime behavior or
+milestone acceptance is claimed; status and prerequisites remain unchanged.
+'''
 
 [[milestone]]
 id         = 'p9b-01'

@@ -19,6 +19,7 @@ pub mod metadata;
 pub mod playout;
 pub mod scanning;
 pub mod scheduling;
+pub mod teletext;
 
 pub use addon_list_lifecycle::*;
 pub use addon_list_selection::*;
@@ -39,3 +40,4 @@ pub use metadata::*;
 pub use playout::*;
 pub use scanning::*;
 pub use scheduling::*;
+pub use teletext::*;
