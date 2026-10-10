@@ -1,8 +1,9 @@
-//! Authored packet coding and supplied source headers (EN 300 706/472, ADR 0121).
+//! Authored packet coding and supplied source metadata (EN 300 706/472, ADR 0121).
 //!
 //! Encoding accepts host domain drafts, not raw add-on transport bytes.
-//! `source_header` reports one supplied DVB unit without acquisition or page
-//! readiness. Neither grants publication: carousel timing, PES/PSI/PID capacity,
+//! `source_pes` bounds one supplied PES; `source_header` reports one supplied DVB
+//! unit. Neither establishes acquisition or page readiness, nor grants
+//! publication: carousel timing, PES/PSI/PID capacity,
 //! output ownership and client acceptance remain separate transport obligations.
 
 mod buffer;
@@ -18,6 +19,7 @@ mod psi_framing;
 mod psi_monitor;
 mod signalling;
 pub mod source_header;
+pub mod source_pes;
 mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};

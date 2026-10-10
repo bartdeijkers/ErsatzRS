@@ -1182,6 +1182,39 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory supplied-PES framing checkpoint:
+The pure source_pes::SuppliedTeletextPes API borrows one complete supplied PES,
+validating its entire declared extent and all unit boundaries before exposure.
+The explicitly supported profile is aligned unscrambled private_stream_1 with
+fixed 45-byte headers, either no PTS or PTS alone and checked header stuffing.
+Other optional fields/DTS remain UnsupportedHeader. Existing mpeg2ts-reader
+0.18.2 checks PTS prefix/markers from an already bounded five-byte slice; absent
+PTS remains None, separate from reported zero or the full 33-bit range. No epoch,
+clock unwrap or individual-unit presentation time is inferred. The packet length
+field and required 184-byte multiple bound input to 65,504 bytes; parsing and
+iteration allocate nothing. Recognized teletext unit lengths are checked; raw
+unknown/stuffing units retain order and encoded length without interpretation.
+Framing is not DVB/PSI conformity or protected-header/body validity. Unknown
+unit IDs and cross-unit field/line ordering remain contextual constraints; only
+the separate source_header observer interprets a recognized supplied unit.
+All 15 new regressions pass in Nextest
+350ba6c8-6e08-44c6-b655-43694ea5f426: 13 units and two public integration tests.
+They prove safe truncation/declared ends, optional profiles, allowed metadata
+flags, PTS prefix/markers/absence/range, all raw stuffing/unknown lengths,
+malformed late/tail units and maximum packet/unit counts. Exact borrowed input
+pointers remain intact. The independent Python calibration producer's complete
+184-byte PES supplies PTS 90000 and original header 200 to the separate observer;
+a malformed final unit rejects the entire packet before earlier headers can be
+exposed. Independent read-only review found no concrete production defects or
+test-proof gaps. Strict FFmpeg all-target Clippy, workspace formatting and
+architecture-lint pass on final source.
+Existing encoder/header, descriptor/storage/acquisition/cleanup and native
+transport evidence remains applicable; production argv, pipeline, schema and
+scanner integration are unchanged. No TS assembler/discovery/acquisition,
+source-byte revision, page inventory/body/charset/readiness or selection is
+claimed. P9A-02 remains the active prerequisite; milestone status, dependencies
+and acceptance are unchanged. Historical checkpoints follow unchanged.
+
 2026-10-10 preparatory supplied-header observation checkpoint:
 The pure source_header::observe_dvb_teletext_header API checks one explicitly
 supplied 46-byte unit without transport discovery, source acquisition or page

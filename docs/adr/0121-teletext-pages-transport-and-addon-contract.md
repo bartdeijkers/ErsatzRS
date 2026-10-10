@@ -233,6 +233,21 @@ magazine context. This grants no transport discovery, acquisition or page
 readiness; source records remain `NotAcquired`. Primary envelope/protection
 references: [EN 300 472 §§4.3–4.4](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf#page=8)
 and [EN 300 706 §§7.1.2, 8.2, 9.3.1 and annex A.1](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf).
+A borrowed `source_pes::SuppliedTeletextPes` view checks one complete supplied
+packet before exposing length-coded units. Its supported header profile is
+unscrambled `private_stream_1`, aligned fixed 45-byte headers, with either no PTS
+or PTS alone; other optional fields are explicitly unsupported. Exact declared
+length, the 184-byte multiple, identifier, timestamp prefix/markers and header
+stuffing are checked. Recognized teletext units require 44 payload bytes; other
+unit IDs remain raw. Successful framing does not establish DVB/PSI conformity:
+a PSI-signalled teletext stream permits only IDs 2, 3 and 255, and cross-unit
+field/line ordering remains separate. Missing PTS is unknown, distinct from
+reported zero; no per-unit timing, epoch or clock synchronization is inferred.
+The view borrows supplied bytes without allocations or source discovery. It
+does not assemble TS, validate protected headers/text, acquire pages or alter
+stored `NotAcquired` state. Header observations still use the separate checked
+unit parser. The packet limits and timing distinction follow
+[EN 300 472 §§4.2–4.4, §5 and annex A](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf#page=8).
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

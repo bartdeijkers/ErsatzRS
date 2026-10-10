@@ -1273,6 +1273,11 @@ It never decodes text/body, infers charset/language or promotes stored observati
 to ready pages. P9A-03 records 14 new and three existing baseline passes; two
 final regressions pass after test-only uncorrectable-error fixture corrections.
 Production probe argv, scanner acquisition and page UI remain unchanged.
+A borrowed complete supplied-PES adapter now validates exact framing and every
+unit boundary before exposure. Missing PTS remains distinct from reported zero;
+other optional-header profiles remain explicit. Fifteen new tests, including
+independent calibration and malformed-final-unit rejection, pass. Independent
+review is clean; no source discovery or page readiness is claimed.
 Source revision across acquisition, actual page discovery/selection, full
 provider rescan acceptance and native Windows proof remain open.
 Full routed source captions/alternate audio, compatible continuous
