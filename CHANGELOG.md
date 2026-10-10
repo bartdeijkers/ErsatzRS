@@ -434,6 +434,10 @@ release section when tagging a release.
 
 - Keep Health links readable in both themes by using the table's text colour
   and an underline instead of an accent colour with insufficient dark contrast.
+- Keep XMLTV guides readable when metadata contains XML-forbidden characters.
+  Preserve rich guide fields, strictly validate custom template fragments before
+  appending them, sanitize per-item fallbacks, and validate the complete document
+  before returning a successful XML response.
 - Keep the on-demand checkpoint regression test's virtual clock stationary
   during SQLite I/O, avoiding intermittent CI write timeouts while preserving
   its checkpoint timing and viewer-position assertions.

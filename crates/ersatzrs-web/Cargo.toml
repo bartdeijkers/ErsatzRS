@@ -57,6 +57,8 @@ leptos_axum = "0.8"
 sqlx = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 quick-xml = "0.42"
+# Strict XMLTV validation: quick-xml tokenization alone accepts malformed XML.
+roxmltree = "0.21.1"
 base64 = "0.23.0"
 tempfile = "3.27.0"
 jsonwebtoken = { version = "11", features = ["rust_crypto"] }
