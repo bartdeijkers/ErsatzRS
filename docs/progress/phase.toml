@@ -1267,6 +1267,11 @@ no-op updates retain metadata. Missing records never prove absent pages.
 P9A-03 records 39 domain and 55 focused infra passes, including 28 new storage/
 schema regressions; strict domain/infra all-target Clippy pass. Independent review
 corrected final-write lease expiry with deterministic rollback proof.
+A pure supplied-unit parser now retains raw teletext header page/subcode/control
+metadata and correction counts, keeping non-headers and termination distinct.
+It never decodes text/body, infers charset/language or promotes stored observations
+to ready pages. P9A-03 records 14 new and three existing baseline passes; two
+final regressions pass after test-only uncorrectable-error fixture corrections.
 Production probe argv, scanner acquisition and page UI remain unchanged.
 Source revision across acquisition, actual page discovery/selection, full
 provider rescan acceptance and native Windows proof remain open.

@@ -1182,6 +1182,41 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory supplied-header observation checkpoint:
+The pure source_header::observe_dvb_teletext_header API checks one explicitly
+supplied 46-byte unit without transport discovery, source acquisition or page
+readiness. Known teletext envelopes validate length, reserved bits, either field,
+defined/undefined line offsets and framing before protected address decoding.
+Unknown/stuffing units remain explicit; non-header packets skip header data.
+Raw page/subcode/C4–C14 controls, field/line/unit classification and address/
+header correction counts survive. C6 never infers supplied unit type or forced/
+default descriptor policy; C12–C14 remain raw without charset/language context.
+FF termination never becomes a display page; FF:3F7F is rejected. Hamming 8/4
+corrects single-bit errors and rejects detected double errors, with no promise
+to detect all larger corruption or certify source bytes. Header text/body remain
+undecoded and stored source observations remain NotAcquired. Encoder behavior,
+FFmpeg argv, database schema, scanner and ordinary media projection are unchanged.
+All 14 new regressions pass in Nextest e1578f13-79f8-43ab-ac83-42fd673836df,
+including independent normative codewords, every single-bit/double-bit pattern,
+damaged full units, both fields/all valid line offsets, raw hex/subcode/control
+boundaries, classification independence and null-versus-termination semantics.
+The public integration case compares exact original Python calibration headers
+200/201/888 and keeps protected metadata independent from damaged header text.
+Three existing normative protection, header flags and carousel-repeat baselines
+pass in Nextest 27c01592-e40f-4c05-bdc4-a965624a77b2. Independent review found
+two fixtures used a correctable zero byte where an uncorrectable error was
+intended. Corrected double-bit fixtures and explicit rejection assertions pass
+both relevant final regressions in Nextest
+9fbfd804-0aa4-4d7f-afb7-775253fed267; production source is unchanged. Other
+new/baseline evidence remains valid. Review found no production defect.
+Strict FFmpeg all-target Clippy, workspace formatting and architecture-lint pass
+on final source. Earlier unchanged descriptor/storage/acquisition/cleanup and
+native audiovisual transport evidence is reused. Primary ETSI references are
+linked in ADR 0121. Actual acquisition, page inventory/body/charset readiness,
+source revision, scanner/provider persistence integration and selection remain
+open. Milestone status, dependencies and acceptance remain unchanged.
+Historical checkpoints follow unchanged.
+
 2026-10-10 preparatory report-only source storage checkpoint:
 Typed observations retain independent binding/provenance/PID/program/descriptor
 states, exact source/provider/version/stream/file association, opaque adapter

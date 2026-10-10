@@ -71,6 +71,11 @@ release section when tagging a release.
   reports on existing file or stream identity changes while preserving ordinary
   tracks. Actual page acquisition and selection remain pending; an adapter
   revision does not certify immutable source bytes.
+- Prepare checked raw teletext header observations from explicitly supplied DVB
+  units, preserving page/subcode/control bits, correction counts and independent
+  unit classification. Distinguish non-headers, termination and invalid metadata;
+  complete source acquisition, character-set context and page readiness remain
+  pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

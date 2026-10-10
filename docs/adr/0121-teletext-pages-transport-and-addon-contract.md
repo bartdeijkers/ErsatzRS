@@ -221,6 +221,18 @@ records never prove absent pages. Stream/file deletion cascades remove reports;
 narrow actual-change triggers also clear them before existing file upserts or
 in-place stream identity updates, preserving no-op writes and ordinary tracks.
 This does not enable scanner/provider acquisition or source-page selection.
+A separate pure parser now checks one explicitly supplied 46-byte DVB unit and
+reports protected header identity, correction counts and raw C4–C14 bits.
+Non-header units and FF termination stay distinct from page headers; the null
+FF:3F7F address is rejected. Hamming 8/4 corrects one-bit errors and rejects
+detected double errors; larger corruptions can alias accepted codewords. Neither
+acceptance nor a correction count certifies source bytes. Unit classification,
+C6 and descriptor/forced/default policy remain independent. No header text or
+body is decoded, and C12–C14 cannot choose charset/language without page or
+magazine context. This grants no transport discovery, acquisition or page
+readiness; source records remain `NotAcquired`. Primary envelope/protection
+references: [EN 300 472 §§4.3–4.4](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf#page=8)
+and [EN 300 706 §§7.1.2, 8.2, 9.3.1 and annex A.1](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf).
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production
