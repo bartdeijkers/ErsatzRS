@@ -176,7 +176,37 @@ scanner and 19 web regressions, followed by 38 locale/API/state/Health checks.
 Known stopped-worker scan errors use the existing persisted UI locale, preserving
 other transport outcomes and server-function routes. Strict affected Clippy and the WASM hydrate type-check pass. This adds no total-probe timeout, CLI signal handling, durable
 quarantine after lease expiry or provider-wide lifecycle guarantee. Extra probe
-fields, teletext scanning/persistence and native Windows acceptance remain open.
+output, teletext scanning/persistence and native Windows acceptance remain open.
+The separate `parse_ffprobe_json_with_teletext` API deserializes supplied JSON
+once and returns the ordinary media version with an ephemeral auxiliary
+snapshot. Only explicitly identified MPEG-TS `dvb_teletext` subtitle rows use
+the packed n9.0 base64 decoder. Global stream indexes remain distinct from PIDs
+and supplied program membership; every reported membership is retained rather
+than selecting the first program. Missing or conflicting PID/program identities
+remain explicitly unavailable or unusable, independently of descriptor usability.
+Auxiliary projection limits are resource policy after JSON deserialization,
+not DVB limits or an input-allocation/RSS bound. This does not acquire media,
+establish source revision, persist pages or discover a complete service/page
+inventory. Production probe arguments and ordinary track projection are unchanged.
+P9A-03 records 80 focused FFprobe passes and 15 relevant final parser/fixture
+passes after strict ASCII-hex PID validation; strict infra all-target Clippy
+and workspace formatting pass. Unchanged acquisition and cleanup evidence is reused.
+The n9.0 acquisition audit rules out adding a global data dump to the ordinary
+probe: `show_data` formats extradata for every selected stream, including large
+attachments, before output-key filtering. `select_streams` filters both root
+and program stream rows, so subtitle-only selection would erase ordinary audio
+and video from that probe. A future optional second subtitle acquisition can
+reuse bounded managed capture, with root `show_streams` and separately restricted
+`program`/`program_stream` entries; it must preserve ordinary metadata on auxiliary
+failure while retaining cleanup uncertainty as fatal. No additional probe flags
+are enabled. Before attachment or persistence, prove source revision across both
+opens and fence the corresponding media-version write with current scan
+ownership. A path hash or scan-write timestamp cannot establish that revision.
+FFprobe field aliases merge entries, and common side-data can repeat in program
+rows; output selection alone is not a child memory bound. Primary evidence:
+[n9.0 stream/program output](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L1888),
+[section-entry selection](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L2717)
+and [data formatting](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/textformat/avtextformat.c#L526).
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

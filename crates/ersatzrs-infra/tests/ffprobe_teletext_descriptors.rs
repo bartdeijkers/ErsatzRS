@@ -4,15 +4,37 @@
 
 use ersatzrs_domain::MediaStreamKind;
 use ersatzrs_infra::ffprobe::{
-    parse_ffprobe_json,
+    parse_ffprobe_json, parse_ffprobe_json_with_teletext,
     teletext::{
         project_packed_descriptors, PackedTeletextData, PackedTeletextProjection,
         ProjectedTeletextDescriptors,
     },
+    teletext_probe::{TeletextProbeEncoding, TeletextProbeSnapshot},
+    FfprobeMediaVersion,
 };
 
 fn fixture() -> serde_json::Value {
     serde_json::from_str(include_str!("fixtures/ffprobe_teletext_base64.json")).unwrap()
+}
+
+fn assert_ordinary_equivalent(mut actual: FfprobeMediaVersion, expected: &FfprobeMediaVersion) {
+    // Fresh scan timestamps are the only intentionally variable fields.
+    actual.version.date_added = expected.version.date_added;
+    actual.version.date_updated = expected.version.date_updated;
+    assert_eq!(&actual, expected);
+}
+
+fn enriched_fixture() -> serde_json::Value {
+    let mut metadata = fixture();
+    metadata["format"]["duration"] = serde_json::json!("12.5");
+    metadata["format"]["tags"] =
+        serde_json::json!({"TITLE": "Synthetic programme", "comment": "Fixture only"});
+    metadata["chapters"] = serde_json::json!([{"id": 0, "start_time": "1.0", "end_time": "3.0", "tags": {"title": "Chapter one"}}]);
+    metadata["streams"][0]["field_order"] = serde_json::json!("progressive");
+    metadata["streams"][0]["color_transfer"] = serde_json::json!("smpte2084");
+    metadata["streams"][1]["disposition"]["default"] = serde_json::json!(1);
+    metadata["streams"][2]["disposition"]["forced"] = serde_json::json!(1);
+    metadata
 }
 
 fn descriptors(stream: &serde_json::Value) -> ProjectedTeletextDescriptors {
@@ -58,8 +80,17 @@ fn ffprobe_teletext_fixture_keeps_source_pages_and_authored_language_separate() 
 
 #[test]
 fn ffprobe_teletext_metadata_preserves_existing_audio_and_subtitle_projection() {
-    let metadata = fixture();
-    let full = parse_ffprobe_json("synthetic.ts", &serde_json::to_vec(&metadata).unwrap()).unwrap();
+    let metadata = enriched_fixture();
+    let (full, additional) = parse_ffprobe_json_with_teletext(
+        "synthetic.ts",
+        &serde_json::to_vec(&metadata).unwrap(),
+        TeletextProbeEncoding::Ffprobe9Base64,
+    )
+    .unwrap();
+    assert!(matches!(additional, TeletextProbeSnapshot::Available(_)));
+    let legacy =
+        parse_ffprobe_json("synthetic.ts", &serde_json::to_vec(&metadata).unwrap()).unwrap();
+    assert_ordinary_equivalent(legacy, &full);
     let mut ordinary = metadata.clone();
     ordinary.as_object_mut().unwrap().remove("programs");
     for stream in ordinary["streams"].as_array_mut().unwrap() {
@@ -69,7 +100,16 @@ fn ffprobe_teletext_metadata_preserves_existing_audio_and_subtitle_projection() 
     }
     let stripped =
         parse_ffprobe_json("synthetic.ts", &serde_json::to_vec(&ordinary).unwrap()).unwrap();
-    assert_eq!(full.streams, stripped.streams);
+    assert_ordinary_equivalent(stripped, &full);
+    assert_eq!(full.chapters.len(), 1);
+    assert_eq!(
+        full.field_orders.get(&0).map(String::as_str),
+        Some("progressive")
+    );
+    assert_eq!(
+        full.format_metadata.get("title").map(String::as_str),
+        Some("Synthetic programme")
+    );
     assert_eq!(full.streams.len(), 5);
     assert_eq!(full.streams[1].kind, MediaStreamKind::Audio);
     assert_eq!(full.streams[1].language.as_deref(), Some("eng"));
@@ -84,7 +124,7 @@ fn ffprobe_teletext_metadata_preserves_existing_audio_and_subtitle_projection() 
 
 #[test]
 fn unusable_additional_teletext_metadata_does_not_erase_ordinary_tracks() {
-    let mut metadata = fixture();
+    let mut metadata = enriched_fixture();
     let original =
         parse_ffprobe_json("synthetic.ts", &serde_json::to_vec(&metadata).unwrap()).unwrap();
     metadata["programs"] = serde_json::json!(false);
@@ -92,10 +132,15 @@ fn unusable_additional_teletext_metadata_does_not_erase_ordinary_tracks() {
         if stream["codec_name"] == "dvb_teletext" {
             stream["extradata"] = serde_json::json!({"unusable": true});
             stream["extradata_size"] = serde_json::json!("unusable");
-            stream["id"] = serde_json::json!(["unusable"]);
+            stream["id"] = serde_json::json!({"unusable": true});
         }
     }
-    let preserved =
-        parse_ffprobe_json("synthetic.ts", &serde_json::to_vec(&metadata).unwrap()).unwrap();
-    assert_eq!(original.streams, preserved.streams);
+    let (preserved, additional) = parse_ffprobe_json_with_teletext(
+        "synthetic.ts",
+        &serde_json::to_vec(&metadata).unwrap(),
+        TeletextProbeEncoding::Ffprobe9Base64,
+    )
+    .unwrap();
+    assert_ordinary_equivalent(preserved, &original);
+    assert!(matches!(additional, TeletextProbeSnapshot::Available(_)));
 }

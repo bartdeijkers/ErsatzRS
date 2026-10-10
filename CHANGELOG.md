@@ -60,6 +60,11 @@ release section when tagging a release.
   descriptors, preserving page addresses, language order and raw types. Report
   stale unpaired metadata without altering ordinary tracks; automatic acquisition,
   page discovery and persistence remain pending.
+- Prepare explicit MPEG-TS teletext metadata associations from supplied FFprobe
+  JSON, retaining global stream indexes, reported PIDs and every program
+  membership alongside packed page descriptors. Missing or conflicting auxiliary
+  metadata remains visible without changing ordinary audio and subtitle tracks;
+  automatic acquisition, source binding and persistence remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

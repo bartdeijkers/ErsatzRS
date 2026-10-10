@@ -1182,6 +1182,46 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory supplied-snapshot association checkpoint:
+parse_ffprobe_json_with_teletext deserializes supplied JSON once and returns the
+ordinary media version alongside a separate typed snapshot. Only identified
+MPEG-TS dvb_teletext subtitle rows use the explicitly selected n9.0 base64
+packing. Global indexes never default to zero for auxiliary binding. Reported
+PID and program membership remain separate from descriptors; absent, malformed
+or ambiguous associations do not erase independently usable descriptor metadata.
+Duplicate global PIDs include collisions with ordinary rows. Every distinct
+reported program membership survives; duplicate program IDs/numbers and missing,
+unknown or repeated member indexes cannot silently select a first program.
+The existing original synthetic fixture retains index 2/PID 0x102 with English
+pages 200/888 and index 4/PID 0x200 with Dutch page 200, plus reported program 1.
+Full ordinary metadata equivalence excludes only fresh scan timestamps and
+covers audio/subtitle languages, forced/default flags, chapters, field order,
+HDR metadata and format tags. Malformed optional auxiliary JSON shapes preserve
+that ordinary projection. Additional limits of 256 supplied streams, 128
+programs, 1,024 memberships and 4,096 total packed pairs bound auxiliary maps,
+clones and descriptor decoding after JSON deserialization. These are resource
+policy, not DVB limits, JSON-input allocation bounds or a process RSS guarantee.
+All 80 selected FFprobe regressions pass in Nextest
+c427c2f6-7d8e-420e-8278-c87d6506ea23. After the final ASCII-hex PID correction
+(rejecting 0x+102 rather than accepting Rust's optional numeric sign), all 15
+relevant parser/fixture regressions pass in Nextest
+d3b42377-4f6f-4989-8a61-7b34ed26b1fc. Unchanged ordinary projection, local cleanup
+and acquisition evidence from the first run remains valid. Independent review
+confirms duplicate-PID ambiguity is corrected without losing multi-program
+membership or descriptor independence. Strict infra all-target Clippy and
+workspace formatting pass on the final source.
+Production probe argv, scanner, SQLite schema and page UI are unchanged. This
+does not establish source revision or a complete descriptor/transmitted-page
+inventory. The n9.0 audit rules out adding a blanket data dump to ordinary
+acquisition: selected attachments are formatted before output-key filtering,
+and subtitle selection would remove ordinary audio/video. A future optional
+second subtitle-only acquisition must preserve ordinary metadata on auxiliary
+failure, keep cleanup uncertainty fatal, and establish source revision across
+both opens before attachment/persistence. Path hashes and scan-write timestamps
+do not establish that revision; source-bound atomic writes and stale invalidation
+remain open. ADR 0121 records the primary acquisition evidence. No milestone
+status, dependency or acceptance changes. Historical checkpoints follow unchanged.
+
 2026-10-10 preparatory managed local-probe cleanup checkpoint: a shared bounded
 task-local scope tracks at most 64 local FFprobe owners and fences registration
 on close. The managed web worker, startup replay and CLI destroy the execution

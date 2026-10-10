@@ -1237,12 +1237,28 @@ Strict affected Clippy, WASM hydrate type-check, formatting, architecture and
 hydration lint pass. No total
 probe timeout, CLI SIGINT/SIGTERM handling, durable quarantine after lease expiry,
 provider-wide lifecycle guarantee or native Windows acceptance is claimed.
-Next bound and verify additional FFprobe output before enabling teletext
-acquisition, then persist
-source/page provenance, keeping observed pages and unknown subcode/charset/region
-distinct. Native Windows acceptance remains open.
-Probe argv/JSON fields, teletext schema/page UI and ordinary track projection
-are unchanged; stale-state invalidation and source selection remain open.
+The separate parse_ffprobe_json_with_teletext API projects supplied MPEG-TS
+metadata once, preserving ordinary rows alongside explicitly typed stream/PID/
+program/descriptor associations. Missing or conflicting PID/program metadata
+does not erase independently usable descriptors. All memberships remain distinct;
+no first-program, default-index or complete inventory inference is made.
+Auxiliary resource caps apply after JSON deserialization, not to input allocation
+or child RSS. P9A-03 records 80 selected FFprobe passes and 15 relevant final
+parser/fixture passes after strict ASCII-hex PID validation, with full ordinary
+metadata equivalence except fresh scan timestamps. Strict infra all-target
+Clippy and workspace formatting pass. Automatic acquisition and source revision
+remain open.
+The n9.0 audit rejects a global ordinary-probe data dump because all selected
+stream extradata, including attachments, is formatted before key filtering.
+Subtitle selection also filters ordinary audio/video rows. A future optional
+second subtitle probe must keep ordinary metadata on auxiliary failure while
+retaining cleanup uncertainty as fatal. Establish source stability/revision
+across both opens and bind the atomic media-version write to scan ownership;
+path hashes and metadata write timestamps do not prove unchanged source bytes.
+Then persist source/page provenance, keeping observed pages and unknown
+subcode/charset/region distinct. Production probe argv, teletext schema/page UI
+and ordinary track projection are unchanged; stale invalidation, source
+selection and native Windows acceptance remain open.
 Full routed source captions/alternate audio, compatible continuous
 slate/programme handover and automatic publication selection remain open.
 Native Windows host acceptance remains open.

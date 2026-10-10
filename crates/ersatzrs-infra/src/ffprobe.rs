@@ -1,6 +1,8 @@
 /// Bounded interpretation of explicitly supplied packed teletext descriptors.
 /// Production probe acquisition and ordinary track projection remain separate.
 pub mod teletext;
+/// Explicit ephemeral projection of supplied stream/program teletext metadata.
+pub mod teletext_probe;
 
 mod local;
 mod local_cleanup_scope;
@@ -740,6 +742,28 @@ pub fn parse_ffprobe_json(
     Ok(project_to_media_version(path.as_ref(), &probe))
 }
 
+/// Parse ordinary rows and a separate, explicitly encoded teletext snapshot.
+///
+/// The JSON is deserialized once. Extra metadata cannot erase ordinary tracks;
+/// this API neither changes probe arguments nor claims a complete page inventory.
+///
+/// # Errors
+/// Returns a serde error for invalid JSON or an invalid ordinary metadata shape.
+pub fn parse_ffprobe_json_with_teletext(
+    path: impl AsRef<Path>,
+    json: &[u8],
+    encoding: teletext_probe::TeletextProbeEncoding,
+) -> std::result::Result<
+    (FfprobeMediaVersion, teletext_probe::TeletextProbeSnapshot),
+    serde_json::Error,
+> {
+    let probe: FfprobeOutput = serde_json::from_slice(json)?;
+    Ok((
+        project_to_media_version(path.as_ref(), &probe),
+        teletext_probe::project(&probe, encoding),
+    ))
+}
+
 #[allow(clippy::too_many_lines)]
 fn project_to_media_version(_path: &Path, probe: &FfprobeOutput) -> FfprobeMediaVersion {
     let now = Utc::now();
@@ -1125,6 +1149,9 @@ fn parse_i64(value: Option<&str>) -> Option<i64> {
 #[derive(Debug, Deserialize)]
 struct FfprobeOutput {
     format: Option<FfprobeFormat>,
+    /// Optional acquisition fields stay tolerant so auxiliary problems cannot
+    /// reject the existing ordinary metadata projection.
+    programs: Option<serde_json::Value>,
     #[serde(default)]
     streams: Vec<FfprobeStream>,
     #[serde(default)]
@@ -1171,6 +1198,9 @@ struct FfprobeDisposition {
 #[derive(Debug, Deserialize)]
 struct FfprobeStream {
     index: Option<i32>,
+    id: Option<serde_json::Value>,
+    extradata: Option<serde_json::Value>,
+    extradata_size: Option<serde_json::Value>,
     codec_name: Option<String>,
     codec_type: Option<String>,
     profile: Option<String>,

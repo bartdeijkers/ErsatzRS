@@ -4,62 +4,61 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121']
 summary    = '''
-ADR 0120 requires generic engine acceptance with synthetic pages at p9a-04,
-then exactly one tvguide teletext add-on in ErsatzRS-Addons at p9b-01. It owns
-NOS-guide-inspired pages 200–299 and guide content; the host owns validation,
-publication, rendering/delivery and read-only programme context. Source subtitle
-requirements remain. P9A-01 is Complete under ADR 0121; P9A-02 is In progress;
-the other four milestones are Not started. No engine/content acceptance is claimed.
+ADR 0120 requires independent generic engine acceptance with synthetic pages at
+p9a-04, then exactly one TV-guide teletext add-on in ErsatzRS-Addons at p9b-01.
+The add-on owns NOS-guide-inspired pages 200–299 and content; the host owns
+validation, publication, delivery and read-only programme context. Source
+subtitle requirements remain. P9A-01 is Complete under ADR 0121; P9A-02 is In
+progress and the other four milestones are Not started. No engine/content
+acceptance is claimed.
 
-Typed drafts validate runs/styles/navigation. Western Latin DVB encoding preserves
-spacing, X/26 accents, X/27 links and X/28 national options; decoding proves seven
-repertoires, captions and colours. Other regions, link CRC/client proof, versioned
-DTOs, persistence and publication remain open. The pure
-ffprobe::teletext::project_packed_descriptors API accepts supplied two-byte packed
-metadata or n9.0 LF-wrapped base64. Its 1,024-entry resource bound is not a service
-limit. Usable entries retain language order, raw type/wire addresses and optional
-decimal display pages; missing/unusable/usable-prefix outcomes remain distinct.
-TrailingUnpairedPairs flags possibly stale tails after shrink; equal counts
-never prove complete inventory. Metadata differs from observed pages; subcode/
-charset/region and provenance remain unknown. P9A-03 owns exact synthetic
-proof. Probe argv/JSON fields, scanner/schema/UI and ordinary audio/subtitles
-are unchanged.
+Typed authored drafts validate runs/styles/navigation. Western Latin DVB
+encoding supports spacing, X/26 accents, X/27 links and X/28 national options;
+independent decoding proves seven repertoires, captions and colours. Other
+regions, link CRC/client proof, versioned DTOs and publication remain open.
 
-Carousel/PES/TS and all-program PAT/CAT/PMT discovery validate ownership and
-continuity. Atomic null-slot replacement and fragmented/growing PMTs preserve
-metadata and AV/PCR. PSI/PID monitoring holds partial sections and fences changes,
-malformed input and incomplete EOF. PCR/CBR checks packet distance, wrap, gaps
-and readiness. Retention shares raw/prepared capacity, arrival ages and one clock,
-preflights intervals and enforces first-byte/source/sink deadlines and epoch-bound
-writer acknowledgement. Finite EOF drains complete packets at original positions/
-timing after an acknowledged cycle; incomplete transport or impossible capacity
-fails. Immutable repeats omit C4 erasure; replacement restarts it. P9A-04 owns
-exact audiovisual/runtime/decoder/TSDuck evidence.
+The pure packed-descriptor API retains language order, raw type/wire addresses
+and optional decimal display pages. Missing, unusable and usable-prefix outcomes
+remain distinct; TrailingUnpairedPairs reports possibly stale tails. Equal
+counts never prove complete inventory. The separate one-pass
+parse_ffprobe_json_with_teletext API retains ordinary metadata alongside typed
+global index/PID/program/descriptor associations. Every reported membership
+survives; missing/conflicting PID/program metadata does not erase descriptors.
+P9A-03 records 80 focused passes and 15 relevant final passes after strict
+ASCII-hex PID validation, plus strict infra Clippy and formatting. Projection
+caps apply after JSON decoding, not to input allocation or child RSS. Production
+acquisition is unchanged. Source revision, observed pages, subcode/charset/region
+and SQLite identity remain open. A future optional second subtitle probe must
+preserve ordinary metadata on auxiliary failure, keep cleanup uncertainty fatal,
+and establish source revision across both opens before atomic persistence.
+Path hashes and scan-write timestamps cannot establish byte identity.
 
-Authored bindings belong only to final MPEG-TS roles, with paced I/O, fresh epochs,
-body errors and zero-byte hardware fallback. Retained output supports refill/short
-EOF. Uncertain startup/process/retry cleanup quarantines admission/assets. Legacy
-admission/retries atomically reserve distinct wrapper/first-encoder leases;
-private UUID callbacks transfer the first encoder once, later items reserve
-independently. Owned startup/scoped disposal preserve song/retry cancellation.
-Localized Health reports limit one only for applicable enabled legacy defaults.
-Linux-hosted route proof uses Linux x64 FFmpeg, Windows interop and QEMU ARM64/
-ARMv7: admission, token rejection, cancellation/reaping, video/selected English
-audio, Dutch page 200 and clean TSDuck. Native Windows/ARM Rust hosts and full
-routed source captions/alternate audio remain unproven.
+Carousel/PES/TS, all-program PSI discovery and atomic fragmented/growing PMT
+installation preserve AV/PCR metadata and continuity. Continuing PSI/PID
+monitoring fences changed/malformed/incomplete input. PCR/CBR checks and bounded
+retention preserve packet timing, deadlines and epoch-bound acknowledgements;
+finite EOF drains validated output. P9A-04 owns exact decoder/TSDuck evidence.
 
-The bounded optional libzvbi text/bitmap probe has localized Health and
-runtime-bound troubleshooting. P9A-02 owns six-RID packaging, licensing and
-remaining macOS/platform proof. P9A-03/04 still require SQLite stream/page identity,
-provider-safe rescans, exact page/language/forced/default selection, native/Next
-Burn/Convert and copy/output
-policy, MPEG-TS carriage/passthrough, burn/extraction and HLS/browser fallback.
-Continuous compatible slate handover, automatic production binding resolution,
-publication/refresh/restart, localized management, full matrix/source/client
-acceptance and applicable browser/smoke/TSDuck gates remain open. Detailed
-sequencing lives in plans/teletext-support.md. UCU platform exceptions do not
-waive teletext acceptance. Production content waits for p9a-04; Phase 10 waits
-for p9b-02.
+Authored bindings apply only to final MPEG-TS roles. Legacy wrapper/first-encoder
+admission reserves distinct leases atomically; private owner-bound callbacks
+transfer the first encoder once and later items reserve independently. Owned
+startup, disposal and retries retain cleanup uncertainty. Localized Health
+reports applicable limit-one capacity failures. Linux-hosted production-route
+proof covers Linux x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission,
+token rejection, cancellation/reaping, video, selected English audio, Dutch page
+200 and clean TSDuck. Native Windows/ARM Rust hosts and full routed source
+captions/alternate audio remain unproven.
+
+The optional decoder probe has localized Health and runtime-bound troubleshooting;
+P9A-02 owns six-RID packaging, licensing and remaining macOS/platform proof.
+P9A-03/04 still require source/page persistence, provider-safe rescans, exact
+page/language/forced/default selection, native/Next Burn/Convert and copy/output
+policy, carriage/passthrough and HLS/browser fallback. Continuous compatible
+slate handover, automatic binding, publication/refresh/restart, localized
+management and full matrix/source/client/browser/smoke/TSDuck acceptance remain
+open. Milestones and debt own detailed evidence; plans/teletext-support.md owns
+future sequencing. UCU exceptions do not waive teletext gates. Production
+content waits for p9a-04; Phase 10 waits for p9b-02.
 '''
 
 [[debt]]
@@ -83,7 +82,7 @@ resolved    = false
 id          = 'teletext-stream-and-page-metadata-is-not-modeled'
 description = 'Scanning persists generic subtitle codec/language/index fields but no teletext service/page, subtitle flag/type, national option/default region, or character-set semantics. P9A-03 owns SQLite source/version/stream/page identity, multiple pages per stream and rescan/source-change behavior while preserving provider identity, ordinary subtitles and alternate audio.'
 discovered  = '2026-08-07'
-evidence    = 'P9A-03 owns the preparatory pure `ffprobe::teletext::project_packed_descriptors` API for explicitly supplied two-byte packed metadata or n9.0 LF-wrapped base64. Its 1,024-entry bound is resource policy, not a DVB service limit. It preserves language order, raw type/wire addresses and optional decimal display pages, with missing/unusable/usable-prefix outcomes and `TrailingUnpairedPairs` after FFmpeg descriptor shrink. Equal counts do not prove complete descriptor inventory; metadata and observed pages remain distinct. Subcode/charset/region and provenance remain unknown. P9A-03 records 40 passing focused FFprobe regressions, exact synthetic projection and strict infra Clippy. Probe argv/JSON fields, teletext schema/page UI and ordinary audio/subtitle projection are unchanged. Preparatory local `extract` capture is now worker-owned under managed Unix process-group/Windows JobObject ownership, with an exact 8 MiB stdout content cap and concurrent 16 KiB retained raw-byte stderr tail, overflow reaping/reader joins and caller-drop cancellation. P9A-03 records 52 passing infra regressions, scanner overflow/recovery, actual pinned Linux FFprobe subtitle preservation and strict infra/scanner Clippy. These bound capture, not RSS or lossy UTF-8 string size. A shared bounded task-local scope now keeps managed web/startup/CLI coordinators alive through local-owner drain, with execution fenced/dropped first and still-owned heartbeats polled. Terminal effects require confirmation; actual lease loss cannot revive or finish. Unconfirmed cleanup stops the worker and rejects scans; cached live Health details/counts share availability with all nine translations. P9A-03 records 68 infra, 11 application-gate, three admission, four scanner and 19 web passes, followed by 38 locale/API/state/Health regressions. Known stopped-worker API errors follow persisted UI language while other outcomes and routes remain unchanged; strict affected Clippy and WASM hydrate type-check pass. Probe argv and ordinary projection are unchanged. No total-probe timeout, CLI SIGINT/SIGTERM handling, durable quarantine after lease expiry or provider-wide lifecycle guarantee is claimed. Additional show_data/show_programs output, teletext scanning/persistence and native Windows acceptance remain open. SQLite source/page identity, stale invalidation and selection remain open; `subtitles.rs` still lacks page-aware extraction.'
+evidence    = 'P9A-03 records the preparatory explicit `parse_ffprobe_json_with_teletext` API: one deserialization preserves ordinary media metadata plus separately typed global index/PID/program/descriptor associations. It retains every program membership and makes missing, malformed or ambiguous association explicit without erasing usable descriptor metadata. Bounds apply after JSON deserialization; no input-allocation/RSS bound or complete service/page inventory is claimed. Eighty selected FFprobe tests pass; 15 relevant parser/fixture tests pass after the final strict ASCII-hex PID correction. Strict infra all-target Clippy and workspace formatting pass. Automatic acquisition, source revision across both opens, source-bound atomic persistence and stale invalidation remain open. ADR 0121 records why blanket show_data would dump selected attachments before key filtering and subtitle selection would erase ordinary audio/video. A future optional second acquisition must preserve ordinary metadata on auxiliary failure and keep cleanup uncertainty fatal. Path hashes and scan-write timestamps are insufficient source revision. Historical evidence follows: P9A-03 owns the preparatory pure `ffprobe::teletext::project_packed_descriptors` API for explicitly supplied two-byte packed metadata or n9.0 LF-wrapped base64. Its 1,024-entry bound is resource policy, not a DVB service limit. It preserves language order, raw type/wire addresses and optional decimal display pages, with missing/unusable/usable-prefix outcomes and `TrailingUnpairedPairs` after FFmpeg descriptor shrink. Equal counts do not prove complete descriptor inventory; metadata and observed pages remain distinct. Subcode/charset/region and provenance remain unknown. P9A-03 records 40 passing focused FFprobe regressions, exact synthetic projection and strict infra Clippy. Probe argv/JSON fields, teletext schema/page UI and ordinary audio/subtitle projection are unchanged. Preparatory local `extract` capture is now worker-owned under managed Unix process-group/Windows JobObject ownership, with an exact 8 MiB stdout content cap and concurrent 16 KiB retained raw-byte stderr tail, overflow reaping/reader joins and caller-drop cancellation. P9A-03 records 52 passing infra regressions, scanner overflow/recovery, actual pinned Linux FFprobe subtitle preservation and strict infra/scanner Clippy. These bound capture, not RSS or lossy UTF-8 string size. A shared bounded task-local scope now keeps managed web/startup/CLI coordinators alive through local-owner drain, with execution fenced/dropped first and still-owned heartbeats polled. Terminal effects require confirmation; actual lease loss cannot revive or finish. Unconfirmed cleanup stops the worker and rejects scans; cached live Health details/counts share availability with all nine translations. P9A-03 records 68 infra, 11 application-gate, three admission, four scanner and 19 web passes, followed by 38 locale/API/state/Health regressions. Known stopped-worker API errors follow persisted UI language while other outcomes and routes remain unchanged; strict affected Clippy and WASM hydrate type-check pass. Probe argv and ordinary projection are unchanged. No total-probe timeout, CLI SIGINT/SIGTERM handling, durable quarantine after lease expiry or provider-wide lifecycle guarantee is claimed. Additional show_data/show_programs output, teletext scanning/persistence and native Windows acceptance remain open. SQLite source/page identity, stale invalidation and selection remain open; `subtitles.rs` still lacks page-aware extraction.'
 resolved    = false
 
 [[debt]]
