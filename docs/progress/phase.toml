@@ -1255,10 +1255,21 @@ second subtitle probe must keep ordinary metadata on auxiliary failure while
 retaining cleanup uncertainty as fatal. Establish source stability/revision
 across both opens and bind the atomic media-version write to scan ownership;
 path hashes and metadata write timestamps do not prove unchanged source bytes.
-Then persist source/page provenance, keeping observed pages and unknown
-subcode/charset/region distinct. Production probe argv, teletext schema/page UI
-and ordinary track projection are unchanged; stale invalidation, source
-selection and native Windows acceptance remain open.
+Preparatory typed report-only observations and additive SQLite storage now
+retain independent binding/provenance/PID/program/descriptor states for exact
+stream/file/version parents. Repeated descriptors and memberships survive;
+observed pages remain NotAcquired, with subcode/charset/national option unknown.
+Opaque adapter revisions establish an association, not immutable source bytes.
+Bounded transaction helpers validate current parents and the actual managed
+library lease. Cascades and narrow actual-change triggers invalidate reports
+without blocking existing provider file upserts or changing ordinary tracks;
+no-op updates retain metadata. Missing records never prove absent pages.
+P9A-03 records 39 domain and 55 focused infra passes, including 28 new storage/
+schema regressions; strict domain/infra all-target Clippy pass. Independent review
+corrected final-write lease expiry with deterministic rollback proof.
+Production probe argv, scanner acquisition and page UI remain unchanged.
+Source revision across acquisition, actual page discovery/selection, full
+provider rescan acceptance and native Windows proof remain open.
 Full routed source captions/alternate audio, compatible continuous
 slate/programme handover and automatic publication selection remain open.
 Native Windows host acceptance remains open.

@@ -2930,7 +2930,7 @@ fn decode_operation_row_with_id(
     })
 }
 
-async fn claim_is_current(
+pub(crate) async fn claim_is_current(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     claim: &ManagedLibraryOperationClaim,
 ) -> Result<bool> {

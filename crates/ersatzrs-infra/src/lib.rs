@@ -97,6 +97,7 @@ pub mod song_background;
 pub mod startup_config;
 pub mod subtitle_cleanup;
 pub mod subtitles;
+pub mod teletext_source;
 pub mod transcode_capacity;
 pub mod tsduck;
 pub mod xmltv;

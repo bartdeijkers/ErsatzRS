@@ -1,4 +1,4 @@
-//! Authored teletext values and structural validation (ADRs 0120/0121).
+//! Authored values and separately reported source metadata (ADRs 0120/0121).
 //!
 //! This is an ErsatzRS extension, not an ErsatzTV subtitle rewrite. Existing
 //! `Subtitle`/`MediaStream` fields retain their source-selection ownership.
@@ -7,9 +7,11 @@
 
 mod identity;
 mod pages;
+mod source;
 
 pub use identity::*;
 pub use pages::*;
+pub use source::*;
 
 #[cfg(test)]
 mod tests;

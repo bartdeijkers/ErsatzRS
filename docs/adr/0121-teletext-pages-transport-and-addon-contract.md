@@ -207,6 +207,20 @@ rows; output selection alone is not a child memory bound. Primary evidence:
 [n9.0 stream/program output](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L1888),
 [section-entry selection](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L2717)
 and [data formatting](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/textformat/avtextformat.c#L526).
+A preparatory report-only source model and additive SQLite storage now retain
+independent binding, provenance, PID, program and descriptor states. Exact
+stream/file/version parents remain distinct; repeated descriptor addresses and
+program memberships survive without becoming selectable pages. Observed pages
+are explicitly `NotAcquired`, with subcode, charset and national option unknown.
+An opaque adapter revision is an association, not certified source-byte identity.
+The storage helper bounds child collections, validates all current parents and
+the single library/source subtype, and reuses the managed scan claim inside the
+caller-owned SQLite writer transaction. Initial stale claims cause no mutation;
+errors require rollback and the caller retains ownership through commit. Missing
+records never prove absent pages. Stream/file deletion cascades remove reports;
+narrow actual-change triggers also clear them before existing file upserts or
+in-place stream identity updates, preserving no-op writes and ordinary tracks.
+This does not enable scanner/provider acquisition or source-page selection.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

@@ -1182,6 +1182,52 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory report-only source storage checkpoint:
+Typed observations retain independent binding/provenance/PID/program/descriptor
+states, exact source/provider/version/stream/file association, opaque adapter
+revision, descriptor ordinals/raw values and every reported program membership.
+Observed pages remain NotAcquired; subcode/charset/national option are unknown.
+Bound means an adapter association, not immutable-byte or certified provenance.
+Additive migration 202610101930 stores stream/file-specific reports, descriptor
+and membership children. Dual composite FKs prevent cross-version parents while
+preserving existing stream IDs and duplicate global indexes. Parent deletions
+cascade; narrow actual-change triggers clear reports before existing provider
+PathHash-conflict upserts or in-place file/stream identity changes. No-op writes
+and ordinary tracks remain unchanged, and failed statements/transactions restore
+trigger-deleted metadata. No actual observed-page table or fabricated defaults.
+Transactional replace/load helpers validate current exact parents and exactly
+one version owner, library and source subtype, plus the actual managed lease's
+library. They bound descriptors to 1,024 and memberships to 128 before domain
+validation/writes and use bounded stored text/row decoding. These are resource
+policies, not DVB inventory limits. Initial/prewrite stale claims return false
+without mutation; lease expiry after child writes requires caller rollback.
+All writes, final fencing and ordinary media projection share the caller-owned
+SQLite writer transaction; the caller retains ownership through commit.
+Missing records mean acquisition is unavailable, never proven page absence.
+Automatic acquisition, immutable-source revision, scanner/provider integration,
+actual page observation/selection and full rescan acceptance remain open.
+The already verified domain source passes 39 tests in Nextest
+114444e7-382d-4700-b3a5-f0af05d97aab and strict domain all-target Clippy.
+All 55 focused infra regressions pass in Nextest
+13768106-ad93-42e8-b50f-f5654cefcb3c: 14 transactional storage tests, 14 schema
+tests, 25 existing database tests and two existing managed lease regressions.
+They prove all four provider associations without acquiring provider media,
+ordinary track preservation, exact-part selection, invalid parent/source rejection,
+initial stale claims and deterministic expiry during a child write with rollback,
+reported-empty/repeated metadata, corrupt/status/child rejection, exact resource
+boundaries and overflow rejection, source/stream/file/version cascades, fresh and
+upgrade migration, real provider upsert compatibility, selective/no-op updates
+and statement/transaction rollback. An independent review found and corrected
+the final-write lease-expiry gap; no remaining concrete defect was identified.
+Strict domain and infra all-target Clippy pass. Subsequent changes are limited
+to formatting and comments, including explicit annotations for genuinely
+read-only test transactions. Functional code is unchanged; tests and Clippy
+evidence remain valid. Workspace formatting and architecture-lint pass on final
+source. Unchanged parser, acquisition/cleanup and audiovisual transport evidence
+is reused.
+No milestone status/dependency/acceptance change.
+Historical checkpoints follow unchanged.
+
 2026-10-10 preparatory supplied-snapshot association checkpoint:
 parse_ffprobe_json_with_teletext deserializes supplied JSON once and returns the
 ordinary media version alongside a separate typed snapshot. Only identified

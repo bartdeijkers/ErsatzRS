@@ -59,12 +59,18 @@ release section when tagging a release.
   Prepare bounded interpretation of explicitly supplied packed teletext
   descriptors, preserving page addresses, language order and raw types. Report
   stale unpaired metadata without altering ordinary tracks; automatic acquisition,
-  page discovery and persistence remain pending.
+  page discovery and scanner integration remain pending.
 - Prepare explicit MPEG-TS teletext metadata associations from supplied FFprobe
   JSON, retaining global stream indexes, reported PIDs and every program
   membership alongside packed page descriptors. Missing or conflicting auxiliary
   metadata remains visible without changing ordinary audio and subtitle tracks;
-  automatic acquisition, source binding and persistence remain pending.
+  automatic acquisition and source-byte verification remain pending.
+- Prepare typed, report-only source teletext metadata with additive SQLite
+  storage for exact stream/file/version associations, reported programs and
+  descriptors. Bound writes to the current managed scan lease and invalidate
+  reports on existing file or stream identity changes while preserving ordinary
+  tracks. Actual page acquisition and selection remain pending; an adapter
+  revision does not certify immutable source bytes.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is
