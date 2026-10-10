@@ -1480,6 +1480,9 @@ pub enum TextKey {
     PlaybackDataAccessTitle,
     LegacyMpegTsCapacityBrief,
     LegacyMpegTsCapacityHelp,
+    ScanWorkerTitle,
+    ScanWorkerUnavailableBrief,
+    ScanWorkerUnavailableHelp,
     TeletextDecoderTitle,
     TeletextDecoderReady,
     TeletextDecoderMissing,
@@ -3676,6 +3679,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::PlaybackDataAccessTitle,
     TextKey::LegacyMpegTsCapacityBrief,
     TextKey::LegacyMpegTsCapacityHelp,
+    TextKey::ScanWorkerTitle,
+    TextKey::ScanWorkerUnavailableBrief,
+    TextKey::ScanWorkerUnavailableHelp,
     TextKey::TeletextDecoderTitle,
     TextKey::TeletextDecoderReady,
     TextKey::TeletextDecoderMissing,
@@ -4971,6 +4977,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
         "Playback Data Access" => text(language, TextKey::PlaybackDataAccessTitle).to_owned(),
+        "Scanner worker" => text(language, TextKey::ScanWorkerTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
@@ -5297,6 +5304,21 @@ fn addon_list_health_message(
     Some(text(language, key))
 }
 
+fn scan_and_playback_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<&'static str> {
+    let key = match (title, message) {
+        ("Scanner worker", "Scanner worker is unavailable") => TextKey::ScanWorkerUnavailableBrief,
+        ("Scanner worker", "The scan worker is unavailable. New scans cannot run. Check the logs and confirm that any remaining local probe processes have stopped before restarting ErsatzRS.") => TextKey::ScanWorkerUnavailableHelp,
+        ("Playback Data Access", "Legacy MPEG-TS requires at least two active transcode slots") => TextKey::LegacyMpegTsCapacityBrief,
+        ("Playback Data Access", "An enabled channel uses the native legacy MPEG-TS mode. Its wrapper and programme encoder require two distinct active transcode slots. Increase the active transcode limit to at least 2, or select another streaming mode.") => TextKey::LegacyMpegTsCapacityHelp,
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -5316,13 +5338,10 @@ pub fn health_check_message_text(
     {
         return localized.to_owned();
     }
-    if title == "Playback Data Access" {
-        let key = match displayed_message {
-            "Legacy MPEG-TS requires at least two active transcode slots" => TextKey::LegacyMpegTsCapacityBrief,
-            "An enabled channel uses the native legacy MPEG-TS mode. Its wrapper and programme encoder require two distinct active transcode slots. Increase the active transcode limit to at least 2, or select another streaming mode." => TextKey::LegacyMpegTsCapacityHelp,
-            _ => return displayed_message.to_owned(),
-        };
-        return text(language, key).to_owned();
+    if matches!(title, "Scanner worker" | "Playback Data Access") {
+        return scan_and_playback_health_message(language, title, displayed_message)
+            .unwrap_or(displayed_message)
+            .to_owned();
     }
     if title == "Teletext decoding" {
         let key = match displayed_message {
@@ -6168,6 +6187,44 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn scan_worker_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, "Scanner worker"),
+                text(language, TextKey::ScanWorkerTitle)
+            );
+            for key in [
+                TextKey::ScanWorkerUnavailableBrief,
+                TextKey::ScanWorkerUnavailableHelp,
+            ] {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert_eq!(
+                    health_check_message_text(language, "Scanner worker", canonical, canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, "Scanner worker", "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
+                }
+            }
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    "Scanner worker",
+                    "Unknown future diagnostic",
+                    ""
+                ),
+                "Unknown future diagnostic"
+            );
         }
     }
 

@@ -246,9 +246,28 @@ pub struct ScanRuntimeReport {
     pub playout_refreshes: Vec<ScanPlayoutRefresh>,
 }
 
+/// Whether the adapter's independently owned scan workers confirmed cleanup.
+///
+/// Uncertainty is sticky for the enclosing operation and must not become an
+/// ordinary scan failure that releases its durable lease.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScanCleanupConfirmation {
+    Confirmed,
+    Unconfirmed,
+}
+
 /// Native scanner execution supplied by the composition root.
 #[async_trait]
 pub trait ScanRuntime: Send + Sync {
+    /// Await current scan-owned workers without closing the operation scope.
+    ///
+    /// Adapters with independent process workers must retain uncertainty even
+    /// when their scanner absorbs a worker error. Other adapters have no
+    /// independent cleanup to confirm.
+    async fn confirm_cleanup(&self) -> ScanCleanupConfirmation {
+        ScanCleanupConfirmation::Confirmed
+    }
+
     /// Read-only, bounded folder discovery before a local television library is
     /// saved. The native adapter must retain capacity for timed-out workers.
     async fn preview_television_folders(

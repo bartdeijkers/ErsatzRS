@@ -365,6 +365,12 @@ impl ScanOperationRegistry {
         recover(self.inner.lock()).worker_available = true;
     }
 
+    /// Read the existing worker lifecycle state before durable scan admission.
+    #[must_use]
+    pub fn is_worker_available(&self) -> bool {
+        recover(self.inner.lock()).worker_available
+    }
+
     /// Fail every non-terminal request and stop accepting new work.
     pub fn worker_stopped(&self, message: impl Into<String>) {
         let message = message.into();

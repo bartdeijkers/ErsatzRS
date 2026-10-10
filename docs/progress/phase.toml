@@ -1222,15 +1222,27 @@ Forty selected FFprobe regressions, exact synthetic projection proof and strict
 infra Clippy pass. Preparatory local probe acquisition now uses worker-owned
 managed processes, an exact 8 MiB stdout content cap and a concurrent 16 KiB
 retained raw-byte stderr tail, with overflow reaping/reader joins and caller-drop
-cleanup signalling. P9A-03 records 52 passing infra regressions, scanner overflow
-and recovery, actual pinned Linux FFprobe subtitle preservation and strict
-infra/scanner Clippy. Outer scan leases are not yet held through cleanup; total
-scan timeout policy is unchanged. Next close that ownership gap before enabling
-additional FFprobe output, then persist
+cleanup signalling. Earlier acquisition, overflow/recovery and pinned Linux
+subtitle preservation proof remains recorded in P9A-03. A shared bounded
+task-local scope now keeps managed web/startup/CLI coordinators alive through
+local probe drain, fences registrations and drops execution before cleanup;
+still-owned heartbeats remain polled. Terminal scan effects require confirmation,
+actual lease loss cannot revive or finish an operation, and unconfirmed cleanup
+stops the worker and rejects new scans. Cached Health detail and badge counts
+share live worker availability, with all nine translations. P9A-03 records 68
+passing infra, 11 application-gate, three admission, four scanner and 19 web
+regressions, followed by 38 locale/API/state/Health checks. Known stopped-worker
+API errors use persisted UI language with unchanged other outcomes and routes.
+Strict affected Clippy, WASM hydrate type-check, formatting, architecture and
+hydration lint pass. No total
+probe timeout, CLI SIGINT/SIGTERM handling, durable quarantine after lease expiry,
+provider-wide lifecycle guarantee or native Windows acceptance is claimed.
+Next bound and verify additional FFprobe output before enabling teletext
+acquisition, then persist
 source/page provenance, keeping observed pages and unknown subcode/charset/region
 distinct. Native Windows acceptance remains open.
-Probe argv/JSON fields, scanner/schema/UI and ordinary track projection are
-unchanged; stale-state invalidation and source selection remain open.
+Probe argv/JSON fields, teletext schema/page UI and ordinary track projection
+are unchanged; stale-state invalidation and source selection remain open.
 Full routed source captions/alternate audio, compatible continuous
 slate/programme handover and automatic publication selection remain open.
 Native Windows host acceptance remains open.

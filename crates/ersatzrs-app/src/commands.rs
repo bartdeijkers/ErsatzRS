@@ -6671,6 +6671,8 @@ pub enum ExecuteScanOutcome {
         /// Storage-neutral adapter diagnostic.
         message: String,
     },
+    /// Process cleanup remains uncertain; durable terminal writes are fenced.
+    CleanupUnconfirmed,
     /// The queue token did not correspond to queued application work.
     Missing,
 }
@@ -6681,7 +6683,11 @@ pub enum ExecuteManagedLibraryOperationOutcome {
     Completed,
     Deferred,
     LeaseLost,
-    Failed { message: String },
+    Failed {
+        message: String,
+    },
+    /// Cleanup was not confirmed; do not release the lease or start more work.
+    CleanupUnconfirmed,
 }
 
 pub(crate) fn request_playout_build(
@@ -6963,6 +6969,9 @@ async fn admit_scan_persisted(
     queue: &dyn ScanWorkQueue,
     operations: &OperationCoordinator,
 ) -> std::result::Result<Option<ScanOperationId>, String> {
+    if !operations.scan_activity().is_worker_available() {
+        return Err("scanner worker is unavailable".to_owned());
+    }
     let scan = match request {
         ScanRequest::Library {
             provider,
@@ -10358,6 +10367,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scan_admission_stopped_worker_rejects_before_durable_enqueue() {
+        let repository =
+            FakeLibraryRepository::with_targets([scan_target(6, MediaSourceKind::Plex)]);
+        let managed = RecordingManagedOperations::default();
+        let queue = RecordingScanQueue::default();
+        let operations = coordinator();
+        operations
+            .scan_activity()
+            .worker_stopped("local probe cleanup was not confirmed");
+
+        assert!(!operations.scan_activity().is_worker_available());
+        assert_eq!(
+            request_library_scan(
+                RequestLibraryScan::new(6, false),
+                &repository,
+                &managed,
+                &queue,
+                &operations,
+            )
+            .await,
+            RequestScanOutcome::Unavailable {
+                message: "scanner worker is unavailable".to_owned(),
+            }
+        );
+        assert_eq!(
+            request_show_scan(
+                RequestShowScan::new(6, 60, true),
+                &repository,
+                &managed,
+                &queue,
+                &operations,
+            )
+            .await,
+            RequestScanOutcome::Unavailable {
+                message: "scanner worker is unavailable".to_owned(),
+            }
+        );
+        assert_eq!(
+            request_scheduled_library_scan(
+                RequestScheduledLibraryScan::new(6),
+                &repository,
+                &managed,
+                &queue,
+                &operations,
+            )
+            .await,
+            RequestScheduledScanOutcome::Unavailable {
+                message: "scanner worker is unavailable".to_owned(),
+            }
+        );
+        assert!(managed.scans.lock().expect("managed scans").is_empty());
+        assert!(queue.requests.lock().expect("scan requests").is_empty());
+        assert!(operations.scan_activity().snapshots().is_empty());
+    }
+
+    #[tokio::test]
     async fn scan_admission_validates_before_persistence_and_survives_wake_failure() {
         let mut disabled = scan_target(5, MediaSourceKind::Emby);
         disabled.should_sync_items = false;
@@ -10403,6 +10468,9 @@ mod tests {
             RequestScanOutcome::Accepted { .. }
         ));
         assert_eq!(operations.scan_activity().snapshots().len(), 1);
+        assert!(operations.scan_activity().is_worker_available());
+        assert_eq!(managed.scans.lock().expect("managed scans").len(), 1);
+        assert!(queue.requests.lock().expect("scan requests").is_empty());
     }
 
     fn channel_validation_state() -> ChannelValidationState {

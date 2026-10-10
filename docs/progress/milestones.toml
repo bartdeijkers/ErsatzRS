@@ -1182,6 +1182,47 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory managed local-probe cleanup checkpoint: a shared bounded
+task-local scope tracks at most 64 local FFprobe owners and fences registration
+on close. The managed web worker, startup replay and CLI destroy the execution
+backing future before awaiting local-owner drain, keeping still-owned lease
+heartbeats polled. The closed scope has a fresh eight-second cleanup budget;
+normal probe execution has no total timeout. Terminal scan effects and native
+interrupted-replay markers require confirmed cleanup. Actual lease loss cannot
+revive or finish an operation. Unconfirmed cleanup stops the worker and rejects
+new scans. Cached Health reports and issue counts use the same existing live
+worker-availability registry and expose one failure detail without duplicate
+counts; the title and guidance are translated for all nine cultures.
+All 68 selected infra regressions pass in Nextest
+f8fe2f02-c76b-49a8-beb9-76ae0dded695. Application cleanup-gate regressions pass
+(11 tests, 1c67c18d-580a-46b0-8cd0-a1f330ca4865), stopped-worker admission passes
+(3 tests, b11dcf8d-b063-496d-96ea-7fc6c1674ded), and scanner foreground lifecycle
+passes (4 tests, 1c3f41cf-b025-422c-80f4-61eebc7bfada).
+All 19 selected web regressions pass in Nextest
+aa55ff95-fa14-4004-91e7-1bd011e43e80, including actual local-probe reaping,
+SQLite rollback/writer-lock progress, startup replay, cached live Health and
+nine-culture translation coverage. After the lint-only helper extraction and
+API error-localization correction, all 38 selected locale/API/state/Health
+regressions pass in Nextest 4d8e5731-6a6e-4ea1-91be-84c6a5e3fc98. The known
+stopped-worker error follows persisted UI language, including a Dutch SQLite
+fixture without a Leptos language context; unknown/accepted/rejected outcomes
+retain their transport behavior. Server-function routes remain stable.
+The scan UI boundary remains the shared scan_library/scan_show server-function
+outcome mapper used by the existing libraries, show-detail and remote-stream-
+playlist islands. Their SSR wrappers, DOM, no-JS behavior and shared primitives
+are unchanged. Focused API tests establish the response text; new browser or
+native-platform acceptance is not claimed. Strict all-target Clippy for infra/app/scanner/web, the WASM hydrate type-check,
+formatting, architecture and hydration lint pass. Existing infra/application/
+scanner evidence is reused after documentation-only and equivalent-duration
+lint corrections; no implementation behavior changed in those tested paths.
+Remaining: no total-probe timeout or CLI SIGINT/SIGTERM handling; native Windows
+cleanup acceptance remains open. This is not durable quarantine after lease
+expiry and provides no provider-wide process lifecycle guarantee. Probe argv
+and ordinary track projection are unchanged. Additional show_data/show_programs
+output, teletext scanning/source-page persistence, stale invalidation and
+native/Next source selection remain open. No milestone status, dependency or
+acceptance changes. Historical preparatory checkpoints follow unchanged.
+
 2026-10-10 preparatory local FFprobe ownership checkpoint: local extraction
 replaces unbounded process output capture with a worker-owned managed process,
 using a Unix process group or Windows JobObject. Stdout content has an exact

@@ -145,6 +145,7 @@ async fn a_failed_reader_does_not_detach_its_pending_sibling() {
 #[cfg(unix)]
 mod unix {
     use super::*;
+    use crate::ffprobe::{LocalProbeCleanupError, LocalProbeCleanupScope};
 
     fn command(script: &str, arguments: &[PathBuf]) -> FfprobeCommand {
         FfprobeCommand {
@@ -227,6 +228,132 @@ mod unix {
         caller.abort();
         assert!(caller.await.unwrap_err().is_cancelled());
         wait_for_exit(pid).await;
+    }
+
+    #[tokio::test]
+    async fn closing_a_scope_cancels_a_live_probe_and_confirms_cleanup_before_response() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("pid");
+        let scope = LocalProbeCleanupScope::new();
+        let caller_scope = scope.clone();
+        let owned_marker = marker.clone();
+        let caller = tokio::spawn(async move {
+            caller_scope
+                .scope(extract(
+                    command("printf '%s' \"$$\" >\"$1\"; exec sleep 30", &[owned_marker]),
+                    PathBuf::from("synthetic.ts"),
+                ))
+                .await
+        });
+        let pid = wait_for_pid_file(&marker).await;
+        assert_eq!(scope.cleanup_status(), Ok(false));
+        scope.close();
+        assert!(matches!(
+            caller.await.unwrap(),
+            Err(FfprobeError::Cancelled { .. })
+        ));
+        // Completion acknowledgement precedes the response. The caller cannot
+        // observe cancellation while its managed process or readers remain live.
+        assert_eq!(scope.cleanup_status(), Ok(true));
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
+        assert_eq!(
+            nix::sys::signal::kill(pid, None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_caller_drop_can_be_awaited_without_an_operation_deadline() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("pid");
+        let scope = LocalProbeCleanupScope::new();
+        let caller_scope = scope.clone();
+        let owned_marker = marker.clone();
+        let caller = tokio::spawn(async move {
+            caller_scope
+                .scope(extract(
+                    command("printf '%s' \"$$\" >\"$1\"; exec sleep 30", &[owned_marker]),
+                    PathBuf::from("synthetic.ts"),
+                ))
+                .await
+        });
+        let pid = wait_for_pid_file(&marker).await;
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        scope.close();
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
+        assert_eq!(
+            nix::sys::signal::kill(pid, None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+    }
+
+    #[tokio::test]
+    async fn closed_or_uncertain_scope_does_not_start_another_process() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("must-not-exist");
+        let closed = LocalProbeCleanupScope::new();
+        closed.close();
+        let result = closed
+            .scope(extract(
+                command("printf spawned >\"$1\"", std::slice::from_ref(&marker)),
+                PathBuf::from("synthetic.ts"),
+            ))
+            .await;
+        assert!(matches!(result, Err(FfprobeError::Cancelled { .. })));
+        let uncertain = LocalProbeCleanupScope::new();
+        uncertain
+            .scope(async {
+                drop(local_cleanup_scope::register_current().unwrap().unwrap());
+            })
+            .await;
+        assert_eq!(
+            uncertain.cleanup_status(),
+            Err(LocalProbeCleanupError::CleanupUnconfirmed)
+        );
+        let result = uncertain
+            .scope(extract(
+                command("printf spawned >\"$1\"", std::slice::from_ref(&marker)),
+                PathBuf::from("synthetic.ts"),
+            ))
+            .await;
+        assert!(matches!(
+            result,
+            Err(FfprobeError::CleanupUnconfirmed { .. })
+        ));
+        assert!(!marker.exists());
+    }
+
+    #[tokio::test]
+    async fn confirmed_probe_errors_allow_later_child_scans_in_the_same_scope() {
+        let scope = LocalProbeCleanupScope::new();
+        let result = scope
+            .scope(extract(
+                command("exit 7", &[]),
+                PathBuf::from("synthetic.ts"),
+            ))
+            .await;
+        assert!(matches!(result, Err(FfprobeError::Process { .. })));
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
+        let result = scope
+            .scope(extract(
+                command("printf '{'", &[]),
+                PathBuf::from("synthetic.ts"),
+            ))
+            .await;
+        assert!(matches!(result, Err(FfprobeError::Json { .. })));
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
+        let result = scope
+            .scope(extract(
+                command(
+                    "printf '{\"streams\":[],\"format\":{\"duration\":\"1.0\"}}'",
+                    &[],
+                ),
+                PathBuf::from("synthetic.ts"),
+            ))
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(scope.cleanup_status(), Ok(true));
     }
 
     #[tokio::test]
@@ -318,18 +445,25 @@ mod unix {
         let leader_marker = directory.path().join("leader-pid");
         let descendant_marker = directory.path().join("descendant-pid");
         let arguments = vec![leader_marker.clone(), descendant_marker.clone()];
-        let caller = tokio::spawn(extract(
-            command(
-                "sleep 30 & printf '%s' \"$!\" >\"$2\"; printf '%s' \"$$\" >\"$1\"; wait",
-                &arguments,
-            ),
-            PathBuf::from("synthetic.ts"),
-        ));
+        let scope = LocalProbeCleanupScope::new();
+        let caller_scope = scope.clone();
+        let caller =
+            tokio::spawn(async move {
+                caller_scope.scope(extract(
+                command(
+                    "sleep 30 & printf '%s' \"$!\" >\"$2\"; printf '%s' \"$$\" >\"$1\"; wait",
+                    &arguments,
+                ),
+                PathBuf::from("synthetic.ts"),
+            )).await
+            });
         let leader = wait_for_pid_file(&leader_marker).await;
         let descendant = wait_for_pid_file(&descendant_marker).await;
         assert!(nix::sys::signal::kill(descendant, None).is_ok());
         caller.abort();
         assert!(caller.await.unwrap_err().is_cancelled());
+        scope.close();
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
         wait_for_exit(leader).await;
         wait_for_exit(descendant).await;
         assert_eq!(

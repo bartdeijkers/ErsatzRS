@@ -8,6 +8,7 @@ use ersatzrs_domain::{ManagedLibraryOperationKind, ManagedLibraryOperationState,
 use ersatzrs_infra::db;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::emby::{sync_emby_movie_library, sync_emby_show_library, EmbyService};
+use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
 use ersatzrs_infra::jellyfin::{
     sync_jellyfin_movie_library, sync_jellyfin_show_library, JellyfinService,
 };
@@ -142,6 +143,10 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     let result = Box::pin(run_while_lease_current(scan, heartbeat)).await;
+    let result = match result? {
+        ForegroundScanOutcome::Finished(result) => result,
+        ForegroundScanOutcome::LeaseLost(error) => return Err(error),
+    };
     match result {
         Ok(()) => {
             if !operations.complete_operation(&claim).await? {
@@ -159,23 +164,57 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
+enum ForegroundScanOutcome {
+    Finished(anyhow::Result<()>),
+    LeaseLost(anyhow::Error),
+}
+
 async fn run_while_lease_current<Scan, Heartbeat>(
     scan: Scan,
     heartbeat: Heartbeat,
-) -> anyhow::Result<()>
+) -> anyhow::Result<ForegroundScanOutcome>
 where
     Scan: Future<Output = anyhow::Result<()>>,
     Heartbeat: Future<Output = anyhow::Result<()>>,
 {
-    tokio::pin!(scan);
+    let scope = LocalProbeCleanupScope::new();
     tokio::pin!(heartbeat);
-    tokio::select! {
-        result = &mut scan => result,
-        result = &mut heartbeat => match result {
-            Err(error) => Err(error),
-            Ok(()) => anyhow::bail!("standalone scanner heartbeat stopped unexpectedly"),
-        },
+    let mut heartbeat_owned = true;
+    let mut outcome = {
+        let scan = scope.scope(scan);
+        tokio::pin!(scan);
+        let outcome = tokio::select! {
+            result = &mut scan => ForegroundScanOutcome::Finished(result),
+            result = &mut heartbeat => {
+                heartbeat_owned = false;
+                ForegroundScanOutcome::LeaseLost(heartbeat_error(result))
+            },
+        };
+        scope.close();
+        outcome
+    };
+    let cleanup = scope.wait_cleanup();
+    tokio::pin!(cleanup);
+    loop {
+        tokio::select! {
+            biased;
+            result = &mut cleanup => {
+                result.map_err(|_| anyhow::anyhow!("Local probe cleanup was not confirmed"))?;
+                return Ok(outcome);
+            }
+            result = &mut heartbeat, if heartbeat_owned => {
+                heartbeat_owned = false;
+                outcome = ForegroundScanOutcome::LeaseLost(heartbeat_error(result));
+            }
+        }
     }
+}
+
+fn heartbeat_error(result: anyhow::Result<()>) -> anyhow::Error {
+    result
+        .err()
+        .unwrap_or_else(|| anyhow::anyhow!("standalone scanner heartbeat stopped unexpectedly"))
 }
 
 #[allow(clippy::disallowed_methods)]
@@ -583,8 +622,8 @@ async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> anyhow::Result<Stri
 #[cfg(test)]
 mod tests {
     use super::{
-        run_while_lease_current, scan_emby, scan_jellyfin, scan_plex, Args, Provider,
-        PLEX_SERVER_AUTH_TOKEN_PREFIX,
+        run_while_lease_current, scan_emby, scan_jellyfin, scan_plex, Args, ForegroundScanOutcome,
+        Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX,
     };
     use httpmock::{prelude::*, Mock};
     use serde_json::json;
@@ -760,15 +799,105 @@ mod tests {
             anyhow::bail!("lease heartbeat failed")
         };
 
-        let error = run_while_lease_current(scan, heartbeat)
+        let outcome = run_while_lease_current(scan, heartbeat)
             .await
-            .expect_err("heartbeat loss must fail the scanner");
+            .expect("cancelled scan cleanup is confirmed");
+        let ForegroundScanOutcome::LeaseLost(error) = outcome else {
+            panic!("heartbeat loss must not become a finished scan");
+        };
 
         assert!(error.to_string().contains("lease heartbeat failed"));
         assert!(
             cancelled.load(Ordering::SeqCst),
             "the foreground scan future must be dropped before returning"
         );
+    }
+
+    #[tokio::test]
+    async fn confirmed_scan_failure_remains_a_finished_failure() {
+        let outcome = run_while_lease_current(
+            async { anyhow::bail!("ordinary scan failure") },
+            std::future::pending(),
+        )
+        .await
+        .expect("no local owners remain");
+        let ForegroundScanOutcome::Finished(Err(error)) = outcome else {
+            panic!("confirmed scan error must remain eligible for failure persistence");
+        };
+        assert_eq!(error.to_string(), "ordinary scan failure");
+    }
+
+    // Unix-only fixture exercises process groups; native Windows acceptance
+    // remains responsible for the corresponding JobObject runtime proof.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn foreground_lease_loss_reaps_actual_local_probe_before_returning() {
+        use ersatzrs_infra::ffprobe::{FfprobeExtractor, LocalProbeCleanupScope};
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().expect("temporary probe fixture");
+        let program = directory.path().join("probe.sh");
+        let ready = directory.path().join("probe.sh.ready");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s' \"$$\" > \"$0.ready\"\nexec sleep 60\n",
+        )
+        .expect("write original probe fixture");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700))
+            .expect("make probe executable");
+        let extractor = FfprobeExtractor::new(program.to_string_lossy());
+        let completed = Arc::new(AtomicBool::new(false));
+        let (scope_sender, scope_receiver) = tokio::sync::oneshot::channel();
+        let scan = async {
+            scope_sender
+                .send(LocalProbeCleanupScope::current().expect("managed scan scope"))
+                .expect("retain cleanup scope");
+            let _ = extractor.extract("synthetic.mkv").await;
+            completed.store(true, Ordering::SeqCst);
+            Ok(())
+        };
+        let heartbeat = async {
+            tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                while std::fs::read_to_string(&ready)
+                    .ok()
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .is_none()
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .expect("probe became active");
+            anyhow::bail!("lease lost while probing")
+        };
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_secs(9),
+            run_while_lease_current(scan, heartbeat),
+        )
+        .await
+        .expect("owned cleanup finishes")
+        .expect("cleanup confirmed");
+        assert!(
+            matches!(outcome, ForegroundScanOutcome::LeaseLost(_)),
+            "lease loss cannot enter terminal success/failure persistence"
+        );
+        assert!(!completed.load(Ordering::SeqCst));
+        assert_eq!(
+            scope_receiver
+                .await
+                .expect("cleanup scope")
+                .cleanup_status(),
+            Ok(true)
+        );
+        let pid = std::fs::read_to_string(&ready).expect("probe process identity");
+        let alive = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "kill -0 \"$1\"", "probe-check", pid.as_str()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await
+            .expect("inspect probe process")
+            .success();
+        assert!(!alive, "probe process is reaped before lease-loss return");
     }
 
     #[tokio::test]

@@ -126,12 +126,14 @@ pub async fn scan_library(
 
     let state = expect_context::<AppState>();
     tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
-    map_scan_outcome(
+    map_scan_outcome_for_api(
         state
             .application
             .request_library_scan(RequestLibraryScan::new(library_id, deep_scan))
             .await,
+        state.application.ports().admin_settings(),
     )
+    .await
 }
 
 /// Fires a background scan for a single show.
@@ -156,16 +158,38 @@ pub async fn scan_show(
         deep_scan,
         "scan_show invoked"
     );
-    map_scan_outcome(
+    map_scan_outcome_for_api(
         state
             .application
             .request_show_scan(RequestShowScan::new(library_id, show_id, deep_scan))
             .await,
+        state.application.ports().admin_settings(),
     )
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn map_scan_outcome_for_api(
+    outcome: RequestScanOutcome,
+    settings: &dyn ersatzrs_core::repositories::AdminSettingsRepository,
+) -> Result<bool, ServerFnError> {
+    use crate::admin::i18n::UiLanguage;
+    let language = if matches!(
+        &outcome,
+        RequestScanOutcome::Unavailable { message } if message == "scanner worker is unavailable"
+    ) {
+        super::settings::load_ui_language_for_api(settings).await?
+    } else {
+        UiLanguage::English
+    };
+    map_scan_outcome(outcome, language)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn map_scan_outcome(outcome: RequestScanOutcome) -> Result<bool, ServerFnError> {
+fn map_scan_outcome(
+    outcome: RequestScanOutcome,
+    language: crate::admin::i18n::UiLanguage,
+) -> Result<bool, ServerFnError> {
     match outcome {
         RequestScanOutcome::Accepted { .. } => Ok(true),
         RequestScanOutcome::Rejected(reason) => {
@@ -174,7 +198,18 @@ fn map_scan_outcome(outcome: RequestScanOutcome) -> Result<bool, ServerFnError> 
                 "scan request rejected: {reason:?}"
             )))
         }
-        RequestScanOutcome::Unavailable { message } => Err(ServerFnError::new(message)),
+        RequestScanOutcome::Unavailable { message } => {
+            let message = if message == "scanner worker is unavailable" {
+                crate::admin::i18n::text(
+                    language,
+                    crate::admin::i18n::TextKey::ScanWorkerUnavailableBrief,
+                )
+                .to_owned()
+            } else {
+                message
+            };
+            Err(ServerFnError::new(message))
+        }
     }
 }
 
@@ -295,6 +330,7 @@ mod server_fn_path_stability {
     //! route and all server-function calls 404 with the empty-body error
     //! `Invalid format: missing delimiter in ""`. Re-deriving the hash with the
     //! pinned key fails fast if the pin is dropped, changed, or the module moves.
+    use crate::admin::i18n::{text, TextKey, UiLanguage};
     use ersatzrs_app::commands::{RequestScanOutcome, RequestScanRejection, ScanOperationId};
     use leptos::server_fn::{xxhash_rust::const_xxh64::xxh64, ServerFn};
 
@@ -323,15 +359,120 @@ mod server_fn_path_stability {
 
     #[test]
     fn rejected_scan_outcomes_are_transport_errors() {
-        assert!(super::map_scan_outcome(RequestScanOutcome::Accepted {
-            operation_id: ScanOperationId(1),
-        })
+        assert!(super::map_scan_outcome(
+            RequestScanOutcome::Accepted {
+                operation_id: ScanOperationId(1),
+            },
+            UiLanguage::English
+        )
         .expect("accepted scan"));
 
-        let error = super::map_scan_outcome(RequestScanOutcome::Rejected(
-            RequestScanRejection::SynchronizationDisabled,
-        ))
+        let error = super::map_scan_outcome(
+            RequestScanOutcome::Rejected(RequestScanRejection::SynchronizationDisabled),
+            UiLanguage::English,
+        )
         .expect_err("rejected scan must not be rendered as queued");
         assert!(error.to_string().contains("SynchronizationDisabled"));
+    }
+
+    #[test]
+    fn stopped_worker_scan_outcome_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let error = super::map_scan_outcome(
+                RequestScanOutcome::Unavailable {
+                    message: "scanner worker is unavailable".to_owned(),
+                },
+                language,
+            )
+            .expect_err("stopped worker rejects manual scan");
+            assert_eq!(
+                error,
+                leptos::prelude::ServerFnError::new(text(
+                    language,
+                    TextKey::ScanWorkerUnavailableBrief
+                ))
+            );
+            let unknown = super::map_scan_outcome(
+                RequestScanOutcome::Unavailable {
+                    message: "unknown future scan diagnostic".to_owned(),
+                },
+                language,
+            )
+            .expect_err("unknown unavailable outcome");
+            assert_eq!(
+                unknown,
+                leptos::prelude::ServerFnError::new("unknown future scan diagnostic")
+            );
+        }
+    }
+
+    #[cfg(feature = "ssr")]
+    #[tokio::test]
+    async fn stopped_worker_scan_error_uses_persisted_api_language_without_context() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("API locale fixture");
+        sqlx::query(r#"CREATE TABLE "ConfigElement" ("Key" TEXT PRIMARY KEY, "Value" TEXT)"#)
+            .execute(&pool)
+            .await
+            .expect("create settings fixture");
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, 'nl')"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE)
+            .execute(&pool)
+            .await
+            .expect("persist Dutch UI language");
+        let settings = ersatzrs_infra::repositories::SqliteAdminSettingsRepository(pool.clone());
+        let error = super::map_scan_outcome_for_api(
+            RequestScanOutcome::Unavailable {
+                message: "scanner worker is unavailable".to_owned(),
+            },
+            &settings,
+        )
+        .await
+        .expect_err("localized stopped worker");
+        assert_eq!(
+            error,
+            leptos::prelude::ServerFnError::new(text(
+                UiLanguage::Dutch,
+                TextKey::ScanWorkerUnavailableBrief
+            ))
+        );
+
+        // Only the known diagnostic needs a settings read. Other outcomes keep
+        // their existing transport behavior even if settings are unavailable.
+        sqlx::query(r#"DROP TABLE "ConfigElement""#)
+            .execute(&pool)
+            .await
+            .expect("remove settings fixture");
+        assert!(super::map_scan_outcome_for_api(
+            RequestScanOutcome::Accepted {
+                operation_id: ScanOperationId(1),
+            },
+            &settings
+        )
+        .await
+        .expect("accepted outcome does not read locale"));
+        let unknown = super::map_scan_outcome_for_api(
+            RequestScanOutcome::Unavailable {
+                message: "unknown future scan diagnostic".to_owned(),
+            },
+            &settings,
+        )
+        .await
+        .expect_err("unchanged unknown diagnostic");
+        assert_eq!(
+            unknown,
+            leptos::prelude::ServerFnError::new("unknown future scan diagnostic")
+        );
+        let rejected = super::map_scan_outcome_for_api(
+            RequestScanOutcome::Rejected(RequestScanRejection::SynchronizationDisabled),
+            &settings,
+        )
+        .await
+        .expect_err("unchanged rejection");
+        assert!(rejected.to_string().contains("SynchronizationDisabled"));
     }
 }

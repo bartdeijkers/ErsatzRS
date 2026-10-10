@@ -3,6 +3,9 @@
 pub mod teletext;
 
 mod local;
+mod local_cleanup_scope;
+
+pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -106,7 +109,9 @@ impl FfprobeExtractor {
     ///
     /// Output is bounded without a total scan timeout. Dropping this future
     /// requests cancellation; an independent owner awaits process-tree and
-    /// pipe cleanup. This does not retain an enclosing scanner lease on drop.
+    /// pipe cleanup. Managed scan coordinators use `LocalProbeCleanupScope`
+    /// to await those owners before releasing operation resources; this method
+    /// does not own an enclosing scanner lease itself.
     ///
     /// # Errors
     ///

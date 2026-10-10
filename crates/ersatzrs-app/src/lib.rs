@@ -27,9 +27,10 @@ pub use ports::{
     PlaybackPreviewRequest, PlaybackPreviewState, PlaybackPreviewStatus, PlayoutBuildQueue,
     PlayoutBuildQueueError, PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit,
     RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime,
-    RemoteStreamPlaylistRuntimeError, RemoteStreamPlaylistTroubleshootingRead, ScanRuntime,
-    ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths,
-    SettingsRuntime, SettingsRuntimeError, SourceAddonRouting, WindowsStartupStatus,
+    RemoteStreamPlaylistRuntimeError, RemoteStreamPlaylistTroubleshootingRead,
+    ScanCleanupConfirmation, ScanRuntime, ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue,
+    ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
+    SourceAddonRouting, WindowsStartupStatus,
 };
 
 /// Native application services assembled by a composition root.
@@ -3669,6 +3670,7 @@ async fn execute_managed_library_operation(
                     };
                     match execute_durable_scan(application, &child_claim).await {
                         Outcome::Completed => {}
+                        Outcome::CleanupUnconfirmed => return Outcome::CleanupUnconfirmed,
                         Outcome::Failed { message } => {
                             let recorded = application
                                 .ports
@@ -3982,6 +3984,7 @@ async fn execute_managed_library_operation(
                     };
                     match execute_durable_scan(application, &child_claim).await {
                         Outcome::Completed => {}
+                        Outcome::CleanupUnconfirmed => return Outcome::CleanupUnconfirmed,
                         Outcome::Failed { message } => {
                             tracing::warn!(
                                 operation_id = claim.operation.id,
@@ -4319,6 +4322,7 @@ async fn execute_addon_media_list_reset_reload(
                     };
                     match execute_durable_scan(application, &child_claim).await {
                         Outcome::Completed => {}
+                        Outcome::CleanupUnconfirmed => return Outcome::CleanupUnconfirmed,
                         Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
                         Outcome::Failed { message } => {
                             return fail_reset_operation(application, claim, message).await;
@@ -4599,13 +4603,25 @@ async fn execute_durable_scan(
             request,
         })
         .await;
+    let operations = application.ports.managed_library_operations();
+    finish_durable_scan(
+        outcome,
+        operations.complete_operation(claim),
+        operations.fail_operation(claim, "scan_failed", "managed-library scan failed"),
+    )
+    .await
+}
+
+/// Poll a terminal storage write only after the scan's cleanup gate confirms.
+async fn finish_durable_scan(
+    outcome: commands::ExecuteScanOutcome,
+    complete: impl std::future::Future<Output = ersatzrs_core::repositories::Result<bool>>,
+    fail: impl std::future::Future<Output = ersatzrs_core::repositories::Result<bool>>,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+
     match outcome {
-        commands::ExecuteScanOutcome::Completed => match application
-            .ports
-            .managed_library_operations()
-            .complete_operation(claim)
-            .await
-        {
+        commands::ExecuteScanOutcome::Completed => match complete.await {
             Ok(true) => Outcome::Completed,
             Ok(false) => Outcome::LeaseLost,
             Err(error) => Outcome::Failed {
@@ -4613,13 +4629,10 @@ async fn execute_durable_scan(
             },
         },
         commands::ExecuteScanOutcome::Failed { message } => {
-            let _ = application
-                .ports
-                .managed_library_operations()
-                .fail_operation(claim, "scan_failed", "managed-library scan failed")
-                .await;
+            let _ = fail.await;
             Outcome::Failed { message }
         }
+        commands::ExecuteScanOutcome::CleanupUnconfirmed => Outcome::CleanupUnconfirmed,
         commands::ExecuteScanOutcome::Missing => Outcome::Failed {
             message: "persisted scan was not visible to the progress registry".to_owned(),
         },
@@ -4716,6 +4729,13 @@ async fn execute_scan_work_with_runtime(
         }
     };
 
+    // Check after post-scan awaits, including errors absorbed by the scanner,
+    // before converting either success or failure into a terminal outcome.
+    if runtime.confirm_cleanup().await == ScanCleanupConfirmation::Unconfirmed {
+        guard.fail("scan process cleanup could not be confirmed");
+        return commands::ExecuteScanOutcome::CleanupUnconfirmed;
+    }
+
     match result.and_then(|report| {
         commands::require_scan_playout_refreshes(report, playout_builds, operations)
             .map_err(|error| ScanRuntimeError::new(error.to_string()))
@@ -4754,11 +4774,14 @@ mod scan_execution_tests {
     };
 
     use super::{
-        execute_scan_work_with_runtime, managed_operation_execution_path,
+        execute_scan_work_with_runtime, finish_durable_scan, managed_operation_execution_path,
         ManagedOperationExecutionPath, OperationCoordinator, PlayoutBuildQueue,
-        PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
+        PlayoutBuildQueueError, ScanCleanupConfirmation, ScanRuntime, ScanRuntimeError,
+        ScanRuntimeReport,
     };
-    use crate::commands::{ExecuteScanOutcome, ScanRequest, ScanWorkRequest};
+    use crate::commands::{
+        ExecuteManagedLibraryOperationOutcome, ExecuteScanOutcome, ScanRequest, ScanWorkRequest,
+    };
     use crate::queries::{GetLibraryScanStatus, LibraryScanStatus, ScanOperationState};
 
     #[test]
@@ -4878,6 +4901,60 @@ mod scan_execution_tests {
         }
     }
 
+    struct UnconfirmedRuntime {
+        inner: FakeRuntime,
+        fail_subtitles: bool,
+    }
+
+    #[async_trait]
+    impl ScanRuntime for UnconfirmedRuntime {
+        async fn confirm_cleanup(&self) -> ScanCleanupConfirmation {
+            self.inner
+                .calls
+                .lock()
+                .expect("calls")
+                .push("confirm_cleanup".to_owned());
+            ScanCleanupConfirmation::Unconfirmed
+        }
+
+        async fn scan_library(
+            &self,
+            provider: MediaSourceKind,
+            library_id: EntityId,
+            deep_scan: bool,
+            progress: &dyn ScanProgressSink,
+        ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+            self.inner
+                .scan_library(provider, library_id, deep_scan, progress)
+                .await
+        }
+
+        async fn scan_show(
+            &self,
+            provider: MediaSourceKind,
+            library_id: EntityId,
+            show_id: EntityId,
+            deep_scan: bool,
+            progress: &dyn ScanProgressSink,
+        ) -> Result<(), ScanRuntimeError> {
+            self.inner
+                .scan_show(provider, library_id, show_id, deep_scan, progress)
+                .await
+        }
+
+        async fn extract_embedded_show_subtitles(
+            &self,
+            show_id: EntityId,
+        ) -> Result<(), ScanRuntimeError> {
+            self.inner.extract_embedded_show_subtitles(show_id).await?;
+            if self.fail_subtitles {
+                Err(ScanRuntimeError::new("subtitle extraction failed"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     #[derive(Default)]
     struct RecordingPlayoutQueue {
         requests: Mutex<Vec<PlayoutBuildRequest>>,
@@ -4912,6 +4989,162 @@ mod scan_execution_tests {
             })
             .expect("accepted");
         work.expect("queue token")
+    }
+
+    async fn recorded_terminal_result(
+        outcome: ExecuteScanOutcome,
+    ) -> (ExecuteManagedLibraryOperationOutcome, Vec<&'static str>) {
+        let writes = Mutex::new(Vec::new());
+        let result = finish_durable_scan(
+            outcome,
+            async {
+                writes.lock().expect("terminal writes").push("complete");
+                Ok(true)
+            },
+            async {
+                writes.lock().expect("terminal writes").push("fail");
+                Ok(true)
+            },
+        )
+        .await;
+        (result, writes.into_inner().expect("terminal writes"))
+    }
+
+    async fn assert_unconfirmed_scan_fences_terminal_writes(
+        runtime: &UnconfirmedRuntime,
+        request: ScanRequest,
+    ) {
+        let operations = coordinator();
+        let queue = RecordingPlayoutQueue::default();
+        let work = admitted(&operations, request);
+        let outcome = execute_scan_work_with_runtime(work, runtime, &queue, &operations).await;
+        assert_eq!(outcome, ExecuteScanOutcome::CleanupUnconfirmed);
+        assert!(queue.requests.lock().expect("requests").is_empty());
+        assert!(operations.scan_activity().progress_by_library().is_empty());
+        let snapshot = operations.scan_activity().snapshots().remove(0);
+        assert!(matches!(
+            snapshot.state,
+            ScanOperationState::Failed { ref message }
+                if message == "scan process cleanup could not be confirmed"
+        ));
+        let (terminal, writes) = recorded_terminal_result(outcome).await;
+        assert_eq!(
+            terminal,
+            ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed
+        );
+        assert!(writes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unconfirmed_successful_scan_suppresses_refresh_and_terminal_lease_writes() {
+        let runtime = UnconfirmedRuntime {
+            inner: FakeRuntime::reporting(vec![ScanPlayoutRefresh {
+                playout_id: 80,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+            }]),
+            fail_subtitles: false,
+        };
+        assert_unconfirmed_scan_fences_terminal_writes(
+            &runtime,
+            ScanRequest::Library {
+                provider: MediaSourceKind::Local,
+                library_id: 20,
+                deep_scan: true,
+            },
+        )
+        .await;
+        assert_eq!(
+            runtime.inner.calls.lock().expect("calls").as_slice(),
+            ["library:Local:20:true", "confirm_cleanup"]
+        );
+    }
+
+    #[tokio::test]
+    async fn unconfirmed_failed_scan_suppresses_ordinary_failure_and_terminal_lease_writes() {
+        let runtime = UnconfirmedRuntime {
+            inner: FakeRuntime::failing(),
+            fail_subtitles: false,
+        };
+        assert_unconfirmed_scan_fences_terminal_writes(
+            &runtime,
+            ScanRequest::Library {
+                provider: MediaSourceKind::Local,
+                library_id: 21,
+                deep_scan: false,
+            },
+        )
+        .await;
+        assert_eq!(
+            runtime.inner.calls.lock().expect("calls").as_slice(),
+            ["library:Local:21:false", "confirm_cleanup"]
+        );
+    }
+
+    #[tokio::test]
+    async fn cleanup_confirmation_follows_successful_or_failed_subtitle_extraction() {
+        for fail_subtitles in [false, true] {
+            let runtime = UnconfirmedRuntime {
+                inner: FakeRuntime::default(),
+                fail_subtitles,
+            };
+            assert_unconfirmed_scan_fences_terminal_writes(
+                &runtime,
+                ScanRequest::Show {
+                    provider: MediaSourceKind::Jellyfin,
+                    library_id: 22,
+                    show_id: 220,
+                    deep_scan: true,
+                },
+            )
+            .await;
+            assert_eq!(
+                runtime.inner.calls.lock().expect("calls").as_slice(),
+                [
+                    "show:Jellyfin:22:220:true",
+                    "subtitles:220",
+                    "confirm_cleanup"
+                ]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn confirmed_scans_preserve_success_and_failure_terminal_lease_writes() {
+        for fail_scan in [false, true] {
+            let operations = coordinator();
+            let runtime = FakeRuntime {
+                fail_scan,
+                ..FakeRuntime::default()
+            };
+            let work = admitted(
+                &operations,
+                ScanRequest::Library {
+                    provider: MediaSourceKind::Local,
+                    library_id: 23,
+                    deep_scan: false,
+                },
+            );
+            let outcome = execute_scan_work_with_runtime(
+                work,
+                &runtime,
+                &RecordingPlayoutQueue::default(),
+                &operations,
+            )
+            .await;
+            let (terminal, writes) = recorded_terminal_result(outcome).await;
+            if fail_scan {
+                assert_eq!(
+                    terminal,
+                    ExecuteManagedLibraryOperationOutcome::Failed {
+                        message: "library failed".to_owned(),
+                    }
+                );
+                assert_eq!(writes, ["fail"]);
+            } else {
+                assert_eq!(terminal, ExecuteManagedLibraryOperationOutcome::Completed);
+                assert_eq!(writes, ["complete"]);
+            }
+        }
     }
 
     #[tokio::test]

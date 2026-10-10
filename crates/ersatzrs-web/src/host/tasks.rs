@@ -13,6 +13,7 @@ use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListMatchReport, AddonMediaListSynchronizer,
 };
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
 use std::collections::BTreeSet;
 use std::future::Future;
@@ -151,6 +152,12 @@ async fn await_terminal_startup_replays(
                             message,
                         });
                     }
+                    ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed => {
+                        return Err(ersatzrs_app::ApplicationError::Unavailable {
+                            operation: "replay interrupted library scan",
+                            message: "Local probe cleanup was not confirmed".to_owned(),
+                        });
+                    }
                 }
                 made_progress = true;
             }
@@ -166,25 +173,54 @@ async fn execute_startup_replay_with_heartbeat(
     application: &(dyn StartupReplayApplication + '_),
     claim: ManagedLibraryOperationClaim,
 ) -> ersatzrs_app::Result<ExecuteManagedLibraryOperationOutcome> {
-    let execution = application.execute(claim.clone());
-    tokio::pin!(execution);
-    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
-    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    heartbeat.tick().await;
+    let scope = LocalProbeCleanupScope::new();
+    let heartbeat = async {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            match application.heartbeat(&claim).await {
+                Ok(true) => {}
+                Ok(false) => return Ok(ExecuteManagedLibraryOperationOutcome::LeaseLost),
+                Err(error) => {
+                    return Err(ersatzrs_app::ApplicationError::Unavailable {
+                        operation: "heartbeat startup library scan replay",
+                        message: error.to_string(),
+                    });
+                }
+            }
+        }
+    };
+    tokio::pin!(heartbeat);
+    let mut heartbeat_owned = true;
+    let mut outcome = {
+        let execution = scope.scope(application.execute(claim.clone()));
+        tokio::pin!(execution);
+        let outcome = tokio::select! {
+            outcome = &mut execution => Ok(outcome),
+            result = &mut heartbeat => {
+                heartbeat_owned = false;
+                result
+            }
+        };
+        scope.close();
+        outcome
+    };
+    let cleanup = scope.wait_cleanup();
+    tokio::pin!(cleanup);
     loop {
         tokio::select! {
-            outcome = &mut execution => return Ok(outcome),
-            _ = heartbeat.tick() => {
-                match application.heartbeat(&claim).await {
-                    Ok(true) => {}
-                    Ok(false) => return Ok(ExecuteManagedLibraryOperationOutcome::LeaseLost),
-                    Err(error) => {
-                        return Err(ersatzrs_app::ApplicationError::Unavailable {
-                            operation: "heartbeat startup library scan replay",
-                            message: error.to_string(),
-                        });
-                    }
+            biased;
+            result = &mut cleanup => {
+                if result.is_err() {
+                    return Ok(ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed);
                 }
+                return outcome;
+            }
+            result = &mut heartbeat, if heartbeat_owned => {
+                heartbeat_owned = false;
+                outcome = result;
             }
         }
     }
@@ -591,6 +627,7 @@ mod tests {
         operation: Mutex<ManagedLibraryOperation>,
         claims: AtomicUsize,
         fail: bool,
+        cleanup_unconfirmed: bool,
         lease_loss_once: bool,
         lease_lost: AtomicBool,
         preparation_rounds: usize,
@@ -617,6 +654,7 @@ mod tests {
                 }),
                 claims: AtomicUsize::new(0),
                 fail: false,
+                cleanup_unconfirmed: false,
                 lease_loss_once: true,
                 lease_lost: AtomicBool::new(false),
                 preparation_rounds: 0,
@@ -691,6 +729,9 @@ mod tests {
             &self,
             _claim: ManagedLibraryOperationClaim,
         ) -> ExecuteManagedLibraryOperationOutcome {
+            if self.cleanup_unconfirmed {
+                return ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed;
+            }
             if self.fail {
                 self.operation.lock().expect("operation").state =
                     ManagedLibraryOperationState::Failed;
@@ -733,6 +774,25 @@ mod tests {
 
         assert!(error.to_string().contains("replay scan failed"));
         assert_eq!(application.claims.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn unconfirmed_startup_cleanup_stops_preflight_without_reclaim() {
+        let application = ReplayApplication {
+            cleanup_unconfirmed: true,
+            ..ReplayApplication::new()
+        };
+        let error = await_terminal_startup_replays(&application, vec![17])
+            .await
+            .expect_err("uncertain local cleanup must stop startup");
+        assert!(error
+            .to_string()
+            .contains("Local probe cleanup was not confirmed"));
+        assert_eq!(application.claims.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            application.operation.lock().expect("operation").state,
+            ManagedLibraryOperationState::Running
+        );
     }
 
     #[tokio::test]

@@ -3,11 +3,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ersatzrs_app::{
     commands::{ExecuteManagedLibraryOperationOutcome, ScanWorkRequest},
-    ApplicationServices, ScanPlayoutRefresh, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
-    ScanWorkQueue, ScanWorkQueueError,
+    ApplicationServices, ScanCleanupConfirmation, ScanPlayoutRefresh, ScanRuntime,
+    ScanRuntimeError, ScanRuntimeReport, ScanWorkQueue, ScanWorkQueueError,
 };
 use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -73,6 +74,16 @@ impl NativeScanRuntime {
 
 #[async_trait]
 impl ScanRuntime for NativeScanRuntime {
+    async fn confirm_cleanup(&self) -> ScanCleanupConfirmation {
+        let Some(scope) = LocalProbeCleanupScope::current() else {
+            return ScanCleanupConfirmation::Unconfirmed;
+        };
+        match scope.wait_cleanup().await {
+            Ok(()) => ScanCleanupConfirmation::Confirmed,
+            Err(_) => ScanCleanupConfirmation::Unconfirmed,
+        }
+    }
+
     async fn preview_television_folders(
         &self,
         paths: Vec<String>,
@@ -200,6 +211,11 @@ impl ScanRuntime for NativeScanRuntime {
                     let mut report = self
                         .scan_local_library_report(library_id, deep_scan, progress)
                         .await?;
+                    if self.confirm_cleanup().await == ScanCleanupConfirmation::Unconfirmed {
+                        return Err(ScanRuntimeError::new(
+                            "Local probe cleanup was not confirmed",
+                        ));
+                    }
                     if report.failed_files > 0 {
                         return Err(ScanRuntimeError::new(format!(
                             "Local scan reported {} failed file(s)",
@@ -215,6 +231,11 @@ impl ScanRuntime for NativeScanRuntime {
                     })
                 }
                 .await;
+                if self.confirm_cleanup().await == ScanCleanupConfirmation::Unconfirmed {
+                    return Err(ScanRuntimeError::new(
+                        "Local probe cleanup was not confirmed",
+                    ));
+                }
                 if let Some(generation) = interrupted_generation {
                     let persisted = if result.is_ok() {
                         ersatzrs_infra::scan_refresh::complete_interrupted_replay(
@@ -304,12 +325,40 @@ async fn run_claimed_operation(
 ) -> Option<ExecuteManagedLibraryOperationOutcome> {
     // Keep polling execution while a heartbeat waits for SQLite's writer lock:
     // execution may own that lock and must be able to finish its transaction.
-    // Owning both futures also drops in-flight work on lease loss or shutdown.
-    tokio::pin!(execution, heartbeat);
-    tokio::select! {
-        () = shutdown.cancelled() => None,
-        outcome = &mut execution => Some(outcome),
-        () = &mut heartbeat => Some(ExecuteManagedLibraryOperationOutcome::LeaseLost),
+    let scope = LocalProbeCleanupScope::new();
+    tokio::pin!(heartbeat);
+    let mut heartbeat_owned = true;
+    let mut outcome = {
+        let execution = scope.scope(execution);
+        tokio::pin!(execution);
+        let outcome = tokio::select! {
+            () = shutdown.cancelled() => None,
+            outcome = &mut execution => Some(outcome),
+            () = &mut heartbeat => {
+                heartbeat_owned = false;
+                Some(ExecuteManagedLibraryOperationOutcome::LeaseLost)
+            },
+        };
+        // Fence registrations before destroying the backing execution future.
+        scope.close();
+        outcome
+    };
+    let cleanup = scope.wait_cleanup();
+    tokio::pin!(cleanup);
+    loop {
+        tokio::select! {
+            biased;
+            result = &mut cleanup => {
+                if result.is_err() {
+                    return Some(ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed);
+                }
+                return outcome;
+            }
+            () = &mut heartbeat, if heartbeat_owned => {
+                heartbeat_owned = false;
+                outcome = Some(ExecuteManagedLibraryOperationOutcome::LeaseLost);
+            }
+        }
     }
 }
 
@@ -416,6 +465,10 @@ pub async fn run_scan_worker(
                     library_id,
                     "managed-library operation stopped after losing its lease"
                 );
+            }
+            ExecuteManagedLibraryOperationOutcome::CleanupUnconfirmed => {
+                tracing::error!("local probe cleanup was not confirmed; scanner worker stopped");
+                break;
             }
         }
     }
@@ -592,6 +645,120 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_cleanup_confirmation_requires_managed_scope() {
+        let (_directory, pool) = worker_test_pool().await;
+        let runtime = NativeScanRuntime::new(pool);
+        assert_eq!(
+            runtime.confirm_cleanup().await,
+            ScanCleanupConfirmation::Unconfirmed
+        );
+        let scope = LocalProbeCleanupScope::new();
+        assert_eq!(
+            scope.scope(runtime.confirm_cleanup()).await,
+            ScanCleanupConfirmation::Confirmed
+        );
+        // Confirmation does not close a healthy reusable scope.
+        assert_eq!(
+            scope.scope(runtime.confirm_cleanup()).await,
+            ScanCleanupConfirmation::Confirmed
+        );
+    }
+
+    // Unix shell fixtures intentionally exercise real managed process groups.
+    // Windows JobObject ownership is covered by native platform acceptance.
+    #[cfg(unix)]
+    async fn assert_local_probe_reaped_before_operation_returns(lose_lease: bool) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir().expect("temporary local probe fixture");
+        let program = directory.path().join("probe.sh");
+        let ready = directory.path().join("probe.sh.ready");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s' \"$$\" > \"$0.ready\"\nexec sleep 60\n",
+        )
+        .expect("write original probe fixture");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700))
+            .expect("make probe fixture executable");
+        let completed = Arc::new(AtomicBool::new(false));
+        let (scope_sender, scope_receiver) = oneshot::channel();
+        let extractor = ersatzrs_infra::ffprobe::FfprobeExtractor::new(program.to_string_lossy());
+        let execution = async {
+            scope_sender
+                .send(LocalProbeCleanupScope::current().expect("managed execution scope"))
+                .expect("retain scope evidence");
+            let _ = extractor.extract("synthetic.mkv").await;
+            completed.store(true, Ordering::SeqCst);
+            ExecuteManagedLibraryOperationOutcome::Completed
+        };
+        let shutdown = CancellationToken::new();
+        let heartbeat = async {
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while std::fs::read_to_string(&ready)
+                    .ok()
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .is_none()
+                {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .expect("local probe became active");
+            if lose_lease {
+                return;
+            }
+            shutdown.cancel();
+            std::future::pending::<()>().await;
+        };
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(9),
+            run_claimed_operation(execution, heartbeat, &shutdown),
+        )
+        .await
+        .expect("owned probe cleanup finishes");
+        if lose_lease {
+            assert!(matches!(
+                outcome,
+                Some(ExecuteManagedLibraryOperationOutcome::LeaseLost)
+            ));
+        } else {
+            assert!(outcome.is_none());
+        }
+        assert!(
+            !completed.load(Ordering::SeqCst),
+            "cancelled execution did not finish"
+        );
+        assert_eq!(
+            scope_receiver
+                .await
+                .expect("scope evidence")
+                .cleanup_status(),
+            Ok(true)
+        );
+        let pid = std::fs::read_to_string(&ready).expect("active process identity");
+        let alive = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "kill -0 \"$1\"", "probe-check", pid.as_str()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await
+            .expect("inspect probe process")
+            .success();
+        assert!(!alive, "process was reaped before operation returned");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shutdown_waits_for_actual_local_probe_cleanup() {
+        assert_local_probe_reaped_before_operation_returns(false).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn lost_heartbeat_waits_for_actual_local_probe_cleanup() {
+        assert_local_probe_reaped_before_operation_returns(true).await;
+    }
+
+    #[tokio::test]
     async fn heartbeat_lease_loss_drops_execution_and_rolls_back() {
         assert_cancelled_execution_rolls_back(Some(Ok(false))).await;
     }
@@ -654,8 +821,8 @@ mod tests {
 
         assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
-        runtime
-            .scan_library(MediaSourceKind::Local, 1, true, &())
+        LocalProbeCleanupScope::new()
+            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &()))
             .await
             .expect("run admitted startup replay");
         let state: i64 = sqlx::query_scalar(
@@ -705,8 +872,8 @@ mod tests {
 
         assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
-        runtime
-            .scan_library(MediaSourceKind::Local, 1, true, &())
+        LocalProbeCleanupScope::new()
+            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &()))
             .await
             .expect_err("malformed managed input must fail replay");
         let state: i64 = sqlx::query_scalar(

@@ -3,7 +3,8 @@
 //! The independent worker owns the managed process tree and both readers until
 //! completion. Caller loss requests cancellation through response-channel
 //! closure. Normal scans have no total timeout; only cleanup and pipe shutdown
-//! have fresh bounded budgets. Existing scanner leases are not retained here.
+//! have fresh bounded budgets. Operation scopes track these workers for managed
+//! coordinator draining; this module owns no scanner lease itself.
 //! Managed process groups/jobs do not contain deliberately detached processes,
 //! and runtime teardown cannot await an asynchronous drop fallback.
 
@@ -18,6 +19,7 @@ use tokio::process::Command;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+use super::local_cleanup_scope::{self, AdmissionError, OwnerGuard};
 use super::{parse_ffprobe_json, FfprobeCommand, FfprobeError, FfprobeMediaVersion};
 use crate::managed_process::ManagedProcess;
 
@@ -76,13 +78,29 @@ pub(super) async fn extract(
     path: PathBuf,
 ) -> super::Result<FfprobeMediaVersion> {
     let label = path.display().to_string();
+    let owner = local_cleanup_scope::register_current().map_err(|problem| match problem {
+        AdmissionError::Closed => FfprobeError::Cancelled {
+            path: label.clone(),
+        },
+        AdmissionError::Unconfirmed => FfprobeError::CleanupUnconfirmed {
+            path: label.clone(),
+        },
+        AdmissionError::Capacity => FfprobeError::Spawn {
+            path: label.clone(),
+            source: io::Error::other("local ffprobe cleanup scope capacity is busy"),
+        },
+    })?;
     let (mut response, receiver) = oneshot::channel();
     let owner_label = label.clone();
     // This worker intentionally outlives an abandoned caller only to perform
     // cleanup. No metadata publication or database write occurs in the worker.
     tokio::spawn(async move {
-        let result = run_owned(command, &owner_label, &mut response).await;
-        if matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. })) {
+        let result = run_owned_scoped(command, &owner_label, &mut response, owner.as_ref()).await;
+        let confirmed = !matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. }));
+        if let Some(owner) = owner {
+            owner.complete(confirmed);
+        }
+        if !confirmed {
             tracing::warn!("local ffprobe process cleanup could not be confirmed");
         }
         let _ = response.send(result);
@@ -105,14 +123,24 @@ pub(super) async fn extract(
     })
 }
 
+#[cfg(test)]
 async fn run_owned(
     command: FfprobeCommand,
     label: &str,
     response: &mut Response,
 ) -> super::Result<LocalProbeOutput> {
+    run_owned_scoped(command, label, response, None).await
+}
+
+async fn run_owned_scoped(
+    command: FfprobeCommand,
+    label: &str,
+    response: &mut Response,
+    owner: Option<&OwnerGuard>,
+) -> super::Result<LocalProbeOutput> {
     // Channel closure is level triggered, including caller loss before the
     // task's first poll; no cancellation notification registration gap exists.
-    if response.is_closed() {
+    if response.is_closed() || owner.is_some_and(OwnerGuard::cancellation_requested) {
         return Err(LocalProbeProblem::Cancelled.into_error(label.to_owned()));
     }
     let mut command_builder = Command::new(command.program);
@@ -135,7 +163,7 @@ async fn run_owned(
         };
         return Err(problem.into_error(label.to_owned()));
     };
-    run_process(child, ProbeReaders::spawn(stdout, stderr), response)
+    run_process(child, ProbeReaders::spawn(stdout, stderr), response, owner)
         .await
         .map_err(|problem| problem.into_error(label.to_owned()))
 }
@@ -144,11 +172,13 @@ async fn run_process(
     mut child: ManagedProcess,
     mut readers: ProbeReaders,
     response: &mut Response,
+    owner: Option<&OwnerGuard>,
 ) -> Result<LocalProbeOutput, LocalProbeProblem> {
     let process_result = loop {
         tokio::select! {
             biased;
             () = response.closed() => break Err(LocalProbeProblem::Cancelled),
+            () = scope_cancelled(owner) => break Err(LocalProbeProblem::Cancelled),
             result = await_reader(&mut readers.stdout_task), if readers.stdout_task.is_some() => {
                 if let Err(problem) = readers.accept_stdout(result) {
                     break Err(problem);
@@ -178,6 +208,13 @@ async fn run_process(
         stdout,
         stderr,
     })
+}
+
+async fn scope_cancelled(owner: Option<&OwnerGuard>) {
+    match owner {
+        Some(owner) => owner.cancelled().await,
+        None => std::future::pending().await,
+    }
 }
 
 async fn terminate(child: &mut ManagedProcess) -> Result<(), LocalProbeProblem> {

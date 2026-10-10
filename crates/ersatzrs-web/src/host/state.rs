@@ -155,6 +155,7 @@ impl AppState {
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
         let next_engine = next_engine_host(pool.clone(), playout_locker.clone());
+        let operations = operation_coordinator(playout_locker);
         let application = Arc::new(ApplicationServices::new(
             ApplicationPorts::new(
                 Arc::new(repositories.channel.clone()),
@@ -195,6 +196,7 @@ impl AppState {
                     health.clone(),
                     startup_errors,
                     startup_warnings,
+                    operations.scan_activity(),
                 )),
                 Arc::new(repositories.troubleshooting.clone()),
                 Arc::new(NativeAdminTroubleshootingRuntime::new(
@@ -216,10 +218,7 @@ impl AppState {
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
                 Arc::new(NativeScanRuntime::new(pool.clone())),
             ),
-            OperationCoordinator::new(
-                playout_locker,
-                ersatzrs_core::locking::PlayoutBuildActivity::default(),
-            ),
+            operations,
         ));
         Self {
             api_key: None,
@@ -299,6 +298,15 @@ fn next_engine_host(
             file_system_layout::data_folder().join("next-playouts"),
         )
         .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
+    )
+}
+
+fn operation_coordinator(
+    playout_locker: ersatzrs_core::locking::EntityLocker,
+) -> OperationCoordinator {
+    OperationCoordinator::new(
+        playout_locker,
+        ersatzrs_core::locking::PlayoutBuildActivity::default(),
     )
 }
 

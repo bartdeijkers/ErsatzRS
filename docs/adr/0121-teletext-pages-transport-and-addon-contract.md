@@ -153,7 +153,7 @@ missing, unusable and usable-prefix outcomes. `TrailingUnpairedPairs` reports
 the potentially stale tail after FFmpeg descriptor shrink; even equal counts
 cannot prove a complete descriptor or transmitted-page inventory. Subcode,
 charset/region and source provenance remain unknown. Probe argv/JSON fields,
-scanner/schema/UI and ordinary audio/subtitle projection are unchanged. P9A-03
+teletext schema/page UI and ordinary audio/subtitle projection are unchanged. P9A-03
 owns focused/synthetic projection proof, bounded probe acquisition and persistent
 source/page identity; production probe integration remains open.
 Preparatory local acquisition replaces unbounded process output capture with a
@@ -164,9 +164,19 @@ Overflow kills/reaps the process and joins readers; caller-future drop signals
 owned cleanup. Probe argv, ordinary metadata and total scan timeout policy are
 unchanged. P9A-03 records 52 passing focused infra regressions, scanner overflow
 and recovery proof, actual pinned Linux FFprobe subtitle preservation and strict
-infra/scanner Clippy. This does not retain an outer scan lease until cleanup,
-enable extra probe fields or implement teletext scans/persistence or UI; native
-Windows acceptance remains open.
+infra/scanner Clippy. A shared bounded task-local cleanup scope now keeps the
+managed web worker, startup replay and standalone scanner alive through local
+owner drain. Cancellation fences new probes and destroys the execution future
+before awaiting cleanup; still-owned heartbeats continue during that drain.
+Terminal scan effects require confirmation, and actual lease loss cannot revive
+or finish the operation. Unconfirmed cleanup stops the worker and rejects new
+scans; cached Health results and badges share its live availability state, with
+all nine translations. P9A-03 records passing infra, application-gate, admission,
+scanner and 19 web regressions, followed by 38 locale/API/state/Health checks.
+Known stopped-worker scan errors use the existing persisted UI locale, preserving
+other transport outcomes and server-function routes. Strict affected Clippy and the WASM hydrate type-check pass. This adds no total-probe timeout, CLI signal handling, durable
+quarantine after lease expiry or provider-wide lifecycle guarantee. Extra probe
+fields, teletext scanning/persistence and native Windows acceptance remain open.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

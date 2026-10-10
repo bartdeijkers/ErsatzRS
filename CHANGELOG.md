@@ -90,6 +90,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retain managed scan ownership through local FFprobe cancellation and cleanup
+  in the web worker, startup replay and standalone scanner. Gate terminal scan
+  updates on confirmed cleanup; stop the worker and reject new scans when
+  cleanup remains uncertain. Report stopped workers in cached Health results
+  and badges, with guidance in every supported language.
 - Bound local FFprobe stdout content to 8 MiB while concurrently retaining a
   16 KiB raw diagnostic tail from stderr. Reject overflow and keep process
   cleanup owned after cancellation, preserving existing probe arguments and
