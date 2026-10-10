@@ -1308,7 +1308,10 @@ blocked. Profile-specific service activation and publication remain open.
 The maintainer accepted ADR 0122's channel/add-on profiles, add-on-owned themes
 and custom zones, and shared admin/Lua controls. P9A-04/9B-01/9B-02 now include
 synthetic then integrated isolation, interval/rollback/restart and invalid-profile
-proof. Implementation remains open; profiles cannot mutate global addon settings.
+proof. Preparatory profile/settings/channel-binding persistence now keeps
+settings isolated, checks revisions atomically and retains unavailable selections.
+Application/admin/Lua controls and profile-scoped invocation/publication remain
+open; profiles do not mutate global addon settings or activate packages.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

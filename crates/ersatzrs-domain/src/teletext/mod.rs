@@ -7,10 +7,12 @@
 
 mod identity;
 mod pages;
+mod profiles;
 mod source;
 
 pub use identity::*;
 pub use pages::*;
+pub use profiles::*;
 pub use source::*;
 
 #[cfg(test)]

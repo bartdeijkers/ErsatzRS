@@ -3,6 +3,7 @@
 //! Add-ons are data plus executables. They never load into the ErsatzRS
 //! process, and their manifests can only select host-controlled launch modes.
 
+pub(crate) mod teletext_profile_settings;
 mod tool_execution;
 
 #[path = "addon_teletext_command.rs"]

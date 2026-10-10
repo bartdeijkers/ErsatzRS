@@ -9,13 +9,12 @@ p9a-04, then exactly one TV-guide teletext add-on in ErsatzRS-Addons at p9b-01.
 The add-on owns NOS-guide-inspired pages 200–299 and content; the host owns
 validation, publication, delivery and read-only programme context. Source
 subtitle requirements remain. P9A-01 is Complete under ADR 0121; P9A-02 is In
-progress and the other four milestones are Not started. No engine/content
-acceptance is claimed.
+progress and the other four milestones are Not started. No engine/content acceptance.
 
-ADR 0122 adds channel profiles, add-on themes/zones and shared admin/Lua controls;
-implementation is open. Typed drafts/Western Latin encoding and bounded guide/
-page conversion have proof. Acquisition, invocation, other regions, link CRC,
-controls and publication remain open.
+ADR 0122 adds profiles, add-on themes/zones and admin/Lua controls. Isolated
+revision-fenced profile storage is preparatory. Typed drafts/Western Latin and
+bounded guide/page conversion have proof. Acquisition, service activation, other
+regions, link CRC, controls and publication remain open.
 
 Supplied packed and JSON projections preserve ordinary tracks alongside global
 indexes, reported PIDs, all memberships and raw descriptors. Missing/unusable
@@ -55,7 +54,7 @@ token rejection, cancellation/reaping, video, selected English audio, Dutch page
 
 Localized decoder Health/troubleshooting exists; P9A-02 owns six-RID packaging,
 licensing and remaining macOS/platform proof.
-P9A-03/04 still require source/page persistence, provider-safe rescans, exact
+P9A-03/04 require source/page persistence, provider-safe rescans, exact
 page/language/forced/default selection, native/Next Burn/Convert and copy/output
 policy, carriage/passthrough and HLS/browser fallback. Continuous compatible
 slate handover, automatic binding, publication/refresh/restart, localized
@@ -123,5 +122,5 @@ id          = 'teletext-channel-profiles-themes-and-lua-control-is-unimplemented
 adr         = '0122'
 description = 'Implement per-channel/add-on enabled bindings and named profile-scoped settings without mutating global AddonSetting or auto-enabling packages. Reuse shared application controls from admin and a core Lua port; persist bounded cursor overrides atomically with schedules, with explicit base precedence, expiry, Continue, Refresh/Reset, error rollback and restart behavior. The sole production TV-guide add-on owns named themes, permitted overrides and defined custom zones after independent engine acceptance. Browser/stream consume identical validated generations; aggregate limits and page collision checks remain bounded.'
 discovered  = '2026-10-10'
-evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with Implementation Not implemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. Current global-settings request/process primitives do not satisfy scoped profiles or controls.'
+evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with partial preparatory profile persistence; application/Lua/admin and publication remain unimplemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. P9A-04 records 20 new profile tests and 43 existing settings/migration checks, including post-write rollback, file-backed reopen, unavailable Off and real uninstall retention. Scoped profile persistence is preparatory; global-settings invocation still does not activate profiles, and application/Lua/admin controls and publication remain open.'
 resolved    = false

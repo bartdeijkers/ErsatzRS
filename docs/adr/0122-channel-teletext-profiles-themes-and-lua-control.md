@@ -8,9 +8,12 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 
 ## Implementation
 
-Not implemented. Existing guide/page DTOs, validation and process primitives are
-preparatory infrastructure. P9A-04 owns independent synthetic acceptance of this
-extension; P9B-01/02 own the sole production TV-guide add-on and integrated proof.
+Partially implemented: neutral profile/binding types and an additive SQLite
+repository prepare isolated, revision-fenced configuration. Guide/page DTOs,
+validation and process primitives remain preparatory infrastructure. Application
+controls, Lua intervals, localized administration and profile-scoped invocation/
+publication are not implemented. P9A-04 owns independent synthetic acceptance;
+P9B-01/02 own the sole production TV-guide add-on and integrated proof.
 
 ## Context
 
@@ -22,9 +25,9 @@ activation side effects.
 
 Existing `AddonSetting` rows belong to an installation, keyed by add-on and
 setting. Saving them disables that installation and changes its StateRevision.
-They cannot serve as mutable per-channel theme state. No named add-on profile
-abstraction currently exists. Independent ConfigRepository get/set calls also
-cannot provide atomic profile/binding/revision updates.
+They cannot serve as mutable per-channel theme state. At decision time no named
+add-on profile abstraction existed. Independent ConfigRepository get/set calls
+also cannot provide atomic profile/binding/revision updates.
 
 Existing Scripted Lua evaluates candidate schedules before publication.
 Watermark/graphics controls affect subsequently generated items. Publication
@@ -59,6 +62,29 @@ an injected Lua adapter invoke the same application validation and state-change
 functions. Callers cannot bypass channel/add-on ownership, profile/package
 compatibility, installed-package enablement or current revision checks.
 A channel binding currently Off can be turned On through those controls.
+
+Profile persistence uses owned setting rows and a composite profile/add-on
+reference from each channel binding. Deleting a channel removes its bindings;
+deleting a profile through the application retains a tombstone and its bindings
+so the unavailable selection remains explainable. Physical profile deletion is
+restricted while referenced. Package uninstall retains this configuration and
+does not gain an implicit foreign-key blocker. Turning an existing binding Off
+requires its current revision, but does not require a usable package or profile.
+
+Complete override bags are bounded to 256 settings, 128 UTF-8 bytes per key,
+16 KiB per literal or unresolved reference, and 64 KiB in aggregate. Profile
+names contain 1–256 UTF-8 bytes without control characters. These host resource
+limits do not define themes or zone semantics. Missing overrides inherit the
+captured installation settings and then manifest defaults; every effective value
+is validated under the same complete-bag bounds. Secret values remain unresolved
+references at this boundary.
+
+Writes compare the installation's state revision, version, package/content hashes
+and manifest identity within the same write transaction as profile/binding
+revision checks. Editing or deleting a shared profile advances only its dependent
+binding revisions. A changed installation identity makes existing configuration
+stale until explicitly revalidated. Configuration validity is not package-byte,
+process, page-generation or publication readiness.
 
 Missing, deleted, wrong-add-on, disabled, incompatible or invalid profiles have
 typed visible outcomes. A rejected command changes no selection. If an existing

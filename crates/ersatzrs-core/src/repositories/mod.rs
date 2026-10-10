@@ -25,6 +25,7 @@ mod metadata;
 mod playout;
 mod program_schedule;
 mod saved_search;
+mod teletext_profiles;
 mod television;
 mod template;
 mod troubleshooting;
@@ -163,6 +164,7 @@ pub use program_schedule::{
     ScheduleLanguageOption, SchedulePlaylistOption,
 };
 pub use saved_search::{SavedSearchAdminRow, SavedSearchRepository};
+pub use teletext_profiles::*;
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};
 pub use template::{
     TemplateAdminRow, TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow,

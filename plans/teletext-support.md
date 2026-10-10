@@ -66,6 +66,10 @@ It is required Phase 9 work, with implementation and independent acceptance open
   channels with different profiles simultaneously. A profile references that
   add-on and its separately scoped, manifest-validated settings. Profile changes
   do not rewrite global installation settings or activate packages.
+  Persist profile/settings/binding revisions atomically, retain unavailable
+  selections after profile deletion or package uninstall, and allow a binding
+  to be switched Off even when its profile or package is unavailable. ADR 0122
+  owns storage bounds, inheritance and revision-fence details.
 - The TV-guide add-on declares named colour/layout themes, permitted overrides
   and defined page zones accepting custom values. A profile selects those values.
   Presentation and zone semantics stay in the add-on; the host validates complete

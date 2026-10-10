@@ -1501,6 +1501,49 @@ and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
 '''
 evidence = '''
+2026-10-10 preparatory profile-storage checkpoint: neutral domain values and a
+narrow core repository prepare named, bounded profile settings and per-output-
+channel/add-on base bindings. An additive SQLite migration retains unavailable
+configuration after package uninstall or profile tombstoning; referenced physical
+profile deletion is restricted and channel deletion cascades owned bindings.
+BEGIN IMMEDIATE fences installation state/version/package/content/manifest and
+profile/binding revisions. Shared edits invalidate only dependent bindings;
+revision overflow rejects before writes. Existing manifest validators validate
+all effective overrides/inherited/default values without secret resolution,
+global setting writes or automatic package enablement. Existing unavailable
+bindings can be turned Off using binding CAS alone. Configuration validity does
+not certify immutable package bytes, invocation, pages or publication readiness.
+
+Four domain, fifteen infrastructure unit and one independent public file-backed
+reopen test prove distinct channel profiles, multiple add-ons, exact dependent
+invalidation, all identity fields, ownership, typed unavailability, resource
+limits, redacted unresolved references, retained real uninstall, ordinary global
+setting behavior and database reopen. An injected late binding-update failure
+proves rollback after profile/settings writes. Review corrected unrelated invalid
+manifest coupling by reading only declared dependencies, and preserved valid
+legacy NULL-setting inheritance through manifest defaults or optional absence.
+
+All 63 selected tests have valid passing evidence: 46 unchanged domain/settings/
+migration tests in Nextest cbc37f9a-256f-4c90-921f-37762bf9f5cf, followed by all
+17 affected tests in 3951b7a2-8f30-4381-8165-63750a9adbe0. The first run rejected
+both new fixture manifests for their omitted mandatory addon.check.v1 capability;
+only fixtures were corrected. One existing Plex migration regression required
+loopback socket permission after the sandbox blocked its mock server. No failed
+check is hidden by retries. Clippy requested equivalent dependency-match arms
+and an associated test helper. After these corrections, all 16 affected profile
+tests pass again on final source in 3514d754-2823-4a97-8bdd-a3567a2bbfcf; the
+other 47 earlier passing checks remain applicable (63 unique tests overall).
+Independent final source review is clean. Strict domain/core/infrastructure
+all-target Clippy and formatting pass. Architecture-lint passes after documenting
+the three read-only transactions; those final comment-only edits preserve the
+valid executable test/lint evidence. Progress validation passes.
+
+This is configuration persistence proof, not simultaneous themed page rendering,
+Lua/schedule restart, localized administration or ordinary playback acceptance.
+Application controls, profile-scoped invocation, generation invalidation/promotion,
+Lua intervals and all existing engine/source/native/platform/client gates remain
+open. Milestone statuses, dependencies and accepted criteria are unchanged.
+
 2026-10-10 preparatory installed-invocation checkpoint: a dedicated fixed
 teletext.pages.v1/pages adapter validates bounded request bytes before resolution,
 then reuses enabled/compatible manifest, dependency, content hash, containment,
