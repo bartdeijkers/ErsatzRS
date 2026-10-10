@@ -82,12 +82,14 @@ release section when tagging a release.
   Supported transport/header profiles remain explicit; these checks do not
   establish source acquisition, PSI conformity, complete pages, character sets
   or readiness.
-- Prepare strict typed teletext page responses and host conversion to complete,
-  structurally validated drafts. Reject oversized input, duplicate JSON keys,
-  missing required fields and mismatched generations while preserving literal
-  content. Prepare civil guide windows through the shared programme clock,
-  preserving daylight-saving boundaries and skipped dates. Producer requests,
-  execution, encoding validation and publication remain pending.
+- Prepare strict typed teletext guide requests and page responses, with host
+  conversion to complete, structurally validated page drafts. Reject oversized
+  input, duplicate JSON keys, missing required fields and mismatched generations
+  while preserving literal content. Bound read-only guide requests, channel and
+  occurrence counts without truncation; retain explicit nullable metadata and
+  precise UTC instants. Prepare civil guide windows through the shared programme
+  clock, preserving daylight-saving boundaries and skipped dates. Guide
+  acquisition, execution, encoding validation and publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

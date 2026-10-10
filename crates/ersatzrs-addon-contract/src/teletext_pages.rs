@@ -1,7 +1,7 @@
-//! Preparatory response-only `teletext.pages.v1` wire types (ADR 0121).
+//! Preparatory `teletext.pages.v1` request and response wire types (ADR 0121).
 //!
-//! This is an unvalidated producer draft, not a complete frozen capability:
-//! request context, production invocation and host integration remain separate.
+//! These are unvalidated guide context and producer drafts. Semantic request
+//! validation, production invocation and host integration remain separate.
 //! Independent wire types deliberately mirror the domain authored page shape
 //! without depending on domain, application, storage or `FFmpeg` crates. Parsing
 //! never authorizes publication or establishes geometry, references, character
@@ -11,6 +11,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 #[path = "teletext_pages_json.rs"]
 mod json;
+
+#[path = "teletext_pages_request.rs"]
+mod request;
+pub use request::*;
 
 /// Explicit response schema version; not a manifest or capability activation.
 pub const TELETEXT_PAGES_SCHEMA_VERSION: u32 = 1;

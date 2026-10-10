@@ -420,17 +420,24 @@ The producer may paginate its pages into subpages within those bounds. Limit
 refresh to one invocation per configured service, coalesce guide invalidations,
 and fence promotion to the exact configuration/package/guide generation.
 
-Preparatory implementation now provides the response-only version-1 DTOs and
-strict raw-byte parser in `ersatzrs-addon-contract`, followed by application
-conversion to a structurally validated, unpublished domain draft. The parser
-checks the 8 MiB raw-input bound before decoding, rejects duplicate keys across
-the complete document, unknown fields and missing required fields, and checks
-the exact opaque generation echo and 1,024-record bound. A required nullable
-navigation subcode must be present even when null. Conversion preserves literal
-text, mosaics, styles and links; invalid late pages fail the entire draft.
-The 1,024-byte generation-token bound is host resource policy. This does not
-freeze the complete request contract, activate the capability, invoke a producer,
-validate native encoding or grant publication authority. Those gates remain open.
+Preparatory version-1 request and response DTOs now live in
+`ersatzrs-addon-contract`. Both strict raw-byte parsers reject duplicate keys
+across the complete document, unknown fields and missing required fields,
+including required nullable metadata and navigation/role references. Request
+parsing and bounded serialization enforce 4 MiB, 256 channels and 10,000 total
+occurrences without truncation. Empty guides remain explicit. Read-only request
+metadata contains occurrence identities, guide intervals, literal titles and
+nullable descriptions, actual segments and separate role references; it excludes
+internal artwork/path metadata. UTC instants preserve nanoseconds; normalized
+UTC years outside 0000–9999 fail on parsing and serialization.
+
+Response parsing checks 8 MiB, the exact opaque generation echo and 1,024-record
+bound. Application conversion checks values and the whole page-set structure
+before returning an unpublished draft, preserving literal text, mosaics, styles
+and links without partial results. The 1,024-byte generation-token bound is host
+resource policy. Request timezone/locale/identity/reference semantics, complete
+guide acquisition, generation ownership, capability activation, producer
+invocation, native encoding and publication remain separate open host gates.
 
 ### Persistence and publication lifecycle
 

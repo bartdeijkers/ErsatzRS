@@ -1294,6 +1294,9 @@ request/guide projection, capability admission/invocation, native encoding check
 and generation publication remain open. P9A-04 records preparatory evidence only.
 The shared programme clock now computes civil guide windows directly across
 DST, midnight gaps/folds and skipped dates; request construction remains open.
+Bounded request-v1 DTOs now retain read-only occurrences, segments and role
+references, with explicit nullable fields and UTC precision. Twenty-nine focused
+wire/public tests pass; host guide acquisition/semantics and invocation stay open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

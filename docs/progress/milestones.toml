@@ -1490,6 +1490,25 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory guide-request checkpoint: closed v1 DTOs expose minimal
+read-only grouped occurrences, actual segments and separate role references.
+Strict parsing and bounded serialization check 4 MiB including escaping,
+256 channels and 10,000 total occurrences without truncation. Required nullable
+metadata remains explicit; zero first-item identity for ExternalJson and empty
+guides are retained. UTC instants preserve nanoseconds; every timestamp rejects
+out-of-range UTC years after normalization and on serialization. The initial
+independent review exposed extended-year roundtrip failure; the correction has
+all-seven-field boundary/roundtrip proof. All 29 focused tests pass, comprising
+15 request, 12 existing response and two independent public-API regressions.
+Final-source Nextest run: 6b1fa837-1eac-4cec-b5b2-db5c49954b7a.
+Strict add-on-contract all-target Clippy,
+formatting, architecture-lint and progress validation pass; independent final
+review is clean. Host semantic validation, named timezone acquisition, complete
+guide projection, capability admission/invocation, generation fencing and
+publication remain open. Runtime, encoder, scanner, schema and UI are unchanged;
+applicable prior evidence is reused. No milestone status/dependency/acceptance
+changes or production content add-on implementation.
+
 2026-10-10 preparatory civil-window checkpoint: the existing programme clock
 now computes one through 255 civil dates from the capture instant's local date,
 using direct end-date arithmetic and actual timezone day starts. Three-date
