@@ -82,6 +82,11 @@ release section when tagging a release.
   Supported transport/header profiles remain explicit; these checks do not
   establish source acquisition, PSI conformity, complete pages, character sets
   or readiness.
+- Prepare strict typed teletext page responses and host conversion to complete,
+  structurally validated drafts. Reject oversized input, duplicate JSON keys,
+  missing required fields and mismatched generations while preserving literal
+  content. Producer requests, execution, encoding validation and publication
+  remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

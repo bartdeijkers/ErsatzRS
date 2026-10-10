@@ -1490,6 +1490,26 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory page-response checkpoint: closed response-only v1 DTOs
+and a raw-byte parser enforce the 8 MiB input cap before parsing, complete
+recursive duplicate-key rejection, required fields, schema/generation checks
+and the 1,024-record bound. Nullable navigation subcodes must be present.
+Application conversion checks domain values and the entire page-set structure
+before returning an unpublished draft, preserving text, mosaics, styles and
+links without partial results. All 20 focused regressions pass in Nextest
+01d38b8c-88b5-40a3-9a55-7d7f24519125: 12 wire, six application and two
+independent public-API tests. Independent review is clean. Strict affected
+add-on-contract/application all-target Clippy, workspace formatting,
+architecture-lint and progress validation pass. Clippy also corrected documentation markup, link borrowing and test-fixture
+vector consumption; unaffected wire evidence is reused. All eight affected
+application/public tests pass again on the final source in Nextest
+bd74bb26-803d-49ae-993b-e6f8e2254dd4.
+Existing encoder, transport, scanner, schema, UI and runtime paths are unchanged;
+their applicable previous evidence remains valid. Request/guide projection,
+capability admission, producer invocation, native encoding validation,
+generation fencing and publication remain open. No milestone status,
+dependency or acceptance changes; no production content add-on is implemented.
+
 2026-10-10 preparatory owner-bound legacy admission checkpoint: immediate
 native legacy admission and capacity-wait retries now atomically reserve distinct
 wrapper/first-encoder leases. Private per-wrapper UUIDs bind concat/item callbacks

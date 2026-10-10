@@ -16,6 +16,8 @@ mod media_list_subtitles;
 pub use media_list_subtitles::*;
 mod remote_stream_retained_play;
 pub use remote_stream_retained_play::*;
+mod teletext_pages;
+pub use teletext_pages::*;
 mod tool_update;
 pub use tool_update::*;
 
