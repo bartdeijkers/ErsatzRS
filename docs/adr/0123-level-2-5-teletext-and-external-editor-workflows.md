@@ -13,9 +13,12 @@ playback, output, profile/Lua and engine-first obligations remain in force.
 Partial — checked colour references, four-bit RGB, editable CLUT2/3 declarations
 and monochrome DRCS bitmap/slot/subtable values exist. Checked raw resource
 identities and a DRCS catalog resolve supplied display references with normative
-subtable/glyph limits. Complete object-derived reference collection is still open.
-The full enhanced service
-model, encoder and editor/publication workflow remain unimplemented. Existing
+subtable/glyph limits. Ordered enhancement programs, checked charset designations
+and local/public/global object identities now support checked definition closure
+and bounded transitive reference collection. Per-display primary/X26 pair and
+per-type invocation limits are enforced; collected DRCS failures retain their
+source command. Resolved display semantics, complete service allocation, enhanced
+encoding and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
 The standards/editor source audits do not establish real editor or client proof.
@@ -85,6 +88,27 @@ DRCS links resolve normal/global scope before checking exact subtable and slot.
 Repeated use of the same glyph does not consume additional distinct-glyph budget.
 A catalog validator supplied with references does not itself prove complete
 transitive reference collection, object expansion or display/resource allocation.
+
+Represent enhancements as ordered semantic commands, with object definitions
+separate from local page data. Object identities carry local display ownership or
+checked public/global resource ownership and semantic IDs; the compiler assigns
+physical pointer slots. Invocation includes the expected object type and optional
+origin modifier, never a detached modifier that can affect an unrelated command.
+Active objects may invoke adaptive/passive, adaptive may invoke passive, and
+passive may invoke none. Resource objects cannot invoke local definitions; local
+references retain exact page/subcode ownership. Resolve every declared target and
+type before traversing the effective page program.
+
+Collect DRCS references and charset-pair designations over all invoked programs
+under caller-owned work/output budgets and per-type invocation limits. Preserve
+the source command/object location for diagnostics. An explicit DRCS glyph
+reference includes scope, subtable and slot; the compiler emits scoped selection
+packets rather than inheriting a caller's selection. Separate page and X/26 charset
+designation validation: X/26 Latin aliases omit national substitution. Secondary
+page designation changes G0 only and contributes no new G2 or X/26 pair. Count the
+primary default plus transitively designated X/26 pairs, preserving raw aliases.
+Complete reference collection does not establish resolved geometry, side-panel
+placement, attribute inheritance/overlap, glyph composition or encoding readiness.
 
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;

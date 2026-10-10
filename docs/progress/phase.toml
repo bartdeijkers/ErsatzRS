@@ -1128,9 +1128,10 @@ ADR 0123 requires authored Level 2.5 design/validation/encoding/publication/disp
 correct Level 1/1.5 fallback and actual QTeletextMaker TTI/sidecar interchange.
 The standards and pinned editor-source audits are recorded. ADR 0123 defines the
 v2 selection/wire boundary and durable revision/export-receipt ownership. Checked
-palette/DRCS values, raw resource identities and supplied-reference DRCS checks
-are implemented; the complete enhanced
-resource graph, compiler and operational draft/publication workflow remain open.
+palette/DRCS values, raw resource identities, ordered enhancement programs and
+checked object closure/reference collection are implemented. Resolved display
+semantics, full service allocation, the enhanced compiler and operational
+draft/publication workflow remain open.
 The editor normalizes
 subcodes/navigation and drops custom metadata, requiring explicit sidecar mapping
 and permission checks rather than silent loss. Import creates a concept, not a

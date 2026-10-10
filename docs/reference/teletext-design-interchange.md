@@ -12,8 +12,10 @@ monochrome DRCS bitmap/slot/subtable values. They reject malformed construction
 and JSON; they do not validate resource graphs, per-display usage or native
 encoding. No current addon interface accepts these new values yet.
 Checked raw resource identities and a DRCS catalog now validate definitions and
-supplied display references. Object expansion, complete service allocation and
-enhanced carriage remain open.
+supplied display references. Ordered enhancement programs and checked object
+closure now collect transitive DRCS and charset references from the supplied
+effective page program. Resolved display semantics, complete service allocation
+and enhanced carriage remain open.
 
 ## Resource identity and DRCS lookup
 
@@ -41,8 +43,51 @@ checks exact page/S1 collisions independently of kind and the host record budget
 Supplied per-display references resolve through normal/global links to exact
 subtables/glyphs. §14.4.1 permits at most two selected subtables and 24 distinct
 glyphs; repeats do not increase the count. Failures retain display/raw subcode
-and reference ordinal. The caller still must collect complete object-derived
-references and validate full service/display allocation and encoding.
+and reference ordinal. The enhancement collector can supply complete references
+from an effective program and its invoked objects; full service/display allocation
+and encoding remain separate checks.
+
+## Enhancement programs and object references
+
+`TeletextEnhancementProgram` preserves ordered commands: relative position,
+screen/row colour, column operations and typed object invocation with a required
+nullable origin modifier. Column operations represent colour, flash/rate,
+non-spacing attributes, G0/G1/G2/G3, diacritics, charset designation and explicit
+normal/global DRCS references. Constructors and JSON enforce local bounds; they
+do not certify assigned glyphs or final display positions. In particular, relative
+row zero is valid and does not imply a writable final header cell.
+
+Page designations accept the 36 assigned table-32 codes; X/26 accepts the 46
+table-34 codes. Raw aliases remain distinct. X/26 designations do not substitute
+national characters. `secondary_from_code(127)` means no secondary G0; the primary
+constructor rejects it. A secondary G0 does not designate G2 or add an enhancement
+pair. Diacritic indices 0–15 are retained; composition requires the actual G0/G2
+context. The mode-0x10/data-0x2a `@` case remains compiler/renderer work.
+
+Object IDs are semantic host `u16` values, not physical pointer slots. Local
+objects retain their exact display page/raw subcode; public/global objects require
+POP/GPOP resources. `TeletextEnhancementObjectCatalog::new` accepts definitions
+and trusted object/aggregate-command budgets. The catalog is not deserializable:
+parse bounded definitions, then apply host budgets explicitly. Every declared
+edge is checked, including unused definitions. Active may invoke adaptive/passive;
+adaptive may invoke passive; passive may invoke none. Resource objects cannot
+invoke local definitions, and local targets must retain their exact owner.
+
+`collect_display_references` takes a checked effective program, display address,
+primary repertoire pair and trusted command/output budgets. Each invocation is
+visited again; repeats consume work and the 127-invocations-per-type limit. The
+primary pair and transitive X/26 pairs may name at most two distinct repertoires;
+aliases do not consume another pair. Collected glyph references preserve their
+object/command source, and `validate_drcs` maps dependency failures back to it.
+Budgets and pair/invocation counters are fresh for each display; failures expose
+no partial collected result.
+
+These checks do not select MOT/page defaults, implement local-X/26 default-object
+suppression, resolve origins/side panels, compose glyphs, apply object inheritance
+or validate spatial overlap/open-object limits. They neither allocate physical
+resources nor establish an encoded or publishable generation. The two 15-object
+spatial limits in annex A are distinct from the strictly descending invocation
+type graph and remain compiler work.
 
 ## Standards audit
 

@@ -124,8 +124,8 @@ release section when tagging a release.
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,
   TSDuck and real display/navigation in a suitable client; Kodi is optional.
-  Checked colour values, raw resource identities and monochrome DRCS dependency
-  validation provide the initial model foundation;
+  Checked colour/resource values, ordered enhancement programs and bounded
+  object-derived DRCS/charset dependency checks provide the model foundation;
   enhanced encoding, editor workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
   profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua

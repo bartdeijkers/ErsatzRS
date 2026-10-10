@@ -71,8 +71,10 @@ The technical boundary retains the closed v1 contract and adds
 `teletext.pages.v2` with exact request/response version checks from the installed
 selection snapshot. Both versions converge on one domain model; v1 contributes
 its unchanged base content. Checked palette/monochrome DRCS values, raw resource
-identities and supplied-reference dependency checks form the model foundation.
-Next implement the complete enhancement/object/resource graph and native compiler.
+identities, ordered enhancement programs and checked object closure form the
+model foundation. Bounded effective-program traversal collects transitive DRCS
+references and checks primary/X26 pair and invocation limits. Next implement
+resolved display/object semantics, full service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export
 receipts; pending/publication state belongs to the eventual promotion owner.

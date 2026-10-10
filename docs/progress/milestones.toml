@@ -987,6 +987,26 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 enhancement/object checkpoint: checked page/X26 designations preserve
+raw aliases and distinct assigned code sets; secondary G0 does not designate G2.
+Relative positions, origin offsets and glyph-code envelopes are checked without
+claiming final geometry or assigned glyphs. Ordered closed enhancement programs
+retain explicit flash, G3 compatibility, attributes and DRCS scope/subtable/slot.
+Checked local/public/global object identities and catalog closure reject every
+broken definition edge, including unused ones, before traversal. Local ownership
+uses exact page/raw subcode; invocation types strictly descend and resource
+objects cannot invoke local definitions. Trusted catalog/collection budgets are
+separate from producer data. Effective-program traversal counts repeated work,
+checks 127 invocations per type and primary/transitive X26's two-pair limit, and
+maps all collected DRCS dependencies back to their object/command source.
+All 102 focused teletext tests pass (52 new, 50 unchanged); the production domain
+check, strict domain all-target Clippy, workspace formatting and architecture-lint
+pass. Independent primitive and final program/collector source/test reviews are
+clean. No v1 payload or existing consumer/runtime/admin path changes. Defaults,
+resolved origins/panels, glyph composition, object inheritance/overlap/spatial
+limits, full resource allocation, enhanced encoding, v2/editor/draft/publication
+and exact-version client/browser acceptance remain open. No milestone is closed.
+
 2026-10-11 resource/DRCS checkpoint: checked raw magazine/page and logical-S1
 identities enforce Annex A.10's exact reserved purposes and derive function/coding
 from kind. MIP S1 is fixed to zero under 11.3.2; nonzero MOT S1 and decimal-looking
