@@ -1212,6 +1212,49 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 preparatory owner-bound legacy admission checkpoint: immediate
+native legacy admission and capacity-wait retries now atomically reserve distinct
+wrapper/first-encoder leases. Private per-wrapper UUIDs bind concat/item callbacks
+to one owner. Only its first item receives the unused encoder lease; later items
+reserve capacity independently. Owned startup observes handler abandonment and
+awaits cooperative cleanup. Item-scoped body-drop fences cannot close a later
+item. Persistent cancellation reaches song rendering and hardware-retry
+preparation/spawn; unconfirmed cleanup quarantines admission/assets and reports
+terminal failure. Limit one rejects before source/process creation, with Health
+guidance localized for applicable enabled native legacy defaults.
+All 125 selected web regressions pass in Nextest
+e3266bdf-d149-41b7-ae2b-e76afe4183d8. Both concat regressions pass in
+1ebf242b-a3f1-45d5-9e6c-85c51d43d838; four playback-data-access Health tests
+pass in ecb24733-f6ff-423b-b5ad-5ab9a9a6b4bf. Strict affected infra/FFmpeg
+Clippy passes. Nineteen shared teletext supervisor regressions pass in Nextest
+07246a40-a618-4b7e-8745-606168802e9e. The actual production-route fixture
+passes in 38e1b2e3-6c8f-4b43-a82c-99a012543cb4 (8.866 seconds) on the exact
+v2.0.6 Linux x64 candidate recorded under P9A-02. Limit one neither half-admits
+nor opens a source; limit two starts the reserved first encoder. Competing,
+malformed, unknown and wrong-channel tokens create no extra source. Pre-first-
+item and active-body disposal fence callbacks and reap owned processes.
+Independent decoding verifies synthetic video, the selected English 440 Hz
+audio and authored Dutch page 200; TSDuck reports zero transport errors at the
+profile muxrate. The separate four-stream wrapper preservation proof remains
+valid; this route fixture proves selected audio only. The same frozen source
+passes with Windows FFmpeg through interop in
+6c676554-cddc-4966-894f-a77baecadb88 (12.992 seconds), ARM64 FFmpeg under QEMU
+in c8f7fc4d-acc6-4102-9d21-23d258f00b8b (12.403 seconds) and ARMv7 FFmpeg
+under QEMU in 9de1d01e-8926-43de-b1cd-232e6499c48a (12.695 seconds), using
+the previously recorded exact candidate hashes and matching FFprobe executables
+validated as major 9. These are Linux-hosted runtime
+repetitions, not native Windows/ARM Rust host acceptance. Strict web
+Clippy passes on the frozen implementation and fixture, as do formatting,
+architecture/hydration lint and progress validation. Ordinary runtime smoke
+passes with the exact Linux FFmpeg/FFprobe pair: public callbacks return 404,
+legacy/hybrid MPEG-TS return 200 with body bytes, and segmenter HLS playlists
+include initial segments. This endpoint smoke does not prove direct HLS,
+decoded media or graceful shutdown. Full routed source
+captions/alternate audio, compatible continuous capacity-slate
+topology/handover, production binding resolution, full source selection,
+publication and native/Next/platform/client acceptance remain open. No
+milestone status, dependency or acceptance changes.
+
 2026-10-10 preparatory wrapper/encoder capacity checkpoint: the existing
 registry now atomically reserves two distinct MPEG-TS leases, failing without
 partial admission when two places are unavailable. A new wrapper cannot claim

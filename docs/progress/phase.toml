@@ -1201,12 +1201,23 @@ pass on the Linux host. The real FFmpeg A/B/A wrapper fixture passes on Linux
 x64 and emulated ARM64/ARMv7; the complete Windows FFmpeg interop case now
 passes after bounding only the fixture's independent audio input probe. Raw
 PCM, both tracks, tone criteria and tool deadlines remain unchanged. Full routed
-item/source selection, capacity-slate topology/ownership and native platform
-acceptance remain open. The existing capacity registry now has a regression-
-proven atomic wrapper/first-encoder reservation primitive with distinct leases.
-Next wire owner-bound one-time encoder handoff through immediate admission and
-capacity retries, then prove compatible slate/programme handover and automatic
-publication selection. Native Windows host acceptance remains open.
+item/source selection, compatible capacity-slate topology/handover and native
+platform acceptance remain open. Immediate legacy admission and capacity retries
+now reserve distinct wrapper/first-encoder leases atomically. Private wrapper
+UUID callbacks transfer the first encoder once; later items reserve independently.
+Owned startup, scoped body disposal and persistent retry cancellation await
+cleanup and quarantine uncertainty. Limit one rejects before source/process
+creation, with localized Health guidance for applicable enabled legacy channels.
+The Linux-hosted production-route fixture passes with exact Linux x64 FFmpeg,
+Windows FFmpeg through interop and ARM64/ARMv7 FFmpeg under QEMU. It proves
+admission, token rejection, cancellation/reaping, decoded video/selected English
+audio and authored Dutch page 200 with clean TSDuck transport; 19 shared
+supervisor regressions and final strict web Clippy pass. This does
+not prove native Windows/ARM Rust host acceptance. Next implement bounded typed
+FFprobe teletext descriptor projection without changing ordinary track metadata.
+Full routed source captions/alternate audio, compatible continuous
+slate/programme handover and automatic publication selection remain open.
+Native Windows host acceptance remains open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

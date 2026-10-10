@@ -19,6 +19,8 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
+use crate::transport::iptv::legacy_wrapper_admission::LegacyWrapperRegistry;
+
 use super::addons::NativeAddonRuntime;
 use super::artwork_cleanup::TokioArtworkCleanupQueue;
 use super::channels::NativeChannelRuntime;
@@ -69,6 +71,8 @@ pub struct AppState {
     pub(crate) streaming_http_addr: Arc<OnceLock<std::net::SocketAddr>>,
     /// Actual private listener; never derived from request or proxy headers.
     pub(crate) internal_http_addr: Arc<OnceLock<std::net::SocketAddr>>,
+    /// Bounded, private identities for individual legacy wrapper lifetimes.
+    pub(crate) legacy_wrappers: Arc<LegacyWrapperRegistry>,
     /// Optional Next version discovered once during host startup.
     pub next_version: Arc<OnceLock<String>>,
     /// Storage-neutral application services built from native infrastructure
@@ -221,6 +225,7 @@ impl AppState {
             api_key: None,
             streaming_http_addr: Arc::new(OnceLock::new()),
             internal_http_addr: Arc::new(OnceLock::new()),
+            legacy_wrappers: Arc::new(LegacyWrapperRegistry::new(256)),
             next_version,
             artwork_cleanup: Arc::new(TokioArtworkCleanupQueue::channel().0),
             application,

@@ -26,10 +26,26 @@ impl ConcatPlaylist {
 
     #[must_use]
     pub fn render(&self) -> String {
+        self.render_internal(None)
+    }
+
+    /// Bind both finite item requests to one exact legacy wrapper lifetime.
+    /// The numeric identity renders as a fixed hexadecimal UUID, so it cannot
+    /// add playlist directives or other query parameters.
+    #[must_use]
+    pub fn render_with_wrapper_id(&self, wrapper_id: u128) -> String {
+        self.render_internal(Some(wrapper_id))
+    }
+
+    fn render_internal(&self, wrapper_id: Option<u128>) -> String {
         let url = format!(
             "{}://{}/ffmpeg/stream/{}?mode={}",
             self.scheme, self.host, self.channel_number, self.mode
         );
+        let url = match wrapper_id {
+            Some(id) => format!("{url}&wrapper_id={id:032x}"),
+            None => url,
+        };
         // Programme responses are bounded, chunked HTTP streams. FFmpeg 9's
         // single-request reader closes the connection on the terminal chunk,
         // then reports EIO on its next read. Persistent request handling keeps
@@ -60,5 +76,19 @@ mod tests {
     fn internal_programme_playlist_preserves_chunked_eof_for_each_entry() {
         assert_eq!(ConcatPlaylist::new("http", "localhost", "1", "hybrid").render(),
             "ffconcat version 1.0\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\noption multiple_requests 1\n");
+    }
+
+    #[test]
+    fn both_item_requests_retain_the_exact_wrapper_identity() {
+        let playlist = ConcatPlaylist::new("http", "localhost", "1", "ts-legacy");
+        let rendered = playlist.render_with_wrapper_id(0x1234);
+        assert_eq!(
+            rendered
+                .matches("&wrapper_id=00000000000000000000000000001234")
+                .count(),
+            2
+        );
+        assert_eq!(rendered.matches("option multiple_requests 1").count(), 2);
+        assert!(!playlist.render().contains("wrapper_id"));
     }
 }

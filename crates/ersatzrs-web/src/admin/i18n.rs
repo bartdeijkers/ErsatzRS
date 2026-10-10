@@ -1477,6 +1477,9 @@ pub enum TextKey {
     AddonListsCombinedDiskWarningGb,
     AddonListDiskWarningHelp,
     AddonListDiskWarningFailed,
+    PlaybackDataAccessTitle,
+    LegacyMpegTsCapacityBrief,
+    LegacyMpegTsCapacityHelp,
     TeletextDecoderTitle,
     TeletextDecoderReady,
     TeletextDecoderMissing,
@@ -3670,6 +3673,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonListsCombinedDiskWarningGb,
     TextKey::AddonListDiskWarningHelp,
     TextKey::AddonListDiskWarningFailed,
+    TextKey::PlaybackDataAccessTitle,
+    TextKey::LegacyMpegTsCapacityBrief,
+    TextKey::LegacyMpegTsCapacityHelp,
     TextKey::TeletextDecoderTitle,
     TextKey::TeletextDecoderReady,
     TextKey::TeletextDecoderMissing,
@@ -4964,6 +4970,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
+        "Playback Data Access" => text(language, TextKey::PlaybackDataAccessTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
@@ -5308,6 +5315,14 @@ pub fn health_check_message_text(
         runtime_health_message(language, title, displayed_message, brief_message)
     {
         return localized.to_owned();
+    }
+    if title == "Playback Data Access" {
+        let key = match displayed_message {
+            "Legacy MPEG-TS requires at least two active transcode slots" => TextKey::LegacyMpegTsCapacityBrief,
+            "An enabled channel uses the native legacy MPEG-TS mode. Its wrapper and programme encoder require two distinct active transcode slots. Increase the active transcode limit to at least 2, or select another streaming mode." => TextKey::LegacyMpegTsCapacityHelp,
+            _ => return displayed_message.to_owned(),
+        };
+        return text(language, key).to_owned();
     }
     if title == "Teletext decoding" {
         let key = match displayed_message {
@@ -6153,6 +6168,49 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn legacy_wrapper_capacity_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, "Playback Data Access"),
+                text(language, TextKey::PlaybackDataAccessTitle)
+            );
+            for key in [
+                TextKey::LegacyMpegTsCapacityBrief,
+                TextKey::LegacyMpegTsCapacityHelp,
+            ] {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert_eq!(
+                    health_check_message_text(
+                        language,
+                        "Playback Data Access",
+                        canonical,
+                        canonical
+                    ),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, "Playback Data Access", "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
+                }
+            }
+            assert_eq!(
+                health_check_message_text(
+                    language,
+                    "Playback Data Access",
+                    "unrecognized diagnostic",
+                    ""
+                ),
+                "unrecognized diagnostic"
+            );
         }
     }
 

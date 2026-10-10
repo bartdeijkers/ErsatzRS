@@ -2,6 +2,7 @@ pub mod access_token;
 pub mod guide;
 pub mod hls;
 pub mod identifier;
+pub(crate) mod legacy_wrapper_admission;
 pub mod logos;
 pub mod next_canvas;
 pub mod next_media;
@@ -23,6 +24,14 @@ use axum::{
 };
 
 use crate::host::state::AppState;
+
+/// Private `FFmpeg` routes carry an exact wrapper lifetime independently of the
+/// public IPTV query/authentication contract.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct LegacyWrapperQuery {
+    pub mode: Option<String>,
+    pub wrapper_id: Option<uuid::Uuid>,
+}
 
 /// Dispatches `/iptv/channel/{file}` between the MPEG-TS stream and the HLS
 /// playlist based on the file extension. Ports the routing fanout from
@@ -46,7 +55,7 @@ pub async fn get_concat_playlist(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
     headers: HeaderMap,
-    Query(query): Query<hls::HlsQuery>,
+    Query(query): Query<LegacyWrapperQuery>,
 ) -> Response {
     stream::serve_concat_playlist(&state, &channel_number, &headers, &query).await
 }
@@ -54,8 +63,9 @@ pub async fn get_concat_playlist(
 pub async fn get_internal_stream(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
+    Query(query): Query<LegacyWrapperQuery>,
 ) -> Response {
-    stream::serve_internal_legacy_stream(&state, &channel_number).await
+    stream::serve_internal_legacy_stream_with_query(&state, &channel_number, &query).await
 }
 
 /// Refuse an incompatible configured output before any worker or wrapper starts.

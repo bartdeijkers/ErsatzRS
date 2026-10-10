@@ -45,13 +45,17 @@ release section when tagging a release.
   refill between writes and drain validated short-source EOF. Enforce first-byte,
   idle-source and sink deadlines, and retain cleanup uncertainty through startup
   and hardware retries. Reject incompatible rate, holding or allocation policies.
-  Prepare atomic wrapper/first-encoder capacity admission with separate leases
-  and independent cleanup quarantine; route integration remains pending.
+  Admit native legacy wrappers and their first encoders atomically with distinct
+  leases. Bind private concat/item callbacks to one wrapper owner and transfer
+  its encoder lease once. Fence abandoned startup, body disposal and hardware
+  retries while awaiting cleanup; quarantine uncertain processes independently.
+  Report insufficient limit-one legacy capacity in Health with localized guidance.
   Synthetic multi-program and real looping-wrapper audiovisual tests preserve
   programme packets, incoming audio languages, source captions and decoded
-  frames/timestamps; live channel
-  publication selection, slate/programme handover and generation publication
-  remain pending.
+  frames/timestamps. The Linux production-route fixture verifies owner-bound
+  admission, cancellation, selected audio and authored pages. Full routed source
+  captions/alternate audio, compatible slate/programme handover, native platform
+  acceptance and generation publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

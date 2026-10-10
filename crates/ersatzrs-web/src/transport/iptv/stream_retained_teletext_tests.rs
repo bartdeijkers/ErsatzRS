@@ -485,9 +485,9 @@ async fn hardware_retry_cleanup_uncertainty_reaches_the_body_for_all_denial_bran
             assert!(error.to_string().contains("cleanup is unconfirmed"));
             assert!(stream.next().await.is_none());
         };
-        let (outcome, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+        let (outcome, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
             tokio::join!(produce, receive)
-        })
+        }))
         .await
         .unwrap();
         assert!(matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed));

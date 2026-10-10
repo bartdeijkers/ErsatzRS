@@ -15,6 +15,10 @@ mod retained_teletext_tests;
 mod wrapper_teletext_runtime_tests;
 
 #[cfg(test)]
+#[path = "stream_wrapper_admission_runtime_tests.rs"]
+mod wrapper_admission_runtime_tests;
+
+#[cfg(test)]
 use std::process::Stdio;
 use std::{
     path::PathBuf,
@@ -84,7 +88,8 @@ use ersatzrs_infra::remote_stream::{
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
-    ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    try_reserve_mpeg_ts_wrapper_capacity, ActiveTranscodeReservation, ActiveTranscodeSlot,
+    DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
@@ -93,6 +98,10 @@ use tokio::process::Command;
 use tokio::sync::{Notify, RwLock};
 use tokio_util::io::ReaderStream;
 
+use super::legacy_wrapper_admission::{
+    LegacyWrapperCloseHandle, LegacyWrapperItemCancellation, LegacyWrapperItemGuard,
+    LegacyWrapperOwner,
+};
 use super::retained_stream_buffer::{
     forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
@@ -100,7 +109,7 @@ use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, Te
 use super::teletext_output::{forward_teletext_output, TeletextPumpError};
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
-use crate::transport::iptv::{hls, hls::HlsQuery};
+use crate::transport::iptv::{hls, hls::HlsQuery, LegacyWrapperQuery};
 
 static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
@@ -287,8 +296,13 @@ pub async fn serve_concat_playlist(
     state: &AppState,
     channel_number: &str,
     _headers: &HeaderMap,
-    query: &HlsQuery,
+    query: &LegacyWrapperQuery,
 ) -> Response {
+    if let Some(id) = query.wrapper_id {
+        if state.legacy_wrappers.lookup(id, channel_number).is_err() {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    }
     let Some(internal_addr) = state.internal_http_addr.get() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -316,7 +330,11 @@ pub async fn serve_concat_playlist(
         .unwrap_or("ts-legacy");
     let playlist = ConcatPlaylist::new("http", internal_addr.to_string(), channel.number, mode);
 
-    let mut response = playlist.render().into_response();
+    let rendered = query.wrapper_id.map_or_else(
+        || playlist.render(),
+        |id| playlist.render_with_wrapper_id(id.as_u128()),
+    );
+    let mut response = rendered.into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/plain; charset=utf-8"),
@@ -328,6 +346,26 @@ pub async fn serve_concat_playlist(
 }
 
 pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str) -> Response {
+    serve_internal_legacy_stream_with_query(state, channel_number, &LegacyWrapperQuery::default())
+        .await
+}
+
+pub async fn serve_internal_legacy_stream_with_query(
+    state: &AppState,
+    channel_number: &str,
+    query: &LegacyWrapperQuery,
+) -> Response {
+    let item = if let Some(id) = query.wrapper_id {
+        let Ok(request) = state.legacy_wrappers.lookup(id, channel_number) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        let Ok(item) = request.begin_item() else {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        };
+        Some(item)
+    } else {
+        None
+    };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     let lookup = tokio::time::timeout_at(
         deadline,
@@ -347,6 +385,55 @@ pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str
         }
     };
 
+    if let Some((guard, first_encoder)) = item {
+        let cancellation = guard.cancellation();
+        if cancellation.is_cancelled() {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        let reservation = match first_encoder {
+            Some(reservation) => reservation,
+            None => match reserve_mpeg_ts_capacity(state, channel_number).await {
+                Ok(Some(reservation)) => reservation,
+                // Compatible finite slate topology is not yet established.
+                // Do not open a source or feed a restarted capacity epoch.
+                _ => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+            },
+        };
+        if cancellation.is_cancelled() {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        if let Err(response) =
+            super::validate_profile_output(state, channel.id, OutputFormat::MpegTs, deadline).await
+        {
+            return response;
+        }
+        let close = guard.close_handle();
+        let owned_state = state.clone();
+        return owned_legacy_item_startup(cancellation, close, move |receiver| async move {
+            serve_channel_stream_admitted(
+                &owned_state,
+                channel,
+                OutputFormat::MpegTs,
+                StreamingMode::TransportStream,
+                deadline,
+                Some(IntervalStreamAdmission {
+                    reservation,
+                    deadline,
+                    cancellation: receiver,
+                    teletext: None,
+                    retained_required: false,
+                    legacy_item: Some(guard),
+                }),
+                TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
+            )
+            .await
+        })
+        .await;
+    }
+
     serve_channel_stream_with_channel(
         state,
         channel,
@@ -356,6 +443,44 @@ pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str
         TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
     )
     .await
+}
+
+/// Keep managed startup alive until cooperative cleanup even if its internal
+/// HTTP handler disappears before it can return a response body.
+async fn owned_legacy_item_startup<F, Fut>(
+    cancellation: LegacyWrapperItemCancellation,
+    close: LegacyWrapperCloseHandle,
+    build: F,
+) -> Response
+where
+    F: FnOnce(tokio::sync::oneshot::Receiver<()>) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = Response> + Send + 'static,
+{
+    let (mut response_sender, response_receiver) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let operation = build(receiver);
+        tokio::pin!(operation);
+        let response = tokio::select! {
+            biased;
+            () = cancellation.cancelled() => {
+                close.close();
+                drop(sender);
+                operation.await
+            },
+            () = response_sender.closed() => {
+                close.close();
+                drop(sender);
+                operation.await
+            },
+            response = &mut operation => response,
+        };
+        // A failed send drops the body, preserving its supervised disposal.
+        let _ = response_sender.send(response);
+    });
+    response_receiver
+        .await
+        .unwrap_or_else(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -399,6 +524,8 @@ struct IntervalStreamAdmission {
     deadline: tokio::time::Instant,
     cancellation: tokio::sync::oneshot::Receiver<()>,
     teletext: Option<Arc<TeletextOutputBinding>>,
+    retained_required: bool,
+    legacy_item: Option<LegacyWrapperItemGuard>,
 }
 
 async fn await_retained_startup_stage<T, E>(
@@ -573,6 +700,8 @@ fn retained_interval_stream_response(
                     deadline,
                     cancellation: receiver,
                     teletext: output.cloned_binding(),
+                    retained_required: true,
+                    legacy_item: None,
                 }),
                 TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
             ));
@@ -702,7 +831,7 @@ async fn cancel_retained_startup(
     subtitle_owner: Option<&mut Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>>,
     cleanup_paths: &[PathBuf],
     controllers: Option<&mut Vec<DynamicTextController>>,
-) {
+) -> bool {
     let confirmed = match prepared {
         Some(prepared) => prepared.cancel().await.is_ok(),
         None => true,
@@ -722,6 +851,7 @@ async fn cancel_retained_startup(
     if confirmed {
         cleanup_stream_artifacts(cleanup_paths).await;
     }
+    confirmed
 }
 
 #[allow(clippy::too_many_lines)]
@@ -731,11 +861,23 @@ async fn serve_channel_stream_admitted_inner(
     output_format: OutputFormat,
     effective_streaming_mode: StreamingMode,
     startup_deadline: tokio::time::Instant,
-    interval_admission: Option<IntervalStreamAdmission>,
+    mut interval_admission: Option<IntervalStreamAdmission>,
     output: TeletextOutputAdmission,
 ) -> Response {
     if output.validate_format(output_format).is_err() {
         return teletext_output_unavailable();
+    }
+    let mut legacy_item = interval_admission
+        .as_mut()
+        .and_then(|admission| admission.legacy_item.take());
+    let legacy_cancellation = legacy_item
+        .as_ref()
+        .map(LegacyWrapperItemGuard::cancellation);
+    if legacy_cancellation
+        .as_ref()
+        .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
+    {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
     let retained_teletext = interval_admission
         .as_ref()
@@ -777,6 +919,12 @@ async fn serve_channel_stream_admitted_inner(
         }
     };
 
+    if legacy_cancellation
+        .as_ref()
+        .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
+    {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
     let interval_source = active
         .remote_stream
         .as_ref()
@@ -784,7 +932,11 @@ async fn serve_channel_stream_admitted_inner(
             RemoteStreamSource::RetainedIntervals(source) => Some(source.clone()),
             _ => None,
         });
-    if interval_admission.is_some() && interval_source.is_none() {
+    if interval_admission
+        .as_ref()
+        .is_some_and(|admission| admission.retained_required)
+        && interval_source.is_none()
+    {
         tracing::warn!(
             channel_id = channel.id,
             "retained source changed during capacity admission"
@@ -906,6 +1058,28 @@ async fn serve_channel_stream_admitted_inner(
     let mut retained_cancellation = None;
     let mut external_subtitle_owner = None;
     let previous_audio_streams = source_audio_streams.clone();
+    // Fence each source-opening stage after awaiting earlier managed work.
+    // Cancellation retains reservations until prepared producers are reaped.
+    macro_rules! fence_cancelled_startup {
+        ($paths:expr, $controllers:expr) => {
+            if legacy_cancellation.as_ref().is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback: ersatzrs_infra::published_interval_source::RetainedIntervalPlayback| playback.prepared),
+                    interval_reservation.as_ref(), Some(&mut external_subtitle_owner),
+                    $paths, $controllers,
+                ).await;
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        };
+    }
+    fence_cancelled_startup!(&[], None);
+
+    if interval_source.is_none() {
+        if let Some(admission) = interval_admission.take() {
+            interval_reservation = Some(admission.reservation);
+            retained_cancellation = Some(admission.cancellation);
+        }
+    }
     let source_stream = if let (Some(source), Some(admission)) =
         (&interval_source, interval_admission)
     {
@@ -991,6 +1165,7 @@ async fn serve_channel_stream_admitted_inner(
         )
         .await
     };
+    fence_cancelled_startup!(&[], None);
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
             Ok(frame_rate) => frame_rate,
@@ -1057,6 +1232,7 @@ async fn serve_channel_stream_admitted_inner(
     );
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
+    fence_cancelled_startup!(&[], None);
     let custom_selection = if active.has_pinned_stream_selection {
         None
     } else {
@@ -1216,6 +1392,7 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         audio_selection
     };
+    fence_cancelled_startup!(&[], None);
     let subtitle = if active.has_pinned_stream_selection {
         if let Some(stream_index) = active.subtitle_stream_index {
             match select_pinned_playback_subtitle(
@@ -1302,6 +1479,7 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     };
+    fence_cancelled_startup!(&[], None);
     let subtitle = match subtitle {
         Some(selected) if active.external.is_some() => {
             let media = active.external.as_ref().expect("external binding checked");
@@ -1362,6 +1540,7 @@ async fn serve_channel_stream_admitted_inner(
         }
         None => None,
     };
+    fence_cancelled_startup!(&[], None);
     let mut retained_subtitle_input = None;
     let retained_subtitle_verified =
         if let (Some(source), Some(subtitle)) = (&interval_source, &subtitle) {
@@ -1433,11 +1612,13 @@ async fn serve_channel_stream_admitted_inner(
         .await;
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
+    fence_cancelled_startup!(&[], None);
     let subtitle_input = if interval_source.is_some() {
         retained_subtitle_input
     } else {
         rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
     };
+    fence_cancelled_startup!(&[], None);
     let watermark_inputs = match async {
         if let Some(media) = &active.external {
             if channel.streaming_mode == StreamingMode::HttpLiveStreamingDirect {
@@ -1515,6 +1696,7 @@ async fn serve_channel_stream_admitted_inner(
     };
     let mut graphics_cleanup_dirs = Vec::new();
     let mut dynamic_text_controllers = Vec::new();
+    fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
     let graphics_overlays = match async {
         if let Some(media) = &active.external {
             ersatzrs_infra::playback::select_fallback_graphics(
@@ -1640,6 +1822,7 @@ async fn serve_channel_stream_admitted_inner(
         active.content_duration,
         channel_start_time,
     );
+    fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
     let media_input = retained_playback.as_ref().map_or_else(
         || {
             active.remote_stream.as_ref().map_or_else(
@@ -1663,6 +1846,7 @@ async fn serve_channel_stream_admitted_inner(
             return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
         }
     };
+    fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
     let song = {
         let executable = runtime_capabilities
             .runtime_identity
@@ -1670,19 +1854,26 @@ async fn serve_channel_stream_admitted_inner(
             .map_or_else(ersatzrs_ffmpeg::ffmpeg_path, |identity| {
                 identity.ffmpeg_path.clone()
             });
-        let (_sender, receiver) = tokio::sync::oneshot::channel();
-        match ersatzrs_infra::song_background::stage_native(
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let operation = ersatzrs_infra::song_background::stage_native(
             &state.pool,
             active.media_item_id,
             channel.id,
             &playback_profile.resolution,
             active.playout_item_id,
             std::path::Path::new(&executable),
-            tokio::time::Instant::now() + Duration::from_secs(15),
+            startup_deadline.min(tokio::time::Instant::now() + Duration::from_secs(15)),
             receiver,
-        )
-        .await
-        {
+        );
+        let result = if let Some(cancellation) = retained_cancellation.as_mut() {
+            let (_, result) = await_retained_startup_stage(cancellation, sender, operation).await;
+            result
+        } else {
+            let _sender = sender;
+            operation.await
+        };
+        fence_cancelled_startup!(&graphics_cleanup_dirs, Some(&mut dynamic_text_controllers));
+        match result {
             Ok(song) => song.map(Arc::new),
             Err(error) => {
                 cancel_retained_startup(
@@ -2061,7 +2252,21 @@ async fn serve_channel_stream_admitted_inner(
     } else {
         None
     };
-    match spawn_stream_body_with_prepared_input(
+    if legacy_cancellation
+        .as_ref()
+        .is_some_and(LegacyWrapperItemCancellation::is_cancelled)
+    {
+        cancel_retained_startup(
+            retained_playback.take().map(|playback| playback.prepared),
+            capacity_reservation.as_ref(),
+            Some(&mut external_subtitle_owner),
+            &graphics_cleanup_dirs,
+            Some(&mut dynamic_text_controllers),
+        )
+        .await;
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    match spawn_stream_body_with_lifetime(
         &command,
         graphics_cleanup_dirs,
         dynamic_text_controllers,
@@ -2076,6 +2281,7 @@ async fn serve_channel_stream_admitted_inner(
             .as_ref()
             .map(|output| (output.terminal.clone(), output.completed.clone())),
         output,
+        legacy_item.take().map(LegacyStreamLifetime::Item),
     )
     .await
     {
@@ -2364,7 +2570,6 @@ async fn serve_legacy_concat_stream(
     let Some(internal_addr) = state.internal_http_addr.get() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    let concat_url = build_legacy_concat_url(*internal_addr, &channel.number);
     let metadata = channel_stream_metadata(channel);
     let (playback_profile, target_frame_rate, runtime_capabilities) =
         match load_capacity_slate_context(state, channel, "legacy stream").await {
@@ -2372,49 +2577,72 @@ async fn serve_legacy_concat_stream(
             Err(response) => return response,
         };
     let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
-    let command = build_mpegts_concat_command(concat_url, &metadata, Some(wrapper_muxrate_bps));
-
-    let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Ok(Some(reservation)) => Some(reservation),
-        Ok(None) => {
-            return mpeg_ts_capacity_wait_response(
-                state,
-                channel,
-                command,
-                Vec::new(),
-                Vec::new(),
-                &playback_profile,
-                target_frame_rate,
-                metadata,
-                runtime_capabilities,
-                None,
-                None,
-                None,
-                output,
-            )
-            .await;
-        }
+    let limit = match load_active_transcode_limit(&state.pool).await {
+        Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
         Err(error) => {
-            tracing::error!(
-                %error,
-                channel_id = channel.id,
-                channel_number = %channel.number,
-                "failed to load legacy-stream transcode capacity"
-            );
+            tracing::error!(%error, "failed to load legacy wrapper transcode capacity");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+    if limit < 2 {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "legacy transport requires capacity for a wrapper and encoder",
+        )
+            .into_response();
+    }
+    let Some((wrapper, first_encoder)) =
+        try_reserve_mpeg_ts_wrapper_capacity(limit, &channel.number)
+    else {
+        if output.binding().is_some() {
+            // A raw capacity-slate prefix followed by this wrapper would
+            // start a new PSI/PCR epoch. Authored output must fail closed.
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        return legacy_wrapper_capacity_wait_response(
+            state,
+            channel,
+            *internal_addr,
+            &playback_profile,
+            target_frame_rate,
+            metadata,
+            runtime_capabilities,
+            wrapper_muxrate_bps,
+        )
+        .await;
+    };
+    let owner = match state.legacy_wrappers.register(
+        &channel.number,
+        &wrapper,
+        first_encoder,
+        tokio::time::Instant::now() + Duration::from_secs(20),
+    ) {
+        Ok(owner) => owner,
+        Err(error) => {
+            tracing::warn!(%error, "legacy wrapper ownership registration failed");
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+    };
+    let command = build_mpegts_concat_command(
+        build_owned_legacy_concat_url(*internal_addr, &channel.number, owner.id()),
+        &metadata,
+        Some(wrapper_muxrate_bps),
+    );
 
-    match spawn_stream_body(
+    match spawn_stream_body_with_lifetime(
         &command,
         Vec::new(),
         Vec::new(),
         channel.number.clone(),
         state.hls_sessions.clone(),
-        capacity_reservation,
+        Some(wrapper),
+        None,
+        None,
+        None,
         None,
         None,
         output,
+        Some(LegacyStreamLifetime::Wrapper(owner)),
     )
     .await
     {
@@ -2435,8 +2663,242 @@ async fn serve_legacy_concat_stream(
     }
 }
 
+// Plain legacy callers retain the existing capacity-slate behavior. Once
+// admitted, the wrapper and first item always receive distinct atomic leases.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Carries the existing finite slate and the independently admitted wrapper context together"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps plain capacity retry, exact wrapper ownership and child cleanup under one supervised response lifetime"
+)]
+async fn legacy_wrapper_capacity_wait_response(
+    state: &AppState,
+    channel: &Channel,
+    address: std::net::SocketAddr,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    muxrate_bps: i64,
+) -> Response {
+    let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
+    let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
+        working_dir: &slate_dir,
+        duration: MPEG_TS_CAPACITY_SLATE_DURATION,
+        playback_profile,
+        target_frame_rate,
+        metadata: metadata.clone(),
+        runtime_capabilities,
+        message: ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+    })
+    .await
+    else {
+        cleanup_stream_artifact(&slate_dir).await;
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let registry = state.legacy_wrappers.clone();
+    let session_registry = state.hls_sessions.clone();
+    let pool = state.pool.clone();
+    let channel_number = channel.number.clone();
+    let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
+    let cancel = handle.cancel.clone();
+    let handle: Arc<dyn HlsSessionHandle> = handle;
+    let fence = Arc::new(WaitingLegacyWrapperFence::default());
+    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let output = TeletextOutputAdmission::plain(TeletextOutputRole::FinalWrapperMpegTs);
+    let (body, completion) = stream_body_for_wrapper_wait(
+        reader,
+        cancel.clone(),
+        &output,
+        true,
+        None,
+        Some(fence.clone()),
+    );
+    tokio::spawn(async move {
+        session_registry.register_direct(handle.clone()).await;
+        let outcome = loop {
+            if fence.closed.load(Ordering::Acquire) {
+                break DirectStreamOutcome::Cancelled;
+            }
+            let limit = match load_active_transcode_limit(&pool).await {
+                Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
+                Err(error) => {
+                    tracing::warn!(%error, "legacy wrapper capacity reload failed");
+                    break DirectStreamOutcome::Failed(
+                        "legacy capacity unavailable".to_owned().into(),
+                    );
+                }
+            };
+            if limit < 2 {
+                break DirectStreamOutcome::Failed(
+                    "legacy wrapper requires two transcode slots"
+                        .to_owned()
+                        .into(),
+                );
+            }
+            if fence.closed.load(Ordering::Acquire) {
+                break DirectStreamOutcome::Cancelled;
+            }
+            if let Some((wrapper, first_encoder)) =
+                try_reserve_mpeg_ts_wrapper_capacity(limit, &channel_number)
+            {
+                let owner = match registry.register(
+                    &channel_number,
+                    &wrapper,
+                    first_encoder,
+                    tokio::time::Instant::now() + Duration::from_secs(20),
+                ) {
+                    Ok(owner) => owner,
+                    Err(error) => {
+                        tracing::warn!(%error, "legacy waiting wrapper registration failed");
+                        break DirectStreamOutcome::Failed(
+                            "legacy wrapper ownership unavailable".to_owned().into(),
+                        );
+                    }
+                };
+                fence.attach(owner.close_handle());
+                if fence.closed.load(Ordering::Acquire) {
+                    break DirectStreamOutcome::Cancelled;
+                }
+                let command = build_mpegts_concat_command(
+                    build_owned_legacy_concat_url(address, &channel_number, owner.id()),
+                    &metadata,
+                    Some(muxrate_bps),
+                );
+                let mut child = match spawn_stream_process(&command, None, &channel_number) {
+                    Ok(child) => child,
+                    Err(error) => {
+                        if !error.cleanup_confirmed() {
+                            wrapper.retain_until_restart();
+                        }
+                        tracing::warn!(%error, "legacy waiting wrapper spawn failed");
+                        break if error.cleanup_confirmed() {
+                            DirectStreamOutcome::Failed(
+                                "legacy wrapper spawn failed".to_owned().into(),
+                            )
+                        } else {
+                            DirectStreamOutcome::CleanupUnconfirmed
+                        };
+                    }
+                };
+                if child.stdout.is_none() {
+                    if reap_stream_process(&mut child).await.is_err() {
+                        wrapper.retain_until_restart();
+                        break DirectStreamOutcome::CleanupUnconfirmed;
+                    }
+                    break DirectStreamOutcome::Failed(
+                        "legacy wrapper has no output".to_owned().into(),
+                    );
+                }
+                let wrapper_cancel = owner.cancel_signal();
+                let outcome = {
+                    let mut retry = None;
+                    let operation = supervise_stream_command_with_retry(
+                        child,
+                        &mut writer,
+                        &cancel,
+                        &channel_number,
+                        &mut retry,
+                        None,
+                        &output,
+                    );
+                    tokio::pin!(operation);
+                    tokio::select! {
+                        biased;
+                        () = wrapper_cancel.notified() => {
+                            owner.close();
+                            cancel.notify_one();
+                            operation.await
+                        },
+                        () = owner.first_item_deadline_expired() => {
+                            owner.close();
+                            cancel.notify_one();
+                            operation.await
+                        },
+                        outcome = &mut operation => outcome,
+                    }
+                };
+                owner.close();
+                if matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed) {
+                    wrapper.retain_until_restart();
+                }
+                drop(owner);
+                drop(wrapper);
+                break outcome;
+            }
+            if request_hls_capacity_reclaim_for_mpeg_ts(&channel_number) {
+                tokio::select! {
+                    () = cancel.notified() => break DirectStreamOutcome::Cancelled,
+                    () = tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL) => {},
+                }
+                continue;
+            }
+            let mut slate_child = match spawn_stream_process(&slate_command, None, &channel_number)
+            {
+                Ok(child) => child,
+                Err(error) => {
+                    tracing::warn!(%error, "legacy waiting slate spawn failed");
+                    break if error.cleanup_confirmed() {
+                        DirectStreamOutcome::Failed(
+                            "legacy capacity slate spawn failed".to_owned().into(),
+                        )
+                    } else {
+                        DirectStreamOutcome::CleanupUnconfirmed
+                    };
+                }
+            };
+            match supervise_stream_process(
+                &mut slate_child,
+                &mut writer,
+                &cancel,
+                &channel_number,
+                None,
+            )
+            .await
+            {
+                DirectStreamOutcome::Completed => {}
+                outcome => break outcome,
+            }
+            tokio::select! {
+                () = cancel.notified() => break DirectStreamOutcome::Cancelled,
+                () = tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL) => {},
+            }
+        };
+        fence.close();
+        session_registry.unregister_direct(&handle).await;
+        if !matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed) {
+            cleanup_stream_artifact(&slate_dir).await;
+        }
+        if let Some(completion) = completion {
+            let _ = completion.send(stream_output_result(&outcome));
+        }
+        drop(writer);
+    });
+    let mut response = body.into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
 fn build_legacy_concat_url(address: std::net::SocketAddr, channel_number: &str) -> String {
     format!("http://{address}/ffmpeg/concat/{channel_number}?mode=ts-legacy")
+}
+
+fn build_owned_legacy_concat_url(
+    address: std::net::SocketAddr,
+    channel_number: &str,
+    wrapper_id: uuid::Uuid,
+) -> String {
+    format!(
+        "{}&wrapper_id={wrapper_id}",
+        build_legacy_concat_url(address, channel_number)
+    )
 }
 
 fn build_segmenter_wrapper_hls_url(
@@ -3940,9 +4402,47 @@ impl StreamRetryBuilder {
         self,
         mode: StreamRetryMode,
         cancel: &Arc<Notify>,
+        item: Option<&LegacyWrapperItemCancellation>,
     ) -> Result<Option<StreamRetryAttempt>, StreamSpawnError> {
-        (self.0)(mode, cancel.clone()).await
+        if item.is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
+            return Err(StreamSpawnError::Spawn("legacy retry cancelled".into()));
+        }
+        let operation = (self.0)(mode, cancel.clone());
+        tokio::pin!(operation);
+        let result = if let Some(item) = item {
+            tokio::select! {
+                biased;
+                () = item.cancelled() => {
+                    // The retained retry builder already owns a cooperative
+                    // preparation bridge; preserve its managed cleanup.
+                    cancel.notify_one();
+                    operation.await
+                },
+                result = &mut operation => result,
+            }
+        } else {
+            operation.await
+        }?;
+        if item.is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
+            if let Some(attempt) = result {
+                cancel_stream_retry_attempt(attempt).await?;
+            }
+            return Err(StreamSpawnError::Spawn("legacy retry cancelled".into()));
+        }
+        Ok(result)
     }
+}
+
+async fn cancel_stream_retry_attempt(
+    mut attempt: StreamRetryAttempt,
+) -> Result<(), StreamSpawnError> {
+    if let Some(prepared) = attempt.prepared.take() {
+        prepared
+            .cancel()
+            .await
+            .map_err(|error| StreamSpawnError::prepared(&error))?;
+    }
+    Ok(())
 }
 
 // Used only by Unix shell-backed retry fixtures; native code uses deferred builders.
@@ -3965,7 +4465,12 @@ async fn spawn_stream_retry(
     attempt: StreamRetryAttempt,
     producer: Option<&RemoteStreamCommand>,
     channel_number: &str,
+    item: Option<&LegacyWrapperItemCancellation>,
 ) -> Result<RemoteStreamProcess, StreamSpawnError> {
+    if item.is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
+        cancel_stream_retry_attempt(attempt).await?;
+        return Err(StreamSpawnError::Spawn("legacy retry cancelled".into()));
+    }
     match attempt.prepared {
         Some(prepared) => spawn_ffmpeg_with_prepared_remote_input(
             &attempt.command,
@@ -4000,15 +4505,90 @@ const STREAM_BODY_BUFFER_BYTES: usize = 256 * 1024;
 /// stack up across player reconnects.
 struct StreamBodyDisposeGuard {
     cancel: Arc<Notify>,
+    wrapper_close: Option<LegacyWrapperCloseHandle>,
+    waiting_wrapper: Option<Arc<WaitingLegacyWrapperFence>>,
 }
 
 impl Drop for StreamBodyDisposeGuard {
     fn drop(&mut self) {
+        if let Some(wrapper) = &self.wrapper_close {
+            wrapper.close();
+        }
+        if let Some(wrapper) = &self.waiting_wrapper {
+            wrapper.close();
+        }
         tracing::debug!("channel stream response body dropped; cancelling ffmpeg supervisor");
         // `notify_one` stores a permit, so the supervisor still observes the
         // disposal even if it is between `notified()` awaits (for example
         // while respawning after a learned hardware-decode denial).
         self.cancel.notify_one();
+    }
+}
+
+#[derive(Default)]
+struct WaitingLegacyWrapperFence {
+    closed: std::sync::atomic::AtomicBool,
+    owner: std::sync::Mutex<Option<LegacyWrapperCloseHandle>>,
+}
+
+impl WaitingLegacyWrapperFence {
+    fn attach(&self, owner: LegacyWrapperCloseHandle) {
+        let mut stored = self
+            .owner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.closed.load(Ordering::Acquire) {
+            owner.close();
+        } else {
+            *stored = Some(owner);
+        }
+    }
+
+    fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+        let owner = self
+            .owner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(owner) = owner {
+            owner.close();
+        }
+    }
+}
+
+enum LegacyStreamLifetime {
+    Wrapper(LegacyWrapperOwner),
+    Item(LegacyWrapperItemGuard),
+}
+
+impl LegacyStreamLifetime {
+    fn item_cancelled(&self) -> bool {
+        matches!(self, Self::Item(item) if item.cancellation().is_cancelled())
+    }
+    fn close_handle(&self) -> LegacyWrapperCloseHandle {
+        match self {
+            Self::Wrapper(owner) => owner.close_handle(),
+            Self::Item(item) => item.close_handle(),
+        }
+    }
+
+    async fn cancellation(&self) {
+        match self {
+            Self::Wrapper(owner) => owner.first_item_deadline_expired().await,
+            Self::Item(item) => {
+                let cancellation = item.cancellation();
+                cancellation.cancelled().await;
+            }
+        }
+    }
+
+    fn complete(self, success: bool) {
+        if let Self::Item(item) = self {
+            if success {
+                item.complete();
+            }
+        }
     }
 }
 
@@ -4157,10 +4737,6 @@ async fn render_stream_song(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[expect(
-    clippy::too_many_lines,
-    reason = "Keeps admitted producer, song, subtitle and capacity ownership together through startup and supervised cleanup"
-)]
 async fn spawn_stream_body_with_prepared_input(
     command: &FfmpegCommand,
     cleanup_paths: Vec<PathBuf>,
@@ -4175,8 +4751,132 @@ async fn spawn_stream_body_with_prepared_input(
     terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
     output: TeletextOutputAdmission,
 ) -> Result<Body, StreamSpawnError> {
+    spawn_stream_body_with_lifetime(
+        command,
+        cleanup_paths,
+        dynamic_text_controllers,
+        channel_number,
+        session_registry,
+        capacity_reservation,
+        retry,
+        remote_stream,
+        prepared,
+        subtitle_owner,
+        terminal,
+        output,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Extends the existing admitted producer context with its exact wrapper or item lifetime"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps admitted producer, song, subtitle and capacity ownership together through startup and supervised cleanup"
+)]
+async fn spawn_stream_body_with_lifetime(
+    command: &FfmpegCommand,
+    cleanup_paths: Vec<PathBuf>,
+    mut dynamic_text_controllers: Vec<DynamicTextController>,
+    channel_number: String,
+    session_registry: Arc<dyn HlsSessionRegistry>,
+    capacity_reservation: Option<ActiveTranscodeReservation>,
+    retry: Option<StreamDenialRetry>,
+    remote_stream: Option<ResolvedRemoteStream>,
+    mut prepared: Option<PreparedRemoteStreamInput>,
+    mut subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
+    terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
+    output: TeletextOutputAdmission,
+    lifetime: Option<LegacyStreamLifetime>,
+) -> Result<Body, StreamSpawnError> {
+    if lifetime
+        .as_ref()
+        .is_some_and(LegacyStreamLifetime::item_cancelled)
+    {
+        let confirmed = cancel_retained_startup(
+            prepared.take(),
+            capacity_reservation.as_ref(),
+            Some(&mut subtitle_owner),
+            &cleanup_paths,
+            Some(&mut dynamic_text_controllers),
+        )
+        .await;
+        return Err(if confirmed {
+            StreamSpawnError::Spawn("legacy item startup cancelled".into())
+        } else {
+            StreamSpawnError::CleanupUnconfirmed("legacy item startup cleanup unconfirmed".into())
+        });
+    }
     if let Some(song) = retry.as_ref().and_then(|retry| retry.song.clone()) {
-        render_stream_song(song, capacity_reservation.clone(), None).await?;
+        let rendered = {
+            let render_cancel = Arc::new(Notify::new());
+            let operation =
+                render_stream_song(song, capacity_reservation.clone(), Some(&render_cancel));
+            tokio::pin!(operation);
+            if let Some(LegacyStreamLifetime::Item(item)) = &lifetime {
+                let cancellation = item.cancellation();
+                tokio::select! {
+                    biased;
+                    () = cancellation.cancelled() => {
+                        render_cancel.notify_one();
+                        operation.await
+                    },
+                    result = &mut operation => result,
+                }
+            } else {
+                operation.await
+            }
+        };
+        if let Err(error) = rendered {
+            if !error.cleanup_confirmed() {
+                if let Some(reservation) = &capacity_reservation {
+                    reservation.retain_until_restart();
+                }
+                if let Some(owner) = subtitle_owner.take() {
+                    owner.preserve_after_unconfirmed_cleanup();
+                }
+            }
+            let confirmed = cancel_retained_startup(
+                prepared.take(),
+                capacity_reservation.as_ref(),
+                Some(&mut subtitle_owner),
+                if error.cleanup_confirmed() {
+                    &cleanup_paths
+                } else {
+                    &[]
+                },
+                Some(&mut dynamic_text_controllers),
+            )
+            .await;
+            return Err(if confirmed {
+                error
+            } else {
+                StreamSpawnError::CleanupUnconfirmed(
+                    "legacy item startup cleanup unconfirmed".into(),
+                )
+            });
+        }
+    }
+    if lifetime
+        .as_ref()
+        .is_some_and(LegacyStreamLifetime::item_cancelled)
+    {
+        let confirmed = cancel_retained_startup(
+            prepared.take(),
+            capacity_reservation.as_ref(),
+            Some(&mut subtitle_owner),
+            &cleanup_paths,
+            Some(&mut dynamic_text_controllers),
+        )
+        .await;
+        return Err(if confirmed {
+            StreamSpawnError::Spawn("legacy item startup cancelled".into())
+        } else {
+            StreamSpawnError::CleanupUnconfirmed("legacy item startup cleanup unconfirmed".into())
+        });
     }
     let song = retry.as_ref().and_then(|retry| retry.song.as_ref());
     if let Some(song) = song {
@@ -4234,28 +4934,62 @@ async fn spawn_stream_body_with_prepared_input(
             }
         };
     }
-    let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
+    let mut handle = DirectStreamHandle::new(channel_number.clone());
+    if let Some(LegacyStreamLifetime::Wrapper(owner)) = &lifetime {
+        handle.cancel = owner.cancel_signal();
+    }
+    let handle = Arc::new(handle);
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
-    let (body, output_completion) = stream_body_for_output(reader, handle_cancel, &output);
+    let (body, output_completion) = stream_body_for_lifetime(
+        reader,
+        handle_cancel,
+        &output,
+        lifetime.is_some(),
+        lifetime.as_ref().map(LegacyStreamLifetime::close_handle),
+    );
 
     tokio::spawn(async move {
         let capacity_guard = capacity_reservation;
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
         let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
-        let outcome = supervise_stream_command_with_retry(
-            child,
-            &mut writer,
-            &cancel,
-            &channel_number,
-            &mut retry,
-            remote_stream.as_ref(),
-            &output,
-        )
-        .await;
+        let item_cancellation = lifetime.as_ref().and_then(|lifetime| match lifetime {
+            LegacyStreamLifetime::Item(item) => Some(item.cancellation()),
+            LegacyStreamLifetime::Wrapper(_) => None,
+        });
+        let outcome = {
+            let operation = supervise_stream_command_with_retry_cancellable(
+                child,
+                &mut writer,
+                &cancel,
+                &channel_number,
+                &mut retry,
+                remote_stream.as_ref(),
+                &output,
+                item_cancellation.as_ref(),
+            );
+            tokio::pin!(operation);
+            let lifetime_cancel = async {
+                match &lifetime {
+                    Some(lifetime) => lifetime.cancellation().await,
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                biased;
+                () = lifetime_cancel => {
+                    if let Some(LegacyStreamLifetime::Wrapper(owner)) = &lifetime {
+                        owner.close();
+                    }
+                    cancel.notify_one();
+                    operation.await
+                },
+                outcome = &mut operation => outcome,
+            }
+        };
         let cleanup_unconfirmed = matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed)
             || song_owner
                 .as_ref()
@@ -4267,6 +5001,24 @@ async fn spawn_stream_body_with_prepared_input(
             if let Some(owner) = subtitle_owner {
                 owner.preserve_after_unconfirmed_cleanup();
             }
+        }
+        let outcome = if cleanup_unconfirmed {
+            DirectStreamOutcome::CleanupUnconfirmed
+        } else {
+            outcome
+        };
+        session_registry.unregister_direct(&handle).await;
+        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+        if !cleanup_unconfirmed {
+            for path in cleanup_paths {
+                cleanup_stream_artifact(&path).await;
+            }
+        }
+        // The next concat request may arrive immediately after terminal EOF.
+        // Release the actual encoder and exclusive item permit before it.
+        drop(capacity_guard);
+        if let Some(lifetime) = lifetime {
+            lifetime.complete(matches!(outcome, DirectStreamOutcome::Completed));
         }
         let close_output = terminal.is_some() || output_completion.is_some();
         if let Some((terminal, completed)) = terminal {
@@ -4285,13 +5037,6 @@ async fn spawn_stream_body_with_prepared_input(
         }
         if close_output {
             drop(writer);
-        }
-        session_registry.unregister_direct(&handle).await;
-        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
-        if !cleanup_unconfirmed {
-            for path in cleanup_paths {
-                cleanup_stream_artifact(&path).await;
-            }
         }
     });
 
@@ -4482,8 +5227,37 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
 // then encoder rejection, each with its own persist-and-respawn. Splitting it
 // would mean threading the FnOnce rebuild and the &mut child through helpers
 // for no gain in clarity.
-#[allow(clippy::too_many_lines)]
 async fn supervise_stream_command_with_retry(
+    child: RemoteStreamProcess,
+    writer: &mut tokio::io::DuplexStream,
+    cancel: &Arc<Notify>,
+    channel_number: &str,
+    retry: &mut Option<StreamDenialRetry>,
+    remote_stream: Option<&ResolvedRemoteStream>,
+    output: &TeletextOutputAdmission,
+) -> DirectStreamOutcome {
+    supervise_stream_command_with_retry_cancellable(
+        child,
+        writer,
+        cancel,
+        channel_number,
+        retry,
+        remote_stream,
+        output,
+        None,
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keeps the existing failure classification and bounded retry ownership in one linear ladder"
+)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Adds the exact item cancellation state to the existing linear retry ownership ladder"
+)]
+async fn supervise_stream_command_with_retry_cancellable(
     mut child: RemoteStreamProcess,
     writer: &mut tokio::io::DuplexStream,
     cancel: &Arc<Notify>,
@@ -4491,6 +5265,7 @@ async fn supervise_stream_command_with_retry(
     retry: &mut Option<StreamDenialRetry>,
     remote_stream: Option<&ResolvedRemoteStream>,
     output: &TeletextOutputAdmission,
+    item: Option<&LegacyWrapperItemCancellation>,
 ) -> DirectStreamOutcome {
     let song = retry.as_ref().and_then(|retry| retry.song.clone());
     loop {
@@ -4579,6 +5354,7 @@ async fn supervise_stream_command_with_retry(
                 .build(
                     StreamRetryMode::HardwareGraphDenied(context.runtime_capabilities.clone()),
                     cancel,
+                    item,
                 )
                 .await
             {
@@ -4612,6 +5388,7 @@ async fn supervise_stream_command_with_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
+                item,
             )
             .await
             {
@@ -4670,6 +5447,7 @@ async fn supervise_stream_command_with_retry(
                 .build(
                     StreamRetryMode::HardwareDecodeDenied(context.runtime_capabilities.clone()),
                     cancel,
+                    item,
                 )
                 .await
             {
@@ -4703,6 +5481,7 @@ async fn supervise_stream_command_with_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
+                item,
             )
             .await
             {
@@ -4751,6 +5530,7 @@ async fn supervise_stream_command_with_retry(
             .build(
                 StreamRetryMode::HardwareEncodeDenied(context.runtime_capabilities),
                 cancel,
+                item,
             )
             .await
         {
@@ -4776,6 +5556,7 @@ async fn supervise_stream_command_with_retry(
             retry_command,
             remote_stream.and_then(remote_stream_producer),
             channel_number,
+            item,
         )
         .await
         {
@@ -4807,7 +5588,11 @@ fn failed_stream_spawn_outcome(error: &StreamSpawnError) -> DirectStreamOutcome 
 fn guarded_stream_body(reader: tokio::io::DuplexStream, cancel: Arc<Notify>) -> Body {
     use futures_util::StreamExt;
 
-    let guard = StreamBodyDisposeGuard { cancel };
+    let guard = StreamBodyDisposeGuard {
+        cancel,
+        wrapper_close: None,
+        waiting_wrapper: None,
+    };
     Body::from_stream(ReaderStream::new(reader).map(move |chunk| {
         let _held_until_body_drop = &guard;
         chunk
@@ -4831,9 +5616,37 @@ fn stream_body_for_output(
     cancel: Arc<Notify>,
     output: &TeletextOutputAdmission,
 ) -> (Body, Option<StreamOutputCompletion>) {
+    stream_body_for_lifetime(reader, cancel, output, false, None)
+}
+
+fn stream_body_for_lifetime(
+    reader: tokio::io::DuplexStream,
+    cancel: Arc<Notify>,
+    output: &TeletextOutputAdmission,
+    force_completion: bool,
+    wrapper_close: Option<LegacyWrapperCloseHandle>,
+) -> (Body, Option<StreamOutputCompletion>) {
+    stream_body_for_wrapper_wait(
+        reader,
+        cancel,
+        output,
+        force_completion,
+        wrapper_close,
+        None,
+    )
+}
+
+fn stream_body_for_wrapper_wait(
+    reader: tokio::io::DuplexStream,
+    cancel: Arc<Notify>,
+    output: &TeletextOutputAdmission,
+    force_completion: bool,
+    wrapper_close: Option<LegacyWrapperCloseHandle>,
+    waiting_wrapper: Option<Arc<WaitingLegacyWrapperFence>>,
+) -> (Body, Option<StreamOutputCompletion>) {
     use futures_util::StreamExt as _;
 
-    if output.binding().is_none() {
+    if output.binding().is_none() && !force_completion {
         return (guarded_stream_body(reader, cancel), None);
     }
     let (sender, completion) = tokio::sync::oneshot::channel();
@@ -4847,7 +5660,11 @@ fn stream_body_for_output(
         }
     })
     .filter_map(std::future::ready);
-    let guard = StreamBodyDisposeGuard { cancel };
+    let guard = StreamBodyDisposeGuard {
+        cancel,
+        wrapper_close,
+        waiting_wrapper,
+    };
     let body = Body::from_stream(ReaderStream::new(reader).chain(terminal).map(move |chunk| {
         let _held_until_body_drop = &guard;
         chunk
@@ -5188,6 +6005,300 @@ fn ffmpeg_stderr_is_hardware_encoder_open_failure(stderr: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_waiting_body_drop_fences_owner_installed_after_disposal() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests,
+        };
+        let _lock = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let registry =
+            Arc::new(super::super::legacy_wrapper_admission::LegacyWrapperRegistry::new(1));
+        let fence = Arc::new(WaitingLegacyWrapperFence::default());
+        let guard = StreamBodyDisposeGuard {
+            cancel: Arc::new(Notify::new()),
+            wrapper_close: None,
+            waiting_wrapper: Some(fence.clone()),
+        };
+        drop(guard);
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "late").unwrap();
+        let owner = registry
+            .register(
+                "late",
+                &wrapper,
+                encoder,
+                tokio::time::Instant::now() + Duration::from_secs(20),
+            )
+            .unwrap();
+        fence.attach(owner.close_handle());
+        assert!(registry.lookup(owner.id(), "late").is_err());
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(owner);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
+
+    #[cfg(unix)] // POSIX process fixture; native Windows runtime proof is separate.
+    #[tokio::test]
+    async fn legacy_handler_drop_cancels_owned_startup_and_retains_lease_until_cleanup() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, reset_active_transcode_state_for_tests,
+        };
+        let _lock = active_transcode_stream_test_guard().await;
+        reset_active_transcode_state_for_tests();
+        let registry =
+            Arc::new(super::super::legacy_wrapper_admission::LegacyWrapperRegistry::new(1));
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "startup-drop").unwrap();
+        let owner = registry
+            .register(
+                "startup-drop",
+                &wrapper,
+                encoder,
+                tokio::time::Instant::now() + Duration::from_secs(20),
+            )
+            .unwrap();
+        let (item, encoder) = registry
+            .lookup(owner.id(), "startup-drop")
+            .unwrap()
+            .begin_item()
+            .unwrap();
+        let cancellation = item.cancellation();
+        let close = item.close_handle();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (cleaning_tx, cleaning_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let (completed_tx, completed_rx) = tokio::sync::oneshot::channel();
+        let handler = tokio::spawn(owned_legacy_item_startup(
+            cancellation,
+            close,
+            move |cancel| async move {
+                let mut child = spawn_stream_process(
+                    &shell_command("exec sleep 30", "exit /b 1"),
+                    None,
+                    "startup-drop",
+                )
+                .unwrap();
+                let _ = started_tx.send(());
+                let _ = cancel.await;
+                reap_stream_process(&mut child).await.unwrap();
+                let _ = cleaning_tx.send(());
+                let _ = release_rx.await;
+                drop(encoder);
+                drop(item);
+                let _ = completed_tx.send(());
+                StatusCode::SERVICE_UNAVAILABLE.into_response()
+            },
+        ));
+        tokio::time::timeout(Duration::from_secs(5), started_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        handler.abort();
+        let _ = handler.await;
+        tokio::time::timeout(Duration::from_secs(10), cleaning_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(registry.lookup(owner.id(), "startup-drop").is_err());
+        assert_eq!(
+            active_transcode_snapshot(2).active,
+            2,
+            "HTTP abandonment must not release managed startup capacity before cleanup"
+        );
+        let _ = release_tx.send(());
+        tokio::time::timeout(Duration::from_secs(5), completed_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(owner);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
+
+    #[tokio::test]
+    async fn legacy_closed_item_never_runs_retry_builder_or_spawns_retry_child() {
+        use ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests;
+        let _lock = active_transcode_stream_test_guard().await;
+        reset_active_transcode_state_for_tests();
+        let registry =
+            Arc::new(super::super::legacy_wrapper_admission::LegacyWrapperRegistry::new(1));
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "retry-fence").unwrap();
+        let owner = registry
+            .register(
+                "retry-fence",
+                &wrapper,
+                encoder,
+                tokio::time::Instant::now() + Duration::from_secs(20),
+            )
+            .unwrap();
+        let (item, encoder) = registry
+            .lookup(owner.id(), "retry-fence")
+            .unwrap()
+            .begin_item()
+            .unwrap();
+        let cancellation = item.cancellation();
+        owner.close();
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed = called.clone();
+        let builder = StreamRetryBuilder(Box::new(move |_, _| {
+            observed.store(true, Ordering::Release);
+            Box::pin(async { Ok(None) })
+        }));
+        let result = builder
+            .build(
+                StreamRetryMode::HardwareEncodeDenied(FfmpegCapabilityReport::default()),
+                &Arc::new(Notify::new()),
+                Some(&cancellation),
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(!called.load(Ordering::Acquire));
+        let result = spawn_stream_retry(
+            StreamRetryAttempt {
+                command: FfmpegCommand {
+                    executable: "must-not-spawn".into(),
+                    arguments: Vec::new(),
+                    environment: Vec::new(),
+                },
+                source_stream: None,
+                prepared: None,
+            },
+            None,
+            "retry-fence",
+            Some(&cancellation),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(StreamSpawnError::Spawn(message)) if message == "legacy retry cancelled")
+        );
+        drop(encoder);
+        drop(item);
+        drop(owner);
+        drop(wrapper);
+    }
+
+    #[tokio::test]
+    async fn legacy_item_failure_reports_body_error_and_fences_parent() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, reset_active_transcode_state_for_tests,
+        };
+        let _lock = active_transcode_stream_test_guard().await;
+        reset_active_transcode_state_for_tests();
+        let registry =
+            Arc::new(super::super::legacy_wrapper_admission::LegacyWrapperRegistry::new(1));
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "item-failure").unwrap();
+        let owner = registry
+            .register(
+                "item-failure",
+                &wrapper,
+                encoder,
+                tokio::time::Instant::now() + Duration::from_secs(20),
+            )
+            .unwrap();
+        let (item, encoder) = registry
+            .lookup(owner.id(), "item-failure")
+            .unwrap()
+            .begin_item()
+            .unwrap();
+        let body = spawn_stream_body_with_lifetime(
+            &shell_command("printf item-prefix; exit 7", "echo item-prefix&exit /b 7"),
+            Vec::new(),
+            Vec::new(),
+            "item-failure".into(),
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new()),
+            encoder,
+            None,
+            None,
+            None,
+            None,
+            None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
+            Some(LegacyStreamLifetime::Item(item)),
+        )
+        .await
+        .unwrap();
+        let result =
+            tokio::time::timeout(Duration::from_secs(10), axum::body::to_bytes(body, 1024))
+                .await
+                .unwrap();
+        assert!(
+            result.is_err(),
+            "a failed item must not appear as clean concat EOF"
+        );
+        assert!(registry.lookup(owner.id(), "item-failure").is_err());
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(owner);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
+
+    #[tokio::test]
+    async fn legacy_item_success_releases_encoder_and_permit_before_eof() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, reset_active_transcode_state_for_tests,
+        };
+        let _lock = active_transcode_stream_test_guard().await;
+        reset_active_transcode_state_for_tests();
+        let registry =
+            Arc::new(super::super::legacy_wrapper_admission::LegacyWrapperRegistry::new(1));
+        let (wrapper, encoder) = try_reserve_mpeg_ts_wrapper_capacity(2, "item-success").unwrap();
+        let owner = registry
+            .register(
+                "item-success",
+                &wrapper,
+                encoder,
+                tokio::time::Instant::now() + Duration::from_secs(20),
+            )
+            .unwrap();
+        let (item, encoder) = registry
+            .lookup(owner.id(), "item-success")
+            .unwrap()
+            .begin_item()
+            .unwrap();
+        let body = spawn_stream_body_with_lifetime(
+            &shell_command("printf item-prefix", "echo item-prefix"),
+            Vec::new(),
+            Vec::new(),
+            "item-success".into(),
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new()),
+            encoder,
+            None,
+            None,
+            None,
+            None,
+            None,
+            TeletextOutputAdmission::plain(TeletextOutputRole::InternalItem),
+            Some(LegacyStreamLifetime::Item(item)),
+        )
+        .await
+        .unwrap();
+        let bytes = tokio::time::timeout(Duration::from_secs(10), axum::body::to_bytes(body, 1024))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(bytes.starts_with(b"item-prefix"));
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        let (next, first_encoder) = registry
+            .lookup(owner.id(), "item-success")
+            .unwrap()
+            .begin_item()
+            .unwrap();
+        assert!(
+            first_encoder.is_none(),
+            "first encoder handoff must be consumed once"
+        );
+        let next_encoder =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("item-success"));
+        assert!(next_encoder.is_some());
+        drop(next_encoder);
+        next.complete();
+        drop(owner);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
 
     #[tokio::test]
     async fn retained_startup_cancellation_awaits_stage_and_preserves_cleanup_result() {

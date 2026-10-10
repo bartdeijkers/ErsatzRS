@@ -127,10 +127,24 @@ No extra task, source opening or arrival-age reset is introduced; EOF sealing
 follows pending flush/acknowledgement.
 The existing transcode registry now provides atomic reservation of two distinct
 MPEG-TS leases for a wrapper and its first encoder. Failure retains neither;
-independent release and uncertain-process quarantine remain unchanged. This is
-a preparatory admission primitive. The legacy routes and capacity-wait retries
-still require exact owner-bound, one-time encoder handoff. Limit-one handling,
-other consumers, fairness and compatible slate handover remain unproven.
+independent release and uncertain-process quarantine remain unchanged. Native
+legacy routes and capacity-wait retries now use this pair admission. Private
+per-wrapper UUIDs bind concat/item callbacks to one owner; only its first item
+receives the unused encoder lease, and later items reserve capacity independently.
+Owned startup awaits cancellation and cleanup after handler abandonment; scoped
+body-drop fences cannot close a later item. Persistent cancellation reaches song
+rendering and hardware-retry preparation/spawn. Cleanup uncertainty retains
+admission/assets and reports terminal failure. Limit one rejects legacy output
+before opening a source or process; localized Health guidance applies only to
+enabled native channels whose configured default is legacy MPEG-TS.
+The Linux-hosted production-route fixture now passes with the exact Linux x64
+FFmpeg candidate, Windows FFmpeg through interop and ARM64/ARMv7 FFmpeg under
+QEMU. It proves owner-bound admission, token rejection and pre-first-item/active-
+body cancellation, with decoded video, selected English audio and authored Dutch
+page 200 plus clean TSDuck transport. P9A-04 owns the exact evidence. Full routed
+source captions/alternate audio, native Windows/ARM host acceptance, other
+platforms/consumers, fairness and compatible continuous slate handover remain
+unproven.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

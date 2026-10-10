@@ -100,9 +100,9 @@ async fn owned_child_delivers_a_complete_paced_cycle_without_changing_source_clo
         }
         bytes
     };
-    let (outcome, delivered) = tokio::time::timeout(Duration::from_secs(2), async {
+    let (outcome, delivered) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(forward, receive)
-    })
+    }))
     .await
     .unwrap();
     assert!(matches!(outcome, DirectStreamOutcome::Completed));
@@ -477,9 +477,9 @@ async fn hardware_rejection_without_raw_bytes_respawns_with_a_fresh_transport_ga
         receiver.read_to_end(&mut bytes).await.unwrap();
         bytes
     };
-    let (outcome, delivered) = tokio::time::timeout(Duration::from_secs(2), async {
+    let (outcome, delivered) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(forward, receive)
-    })
+    }))
     .await
     .unwrap();
     assert!(matches!(outcome, DirectStreamOutcome::Completed));
