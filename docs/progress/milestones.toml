@@ -1501,6 +1501,54 @@ and stream consume identical validated channel generations. Localize these
 controls in every supported culture and prove no-JS/hydrated browser flows.
 '''
 evidence = '''
+2026-10-11 preparatory profile-preparation checkpoint: shared application base
+controls use the existing transactional repository. An enabled invocation snapshot
+captures output channel, binding/profile revisions, exact installation identity
+and bounded effective settings in one read transaction. The native adapter
+compares the complete snapshot before resolution and prelaunch, passing scoped
+settings into existing environment/tool resolution before executable leases.
+Cancellation, the original absolute deadline and cleanup uncertainty retain the
+existing owned-worker behavior. Global invocation remains compatible.
+
+Application preparation validates the supplied guide, invokes the exact binding,
+checks receipt selection/generation, rereads current selection after completion
+and validates the entire response into an unpublished draft. Guide channels are
+source context, not output ownership; opaque supplied generations are correlation
+values, not trusted generation authority. Promotion must recheck current state.
+
+A synthetic native AppState fixture runs two real producers concurrently from
+one installed package with different profiles. Both children must overlap before
+returning distinct text/colour drafts, and receive identical exact guide bytes.
+Off prevents further invocation only on its channel; another channel still
+prepares successfully. Wrong-generation output is rejected as a whole and a
+missing profile cannot replace the retained selection. Global settings, package
+identity and the ordinary playout queue remain unchanged. This is host-to-draft
+proof, not playback, browser, native Windows or service publication acceptance.
+
+Seventeen new regressions cover transactional enabled snapshots, forged inputs,
+prelaunch profile/binding/global/manifest edits, cancellation and abandonment,
+application receipt/final-read fences, complete response rejection, redaction,
+error mapping and native host composition. Independent implementation and fixture
+reviews found no blocking defect. The initial selected run passed 60 of 61 tests
+(Nextest eda947c2-41a2-430e-9ada-e8d5a07d6e96). Its new tool-bearing profile test
+correctly rejected an inaccessible default user-state receipt directory. The
+fixture now runs in a subprocess with disposable state/data roots, preserving
+real tool leases and every assertion without changing production behavior. The
+other 60 passing results remain applicable. All 14 corrected/shared resolver,
+hash, setting and native-tool regressions then pass in Nextest
+8cd4396a-2acd-435b-b1de-69d9f8602211, giving 74 unique passing tests. Earlier
+applicable migration, scanner and playback evidence is reused; these paths did
+not change. Final strict domain/core/infra/app/web all-target Clippy passes after
+a fixture field-name correction; it does not change behavior, so all 74 passing
+results remain applicable. Architecture-lint passes after documenting two
+read-only transactions; these comment-only changes preserve test/lint evidence.
+Workspace formatting passes. No full CI or native Windows acceptance is claimed.
+
+Localized admin, Lua candidate intervals/rollback/restart, trusted generation
+ownership, composition, native encoding, safe live promotion and all existing
+engine/source/platform/client gates remain open. No milestone status, dependency
+or accepted criterion changes.
+
 2026-10-10 preparatory profile-storage checkpoint: neutral domain values and a
 narrow core repository prepare named, bounded profile settings and per-output-
 channel/add-on base bindings. An additive SQLite migration retains unavailable

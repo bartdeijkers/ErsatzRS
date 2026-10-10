@@ -208,6 +208,7 @@ impl AppState {
                 )),
                 Arc::new(NativeRemoteStreamPlaylistRuntime::new(pool.clone())),
                 Arc::new(NativeAddonRuntime::new(pool.clone())),
+                Arc::new(repositories.teletext_profiles.clone()),
                 Arc::new(NativeMediaSourceRuntime::new(pool.clone())),
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(repositories.scheduling.clone()),

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextInstallationRead,
     TeletextInstallationSnapshot, TeletextProfile, TeletextProfileRead, TeletextProfileSetting,
+    TeletextSelectionSnapshot,
 };
 
 use super::Result;
@@ -36,6 +37,7 @@ pub struct ChannelTeletextBindingSave {
 pub enum TeletextProfileRejection {
     MissingChannel,
     MissingBinding,
+    DisabledBinding,
     MissingProfile,
     WrongAddon,
     DeletedProfile,
@@ -75,6 +77,16 @@ pub trait TeletextProfileRepository: Send + Sync {
         &self,
         channel_id: EntityId,
     ) -> Result<Vec<ChannelTeletextBindingRead>>;
+    /// Capture an exact enabled base selection and its bounded effective values
+    /// in one read transaction. Rejection writes nothing and implies no fallback.
+    /// Future Lua candidate validation must reuse this policy; candidate/base
+    /// transitions and their publication intervals are not represented here.
+    async fn invocation_snapshot(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        expected_binding_revision: i64,
+    ) -> Result<TeletextProfileMutation<TeletextSelectionSnapshot>>;
     /// Replace a complete override bag and invalidate only its dependents.
     async fn save_profile(
         &self,

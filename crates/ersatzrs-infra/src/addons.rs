@@ -3384,10 +3384,33 @@ async fn resolve_addon_command_body(
     check_resolution_fence(fence)?;
     let settings = load_addon_settings(pool, addon_id).await?;
     check_resolution_fence(fence)?;
+    complete_addon_command(
+        &installation,
+        (install_root, executable, kind),
+        operation,
+        runtime,
+        &settings,
+        fence,
+    )
+    .await
+}
+
+// Settings are already scoped/validated by the caller. Merge them before any
+// native-tool path resolution, using the same environment conversion as globals.
+async fn complete_addon_command(
+    installation: &InstalledAddon,
+    verified_entrypoint: (PathBuf, PathBuf, AddonEntrypointKind),
+    operation: &str,
+    runtime: &AddonRuntimeContext,
+    settings: &[AddonSettingValue],
+    fence: Option<&teletext_invocation::ResolutionFence>,
+) -> Result<ResolvedAddonCommand, AddonError> {
+    let (install_root, executable, kind) = verified_entrypoint;
+    check_resolution_fence(fence)?;
     let mut environment = resolve_setting_environment(
         &installation.manifest,
         &installation.data_namespace,
-        &settings,
+        settings,
         runtime,
     )?;
     check_resolution_fence(fence)?;
@@ -3407,12 +3430,12 @@ async fn resolve_addon_command_body(
     };
     check_resolution_fence(fence)?;
     Ok(ResolvedAddonCommand {
-        addon_id: addon_id.to_owned(),
+        addon_id: installation.addon_id.clone(),
         program,
         args,
         working_directory: install_root,
         environment,
-        state_revision: installation.state_revision,
+        state_revision: installation.state_revision.clone(),
         tool_paths,
     })
 }

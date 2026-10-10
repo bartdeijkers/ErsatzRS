@@ -461,7 +461,7 @@ before returning an unpublished draft, preserving literal text, mosaics, styles
 and links without partial results. The 1,024-byte generation-token bound is host
 resource policy. Authoritative locale composition and guide acquisition,
 projection completeness, source association, generation ownership, capability
-profile-specific service activation/invocation, native encoding and publication
+profile-specific service activation, native encoding and publication
 remain open host gates.
 
 A preparatory infrastructure command primitive accepts an already host-resolved
@@ -491,8 +491,20 @@ may return CleanupUnconfirmed after five seconds while the owner keeps awaiting
 the original job, with no later stage or child launch. Genuine tool uncertainty
 is never collapsed into cancellation, timeout or admission failure. Raw stdout
 and the observed revision do not certify immutable package bytes or grant
-promotion. Profile-specific setting snapshots, channel/configuration fencing,
-service activation, response/encoding validation and publication remain open.
+promotion.
+
+ADR 0122's profile path now captures one enabled output binding and its complete
+validated effective settings under a read transaction. Exact snapshot comparison
+before resolution and immediately before launch prevents stale or mixed
+profile/installation settings. Environment and native-tool resolution use those
+settings together, before execution leases are selected. The existing owned
+deadline/cancellation/settlement path remains in force. The receipt retains the
+out-of-band output selection and exact supplied request generation; guide-source
+channels do not confer output ownership. Application preparation rechecks that
+selection after execution and parses the entire response into an unpublished
+draft. Shared application controls mutate only explicit operator base state.
+Trusted generation ownership, automatic channel service activation, Lua overrides,
+localized administration, encoding, composition and publication remain open.
 
 ### Persistence and publication lifecycle
 

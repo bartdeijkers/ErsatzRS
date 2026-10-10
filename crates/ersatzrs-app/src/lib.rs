@@ -15,6 +15,7 @@ pub mod ports;
 pub mod queries;
 pub mod teletext_guide;
 pub mod teletext_pages;
+pub mod teletext_profiles;
 
 pub use error::{ApplicationError, Result};
 pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};

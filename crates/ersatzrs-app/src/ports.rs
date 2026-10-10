@@ -11,8 +11,8 @@ use ersatzrs_core::repositories::{
     DecoRepository, FfmpegProfileRepository, FillerRepository, GraphicsRepository,
     LibraryRepository, ManagedLibraryOperationRepository, MediaItemRepository,
     MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository,
-    SettingsMutation, TelevisionRepository, TemplateRepository, TroubleshootingRepository,
-    WatermarkRepository,
+    SettingsMutation, TeletextProfileRepository, TelevisionRepository, TemplateRepository,
+    TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -753,6 +753,19 @@ impl SourceAddonRouting {
 /// Local source, package, configuration, and process lifecycle operations.
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
+    /// Invoke one exact profile selection without publication authority.
+    /// Native adapters retain process cleanup after caller abandonment.
+    async fn invoke_teletext_profile(
+        &self,
+        _selection: ersatzrs_domain::TeletextSelectionSnapshot,
+        _input: Vec<u8>,
+    ) -> Result<
+        crate::teletext_profiles::TeletextProfileRuntimeReceipt,
+        crate::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
+    }
+
     /// Whether the enabled package provides access checking and runtime identity.
     async fn supports_media_list_access_check(
         &self,
@@ -968,6 +981,7 @@ pub struct ApplicationPorts {
     troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
     remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
     addons: Arc<dyn AddonRuntime>,
+    teletext_profiles: Arc<dyn TeletextProfileRepository>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -1011,6 +1025,7 @@ impl ApplicationPorts {
         troubleshooting_runtime: Arc<dyn AdminTroubleshootingRuntime>,
         remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
         addons: Arc<dyn AddonRuntime>,
+        teletext_profiles: Arc<dyn TeletextProfileRepository>,
         media_source_runtime: Arc<dyn MediaSourceRuntime>,
         admin_search: Arc<dyn AdminSearchRepository>,
         block_previews: Arc<dyn BlockPreviewRepository>,
@@ -1049,6 +1064,7 @@ impl ApplicationPorts {
             troubleshooting_runtime,
             remote_stream_playlists,
             addons,
+            teletext_profiles,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -1230,6 +1246,12 @@ impl ApplicationPorts {
     #[must_use]
     pub fn addons(&self) -> &(dyn AddonRuntime + 'static) {
         self.addons.as_ref()
+    }
+
+    /// Named teletext profiles and channel-scoped selection controls.
+    #[must_use]
+    pub fn teletext_profiles(&self) -> &(dyn TeletextProfileRepository + 'static) {
+        self.teletext_profiles.as_ref()
     }
 
     /// Remote media-source validation and synchronization effects.

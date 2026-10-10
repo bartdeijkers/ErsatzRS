@@ -10,7 +10,9 @@ use ersatzrs_domain::{
     MAX_TELETEXT_PROFILE_SETTINGS_BYTES, MAX_TELETEXT_PROFILE_VALUE_BYTES,
 };
 
-use super::{AddonError, AddonManifest, AddonSecretReferenceKind, AddonSettingValue};
+use super::{
+    AddonError, AddonManifest, AddonSecretReferenceKind, AddonSettingValue, InstalledAddon,
+};
 use crate::db::{Db, DbRow};
 use crate::repositories::SqlxResultExt as _;
 use sha2::{Digest as _, Sha256};
@@ -23,26 +25,29 @@ pub(crate) async fn configuration(
     addon_id: &str,
     overrides: Option<&[TeletextProfileSetting]>,
 ) -> Result<TeletextInstallationRead> {
+    Ok(configuration_with_settings(tx, addon_id, overrides)
+        .await?
+        .installation)
+}
+
+pub(crate) struct ScopedConfiguration {
+    pub installation: TeletextInstallationRead,
+    pub effective_settings: Option<Vec<TeletextProfileSetting>>,
+}
+
+/// Resolve the same bounded values used by writes and invocation admission.
+pub(crate) async fn configuration_with_settings(
+    tx: &mut Transaction<'_, Db>,
+    addon_id: &str,
+    overrides: Option<&[TeletextProfileSetting]>,
+) -> Result<ScopedConfiguration> {
     let installation = match super::load_installed_addon_in_transaction(tx, addon_id).await {
         Ok(Some(installation)) => installation,
         Ok(None) => return Ok(state(None, A::MissingInstallation)),
         Err(AddonError::Database(_)) => return Err(storage_error()),
         Err(_) => return Ok(state(None, A::IncompatibleInstallation)),
     };
-    let manifest: String =
-        sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#)
-            .bind(addon_id)
-            .fetch_one(&mut **tx)
-            .await
-            .repository()?;
-    let snapshot = TeletextInstallationSnapshot {
-        addon_id: installation.addon_id.clone(),
-        state_revision: installation.state_revision.clone(),
-        version: installation.version.to_string(),
-        package_sha256: installation.package_sha256.clone(),
-        content_sha256: installation.content_sha256.clone(),
-        manifest_sha256: super::hex_digest(Sha256::digest(manifest.as_bytes())),
-    };
+    let snapshot = installation_identity(tx, &installation).await?;
     if !installation.enabled {
         return Ok(state(Some(snapshot), A::DisabledInstallation));
     }
@@ -55,15 +60,39 @@ pub(crate) async fn configuration(
     {
         return Ok(state(Some(snapshot), A::IncompatibleInstallation));
     }
+    let mut result = state(Some(snapshot), A::Configured);
     if let Some(overrides) = overrides {
         let globals = load_bounded_globals(tx, addon_id).await?;
-        if globals.is_none_or(|globals| {
-            validate_effective_settings(&installation.manifest, &globals, overrides).is_err()
-        }) {
-            return Ok(state(Some(snapshot), A::InvalidSettings));
+        result.effective_settings = globals.and_then(|globals| {
+            resolve_effective_settings(&installation.manifest, &globals, overrides).ok()
+        });
+        if result.effective_settings.is_none() {
+            result.installation.availability = A::InvalidSettings;
         }
     }
-    Ok(state(Some(snapshot), A::Configured))
+    Ok(result)
+}
+
+/// Fingerprint the raw stored manifest associated with this loaded object in
+/// the SAME transaction. Never mix a later manifest with earlier settings.
+pub(crate) async fn installation_identity(
+    tx: &mut Transaction<'_, Db>,
+    installation: &InstalledAddon,
+) -> Result<TeletextInstallationSnapshot> {
+    let manifest: String =
+        sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#)
+            .bind(&installation.addon_id)
+            .fetch_one(&mut **tx)
+            .await
+            .repository()?;
+    Ok(TeletextInstallationSnapshot {
+        addon_id: installation.addon_id.clone(),
+        state_revision: installation.state_revision.clone(),
+        version: installation.version.to_string(),
+        package_sha256: installation.package_sha256.clone(),
+        content_sha256: installation.content_sha256.clone(),
+        manifest_sha256: super::hex_digest(Sha256::digest(manifest.as_bytes())),
+    })
 }
 
 async fn dependencies_available(
@@ -89,13 +118,13 @@ fn storage_error() -> RepositoryError {
     )
 }
 
-fn state(
-    snapshot: Option<TeletextInstallationSnapshot>,
-    availability: A,
-) -> TeletextInstallationRead {
-    TeletextInstallationRead {
-        snapshot,
-        availability,
+fn state(snapshot: Option<TeletextInstallationSnapshot>, availability: A) -> ScopedConfiguration {
+    ScopedConfiguration {
+        installation: TeletextInstallationRead {
+            snapshot,
+            availability,
+        },
+        effective_settings: None,
     }
 }
 
@@ -141,11 +170,11 @@ fn within_budget(row: &DbRow) -> Result<bool> {
     )
 }
 
-fn validate_effective_settings(
+fn resolve_effective_settings(
     manifest: &AddonManifest,
     globals: &[AddonSettingValue],
     overrides: &[TeletextProfileSetting],
-) -> std::result::Result<(), ()> {
+) -> std::result::Result<Vec<TeletextProfileSetting>, ()> {
     if manifest.settings.len() > MAX_TELETEXT_PROFILE_SETTINGS {
         return Err(());
     }
@@ -218,7 +247,8 @@ fn validate_effective_settings(
             return Err(());
         }
     }
-    validate_teletext_profile_values("Profile", &effective).map_err(|_| ())
+    validate_teletext_profile_values("Profile", &effective).map_err(|_| ())?;
+    Ok(effective)
 }
 
 fn setting_bytes(setting: &AddonSettingValue) -> Option<usize> {
@@ -232,7 +262,7 @@ fn setting_bytes(setting: &AddonSettingValue) -> Option<usize> {
     .then_some(setting.key.len() + value.len() + reference.len())
 }
 
-fn to_addon_setting(setting: &TeletextProfileSetting) -> AddonSettingValue {
+pub(crate) fn to_addon_setting(setting: &TeletextProfileSetting) -> AddonSettingValue {
     let (value, reference_kind, reference) = match &setting.value {
         TeletextProfileValue::Literal(value) => (Some(value.clone()), None, None),
         TeletextProfileValue::SecretReference { kind, reference } => (

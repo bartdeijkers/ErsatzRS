@@ -77,6 +77,32 @@ async fn latest_tool_maintenance(
 
 #[async_trait]
 impl AddonRuntime for NativeAddonRuntime {
+    async fn invoke_teletext_profile(
+        &self,
+        selection: ersatzrs_domain::TeletextSelectionSnapshot,
+        input: Vec<u8>,
+    ) -> Result<
+        ersatzrs_app::teletext_profiles::TeletextProfileRuntimeReceipt,
+        ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        let receipt = ersatzrs_infra::addons::teletext_invocation::invoke_profile(
+            self.pool.clone(),
+            selection,
+            runtime_context(),
+            input,
+            None,
+        )
+        .await
+        .map_err(teletext_runtime_error)?;
+        Ok(
+            ersatzrs_app::teletext_profiles::TeletextProfileRuntimeReceipt {
+                stdout: receipt.stdout,
+                selection: receipt.selection,
+                generation: receipt.generation,
+            },
+        )
+    }
+
     async fn supports_media_list_access_check(
         &self,
         addon_id: &str,
@@ -546,4 +572,65 @@ fn map_repository(value: LocalAddonSource) -> AddonRepositoryRead {
 
 fn runtime_error(error: impl std::fmt::Display) -> AddonRuntimeError {
     AddonRuntimeError::new(error.to_string())
+}
+
+// Keep cleanup uncertainty distinct at both invocation and command layers.
+fn teletext_runtime_error(
+    error: ersatzrs_infra::addons::teletext_invocation::TeletextInvocationError,
+) -> ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError {
+    use ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError as Out;
+    use ersatzrs_infra::addons::{
+        teletext_command::TeletextCommandError as Command,
+        teletext_invocation::TeletextInvocationError as Invocation,
+    };
+    match error {
+        Invocation::InvalidRequest => Out::InvalidRequest,
+        Invocation::AdmissionRejected => Out::AdmissionRejected,
+        Invocation::Cancelled => Out::Cancelled,
+        Invocation::TimedOut => Out::TimedOut,
+        Invocation::CleanupUnconfirmed => Out::CleanupUnconfirmed,
+        Invocation::Command(error) => match error {
+            Command::InvalidRequest => Out::InvalidRequest,
+            Command::Cancelled => Out::Cancelled,
+            Command::TimedOut => Out::TimedOut,
+            Command::SpawnFailed => Out::SpawnFailed,
+            Command::IoFailed => Out::IoFailed,
+            Command::OutputTooLarge => Out::OutputTooLarge,
+            Command::StderrTooLarge => Out::StderrTooLarge,
+            Command::Failed => Out::Failed,
+            Command::CleanupUnconfirmed => Out::CleanupUnconfirmed,
+        },
+    }
+}
+
+#[cfg(test)]
+mod teletext_tests {
+    use super::teletext_runtime_error;
+    use ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError as Out;
+    use ersatzrs_infra::addons::{
+        teletext_command::TeletextCommandError as C,
+        teletext_invocation::TeletextInvocationError as I,
+    };
+
+    #[test]
+    fn teletext_runtime_preserves_cleanup_uncertainty_and_failure_classes() {
+        for (input, expected) in [
+            (I::InvalidRequest, Out::InvalidRequest),
+            (I::AdmissionRejected, Out::AdmissionRejected),
+            (I::Cancelled, Out::Cancelled),
+            (I::TimedOut, Out::TimedOut),
+            (I::CleanupUnconfirmed, Out::CleanupUnconfirmed),
+            (I::Command(C::InvalidRequest), Out::InvalidRequest),
+            (I::Command(C::Cancelled), Out::Cancelled),
+            (I::Command(C::TimedOut), Out::TimedOut),
+            (I::Command(C::SpawnFailed), Out::SpawnFailed),
+            (I::Command(C::IoFailed), Out::IoFailed),
+            (I::Command(C::OutputTooLarge), Out::OutputTooLarge),
+            (I::Command(C::StderrTooLarge), Out::StderrTooLarge),
+            (I::Command(C::Failed), Out::Failed),
+            (I::Command(C::CleanupUnconfirmed), Out::CleanupUnconfirmed),
+        ] {
+            assert_eq!(teletext_runtime_error(input), expected);
+        }
+    }
 }

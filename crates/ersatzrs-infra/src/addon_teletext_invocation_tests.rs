@@ -126,6 +126,7 @@ async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem()
             runtime: AddonRuntimeContext::default(),
             input,
             cancellation: None,
+            selection: None,
         };
         assert_eq!(
             invoke_with_fence(invocation, fence, Duration::from_secs(1)).await,
@@ -147,12 +148,17 @@ mod unix {
         AddonCapability, AddonDependency, AddonEntrypoint, AddonEntrypointKind, AddonManifest,
         AddonPermissions, AddonSettingDefinition, AddonSettingKind, ADDON_MANIFEST_VERSION,
     };
+    use ersatzrs_core::repositories::{
+        ChannelRepository as _, ChannelTeletextBindingSave, FfmpegProfileRepository as _,
+        TeletextProfileSave,
+    };
+    use ersatzrs_domain::{Channel, FFmpegProfile, TeletextProfileSetting, TeletextProfileValue};
     use semver::{Version, VersionReq};
 
     use super::*;
 
     struct Fixture {
-        _temp: tempfile::TempDir,
+        temp: tempfile::TempDir,
         pool: DbPool,
         package: PathBuf,
         marker: PathBuf,
@@ -221,7 +227,7 @@ mod unix {
                 .bind(&manifest.id).bind(digest).bind(serde_json::to_string(&manifest).unwrap()).bind(package.to_string_lossy().into_owned()).execute(&pool).await.unwrap();
             let marker = temp.path().join("started");
             Self {
-                _temp: temp,
+                temp,
                 pool,
                 package,
                 marker,
@@ -236,6 +242,7 @@ mod unix {
                 runtime: AddonRuntimeContext::default(),
                 input: request_bytes(),
                 cancellation,
+                selection: None,
             }
         }
 
@@ -246,6 +253,136 @@ mod unix {
                 .execute(&self.pool)
                 .await
                 .unwrap();
+        }
+    }
+
+    impl Fixture {
+        async fn configure_profile_settings(
+            &self,
+            with_tools: bool,
+        ) -> [Vec<TeletextProfileSetting>; 2] {
+            let mut manifest = self.manifest.clone();
+            manifest.settings = vec![setting(AddonSettingKind::String, Some("global".to_owned()))];
+            let mut inherited = setting(AddonSettingKind::String, Some("inherited".to_owned()));
+            inherited.key = "OTHER".to_owned();
+            inherited.required = false;
+            manifest.settings.push(inherited);
+            let mut settings = [
+                vec![profile_literal("VALUE", "left")],
+                vec![profile_literal("VALUE", "right")],
+            ];
+            if with_tools {
+                let mut definition = setting(AddonSettingKind::Executable, None);
+                definition.key = "TOOL".to_owned();
+                manifest.settings.push(definition);
+                for (index, settings) in settings.iter_mut().enumerate() {
+                    let path = self.temp.path().join(format!("tool-{index}"));
+                    std::fs::write(&path, b"synthetic tool").unwrap();
+                    settings.push(profile_literal("TOOL", &path.to_string_lossy()));
+                }
+            }
+            std::fs::write(
+                self.package.join("addon.toml"),
+                toml::to_string(&manifest).unwrap(),
+            )
+            .unwrap();
+            self.store_manifest(&manifest).await;
+            let digest = super::super::super::calculate_addon_content_sha256(&self.package)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"UPDATE "AddonInstallation" SET "ContentSha256" = ? WHERE "AddonId" = ?"#,
+            )
+            .bind(digest)
+            .bind(&manifest.id)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+            settings
+        }
+
+        async fn profile_selections(&self, with_tools: bool) -> [TeletextSelectionSnapshot; 2] {
+            let settings = self.configure_profile_settings(with_tools).await;
+            sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, 'fixture', 1920, 1080)"#).execute(&self.pool).await.unwrap();
+            let repos = crate::repositories::make_repositories(self.pool.clone());
+            repos
+                .ffmpeg_profile
+                .upsert(&FFmpegProfile {
+                    id: 1,
+                    name: "Fixture".to_owned(),
+                    resolution_id: 1,
+                    ..FFmpegProfile::default()
+                })
+                .await
+                .unwrap();
+            let repo = crate::repositories::SqliteTeletextProfileRepository(self.pool.clone());
+            let installation = repo
+                .installation_snapshot(&self.manifest.id)
+                .await
+                .unwrap()
+                .snapshot
+                .unwrap();
+            let mut selections = Vec::new();
+            for (index, settings) in settings.into_iter().enumerate() {
+                let channel_id = i64::try_from(index + 1).unwrap();
+                repos
+                    .channel
+                    .upsert(&Channel {
+                        id: channel_id,
+                        unique_id: uuid::Uuid::new_v4(),
+                        number: channel_id.to_string(),
+                        name: format!("Channel {channel_id}"),
+                        ffmpeg_profile_id: 1,
+                        ..Channel::default()
+                    })
+                    .await
+                    .unwrap();
+                let profile = saved(
+                    repo.save_profile(&TeletextProfileSave {
+                        addon_id: self.manifest.id.clone(),
+                        name: format!("Profile {channel_id}"),
+                        settings,
+                        expected_installation: installation.clone(),
+                        existing: None,
+                    })
+                    .await
+                    .unwrap(),
+                )
+                .profile;
+                let binding = saved(
+                    repo.save_binding(&ChannelTeletextBindingSave {
+                        channel_id,
+                        addon_id: self.manifest.id.clone(),
+                        profile_id: profile.id,
+                        enabled: true,
+                        expected_installation: installation.clone(),
+                        expected_profile_revision: profile.revision,
+                        expected_binding_revision: None,
+                    })
+                    .await
+                    .unwrap(),
+                );
+                selections.push(saved(
+                    repo.invocation_snapshot(channel_id, &self.manifest.id, binding.revision)
+                        .await
+                        .unwrap(),
+                ));
+            }
+            selections.try_into().unwrap()
+        }
+    }
+
+    fn profile_literal(key: &str, value: &str) -> TeletextProfileSetting {
+        TeletextProfileSetting {
+            key: key.to_owned(),
+            value: TeletextProfileValue::Literal(value.to_owned()),
+        }
+    }
+
+    fn saved<T: std::fmt::Debug>(mutation: TeletextProfileMutation<T>) -> T {
+        match mutation {
+            TeletextProfileMutation::Saved(value) => value,
+            TeletextProfileMutation::Rejected(reason) => panic!("unexpected rejection {reason:?}"),
         }
     }
 
@@ -602,5 +739,206 @@ mod unix {
             nix::sys::signal::killpg(nix::unistd::Pid::from_raw(pid), None),
             Err(nix::errno::Errno::ESRCH)
         );
+    }
+    // Isolate the durable tool receipt store in a subprocess. Mutating process
+    // environment in this test process could affect concurrently running tests.
+    async fn isolate_profile_tool_receipts() -> bool {
+        const HELPER: &str = "ERSATZRS_TEST_TELETEXT_PROFILE_TOOL_RECEIPTS";
+        if crate::startup_config::environment_variable(HELPER).is_some() {
+            return false;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let name = concat!(
+            module_path!(),
+            "::two_channels_one_package_use_distinct_effective_profiles_and_exact_receipts"
+        );
+        let mut process = tokio::process::Command::new(std::env::current_exe().unwrap());
+        process
+            .args([
+                "--exact",
+                name.strip_prefix("ersatzrs_infra::").unwrap(),
+                "--nocapture",
+            ])
+            .env(HELPER, "1")
+            .env(
+                crate::file_system_layout::APP_STATE_DIR_ENV_VAR,
+                temp.path(),
+            )
+            .env(crate::file_system_layout::APP_DATA_DIR_ENV_VAR, temp.path())
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(90), process.output())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "isolated profile tool fixture failed: {} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        true
+    }
+
+    #[tokio::test]
+    async fn two_channels_one_package_use_distinct_effective_profiles_and_exact_receipts() {
+        if isolate_profile_tool_receipts().await {
+            return;
+        }
+        let fixture =
+            Fixture::new("cat >/dev/null; printf '%s' \"$ERSATZRS_ADDON_SETTING_VALUE\"").await;
+        let selections = fixture.profile_selections(true).await;
+        for (selection, expected) in selections.iter().zip(["left", "right"]) {
+            let command = resolve_profile_for_launch(
+                &fixture.pool,
+                selection,
+                &AddonRuntimeContext::default(),
+                &ResolutionFence::new(Instant::now() + EXECUTION_TIMEOUT),
+            )
+            .await
+            .unwrap();
+            let expected_tool = selection
+                .effective_settings
+                .iter()
+                .find(|value| value.key == "TOOL")
+                .unwrap();
+            let TeletextProfileValue::Literal(path) = &expected_tool.value else {
+                panic!("expected literal")
+            };
+            assert_eq!(command.tool_paths, vec![dunce::canonicalize(path).unwrap()]);
+            let receipt = invoke_profile(
+                fixture.pool.clone(),
+                selection.clone(),
+                AddonRuntimeContext::default(),
+                request_bytes(),
+                None,
+            )
+            .await
+            .unwrap();
+            assert_eq!(receipt.stdout, expected.as_bytes());
+            assert_eq!(receipt.selection, *selection);
+            assert_eq!(
+                receipt.generation,
+                TeletextPagesRequest::from_json(&request_bytes())
+                    .unwrap()
+                    .generation
+            );
+        }
+        let settings: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonSetting" WHERE "AddonId" = ?"#)
+                .bind(&fixture.manifest.id)
+                .fetch_one(&fixture.pool)
+                .await
+                .unwrap();
+        assert_eq!(settings, 0);
+    }
+
+    #[tokio::test]
+    async fn forged_profile_snapshot_is_rejected_before_filesystem_or_spawn() {
+        let fixture = Fixture::new("exec cat").await;
+        let [selection, _] = fixture.profile_selections(false).await;
+        for field in 0..12 {
+            let mut changed = selection.clone();
+            match field {
+                0 => changed.channel_id = 2,
+                1 => changed.addon_id.push_str(".changed"),
+                2 => changed.binding_revision += 1,
+                3 => changed.profile_id += 1,
+                4 => changed.profile_revision += 1,
+                5 => changed.installation.addon_id.push_str(".changed"),
+                6 => changed.installation.state_revision.push_str("changed"),
+                7 => changed.installation.version.push_str("changed"),
+                8 => changed.installation.package_sha256.push_str("changed"),
+                9 => changed.installation.content_sha256.push_str("changed"),
+                10 => changed.installation.manifest_sha256.push_str("changed"),
+                _ => changed.effective_settings[0] = profile_literal("VALUE", "changed"),
+            }
+            let blocker = Blocker::new("hash", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let mut invocation = fixture.invocation(None);
+            invocation.selection = Some(changed);
+            assert_eq!(
+                invoke_with_fence(
+                    invocation,
+                    fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT),
+                    Duration::from_secs(1)
+                )
+                .await,
+                Err(TeletextInvocationError::AdmissionRejected)
+            );
+            assert!(blocker.stages.lock().unwrap().is_empty());
+            assert!(!fixture.marker.exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn profile_prelaunch_fence_rejects_changes_after_resolution_started() {
+        for change in ["profile", "binding", "global", "manifest"] {
+            let fixture = Fixture::new("exec cat").await;
+            let [selection, _] = fixture.profile_selections(false).await;
+            let blocker = Blocker::new("hash", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let mut invocation = fixture.invocation(None);
+            invocation.selection = Some(selection.clone());
+            let task = tokio::spawn(invoke_with_fence(
+                invocation,
+                fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT),
+                Duration::from_secs(5),
+            ));
+            blocker.wait_entered().await;
+            match change {
+                "profile" => {
+                    sqlx::query(r#"UPDATE "TeletextProfileSetting" SET "Value" = 'changed' WHERE "ProfileId" = ? AND "Key" = 'VALUE'"#).bind(selection.profile_id).execute(&fixture.pool).await.unwrap();
+                }
+                "binding" => {
+                    sqlx::query(r#"UPDATE "ChannelTeletextBinding" SET "Enabled" = 0 WHERE "ChannelId" = 1"#).execute(&fixture.pool).await.unwrap();
+                }
+                "global" => {
+                    // Effective inherited values are fenced even when the
+                    // installation revision and manifest remain unchanged.
+                    sqlx::query(r#"INSERT INTO "AddonSetting" ("AddonId", "Key", "Value") VALUES (?, 'OTHER', 'changed')"#).bind(&fixture.manifest.id).execute(&fixture.pool).await.unwrap();
+                }
+                _ => {
+                    sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = "ManifestJson" || ' ' WHERE "AddonId" = ?"#).bind(&fixture.manifest.id).execute(&fixture.pool).await.unwrap();
+                }
+            }
+            blocker.release();
+            assert_eq!(
+                task.await.unwrap(),
+                Err(TeletextInvocationError::AdmissionRejected)
+            );
+            assert!(!fixture.marker.exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn profile_cancel_or_caller_drop_retains_blocking_resolution_until_joined() {
+        for abandon in [false, true] {
+            let fixture = Fixture::new("exec cat").await;
+            let [selection, _] = fixture.profile_selections(false).await;
+            let blocker = Blocker::new("hash", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let fence = fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT);
+            let stopped = Arc::clone(&fence.stopped);
+            let completed = Arc::clone(&fence.worker_completed);
+            let (cancel, cancelled) = oneshot::channel();
+            let mut invocation = fixture.invocation(Some(cancelled));
+            invocation.selection = Some(selection);
+            let task = tokio::spawn(invoke_with_fence(invocation, fence, Duration::from_secs(5)));
+            blocker.wait_entered().await;
+            if abandon {
+                task.abort();
+            } else {
+                cancel.send(()).unwrap();
+            }
+            wait_true(&stopped).await;
+            assert!(!completed.load(Ordering::Acquire));
+            blocker.release();
+            wait_true(&completed).await;
+            if !abandon {
+                assert_eq!(task.await.unwrap(), Err(TeletextInvocationError::Cancelled));
+            }
+            assert!(blocker.finished.load(Ordering::Acquire));
+            assert!(!fixture.marker.exists());
+        }
     }
 }

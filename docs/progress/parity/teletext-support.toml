@@ -9,12 +9,11 @@ p9a-04, then exactly one TV-guide teletext add-on in ErsatzRS-Addons at p9b-01.
 The add-on owns NOS-guide-inspired pages 200–299 and content; the host owns
 validation, publication, delivery and read-only programme context. Source
 subtitle requirements remain. P9A-01 is Complete under ADR 0121; P9A-02 is In
-progress and the other four milestones are Not started. No engine/content acceptance.
+progress; four milestones are Not started. No engine/content acceptance.
 
-ADR 0122 adds profiles, add-on themes/zones and admin/Lua controls. Isolated
-revision-fenced profile storage is preparatory. Typed drafts/Western Latin and
-bounded guide/page conversion have proof. Acquisition, service activation, other
-regions, link CRC, controls and publication remain open.
+ADR 0122 adds profiles, themes/zones and admin/Lua controls. Isolated storage
+and shared app controls prepare profile-scoped unpublished drafts. Drafts, Western Latin and bounded guide/page conversion have proof. Acquisition, service
+activation, other regions, link CRC, UI/Lua and publication remain open.
 
 Supplied packed and JSON projections preserve ordinary tracks alongside global
 indexes, reported PIDs, all memberships and raw descriptors. Missing/unusable
@@ -122,5 +121,5 @@ id          = 'teletext-channel-profiles-themes-and-lua-control-is-unimplemented
 adr         = '0122'
 description = 'Implement per-channel/add-on enabled bindings and named profile-scoped settings without mutating global AddonSetting or auto-enabling packages. Reuse shared application controls from admin and a core Lua port; persist bounded cursor overrides atomically with schedules, with explicit base precedence, expiry, Continue, Refresh/Reset, error rollback and restart behavior. The sole production TV-guide add-on owns named themes, permitted overrides and defined custom zones after independent engine acceptance. Browser/stream consume identical validated generations; aggregate limits and page collision checks remain bounded.'
 discovered  = '2026-10-10'
-evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with partial preparatory profile persistence; application/Lua/admin and publication remain unimplemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. P9A-04 records 20 new profile tests and 43 existing settings/migration checks, including post-write rollback, file-backed reopen, unavailable Off and real uninstall retention. Scoped profile persistence is preparatory; global-settings invocation still does not activate profiles, and application/Lua/admin controls and publication remain open.'
+evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with preparatory profile persistence and shared application controls; Lua/admin and publication remain unimplemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. P9A-04 records 20 new profile tests and 43 existing settings/migration checks, including post-write rollback, file-backed reopen, unavailable Off and real uninstall retention. P9A-04 also records shared application controls and native profile-scoped preparation with 74 unique passing tests, including simultaneous two-channel text/colour drafts, stale selection/receipt/output rejection and real scoped executable leases. The single initially failing fixture was isolated from the default user-state directory without changing production code; the other 60 initial passes remain valid. Scoped storage and shared application preparation remain preparatory. Profile invocation now uses exact channel/profile settings without global writes; localized admin, Lua controls, trusted generation ownership and publication remain open.'
 resolved    = false

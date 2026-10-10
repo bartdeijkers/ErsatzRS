@@ -9,11 +9,12 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 ## Implementation
 
 Partially implemented: neutral profile/binding types and an additive SQLite
-repository prepare isolated, revision-fenced configuration. Guide/page DTOs,
-validation and process primitives remain preparatory infrastructure. Application
-controls, Lua intervals, localized administration and profile-scoped invocation/
-publication are not implemented. P9A-04 owns independent synthetic acceptance;
-P9B-01/02 own the sole production TV-guide add-on and integrated proof.
+repository provide isolated, revision-fenced configuration. Shared application
+controls and profile-scoped invocation prepare structurally validated unpublished
+drafts through the native host adapter. Lua intervals, localized administration,
+automatic service activation, encoding and publication remain open. P9A-04 owns
+independent synthetic acceptance; P9B-01/02 own the sole production TV-guide
+add-on and integrated proof.
 
 ## Context
 
@@ -85,6 +86,22 @@ revision checks. Editing or deleting a shared profile advances only its dependen
 binding revisions. A changed installation identity makes existing configuration
 stale until explicitly revalidated. Configuration validity is not package-byte,
 process, page-generation or publication readiness.
+
+Profile invocation captures the enabled output binding, selected profile,
+installation identity and complete effective settings in one read transaction.
+The resolver compares that snapshot before native work and immediately before
+launch. Scoped settings enter the existing environment and executable-tool
+resolution together, so a profile cannot replace an executable after its lease
+identity has been selected. Application preparation checks the receipt's exact
+snapshot and request generation, rechecks the selection after the producer
+finishes, and validates the complete response before returning an unpublished
+draft. A later publication transaction must check these identities again.
+
+The request's guide channels are source data; they are not the output binding.
+Several outputs may intentionally share identical multi-channel guide context.
+Output identity remains host-side, including for mirrors sharing playout IDs.
+Supplied generation tokens remain opaque correlation values. A snapshot and
+echoed token do not replace trusted generation ownership or publication fences.
 
 Missing, deleted, wrong-add-on, disabled, incompatible or invalid profiles have
 typed visible outcomes. A rejected command changes no selection. If an existing

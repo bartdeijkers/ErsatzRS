@@ -139,6 +139,21 @@ pub struct ChannelTeletextBinding {
     pub revision: i64,
 }
 
+/// Exact enabled base selection and unresolved effective settings observed in
+/// one repository read transaction. This is neither source-byte assurance nor
+/// executable/publication authority; consumers must compare a fresh snapshot.
+/// The output channel is independent of any guide channels in a wire request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeletextSelectionSnapshot {
+    pub channel_id: EntityId,
+    pub addon_id: String,
+    pub binding_revision: i64,
+    pub profile_id: EntityId,
+    pub profile_revision: i64,
+    pub installation: TeletextInstallationSnapshot,
+    pub effective_settings: Vec<TeletextProfileSetting>,
+}
+
 /// Configuration checks only: `Configured` grants no invocation, source-byte,
 /// output/page-set, publication or playback-readiness authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

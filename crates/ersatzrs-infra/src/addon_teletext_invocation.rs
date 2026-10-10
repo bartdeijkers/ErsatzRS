@@ -1,7 +1,7 @@
 //! Preparatory installed-package teletext invocation, without service activation.
 //!
-//! This adapter reuses package admission and global settings, not channel/profile
-//! settings. It owns resolution through native filesystem settlement, then owns
+//! This adapter supports global settings or an explicitly supplied, revision-fenced
+//! base channel/profile selection. It owns resolution through native filesystem settlement, then owns
 //! command cancellation through cleanup. The receipt is a revision observation,
 //! not immutable package bytes, a validated page set or publication authority.
 
@@ -14,6 +14,8 @@ use std::{
 };
 
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
+use ersatzrs_core::repositories::{TeletextProfileMutation, TeletextProfileRepository as _};
+use ersatzrs_domain::TeletextSelectionSnapshot;
 use sqlx::Row;
 use tokio::{sync::oneshot, time::Instant};
 
@@ -32,6 +34,43 @@ const RESOLUTION_SETTLEMENT_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct TeletextInvocationReceipt {
     pub stdout: Vec<u8>,
     pub state_revision: String,
+}
+
+/// Unpublished producer output associated with a checked base configuration.
+/// Generation is request correlation, not channel ownership or promotion authority.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextProfileInvocationReceipt {
+    pub stdout: Vec<u8>,
+    pub selection: TeletextSelectionSnapshot,
+    pub generation: String,
+}
+
+impl std::fmt::Debug for TeletextProfileInvocationReceipt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TeletextProfileInvocationReceipt")
+            .field("stdout_bytes", &self.stdout.len())
+            .field("selection", &self.selection)
+            .field("generation", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(PartialEq, Eq)]
+struct InvocationReceipt {
+    stdout: Vec<u8>,
+    state_revision: String,
+    selection: Option<TeletextSelectionSnapshot>,
+    generation: String,
+}
+
+impl std::fmt::Debug for InvocationReceipt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InvocationReceipt")
+            .field("stdout_bytes", &self.stdout.len())
+            .field("selection", &self.selection)
+            .field("generation", &"[redacted]")
+            .finish_non_exhaustive()
+    }
 }
 
 /// Static failures; producer diagnostics and guide/configuration values are absent.
@@ -85,11 +124,55 @@ pub async fn invoke(
             runtime,
             input,
             cancellation,
+            selection: None,
         },
         fence,
         RESOLUTION_SETTLEMENT_TIMEOUT,
     )
     .await
+    .map(|receipt| TeletextInvocationReceipt {
+        stdout: receipt.stdout,
+        state_revision: receipt.state_revision,
+    })
+}
+
+/// Invoke using one enabled base channel binding and its effective settings.
+///
+/// The selection is re-read before filesystem/tool resolution and immediately
+/// prelaunch. Supplied request guide channels may differ from the output channel;
+/// generation remains exact opaque correlation. No settings or enablement change
+/// occurs here, and the receipt cannot authorize later publication.
+///
+/// # Errors
+/// Returns static failures and preserves owned resolution/process cleanup uncertainty.
+pub async fn invoke_profile(
+    pool: DbPool,
+    selection: TeletextSelectionSnapshot,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    cancellation: Option<oneshot::Receiver<()>>,
+) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
+    let fence = ResolutionFence::new(Instant::now() + EXECUTION_TIMEOUT);
+    let receipt = invoke_with_fence(
+        Invocation {
+            pool,
+            addon_id: selection.addon_id.clone(),
+            runtime,
+            input,
+            cancellation,
+            selection: Some(selection),
+        },
+        fence,
+        RESOLUTION_SETTLEMENT_TIMEOUT,
+    )
+    .await?;
+    Ok(TeletextProfileInvocationReceipt {
+        stdout: receipt.stdout,
+        selection: receipt
+            .selection
+            .ok_or(TeletextInvocationError::AdmissionRejected)?,
+        generation: receipt.generation,
+    })
 }
 
 struct Invocation {
@@ -98,26 +181,35 @@ struct Invocation {
     runtime: AddonRuntimeContext,
     input: Vec<u8>,
     cancellation: Option<oneshot::Receiver<()>>,
+    selection: Option<TeletextSelectionSnapshot>,
 }
 
-type Response = oneshot::Sender<Result<TeletextInvocationReceipt, TeletextInvocationError>>;
+type Response = oneshot::Sender<Result<InvocationReceipt, TeletextInvocationError>>;
 
 async fn invoke_with_fence(
     invocation: Invocation,
     fence: ResolutionFence,
     settlement_timeout: Duration,
-) -> Result<TeletextInvocationReceipt, TeletextInvocationError> {
-    if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES
-        || TeletextPagesRequest::from_json(&invocation.input).is_err()
-    {
+) -> Result<InvocationReceipt, TeletextInvocationError> {
+    if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
         return Err(TeletextInvocationError::InvalidRequest);
     }
+    let generation = TeletextPagesRequest::from_json(&invocation.input)
+        .map_err(|_| TeletextInvocationError::InvalidRequest)?
+        .generation;
     let (response, result) = oneshot::channel();
     tokio::spawn(async move {
         #[cfg(test)]
         let completed = Arc::clone(&fence.worker_completed);
         let mut response = Some(response);
-        let outcome = invoke_owned(invocation, fence, settlement_timeout, &mut response).await;
+        let outcome = invoke_owned(
+            invocation,
+            generation,
+            fence,
+            settlement_timeout,
+            &mut response,
+        )
+        .await;
         #[cfg(test)]
         completed.store(true, Ordering::Release);
         if let Some(response) = response {
@@ -200,10 +292,11 @@ fn already_cancelled(cancellation: &mut Option<oneshot::Receiver<()>>) -> bool {
 
 async fn invoke_owned(
     mut invocation: Invocation,
+    generation: String,
     fence: ResolutionFence,
     settlement_timeout: Duration,
     response: &mut Option<Response>,
-) -> Result<TeletextInvocationReceipt, TeletextInvocationError> {
+) -> Result<InvocationReceipt, TeletextInvocationError> {
     if response.as_ref().is_none_or(Response::is_closed)
         || already_cancelled(&mut invocation.cancellation)
     {
@@ -212,10 +305,11 @@ async fn invoke_owned(
     if fence.check().is_err() {
         return Err(TeletextInvocationError::TimedOut);
     }
-    let resolution = resolve_for_launch(
+    let resolution = resolve_invocation_for_launch(
         &invocation.pool,
         &invocation.addon_id,
         &invocation.runtime,
+        invocation.selection.as_ref(),
         &fence,
     );
     tokio::pin!(resolution);
@@ -265,14 +359,102 @@ async fn invoke_owned(
     };
     // The resolution future borrows only read-only inputs; its complete result
     // is retained before moving the raw request into the command owner.
-    execute(
+    let receipt = execute(
         command,
         invocation.input,
         &mut invocation.cancellation,
         fence.deadline,
         response,
     )
-    .await
+    .await?;
+    Ok(InvocationReceipt {
+        stdout: receipt.stdout,
+        state_revision: receipt.state_revision,
+        selection: invocation.selection.clone(),
+        generation,
+    })
+}
+
+async fn resolve_invocation_for_launch(
+    pool: &DbPool,
+    addon_id: &str,
+    runtime: &AddonRuntimeContext,
+    selection: Option<&TeletextSelectionSnapshot>,
+    fence: &ResolutionFence,
+) -> Result<ResolvedAddonCommand, AddonError> {
+    if let Some(selection) = selection {
+        resolve_profile_for_launch(pool, selection, runtime, fence).await
+    } else {
+        resolve_for_launch(pool, addon_id, runtime, fence).await
+    }
+}
+
+async fn check_selection(
+    pool: &DbPool,
+    selection: &TeletextSelectionSnapshot,
+    fence: &ResolutionFence,
+) -> Result<(), AddonError> {
+    fence.check()?;
+    let current = crate::repositories::SqliteTeletextProfileRepository(pool.clone())
+        .invocation_snapshot(
+            selection.channel_id,
+            &selection.addon_id,
+            selection.binding_revision,
+        )
+        .await
+        .map_err(|_| AddonError::Database("profile selection unavailable".to_owned()))?;
+    fence.check()?;
+    if !matches!(current, TeletextProfileMutation::Saved(current) if current == *selection) {
+        return Err(AddonError::Validation(
+            "profile selection changed".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn resolve_profile_for_launch(
+    pool: &DbPool,
+    selection: &TeletextSelectionSnapshot,
+    runtime: &AddonRuntimeContext,
+    fence: &ResolutionFence,
+) -> Result<ResolvedAddonCommand, AddonError> {
+    check_selection(pool, selection, fence).await?;
+    // Read-only transaction: bind the loaded manifest to its exact installation identity.
+    let mut tx = pool.begin().await.map_err(super::database_error)?;
+    let installation = super::load_installed_addon_in_transaction(&mut tx, &selection.addon_id)
+        .await?
+        .ok_or_else(|| AddonError::Validation("profile installation unavailable".to_owned()))?;
+    let identity = super::teletext_profile_settings::installation_identity(&mut tx, &installation)
+        .await
+        .map_err(|_| AddonError::Database("profile installation unavailable".to_owned()))?;
+    if !installation.enabled || identity != selection.installation {
+        return Err(AddonError::Validation(
+            "profile installation changed".to_owned(),
+        ));
+    }
+    // The actual manifest object and its raw fingerprint came from one SQLite
+    // snapshot. No filesystem/native-tool stage may use a different installation.
+    drop(tx);
+    fence.check()?;
+    let settings = selection
+        .effective_settings
+        .iter()
+        .map(super::teletext_profile_settings::to_addon_setting)
+        .collect::<Vec<_>>();
+    let verified =
+        super::resolve_verified_entrypoint(&installation, super::current_rid()?, Some(fence))
+            .await?;
+    let command = super::complete_addon_command(
+        &installation,
+        verified,
+        "pages",
+        runtime,
+        &settings,
+        Some(fence),
+    )
+    .await?;
+    check_selection(pool, selection, fence).await?;
+    Ok(command)
 }
 
 async fn resolve_for_launch(

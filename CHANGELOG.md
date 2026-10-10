@@ -97,11 +97,14 @@ release section when tagging a release.
   and cancellation cleanup across caller abandonment. Keep uncertain cleanup
   distinct. A dedicated adapter checks enabled installed packages under the same
   deadline and retains native resolution jobs after cancellation; generic invokers
-  still refuse teletext. Add preparatory named profile and channel-binding
-  persistence with isolated settings, revision checks and retained unavailable
-  selections. Turning a binding Off remains possible when its package or profile
-  is unavailable. Admin/Lua controls and profile-specific service activation
-  remain pending.
+  still refuse teletext.
+- Prepare named teletext profiles and channel bindings with isolated settings,
+  revision checks and retained unavailable selections. Shared application
+  controls can turn a binding Off even when its package or profile is unavailable.
+  Profile-specific execution uses the effective settings before native-tool
+  resolution, checks selection identity around execution and returns only complete
+  structurally validated unpublished page drafts. Localized admin, Lua controls,
+  automatic service activation, encoding and publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

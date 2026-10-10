@@ -1004,3 +1004,121 @@ async fn existing_uninstall_retains_unavailable_profiles_and_bindings_in_isolate
     );
     assert!(!saved(fixture.repo.disable_binding(1, ADDON, 1).await.unwrap()).enabled);
 }
+
+#[tokio::test]
+async fn invocation_snapshot_captures_complete_effective_values_without_writes() {
+    let fixture = Fixture::new().await;
+    let profile = fixture.profile("Night", "night").await;
+    let binding = fixture.bind(1, &profile).await;
+    let initial = saved(
+        fixture
+            .repo
+            .invocation_snapshot(1, ADDON, binding.revision)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(initial.channel_id, 1);
+    assert_eq!(initial.profile_id, profile.id);
+    assert_eq!(initial.profile_revision, profile.revision);
+    assert_eq!(initial.installation, profile.validated_installation);
+    assert_eq!(
+        initial.effective_settings,
+        vec![literal("THEME", "night"), literal("ZONE", "Inherited")]
+    );
+    // A legacy/global change need not advance installation StateRevision. Its
+    // actual effective values are nevertheless part of the invocation fence.
+    sqlx::query(
+        r#"UPDATE "AddonSetting" SET "Value" = 'Changed' WHERE "AddonId" = ? AND "Key" = 'ZONE'"#,
+    )
+    .bind(ADDON)
+    .execute(&fixture.repo.0)
+    .await
+    .unwrap();
+    let changed = saved(
+        fixture
+            .repo
+            .invocation_snapshot(1, ADDON, binding.revision)
+            .await
+            .unwrap(),
+    );
+    assert_ne!(initial, changed);
+    assert_eq!(initial.installation, changed.installation);
+    assert_eq!(
+        changed.effective_settings,
+        vec![literal("THEME", "night"), literal("ZONE", "Changed")]
+    );
+    assert_eq!(
+        fixture.repo.channel_bindings(1).await.unwrap()[0].binding,
+        binding
+    );
+    assert_eq!(
+        fixture.repo.list_profiles(ADDON).await.unwrap()[0].profile,
+        profile
+    );
+    assert_eq!(fixture.token().await, initial.installation);
+}
+
+#[tokio::test]
+async fn invocation_snapshot_rejects_disabled_stale_missing_and_unavailable_selection() {
+    let fixture = Fixture::new().await;
+    let profile = fixture.profile("Day", "day").await;
+    let binding = fixture.bind(1, &profile).await;
+    for (channel, revision, expected) in [
+        (99, binding.revision, R::MissingChannel),
+        (2, binding.revision, R::MissingBinding),
+        (1, binding.revision + 1, R::Conflict),
+    ] {
+        assert_eq!(
+            fixture
+                .repo
+                .invocation_snapshot(channel, ADDON, revision)
+                .await
+                .unwrap(),
+            M::Rejected(expected)
+        );
+    }
+    let disabled = saved(
+        fixture
+            .repo
+            .disable_binding(1, ADDON, binding.revision)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(
+        fixture
+            .repo
+            .invocation_snapshot(1, ADDON, disabled.revision)
+            .await
+            .unwrap(),
+        M::Rejected(R::DisabledBinding)
+    );
+    let binding = fixture.bind(2, &profile).await;
+    sqlx::query(
+        r#"UPDATE "AddonInstallation" SET "StateRevision" = 'changed' WHERE "AddonId" = ?"#,
+    )
+    .bind(ADDON)
+    .execute(&fixture.repo.0)
+    .await
+    .unwrap();
+    assert_eq!(
+        fixture
+            .repo
+            .invocation_snapshot(2, ADDON, binding.revision)
+            .await
+            .unwrap(),
+        M::Rejected(R::Conflict)
+    );
+    sqlx::query(r#"DELETE FROM "AddonInstallation" WHERE "AddonId" = ?"#)
+        .bind(ADDON)
+        .execute(&fixture.repo.0)
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture
+            .repo
+            .invocation_snapshot(2, ADDON, binding.revision)
+            .await
+            .unwrap(),
+        M::Rejected(R::InstallationUnavailable)
+    );
+}

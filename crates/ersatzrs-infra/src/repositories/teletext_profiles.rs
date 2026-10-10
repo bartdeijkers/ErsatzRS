@@ -10,13 +10,13 @@ use ersatzrs_domain::{
     validate_teletext_profile_values, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
     TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
     TeletextProfileAvailability as A, TeletextProfileRead, TeletextProfileSetting,
-    TeletextProfileValue, TeletextSecretReferenceKind,
+    TeletextProfileValue, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
 };
 use sqlx::{Row as _, Transaction};
 
 use super::SqlxResultExt as _;
 use crate::{
-    addons::teletext_profile_settings::configuration,
+    addons::teletext_profile_settings::{configuration, configuration_with_settings},
     db::{Db, DbPool, DbRow},
 };
 
@@ -80,6 +80,62 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
             });
         }
         Ok(bindings)
+    }
+
+    async fn invocation_snapshot(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        expected_binding_revision: i64,
+    ) -> Result<M<TeletextSelectionSnapshot>> {
+        // Read-only transaction: observe one coherent binding, profile and settings snapshot.
+        let mut tx = self.0.begin().await.repository()?;
+        if !channel_exists(&mut tx, channel_id).await? {
+            return Ok(M::Rejected(R::MissingChannel));
+        }
+        let Some(binding) = load_binding(&mut tx, channel_id, addon_id).await? else {
+            return Ok(M::Rejected(R::MissingBinding));
+        };
+        if binding.revision != expected_binding_revision {
+            return Ok(M::Rejected(R::Conflict));
+        }
+        if !binding.enabled {
+            return Ok(M::Rejected(R::DisabledBinding));
+        }
+        let Some(profile) = load_profile(&mut tx, binding.profile_id).await? else {
+            return Ok(M::Rejected(R::MissingProfile));
+        };
+        if profile.addon_id != addon_id {
+            return Ok(M::Rejected(R::WrongAddon));
+        }
+        if profile.deleted {
+            return Ok(M::Rejected(R::DeletedProfile));
+        }
+        if validate_teletext_profile_values(&profile.name, &profile.settings).is_err() {
+            return Ok(M::Rejected(R::InvalidSettings));
+        }
+        let configuration =
+            configuration_with_settings(&mut tx, addon_id, Some(&profile.settings)).await?;
+        match configuration.installation.availability {
+            A::Configured => {}
+            A::InvalidSettings => return Ok(M::Rejected(R::InvalidSettings)),
+            _ => return Ok(M::Rejected(R::InstallationUnavailable)),
+        }
+        if configuration.installation.snapshot.as_ref() != Some(&profile.validated_installation) {
+            return Ok(M::Rejected(R::Conflict));
+        }
+        let effective_settings = configuration
+            .effective_settings
+            .ok_or_else(|| decode_error("effective settings missing"))?;
+        Ok(M::Saved(TeletextSelectionSnapshot {
+            channel_id,
+            addon_id: addon_id.to_owned(),
+            binding_revision: binding.revision,
+            profile_id: profile.id,
+            profile_revision: profile.revision,
+            installation: profile.validated_installation,
+            effective_settings,
+        }))
     }
 
     async fn save_profile(
