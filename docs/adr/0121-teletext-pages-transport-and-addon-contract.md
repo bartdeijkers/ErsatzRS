@@ -379,6 +379,18 @@ loss or double producer consumption. Prove accepted combinations with served
 media, decoded captions/pages and audio/timing comparison. Operator-selected
 unsupported combinations are visible in administration, startup and Health.
 
+### Channel profiles and shared controls
+
+[ADR 0122](0122-channel-teletext-profiles-themes-and-lua-control.md) supplements
+this contract with multiple per-channel add-on bindings, independently scoped
+profile settings and shared application validation for admin/Lua. Generation
+identity also fences channel, binding/profile/settings revision and any published
+Lua interval. Presentation themes and defined custom zones remain add-on-owned;
+only complete validated pages reach either browser or transport. Missing/invalid
+profiles, collisions, expired overrides and script failures preserve ordinary
+playback. The accepted timing/precedence/restart rules live in ADR 0122.
+These requirements are not implemented by the preparatory global-settings runner.
+
 ### Host/add-on boundary
 
 Add a versioned `teletext.pages.v1` capability to the existing package/child
@@ -402,9 +414,9 @@ Anchor the three-date guide window to the capture instant's local calendar date:
 start at that date's actual beginning and end at the beginning of the date three
 civil dates later. Reuse `ProgrammeClock::calendar_day_bounds` with a count of
 three. Direct date arithmetic preserves DST and skipped-date behavior; it does
-not add 72 elapsed hours. The helper is preparatory and is not yet wired to
-request construction. Named timezone acquisition and complete guide projection
-remain required host checks.
+not add 72 elapsed hours. The helper supports the preparatory supplied-context
+request builder. Authoritative named timezone acquisition and complete guide
+projection remain required host checks.
 
 The response echoes the generation token and contains service language,
 initial page, page/subpage identities, typed row content and navigation links.
@@ -417,7 +429,8 @@ Bound one invocation to 30 seconds, 4 MiB request and 8 MiB response, at most
 256 channels, 10,000 programme occurrences and 1,024 page/subpage records.
 Exceeding a bound fails visibly; do not publish a silently shortened guide.
 The producer may paginate its pages into subpages within those bounds. Limit
-refresh to one invocation per configured service, coalesce guide invalidations,
+refresh to one invocation per configured service, including serial producer
+composition for multiple bindings, coalesce guide invalidations,
 and fence promotion to the exact configuration/package/guide generation.
 
 Preparatory version-1 request and response DTOs now live in

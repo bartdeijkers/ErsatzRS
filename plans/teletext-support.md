@@ -55,6 +55,59 @@ general-purpose public add-on HTTP API or automatic repository distribution is
 required by this plan. Current checkout/ZIP installation avoids a dependency
 cycle with OAD-01 through OAD-04, which remain after Phase 9 and Phase 10.
 
+## Channel profiles, themes and Lua control
+
+The maintainer's scope extension is accepted in
+[ADR 0122](../docs/adr/0122-channel-teletext-profiles-themes-and-lua-control.md).
+It is required Phase 9 work, with implementation and independent acceptance open.
+
+- Each `(channel, add-on)` binding has an enable state and selected named profile.
+  A channel supports several add-ons; the same installed add-on serves multiple
+  channels with different profiles simultaneously. A profile references that
+  add-on and its separately scoped, manifest-validated settings. Profile changes
+  do not rewrite global installation settings or activate packages.
+- The TV-guide add-on declares named colour/layout themes, permitted overrides
+  and defined page zones accepting custom values. A profile selects those values.
+  Presentation and zone semantics stay in the add-on; the host validates complete
+  standard pages and rejects collisions or unsupported content without truncation.
+  Stream and browser use the same immutable validated channel generation.
+- Admin persists base selections through application commands. Lua controls
+  existing profiles and toggles through the same application validation, via a
+  core port. During generation, commands create candidate channel/binding
+  intervals at the scheduling cursor, until the next successful command or the
+  candidate timeline end. At expiry, restore the current admin base. Continue
+  starts from base unless its script selects an override again.
+- Publish override intervals atomically with the schedule. An uncaught script
+  error rolls back the entire candidate. Restart restores current published
+  intervals without replaying Lua; expired or stale revisions cannot return.
+  Refresh/Reset preserve or replace overrides at the programme boundary, and
+  mirrors resolve independently by output channel identity.
+- Profile/enable changes publish at a safe carousel/output boundary after complete
+  validation. Preparation delay is visible as pending/unavailable; it cannot pass
+  off another profile as current. Disable withdraws the channel's binding safely.
+  An active explicit Lua override takes precedence over base edits until expiry;
+  profile edits invalidate its snapshot without extending that expiry.
+- Missing, deleted, wrong-add-on, invalid, disabled or incompatible profiles have
+  typed visible outcomes. Rejected commands leave the selection intact. Existing
+  selections that become invalid follow bounded stale/withdrawal policy without
+  damaging ordinary playback or other channels. Scripts install/enable no packages.
+
+Use existing installation/settings definitions, channel application commands,
+Scripted resolution and atomic schedule publication. Add only the necessary
+profile/binding/interval transactional relationships; ConfigRepository's
+independent get/set operations cannot substitute for their atomic revision checks.
+
+P9A-04 proves controls with synthetic producers before production content:
+channel and mirror isolation, multiple bindings/page collisions, simultaneous
+profile presentation, shared-profile edits, Lua transitions/expiry/rollback,
+restart inside/after overrides, Refresh/Reset and missing/invalid profile safety.
+All changed admin surfaces require every supported culture and matched no-JS/
+hydrated browser proof. P9B-01 then supplies the single production TV-guide
+add-on's themes/overrides/zones; P9B-02 repeats the scenarios with its exact
+installed package, actual guide pages and browser/stream generation comparison.
+Existing source-subtitle, alternate-audio, native/Next, six-RID and output gates
+remain required. NOS reference scope stays limited to TV-guide pages 200–299.
+
 ## Evidence from the 2026-10-07 planning review
 
 - ErsatzRS currently has no teletext-specific domain model, scanner branch,
@@ -313,9 +366,11 @@ or DVB-subtitle stream.
 2. `p9a-02`: package and functionally probe the decoder.
 3. `p9a-03`: persist source services/pages and expose exact metadata.
 4. `p9a-04`: implement and accept the generic engine and selection/output matrix
-   using synthetic pages, with localized management, health and runtime proof.
+   using synthetic pages, including channel profiles, shared admin/Lua controls,
+   localized management, health and runtime proof.
 5. `p9b-01`: implement the single tvguide teletext add-on in ErsatzRS-Addons,
-   including its NOS-inspired page structure and host-supplied guide content.
+   including its NOS-inspired page structure, host-supplied guide content,
+   named themes, permitted overrides and custom zones.
 6. `p9b-02`: close integrated host/add-on management, health and end-to-end proof.
 
 Phase 10 video-jukebox work remains dependency-gated behind `p9b-02`, including
@@ -329,7 +384,8 @@ session log. Phase 9 closes only after:
 - runtime packaging/probing is verified for all six RIDs or an ADR records an
   intentional supported-platform exception;
 - SQLite scanner and persistence tests pass;
-- P9A-04 independently proves the engine before production content starts;
+- P9A-04 independently proves the engine, channel/profile isolation, shared
+  admin/Lua lifecycle and synthetic presentation before production content starts;
 - the exact compatible tvguide add-on is installed and its real guide pages,
   navigation, refresh, restart and failure behavior pass integrated proof;
 - FFmpeg argv snapshots and decoded subtitle/page fixtures pass;

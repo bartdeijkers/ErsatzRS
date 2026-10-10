@@ -107,6 +107,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
+  profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua
+  controls. Specify override timing, expiry, rollback and restart, channel
+  isolation and identical validated browser/stream pages. Implementation remains
+  pending; generic engine acceptance still precedes the single TV-guide add-on.
 - Plan Phase 9 as a generic teletext engine followed by one new TV-guide
   teletext add-on in ErsatzRS-Addons, with pages and navigation inspired only
   by the TV-guide-related NOS Teletekst pages 200–299.

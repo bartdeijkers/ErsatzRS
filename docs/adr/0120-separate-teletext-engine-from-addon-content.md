@@ -64,6 +64,13 @@ for the add-on. Phase 9 must not depend on the later automatic official
 repository distribution work in ADR 0118. Phase 10 and OAD retain their
 `p9b-02` dependency, which now includes the working tvguide add-on.
 
+The accepted extension in [ADR 0122](0122-channel-teletext-profiles-themes-and-lua-control.md)
+adds channel/add-on bindings and profiles, add-on-owned themes/custom zones and
+shared admin/Lua controls with explicit timing and restart/error rules. Generic
+synthetic acceptance includes these controls before the same single production
+TV-guide add-on supplies actual themes and content. This supplements ownership
+and acceptance without changing the two-stage order or NOS reference scope.
+
 ## Consequences
 
 - Generic engine acceptance is separately observable before content work starts.

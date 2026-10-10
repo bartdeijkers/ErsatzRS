@@ -1488,6 +1488,17 @@ Localized engine management and health, supported-platform probes, changed UI
 browser/hydration proof, source-subtitle regressions and applicable smoke/TSDuck
 checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
+ADR 0122 also requires generic channel/add-on enable state and named profiles
+with independently scoped settings. Synthetic producers prove multiple bindings,
+page collision rejection, two simultaneous channels using the same package with
+different profile presentation, mirror isolation and shared-profile invalidation.
+Admin and Lua use the same application controls. Verify cursor-bound override
+intervals/expiry, Continue base behavior, failed-script atomic rollback, restart
+inside/after an interval and Refresh/Reset programme boundaries. Missing, deleted,
+wrong-add-on, invalid or unavailable profiles cannot activate packages or damage
+ordinary playback. Safe live transitions expose pending/applied state, and browser
+and stream consume identical validated channel generations. Localize these
+controls in every supported culture and prove no-JS/hydrated browser flows.
 '''
 evidence = '''
 2026-10-10 preparatory command-owner checkpoint: an infrastructure primitive
@@ -2183,6 +2194,12 @@ restart. Missing/disabled/incompatible packages and failed/timed-out refresh
 follow the accepted visible stale/last-good policy without harming playback.
 Use existing checkout/ZIP distribution; automatic repository updates, NOS data
 scraping and broader editorial/news services are excluded.
+ADR 0122 requires the add-on to provide named colour/layout themes, permitted
+profile overrides and defined page zones accepting custom values. The same
+package simultaneously serves different channels/profiles without global setting
+mutation. Unknown themes/zones or invalid/oversized values fail visibly without
+truncation; presentation remains add-on-owned within supported teletext encoding.
+Stream and browser use the host's same validated pages.
 '''
 evidence = ''
 
@@ -2213,6 +2230,15 @@ Engine-only or fixture-producer proof cannot close Phase 9. Record both host
 and add-on identities; automatic repository distribution remains out of scope.
 Existing workspace closeout, Clippy, Leptos, parity-check, smoke, changed-output
 TSDuck and progress validation gates remain required.
+With the exact production package, prove different themes simultaneously on
+two channels, independent binding toggles, profile edits and mirror isolation.
+Exercise Lua profile/on/off transitions, interval expiry and Continue, handled
+invalid profiles, failed-script rollback, restart during/after overrides and
+Refresh/Reset boundaries. Compare actual stream/browser generation and content,
+including custom zones and overrides. Missing, deleted, wrong-add-on or invalid
+profiles and unavailable packages preserve ordinary playback. No script installs
+or enables a package. All changed profile/theme/zone/Lua admin surfaces are
+localized and browser-proven under the existing acceptance gates.
 '''
 evidence = ''
 
