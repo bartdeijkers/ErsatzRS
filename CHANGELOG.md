@@ -87,8 +87,11 @@ release section when tagging a release.
   input, duplicate JSON keys, missing required fields and mismatched generations
   while preserving literal content. Bound read-only guide requests, channel and
   occurrence counts without truncation; retain explicit nullable metadata and
-  precise UTC instants. Prepare civil guide windows through the shared programme
-  clock, preserving daylight-saving boundaries and skipped dates. Guide
+  precise UTC instants. Build requests from supplied grouped programmes with
+  exact host locale membership, actual segments and shared current/next/continuing
+  roles. Keep full-guide limits separate from Later Today; reject inexact source
+  offsets without changing content. Prepare civil guide windows through the
+  shared programme clock across daylight-saving boundaries and skipped dates. Guide
   acquisition, execution, encoding validation and publication remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,

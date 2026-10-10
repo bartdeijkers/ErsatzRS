@@ -431,13 +431,25 @@ nullable descriptions, actual segments and separate role references; it excludes
 internal artwork/path metadata. UTC instants preserve nanoseconds; normalized
 UTC years outside 0000–9999 fail on parsing and serialization.
 
+A preparatory application builder accepts complete, already grouped supplied
+occurrences and an authoritative host locale allowlist. It checks exact locale
+membership, resolves the named timezone, retains whole occurrences intersecting
+the three-date window and uses the shared selector with a separate one-date
+Later Today boundary. Channel-local identity, actual segment order and exact
+millisecond source offsets are checked before returning complete bounded request
+bytes. Zero external item IDs, preroll identity, cross-channel mirrors and guide
+intervals differing from actual segments remain intact. Explicit unknown
+None-media zero offsets do not become invented source timing. The builder cannot
+prove acquisition completeness, source revision or generation ownership.
+
 Response parsing checks 8 MiB, the exact opaque generation echo and 1,024-record
 bound. Application conversion checks values and the whole page-set structure
 before returning an unpublished draft, preserving literal text, mosaics, styles
 and links without partial results. The 1,024-byte generation-token bound is host
-resource policy. Request timezone/locale/identity/reference semantics, complete
-guide acquisition, generation ownership, capability activation, producer
-invocation, native encoding and publication remain separate open host gates.
+resource policy. Authoritative locale composition and guide acquisition,
+projection completeness, source association, generation ownership, capability
+activation, producer invocation, native encoding and publication remain open
+host gates.
 
 ### Persistence and publication lifecycle
 
