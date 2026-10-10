@@ -5,11 +5,13 @@
 //! Structure alone is not publication readiness: the FFmpeg-side encoder must
 //! also validate character representation and physical spacing-control cells.
 
+mod enhancements;
 mod identity;
 mod pages;
 mod profiles;
 mod source;
 
+pub use enhancements::*;
 pub use identity::*;
 pub use pages::*;
 pub use profiles::*;
@@ -17,3 +19,6 @@ pub use source::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod enhancements_tests;

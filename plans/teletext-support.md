@@ -67,6 +67,15 @@ ADR 0123 owns the accepted scope. The
 records normative clauses, the pinned QTeletextMaker 1.0 source, actual TTI
 normalization/metadata losses and the planned structured file workflow.
 
+The technical boundary retains the closed v1 contract and adds
+`teletext.pages.v2` with exact request/response version checks from the installed
+selection snapshot. Both versions converge on one domain model; v1 contributes
+its unchanged base content. Checked palette/monochrome DRCS values are the first
+model foundation, followed by the complete enhancement/resource graph and native
+compiler. Model values alone cannot close P9A-01 or the engine acceptance gate.
+Durable designs use immutable revisions, head compare-and-swap and host export
+receipts; pending/publication state belongs to the eventual promotion owner.
+
 - Extend the typed model, versioned addon payloads, native packets/resources and
   browser renderer through Level 2.5: palettes, extended characters/mosaics,
   non-spacing attributes, DRCS, local/public/global objects and side panels.
@@ -84,7 +93,8 @@ normalization/metadata losses and the planned structured file workflow.
 - Preserve addon-owned templates, theme/override settings, declared zones and
   dynamic fields in the sidecar. Distinguish free content, fillable zones and
   automatically generated guide regions. Validate edit permissions against host
-  state; template changes require an explicit addon version workflow.
+  state, including indirect palette/object/DRCS effects on protected regions;
+  template changes require an explicit addon version workflow.
 - Prove export → actual editor open/edit/save → import → validation/preview →
   explicit publication. Provide bounded file inputs and structured diagnostics
   for AI agents through the same validation/application functions. Localize all

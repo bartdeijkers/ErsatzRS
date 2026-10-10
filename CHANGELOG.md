@@ -124,7 +124,8 @@ release section when tagging a release.
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,
   TSDuck and real display/navigation in a suitable client; Kodi is optional.
-  Implementation and editor/client acceptance remain open.
+  Checked colour and monochrome DRCS values provide the initial model foundation;
+  enhanced encoding, editor workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
   profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua
   controls. Specify override timing, expiry, rollback and restart, channel

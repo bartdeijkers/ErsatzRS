@@ -10,8 +10,11 @@ playback, output, profile/Lua and engine-first obligations remain in force.
 
 ## Implementation
 
-Not implemented. Existing Western Latin Level 1/1.5 encoding and unpublished
-channel composition are reusable baseline evidence, not Level 2.5 acceptance.
+Partial — checked colour references, four-bit RGB, editable CLUT2/3 declarations
+and monochrome DRCS bitmap/slot/subtable values exist. The full enhanced service
+model, encoder and editor/publication workflow remain unimplemented. Existing
+Western Latin Level 1/1.5 encoding and unpublished channel composition are
+reusable baseline evidence, not Level 2.5 acceptance.
 The standards/editor source audits do not establish real editor or client proof.
 
 ## Context
@@ -46,6 +49,48 @@ and generation. Preview offers enhanced and base views. Diagnostics identify pag
 raw subcode and position, adding resource/source-file locations where applicable.
 A preview never replaces native encoding, transport or actual client evidence.
 
+### Enhanced model and wire boundary
+
+Keep decimal display identities and the closed v1 model unchanged. Enhanced
+documents contain a mandatory base display set, separately typed enhancements
+and non-display resources. Resource addresses carry a magazine and raw page byte;
+they are not decimal display pages. Resource kind and logical subpage identity
+are authored values; physical update and last-packet header bits belong to the
+compiler. Validate reserved-purpose addresses, collisions and dependencies over
+the complete service, including transitively invoked objects and DRCS.
+
+Use checked five-bit colour references and four-bit RGB components. Only CLUT2/3
+are editable in Level 2.5; fixed CLUT0/1 and transparency retain their standard
+meaning. DRCS glyphs have ten rows of twelve monochrome pixels, checked glyph
+slots 0–47 and logical subtable indices 0–15. Representation validation does not
+replace the per-display limit of two selected subtables and 24 distinct referenced
+glyphs. Objects retain local/public/global identity and active/adaptive/passive
+semantics; structured non-spacing operations retain their position and character
+designation. Side panels and page/magazine defaults remain explicit model data,
+not browser-only styling. Packet ordering and header synthesis are compiler work.
+
+Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
+uses `schema_version = 2` with the same guide input fields and limits as v1;
+its response uses version 2 for the enhanced document. Give v1 request/response
+independent version constants without changing their existing values, shapes or
+parser behavior. Choose the highest declared
+host-supported contract from the same installed-manifest/settings snapshot,
+retain that choice in the invocation receipt and require the exact response
+version. A v2 failure never triggers a v1 retry or lossy downgrade. Existing
+installation hash/version and selection fences apply; a capability string alone
+does not require a manifest schema migration. No producer may choose publication
+identity or turn a structurally valid document into a ready generation.
+
+Mixed v1/v2 producers receive identical guide values and generation with the
+appropriate request version. Convert v1 losslessly into base-only contributions
+to the shared enhanced domain model. Both invocation preflights and response
+validation enforce the selected version; response contents cannot negotiate it.
+
+Existing payload/time/service budgets remain host resource policy, not claims
+about normative teletext limits. Enhanced validation must bound resource counts,
+dependency traversal, object expansion and encoded output before publication.
+The full enhanced aggregate and encoder implementation remain separate work.
+
 ### External editing, drafts and publication
 
 Support selection/export of a page, its subpages or a supported page set as TTI
@@ -73,6 +118,35 @@ separately. Validate edits against addon-owned theme/zone/template declarations;
 generated content remains generated. Template changes use explicit addon versions
 and installation workflow, never package-file mutation or script autoactivation.
 Reuse existing application commands, configuration, addon trust and Lua controls.
+Edit-policy validation includes indirect effects: a shared palette, object or
+DRCS change can modify protected/generated cells even when its definition lies
+outside their geometric bounds. Checking edited coordinates alone is insufficient.
+
+### Durable design ownership
+
+Existing graphics upserts have no draft revisions or export compare-and-swap;
+addon-list lifecycle records have different ownership. Reuse their immutable
+snapshot and transactional revision patterns, not their tables or `ConfigElement`.
+Add a `TeletextDesign` head/tombstone, immutable `TeletextDesignRevision` records
+and server-owned `TeletextDesignExportReceipt` records. Revisions retain a bounded,
+versioned document, digest and original selection/edit-policy context. Receipts
+retain the exact export revision, stable file mapping and resource baselines.
+Keep these records when a profile or package is removed; do not cascade designs
+from `AddonInstallation`.
+
+Saving/importing requires the expected head revision and one immediate write
+transaction; overflow, stale input or any failure preserves the previous head.
+Validate the complete import before writing. The supplied sidecar cannot broaden
+the receipt's edit permissions. Export only permitted design metadata, never a
+general settings bag containing secret or local-file references. Package/profile
+changes make the original selection context stale and require explicit resolution.
+
+Explicit publication references an immutable `(design_id, revision, digest)` and
+a fresh complete channel-selection fence. Saving/importing never sets an active
+flag. Add durable pending/publication state with the actual service promotion
+owner, not as a substitute for it. After restart, drafts and receipts remain
+readable without automatic transmission; publication/restart must separately
+restore only accepted generations under the existing profile/Lua timing contract.
 
 ### Evidence and delivery order
 

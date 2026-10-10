@@ -987,6 +987,22 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 enhanced-value checkpoint: ADR 0123 fixes explicit v2 request/response
+selection, unchanged v1 compatibility, semantic resource/compiler ownership and
+durable design revision/head-CAS/export-receipt boundaries. Read-only audits found
+no reusable graphics/addon-list table with the required design lifecycle; reuse
+their transaction and immutable-snapshot patterns rather than their ownership.
+Checked five-bit colour references, four-bit RGB, editable CLUT2/3 and 12x10
+monochrome DRCS bitmap/slot/subtable values are implemented in the domain only.
+Constructors and nested serde reject malformed values, dimensions, fixed-table
+edits and multicolour shapes without masking or truncation. Eleven new tests
+and 22 existing teletext tests pass in one focused domain selection; strict
+domain all-target Clippy passes. Independent model/code and lifecycle/wire reviews
+are clean. Normative DRCS dimensions/subtable/display limits were rechecked against
+EN 300 706 clauses 10.5.2.1, 14.1 and 14.4.1. No v1 wire, encoder, runtime or admin
+behavior changed. Full aggregate/resource/compiler contracts, their implementation
+and editor/publication/client evidence remain open; P9A-01 is not complete.
+
 2026-10-11 maintainer-authorized scope extension reopens this standards gate.
 ADR 0123 accepts full authored Level 2.5, base fallback, actual QTeletextMaker
 TTI/sidecar design interchange and a suitable-client gate. The Kodi amendment

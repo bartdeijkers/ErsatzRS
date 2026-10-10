@@ -7,6 +7,11 @@ support, durable designs/drafts, editor roundtrips and real-client acceptance ar
 open. Existing Western Latin Level 1/1.5 candidates are preparatory. No new CLI,
 admin route, metadata schema implementation or editor binary is claimed here.
 
+The domain now provides checked colour references/RGB, editable CLUT2/3 and
+monochrome DRCS bitmap/slot/subtable values. They reject malformed construction
+and JSON; they do not validate resource graphs, per-display usage or native
+encoding. No current addon interface accepts these new values yet.
+
 ## Standards audit
 
 Basis: [ETSI EN 300 706 V1.2.1 (2003-04)](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf).
@@ -80,6 +85,22 @@ Missing sidecar data cannot confer addon-template edit permission. Ambiguous new
 reordered subpages or changed exact links need explicit resolution, never guessed
 matching. Resource editing that the pinned editor cannot preserve must be refused
 or use a separately validated structured resource file; never claim a lossy export.
+
+The host export receipt binds the design ID, immutable revision/digest, exact
+relative file mapping, resource baseline and edit policy. A changed sidecar cannot
+grant new permissions. Durable draft saves require the expected head revision;
+stale imports and validation failures retain the previous head and broadcast.
+Removing an addon/profile retains designs and receipts while making their
+configuration context stale. Ordinary playback does not depend on draft storage.
+
+The enhanced addon boundary is `teletext.pages.v2`: version-2 requests retain the
+same bounded guide fields, and version-2 responses carry mandatory base pages plus
+typed enhancements/resources. Existing version 1 remains unchanged. The host
+selects the highest mutually supported declared version from its installation
+snapshot and checks the exact response version without fallback after failure.
+Mixed-version producers receive identical guide values with their selected
+request version; v1 contributes base pages without enhancement loss. Semantic
+resource identities remain separate from compiler-owned physical header fields.
 
 ## Planned validation and evidence sequence
 

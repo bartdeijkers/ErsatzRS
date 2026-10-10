@@ -1126,8 +1126,11 @@ containing only the Windows package. Do not publish before those gates.
 Continue Phase 9A at reopened p9a-01 for the 2026-10-11 authorized expansion.
 ADR 0123 requires authored Level 2.5 design/validation/encoding/publication/display,
 correct Level 1/1.5 fallback and actual QTeletextMaker TTI/sidecar interchange.
-The standards and pinned editor-source audits are recorded; extended typed/wire/
-resource and draft/publication contracts remain to finalize. The editor normalizes
+The standards and pinned editor-source audits are recorded. ADR 0123 defines the
+v2 selection/wire boundary and durable revision/export-receipt ownership. Checked
+palette and monochrome DRCS values are implemented; the complete enhanced
+resource graph, compiler and operational draft/publication workflow remain open.
+The editor normalizes
 subcodes/navigation and drops custom metadata, requiring explicit sidecar mapping
 and permission checks rather than silent loss. Import creates a concept, not a
 live update or package edit. Preserve addon-owned templates/themes/zones/dynamic
