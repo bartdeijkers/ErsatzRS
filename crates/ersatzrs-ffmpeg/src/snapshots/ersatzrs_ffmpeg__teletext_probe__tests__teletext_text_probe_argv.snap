@@ -1,0 +1,27 @@
+---
+source: crates/ersatzrs-ffmpeg/src/teletext_probe.rs
+assertion_line: 301
+expression: "TEXT_PROBE_ARGUMENTS.join(\"\\n\")"
+---
+-hide_banner
+-loglevel
+error
+-txt_page
+200,888
+-txt_format
+text
+-txt_chop_top
+0
+-txt_duration
+1000
+-f
+mpegts
+-i
+pipe:0
+-map
+0:s:0
+-c:s
+srt
+-f
+srt
+pipe:1

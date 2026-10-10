@@ -17,6 +17,7 @@ pub mod locator;
 pub mod options;
 pub mod pipeline;
 pub mod runtime;
+pub mod teletext_probe;
 pub mod version;
 
 pub use canvas::*;
@@ -34,4 +35,5 @@ pub use locator::*;
 pub use options::*;
 pub use pipeline::*;
 pub use runtime::*;
+pub use teletext_probe::*;
 pub use version::*;

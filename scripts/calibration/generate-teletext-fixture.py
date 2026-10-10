@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Generate original synthetic DVB teletext; never use operator or NOS content.
+
+EN 300 706 sections 8/9 define packet protection/page coding; EN 300 472
+section 4 defines DVB carriage. This is a fixture producer, not the runtime
+engine. Verify it independently with FFmpeg/libzvbi and TSDuck.
+"""
+
+import argparse
+from pathlib import Path
+import struct
+
+HAMMING_8_4 = (
+    0x15, 0x02, 0x49, 0x5E, 0x64, 0x73, 0x38, 0x2F,
+    0xD0, 0xC7, 0x8C, 0x9B, 0xA1, 0xB6, 0xFD, 0xEA,
+)
+
+
+def crc32_mpeg(data):
+    value = 0xFFFFFFFF
+    for byte in data:
+        value ^= byte << 24
+        for _ in range(8):
+            value = ((value << 1) ^ (0x04C11DB7 if value & 0x80000000 else 0)) & 0xFFFFFFFF
+    return struct.pack(">I", value)
+
+
+def odd_parity(byte):
+    return byte | (0x80 if byte.bit_count() % 2 == 0 else 0)
+
+
+def reverse_bits(byte):
+    return int(f"{byte:08b}"[::-1], 2)
+
+
+def data_unit(page, row, data, subtitle=False):
+    address = (page // 100 % 8) | (row << 3)
+    fields = bytes([HAMMING_8_4[address & 15], HAMMING_8_4[address >> 4]]) + data
+    assert len(fields) == 42
+    return bytes([3 if subtitle else 2, 44, 0xE0, 0xE4]) + bytes(map(reverse_bits, fields))
+
+
+def page_header(page, subtitle=False):
+    # Erase, subtitle/suppress-header and serial transmission flags; English G0.
+    nibbles = [page % 10, page % 100 // 10, 0, 8, 0, 8 if subtitle else 0,
+               1 if subtitle else 0, 1]
+    text = b"ERSATZRS SYNTHETIC TEST".ljust(32)
+    return bytes(HAMMING_8_4[n] for n in nibbles) + bytes(map(odd_parity, text))
+
+
+def page_row(text):
+    assert len(text) <= 40
+    return bytes(map(odd_parity, text.ljust(40)))
+
+
+def timestamp(pts):
+    return bytes([0x21 | ((pts >> 29) & 14), (pts >> 22) & 255,
+                  ((pts >> 14) & 254) | 1, (pts >> 7) & 255, ((pts << 1) & 254) | 1])
+
+
+class FixtureTransport:
+    def __init__(self):
+        self.continuity = {}
+        self.output = bytearray()
+
+    def packet(self, pid, payload, start=False):
+        counter = self.continuity.get(pid, 0)
+        self.continuity[pid] = (counter + 1) % 16
+        assert len(payload) <= 184
+        self.output.extend(bytes([0x47, (0x40 if start else 0) | (pid >> 8),
+                                  pid & 255, 0x10 | counter]) + payload.ljust(184, b"\xff"))
+
+    def section(self, pid, table):
+        self.packet(pid, b"\x00" + table + crc32_mpeg(table), True)
+
+    def tables(self):
+        self.section(0, bytes.fromhex("00 b0 0d 00 01 c1 00 00 00 01 f0 00"))
+        descriptor = bytes.fromhex("56 0a") + b"eng" + bytes([0x0A, 0x00])
+        descriptor += b"eng" + bytes([0x10, 0x88])
+        body = bytes.fromhex("00 01 c1 00 00 e1 00 f0 00 06 e1 00")
+        body += bytes([0xF0, len(descriptor)]) + descriptor
+        self.section(0x1000, bytes([2, 0xB0, len(body) + 4]) + body)
+
+    def clock(self, pts):
+        # An adaptation-only PCR establishes the clock without advancing payload CC.
+        base = pts - 9000
+        clock = bytes([(base >> 25) & 255, (base >> 17) & 255, (base >> 9) & 255,
+                       (base >> 1) & 255, ((base & 1) << 7) | 0x7E, 0])
+        counter = (self.continuity.get(0x100, 0) - 1) % 16
+        self.output.extend(bytes([0x47, 1, 0, 0x20 | counter, 183, 0x10])
+                           + clock + b"\xff" * 176)
+
+    def pes(self, units, pts):
+        self.clock(pts)
+        units = list(units)
+        # Fixed 45-byte PES header plus identifier; three units fit one TS payload.
+        while len(units) % 4 != 3:
+            units.append(bytes([255, 44]) + b"\xff" * 44)
+        payload = b"\x10" + b"".join(units)
+        content = b"\x00\x00\x01\xbd" + struct.pack(">H", 39 + len(payload))
+        content += bytes([0x84, 0x80, 36]) + timestamp(pts) + b"\xff" * 31 + payload
+        assert len(content) % 184 == 0
+        for offset in range(0, len(content), 184):
+            self.packet(0x100, content[offset:offset + 184], offset == 0)
+
+
+def generate_fixture():
+    transport = FixtureTransport()
+    pages = [(200, False, b"\x06TV GUIDE INDEX"),
+             (201, False, b"\x03CHANNEL ONE  12:00 SYNTHETIC SHOW"),
+             (888, True, b"\x0b\x0bSynthetic subtitle page 888\x0a\x0a")]
+    for cycle in range(8):
+        transport.tables()
+        for index, (page, subtitle, text) in enumerate(pages):
+            pts = 90000 + cycle * 90000 + index * 18000
+            transport.pes([data_unit(page, 0, page_header(page, subtitle), subtitle)], pts)
+            transport.pes([data_unit(page, 1, page_row(text), subtitle),
+                           data_unit(page, 2, page_row(b"\x02Independent decoder fixture"), subtitle)],
+                          pts + 3600)
+        # Close the last transmitted page; this is deliberately not user content.
+        transport.pes([data_unit(899, 0, page_header(899))], 90000 + cycle * 90000 + 72000)
+    return bytes(transport.output)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output", type=Path, help="Destination TS fixture")
+    args = parser.parse_args()
+    args.output.write_bytes(generate_fixture())

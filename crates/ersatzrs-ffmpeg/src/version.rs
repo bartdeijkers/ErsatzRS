@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncReadExt;
 
 use crate::runtime::FfmpegRuntimeAcquisition;
+use crate::teletext_probe::{probe_teletext_decoder, TeletextDecoderCapability};
 
 /// Supported `FFmpeg` and `ffprobe` major version.
 pub const REQUIRED_MAJOR: u32 = 9;
@@ -329,6 +330,8 @@ pub struct FfmpegCapabilityReport {
     pub encoders: BTreeSet<String>,
     /// Decoder names from `ffmpeg -decoders`.
     pub decoders: BTreeSet<String>,
+    /// Exact-runtime optional teletext capability proven by text/bitmap fixtures.
+    pub teletext_decoder: TeletextDecoderCapability,
     /// Output container names from `ffmpeg -formats`.
     pub muxers: BTreeSet<String>,
     /// Input container names from `ffmpeg -formats`.
@@ -976,6 +979,7 @@ impl FfmpegRuntimeReport {
             filters: BTreeSet::from_iter(to_owned_vec(REQUIRED_FILTERS)),
             encoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_ENCODERS)),
             decoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_DECODERS)),
+            teletext_decoder: crate::TeletextDecoderCapability::default(),
             muxers: BTreeSet::from_iter(to_owned_vec(REQUIRED_MUXERS)),
             demuxers: BTreeSet::from_iter(to_owned_vec(REQUIRED_DEMUXERS)),
             bitstream_filters: BTreeSet::from(["dovi_split".to_owned()]),
@@ -1502,6 +1506,7 @@ async fn collect_ffmpeg_capabilities(
         filters: parse_capability_names(&filters),
         encoders: parse_capability_names(&encoders),
         decoders: parse_capability_names(&decoders),
+        teletext_decoder: crate::TeletextDecoderCapability::default(),
         muxers,
         demuxers,
         bitstream_filters: parse_bitstream_filters(&bitstream_filters),
@@ -1521,6 +1526,12 @@ async fn collect_ffmpeg_capabilities(
         videotoolbox_encoders: BTreeSet::new(),
     };
 
+    // Decoder advertising alone does not prove page selection or glyph/colour decode.
+    report.teletext_decoder = probe_teletext_decoder(
+        &config.ffmpeg_path,
+        report.has_decoder("libzvbi_teletextdec"),
+    )
+    .await;
     enrich_device_profiles(config, &mut report).await;
 
     Ok(report)
@@ -2883,6 +2894,7 @@ h264_nvenc AVOptions:
             filters: BTreeSet::new(),
             encoders: BTreeSet::from(["libx264".to_owned()]),
             decoders: BTreeSet::from(["h264".to_owned()]),
+            teletext_decoder: crate::TeletextDecoderCapability::default(),
             muxers: BTreeSet::from(["nut".to_owned()]),
             demuxers: BTreeSet::from(["nut".to_owned()]),
             bitstream_filters: BTreeSet::new(),

@@ -2,16 +2,18 @@
 
 ## Status
 
-Queued and not implemented. The 2026-10-10 maintainer decision in
+In progress. The 2026-10-10 maintainer decision in
 [ADR 0120](../docs/adr/0120-separate-teletext-engine-from-addon-content.md)
 sets two stages: first the generic ErsatzRS teletext engine, then one new
 TV-guide content add-on in ErsatzRS-Addons. Six milestones include a separate
-engine acceptance gate (`p9a-04`); `p9a-01` still blocks implementation until
-the technical standards and host/add-on contract are accepted. Implementation
-starts after `ucu-09` and the other recorded prerequisites are Complete. UCU-09
+engine acceptance gate (`p9a-04`). P9A-01 is Complete under accepted
+[ADR 0121](../docs/adr/0121-teletext-pages-transport-and-addon-contract.md);
+P9A-02 has bounded selected-runtime decoder probes, with packaging and platform
+acceptance still open. Implementation follows the completed `ucu-09` and other
+recorded prerequisites. UCU-09
 has a fixed upstream v26.11.1 boundary; later upstream releases do not extend
-that gate. This refresh changes planned ownership and sequencing; it delivers
-no schema, API, runtime capability or add-on. The authoritative execution state
+that gate. No page engine, source metadata, UI or content add-on acceptance is
+claimed. The authoritative execution state
 lives in
 [`docs/progress/milestones.toml`](../docs/progress/milestones.toml) and
 [`docs/progress/parity/teletext-support.toml`](../docs/progress/parity/teletext-support.toml);
@@ -85,6 +87,32 @@ cycle with OAD-01 through OAD-04, which remain after Phase 9 and Phase 10.
   teletext-specific policy, as in the initial 2026-08-07 search. P9A-01 must
   repeat the source audit at the completed UCU baseline and classify each
   accepted behavior as parity or an ErsatzRS extension.
+
+## Source map and technical decision
+
+[ADR 0121](../docs/adr/0121-teletext-pages-transport-and-addon-contract.md)
+owns the technical page, DVB/browser delivery, add-on and lifecycle contract.
+The 2026-10-10 audit uses ErsatzTV legacy commit
+`46118d43313b7828780fbfcfb46e980390ea8b0d`:
+
+- ErsatzTV UI/components/validators: no teletext-specific policy found in C#,
+  project, JSON or Markdown sources; authored-page UI is an ErsatzRS extension.
+- Existing selection: `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`
+  preserves language, forced/default and embedded-source constraints.
+- Existing metadata: `$ERSATZTV_SRC/ErsatzTV.Core/Domain/Metadata/Subtitle.cs`
+  and `Domain/MediaItem/MediaStream.cs` have generic codec/index/language fields,
+  but no page/service identity or teletext extraction format.
+- Existing side effects: extraction/preparation, source ownership and retained
+  interval timing stay in their established owners; authored pages do not
+  modify schedules or consume media inputs.
+- ErsatzRS targets: domain page/service values; core selection/guide rules;
+  add-on-contract DTOs; infrastructure scanner/persistence/invocation; FFmpeg
+  encoding/probes; application coordination; web viewer/admin/transport.
+- Visual reference for the future content add-on: only TV-guide-related NOS
+  200–299 pages. Shared SSR forms, links, localization and hydration primitives
+  govern host management; P9B-01 owns the detailed content-page visual map.
+- Intentional deviation: authored page generation is the extension accepted by
+  ADRs 0120/0121, not a claim of existing ErsatzTV teletext parity.
 
 ## Non-goals before the Phase 9 ADR
 

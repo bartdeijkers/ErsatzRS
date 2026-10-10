@@ -1,23 +1,26 @@
 feature    = 'Teletext support'
-etv_source = 'No teletext-specific policy was located in the 2026-08-07 search or the 2026-10-07 local `$ERSATZTV_SRC` checkout at df6ae228; milestone p9a-01 must revalidate the completed UCU baseline and classify each accepted behavior as parity or an ErsatzRS extension'
+etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
-status     = 'Not started'
-adr        = ['0120']
+status     = 'In progress'
+adr        = ['0120', '0121']
 summary    = '''
-Not started and queued as Phase 9 after UCU-09 and the other p9a-01 prerequisites.
+Phase 9 implementation starts after the recorded p9a-01 prerequisites.
 The 2026-10-10 maintainer decision (ADR 0120) requires a generic ErsatzRS
 teletext engine first, independently accepted at p9a-04 using synthetic pages,
 then one new tvguide teletext add-on in ErsatzRS-Addons at p9b-01. The add-on
 owns page structure/navigation inspired only by the TV-guide-related NOS
 Teletekst pages 200–299, plus actual TV-guide content. The host owns validation,
 publication, rendering/delivery and read-only programme
-context. Source subtitle requirements remain. P9A-01 still must accept the
-technical standards/runtime and versioned host/add-on contract before code.
-The six milestones remain Not started; this is accepted planning, not delivery.
+context. Source subtitle requirements remain.
+P9A-01 is Complete under accepted technical ADR 0121; P9A-02 is In progress.
+The remaining four milestones are Not started. No engine/content acceptance
+is claimed.
 
 Current ErsatzRS scanning and playback have no teletext-specific model or
-selection path, and the FFmpeg runtime contract does not require or functionally
-probe the optional libzvbi teletext decoder. The active sequence in
+selection path. The selected FFmpeg runtime now has an optional bounded
+libzvbi decoder-options/text/colour-bitmap probe, independently proven on the
+pinned Linux x64 package. Six-RID packaging, operator visibility and health
+acceptance remain open in P9A-02. The active sequence in
 `plans/teletext-support.md` covers six-RID packaging, SQLite stream/page
 persistence and an explicit native/Next engine/source/output matrix. It reuses
 existing selection, provider identity, bounded preparation, programme context
@@ -28,17 +31,19 @@ to teletext. Phase 10 video-jukebox work begins only after p9b-02 closes.
 
 [[debt]]
 id          = 'teletext-product-and-standards-contract-is-undecided'
-adr         = '0120'
+adr         = '0121'
 description = 'ADR 0120 settles engine-first ownership and required authored full-page support followed by one TV-guide content add-on. Decide the technical page model, versioned guide-input/page-output contract, validation, compatibility, refresh/publication/restart and stale-page/failure policy, plus source subtitles, burn-in, extraction, MPEG-TS carriage/passthrough and HLS/browser delivery. P9A-01 owns page/language/region/accessibility semantics and the native/Next source/output matrix, including Burn/Convert, copy, finite/prepared/live/one-shot inputs, endpoint boundaries, packaging and visible unsupported behavior.'
 discovered  = '2026-08-07'
 evidence    = 'Milestone p9a-01 and `plans/teletext-support.md` enumerate the decision surface. FFmpeg documents optional libzvbi decoding for DVB teletext pages/subtitles but no DVB teletext encoder; decoder availability alone cannot settle the product or output contract.'
-resolved    = false
+resolved    = true
+
+resolution  = 'P9A-01 accepted ADR 0121 on 2026-10-10; the plan source map and milestone evidence own the baseline audit, technical matrix, page/add-on semantics, lifecycle and packaging decisions. Implementation and runtime proof remain separate open debts.'
 
 [[debt]]
 id          = 'teletext-runtime-capability-is-unproven'
-description = 'The first-party FFmpeg 9 packages and operator-runtime capability report do not yet guarantee or functionally probe libzvbi_teletextdec across the six supported RIDs. Add the accepted packaging/probe contract without making missing optional support fatal to unrelated playback.'
+description = 'The selected-runtime capability report has bounded decoder-option and functional text/bitmap probes, but first-party FFmpeg packages are not yet accepted across all six RIDs. Complete packaging, dependency/licensing and operator-visible capability/health evidence without making missing optional support fatal to unrelated playback.'
 discovered  = '2026-08-07'
-evidence    = '`crates/ersatzrs-ffmpeg/src/version.rs` has no required libzvbi decoder/build flag or teletext functional probe; `runtime.rs` pins managed FFmpeg v2.0.6 at the 2026-10-07 review. P9A-02 owns exact-artifact decoder/options, functional decode, dependency packaging and platform evidence; package presence and UCU exceptions do not satisfy it.'
+evidence    = 'P9A-02 evidence owns the bounded probe in `teletext_probe.rs`, its `version.rs` integration, exact v2.0.6 Linux x64 hashes and functional proof, and the missing macOS package/native platform acceptance. Package presence and UCU exceptions do not satisfy six-RID acceptance.'
 resolved    = false
 
 [[debt]]
@@ -59,7 +64,7 @@ resolved    = false
 id          = 'teletext-management-health-and-runtime-proof-is-missing'
 description = 'P9B-02 owns localized page/type/language/capability management, existing health/troubleshooting integration and licensed or redistributable decoded fixtures. Prove the accepted engine/source/output matrix, scan/rescan, multiple pages, seek/restart, edited timelines, cancellation, stale/missing capability failures, route isolation and client-visible output; require PSI/PID and client proof for separate carriage.'
 discovered  = '2026-08-07'
-evidence    = 'No teletext admin labels, health check, browser workflow, FFmpeg fixture, smoke scenario, or TSDuck gate exists in the workspace. Milestone p9b-02 owns the closeout evidence.'
+evidence    = 'An original synthetic decoder fixture and option/text/bitmap probes now exist under P9A-02. Teletext admin labels, health integration, browser workflows and audiovisual smoke/TSDuck output gates remain absent; p9a-04 owns independent engine acceptance and p9b-02 integrated closeout evidence.'
 resolved    = false
 
 [[debt]]

@@ -932,6 +932,7 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
 
     FfmpegCapabilityReport {
         runtime_identity: None,
+        teletext_decoder: crate::TeletextDecoderCapability::default(),
         muxers: BTreeSet::from(["nut".to_owned()]),
         demuxers: BTreeSet::from(["nut".to_owned()]),
         filters: BTreeSet::from([

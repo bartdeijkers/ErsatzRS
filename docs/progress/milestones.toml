@@ -952,7 +952,7 @@ both transitions, save, and reload.
 id         = 'p9a-01'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Decide the teletext product and standards contract'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02', 'ucu-09']
@@ -986,10 +986,23 @@ teletext statuses/dependencies and the active phase/focus.
 by one NOS-inspired tvguide teletext add-on in ErsatzRS-Addons. Add p9a-04 for
 independent engine acceptance and move production content to p9b-01. Existing
 selection/output acceptance moves to p9a-04; p9b-02 remains integrated closeout.
-All Phase 9 milestones remain Not started; the technical ADR is still required.
+At that planning checkpoint all Phase 9 milestones remained Not started.
 Planning checks pass: progress validation, local Markdown links, retained output
 acceptance and scoped milestone comparison. Non-Phase-9 records, including
 Phase 10 and OAD dependencies, are unchanged. No runtime proof is claimed.
+2026-10-10 technical closeout: accepted ADR 0121 defines page/service and
+language/accessibility semantics, six-RID decoding and packaging, genuine DVB
+carriage plus authenticated browser delivery, versioned teletext.pages.v1,
+bounded publication/refresh/restart/stale policy and the explicit native/Next
+engine/source/output/copy matrix. Revalidated ErsatzTV legacy at
+46118d43313b7828780fbfcfb46e980390ea8b0d; no teletext-specific C#/project/JSON/
+Markdown policy found. The plan records the source/side-effect/target map.
+Independent original synthetic DVB page/subtitle packets decode to text and
+coloured bitmap output with FFmpeg n9.0-20260805; TSDuck recognizes the PMT
+teletext descriptor and distinct page/subtitle entries. This is feasibility
+proof only; p9a-02 owns exact-artifact, functional and six-RID runtime evidence.
+No scanner, domain, add-on runtime or user UI acceptance is claimed here.
+
 '''
 
 [[milestone]]
@@ -1053,7 +1066,7 @@ same-process reload gates passed with ErsatzRS FFmpeg 9 on Windows and WSL/Linux
 id         = 'p9a-02'
 phase      = 'Phase 9A — Generic teletext engine'
 title      = 'Package and probe teletext decoding'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
 depends_on = ['p9a-01']
@@ -1067,7 +1080,28 @@ artifacts, including packaged dependencies. Reuse existing managed-runtime
 acquisition and probes. UCU-specific platform/hardware exceptions do not waive
 these teletext gates without a separate accepted decision.
 '''
-evidence = ''
+evidence = '''
+2026-10-10 engineering checkpoint: `teletext_probe.rs` embeds an independent
+original DVB fixture and bounds each process to ten seconds with bounded I/O.
+The selected-runtime report probes required decoder options, exact pages
+200/888 as text (excluding page 201), and full-page cyan/green bitmap output.
+Missing or failed optional support is returned as capability data, preserving
+unrelated startup/playback. Fixture regeneration is byte-identical; its SHA256
+is 17dba7c8d448388877f3d19bb2e4989484d86ddccd2e7a20a069249ac0938067.
+Reviewed text/bitmap argv snapshots and all 390 FFmpeg crate tests pass (21
+ignored/skipped), alongside strict affected-crate Clippy and the infra check.
+The explicit ignored real-runtime test passes against the downloaded pinned
+v2.0.6 Linux x64 package after manifest/archive/executable hash verification:
+archive f41ae6aececf47386babb1584bfdc02f7336e0da592f17d1041b88718d15fd79;
+ffmpeg e878341202c96f7c061099f87369a5dde63baa4c9c1c8aa93f1c919e525823a9;
+ffprobe 3e0a8c01754e1db133379dcdfa1610f9616a3e69582bd0cf87bb29fa3e015361.
+The separate local FFmpeg 9 candidate also passes, but is not the pinned binary.
+The v2.0.6 published manifest lists linux-x64, linux-arm64, linux-arm and win-x64;
+it contains neither macOS RID. Windows/ARM native functional proof, both macOS
+packages or a separately accepted platform decision, packaged dependency/license
+review and visible operator capability/health integration remain due. No UCU
+exception, full engine, client/output timing or Phase 9 acceptance is claimed.
+'''
 
 [[milestone]]
 id         = 'p9a-03'

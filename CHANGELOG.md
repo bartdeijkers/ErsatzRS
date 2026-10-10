@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Functionally probe the selected FFmpeg runtime's optional teletext decoder
+  with synthetic full-page and subtitle fixtures, checking exact page selection,
+  text and colour bitmap output within bounded processes. Missing support is
+  recorded without rejecting unrelated playback; full teletext delivery remains
+  in progress.
+
 ### Changed
 
 - Plan Phase 9 as a generic teletext engine followed by one new TV-guide

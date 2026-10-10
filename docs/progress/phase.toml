@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'All channel setup findings locally accepted for v1.1.1; release and deployment gates remain separate'
+current_focus = 'P9A-02: verify and package teletext decoding after the accepted technical contract'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1123,16 +1123,21 @@ AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is
 historical evidence, not CI proof for this working tree. After AMM-N-03 is done
 and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
-Resume Phase 9A at p9a-01 under its recorded prerequisites. The 2026-10-10
+Continue Phase 9A at p9a-02 after the recorded p9a-01 technical acceptance.
+The 2026-10-10
 maintainer decision in ADR 0120 fixes the sequence: generic ErsatzRS teletext
 engine first, then one new tvguide teletext add-on in ErsatzRS-Addons for the
 page structure inspired only by TV-guide-related NOS Teletekst pages 200–299
-and actual guide content. Accept the technical
-standards/runtime and versioned host/add-on contract at p9a-01. P9A-02/03 cover
+and actual guide content. ADR 0121 accepts the technical standards/runtime and
+versioned host/add-on contract at p9a-01. P9A-02/03 cover
 runtime and source metadata; new p9a-04 independently accepts the engine with
 synthetic pages and retained selection/output proof. Only then implement the
-content add-on at p9b-01 and close integrated acceptance at p9b-02. All six
-milestones remain Not started. Existing native/Next, source subtitle, six-RID,
+content add-on at p9b-01 and close integrated acceptance at p9b-02. P9A-01 is
+Complete under ADR 0121; P9A-02 is In progress with bounded decoder probes and
+exact pinned Linux x64 proof. Complete six-RID packaging/native proof and
+operator-visible capability/health evidence next; the published v2.0.6 manifest
+lacks both macOS packages. The remaining four milestones are Not started.
+Existing native/Next, source subtitle, six-RID,
 localized admin, health and runtime gates remain; UCU platform exceptions do
 not waive them. plans/teletext-support.md owns detailed future sequencing.
 
@@ -1153,7 +1158,7 @@ scope or a prerequisite for the current corrective milestone.
 '''
 
 [[blocking_decision]]
-note = 'ADR 0120 accepts engine-first delivery followed by one tvguide content add-on. Milestone p9a-01 must still accept the technical teletext standards/runtime and host/add-on contract before schema, runtime packaging, selection or output work starts; p9a-04 must close before production content work.'
+note = 'P9A-01 accepts ADR 0121 for technical teletext standards/runtime and host/add-on contracts. P9A-04 must independently close generic engine acceptance before the production tvguide content add-on starts under ADR 0120.'
 
 [[blocking_decision]]
 note = 'Milestone p10a-01 must accept the video-jukebox product and architecture ADR before Phase 10 schema, public add-on API, or queue implementation starts.'

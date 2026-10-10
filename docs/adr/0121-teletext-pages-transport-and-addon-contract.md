@@ -1,0 +1,244 @@
+# ADR 0121: Define teletext pages, transport and the add-on contract
+
+## Status
+
+Accepted (2026-10-10) as the technical implementation contract for the
+maintainer-authorized Phase 9 engine-first programme in ADR 0120. The selected
+delivery is genuine DVB teletext for MPEG-TS clients plus an authenticated
+browser viewer. The separate TV-guide add-on still starts after P9A-04.
+
+## Implementation
+
+Partial. The selected-runtime capability report now runs bounded decoder-option,
+exact-page text and colour bitmap probes against an independent synthetic DVB
+fixture. This does not establish engine, six-RID packaging, scanner, UI or client
+acceptance. The
+`teletext-support` parity record and P9A-01 through P9B-02 own those claims.
+
+## Context
+
+A source audit at ErsatzTV legacy `46118d43313b7828780fbfcfb46e980390ea8b0d`
+found no teletext-specific policy. Existing subtitle selection and extraction
+remain the behavioral baseline; authored full pages are an ErsatzRS extension.
+FFmpeg's libzvbi decoder handles pages and captions but is not an authoring
+encoder. An independent experiment with original synthetic pages demonstrates
+that FFmpeg 9 can decode correctly signalled DVB packets into text and bitmaps.
+
+## Decision
+
+### Page and service model
+
+Use EN 300 706 Level 1/1.5 semantics: 40 columns, a header with 32 authored
+character positions, 24 body rows and an optional navigation row. A display
+page number is decimal 100–899; magazine 8 has wire value zero. Subcodes retain
+their standards-defined identity independently from a page number. Multiple
+subpages cycle within a page and remain independently addressable in the viewer.
+Reserved non-display addresses cannot be supplied as ordinary authored pages.
+
+The public page model contains typed text/mosaic runs, foreground/background
+colour, boxing, height, flash and conceal attributes, language, national option,
+subpage identity and explicit navigation targets. It contains neither raw
+transport bytes nor arbitrary HTML, SVG, scripts or renderer command arguments.
+Validate row/column occupancy including spacing control cells before encoding.
+Do not silently truncate or replace characters. Use the appropriate G0 national
+subset and Level 1.5 X/26 enhancement for supported accented characters. Reject
+unrepresentable characters with a page/row diagnostic. Browser text preserves
+Unicode, but a service advertised for DVB must also validate its DVB encoding.
+
+Source pages retain stream index, codec `dvb_teletext`, service/page/subcode,
+subtitle type, ISO-639 language, default region/national option, character-set
+provenance and source identity. Bind selections and cached derivatives to the
+exact media version, stream and source revision. A subtitle page flag is not a
+forced/default selection flag. Newsflash is not a subtitle. DVB bitmap captions,
+closed captions and ordinary text captions keep their existing identities.
+
+Reuse exact-item, channel and global-language selection in that order, including
+the existing forced/default/accessibility policy and explicit Off. Select one
+exact page within a stream; never merge independently selectable language pages.
+Source replacement/rescan reconciles stale pages without deleting unrelated
+subtitle or alternate-audio state. Subpages carry updates to the same selected
+page; they do not automatically become new subtitle preferences.
+
+### Authored DVB transport
+
+Implement standards-based encoding in safe Rust within the existing FFmpeg
+pipeline boundary. FFmpeg remains the audiovisual encoder; no libav binding,
+external graphics renderer or separate mandatory transport process is introduced.
+The demonstrated gap is page authoring, not another audiovisual pipeline.
+Keep the encoder limited to page packets and the required transport adapter.
+Evaluate existing maintained protocol libraries before implementing parser or
+multiplexer machinery; no new dependency is selected by this ADR.
+
+Use EN 300 472 PES carriage and EN 300 468 teletext signalling: private stream
+PES, a dedicated non-colliding PID, PMT private-data stream with teletext
+descriptor, correct language/type/page identity, Hamming-protected addresses,
+odd-parity character data, the specified bit order and stuffing. Preserve PTS,
+PCR, continuity counters, PMT CRC/version and page erase/header timing. Use a
+bounded carousel, distinguish subtitle units from ordinary page units and close
+page transmissions correctly. Include page/subpage navigation in both encoded
+and browser output. Neither a visual preview nor successful FFmpeg startup is
+carriage evidence.
+
+The transport adapter operates on host-owned encoded output, never reopens or
+consumes an input producer. For constant-rate streams reserve capacity and
+replace null packets; retain audiovisual packets and their timing. Validate PID
+and PMT ownership and available rate before enabling a service. Variable-rate
+or fragmented output must use its explicitly verified transport path rather
+than assuming the same adapter applies. Insufficient capacity, malformed PSI
+or PID collision is a visible failure, not silent page loss. Refresh swaps the
+complete validated page generation at a carousel boundary.
+
+### Engine/source/output matrix
+
+Every row is an implementation obligation, not a claim of current support.
+Authored pages depend on the host guide snapshot, independently of the selected
+media source and video transcode/copy policy.
+
+| Engine and output | Authored page delivery | Selected source teletext captions |
+|---|---|---|
+| Native direct/legacy MPEG-TS | DVB page carousel in a signalled PID plus browser viewer. | Exact-page bitmap burn-in when transcoding; explicit selected-source passthrough where PMT/PID/client proof permits it. Video copy requires verified carriage or a source-bound sidecar; never pretend copy burns captions. |
+| Native HLS segmenter/direct | Browser viewer for complete pages; DVB carriage in TS segments only on the explicitly verified TS-segment path. No native browser HLS teletext controls. fMP4 uses the viewer rather than a claimed DVB track. | Exact-page burn-in when transcoding or bounded finite extraction to the existing subtitle delivery path; reject unsupported copy/output combinations visibly. |
+| Next hybrid MPEG-TS | Host-owned post-wrapper DVB carousel plus browser viewer, separately proven from native output. | Finite source-bound extracted captions use the existing Burn/Convert adapter. Exact source teletext passthrough is not assumed from Next track hints. |
+| Next HLS, Burn/Convert | Browser viewer for authored full pages; no claim that Next HLS has a DVB carriage/page-selection protocol. | Finite source-bound extracted captions use the existing Burn/Convert adapter. Unsupported embedded live/one-shot selections retain ADR 0100's visible refusal. |
+
+Apply the following source-lifecycle rules across those rows:
+
+- Reopenable local files and finite authenticated providers: bounded exact-page
+  decode/extraction with source-owned authentication and version-bound cache.
+- Prepared add-on files: same exact-file contract, preserving retained intervals,
+  subtitle ownership and validation receipts.
+- One-shot producers: consume once. Native streaming decode may share the already
+  owned input; extraction requiring a second read is rejected. Next requires an
+  independently verified source-bound prepared caption artifact per ADR 0100.
+- Live HTTP/RTSP: native page-specific streaming decode remains bounded and
+  cancellation-aware. Never await whole-source extraction from an endless input.
+  Next unsupported embedded text/page selections fail visibly per ADR 0100.
+- Authored services: use the validated host page generation for all source
+  lifecycles without seeking or rescheduling the programme or replacing audio.
+
+There is no automatic engine switch, alternate page substitution, silent caption
+loss or double producer consumption. Prove accepted combinations with served
+media, decoded captions/pages and audio/timing comparison. Operator-selected
+unsupported combinations are visible in administration, startup and Health.
+
+### Host/add-on boundary
+
+Add a versioned `teletext.pages.v1` capability to the existing package/child
+process contract. Its operation is `pages`: one bounded JSON guide request on
+stdin and one complete typed JSON page-set response. Unknown schema versions
+are rejected. The exact DTOs live in `ersatzrs-addon-contract`; domain conversion
+and validation live in the host's existing domain/application boundaries.
+Manifest compatibility, explicit install/enable, settings, content hashes and
+existing permission review remain mandatory. A repository refresh never enables
+this capability automatically.
+
+The request carries a generation token, requested locale and IANA timezone,
+UTC capture/window instants, bounded channel identities/names and read-only
+programme occurrence data. Reuse ADR 0112's projection, including grouped
+programmes, filler disposition, current/next/continuing and Later Today. Supply
+a three-calendar-day guide window for the TV-guide consumer; timezone/DST
+conversion must use the existing programme clock. The add-on has no database
+connection or scheduling write authority.
+
+The response echoes the generation token and contains service language,
+initial page, page/subpage identities, typed row content and navigation links.
+The host checks identity, compatibility, bounded size, duplicate keys, encoding,
+overlap and references before accepting any page. No product page numbers,
+channel ordering or TV-guide composition is hard-coded in the engine. The
+separate tvguide add-on owns NOS-inspired TV-guide pages only (ADR 0120).
+
+Bound one invocation to 30 seconds, 4 MiB request and 8 MiB response, at most
+256 channels, 10,000 programme occurrences and 1,024 page/subpage records.
+Exceeding a bound fails visibly; do not publish a silently shortened guide.
+The producer may paginate its pages into subpages within those bounds. Limit
+refresh to one invocation per configured service, coalesce guide invalidations,
+and fence promotion to the exact configuration/package/guide generation.
+
+### Persistence and publication lifecycle
+
+Use SQLite for source-page metadata, service configuration, generation identity
+and latest operation state. Store validated immutable page generations beneath
+the existing managed-data boundary. Publish only a complete validated generation
+by atomic promotion; browser and transport readers share that same generation.
+Restart adopts only the generation recorded as validated; it does not rerun an
+add-on before unrelated playback can begin.
+
+Refresh after guide/configuration/package changes with a one-minute debounce
+and at least every five minutes while enabled. Page expiry is host-owned: the
+last accepted snapshot remains available for at most 15 minutes after a failed
+refresh, with an explicit stale indicator and Health warning. After expiry the
+service becomes unavailable and its transport advertisement is withdrawn safely.
+A disabled/uninstalled/incompatible package stops publication immediately and
+withdraws the service; never keep secretly running its executable. Cancellation,
+lease loss or stale-generation completion cannot promote pages. Keep the last
+validated generation for diagnostics without presenting it as current output.
+
+The service is opt-in; missing teletext capability does not break unrelated
+playback. A configured service with no valid generation reports unavailable
+rather than synthetic replacement guide content. Engine fixtures are never a
+production fallback.
+
+### Runtime and platform contract
+
+All six RIDs retain the same model and safe-Rust encoder. Managed FFmpeg 9
+packages must include libzvbi and required license/dependency notices, expose
+accepted decoder options and pass an actual small page/subtitle decode probe.
+Runtime identity includes the exact artifact digest; version or decoder name
+alone is insufficient. Operator runtimes report supported/unavailable accurately;
+missing optional capability becomes a blocking warning/error only when selected
+teletext operations require it. Reuse acquisition, bounded process execution
+and refresh/capability cache ownership. No UCU platform exception is inherited.
+
+### Routes, administration and accessibility
+
+Provide an authenticated management viewer for a configured channel/service,
+page and subpage through the existing browser route surface. Classify every
+route under ADRs 0102/0103; machine administration stays under machine API policy
+and private media/decoder callbacks stay on the internal listener. Do not add
+management to the public streaming-only listener.
+
+Use server-rendered links/forms for page-number entry, index, previous/next page
+and subpage. Hydration adds convenience without blocking basic browsing. Expose
+plain readable programme text and labels for assistive technology; do not make
+colour the only navigation cue. Allow flash suppression, conceal/reveal and
+predictable keyboard focus. Localize management, capability, stale/error labels
+and diagnostics in all nine supported cultures. The add-on owns guide content
+language within its package contract.
+
+Health/troubleshooting distinguishes missing decoder/options, selected page not
+found, invalid metadata/charset, failed extraction, unsupported engine/output,
+PID/rate/signalling failure, missing/disabled/incompatible add-on and stale or
+expired publication. Preserve the existing subtitle/audio and provider checks.
+
+## Consequences
+
+The native engine needs a standards-based authoring encoder and output adapter;
+libzvbi alone cannot supply those. Genuine DVB and browser delivery share a typed
+page generation but require independent runtime and client proof. P9A-02 must
+verify packaging on every RID, P9A-03 owns source metadata, P9A-04 closes generic
+engine acceptance and P9B-01/02 own actual content and integrated acceptance.
+None of those gates is waived by this decision or its synthetic experiment.
+
+## Alternatives Considered
+
+- Browser-only pages or a burned-in guide image: insufficient for the selected
+  genuine DVB delivery and independently navigable full pages.
+- Treat decoder support as an encoder: no such FFmpeg contract was found.
+- External teletext/graphics process in the playback path: adds runtime ownership
+  where a bounded safe-Rust packet encoder/adapter is the demonstrated gap.
+- Raw page bytes or HTML supplied by add-ons: exposes wire/rendering internals
+  and bypasses typed validation and accessibility.
+- Unlimited guide enumeration or indefinite stale-page retention: prevents
+  bounded work and truthful publication/Health behavior.
+
+## References
+
+- [ADR 0120: Engine/content ownership](0120-separate-teletext-engine-from-addon-content.md)
+- [Phase 9 plan and source map](../../plans/teletext-support.md)
+- [Milestone acceptance and evidence](../progress/milestones.toml)
+- [Remaining teletext debt](../progress/parity/teletext-support.toml)
+- [Current add-on runtime](../reference/addon-runtime.md)
+- [EN 300 706 V1.2.1: Page coding and transmission](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf)
+- [EN 300 472 V1.4.1: DVB PES carriage](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf)
+- [EN 300 468 V1.20.1: DVB service information](https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.20.01_60/en_300468v012001p.pdf)
+- [FFmpeg libzvbi decoder options](https://ffmpeg.org/ffmpeg-codecs.html#libzvbi_002dteletext)

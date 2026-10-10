@@ -1,0 +1,33 @@
+---
+source: crates/ersatzrs-ffmpeg/src/teletext_probe.rs
+assertion_line: 307
+expression: "BITMAP_PROBE_ARGUMENTS.join(\"\\n\")"
+---
+-hide_banner
+-loglevel
+error
+-f
+lavfi
+-i
+color=c=black:s=492x250:r=25
+-txt_page
+200
+-txt_format
+bitmap
+-txt_chop_top
+0
+-f
+mpegts
+-i
+pipe:0
+-filter_complex
+[0:v][1:s:0]overlay,select=gte(t\,1)
+-t
+2
+-frames:v
+1
+-pix_fmt
+rgb24
+-f
+rawvideo
+pipe:1
