@@ -1296,6 +1296,24 @@ ownership, growing-PMT installation, asynchronous pacing/buffer/rate admission
 or live output integration. Generation fencing/publication, source metadata,
 viewer and add-on implementation remain open; no milestone status or required
 acceptance gate changes.
+
+2026-10-10 authorized transport-engine checkpoint: source PAT/CAT/all-program
+PMT discovery and continuing monitoring, atomic growing-PMT installation,
+explicit PCR/CBR validation and bounded raw/prepared output retention now form
+one library-owned transport gate. Physical scheduling, epoch-bound sink
+acknowledgement, finite EOF without padding and non-erasing immutable repeats
+are covered by reused domain/FFmpeg regressions in Nextest
+93db5bc0-3854-45da-b63b-99b5b7ee7c18 (710 selected domain/FFmpeg/web tests).
+Library runtime prefix/finite-EOF tests pass on four exact v2.0.6 candidates:
+Linux x64 33a42b58-93df-405b-b915-81cfe8d3688c, ARM64 under QEMU
+73683893-284c-48ad-90ce-001093ea5a56, ARMv7 under QEMU
+fdda9bc0-64de-447f-9f39-77df19026d76 and Windows FFmpeg interop
+751883f0-a40c-4a34-a405-4bc32494a438. Library acknowledgements are simulated;
+this checkpoint does not claim actual client delivery. Strict affected Clippy,
+formatting and architecture/progress checks pass; no dependency changes.
+Host forwarding/supervision is a separate checkpoint. Publication selection,
+slate/programme handover, source metadata, remaining platform/native/Next/admin/
+client/add-on acceptance and all open milestone requirements remain unchanged.
 '''
 
 [[milestone]]

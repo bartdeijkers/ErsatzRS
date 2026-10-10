@@ -21,9 +21,23 @@ release section when tagging a release.
   explicit national subsets, accents and spacing controls; reject unsupported
   text or attributes without replacing content. Add bounded serial page
   carousels, timestamped DVB PES/TS packetization, validated PMT service
-  signalling and atomic null-packet replacement. Synthetic audiovisual tests
+  signalling, bounded source PAT/CAT/PMT discovery and atomic null-packet
+  replacement. Install growing PMTs using owned and null slots with atomic
+  preflight and persistent continuity. Continue checking admitted source PSI
+  and PID ownership across packet windows; reject changed tables and incomplete
+  sections before releasing output. Validate the declared constant muxrate
+  against selected-program PCR with explicit gap and tolerance limits.
+  Compose bounded byte retention and atomic output preparation with first-byte
+  holding deadlines, physical packet schedules and epoch-bound sink
+  acknowledgements; reject stale, late or undelivered output.
+  Drain complete packets at finite EOF without padding or shifting their timing;
+  require an acknowledged complete cycle and reject incomplete transport/PSI.
+  Repeat immutable pages without erasing previously acquired content; a new
+  generation retains first-cycle erasure.
+  Synthetic multi-program audiovisual tests
   preserve programme packets and decoded frames/timestamps; live channel
-  integration and generation publication remain pending.
+  publication selection, slate/programme handover and generation publication
+  remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

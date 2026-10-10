@@ -2,7 +2,7 @@ use ersatzrs_domain::*;
 
 use super::*;
 
-fn draft(number: u16, subcode: u16, caption: bool) -> TeletextPageDraft {
+pub(super) fn draft(number: u16, subcode: u16, caption: bool) -> TeletextPageDraft {
     TeletextPageDraft {
         address: TeletextPageAddress {
             page: TeletextPageNumber::new(number).unwrap(),
@@ -37,7 +37,7 @@ fn draft(number: u16, subcode: u16, caption: bool) -> TeletextPageDraft {
     }
 }
 
-fn set(pages: Vec<TeletextPageDraft>) -> EncodedTeletextPageSet {
+pub(super) fn set(pages: Vec<TeletextPageDraft>) -> EncodedTeletextPageSet {
     encode_teletext_page_set(
         &TeletextPageSetDraft {
             initial_page: pages[0].address.page,
@@ -147,6 +147,122 @@ fn replacements_cannot_mix_generations_or_reset_the_programme_clock() {
     let batch = carousel.next_batch().unwrap();
     assert_eq!(batch.presentation_ticks(), 5400);
     assert_eq!(batch.data_units(), &[expected]);
+}
+
+fn decoded_header_nibble(unit: &[u8; 46], column: usize) -> u8 {
+    // EN 300 706 Hamming 8/4 codewords, independent of the encoder function.
+    const CODEWORDS: [u8; 16] = [
+        0x15, 0x02, 0x49, 0x5e, 0x64, 0x73, 0x38, 0x2f, 0xd0, 0xc7, 0x8c, 0x9b, 0xa1, 0xb6, 0xfd,
+        0xea,
+    ];
+    u8::try_from(
+        CODEWORDS
+            .iter()
+            .position(|&word| word == unit[6 + column].reverse_bits())
+            .expect("valid Hamming-protected page header"),
+    )
+    .unwrap()
+}
+
+fn decoded_header_subcode(unit: &[u8; 46]) -> u16 {
+    u16::from(decoded_header_nibble(unit, 2))
+        | (u16::from(decoded_header_nibble(unit, 3) & 7) << 4)
+        | (u16::from(decoded_header_nibble(unit, 4)) << 8)
+        | (u16::from(decoded_header_nibble(unit, 5) & 3) << 12)
+}
+
+fn carousel_cycle_headers(carousel: &mut TeletextCarousel) -> Vec<[u8; 46]> {
+    let mut headers = Vec::new();
+    loop {
+        let batch = carousel.next_batch().unwrap();
+        match batch.kind() {
+            TeletextCarouselBatchKind::Header => headers.push(batch.data_units()[0]),
+            TeletextCarouselBatchKind::Terminator => return headers,
+            TeletextCarouselBatchKind::Page => (),
+        }
+    }
+}
+
+#[test]
+fn initial_headers_erase_once_and_repetitions_retain_subcodes_and_all_other_flags() {
+    for subcode in [0, 0x15, 0x3f7e] {
+        for kind in [
+            TeletextPageKind::FullPage,
+            TeletextPageKind::Newsflash,
+            TeletextPageKind::Subtitle,
+        ] {
+            let mut page = draft(200, subcode, kind != TeletextPageKind::FullPage);
+            page.kind = kind;
+            page.national_option = TeletextNationalOption::new(3).unwrap();
+            let encoded = set(vec![page]);
+            let original = encoded.pages()[0].data_units()[0];
+            let mut carousel = TeletextCarousel::new(encoded);
+            assert_eq!(carousel_cycle_headers(&mut carousel), vec![original]);
+            assert_ne!(decoded_header_nibble(&original, 3) & 8, 0);
+            for _ in 0..3 {
+                let headers = carousel_cycle_headers(&mut carousel);
+                assert_eq!(headers.len(), 1);
+                let repeated = headers[0];
+                assert_eq!(decoded_header_nibble(&repeated, 3) & 8, 0);
+                assert_eq!(decoded_header_subcode(&repeated), subcode);
+                for index in 0..46 {
+                    if index != 9 {
+                        assert_eq!(repeated[index], original[index]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn every_subpage_erases_in_the_first_cycle_then_repeats_without_mutating_encoded_units() {
+    let encoded = set(vec![draft(200, 0, false), draft(200, 0x23, false)]);
+    let originals: Vec<_> = encoded
+        .pages()
+        .iter()
+        .map(|page| page.data_units()[0])
+        .collect();
+    let mut carousel = TeletextCarousel::new(encoded.clone());
+    assert_eq!(carousel_cycle_headers(&mut carousel), originals);
+    let repeated = carousel_cycle_headers(&mut carousel);
+    for (header, subcode) in repeated.iter().zip([0, 0x23]) {
+        assert_eq!(decoded_header_nibble(header, 3) & 8, 0);
+        assert_eq!(decoded_header_subcode(header), subcode);
+    }
+    carousel.replace_at_boundary(encoded).unwrap();
+    // Replacement resets first-cycle erasure using the same encoded value;
+    // copied repeat headers must not have mutated that retained page set.
+    assert_eq!(carousel_cycle_headers(&mut carousel), originals);
+}
+
+#[test]
+fn replacement_restarts_first_cycle_erasure_for_zero_and_nonzero_subcodes_without_clock_reset() {
+    for subcode in [0, 0x2a, 0x3f7e] {
+        let mut carousel = TeletextCarousel::new(set(vec![draft(200, subcode, false)]));
+        carousel_cycle_headers(&mut carousel);
+        carousel_cycle_headers(&mut carousel);
+        let replacement = set(vec![draft(201, subcode, false)]);
+        let expected = replacement.pages()[0].data_units()[0];
+        carousel.replace_at_boundary(replacement).unwrap();
+        let header = carousel.next_batch().unwrap();
+        assert_eq!(header.presentation_ticks(), 10_800);
+        assert_eq!(header.data_units(), &[expected]);
+        assert_ne!(decoded_header_nibble(&header.data_units()[0], 3) & 8, 0);
+        assert_eq!(decoded_header_subcode(&header.data_units()[0]), subcode);
+        assert_eq!(
+            carousel.next_batch().unwrap().kind(),
+            TeletextCarouselBatchKind::Page
+        );
+        assert_eq!(
+            carousel.next_batch().unwrap().kind(),
+            TeletextCarouselBatchKind::Terminator
+        );
+        assert_eq!(
+            decoded_header_nibble(&carousel.next_batch().unwrap().data_units()[0], 3) & 8,
+            0
+        );
+    }
 }
 
 #[test]

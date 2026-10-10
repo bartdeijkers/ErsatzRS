@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use ersatzrs_domain::TeletextPageKind;
 use mpeg2ts_reader::{
-    descriptor::UnknownDescriptor,
+    descriptor::{DescriptorIter, UnknownDescriptor},
     mpegts_crc,
     packet::Packet,
     psi::{pmt::PmtSection, SectionCommonHeader, TableSyntaxHeader},
@@ -11,7 +11,7 @@ use mpeg2ts_reader::{
 use super::{EncodedTeletextPageSet, TeletextCarouselBatch, TeletextPacketizer, TeletextTimestamp};
 
 const MAX_PMT_BYTES: usize = 1_024;
-const MAX_WINDOW_PACKETS: usize = 32_768;
+pub(super) const MAX_WINDOW_PACKETS: usize = 32_768;
 
 mpeg2ts_reader::descriptor_enum! {
     RawDescriptors {
@@ -185,6 +185,12 @@ impl TeletextPmtPlan {
         self.program
     }
 
+    /// Source PMT PID; the host must match it to the selected PAT entry.
+    #[must_use]
+    pub const fn pmt_pid(&self) -> u16 {
+        self.pmt_pid
+    }
+
     /// Source PCR PID, retained without modifying its packets.
     #[must_use]
     pub const fn pcr_pid(&self) -> u16 {
@@ -274,14 +280,14 @@ impl TeletextPmtPlan {
     }
 }
 
-fn validate_pid(pid: u16) -> Result<(), TeletextMultiplexError> {
+pub(super) fn validate_pid(pid: u16) -> Result<(), TeletextMultiplexError> {
     if !(0x20..=0x1ffe).contains(&pid) {
         return Err(TeletextMultiplexError::Pid);
     }
     Ok(())
 }
 
-fn validate_pmt(
+pub(super) fn validate_pmt(
     source: &[u8],
     pmt_pid: u16,
     pid: u16,
@@ -366,7 +372,14 @@ fn descriptors<'a>(
     Ok(length)
 }
 
-fn valid_packet(raw: &[u8; 188]) -> Result<Packet<'_>, TeletextMultiplexError> {
+pub(super) fn validate_descriptor_bytes(
+    bytes: &[u8],
+    pid: u16,
+) -> Result<(), TeletextMultiplexError> {
+    descriptors(DescriptorIter::<RawDescriptors<'_>>::new(bytes), pid).map(|_| ())
+}
+
+pub(super) fn valid_packet(raw: &[u8; 188]) -> Result<Packet<'_>, TeletextMultiplexError> {
     let packet = Packet::try_new(raw).ok_or(TeletextMultiplexError::Packet)?;
     if packet.transport_error_indicator()
         || packet.transport_scrambling_control().is_scrambled()

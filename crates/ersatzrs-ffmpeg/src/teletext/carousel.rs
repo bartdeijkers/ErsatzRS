@@ -8,7 +8,7 @@ const STEP_TICKS: u64 = 1_800;
 /// Purpose of a bounded serial-mode transmission batch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextCarouselBatchKind {
-    /// A page's erase/header, sent independently of its remaining packets.
+    /// A page header, sent independently of its remaining packets.
     Header,
     /// Ordered links, designation, enhancements and display rows.
     Page,
@@ -68,6 +68,7 @@ pub struct TeletextCarousel {
     unit: usize,
     ticks: u64,
     boundary: bool,
+    first_cycle: bool,
 }
 
 impl TeletextCarousel {
@@ -80,6 +81,7 @@ impl TeletextCarousel {
             unit: 0,
             ticks: 0,
             boundary: true,
+            first_cycle: true,
         }
     }
 
@@ -104,6 +106,7 @@ impl TeletextCarousel {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
         self.set = set;
+        self.first_cycle = true;
         Ok(())
     }
 
@@ -121,6 +124,7 @@ impl TeletextCarousel {
             self.page = 0;
             self.unit = 0;
             self.boundary = true;
+            self.first_cycle = false;
             (
                 TeletextCarouselBatchKind::Terminator,
                 vec![packets::terminator(magazine)],
@@ -130,7 +134,18 @@ impl TeletextCarousel {
             self.boundary = false;
             if self.unit == 0 {
                 self.unit = 1;
-                (TeletextCarouselBatchKind::Header, vec![units[0]])
+                let mut header = units[0];
+                if !self.first_cycle {
+                    // Repetition must not erase already acquired page content.
+                    // C4 shares this Hamming nibble with subcode bits 4..6.
+                    let low = self.set.pages()[self.page]
+                        .address()
+                        .subcode
+                        .get()
+                        .to_le_bytes()[0];
+                    header[9] = packets::hamming_8_4(low >> 4).reverse_bits();
+                }
+                (TeletextCarouselBatchKind::Header, vec![header])
             } else {
                 let end = (self.unit + MAX_BATCH_UNITS).min(units.len());
                 let batch = units[self.unit..end].to_vec();
@@ -149,5 +164,27 @@ impl TeletextCarousel {
         };
         self.ticks = next_ticks;
         Ok(batch)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::teletext::transport_tests::{draft, set};
+
+    #[test]
+    fn repeated_header_planning_preserves_the_carousels_exact_encoded_page_set() {
+        let encoded = set(vec![draft(200, 0, false), draft(200, 0x3f7e, false)]);
+        let original = encoded.clone();
+        let mut carousel = TeletextCarousel::new(encoded);
+        for _ in 0..4 {
+            loop {
+                let batch = carousel.next_batch().unwrap();
+                assert_eq!(carousel.set, original);
+                if batch.kind() == TeletextCarouselBatchKind::Terminator {
+                    break;
+                }
+            }
+        }
     }
 }

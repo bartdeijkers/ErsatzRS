@@ -4,19 +4,36 @@
 //! Encoding is not publication: carousel timing, PES/PSI/PID capacity, output
 //! ownership and client acceptance remain separate transport obligations.
 
+mod buffer;
 mod carousel;
 mod charset;
+mod clock;
 mod layout;
+mod output;
 mod packets;
+mod pmt_install;
+mod psi;
+mod psi_framing;
+mod psi_monitor;
 mod signalling;
 mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
+pub use buffer::{TeletextBufferError, TeletextPacketBuffer};
 pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatchKind};
+pub use clock::{
+    TeletextClockConfig, TeletextClockError, TeletextClockReport, TeletextClockValidator,
+};
+pub use output::{
+    TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
+};
 pub use packets::{
     encode_teletext_page, encode_teletext_page_set, EncodedTeletextPage, EncodedTeletextPageSet,
 };
+pub use pmt_install::{TeletextPmtInstallError, TeletextPmtInstallReport, TeletextPmtInstaller};
+pub use psi::{TeletextPsiDiscovery, TeletextPsiError};
+pub use psi_monitor::TeletextPsiMonitor;
 pub use signalling::{TeletextMultiplexError, TeletextPmtPlan, TeletextServiceDescriptor};
 pub use transport::{TeletextPacketizer, TeletextTimestamp, TeletextTransportError};
 
@@ -86,6 +103,16 @@ pub enum TeletextEncodingError {
     LinkSubcode { address: TeletextPageAddress },
 }
 
+#[cfg(test)]
+mod buffer_tests;
+#[cfg(test)]
+mod clock_tests;
+#[cfg(test)]
+mod pmt_install_tests;
+#[cfg(test)]
+mod psi_monitor_tests;
+#[cfg(test)]
+mod psi_tests;
 #[cfg(test)]
 mod signalling_runtime_tests;
 #[cfg(test)]
