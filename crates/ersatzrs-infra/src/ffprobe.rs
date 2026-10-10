@@ -2,6 +2,8 @@
 /// Production probe acquisition and ordinary track projection remain separate.
 pub mod teletext;
 
+mod local;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{ExitStatus, Stdio};
@@ -65,6 +67,10 @@ pub enum FfprobeError {
     Cancelled { path: String },
     #[error("ffprobe returned invalid metadata for {path}")]
     InvalidOutput { path: String },
+    #[error("local ffprobe output exceeded its size limit for {path}")]
+    OutputTooLarge { path: String },
+    #[error("local ffprobe process cleanup could not be confirmed for {path}")]
+    CleanupUnconfirmed { path: String },
 }
 
 pub type Result<T> = std::result::Result<T, FfprobeError>;
@@ -98,35 +104,17 @@ impl FfprobeExtractor {
 
     /// Run ffprobe and parse the JSON metadata for a media file.
     ///
+    /// Output is bounded without a total scan timeout. Dropping this future
+    /// requests cancellation; an independent owner awaits process-tree and
+    /// pipe cleanup. This does not retain an enclosing scanner lease on drop.
+    ///
     /// # Errors
     ///
-    /// Returns an error when ffprobe cannot start, exits unsuccessfully, or
-    /// returns invalid JSON.
+    /// Returns an error when ffprobe cannot start, exits unsuccessfully,
+    /// exceeds the output bound, cannot confirm cleanup, or returns invalid JSON.
     pub async fn extract(&self, path: impl AsRef<Path>) -> Result<FfprobeMediaVersion> {
-        let path = path.as_ref();
-        let command = self.command_for(path);
-        let mut process = Command::new(&command.program);
-        process.args(&command.args).kill_on_drop(true);
-        let output = process
-            .output()
-            .await
-            .map_err(|source| FfprobeError::Spawn {
-                path: path.display().to_string(),
-                source,
-            })?;
-
-        if !output.status.success() {
-            return Err(FfprobeError::Process {
-                path: path.display().to_string(),
-                status: output.status,
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        parse_ffprobe_json(path, &output.stdout).map_err(|source| FfprobeError::Json {
-            path: path.display().to_string(),
-            source,
-        })
+        let path = path.as_ref().to_owned();
+        local::extract(self.command_for(&path), path).await
     }
 
     /// Probe a persisted Remote Stream URL or media-producing add-on.

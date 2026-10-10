@@ -156,6 +156,17 @@ charset/region and source provenance remain unknown. Probe argv/JSON fields,
 scanner/schema/UI and ordinary audio/subtitle projection are unchanged. P9A-03
 owns focused/synthetic projection proof, bounded probe acquisition and persistent
 source/page identity; production probe integration remains open.
+Preparatory local acquisition replaces unbounded process output capture with a
+worker-owned managed process using a Unix process group or Windows JobObject.
+Stdout content has an exact 8 MiB cap; concurrent stderr draining retains a
+16 KiB raw-byte tail. These are capture bounds, not a process RSS guarantee.
+Overflow kills/reaps the process and joins readers; caller-future drop signals
+owned cleanup. Probe argv, ordinary metadata and total scan timeout policy are
+unchanged. P9A-03 records 52 passing focused infra regressions, scanner overflow
+and recovery proof, actual pinned Linux FFprobe subtitle preservation and strict
+infra/scanner Clippy. This does not retain an outer scan lease until cleanup,
+enable extra probe fields or implement teletext scans/persistence or UI; native
+Windows acceptance remains open.
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

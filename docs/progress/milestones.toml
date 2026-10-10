@@ -1182,6 +1182,28 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-10 preparatory local FFprobe ownership checkpoint: local extraction
+replaces unbounded process output capture with a worker-owned managed process,
+using a Unix process group or Windows JobObject. Stdout content has an exact
+8 MiB cap; stderr drains concurrently into a 16 KiB retained raw-byte tail.
+These bound capture, not process RSS or lossy UTF-8 string size. Overflow
+kills/reaps the process and joins readers; caller-future drop signals the worker
+to finish owned cleanup. Input argv, ordinary metadata projection and total scan
+timeout policy remain unchanged. All 52 selected infra regressions pass in
+Nextest 1ef564c7-6095-4054-84ba-5b54b49b983e: 12 new local-owner checks and 40
+existing FFprobe/descriptor regressions, including actual Linux active overflow,
+caller-drop and isolated-subreaper descendant cleanup. Scanner regression
+c854a96b-4b62-4abb-bff6-7e6a392cd71b passes: initial episode overflow publishes
+no Episode; overflow during rescan preserves four ordinary track rows and their
+IDs, invalidates the season etag and recovers cleanly. Actual extraction with
+the previously pinned Linux FFprobe 9 candidate passes the long-subtitle
+regression in Nextest 7e2eeb06-5bb5-4ae2-9698-978b23266c32, retaining one-second
+video duration and Dutch SubRip captions extending past video EOF. Strict
+all-target infra and scanner Clippy and formatting pass on unchanged source.
+Outer scan admission is not yet retained until cleanup. Additional
+show_data/show_programs output, teletext scanning/persistence and native Windows
+acceptance remain open. No milestone status, dependency or acceptance changes.
+
 2026-10-10 preparatory packed-metadata projection: the pure
 `ffprobe::teletext::project_packed_descriptors` API accepts explicitly supplied
 two-byte packed metadata or the identified n9.0 LF-wrapped base64 writer format.

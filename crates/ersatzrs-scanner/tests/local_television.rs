@@ -840,6 +840,188 @@ async fn failed_episode_scan_does_not_publish_season_etag() {
     }
 }
 
+// Synthetic shell process fixture is Unix-only. Windows process ownership is
+// covered separately by addon_process_job; native scanner acceptance stays open.
+#[cfg(unix)]
+#[tokio::test]
+async fn episode_probe_output_overflow_preserves_metadata_and_invalidates_season_etag() {
+    use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor};
+
+    let temp = tempfile::tempdir().unwrap();
+    let library = temp.path().join("library");
+    let season = library.join("Synthetic Show").join("Season 01");
+    std::fs::create_dir_all(&season).unwrap();
+    let episode = season.join("Synthetic.Show.S01E01.mkv");
+    std::fs::write(&episode, b"synthetic probe input").unwrap();
+    std::fs::write(
+        episode.with_extension("nfo"),
+        "<episodedetails><title>Complete episode</title><season>1</season><episode>1</episode></episodedetails>",
+    ).unwrap();
+    let probe = synthetic_episode_probe(temp.path()).await;
+    let mode = temp.path().join("probe-mode");
+    std::fs::write(&mode, "overflow").unwrap();
+    let failure = FfprobeExtractor::new(probe.to_string_lossy())
+        .extract(&episode)
+        .await
+        .unwrap_err();
+    assert!(matches!(failure, FfprobeError::OutputTooLarge { .. }));
+
+    let pool = test_db().await;
+    seed_local_library(&pool, &library, 2).await;
+    let mut config = LocalScanConfig {
+        deep_scan: false,
+        library_id: 1,
+        ffprobe_path: probe.to_string_lossy().into_owned(),
+    };
+    assert_overflow_scan_preserves_episode(&pool, &config, &season, None).await;
+    std::fs::write(&mode, "valid").unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    let baseline = deep_scan_projection(&pool).await;
+    assert_eq!(baseline.title, "Complete episode");
+    assert_eq!(baseline.streams.len(), 4);
+    assert_eq!(baseline.streams[1].3.as_deref(), Some("eng"));
+    assert_eq!(baseline.streams[2].1, 2);
+    assert_eq!(baseline.streams[2].3.as_deref(), Some("nld"));
+    assert_eq!(baseline.streams[3].1, 3);
+    assert_eq!(baseline.streams[3].2.as_deref(), Some("subrip"));
+    assert_eq!(baseline.streams[3].3.as_deref(), Some("nld"));
+    assert!(baseline.streams[3].6);
+    assert_eq!(baseline.subtitles.len(), 1);
+    let ids = episode_track_row_ids(&pool).await;
+    let etag = season_etag(&pool, &season).await.unwrap();
+
+    // The mode file is outside the library: unchanged media and NFO bytes must
+    // still become retryable after a failed explicit deep scan.
+    std::fs::write(&mode, "overflow").unwrap();
+    config.deep_scan = true;
+    assert_overflow_scan_preserves_episode(&pool, &config, &season, Some(&baseline)).await;
+    assert_eq!(episode_track_row_ids(&pool).await, ids);
+    config.deep_scan = false;
+    assert_overflow_scan_preserves_episode(&pool, &config, &season, Some(&baseline)).await;
+    assert_eq!(episode_track_row_ids(&pool).await, ids);
+
+    std::fs::write(&mode, "valid").unwrap();
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    assert_eq!(deep_scan_projection(&pool).await, baseline);
+    assert_eq!(
+        season_etag(&pool, &season).await.as_deref(),
+        Some(etag.as_str())
+    );
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    pool.close().await;
+}
+
+#[cfg(unix)]
+async fn assert_overflow_scan_preserves_episode(
+    pool: &SqlitePool,
+    config: &LocalScanConfig,
+    season: &Path,
+    baseline: Option<&DeepScanProjection>,
+) {
+    assert_eq!(
+        scan_local_library(pool, config)
+            .await
+            .unwrap()
+            .scanned_files,
+        0
+    );
+    assert_eq!(season_etag(pool, season).await, None);
+    if let Some(baseline) = baseline {
+        assert_eq!(&deep_scan_projection(pool).await, baseline);
+    } else {
+        for table in [
+            "Episode",
+            "EpisodeMetadata",
+            "MediaVersion",
+            "MediaFile",
+            "MediaStream",
+            "Subtitle",
+        ] {
+            assert_eq!(
+                count(pool, table).await,
+                0,
+                "failed probe published {table}"
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+async fn episode_track_row_ids(pool: &SqlitePool) -> (Vec<i64>, Vec<i64>) {
+    let streams = sqlx::query_scalar(r#"SELECT "Id" FROM "MediaStream" ORDER BY "Id""#)
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    let subtitles = sqlx::query_scalar(r#"SELECT "Id" FROM "Subtitle" ORDER BY "Id""#)
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    (streams, subtitles)
+}
+
+#[cfg(unix)]
+async fn synthetic_episode_probe(root: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let metadata = serde_json::json!({
+        "format": {"duration": "60.0", "format_name": "matroska"},
+        "streams": [
+            {"index": 0, "codec_type": "video", "codec_name": "h264",
+             "width": 160, "height": 90, "r_frame_rate": "25/1"},
+            {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2,
+             "tags": {"language": "eng"}, "disposition": {"default": 1, "forced": 0}},
+            {"index": 2, "codec_type": "audio", "codec_name": "aac", "channels": 2,
+             "tags": {"language": "nld"}, "disposition": {"default": 0, "forced": 0}},
+            {"index": 3, "codec_type": "subtitle", "codec_name": "subrip",
+             "tags": {"language": "nld"}, "disposition": {"default": 0, "forced": 1}}
+        ]
+    });
+    tokio::fs::write(
+        root.join("probe-metadata.json"),
+        serde_json::to_vec(&metadata).unwrap(),
+    )
+    .await
+    .unwrap();
+    let executable = root.join("synthetic-episode-probe.sh");
+    tokio::fs::write(
+        &executable,
+        r#"#!/bin/sh
+set -eu
+probe_root=$(dirname "$0")
+if [ "$(cat "$probe_root/probe-mode")" = overflow ]; then
+    # One byte beyond the production eight-MiB stdout bound.
+    head -c 8388609 /dev/zero
+else
+    cat "$probe_root/probe-metadata.json"
+fi
+"#,
+    )
+    .await
+    .unwrap();
+    tokio::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
+        .await
+        .unwrap();
+    executable
+}
+
 async fn season_etag(pool: &SqlitePool, season: &Path) -> Option<String> {
     sqlx::query_scalar(r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
         .bind(season.to_string_lossy().as_ref())

@@ -1219,9 +1219,16 @@ addresses, distinguishing missing, unusable and usable-prefix outcomes. Its
 1,024-entry bound is resource policy; trailing pairs may be stale after FFmpeg
 descriptor shrink, and equal counts do not prove complete page inventory.
 Forty selected FFprobe regressions, exact synthetic projection proof and strict
-infra Clippy pass. Next add bounded local probe acquisition before enabling
-additional FFprobe output, then persistent source/page provenance, keeping
-observed pages and unknown subcode/charset/region distinct.
+infra Clippy pass. Preparatory local probe acquisition now uses worker-owned
+managed processes, an exact 8 MiB stdout content cap and a concurrent 16 KiB
+retained raw-byte stderr tail, with overflow reaping/reader joins and caller-drop
+cleanup signalling. P9A-03 records 52 passing infra regressions, scanner overflow
+and recovery, actual pinned Linux FFprobe subtitle preservation and strict
+infra/scanner Clippy. Outer scan leases are not yet held through cleanup; total
+scan timeout policy is unchanged. Next close that ownership gap before enabling
+additional FFprobe output, then persist
+source/page provenance, keeping observed pages and unknown subcode/charset/region
+distinct. Native Windows acceptance remains open.
 Probe argv/JSON fields, scanner/schema/UI and ordinary track projection are
 unchanged; stale-state invalidation and source selection remain open.
 Full routed source captions/alternate audio, compatible continuous

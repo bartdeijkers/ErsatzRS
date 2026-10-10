@@ -90,6 +90,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Bound local FFprobe stdout content to 8 MiB while concurrently retaining a
+  16 KiB raw diagnostic tail from stderr. Reject overflow and keep process
+  cleanup owned after cancellation, preserving existing probe arguments and
+  ordinary track metadata.
 - Preserve every incoming stream and its language metadata through the legacy
   MPEG-TS channel wrapper, including alternate audio and DVB teletext subtitles.
   Keep source stream metadata separate from channel service metadata.
