@@ -14,7 +14,7 @@ use mpeg2ts_reader::pes::Timestamp;
 use super::TeletextTimestamp;
 
 // Largest multiple of 184 fitting the nonzero 16-bit PES length plus six bytes.
-const MAX_PES_BYTES: usize = 65_504;
+pub(super) const MAX_PES_BYTES: usize = 65_504;
 const PAYLOAD_START: usize = 46;
 
 /// Static framing failures, without retaining supplied bytes in errors.

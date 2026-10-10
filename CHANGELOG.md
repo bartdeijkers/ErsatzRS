@@ -76,11 +76,12 @@ release section when tagging a release.
   unit classification. Distinguish non-headers, termination and invalid metadata;
   complete source acquisition, character-set context and page readiness remain
   pending.
-- Prepare a borrowed, bounded view of one supplied teletext PES packet with
-  exact framing and optional PTS validation before exposing data units. The
-  supported header profile does not establish source acquisition, PSI conformity,
-  complete pages, character sets or readiness; unsupported optional headers
-  remain explicit.
+- Prepare bounded assembly on one explicitly selected teletext PID and a borrowed
+  view of each complete supplied PES, checking continuity, exact duplicates,
+  finite truncation, framing and optional PTS before exposing data units.
+  Supported transport/header profiles remain explicit; these checks do not
+  establish source acquisition, PSI conformity, complete pages, character sets
+  or readiness.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

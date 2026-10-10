@@ -248,6 +248,22 @@ does not assemble TS, validate protected headers/text, acquire pages or alter
 stored `NotAcquired` state. Header observations still use the separate checked
 unit parser. The packet limits and timing distinction follow
 [EN 300 472 §§4.2–4.4, §5 and annex A](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf#page=8).
+A bounded `source_assembly::SuppliedTeletextAssembler` accepts supplied TS188
+packets for one caller-selected elementary PID. It retains at most one PES and
+one previous payload packet, emitting a borrowed view only after complete PES
+validation. Selected-PID continuity, exact duplicates and finite truncation are
+checked; unexpected starts, gaps, discontinuity or malformed data fence the
+instance. An initially unobserved PES prefix remains explicit. Other PID data
+does not acquire assembly state; only sync is checked globally. The supported
+strict DVB transport profile permits payload-only or adaptation-only packets,
+not combined adaptation/payload packets; generic remux output needs separate
+support and proof. Adaptation-only continuity is checked, without interpreting
+optional PCR/OPCR/extension contents or establishing clock validity. Byte-tail
+framing, source discovery, acquisition deadlines and immutable source identity
+remain caller obligations; successful finite closure never proves an absent or
+complete page inventory. The selected PID is not certified by PSI ownership.
+This supported transport restriction follows
+[EN 300 472 §4.1](https://www.etsi.org/deliver/etsi_en/300400_300499/300472/01.04.01_60/en_300472v010401p.pdf#page=8).
 Automatic publication selection, rate/retention policy,
 refresh/publication and live channel acceptance remain open. These drafts do not freeze the
 versioned add-on schema or establish generation publication or production

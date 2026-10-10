@@ -1,8 +1,9 @@
 //! Authored packet coding and supplied source metadata (EN 300 706/472, ADR 0121).
 //!
 //! Encoding accepts host domain drafts, not raw add-on transport bytes.
-//! `source_pes` bounds one supplied PES; `source_header` reports one supplied DVB
-//! unit. Neither establishes acquisition or page readiness, nor grants
+//! `source_assembly` bounds supplied TS packets on one explicit PID; `source_pes`
+//! checks one complete PES and `source_header` reports one supplied DVB unit.
+//! These establish neither acquisition nor page readiness, nor grant
 //! publication: carousel timing, PES/PSI/PID capacity,
 //! output ownership and client acceptance remain separate transport obligations.
 
@@ -18,6 +19,7 @@ mod psi;
 mod psi_framing;
 mod psi_monitor;
 mod signalling;
+pub mod source_assembly;
 pub mod source_header;
 pub mod source_pes;
 mod transport;
