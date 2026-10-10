@@ -184,6 +184,12 @@ remains on the final wrapper while plain internal responses reopen A, B and A.
 Decoded video and both English/Dutch audio tracks must contain both programmes;
 distinct source captions on page 888 and authored page 200 must remain readable.
 Clock and TSDuck checks cover PCR rate, PSI/PIDs, language, PES and continuity.
+The independent audio-tone oracle uses a 32 KiB input probe after full
+audiovisual inspection. Default audio-only probing stalls the exact Windows
+FFmpeg candidate on the finite synthetic pipe under WSL interoperability;
+the bounded probe preserves raw PCM decoding, both tracks, one-second tone
+requirements, output limits and the existing process deadline. This changes
+only the fixture, not production input probing or native-platform acceptance.
 The fixture retains the production input readrate. Host pacing reads bounded
 lookahead from the same stdout during packet waits, writes and flushes; raw and
 pending bytes share capacity and retain their first-arrival age. Sink deadlines

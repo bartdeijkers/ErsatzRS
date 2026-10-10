@@ -1198,11 +1198,12 @@ admits first-packet startup reset markers only in a fresh output epoch. Its
 paced pump reads bounded stdout lookahead during delivery without resetting
 ages, relaxing deadlines or adding tasks. All 705 selected Rust regressions
 pass on the Linux host. The real FFmpeg A/B/A wrapper fixture passes on Linux
-x64 and emulated ARM64/ARMv7; Windows interop reaches wrapper/frame checks but
-its PCM probe times out. Full routed
+x64 and emulated ARM64/ARMv7; the complete Windows FFmpeg interop case now
+passes after bounding only the fixture's independent audio input probe. Raw
+PCM, both tracks, tone criteria and tool deadlines remain unchanged. Full routed
 item/source selection, capacity-slate topology/ownership and native platform
 acceptance remain open. Next implement compatible slate/programme handover and
-automatic publication selection; resolve the Windows PCM probe separately.
+automatic publication selection; native Windows host acceptance remains open.
 Production policy,
 refresh/publication and live source/output acceptance remain open. P9A-04
 acceptance and its P9A-02/03 prerequisites are unchanged.

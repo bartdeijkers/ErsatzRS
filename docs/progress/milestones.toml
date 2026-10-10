@@ -1212,6 +1212,22 @@ checks pass before the production add-on begins. A preview alone is not
 teletext carriage proof.
 '''
 evidence = '''
+2026-10-10 bounded decoder-oracle follow-up to the final-wrapper checkpoint:
+Windows FFmpeg interop now passes the complete A/B/A wrapper fixture in Nextest
+b5632a18-0a45-4b9b-a9ee-3583dfcf32b2 (17.173 seconds). The exact captured finite
+transport reproduced the audio-only probing stall outside Tokio. A 32 KiB
+input probe resolves it without changing raw PCM conversion, either audio
+track, one-second tone criteria, output bounds or the 15-second tool deadline.
+The same frozen fixture passes on Linux x64
+(e8ddb776-0b07-4521-a7bc-41abf110979c, 6.991 seconds), ARM64 under QEMU
+(468002de-5576-498c-ba44-8233e19622fa, 12.987 seconds) and ARMv7 under QEMU
+(dd79cb73-b219-4db9-b314-55ddd28d211c, 13.661 seconds). Candidate identities
+remain the exact v2.0.6 package hashes already recorded below. Full audiovisual
+inspection precedes this independent tone oracle. Only the fixture's probe
+configuration changes; production code is unchanged. This is
+interop fixture proof, not native Windows host acceptance. Milestone status,
+dependencies and acceptance remain unchanged.
+
 2026-10-10 final legacy-wrapper checkpoint after 202acdc1 and ded9f3dc:
 the production concat command explicitly maps every incoming stream and keeps
 channel metadata separate from copied stream metadata, preserving source

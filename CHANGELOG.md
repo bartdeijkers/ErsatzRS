@@ -45,8 +45,9 @@ release section when tagging a release.
   refill between writes and drain validated short-source EOF. Enforce first-byte,
   idle-source and sink deadlines, and retain cleanup uncertainty through startup
   and hardware retries. Reject incompatible rate, holding or allocation policies.
-  Synthetic multi-program audiovisual tests
-  preserve programme packets and decoded frames/timestamps; live channel
+  Synthetic multi-program and real looping-wrapper audiovisual tests preserve
+  programme packets, incoming audio languages, source captions and decoded
+  frames/timestamps; live channel
   publication selection, slate/programme handover and generation publication
   remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder

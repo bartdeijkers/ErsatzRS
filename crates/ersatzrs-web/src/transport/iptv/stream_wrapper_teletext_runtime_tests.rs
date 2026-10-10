@@ -490,6 +490,9 @@ async fn verify_programme_content(ffmpeg: &str, sources: &[Arc<[u8]>; 2], output
 
 async fn verify_decoded_tones(ffmpeg: &str, bytes: &[u8], audio: usize, tones: &[usize]) {
     let mapping = format!("0:a:{audio}");
+    // This synthetic transport has already passed full AV/PSI inspection.
+    // Bound audio-only input probing: default probing stalls the exact Windows
+    // runtime on this finite pipe before PCM output, independently of Tokio.
     let pcm = probe(
         ffmpeg,
         &[
@@ -497,6 +500,8 @@ async fn verify_decoded_tones(ffmpeg: &str, bytes: &[u8], audio: usize, tones: &
             "-loglevel",
             "error",
             "-nostdin",
+            "-probesize",
+            "32768",
             "-f",
             "mpegts",
             "-i",
