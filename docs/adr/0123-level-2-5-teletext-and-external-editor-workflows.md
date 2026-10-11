@@ -694,6 +694,15 @@ ownership and stale-selection fences still belong to the application boundary.
 This composition step remains unimplemented; a standalone semantic service does
 not establish multi-producer publication or profile acceptance.
 
+A preparatory strict v2 response DTO and direct application conversion now retain
+the mandatory base fallback and original enhanced declarations. The application
+authenticates supplied resolved assertions through the existing bounded semantic
+and declared service constructors. It returns an unpublished checked service,
+without encoding, activation, channel composition or publication authority.
+The [interchange reference](../reference/teletext-design-interchange.md#preparatory-v2-authored-input)
+owns its exact shape and remaining integration boundaries. The following
+installed-version negotiation and operational preparation requirements remain open.
+
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;
 its response uses version 2 for the enhanced document. Give v1 request/response
@@ -714,7 +723,7 @@ validation enforce the selected version; response contents cannot negotiate it.
 Existing payload/time/service budgets remain host resource policy, not claims
 about normative teletext limits. Enhanced validation must bound resource counts,
 dependency traversal, object expansion and encoded output before publication.
-The full enhanced aggregate and encoder implementation remain separate work.
+Channel-aggregate compilation and operational integration remain separate work.
 
 ### External editing, drafts and publication
 

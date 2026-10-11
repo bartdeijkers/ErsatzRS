@@ -1124,6 +1124,11 @@ historical evidence, not CI proof for this working tree. After AMM-N-03 is done
 and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
 Continue Phase 9A at reopened p9a-01 for the 2026-10-11 authorized expansion.
+Preparatory v2 response parsing and direct bounded conversion now authenticate
+original declarations into an unpublished service. Finish pinned installed-version
+selection, exact v2 request/receipt checks and native candidate preparation next;
+resolve producer inheritance before channel composition. No activation or
+publication authority follows from this input checkpoint.
 Owned service candidates now authenticate actual MOT/X27 selections, all original
 sparse defaults and advertised resource subpages, including empty companions.
 One actual MOT bank per magazine binds every display subcode; original POP

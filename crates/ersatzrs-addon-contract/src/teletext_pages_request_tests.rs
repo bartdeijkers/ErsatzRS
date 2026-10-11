@@ -50,7 +50,7 @@ fn channel() -> TeletextGuideChannelWire {
 
 fn request() -> TeletextPagesRequest {
     TeletextPagesRequest {
-        schema_version: TELETEXT_PAGES_SCHEMA_VERSION,
+        schema_version: TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION,
         generation: "Opaque generation".to_owned(),
         locale: "nl-NL".to_owned(),
         timezone: "Europe/Amsterdam".to_owned(),

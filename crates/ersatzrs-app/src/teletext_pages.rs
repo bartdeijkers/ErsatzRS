@@ -53,7 +53,7 @@ pub fn parse_page_set(
     Ok(draft)
 }
 
-fn convert_page(
+pub(super) fn convert_page(
     page: wire::TeletextPageDraftWire,
 ) -> Result<TeletextPageDraft, TeletextValueError> {
     Ok(TeletextPageDraft {

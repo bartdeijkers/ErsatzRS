@@ -18,6 +18,8 @@ mod remote_stream_retained_play;
 pub use remote_stream_retained_play::*;
 mod teletext_pages;
 pub use teletext_pages::*;
+mod teletext_pages_v2;
+pub use teletext_pages_v2::*;
 mod tool_update;
 pub use tool_update::*;
 

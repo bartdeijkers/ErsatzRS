@@ -145,7 +145,10 @@ release section when tagging a release.
   content and modulo-eight counters, preserving pending candidates, retired owners
   and legacy-page reuse without advancing history on rejection. Independent
   warm-cache DRCS decoding now verifies changed and unchanged complete generations,
-  exact glyph pixels and counter wraparound. Durable restart and broader client
+  exact glyph pixels and counter wraparound. Add strict unpublished v2 authored
+  input with mandatory fallback, original resource/presentation declarations,
+  trusted work budgets and authenticated resolved assertions; installed negotiation
+  and live preparation remain open. Durable restart and broader client
   acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all

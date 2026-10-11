@@ -12,12 +12,18 @@ use serde::{Deserialize, Deserializer, Serialize};
 #[path = "teletext_pages_json.rs"]
 mod json;
 
+pub(crate) fn reject_duplicate_keys(bytes: &[u8]) -> Result<(), TeletextPagesError> {
+    json::reject_duplicate_keys(bytes)
+}
+
 #[path = "teletext_pages_request.rs"]
 mod request;
 pub use request::*;
 
-/// Explicit response schema version; not a manifest or capability activation.
-pub const TELETEXT_PAGES_SCHEMA_VERSION: u32 = 1;
+/// Explicit v1 response version, independent of request and future contracts.
+pub const TELETEXT_PAGES_V1_RESPONSE_SCHEMA_VERSION: u32 = 1;
+/// Existing v1 name retained for callers; not a capability negotiation value.
+pub const TELETEXT_PAGES_SCHEMA_VERSION: u32 = TELETEXT_PAGES_V1_RESPONSE_SCHEMA_VERSION;
 /// Maximum raw response bytes, including JSON syntax and trailing whitespace.
 pub const MAX_TELETEXT_PAGES_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Resource policy for a byte-exact opaque host correlation value, not a DVB limit.
@@ -80,7 +86,7 @@ impl TeletextPagesResponse {
         json::reject_duplicate_keys(bytes)?;
         let response: Self =
             serde_json::from_slice(bytes).map_err(|_| TeletextPagesError::InvalidJson)?;
-        if response.schema_version != TELETEXT_PAGES_SCHEMA_VERSION {
+        if response.schema_version != TELETEXT_PAGES_V1_RESPONSE_SCHEMA_VERSION {
             return Err(TeletextPagesError::UnsupportedSchema);
         }
         if !valid_generation(expected_generation) || !valid_generation(&response.generation) {

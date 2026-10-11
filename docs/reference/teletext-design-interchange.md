@@ -3081,6 +3081,51 @@ Mixed-version producers receive identical guide values with their selected
 request version; v1 contributes base pages without enhancement loss. Semantic
 resource identities remain separate from compiler-owned physical header fields.
 
+### Preparatory v2 authored input
+
+The independent addon-contract `TeletextPagesV2Response` and application
+`teletext_pages_v2::parse_declared_service` now provide a preparatory unpublished
+input path. Mandatory base `pages` reuse the unchanged v1 DTO/conversion. The
+additional required collections are `page_enhancements`, `magazines`, `objects`,
+`drcs`, `mots`, `mot_selections` and `empty_object_pages`.
+Every enhanced object or tagged variant is a closed map; assigned scalar enums
+are strings. Missing nullable fields are rejected. In particular, `local_program:
+null` and `local_program: {"commands": []}` remain different authored inputs.
+
+Raw resource pages use `{ "magazine": 2, "page": 192 }` for 2C0, independently
+of decimal display page numbers. Resource `subpage` is logical S1, never a full
+physical header subcode. Local objects retain exact display page/subcode owners;
+Public/Global objects retain purpose, resource address, logical S1 and semantic
+object ID. The input preserves original charset aliases, command order, palette
+components, panel fields, monochrome DRCS bitmaps, X27 masks/FF magazines and
+complete MOT banks/associations/defaults, including inactive raw selector bytes.
+
+The parser retains the existing 8 MiB raw response cap and exact bounded
+generation echo. Each original top-level collection is limited to 1024 records;
+base pages require 1–1024. Metadata is not counted as additional base pages, and
+duplicates cannot evade collection limits. Duplicate JSON keys, trailing input
+and excessive nesting reject before a typed result escapes. These are host wire
+limits, not normative teletext limits or bounds on process RSS.
+
+Conversion receives separate trusted semantic/declaration budgets, accounts for
+original content/commands before converted collections or domain indexes, and
+uses direct checked constructors. It then calls
+`TeletextSemanticService::new_with_object_companions` and
+`TeletextDeclaredService::new`. Supplied resolved links, defaults and MOT
+selections are checked assertions, never overrides of actual declarations.
+Failures return numeric collection/command locations or existing typed
+semantic/declaration diagnostics without authored text or correlation values.
+No partial service, v1 retry, physical pointer/update choice or publication
+identity is returned.
+
+Independent v1 request/response version constants retain value 1, with the
+original shared name preserved for callers. Installed highest-version selection,
+v2 requests/environment/receipts, native candidate preparation, per-producer
+resolution before channel composition, durable drafts/editor interchange and
+explicit publication remain open. This input path does not activate packages,
+change live output or establish complete engine/client acceptance. P9A-01 owns
+the current verification evidence.
+
 ## Planned validation and evidence sequence
 
 The same application functions serve admin and structured agent workflows:

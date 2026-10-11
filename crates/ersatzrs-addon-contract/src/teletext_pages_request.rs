@@ -11,7 +11,10 @@ use std::io::{self, Write};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::{MAX_TELETEXT_PAGES_GENERATION_BYTES, TELETEXT_PAGES_SCHEMA_VERSION};
+use super::MAX_TELETEXT_PAGES_GENERATION_BYTES;
+
+/// Explicit v1 request version; its guide shape and bounds remain unchanged.
+pub const TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION: u32 = 1;
 
 /// Maximum complete request bytes, including JSON syntax and whitespace.
 pub const MAX_TELETEXT_PAGES_INPUT_BYTES: usize = 4 * 1024 * 1024;
@@ -109,7 +112,7 @@ impl TeletextPagesRequest {
     }
 
     fn validate_wire_bounds(&self) -> Result<(), TeletextPagesRequestError> {
-        if self.schema_version != TELETEXT_PAGES_SCHEMA_VERSION {
+        if self.schema_version != TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION {
             return Err(TeletextPagesRequestError::UnsupportedSchema);
         }
         if self.generation.is_empty() || self.generation.len() > MAX_TELETEXT_PAGES_GENERATION_BYTES

@@ -76,6 +76,12 @@ model foundation. Bounded effective-program traversal collects transitive DRCS
 references and checks primary/X26 pair and invocation limits. Presentation
 declarations and the explicitly resolved semantic service retain page/magazine
 presence, panels and default suppression while checking aggregate dependencies.
+Preparatory strict v2 response parsing now retains complete original declarations
+and converts them directly into an authenticated unpublished service with trusted
+host budgets. It preserves the 1024-page fallback capacity independently of
+metadata. Installed negotiation/receipts, v2 native candidate preparation and
+producer-isolated channel composition remain open; see the
+[input reference](../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input).
 The presentation packet-body encoder and bounded v1 lift preserve explicit
 page/X26 presence and unchanged v1 bytes. Full mixed-v1/v2 compiler convergence
 remains open. Checked X27/4 declarations and body coding preserve masks,

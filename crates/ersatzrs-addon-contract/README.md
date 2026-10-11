@@ -56,6 +56,24 @@ Legacy manifests and frozen `media-list.import.v1` and
 supported option capability gets no option controls and receives no option
 values.
 
+## Preparatory authored teletext
+
+`TeletextPagesV2Response::from_json` parses the unpublished enhanced document
+specified by [ADR 0123](../../docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md).
+Mandatory base `pages` retain the v1 shape. Required additional collections are
+`page_enhancements`, `magazines`, `objects`, `drcs`, `mots`, `mot_selections`
+and `empty_object_pages`; empty collections and explicit nulls remain explicit.
+Enhanced objects/variants are maps, and assigned scalar enums are strings.
+
+The response retains actual X28/M29/X27/MOT declarations and supplied resolved
+assertions, exact display subcodes, logical resource S1, ordered commands and
+original charset aliases. It contains no physical pointer slots, update counters,
+host budgets or publication authority. The application authenticates declarations
+through the existing bounded domain service constructors before encoding.
+See the [interchange reference](../../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input)
+for bounds, conversion and remaining operational work. This parser does not
+activate v2 packages or replace the installed v1 invocation workflow.
+
 ## Interval metadata
 
 `media-list.interval-metadata.v1` invokes `interval-metadata` with source and
