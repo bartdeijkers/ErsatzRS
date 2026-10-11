@@ -28,6 +28,7 @@ const C: &str = "org.example.c";
 
 fn binding(addon: &str, profile_id: i64) -> TeletextSelectionSnapshot {
     TeletextSelectionSnapshot {
+        contract: ersatzrs_domain::TeletextPageContract::V1,
         channel_id: 9,
         addon_id: addon.to_owned(),
         binding_revision: 2,
@@ -344,7 +345,7 @@ async fn invalid_guide_and_unavailable_selection_do_not_invoke_runtime() {
 
 #[tokio::test]
 async fn mixed_or_forged_later_receipt_never_returns_an_aggregate() {
-    for change in 0..3 {
+    for change in 0..4 {
         let repo = Repository::two();
         let result = prepare_with_ports(
             &repo,
@@ -358,6 +359,7 @@ async fn mixed_or_forged_later_receipt_never_returns_an_aggregate() {
                     match change {
                         0 => receipt.selection = binding(A, 1),
                         1 => receipt.selection.effective_settings.clear(),
+                        2 => receipt.selection.contract = ersatzrs_domain::TeletextPageContract::V2,
                         _ => receipt.generation = "wrong".to_owned(),
                     }
                 }
@@ -482,7 +484,7 @@ async fn late_failure_or_malformed_response_is_atomic_and_preserves_cleanup_unce
 
 #[tokio::test]
 async fn final_whole_snapshot_catches_early_producer_edits_and_enabled_membership_changes() {
-    for change in 0..4 {
+    for change in 0..5 {
         let repo = Repository::two();
         let result = prepare_with_ports(
             &repo,
@@ -498,7 +500,11 @@ async fn final_whole_snapshot_catches_early_producer_edits_and_enabled_membershi
                             snapshot.bindings.remove(0);
                         }
                         2 => snapshot.bindings.push(binding(C, 3)),
-                        _ => snapshot.bindings[0].effective_settings.clear(),
+                        3 => snapshot.bindings[0].effective_settings.clear(),
+                        _ => {
+                            snapshot.bindings[0].contract =
+                                ersatzrs_domain::TeletextPageContract::V2;
+                        }
                     }
                 }
                 async move { Ok(basic(selection)) }
@@ -599,4 +605,27 @@ async fn prepared_debug_redacts_generation_and_effective_setting_values() {
     let debug = format!("{prepared:?}");
     assert!(!debug.contains(GENERATION));
     assert!(!debug.contains("private theme text"));
+}
+
+#[tokio::test]
+async fn any_authored_binding_rejects_base_composition_before_the_first_producer() {
+    for authored_index in 0..2 {
+        let repo = Repository::two();
+        repo.selection.lock().unwrap().bindings[authored_index].contract =
+            ersatzrs_domain::TeletextPageContract::V2;
+        let result = prepare_with_ports(
+            &repo,
+            9,
+            Some(A),
+            &context(),
+            |_, _, _| async { panic!("no producer may run before complete contract admission") },
+            Instant::now,
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ChannelTeletextPagesError::EnhancedCompositionRequired)
+        ));
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+    }
 }

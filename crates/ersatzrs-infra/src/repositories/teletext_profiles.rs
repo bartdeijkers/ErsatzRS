@@ -392,6 +392,9 @@ async fn selection_for_binding(
     let effective_settings = configuration
         .effective_settings
         .ok_or_else(|| decode_error("effective settings missing"))?;
+    let contract = configuration
+        .contract
+        .ok_or_else(|| decode_error("teletext contract missing"))?;
     Ok(M::Saved(TeletextSelectionSnapshot {
         channel_id: binding.channel_id,
         addon_id: binding.addon_id.clone(),
@@ -400,6 +403,7 @@ async fn selection_for_binding(
         profile_revision: profile.revision,
         installation: profile.validated_installation,
         effective_settings,
+        contract,
     }))
 }
 

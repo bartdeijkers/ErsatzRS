@@ -86,6 +86,62 @@ mod unix {
     }
 
     #[tokio::test]
+    async fn selected_v2_command_enforces_schema_and_replaces_supplied_capability() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut request = TeletextPagesRequest::from_json(&request_bytes()).unwrap();
+        request.schema_version = 2;
+        let input = serde_json::to_vec(&request).unwrap();
+        let mut supplied = command(
+            temp.path(),
+            "test \"$ERSATZRS_ADDON_CAPABILITY\" = teletext.pages.v2 || exit 9; exec cat",
+        );
+        supplied.environment.insert(
+            "ERSATZRS_ADDON_CAPABILITY".to_owned(),
+            "teletext.pages.v1".to_owned(),
+        );
+        assert_eq!(
+            run_with_contract_deadline(
+                supplied,
+                input.clone(),
+                None,
+                Instant::now() + EXECUTION_TIMEOUT,
+                TeletextPageContract::V2,
+            )
+            .await
+            .unwrap(),
+            input
+        );
+    }
+
+    #[tokio::test]
+    async fn selected_schema_mismatch_rejects_before_spawn_in_both_directions() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("not-started");
+        let mut supplied = command(temp.path(), "printf started > \"$1\"");
+        supplied.args.push(marker.to_string_lossy().into_owned());
+        for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
+            let mut request = TeletextPagesRequest::from_json(&request_bytes()).unwrap();
+            request.schema_version = if contract == TeletextPageContract::V1 {
+                2
+            } else {
+                1
+            };
+            assert_eq!(
+                run_with_contract_deadline(
+                    supplied.clone(),
+                    serde_json::to_vec(&request).unwrap(),
+                    None,
+                    Instant::now() + EXECUTION_TIMEOUT,
+                    contract,
+                )
+                .await,
+                Err(TeletextCommandError::InvalidRequest)
+            );
+            assert!(!marker.exists());
+        }
+    }
+
+    #[tokio::test]
     async fn invalid_or_oversize_input_is_rejected_before_spawn() {
         let temp = tempfile::tempdir().unwrap();
         let marker = temp.path().join("not-started");

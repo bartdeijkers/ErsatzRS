@@ -91,6 +91,8 @@ pub enum ChannelTeletextPagesError {
     EntryAddonNotSelected,
     #[error("teletext channel selection exceeds its binding limit")]
     BindingCount,
+    #[error("selected teletext contract requires authored channel composition")]
+    EnhancedCompositionRequired,
     #[error("teletext channel preparation exceeded its shared deadline")]
     TimedOut,
     #[error(transparent)]
@@ -164,6 +166,13 @@ where
     check_deadline(now(), deadline)?;
     if selection.bindings.len() > MAX_TELETEXT_PAGE_RECORDS {
         return Err(ChannelTeletextPagesError::BindingCount);
+    }
+    if selection
+        .bindings
+        .iter()
+        .any(|binding| binding.contract != ersatzrs_domain::TeletextPageContract::V1)
+    {
+        return Err(ChannelTeletextPagesError::EnhancedCompositionRequired);
     }
     let entry = select_entry(&selection, entry_addon_id)?;
     let mut aggregate = None;

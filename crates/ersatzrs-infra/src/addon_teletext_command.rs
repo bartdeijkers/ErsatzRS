@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
+use ersatzrs_domain::TeletextPageContract;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     sync::oneshot,
@@ -46,7 +47,7 @@ pub enum TeletextCommandError {
     CleanupUnconfirmed,
 }
 
-/// Execute an already resolved host command with one strict bounded guide request.
+/// Execute an already resolved host command with one strict bounded v1 guide request.
 ///
 /// The absolute 30-second deadline begins when first polled, includes preflight,
 /// stdin and complete process/output handling, and never restarts between stages.
@@ -83,15 +84,42 @@ pub(super) async fn run_with_deadline(
     cancellation: Option<oneshot::Receiver<()>>,
     deadline: Instant,
 ) -> Result<Vec<u8>, TeletextCommandError> {
+    run_with_contract_deadline(
+        command,
+        input,
+        cancellation,
+        deadline,
+        TeletextPageContract::V1,
+    )
+    .await
+}
+
+/// Execute only the contract already selected by the host's profile snapshot.
+/// Neither request nor response contents negotiate a different capability.
+pub(super) async fn run_with_contract_deadline(
+    command: ResolvedAddonCommand,
+    input: Vec<u8>,
+    cancellation: Option<oneshot::Receiver<()>>,
+    deadline: Instant,
+    contract: TeletextPageContract,
+) -> Result<Vec<u8>, TeletextCommandError> {
     if input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES
-        || TeletextPagesRequest::from_json(&input).is_err()
+        || TeletextPagesRequest::from_json_for_schema(&input, contract.schema_version()).is_err()
     {
         return Err(TeletextCommandError::InvalidRequest);
     }
     let (response, result) = oneshot::channel();
     tokio::spawn(async move {
         let mut response = response;
-        let outcome = run_owned(command, input, cancellation, deadline, &mut response).await;
+        let outcome = run_owned(
+            command,
+            input,
+            cancellation,
+            deadline,
+            contract,
+            &mut response,
+        )
+        .await;
         let _ = response.send(outcome);
     });
     result
@@ -180,6 +208,7 @@ async fn run_owned(
     input: Vec<u8>,
     mut cancellation: Option<oneshot::Receiver<()>>,
     deadline: Instant,
+    contract: TeletextPageContract,
     response: &mut CommandResponse,
 ) -> Result<Vec<u8>, TeletextCommandError> {
     if response.is_closed() || cancellation_requested(&mut cancellation) {
@@ -190,7 +219,7 @@ async fn run_owned(
     }
     command.environment.insert(
         "ERSATZRS_ADDON_CAPABILITY".to_owned(),
-        "teletext.pages.v1".to_owned(),
+        contract.capability().to_owned(),
     );
     let mut child = tool_execution::spawn_bounded_addon_process(
         &command,

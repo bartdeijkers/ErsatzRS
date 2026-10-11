@@ -701,7 +701,13 @@ and declared service constructors. It returns an unpublished checked service,
 without encoding, activation, channel composition or publication authority.
 The [interchange reference](../reference/teletext-design-interchange.md#preparatory-v2-authored-input)
 owns its exact shape and remaining integration boundaries. The following
-installed-version negotiation and operational preparation requirements remain open.
+operational authored preparation requirements remain open. Installed profile
+selection now pins the highest declared supported contract (v2 before v1) from
+the same manifest/settings transaction. Exact request preflights and the child
+capability environment follow that selection; manifest rechecks and the returned
+selection receipt retain it. The explicit global legacy API remains fixed at v1.
+Base-only single-binding and channel preparation reject v2 before any producer
+starts, preserving authored content until the complete compiler is integrated.
 
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;

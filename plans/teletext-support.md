@@ -79,8 +79,11 @@ presence, panels and default suppression while checking aggregate dependencies.
 Preparatory strict v2 response parsing now retains complete original declarations
 and converts them directly into an authenticated unpublished service with trusted
 host budgets. It preserves the 1024-page fallback capacity independently of
-metadata. Installed negotiation/receipts, v2 native candidate preparation and
-producer-isolated channel composition remain open; see the
+metadata. Installed profile selection now pins the highest declared supported
+contract; request preflights, process environment, manifest rechecks and receipts
+retain it. Base-only preparation rejects v2 before any producer starts; complete
+authored native candidate preparation and producer-isolated channel composition
+remain open. The global legacy API stays explicitly v1. See the
 [input reference](../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input).
 The presentation packet-body encoder and bounded v1 lift preserve explicit
 page/X26 presence and unchanged v1 bytes. Full mixed-v1/v2 compiler convergence

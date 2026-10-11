@@ -1,4 +1,4 @@
-//! Preparatory read-only `teletext.pages.v1` request wire boundary (ADR 0121).
+//! Preparatory read-only teletext request wire boundary (ADRs 0121/0123).
 //!
 //! These types do not activate a capability or acquire a guide. The host must
 //! validate civil-day windows, IANA timezone and locale, identities, references,
@@ -15,6 +15,8 @@ use super::MAX_TELETEXT_PAGES_GENERATION_BYTES;
 
 /// Explicit v1 request version; its guide shape and bounds remain unchanged.
 pub const TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION: u32 = 1;
+/// Explicit v2 request version; the unchanged guide fields are selected by the host.
+pub const TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION: u32 = 2;
 
 /// Maximum complete request bytes, including JSON syntax and whitespace.
 pub const MAX_TELETEXT_PAGES_INPUT_BYTES: usize = 4 * 1024 * 1024;
@@ -72,6 +74,21 @@ impl TeletextPagesRequest {
     /// Rejects oversize, invalid UTF-8/JSON, duplicate keys, unknown/missing fields,
     /// unsupported schemas, invalid generation and channel/occurrence overflow.
     pub fn from_json(bytes: &[u8]) -> Result<Self, TeletextPagesRequestError> {
+        Self::from_json_for_schema(bytes, TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION)
+    }
+
+    /// Parse only the schema explicitly selected by the trusted host.
+    ///
+    /// Schema 1 and 2 share the same guide shape and bounds. The payload cannot
+    /// negotiate a version or trigger a retry under another schema.
+    /// # Errors
+    /// Returns the same strict wire errors as `from_json`, including an unsupported
+    /// expected schema or a payload version differing from that selection.
+    pub fn from_json_for_schema(
+        bytes: &[u8],
+        expected_schema: u32,
+    ) -> Result<Self, TeletextPagesRequestError> {
+        validate_expected_schema(expected_schema)?;
         if bytes.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
             return Err(TeletextPagesRequestError::InputTooLarge);
         }
@@ -82,7 +99,7 @@ impl TeletextPagesRequest {
         })?;
         let request: Self =
             serde_json::from_slice(bytes).map_err(|_| TeletextPagesRequestError::InvalidJson)?;
-        request.validate_wire_bounds()?;
+        request.validate_wire_bounds(expected_schema)?;
         Ok(request)
     }
 
@@ -96,7 +113,21 @@ impl TeletextPagesRequest {
     /// Rejects unsupported schemas, invalid generation, record-count overflow,
     /// oversized serialized requests or serialization failures.
     pub fn to_json(&self) -> Result<Vec<u8>, TeletextPagesRequestError> {
-        self.validate_wire_bounds()?;
+        self.to_json_for_schema(TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION)
+    }
+
+    /// Encode only the schema explicitly selected by the trusted host.
+    ///
+    /// This preserves all guide fields, instant precision and byte/count fences;
+    /// it never replaces the supplied DTO's schema version.
+    /// # Errors
+    /// Returns the same wire errors as `to_json`, including an unsupported expected
+    /// schema or a DTO version differing from that selection.
+    pub fn to_json_for_schema(
+        &self,
+        expected_schema: u32,
+    ) -> Result<Vec<u8>, TeletextPagesRequestError> {
+        self.validate_wire_bounds(expected_schema)?;
         let mut writer = BoundedRequestWriter {
             bytes: Vec::new(),
             overflow: false,
@@ -111,8 +142,9 @@ impl TeletextPagesRequest {
         Ok(writer.bytes)
     }
 
-    fn validate_wire_bounds(&self) -> Result<(), TeletextPagesRequestError> {
-        if self.schema_version != TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION {
+    fn validate_wire_bounds(&self, expected_schema: u32) -> Result<(), TeletextPagesRequestError> {
+        validate_expected_schema(expected_schema)?;
+        if self.schema_version != expected_schema {
             return Err(TeletextPagesRequestError::UnsupportedSchema);
         }
         if self.generation.is_empty() || self.generation.len() > MAX_TELETEXT_PAGES_GENERATION_BYTES
@@ -129,6 +161,17 @@ impl TeletextPagesRequest {
                 .ok_or(TeletextPagesRequestError::OccurrenceCount)
         })?;
         Ok(())
+    }
+}
+
+fn validate_expected_schema(expected_schema: u32) -> Result<(), TeletextPagesRequestError> {
+    if matches!(
+        expected_schema,
+        TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION | TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION
+    ) {
+        Ok(())
+    } else {
+        Err(TeletextPagesRequestError::UnsupportedSchema)
     }
 }
 

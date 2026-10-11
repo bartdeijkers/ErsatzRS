@@ -14,6 +14,34 @@ pub const MAX_TELETEXT_PROFILE_VALUE_BYTES: usize = 16 * 1024;
 pub const MAX_TELETEXT_PROFILE_SETTINGS_BYTES: usize = 64 * 1024;
 pub const MAX_TELETEXT_PROFILE_NAME_BYTES: usize = 256;
 
+/// Host-supported authored contract chosen from the exact installed manifest.
+/// This is an observed selection, not a producer negotiation or publication token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeletextPageContract {
+    V1,
+    V2,
+}
+
+impl TeletextPageContract {
+    /// Exact request/response version required for this selection.
+    #[must_use]
+    pub const fn schema_version(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+            Self::V2 => 2,
+        }
+    }
+
+    /// Installed capability and fixed command environment value.
+    #[must_use]
+    pub const fn capability(self) -> &'static str {
+        match self {
+            Self::V1 => "teletext.pages.v1",
+            Self::V2 => "teletext.pages.v2",
+        }
+    }
+}
+
 /// Exact database installation observation, not immutable executable assurance.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeletextInstallationSnapshot {
@@ -145,6 +173,8 @@ pub struct ChannelTeletextBinding {
 /// The output channel is independent of any guide channels in a wire request.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeletextSelectionSnapshot {
+    /// Selected within the same transaction as installation/effective settings.
+    pub contract: TeletextPageContract,
     pub channel_id: EntityId,
     pub addon_id: String,
     pub binding_revision: i64,

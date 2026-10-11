@@ -334,3 +334,125 @@ fn teletext_guide_enforces_counts_before_cloning_and_serialized_bytes_without_pa
     ));
     assert!(!format!("{error:?}").contains("Guide channel"));
 }
+
+#[test]
+fn teletext_guide_v2_preserves_complete_content_roles_and_exact_v1_output() {
+    let mut current = occurrence(0, -60, 100);
+    current.segments = vec![
+        ProgrammeSegment {
+            item_id: 0,
+            media_item_id: Some(9),
+            start: at(-60),
+            finish: at(-10),
+            in_point: Duration::zero(),
+            out_point: Duration::seconds(50),
+        },
+        ProgrammeSegment {
+            item_id: 1,
+            media_item_id: Some(9),
+            start: at(10),
+            finish: at(60),
+            in_point: Duration::seconds(50),
+            out_point: Duration::seconds(100),
+        },
+    ];
+    let programmes = [current, occurrence(2, 110, 150)];
+    let channels = [channel(&programmes)];
+    let mut input = context(&channels);
+    input.captured_at = at(0) + Duration::nanoseconds(123_456_789);
+    let v1 = build_request(&input).unwrap();
+    assert_eq!(build_request_for_schema(&input, 1).unwrap(), v1);
+    let mut expected = wire::TeletextPagesRequest::from_json(&v1).unwrap();
+    let v2 = build_request_for_schema(&input, 2).unwrap();
+    expected.schema_version = 2;
+    assert_eq!(v2, expected.to_json_for_schema(2).unwrap());
+    let actual = wire::TeletextPagesRequest::from_json_for_schema(&v2, 2).unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(
+        actual.channels[0].programmes[0].title,
+        "Café <b>programme</b>"
+    );
+    assert_eq!(actual.channels[0].programmes[0].segments.len(), 2);
+    assert_eq!(
+        actual.channels[0].context.continuing,
+        actual.channels[0].context.current
+    );
+    assert_eq!(actual.channels[0].context.next.unwrap().first_item_id, 2);
+    assert_eq!(
+        wire::TeletextPagesRequest::from_json(&v2),
+        Err(wire::TeletextPagesRequestError::UnsupportedSchema)
+    );
+}
+
+#[test]
+fn teletext_guide_schema_selection_is_trusted_and_not_payload_negotiation() {
+    let channels = [];
+    let input = context(&channels);
+    for schema in [0, 3, u32::MAX] {
+        assert!(matches!(
+            build_request_for_schema(&input, schema),
+            Err(TeletextGuideRequestError::Contract(
+                wire::TeletextPagesRequestError::UnsupportedSchema
+            ))
+        ));
+    }
+    let v2 = build_request_for_schema(&input, 2).unwrap();
+    let request = wire::TeletextPagesRequest::from_json_for_schema(&v2, 2).unwrap();
+    assert_eq!(request.schema_version, 2);
+    assert!(request.channels.is_empty());
+    assert_eq!(
+        request.window.start,
+        "2026-10-04T22:00:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+    assert_eq!(
+        request.window.finish,
+        "2026-10-07T22:00:00Z".parse::<DateTime<Utc>>().unwrap()
+    );
+}
+
+#[test]
+fn teletext_guide_v2_reuses_semantic_and_input_limits_without_partial_requests() {
+    let channels: Vec<_> = (1..=257)
+        .map(|id| TeletextGuideChannel {
+            id,
+            number: "1",
+            name: "Synthetic",
+            programmes: &[],
+        })
+        .collect();
+    assert!(matches!(
+        build_request_for_schema(&context(&channels), 2),
+        Err(TeletextGuideRequestError::Contract(
+            wire::TeletextPagesRequestError::ChannelCount
+        ))
+    ));
+    let mut programmes = [occurrence(0, -10, 50)];
+    programmes[0].segments[0].in_point = Duration::nanoseconds(1);
+    let channels = [channel(&programmes)];
+    assert!(matches!(
+        build_request_for_schema(&context(&channels), 2),
+        Err(TeletextGuideRequestError::SourceOffsetPrecision)
+    ));
+    programmes[0].segments[0].in_point = Duration::zero();
+    programmes[0].programme.title = "\n".repeat(wire::MAX_TELETEXT_PAGES_INPUT_BYTES / 2);
+    let channels = [channel(&programmes)];
+    assert!(matches!(
+        build_request_for_schema(&context(&channels), 2),
+        Err(TeletextGuideRequestError::Contract(
+            wire::TeletextPagesRequestError::InputTooLarge
+        ))
+    ));
+    let channels = [];
+    let mut input = context(&channels);
+    input.locale = "NL";
+    assert!(matches!(
+        build_request_for_schema(&input, 2),
+        Err(TeletextGuideRequestError::UnsupportedLocale)
+    ));
+    input.locale = "nl";
+    input.timezone = "Invalid/GuideTimezone";
+    assert!(matches!(
+        build_request_for_schema(&input, 2),
+        Err(TeletextGuideRequestError::Timezone)
+    ));
+}

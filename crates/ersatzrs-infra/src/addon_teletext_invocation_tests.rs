@@ -6,6 +6,13 @@ fn request_bytes() -> Vec<u8> {
     br#"{"schema_version":1,"generation":"fixture","locale":"nl-NL","timezone":"Europe/Amsterdam","captured_at":"2026-10-25T00:30:00Z","window":{"start":"2026-10-24T22:00:00Z","finish":"2026-10-27T23:00:00Z"},"channels":[]}"#.to_vec()
 }
 
+#[cfg(unix)]
+fn request_for_contract(contract: TeletextPageContract) -> Vec<u8> {
+    let mut request = TeletextPagesRequest::from_json(&request_bytes()).unwrap();
+    request.schema_version = contract.schema_version();
+    serde_json::to_vec(&request).unwrap()
+}
+
 struct Blocker {
     stage: &'static str,
     occurrence: usize,
@@ -167,6 +174,10 @@ mod unix {
 
     impl Fixture {
         async fn new(script: &str) -> Self {
+            Self::with_contracts(script, &["teletext.pages.v1"]).await
+        }
+
+        async fn with_contracts(script: &str, contracts: &[&str]) -> Self {
             let temp = tempfile::tempdir().unwrap();
             let pool = crate::db::init(&format!(
                 "sqlite:{}",
@@ -189,16 +200,13 @@ mod unix {
                 license: "GPL-3.0-or-later".to_owned(),
                 source_url: "https://example.test/source".to_owned(),
                 host_version: VersionReq::STAR,
-                capabilities: vec![
-                    AddonCapability {
-                        id: "addon.check.v1".to_owned(),
+                capabilities: std::iter::once("addon.check.v1")
+                    .chain(contracts.iter().copied())
+                    .map(|id| AddonCapability {
+                        id: id.to_owned(),
                         options: Vec::new(),
-                    },
-                    AddonCapability {
-                        id: "teletext.pages.v1".to_owned(),
-                        options: Vec::new(),
-                    },
-                ],
+                    })
+                    .collect(),
                 dependencies: Vec::new(),
                 entrypoints: BTreeMap::from([(
                     "any".to_owned(),
@@ -219,7 +227,12 @@ mod unix {
                 toml::to_string(&manifest).unwrap(),
             )
             .unwrap();
-            std::fs::write(package.join("addon.sh"), format!("test \"$1\" = pages || exit 9\ntest \"$ERSATZRS_ADDON_CAPABILITY\" = teletext.pages.v1 || exit 8\nprintf started > ../started\n{script}\n")).unwrap();
+            let capability = if contracts.contains(&"teletext.pages.v2") {
+                "teletext.pages.v2"
+            } else {
+                "teletext.pages.v1"
+            };
+            std::fs::write(package.join("addon.sh"), format!("test \"$1\" = pages || exit 9\ntest \"$ERSATZRS_ADDON_CAPABILITY\" = {capability} || exit 8\nprintf started > ../started\n{script}\n")).unwrap();
             let digest = super::super::super::calculate_addon_content_sha256(&package)
                 .await
                 .unwrap();
@@ -423,17 +436,128 @@ mod unix {
 
     #[tokio::test]
     async fn generic_dispatch_remains_rejected_even_for_enabled_declared_package() {
-        let fixture = Fixture::new("exec cat").await;
-        let result = super::super::super::resolve_enabled_addon_command(
-            &fixture.pool,
-            &fixture.manifest.id,
-            "teletext.pages.v1",
-            "pages",
-            &AddonRuntimeContext::default(),
-        )
-        .await;
-        assert!(matches!(result, Err(AddonError::Validation(_))));
+        let fixture =
+            Fixture::with_contracts("exec cat", &["teletext.pages.v1", "teletext.pages.v2"]).await;
+        for capability in ["teletext.pages.v1", "teletext.pages.v2"] {
+            let result = super::super::super::resolve_enabled_addon_command(
+                &fixture.pool,
+                &fixture.manifest.id,
+                capability,
+                "pages",
+                &AddonRuntimeContext::default(),
+            )
+            .await;
+            assert!(matches!(result, Err(AddonError::Validation(_))));
+        }
         assert!(!fixture.marker.exists());
+    }
+
+    #[tokio::test]
+    async fn v2_only_and_mixed_profiles_pin_schema_capability_and_receipt() {
+        for capabilities in [
+            vec!["teletext.pages.v2"],
+            vec!["teletext.pages.v1", "teletext.pages.v2"],
+        ] {
+            let fixture = Fixture::with_contracts("exec cat", &capabilities).await;
+            let [selection, _] = fixture.profile_selections(false).await;
+            assert_eq!(selection.contract, TeletextPageContract::V2);
+            let input = request_for_contract(selection.contract);
+            let receipt = invoke_profile(
+                fixture.pool.clone(),
+                selection.clone(),
+                AddonRuntimeContext::default(),
+                input.clone(),
+                None,
+            )
+            .await
+            .unwrap();
+            assert_eq!(receipt.stdout, input);
+            assert_eq!(receipt.selection, selection);
+            assert_eq!(receipt.generation, "fixture");
+            assert!(fixture.marker.exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn profile_schema_mismatch_precedes_resolution_without_spawn_or_retry() {
+        for (capability, wrong_contract) in [
+            ("teletext.pages.v1", TeletextPageContract::V2),
+            ("teletext.pages.v2", TeletextPageContract::V1),
+        ] {
+            let fixture = Fixture::with_contracts("exec cat", &[capability]).await;
+            let [selection, _] = fixture.profile_selections(false).await;
+            let blocker = Blocker::new("hash", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let mut invocation = fixture.invocation(None);
+            invocation.input = request_for_contract(wrong_contract);
+            invocation.selection = Some(selection);
+            assert_eq!(
+                invoke_with_fence(
+                    invocation,
+                    fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT),
+                    Duration::from_secs(1),
+                )
+                .await,
+                Err(TeletextInvocationError::InvalidRequest)
+            );
+            assert!(blocker.stages.lock().unwrap().is_empty());
+            assert!(!fixture.marker.exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn global_invocation_stays_v1_with_mixed_or_v2_only_manifest() {
+        let mixed =
+            Fixture::with_contracts("exec cat", &["teletext.pages.v1", "teletext.pages.v2"]).await;
+        // The installed synthetic producer checks the legacy capability itself.
+        // Rehash its actual bytes before admission rather than bypassing the fence.
+        let script_path = mixed.package.join("addon.sh");
+        let script = std::fs::read_to_string(&script_path)
+            .unwrap()
+            .replace("= teletext.pages.v2", "= teletext.pages.v1");
+        std::fs::write(&script_path, script).unwrap();
+        let digest = super::super::super::calculate_addon_content_sha256(&mixed.package)
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ContentSha256" = ? WHERE "AddonId" = ?"#)
+            .bind(digest)
+            .bind(&mixed.manifest.id)
+            .execute(&mixed.pool)
+            .await
+            .unwrap();
+        let receipt = invoke(
+            mixed.pool.clone(),
+            mixed.manifest.id.clone(),
+            AddonRuntimeContext::default(),
+            request_bytes(),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(receipt.stdout, request_bytes());
+        assert!(mixed.marker.exists());
+
+        let v2_only = Fixture::with_contracts("exec cat", &["teletext.pages.v2"]).await;
+        for (input, expected) in [
+            (request_bytes(), TeletextInvocationError::AdmissionRejected),
+            (
+                request_for_contract(TeletextPageContract::V2),
+                TeletextInvocationError::InvalidRequest,
+            ),
+        ] {
+            assert_eq!(
+                invoke(
+                    v2_only.pool.clone(),
+                    v2_only.manifest.id.clone(),
+                    AddonRuntimeContext::default(),
+                    input,
+                    None,
+                )
+                .await,
+                Err(expected)
+            );
+            assert!(!v2_only.marker.exists());
+        }
     }
 
     #[tokio::test]
@@ -836,7 +960,7 @@ mod unix {
     async fn forged_profile_snapshot_is_rejected_before_filesystem_or_spawn() {
         let fixture = Fixture::new("exec cat").await;
         let [selection, _] = fixture.profile_selections(false).await;
-        for field in 0..12 {
+        for field in 0..13 {
             let mut changed = selection.clone();
             match field {
                 0 => changed.channel_id = 2,
@@ -850,11 +974,13 @@ mod unix {
                 8 => changed.installation.package_sha256.push_str("changed"),
                 9 => changed.installation.content_sha256.push_str("changed"),
                 10 => changed.installation.manifest_sha256.push_str("changed"),
-                _ => changed.effective_settings[0] = profile_literal("VALUE", "changed"),
+                11 => changed.effective_settings[0] = profile_literal("VALUE", "changed"),
+                _ => changed.contract = TeletextPageContract::V2,
             }
             let blocker = Blocker::new("hash", 1);
             let _release = ReleaseOnDrop(Arc::clone(&blocker));
             let mut invocation = fixture.invocation(None);
+            invocation.input = request_for_contract(changed.contract);
             invocation.selection = Some(changed);
             assert_eq!(
                 invoke_with_fence(

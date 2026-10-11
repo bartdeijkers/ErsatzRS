@@ -19,6 +19,7 @@ const GENERATION: &str = "supplied-generation";
 
 fn selection(channel_id: i64) -> TeletextSelectionSnapshot {
     TeletextSelectionSnapshot {
+        contract: ersatzrs_domain::TeletextPageContract::V1,
         channel_id,
         addon_id: ADDON.to_owned(),
         binding_revision: 3,
@@ -261,7 +262,7 @@ async fn exact_output_bindings_route_separately_with_same_multi_source_guide_and
 
 #[tokio::test]
 async fn changed_receipt_selection_or_generation_is_rejected_before_final_read() {
-    for change in 0..4 {
+    for change in 0..5 {
         let repo = Repository::new();
         let result = prepare_with_ports(
             &repo,
@@ -275,6 +276,7 @@ async fn changed_receipt_selection_or_generation_is_rejected_before_final_read()
                     0 => receipt.selection.channel_id = 2,
                     1 => receipt.selection.profile_revision += 1,
                     2 => receipt.selection.effective_settings.clear(),
+                    3 => receipt.selection.contract = ersatzrs_domain::TeletextPageContract::V2,
                     _ => receipt.generation = "wrong private generation".to_owned(),
                 }
                 Ok(receipt)
@@ -291,7 +293,7 @@ async fn changed_receipt_selection_or_generation_is_rejected_before_final_read()
 
 #[tokio::test]
 async fn in_flight_edits_or_unavailability_reject_completed_producer_output() {
-    for change in 0..4 {
+    for change in 0..5 {
         let repo = Repository::new();
         let result = prepare_with_ports(&repo, 1, ADDON, 3, &context(&[]), |selection, _| async {
             if change == 3 {
@@ -303,7 +305,8 @@ async fn in_flight_edits_or_unavailability_reject_completed_producer_output() {
                 match change {
                     0 => current.binding_revision += 1,
                     1 => current.profile_revision += 1,
-                    _ => current.effective_settings.clear(),
+                    2 => current.effective_settings.clear(),
+                    _ => current.contract = ersatzrs_domain::TeletextPageContract::V2,
                 }
             }
             Ok(receipt(selection))
@@ -425,4 +428,24 @@ async fn receipt_and_prepared_debug_omit_raw_content_and_correlation_values() {
     assert!(!debug.contains(GENERATION));
     assert!(!debug.contains("Literal <b>page</b>"));
     assert!(!debug.contains("day"));
+}
+
+#[tokio::test]
+async fn authored_selection_is_not_downgraded_by_base_preparation() {
+    let repo = Repository::new();
+    repo.selections
+        .lock()
+        .unwrap()
+        .get_mut(&1)
+        .unwrap()
+        .contract = ersatzrs_domain::TeletextPageContract::V2;
+    let result = prepare_with_ports(&repo, 1, ADDON, 3, &context(&[]), |_, _| async {
+        panic!("base preparation must not invoke an authored producer")
+    })
+    .await;
+    assert!(matches!(
+        result,
+        Err(BoundTeletextPagesError::EnhancedPreparationRequired)
+    ));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
 }

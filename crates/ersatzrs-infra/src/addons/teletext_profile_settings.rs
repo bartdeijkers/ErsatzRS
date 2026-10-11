@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     validate_teletext_profile_values, TeletextInstallationRead, TeletextInstallationSnapshot,
-    TeletextProfileAvailability as A, TeletextProfileSetting, TeletextProfileValue,
-    TeletextSecretReferenceKind, MAX_TELETEXT_PROFILE_KEY_BYTES, MAX_TELETEXT_PROFILE_SETTINGS,
-    MAX_TELETEXT_PROFILE_SETTINGS_BYTES, MAX_TELETEXT_PROFILE_VALUE_BYTES,
+    TeletextPageContract, TeletextProfileAvailability as A, TeletextProfileSetting,
+    TeletextProfileValue, TeletextSecretReferenceKind, MAX_TELETEXT_PROFILE_KEY_BYTES,
+    MAX_TELETEXT_PROFILE_SETTINGS, MAX_TELETEXT_PROFILE_SETTINGS_BYTES,
+    MAX_TELETEXT_PROFILE_VALUE_BYTES,
 };
 
 use super::{
@@ -33,6 +34,14 @@ pub(crate) async fn configuration(
 pub(crate) struct ScopedConfiguration {
     pub installation: TeletextInstallationRead,
     pub effective_settings: Option<Vec<TeletextProfileSetting>>,
+    pub contract: Option<TeletextPageContract>,
+}
+
+/// Prefer the highest host-supported contract declared by this exact manifest.
+pub(crate) fn preferred_contract(manifest: &AddonManifest) -> Option<TeletextPageContract> {
+    [TeletextPageContract::V2, TeletextPageContract::V1]
+        .into_iter()
+        .find(|contract| manifest.has_capability(contract.capability()))
 }
 
 /// Resolve the same bounded values used by writes and invocation admission.
@@ -51,7 +60,8 @@ pub(crate) async fn configuration_with_settings(
     if !installation.enabled {
         return Ok(state(Some(snapshot), A::DisabledInstallation));
     }
-    if !installation.manifest.has_capability("teletext.pages.v1")
+    let contract = preferred_contract(&installation.manifest);
+    if contract.is_none()
         || !installation
             .manifest
             .host_version
@@ -61,6 +71,7 @@ pub(crate) async fn configuration_with_settings(
         return Ok(state(Some(snapshot), A::IncompatibleInstallation));
     }
     let mut result = state(Some(snapshot), A::Configured);
+    result.contract = contract;
     if let Some(overrides) = overrides {
         let globals = load_bounded_globals(tx, addon_id).await?;
         result.effective_settings = globals.and_then(|globals| {
@@ -125,6 +136,7 @@ fn state(snapshot: Option<TeletextInstallationSnapshot>, availability: A) -> Sco
             availability,
         },
         effective_settings: None,
+        contract: None,
     }
 }
 

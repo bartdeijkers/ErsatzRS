@@ -477,3 +477,137 @@ fn all_instant_fields_reject_extended_utc_years_and_offset_overflow() {
         }
     }
 }
+
+#[test]
+fn trusted_request_v2_roundtrip_changes_only_version_and_preserves_default_v1_bytes() {
+    let mut original = request();
+    let v1 = original.to_json().unwrap();
+    assert_eq!(original.to_json_for_schema(1).unwrap(), v1);
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&v1, 1).unwrap(),
+        original
+    );
+    original.schema_version = TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION;
+    let v2 = original.to_json_for_schema(2).unwrap();
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&v2, 2).unwrap(),
+        original
+    );
+    let mut expected: Value = serde_json::from_slice(&v1).unwrap();
+    expected["schema_version"] = json!(2);
+    assert_eq!(serde_json::from_slice::<Value>(&v2).unwrap(), expected);
+    assert_eq!(
+        original.to_json(),
+        Err(TeletextPagesRequestError::UnsupportedSchema)
+    );
+    assert_eq!(
+        TeletextPagesRequest::from_json(&v2),
+        Err(TeletextPagesRequestError::UnsupportedSchema)
+    );
+}
+
+#[test]
+fn trusted_request_selection_never_negotiates_payload_schema() {
+    for actual in [1, 2] {
+        let mut supplied = request();
+        supplied.schema_version = actual;
+        let bytes = supplied.to_json_for_schema(actual).unwrap();
+        for expected in [0, 1, 2, 3, u32::MAX] {
+            if expected == actual {
+                continue;
+            }
+            assert_eq!(
+                TeletextPagesRequest::from_json_for_schema(&bytes, expected),
+                Err(TeletextPagesRequestError::UnsupportedSchema)
+            );
+            assert_eq!(
+                supplied.to_json_for_schema(expected),
+                Err(TeletextPagesRequestError::UnsupportedSchema)
+            );
+        }
+    }
+}
+
+#[test]
+fn trusted_request_v2_keeps_raw_count_and_generation_fences() {
+    let mut supplied = request();
+    supplied.schema_version = 2;
+    let mut bytes = supplied.to_json_for_schema(2).unwrap();
+    bytes.resize(MAX_TELETEXT_PAGES_INPUT_BYTES, b' ');
+    assert!(TeletextPagesRequest::from_json_for_schema(&bytes, 2).is_ok());
+    bytes.push(0xff);
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&bytes, 2),
+        Err(TeletextPagesRequestError::InputTooLarge)
+    );
+    supplied.channels = vec![channel(); MAX_TELETEXT_PAGES_CHANNELS + 1];
+    assert_eq!(
+        supplied.to_json_for_schema(2),
+        Err(TeletextPagesRequestError::ChannelCount)
+    );
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&serde_json::to_vec(&supplied).unwrap(), 2),
+        Err(TeletextPagesRequestError::ChannelCount)
+    );
+    let mut minimal = programme();
+    minimal.segments.clear();
+    supplied.channels = vec![channel()];
+    supplied.channels[0].programmes = vec![minimal; MAX_TELETEXT_PAGES_OCCURRENCES + 1];
+    assert_eq!(
+        supplied.to_json_for_schema(2),
+        Err(TeletextPagesRequestError::OccurrenceCount)
+    );
+    supplied.channels.clear();
+    supplied.generation.clear();
+    assert_eq!(
+        supplied.to_json_for_schema(2),
+        Err(TeletextPagesRequestError::InvalidGeneration)
+    );
+    supplied.generation = "synthetic-v2".into();
+    supplied.locale = "\0".repeat(MAX_TELETEXT_PAGES_INPUT_BYTES / 2);
+    assert_eq!(
+        supplied.to_json_for_schema(2),
+        Err(TeletextPagesRequestError::InputTooLarge)
+    );
+}
+
+#[test]
+fn trusted_request_v2_keeps_duplicate_nullable_and_instant_contracts() {
+    let mut supplied = request();
+    supplied.schema_version = 2;
+    let bytes = supplied.to_json_for_schema(2).unwrap();
+    let duplicate = String::from_utf8(bytes.clone()).unwrap().replacen(
+        "\"schema_version\":2",
+        "\"schema_version\":2,\"schema_version\":2",
+        1,
+    );
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(duplicate.as_bytes(), 2),
+        Err(TeletextPagesRequestError::DuplicateKey)
+    );
+    let original: Value = serde_json::from_slice(&bytes).unwrap();
+    for field in ["custom_title", "sub_title", "description"] {
+        let mut missing = original.clone();
+        missing["channels"][0]["programmes"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert_eq!(
+            TeletextPagesRequest::from_json_for_schema(&serde_json::to_vec(&missing).unwrap(), 2),
+            Err(TeletextPagesRequestError::InvalidJson)
+        );
+    }
+    let mut offset = original.clone();
+    offset["captured_at"] = json!("2026-10-25T02:30:00.123456789+02:00");
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&serde_json::to_vec(&offset).unwrap(), 2)
+            .unwrap()
+            .captured_at,
+        instant()
+    );
+    offset["captured_at"] = json!("2026-10-25T00:30:00");
+    assert_eq!(
+        TeletextPagesRequest::from_json_for_schema(&serde_json::to_vec(&offset).unwrap(), 2),
+        Err(TeletextPagesRequestError::InvalidJson)
+    );
+}

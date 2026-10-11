@@ -3119,10 +3119,25 @@ No partial service, v1 retry, physical pointer/update choice or publication
 identity is returned.
 
 Independent v1 request/response version constants retain value 1, with the
-original shared name preserved for callers. Installed highest-version selection,
-v2 requests/environment/receipts, native candidate preparation, per-producer
-resolution before channel composition, durable drafts/editor interchange and
-explicit publication remain open. This input path does not activate packages,
+original shared name preserved for callers. `TeletextSelectionSnapshot.contract`
+now pins the highest supported declared contract from the exact installed
+manifest/settings transaction, preferring v2 over v1. The explicit trusted-schema
+request APIs and `build_request_for_schema` retain identical guide fields and
+limits, requiring exact version agreement; default APIs remain strictly v1.
+Profile invocation preflights the selected version before package resolution,
+rechecks the manifest choice and installation identity before launch, sets
+`ERSATZRS_ADDON_CAPABILITY` from that choice and returns it within the exact
+selection receipt. A response cannot negotiate another contract. The global
+legacy invocation API remains explicitly v1.
+
+Existing base-only binding preparation rejects a v2 selection before invoking
+the producer. Channel preparation checks every binding before starting any
+producer, including a v2 binding later in a mixed selection. These are explicit
+unavailable preparation results, without fallback, partial candidate or package
+activation. No schema migration or installed package modification is needed.
+Complete authored native preparation, producer-isolated channel composition,
+durable drafts/editor interchange and explicit publication remain open.
+This input path does not activate packages,
 change live output or establish complete engine/client acceptance. P9A-01 owns
 the current verification evidence.
 

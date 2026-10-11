@@ -71,6 +71,28 @@ pub enum TeletextGuideRequestError {
 pub fn build_request(
     context: &SuppliedTeletextGuideContext<'_>,
 ) -> Result<Vec<u8>, TeletextGuideRequestError> {
+    build_request_for_schema(context, wire::TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION)
+}
+
+/// Build the unchanged guide request under a trusted explicit schema 1 or 2.
+///
+/// Host selection precedes conversion. Civil dates, exact source offsets,
+/// programme roles/content and all input limits are identical for both versions.
+/// This does not negotiate an add-on capability or grant invocation authority.
+/// # Errors
+/// Returns `UnsupportedSchema` for any other version and the same context,
+/// semantic, count and serialized-byte failures as `build_request`.
+pub fn build_request_for_schema(
+    context: &SuppliedTeletextGuideContext<'_>,
+    expected_schema: u32,
+) -> Result<Vec<u8>, TeletextGuideRequestError> {
+    if !matches!(
+        expected_schema,
+        wire::TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION
+            | wire::TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION
+    ) {
+        return Err(wire::TeletextPagesRequestError::UnsupportedSchema.into());
+    }
     if context.locale.is_empty() || !context.supported_locales.contains(&context.locale) {
         return Err(TeletextGuideRequestError::UnsupportedLocale);
     }
@@ -103,7 +125,7 @@ pub fn build_request(
         })
         .collect::<Result<_, _>>()?;
     Ok(wire::TeletextPagesRequest {
-        schema_version: wire::TELETEXT_PAGES_SCHEMA_VERSION,
+        schema_version: expected_schema,
         generation: context.generation.to_owned(),
         locale: context.locale.to_owned(),
         timezone: context.timezone.to_owned(),
@@ -111,7 +133,7 @@ pub fn build_request(
         window: wire::TeletextGuideWindowWire { start, finish },
         channels,
     }
-    .to_json()?)
+    .to_json_for_schema(expected_schema)?)
 }
 
 fn intersects(

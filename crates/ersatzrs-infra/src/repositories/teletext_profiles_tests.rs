@@ -5,7 +5,9 @@ use ersatzrs_addon_contract::{
     AddonPermissions, AddonSettingDefinition, AddonSettingKind, ADDON_MANIFEST_VERSION,
 };
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
-use ersatzrs_domain::{Channel, FFmpegProfile, MAX_TELETEXT_PROFILE_VALUE_BYTES};
+use ersatzrs_domain::{
+    Channel, FFmpegProfile, TeletextPageContract, MAX_TELETEXT_PROFILE_VALUE_BYTES,
+};
 use semver::{Version, VersionReq};
 use sqlx::sqlite::SqlitePoolOptions;
 
@@ -197,6 +199,97 @@ async fn insert_installation(pool: &DbPool, manifest: &AddonManifest) {
     sqlx::query(r#"INSERT INTO "AddonInstallation" ("AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "StateRevision")
         VALUES (?, ?, 1, 'fixture-package', 'fixture-content', ?, 'unused-fixture', 'now', 'now', 'fixture-revision')"#)
         .bind(&manifest.id).bind(manifest.version.to_string()).bind(serde_json::to_string(manifest).unwrap()).execute(pool).await.unwrap();
+}
+
+#[tokio::test]
+async fn profile_contract_uses_highest_supported_capability_in_same_snapshot() {
+    for (capabilities, expected) in [
+        (vec!["teletext.pages.v1"], TeletextPageContract::V1),
+        (vec!["teletext.pages.v2"], TeletextPageContract::V2),
+        (
+            vec!["teletext.pages.v1", "teletext.pages.v2"],
+            TeletextPageContract::V2,
+        ),
+    ] {
+        let fixture = Fixture::new().await;
+        let mut manifest = fixture.manifest.clone();
+        manifest.capabilities = std::iter::once("addon.check.v1")
+            .chain(capabilities)
+            .map(|id| AddonCapability {
+                id: id.to_owned(),
+                options: Vec::new(),
+            })
+            .collect();
+        fixture.store_manifest(&manifest).await;
+        let profile = fixture.profile("Selected contract", "night").await;
+        let binding = fixture.bind(1, &profile).await;
+        let selection = saved(
+            fixture
+                .repo
+                .invocation_snapshot(1, ADDON, binding.revision)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(selection.contract, expected);
+        assert_eq!(selection.installation, profile.validated_installation);
+        assert_eq!(selection.effective_settings[0], literal("THEME", "night"));
+        assert_eq!(
+            selection.effective_settings[1],
+            literal("ZONE", "Inherited")
+        );
+        assert_eq!(
+            saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap()).bindings,
+            vec![selection]
+        );
+        assert_eq!(
+            fixture.repo.list_profiles(ADDON).await.unwrap()[0].availability,
+            A::Configured
+        );
+    }
+}
+
+#[tokio::test]
+async fn adding_v2_capability_requires_existing_installation_revalidation() {
+    let fixture = Fixture::new().await;
+    let profile = fixture.profile("Legacy", "day").await;
+    let binding = fixture.bind(1, &profile).await;
+    let original = saved(
+        fixture
+            .repo
+            .invocation_snapshot(1, ADDON, binding.revision)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(original.contract, TeletextPageContract::V1);
+    let mut manifest = fixture.manifest.clone();
+    manifest.capabilities.push(AddonCapability {
+        id: "teletext.pages.v2".to_owned(),
+        options: Vec::new(),
+    });
+    fixture.store_manifest(&manifest).await;
+    assert_eq!(
+        fixture
+            .repo
+            .invocation_snapshot(1, ADDON, binding.revision)
+            .await
+            .unwrap(),
+        M::Rejected(R::Conflict)
+    );
+    assert_eq!(
+        fixture.repo.list_profiles(ADDON).await.unwrap()[0].availability,
+        A::StaleInstallation
+    );
+    let current = fixture.token().await;
+    assert_eq!(current.state_revision, original.installation.state_revision);
+    assert_eq!(current.content_sha256, original.installation.content_sha256);
+    assert_ne!(
+        current.manifest_sha256,
+        original.installation.manifest_sha256
+    );
+    assert_eq!(
+        fixture.repo.channel_bindings(1).await.unwrap()[0].binding,
+        binding
+    );
 }
 
 #[tokio::test]

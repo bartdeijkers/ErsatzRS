@@ -93,6 +93,8 @@ pub enum BoundTeletextPagesError {
     ReceiptMismatch,
     #[error("teletext selection changed during preparation")]
     SelectionChanged,
+    #[error("selected teletext contract requires authored preparation")]
+    EnhancedPreparationRequired,
     #[error(transparent)]
     Response(#[from] TeletextPagesError),
 }
@@ -214,6 +216,9 @@ where
             return Err(BoundTeletextPagesError::SelectionRejected(reason))
         }
     };
+    if selection.contract != ersatzrs_domain::TeletextPageContract::V1 {
+        return Err(BoundTeletextPagesError::EnhancedPreparationRequired);
+    }
     let receipt = invoke(selection.clone(), input).await?;
     if receipt.selection != selection || receipt.generation != context.generation {
         return Err(BoundTeletextPagesError::ReceiptMismatch);

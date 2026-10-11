@@ -1125,9 +1125,12 @@ and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
 Continue Phase 9A at reopened p9a-01 for the 2026-10-11 authorized expansion.
 Preparatory v2 response parsing and direct bounded conversion now authenticate
-original declarations into an unpublished service. Finish pinned installed-version
-selection, exact v2 request/receipt checks and native candidate preparation next;
-resolve producer inheritance before channel composition. No activation or
+original declarations into an unpublished service. Installed profiles now pin
+the highest supported declared contract, exact request/environment/receipt and
+manifest fences; base-only preparation rejects v2 before any producer starts.
+Integrate complete authored native candidate preparation next, retaining the
+shared deadline and fresh selection fences; resolve producer inheritance before
+channel composition. No activation or
 publication authority follows from this input checkpoint.
 Owned service candidates now authenticate actual MOT/X27 selections, all original
 sparse defaults and advertised resource subpages, including empty companions.

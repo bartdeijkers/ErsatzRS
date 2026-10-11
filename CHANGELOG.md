@@ -147,9 +147,11 @@ release section when tagging a release.
   warm-cache DRCS decoding now verifies changed and unchanged complete generations,
   exact glyph pixels and counter wraparound. Add strict unpublished v2 authored
   input with mandatory fallback, original resource/presentation declarations,
-  trusted work budgets and authenticated resolved assertions; installed negotiation
-  and live preparation remain open. Durable restart and broader client
-  acceptance remain open. Final resource command spans now settle same-instance attributes
+  trusted work budgets and authenticated resolved assertions. Pin the highest
+  supported installed profile contract through exact request, process capability,
+  manifest and receipt checks; base-only preparation rejects enhanced selections
+  before any producer starts. Complete authored live preparation, durable restart
+  and broader client acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw

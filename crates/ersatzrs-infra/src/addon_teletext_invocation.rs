@@ -15,7 +15,7 @@ use std::{
 
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
 use ersatzrs_core::repositories::{TeletextProfileMutation, TeletextProfileRepository as _};
-use ersatzrs_domain::TeletextSelectionSnapshot;
+use ersatzrs_domain::{TeletextPageContract, TeletextSelectionSnapshot};
 use sqlx::Row;
 use tokio::{sync::oneshot, time::Instant};
 
@@ -104,7 +104,8 @@ pub enum TeletextInvocationError {
 /// uncertain result may return, but the worker retains and joins that job and
 /// cannot start a later stage or command. Command execution retains its separate
 /// existing cleanup budgets. No database connection is supplied to the producer.
-/// Profile overrides and channel/configuration/generation promotion remain open.
+/// This legacy global route remains explicitly v1, even when v2 is also declared;
+/// it is never a retry or fallback for profile invocation. Promotion remains open.
 ///
 /// # Errors
 /// Returns static request, admission, cancellation, deadline or command failures,
@@ -136,7 +137,7 @@ pub async fn invoke(
     })
 }
 
-/// Invoke using one enabled base channel binding and its effective settings.
+/// Invoke using one enabled channel binding, effective settings and pinned contract.
 ///
 /// The selection is re-read before filesystem/tool resolution and immediately
 /// prelaunch. Supplied request guide channels may differ from the output channel;
@@ -220,9 +221,14 @@ async fn invoke_with_fence(
     if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
         return Err(TeletextInvocationError::InvalidRequest);
     }
-    let generation = TeletextPagesRequest::from_json(&invocation.input)
-        .map_err(|_| TeletextInvocationError::InvalidRequest)?
-        .generation;
+    let contract = invocation
+        .selection
+        .as_ref()
+        .map_or(TeletextPageContract::V1, |selection| selection.contract);
+    let generation =
+        TeletextPagesRequest::from_json_for_schema(&invocation.input, contract.schema_version())
+            .map_err(|_| TeletextInvocationError::InvalidRequest)?
+            .generation;
     let (response, result) = oneshot::channel();
     tokio::spawn(async move {
         #[cfg(test)]
@@ -231,6 +237,7 @@ async fn invoke_with_fence(
         let outcome = invoke_owned(
             invocation,
             generation,
+            contract,
             fence,
             settlement_timeout,
             &mut response,
@@ -319,6 +326,7 @@ fn already_cancelled(cancellation: &mut Option<oneshot::Receiver<()>>) -> bool {
 async fn invoke_owned(
     mut invocation: Invocation,
     generation: String,
+    contract: TeletextPageContract,
     fence: ResolutionFence,
     settlement_timeout: Duration,
     response: &mut Option<Response>,
@@ -390,6 +398,7 @@ async fn invoke_owned(
         invocation.input,
         &mut invocation.cancellation,
         fence.deadline,
+        contract,
         response,
     )
     .await?;
@@ -453,7 +462,11 @@ async fn resolve_profile_for_launch(
     let identity = super::teletext_profile_settings::installation_identity(&mut tx, &installation)
         .await
         .map_err(|_| AddonError::Database("profile installation unavailable".to_owned()))?;
-    if !installation.enabled || identity != selection.installation {
+    if !installation.enabled
+        || identity != selection.installation
+        || super::teletext_profile_settings::preferred_contract(&installation.manifest)
+            != Some(selection.contract)
+    {
         return Err(AddonError::Validation(
             "profile installation changed".to_owned(),
         ));
@@ -548,12 +561,18 @@ async fn execute(
     input: Vec<u8>,
     cancellation: &mut Option<oneshot::Receiver<()>>,
     deadline: Instant,
+    contract: TeletextPageContract,
     response: &mut Option<Response>,
 ) -> Result<TeletextInvocationReceipt, TeletextInvocationError> {
     let revision = command.state_revision.clone();
     let (cancel_command, command_cancelled) = oneshot::channel();
-    let execution =
-        teletext_command::run_with_deadline(command, input, Some(command_cancelled), deadline);
+    let execution = teletext_command::run_with_contract_deadline(
+        command,
+        input,
+        Some(command_cancelled),
+        deadline,
+        contract,
+    );
     tokio::pin!(execution);
     let selected = tokio::select! {
         biased;
