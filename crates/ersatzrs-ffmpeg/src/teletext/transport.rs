@@ -14,6 +14,9 @@ pub enum TeletextTransportError {
     /// The extended programme-relative carousel clock cannot advance.
     #[error("teletext carousel clock overflow")]
     ClockOverflow,
+    /// This simple complete-cycle schedule exceeds the resource acquisition bound.
+    #[error("teletext carousel requires {batches} batches; resource repetition permits {maximum}")]
+    CycleTiming { batches: usize, maximum: usize },
     /// Replacing pages mid-cycle would mix distinct coherent page sets.
     #[error("teletext replacement requires a complete carousel boundary")]
     MidCycleReplacement,

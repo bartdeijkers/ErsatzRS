@@ -3,11 +3,11 @@ use std::{sync::Arc, time::Duration};
 use mpeg2ts_reader::packet::Packet;
 
 use super::{
-    EncodedTeletextPageSet, TeletextBufferError, TeletextCarousel, TeletextClockConfig,
-    TeletextClockError, TeletextClockValidator, TeletextMultiplexError, TeletextPacketBuffer,
-    TeletextPacketizer, TeletextPmtInstallError, TeletextPmtInstaller, TeletextPsiDiscovery,
-    TeletextPsiError, TeletextPsiMonitor, TeletextServiceDescriptor, TeletextTimestamp,
-    TeletextTransportError,
+    EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextBufferError, TeletextCarousel,
+    TeletextClockConfig, TeletextClockError, TeletextClockValidator, TeletextMultiplexError,
+    TeletextPacketBuffer, TeletextPacketizer, TeletextPmtInstallError, TeletextPmtInstaller,
+    TeletextPsiDiscovery, TeletextPsiError, TeletextPsiMonitor, TeletextServiceDescriptor,
+    TeletextTimestamp, TeletextTransportError,
 };
 
 const STEP_TICKS: u64 = 1_800;
@@ -24,6 +24,10 @@ mod tail_tests;
 #[cfg(test)]
 #[path = "output_retained_tests.rs"]
 mod retained_tests;
+
+#[cfg(test)]
+#[path = "authored_service_output_tests.rs"]
+mod authored_service_tests;
 
 /// Immutable admission and delivery policy for one host-owned TS188 epoch.
 ///
@@ -230,7 +234,13 @@ impl TeletextOutputGate {
         config: TeletextOutputConfig,
         set: EncodedTeletextPageSet,
     ) -> Result<Self, TeletextOutputError> {
-        Self::new_inner(config, set, DeliveryStart::OnArrival)
+        let descriptor = TeletextServiceDescriptor::from_page_set(&set);
+        Self::new_inner(
+            config,
+            TeletextCarousel::new(set),
+            descriptor,
+            DeliveryStart::OnArrival,
+        )
     }
 
     /// Retain and validate an encoded reserve before the owner starts delivery.
@@ -244,7 +254,39 @@ impl TeletextOutputGate {
         config: TeletextOutputConfig,
         set: EncodedTeletextPageSet,
     ) -> Result<Self, TeletextOutputError> {
-        Self::new_inner(config, set, DeliveryStart::Deferred)
+        let descriptor = TeletextServiceDescriptor::from_page_set(&set);
+        Self::new_inner(
+            config,
+            TeletextCarousel::new(set),
+            descriptor,
+            DeliveryStart::Deferred,
+        )
+    }
+
+    /// Plan complete authored packets through the existing bounded output epoch.
+    /// This does not supply host publication or Level 2.5 admission authority.
+    /// # Errors
+    /// Rejects carousel repetition bounds and the existing source/timing policy.
+    pub fn new_authored(
+        config: TeletextOutputConfig,
+        service: EncodedTeletextAuthoredService,
+    ) -> Result<Self, TeletextOutputError> {
+        let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
+        let carousel = TeletextCarousel::new_authored(service)?;
+        Self::new_inner(config, carousel, descriptor, DeliveryStart::OnArrival)
+    }
+
+    /// Retain a complete authored candidate until its owner starts delivery.
+    /// Source acquisition/holding and sink acknowledgement keep their epoch fences.
+    /// # Errors
+    /// Rejects the same carousel and output-policy bounds as `new_authored`.
+    pub fn new_authored_retained(
+        config: TeletextOutputConfig,
+        service: EncodedTeletextAuthoredService,
+    ) -> Result<Self, TeletextOutputError> {
+        let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
+        let carousel = TeletextCarousel::new_authored(service)?;
+        Self::new_inner(config, carousel, descriptor, DeliveryStart::Deferred)
     }
 
     /// Establish the one final packet schedule after reserve readiness.
@@ -262,7 +304,8 @@ impl TeletextOutputGate {
 
     fn new_inner(
         config: TeletextOutputConfig,
-        set: EncodedTeletextPageSet,
+        carousel: TeletextCarousel,
+        descriptor: TeletextServiceDescriptor,
         delivery_start: DeliveryStart,
     ) -> Result<Self, TeletextOutputError> {
         let interval_packets = u128::from(config.clock.muxrate_bps) / (50 * PACKET_BITS);
@@ -291,7 +334,7 @@ impl TeletextOutputGate {
         }
         Ok(Self {
             config,
-            service: TeletextServiceDescriptor::from_page_set(&set),
+            service: descriptor,
             buffer: Some(TeletextPacketBuffer::new(
                 config.max_buffer_packets,
                 config.max_hold,
@@ -304,7 +347,7 @@ impl TeletextOutputGate {
             clock: TeletextClockValidator::new_source_epoch(config.clock)?,
             installer: None,
             packetizer: TeletextPacketizer::new(config.elementary_pid)?,
-            carousel: TeletextCarousel::new(set),
+            carousel,
             anchor: None,
             origin: None,
             delivery_start,

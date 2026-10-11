@@ -178,7 +178,7 @@ fn carousel_cycle_headers(carousel: &mut TeletextCarousel) -> Vec<[u8; 46]> {
         match batch.kind() {
             TeletextCarouselBatchKind::Header => headers.push(batch.data_units()[0]),
             TeletextCarouselBatchKind::Terminator => return headers,
-            TeletextCarouselBatchKind::Page => (),
+            TeletextCarouselBatchKind::Page | TeletextCarouselBatchKind::Magazine => (),
         }
     }
 }

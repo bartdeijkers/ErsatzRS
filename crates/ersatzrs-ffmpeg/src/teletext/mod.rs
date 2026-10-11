@@ -283,5 +283,8 @@ mod tests;
 
 #[cfg(test)]
 mod authored_service_tests;
+
+#[cfg(test)]
+mod authored_service_transport_runtime_tests;
 #[cfg(test)]
 mod transport_tests;

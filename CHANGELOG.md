@@ -134,7 +134,10 @@ release section when tagging a release.
   display/resource with shared pointer reservations, explicit lifecycle records,
   aggregate bounds and final physical inventory; emit M29 once. Independent full
   compiler decoding retains both the original X27 defect and corrected test-only
-  result. Service transport, update history and full acceptance remain open. Verify
+  result. Reuse the bounded carousel/output epoch for complete services, with
+  magazine/resource acquisition order, immutable C4/C8 repeats, exact cycle
+  timing and display-only signalling. Independent carousel decoding and TSDuck
+  checks pass; hosted transport, update history and full acceptance remain open. Verify
   the existing whole-display 127-invocations-per-type admission across sparse
   defaults, nested calls and independent subcodes; physical replay must reuse it.
   Trace a supplied physical program with the shared bounded spatial executor,

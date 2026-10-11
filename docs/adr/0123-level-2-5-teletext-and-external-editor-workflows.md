@@ -245,6 +245,17 @@ does not settle resource-command C2 order, update history, service-carousel
 delivery or host publication. Independent decoding must distinguish the original
 decoder deficiency from the receipted test-only correction; both preserve the
 normative authored-service fixture and positive expected cells.
+Complete service delivery planning now reuses the same bounded carousel,
+packetizer and output-epoch machinery. Order acquisition as M29, MOT, DRCS,
+object pages, then displays (Annex B.3/B.7). Repeating identical complete resource
+pages clears C4 and C8 while preserving counter, S1, extent and other flags;
+display repetition retains its existing C4 rule. Require resource/M29 repetition
+within twenty seconds (B.6); the fixed 20 ms planner rejects overlong cycles
+before allocation or replacement. Larger-service interleaving remains required
+work, not an approved authoring restriction. Derive PMT navigation only from
+actual displays and reuse all source, capacity, pacing and acknowledgement fences.
+Pure output planning and synthetic TSDuck/decoder checks do not establish
+host publication or suitable-client display/navigation acceptance.
 
 Foreign MOT defaults require two explicit producer paths. Without local X26,
 retain native MOT activation, sparse slots and exact owner/type/S1 plus original

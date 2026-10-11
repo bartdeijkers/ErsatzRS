@@ -872,10 +872,88 @@ ERSATZRS_TELETEXT_TEST_AUTHORED_SERVICE_NESTED_FIXTURE="$fixture_dir/authored-ne
 Exporting nested with unmodified libzvbi intentionally returns nonzero after
 writing the unchanged producer fixture. Use the receipted offline replay for
 both decoder variants; never change expected cells to obtain a green result.
-Full resource-command C2 settlement, lifecycle/update histories, heterogeneous
-carousel/PES/TS delivery, host admission, all remaining national recipes and
+Full resource-command C2 settlement, lifecycle/update histories, host-delivered
+service transport/admission, all remaining national recipes and
 Level2.5 client/editor/publication gates remain required and open. P9A-01 owns
 current run IDs and verification evidence; no milestone acceptance is weakened.
+
+### Complete service carousel and output planning
+
+`TeletextCarousel::new_authored` owns a complete service candidate. It reuses the
+legacy cursor, 20 ms header/body interval, at most31 units per PES batch and
+closing mFF header. Actual M29 is emitted once per cycle in a separate Magazine
+batch. Resource indexes are bounded and ordered MOT, DRCS/GDRCS, POP/GPOP,
+then original display order (Annex B.3/B.7). Owned pages are retained; batches
+copy only their scheduled units.
+The first header retains supplied resource lifecycle state. Later identical
+resource repeats clear C4/C8, preserving physical S1/counter/last-row and every
+other header bit. Display C4 repetition remains unchanged. Source units stay
+immutable.
+
+Resource and M29 acquisition repetition must remain within twenty seconds
+(Annex B.6). Before order-index allocation, count one magazine batch when present,
+each page header and ceil(bodyunits/31) batches, and one final terminator.
+A resource/M29 plan exceeding1000 batches at20 ms rejects with `CycleTiming`.
+Display-only candidates do not gain an invented resource limit. This bounded
+planner is not an approved restriction on authored pages; larger-service
+resource interleaving remains open work. Overflow or failed timing validation
+must not change an existing plan. Replacement requires the complete boundary;
+even a first magazine-only batch closes that boundary. Clock and whole-generation
+ownership survive legacy/authored transitions.
+
+`TeletextServiceDescriptor::from_authored_service` advertises only original
+initial/subtitle display roles, addresses and languages. MOT/DRCS/object pages
+and M29 do not create navigation entries. `TeletextOutputGate::new_authored`
+and `new_authored_retained` pair this same candidate's descriptor and carousel,
+then reuse source PSI/PCR admission, null-slot capacity, packet pacing, retention,
+explicit delivery start, sink acknowledgements and EOF fences. The web host
+still needs version2 service admission/publication; these constructors grant no
+package, profile or live-stream capability by themselves.
+
+The complete mixed-service calibration sends four real carousel cycles through
+the production packetizer. Independent calibration adds PSI/PCR only and retains
+Rust PES/TS bytes. TSDuck3.44-4676 checks sync/transport errors, PID references,
+private-stream PES, continuity and PTS/PCR leaps; an intentionally damaged counter
+must fail its continuity invariant. This is not a real AV host/playback proof.
+Captured synthetic TS SHA256:
+`763cee5715f461388214b26d76be954e397838daf517032a7ecc8b8c0ad320b1`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_TSANALYZE="$tsanalyze" \
+ERSATZRS_TELETEXT_TEST_PYTHON="$python" \
+ERSATZRS_TELETEXT_TEST_AUTHORED_CAROUSEL_TS="$fixture_dir/authored-carousel.ts" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  complete_authored_carousel_pes_passes_tsduck_and_detects_counter_damage \
+  --lib --run-ignored ignored-only
+```
+
+Two full carousel cycles also pass the unchanged root A/C and empty-Local T
+oracle with libzvbi0.2.42. Original nested decoding preserves its exact known X27
+failure; the same receipted test-only correction passes nested A/C/D and Local
+suppression. No page body or closing header is replaced in this fixture.
+Request SHA256 values:
+
+- Carousel root: `8636493c5710c59339c14e06f4fb0ccbc33dfa12fc2abd5aadd4716efd60be8d`.
+- Carousel nested: `093f973725e0c7a1beeff3ad178af968f24ced16aac1cd77cc5467b522bf5975`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_AUTHORED_CAROUSEL_ROOT_FIXTURE="$fixture_dir/carousel-root.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  full_authored_carousel_root_and_compiled_empty_local_decode \
+  --lib --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_AUTHORED_CAROUSEL_NESTED_FIXTURE="$fixture_dir/carousel-nested.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  full_authored_carousel_nested_selected_default_decode \
+  --lib --run-ignored ignored-only
+```
+
+The maintained receipt replay accepts `carousel-root`/`carousel-nested` in
+separate original/corrected processes. Original nested must retain
+`conformance_passed:false`; both corrected fixtures and original root report
+two passing cases. Exporting nested on the original decoder intentionally
+returns nonzero after writing the producer fixture. Resource-word C2, update
+history, larger-service scheduling, hostv2 served transport, full national
+recipes and suitable-client/editor/publication gates remain required/open.
 
 ### National-option carrier conversion
 

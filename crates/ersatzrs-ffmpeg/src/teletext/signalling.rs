@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use ersatzrs_domain::TeletextPageKind;
+use ersatzrs_domain::{
+    TeletextLanguage, TeletextPageAddress, TeletextPageKind, TeletextPageNumber,
+};
 use mpeg2ts_reader::{
     descriptor::{DescriptorIter, UnknownDescriptor},
     mpegts_crc,
@@ -8,7 +10,10 @@ use mpeg2ts_reader::{
     psi::{pmt::PmtSection, SectionCommonHeader, TableSyntaxHeader},
 };
 
-use super::{EncodedTeletextPageSet, TeletextCarouselBatch, TeletextPacketizer, TeletextTimestamp};
+use super::{
+    EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextCarouselBatch,
+    TeletextPacketizer, TeletextTimestamp,
+};
 
 const MAX_PMT_BYTES: usize = 1_024;
 pub(super) const MAX_WINDOW_PACKETS: usize = 32_768;
@@ -73,22 +78,47 @@ impl TeletextServiceDescriptor {
     /// Derive signalling from validated host pages, never add-on transport bytes.
     #[must_use]
     pub fn from_page_set(set: &EncodedTeletextPageSet) -> Self {
+        Self::from_displays(
+            set.initial_page(),
+            set.pages()
+                .iter()
+                .map(|page| (page.address(), page.kind(), page.language())),
+        )
+    }
+
+    /// Advertise only actual initial/subtitle displays from this same candidate.
+    /// Resource pages and M29 packets are not navigable descriptor entries.
+    #[must_use]
+    pub fn from_authored_service(service: &EncodedTeletextAuthoredService) -> Self {
+        let base = service.declared().semantic().base();
+        Self::from_displays(
+            base.initial_page,
+            base.pages
+                .iter()
+                .map(|page| (page.address, page.kind, &page.language)),
+        )
+    }
+
+    fn from_displays<'a>(
+        initial: TeletextPageNumber,
+        pages: impl Iterator<Item = (TeletextPageAddress, TeletextPageKind, &'a TeletextLanguage)>,
+    ) -> Self {
         let mut entries = BTreeSet::new();
-        for page in set.pages() {
-            let kind = if page.kind() == TeletextPageKind::Subtitle {
+        for (address, page_kind, language) in pages {
+            let kind = if page_kind == TeletextPageKind::Subtitle {
                 2
-            } else if page.address().page == set.initial_page() {
+            } else if address.page == initial {
                 1
             } else {
                 continue;
             };
-            let language = page.language().as_str().as_bytes();
+            let language = language.as_str().as_bytes();
             entries.insert([
                 language[0],
                 language[1],
                 language[2],
-                (kind << 3) | page.address().page.wire_magazine(),
-                page.address().page.wire_page(),
+                (kind << 3) | address.page.wire_magazine(),
+                address.page.wire_page(),
             ]);
         }
         let entries: Vec<_> = entries.into_iter().collect();

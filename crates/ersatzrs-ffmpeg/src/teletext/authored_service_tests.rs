@@ -110,7 +110,7 @@ fn mot() -> TeletextMotLevel25Declaration {
     )
     .unwrap()
 }
-fn input() -> TeletextResolvedServiceDraft {
+pub(super) fn input() -> TeletextResolvedServiceDraft {
     let language = TeletextLanguage::new("nld".into()).unwrap();
     let mut declaration =
         super::presentation::western_latin_v1_presentation(TeletextNationalOption::new(1).unwrap())
@@ -170,7 +170,7 @@ fn input() -> TeletextResolvedServiceDraft {
         .unwrap()],
     }
 }
-fn declared(input: TeletextResolvedServiceDraft) -> TeletextDeclaredService {
+pub(super) fn declared(input: TeletextResolvedServiceDraft) -> TeletextDeclaredService {
     let companions = vec![resource(TeletextResourceKind::Pop, 0xa0, 1)];
     let service = TeletextSemanticService::new_with_object_companions(
         input,
@@ -192,7 +192,9 @@ fn declared(input: TeletextResolvedServiceDraft) -> TeletextDeclaredService {
     )
     .unwrap()
 }
-fn transmissions(declared: &TeletextDeclaredService) -> Vec<TeletextServiceResourceTransmission> {
+pub(super) fn transmissions(
+    declared: &TeletextDeclaredService,
+) -> Vec<TeletextServiceResourceTransmission> {
     declared
         .resource_inventory()
         .iter()
@@ -538,7 +540,7 @@ fn final_actual_header_collision_discards_the_whole_candidate() {
     assert_eq!(original, before);
 }
 
-fn semantic_limits() -> TeletextServiceBudget {
+pub(super) fn semantic_limits() -> TeletextServiceBudget {
     TeletextServiceBudget {
         max_records: 64,
         max_objects: 32,
@@ -549,7 +551,7 @@ fn semantic_limits() -> TeletextServiceBudget {
         max_collected_drcs_references: 0,
     }
 }
-fn declaration_limits() -> TeletextDeclaredServiceBudget {
+pub(super) fn declaration_limits() -> TeletextDeclaredServiceBudget {
     TeletextDeclaredServiceBudget {
         max_mots: 8,
         max_displays: 8,
@@ -638,4 +640,10 @@ pub(super) fn limits() -> TeletextAuthoredServiceEncodingBudget {
         max_commands: 8192,
         normalization: normalization_limits(),
     }
+}
+
+pub(super) fn candidate() -> EncodedTeletextAuthoredService {
+    let declared = declared(input());
+    let tx = transmissions(&declared);
+    encode_teletext_authored_service(declared, &tx, &limits()).unwrap()
 }

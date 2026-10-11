@@ -32,6 +32,8 @@ FIXTURES = {
     'nested': '98d8416f14be48c760473a39e73f48b5934fcb91e8478a3ea6478fd7b7262db2',
     'authored-root': 'fbab6be109e59c0c29d30e0936ae4681a094217bb178821ecf3a81c778f31efd',
     'authored-nested': 'f837aa540a3ea608f13f2bfe692cabe48b4b731ec13ac8a58be8de8934e7f33f',
+    'carousel-root': '8636493c5710c59339c14e06f4fb0ccbc33dfa12fc2abd5aadd4716efd60be8d',
+    'carousel-nested': '093f973725e0c7a1beeff3ad178af968f24ced16aac1cd77cc5467b522bf5975',
 }
 HELPERS = {
     'teletext-object-decoder.py': 'd8d7001f6df374614b95c59a413b07f60af4038089bed1811c12abbe2cf6c6f1',
@@ -65,7 +67,7 @@ def unique_object(pairs):
 
 
 def main():
-    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested|authored-root|authored-nested')
+    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested|authored-root|authored-nested|carousel-root|carousel-nested')
     variant, fixture = sys.argv[1:]
     require(variant in PARSERS and fixture in FIXTURES, 'Unknown variant or fixture')
     output, proof = Path('/out'), Path('/proof')
@@ -117,7 +119,11 @@ def main():
         require(report == {'cases_passed': 2, 'decoder_version': '0.2.42'} and not stderr.getvalue(), 'Success oracle mismatch')
     else:
         report = json.loads(stderr.getvalue(), object_pairs_hook=unique_object)
-        name = 'authored_service_foreign_mot_nested_selected' if fixture == 'authored-nested' else 'native_foreign_mot_default_nested_selected_page'
+        name = {
+            'nested': 'native_foreign_mot_default_nested_selected_page',
+            'authored-nested': 'authored_service_foreign_mot_nested_selected',
+            'carousel-nested': 'authored_carousel_foreign_mot_nested_selected',
+        }[fixture]
         require(report == {'error': name + ': cell 1,8 differs: actual (84, 7, 0), expected (65, 1, 4)'} and not stdout.getvalue(), 'Upstream failure oracle changed')
     print(json.dumps({
         'schema': 1, 'variant': variant, 'decoder_label': entry['label'], 'fixture': fixture,

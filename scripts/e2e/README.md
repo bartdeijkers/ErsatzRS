@@ -623,6 +623,19 @@ including the required empty companion, and both native and compiled display
 paths. Only closing headers are added for decoder feeding. This does not prove
 service-carousel timing, transport, lifecycle history or client navigation.
 
+For actual two-cycle production-carousel packets, export `carousel-root.json`
+and `carousel-nested.json` using the
+[carousel/output instructions](../../docs/reference/teletext-design-interchange.md#complete-service-carousel-and-output-planning).
+Reuse the same receipted libraries and command, binding these two files at
+`/proof/carousel-root.json` and `/proof/carousel-nested.json`, and iterate
+`carousel-root carousel-nested` instead of the authored fixture names.
+Both corrected records and original root pass two unchanged cell oracles;
+original nested remains the exact known failure. The separate TSDuck test uses
+the complete mixed candidate, production carousel and packetizer with independent
+calibration PSI/PCR. It checks continuity damage explicitly. Neither these
+probes nor the pure output-epoch tests establish hosted playback, navigation,
+editor/publication acceptance or every Level2.5 feature.
+
 ## Teletext second local-object decoder calibration
 
 The separate opt-in cell oracle uses unmodified teletextimager 0.2.0 at

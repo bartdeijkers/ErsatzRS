@@ -1,13 +1,21 @@
-use super::{packets, EncodedTeletextPageSet, TeletextTransportError};
+use ersatzrs_domain::{TeletextResourceHeaderMetadata, TeletextResourceKind};
+
+use super::{
+    packets, EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextTransportError,
+};
 
 // 31 units plus the data identifier fit within the 1,504-byte Bttx buffer.
 pub(super) const MAX_BATCH_UNITS: usize = 31;
 // EN 300 706 B.1/B.9: at least 20 ms after erase, at most 100 ms between packets.
 const STEP_TICKS: u64 = 1_800;
+// EN 300 706 B.6: resource and magazine acquisition repetition is at most 20 s.
+const MAX_RESOURCE_CYCLE_BATCHES: usize = 1_000;
 
 /// Purpose of a bounded serial-mode transmission batch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextCarouselBatchKind {
+    /// Service-wide magazine declarations, preceding resource acquisition.
+    Magazine,
     /// A page header, sent independently of its remaining packets.
     Header,
     /// Ordered links, designation, enhancements and display rows.
@@ -57,18 +65,124 @@ impl TeletextCarouselBatch {
 
 /// Bounded, synchronous page/subpage carousel over an entirely encoded set.
 ///
-/// Pages retain producer order and exact subpage identities. There is no task,
+/// Legacy pages retain producer order and exact subpage identities. Authored
+/// services acquire magazines, MOT, DRCS and object pages before displays.
+/// There is no task,
 /// timer, input-media access or background queue here. Publication ownership,
 /// generation fencing, cancellation and actual multiplex pacing belong to the
 /// host adapter. Replacement is permitted only after the cycle's terminator.
 #[derive(Debug)]
 pub struct TeletextCarousel {
-    set: EncodedTeletextPageSet,
+    content: CarouselContent,
     page: usize,
     unit: usize,
     ticks: u64,
     boundary: bool,
     first_cycle: bool,
+    magazine_pending: bool,
+}
+
+#[derive(Debug)]
+enum CarouselContent {
+    Legacy(EncodedTeletextPageSet),
+    Authored {
+        service: Box<EncodedTeletextAuthoredService>,
+        resource_order: Vec<usize>,
+    },
+}
+
+impl CarouselContent {
+    fn authored(service: EncodedTeletextAuthoredService) -> Result<Self, TeletextTransportError> {
+        let magazine_batch = usize::from(!service.magazine_units().is_empty());
+        let batches = service
+            .pages()
+            .iter()
+            .try_fold(1 + magazine_batch, |sum, page| {
+                sum.checked_add(1 + (page.data_units().len() - 1).div_ceil(MAX_BATCH_UNITS))
+                    .ok_or(TeletextTransportError::ClockOverflow)
+            })?;
+        if (!service.declared().resource_inventory().is_empty() || magazine_batch != 0)
+            && batches > MAX_RESOURCE_CYCLE_BATCHES
+        {
+            return Err(TeletextTransportError::CycleTiming {
+                batches,
+                maximum: MAX_RESOURCE_CYCLE_BATCHES,
+            });
+        }
+        let displays = service.declared().semantic().base().pages.len();
+        let mut resource_order: Vec<_> = (displays..service.pages().len()).collect();
+        resource_order.sort_unstable_by_key(|&index| {
+            // Authenticated owned candidates retain displays first, then resources.
+            let kind = service.declared().resource_inventory()[index - displays].kind();
+            let rank = match kind {
+                TeletextResourceKind::Mot => 0,
+                TeletextResourceKind::Drcs | TeletextResourceKind::Gdrcs => 1,
+                TeletextResourceKind::Pop | TeletextResourceKind::Gpop => 2,
+                // The authored producer currently excludes MIP pages.
+                TeletextResourceKind::Mip => 3,
+            };
+            (rank, index)
+        });
+        Ok(Self::Authored {
+            service: Box::new(service),
+            resource_order,
+        })
+    }
+
+    fn page_count(&self) -> usize {
+        match self {
+            Self::Legacy(set) => set.pages().len(),
+            Self::Authored { service, .. } => service.pages().len(),
+        }
+    }
+
+    fn magazines(&self) -> &[[u8; 46]] {
+        match self {
+            Self::Legacy(_) => &[],
+            Self::Authored { service, .. } => service.magazine_units(),
+        }
+    }
+
+    fn initial_magazine(&self) -> u8 {
+        match self {
+            Self::Legacy(set) => set.initial_page().wire_magazine(),
+            Self::Authored { service, .. } => service
+                .declared()
+                .semantic()
+                .base()
+                .initial_page
+                .wire_magazine(),
+        }
+    }
+
+    fn page(&self, logical: usize) -> (&[[u8; 46]], u16, Option<TeletextResourceHeaderMetadata>) {
+        match self {
+            Self::Legacy(set) => {
+                let page = &set.pages()[logical];
+                (page.data_units(), page.address().subcode.get(), None)
+            }
+            Self::Authored {
+                service,
+                resource_order,
+            } => {
+                let physical = if logical < resource_order.len() {
+                    resource_order[logical]
+                } else {
+                    logical - resource_order.len()
+                };
+                let page = &service.pages()[physical];
+                let subcode = match page.inventory_record() {
+                    super::TeletextPhysicalPageInventoryRecord::Display(address) => {
+                        address.subcode.get()
+                    }
+                    super::TeletextPhysicalPageInventoryRecord::Resource(header) => {
+                        header.physical_subcode()
+                    }
+                };
+                (page.data_units(), subcode, page.resource_header())
+            }
+        }
+    }
 }
 
 impl TeletextCarousel {
@@ -76,13 +190,36 @@ impl TeletextCarousel {
     #[must_use]
     pub fn new(set: EncodedTeletextPageSet) -> Self {
         Self {
-            set,
+            content: CarouselContent::Legacy(set),
             page: 0,
             unit: 0,
             ticks: 0,
             boundary: true,
             first_cycle: true,
+            magazine_pending: false,
         }
+    }
+
+    /// Start one complete authored service, acquiring resources before displays.
+    /// This fixed 20 ms batch plan rejects resource/M29 cycles longer than
+    /// 20 seconds. The diagnostic is a schedule limit, not an authored-page
+    /// limitation; larger services require a separately verified schedule.
+    /// # Errors
+    /// Rejects schedules exceeding the 20-second resource repetition bound.
+    pub fn new_authored(
+        service: EncodedTeletextAuthoredService,
+    ) -> Result<Self, TeletextTransportError> {
+        let content = CarouselContent::authored(service)?;
+        let magazine_pending = !content.magazines().is_empty();
+        Ok(Self {
+            content,
+            page: 0,
+            unit: 0,
+            ticks: 0,
+            boundary: true,
+            first_cycle: true,
+            magazine_pending,
+        })
     }
 
     /// True before the first header or after the complete cycle's terminator.
@@ -105,9 +242,31 @@ impl TeletextCarousel {
         if !self.boundary {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
-        self.set = set;
-        self.first_cycle = true;
+        self.replace_content(CarouselContent::Legacy(set));
         Ok(())
+    }
+
+    /// Replace with a complete authored service while retaining the programme clock.
+    /// # Errors
+    /// Rejects mid-cycle replacement or an excessive resource repetition interval.
+    pub fn replace_authored_at_boundary(
+        &mut self,
+        service: EncodedTeletextAuthoredService,
+    ) -> Result<(), TeletextTransportError> {
+        if !self.boundary {
+            return Err(TeletextTransportError::MidCycleReplacement);
+        }
+        let content = CarouselContent::authored(service)?;
+        self.replace_content(content);
+        Ok(())
+    }
+
+    fn replace_content(&mut self, content: CarouselContent) {
+        self.magazine_pending = !content.magazines().is_empty();
+        self.content = content;
+        self.page = 0;
+        self.unit = 0;
+        self.first_cycle = true;
     }
 
     /// Plan the next bounded batch, leaving a 20 ms presentation interval.
@@ -118,19 +277,27 @@ impl TeletextCarousel {
             .ticks
             .checked_add(STEP_TICKS)
             .ok_or(TeletextTransportError::ClockOverflow)?;
-        let (kind, units) = if self.page == self.set.pages().len() {
+        let (kind, units) = if self.magazine_pending {
+            self.magazine_pending = false;
+            self.boundary = false;
+            (
+                TeletextCarouselBatchKind::Magazine,
+                self.content.magazines().to_vec(),
+            )
+        } else if self.page == self.content.page_count() {
             // A serial-mode page can be closed by a header from any magazine.
-            let magazine = self.set.initial_page().wire_magazine();
+            let magazine = self.content.initial_magazine();
             self.page = 0;
             self.unit = 0;
             self.boundary = true;
             self.first_cycle = false;
+            self.magazine_pending = !self.content.magazines().is_empty();
             (
                 TeletextCarouselBatchKind::Terminator,
                 vec![packets::terminator(magazine)],
             )
         } else {
-            let units = self.set.pages()[self.page].data_units();
+            let (units, subcode, resource_header) = self.content.page(self.page);
             self.boundary = false;
             if self.unit == 0 {
                 self.unit = 1;
@@ -138,12 +305,15 @@ impl TeletextCarousel {
                 if !self.first_cycle {
                     // Repetition must not erase already acquired page content.
                     // C4 shares this Hamming nibble with subcode bits 4..6.
-                    let low = self.set.pages()[self.page]
-                        .address()
-                        .subcode
-                        .get()
-                        .to_le_bytes()[0];
+                    let low = subcode.to_le_bytes()[0];
                     header[9] = packets::hamming_8_4(low >> 4).reverse_bits();
+                    if resource_header
+                        .is_some_and(|metadata| metadata.transmission().update_indicator())
+                    {
+                        // Clear resource C8 without disturbing C7/C9/C10.
+                        header[12] ^=
+                            (packets::hamming_8_4(0) ^ packets::hamming_8_4(2)).reverse_bits();
+                    }
                 }
                 (TeletextCarouselBatchKind::Header, vec![header])
             } else {
@@ -168,6 +338,10 @@ impl TeletextCarousel {
 }
 
 #[cfg(test)]
+#[path = "authored_service_carousel_tests.rs"]
+mod authored_service_carousel_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::teletext::transport_tests::{draft, set};
@@ -180,7 +354,10 @@ mod tests {
         for _ in 0..4 {
             loop {
                 let batch = carousel.next_batch().unwrap();
-                assert_eq!(carousel.set, original);
+                let CarouselContent::Legacy(set) = &carousel.content else {
+                    panic!("legacy content");
+                };
+                assert_eq!(set, &original);
                 if batch.kind() == TeletextCarouselBatchKind::Terminator {
                     break;
                 }
