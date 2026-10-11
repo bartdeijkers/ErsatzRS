@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn owner() -> TeletextPageAddress {
+pub(super) fn owner() -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),
         subcode: TeletextSubcode::new(0x1234).unwrap(),
@@ -78,7 +78,7 @@ fn base_code(row: u8, column: u8) -> u8 {
     ROW.get(usize::from(column)).copied().unwrap_or(b' ')
 }
 
-fn base() -> TeletextBaseDisplay {
+pub(super) fn base() -> TeletextBaseDisplay {
     let rows: Vec<[TeletextBaseDisplayCell; 40]> = (0_u8..25)
         .map(|row| {
             let cells: Vec<_> = (0_u8..40)
@@ -376,15 +376,15 @@ fn group_base() -> TeletextBaseDisplay {
     .unwrap()
 }
 
-fn local(id: u16) -> TeletextObjectIdentity {
+pub(super) fn local(id: u16) -> TeletextObjectIdentity {
     TeletextObjectIdentity::local(owner(), TeletextObjectId::new(id))
 }
 
-fn at(column: u8, operation: TeletextColumnOperation) -> TeletextEnhancementCommand {
+pub(super) fn at(column: u8, operation: TeletextColumnOperation) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::AtColumn { column, operation }
 }
 
-fn foreground(column: u8, index: u8) -> TeletextEnhancementCommand {
+pub(super) fn foreground(column: u8, index: u8) -> TeletextEnhancementCommand {
     at(
         column,
         TeletextColumnOperation::Foreground {
@@ -393,7 +393,7 @@ fn foreground(column: u8, index: u8) -> TeletextEnhancementCommand {
     )
 }
 
-fn glyph(column: u8, code: u8) -> TeletextEnhancementCommand {
+pub(super) fn glyph(column: u8, code: u8) -> TeletextEnhancementCommand {
     at(
         column,
         TeletextColumnOperation::G0 {
@@ -402,13 +402,13 @@ fn glyph(column: u8, code: u8) -> TeletextEnhancementCommand {
     )
 }
 
-fn set(row: u8, column: u8) -> TeletextEnhancementCommand {
+pub(super) fn set(row: u8, column: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::SetPosition {
         position: position(row, column),
     }
 }
 
-fn invoke(
+pub(super) fn invoke(
     target: TeletextObjectIdentity,
     object_type: TeletextObjectType,
     offset: Option<(u8, u8)>,
@@ -420,7 +420,7 @@ fn invoke(
     }
 }
 
-fn definition(
+pub(super) fn definition(
     identity: TeletextObjectIdentity,
     object_type: TeletextObjectType,
     commands: Vec<TeletextEnhancementCommand>,
@@ -452,7 +452,7 @@ fn object_example() -> Vec<TeletextEnhancementCommand> {
     ]
 }
 
-fn service(
+pub(super) fn service(
     main: Vec<TeletextEnhancementCommand>,
     objects: Vec<TeletextEnhancementObjectDefinition>,
 ) -> TeletextSemanticService {

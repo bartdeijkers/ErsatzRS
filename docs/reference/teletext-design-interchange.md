@@ -432,6 +432,51 @@ or DRCS, validate prohibited object overlap/open-object limits, normalize physic
 instructions or authorize rendering/publication. Final C2 transmission ties,
 Adaptive endpoints, geometry and both receiver views remain mandatory work.
 
+### Original candidate attribute observations
+
+`TeletextAttributeExecution.records()` retains one immutable pre-geometry
+observation per original glyph-layer candidate, with identical index, candidate,
+source/root/instance and Base coded/Unicode role. Original losing contenders are
+not removed. The execution also retains fixed shared cell stages after
+Base/Active/Local tails and after Adaptive application through
+`before_adaptive_cell()` and `before_passive_cell()`. The existing `cell()`
+projection still includes the winning Passive overlay; it does not replace either
+shared stage.
+
+Base/Local/Active/Adaptive observations use the shared stage before Passive
+application. Every Passive glyph instead captures its actual invocation's private
+state at that original event, before diagnostic winner filtering. A later blue,
+normal-size Passive glyph cannot erase an earlier red, double-size Passive
+observation or overwrite the shared lower-stage data. Fresh invocation defaults,
+private row lifetime and all per-field origins/pending handles survive. Original
+header/wide Passive observations retain private state with an explicit
+unaddressable reason; other unaddressable observations have no fabricated shared
+cell. Attributes do not grant placement or make invalid original positions legal.
+
+The same immutable registry owns every copied pending handle. All candidate and
+original command counts, checked candidate/stage/private-slot/scratch storage and
+work bounds precede allocation. Shared original correspondence validation checks
+exact Base cells and one-to-one original glyph events, including full
+source/root/instance/type/priority/position. It does not run object-overlap or open
+interval admission on behalf of this observational boundary. The same-service
+composition supplies the unchanged authoritative inputs; matching IDs alone are
+not a generation certificate.
+
+These observations are not final candidate rendering attributes. Adaptive has
+already affected the shared before-Passive stage; its individual overrides and
+original writers remain authoritative for stage-aware replay. Final C.3
+resolution must process Base/Active/Local, Adaptive and Passive layers with
+instance/fragment provenance, rather than enlarge a flattened highest-ranked
+glyph. Preserve requested/effective size, origin attributes across every fragment
+and obscured writers deferred to the next free position unless superseded.
+Spacing double-height suppresses lower-row main-page Base data and controls;
+nonspacing-only double-height leaves uncovered Base data active. Re-execute those
+baselines and enhancement inheritance; do not copy an unsuppressed final cell
+snapshot or erase all selected panel columns. Boundary violations need located
+authoring diagnostics; discretionary decoder responses are not a clipping rule.
+Full C.3, A.7/A.8, physical realization and engine/client/editor/publication
+acceptance remain required and open.
+
 ### Original charset contexts
 
 `resolve_teletext_charset_execution` retains exactly one immutable record per

@@ -120,6 +120,12 @@ uncertain Adaptive endpoints remain typed pending diagnostics. Potential panel
 areas use independent standard defaults. This is a bounded semantic intermediate,
 not character-set execution, geometry/overlap acceptance, physical normalization
 or publication authority; see the interchange reference and milestone evidence.
+The same execution retains every original candidate's pre-geometry attribute
+observation, including losing Passive private states, alongside fixed shared
+stages before Adaptive and Passive application. Neither an observation nor a
+flattened cell winner supplies final size/overlap semantics. C.3 resolution must
+replay original layer/instance writers, spacing lower-row suppression, origin
+fragments and deferred obscured attributes before rendering and publication.
 G1 alphabetic positions now have a separate checked operation, preserving mode
 0x01 rather than promoting them to a Level 1.5-compatible character command.
 Original glyph/Passive attribute execution retains this intent; composition keeps

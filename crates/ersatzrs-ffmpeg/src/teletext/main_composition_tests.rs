@@ -2004,3 +2004,135 @@ fn original_geometry_counts_all_object_types_and_rejects_sixteenth_with_call_pro
     );
     assert_eq!(invalid, before);
 }
+
+fn colour(column: u8, value: u8) -> TeletextEnhancementCommand {
+    at(
+        column,
+        TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(value).unwrap(),
+        },
+    )
+}
+fn observation_fixture() -> Fixture {
+    let first = local(0xffff);
+    let second = local(0x0100);
+    let adaptive = local(0);
+    let mut fixture = Fixture::new(
+        vec![text(1, 8, "é")],
+        Some(vec![
+            position(1, 7),
+            colour(7, 2),
+            position(1, 8),
+            invoke(adaptive, TeletextObjectType::Adaptive),
+            invoke(first, TeletextObjectType::Passive),
+            invoke(second, TeletextObjectType::Passive),
+        ]),
+    );
+    fixture.objects.push(definition(
+        adaptive,
+        TeletextObjectType::Adaptive,
+        vec![colour(0, 3), g0(0)],
+    ));
+    fixture.objects.push(definition(
+        first,
+        TeletextObjectType::Passive,
+        vec![
+            colour(0, 1),
+            at(
+                0,
+                TeletextColumnOperation::Attributes {
+                    double_height: true,
+                    double_width: true,
+                    boxed: false,
+                    conceal: false,
+                    invert: false,
+                    underline_or_separated_mosaics: false,
+                },
+            ),
+            g0(0),
+        ],
+    ));
+    fixture.objects.push(definition(
+        second,
+        TeletextObjectType::Passive,
+        vec![colour(0, 4), g0(0)],
+    ));
+    fixture
+}
+
+#[test]
+fn composition_retains_losing_private_attributes_and_shared_execution_stages() {
+    let service = observation_fixture().build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let execution = plan.attribute_execution();
+    assert_eq!(
+        execution.records().len(),
+        plan.glyph_layers().candidates().len()
+    );
+    for (index, record) in execution.records().iter().enumerate() {
+        assert_eq!(record.candidate_index(), index);
+        assert_eq!(record.candidate(), &plan.glyph_layers().candidates()[index]);
+    }
+    assert_eq!(
+        execution
+            .before_adaptive_cell(1, 8)
+            .unwrap()
+            .foreground()
+            .value(),
+        Some(TeletextColourReference::new(2).unwrap())
+    );
+    assert_eq!(
+        execution
+            .before_passive_cell(1, 8)
+            .unwrap()
+            .foreground()
+            .value(),
+        Some(TeletextColourReference::new(3).unwrap())
+    );
+    assert_eq!(
+        execution.cell(1, 8).unwrap().foreground().value(),
+        Some(TeletextColourReference::new(4).unwrap())
+    );
+    let first = execution
+        .records()
+        .iter()
+        .find(|record| {
+            record.candidate().source()
+                == Some(TeletextEnhancementSource {
+                    object: Some(local(0xffff)),
+                    command: 2,
+                })
+        })
+        .unwrap();
+    let attributes = first.attributes().unwrap();
+    assert_eq!(
+        attributes.foreground().value(),
+        Some(TeletextColourReference::new(1).unwrap())
+    );
+    assert_eq!(attributes.double_height().value(), Some(true));
+    assert_eq!(attributes.double_width().value(), Some(true));
+    assert_eq!(first.candidate().invocation().unwrap().get(), 1);
+    assert_eq!(first.reason(), None);
+    let base = execution
+        .records()
+        .iter()
+        .find(|record| {
+            record.candidate().position() == (1, 8) && record.candidate().base().is_some()
+        })
+        .unwrap();
+    assert_eq!(
+        base.attributes().unwrap().foreground().value(),
+        Some(TeletextColourReference::new(3).unwrap())
+    );
+    assert_eq!(
+        base.candidate()
+            .base()
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(service, before);
+}

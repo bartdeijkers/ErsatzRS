@@ -173,6 +173,11 @@ defaults and located pending C2/Adaptive-extent diagnostics. Next settle pending
 transmission and endpoint rules, execute character-set lifetimes, validate object
 overlap/areas and size footprints, and normalize the physical instructions against
 both receiver views. Full display/publication acceptance remains open.
+All original candidates now retain pre-geometry attribute observations, including
+losing private Passive state, with shared stages before Adaptive and Passive.
+Next consume original writers and these stages in layer-aware C.3 resolution:
+spacing lower-row suppression, origin fragments and deferred obscured attributes.
+Do not resize a flattened glyph winner or use these observations as final attrs.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.

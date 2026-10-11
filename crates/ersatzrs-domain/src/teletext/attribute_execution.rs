@@ -4,14 +4,17 @@
 //! wire timing remain separate obligations. Exact C.2 r3 ties and ambiguous
 //! Adaptive AP/call tails remain typed pending; logical event order is not time.
 
+use super::attribute_observations::{observe_candidates, preflight_observations};
+
 use super::{
     TeletextAttributePending, TeletextAttributePendingReason, TeletextAttributeSource,
     TeletextBaseAttributeSource, TeletextBaseDisplay, TeletextBaseDisplayCell,
     TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
     TeletextEnhancementSource, TeletextExecutedAttribute, TeletextExecutedAttributes,
-    TeletextExecutedFlash, TeletextFlashMode, TeletextFlashRate, TeletextGlyphLayers,
-    TeletextGlyphPriority, TeletextObjectType, TeletextPageAddress, TeletextSpatialEvent,
-    TeletextSpatialInvocationId, TeletextSpatialRootSource, TeletextSpatialTrace,
+    TeletextExecutedFlash, TeletextExecutedGlyphAttributes, TeletextFlashMode, TeletextFlashRate,
+    TeletextGlyphLayers, TeletextGlyphPriority, TeletextObjectType, TeletextPageAddress,
+    TeletextSpatialEvent, TeletextSpatialInvocationId, TeletextSpatialRootSource,
+    TeletextSpatialTrace,
 };
 use std::collections::BTreeMap;
 
@@ -23,6 +26,9 @@ const HEIGHT: usize = 25;
 pub struct TeletextAttributeExecution {
     owner: TeletextPageAddress,
     cells: Vec<Option<TeletextExecutedAttributes>>,
+    before_adaptive: Vec<Option<TeletextExecutedAttributes>>,
+    before_passive: Vec<Option<TeletextExecutedAttributes>>,
+    records: Vec<TeletextExecutedGlyphAttributes>,
     pending: Vec<TeletextAttributePending>,
 }
 impl TeletextAttributeExecution {
@@ -33,10 +39,24 @@ impl TeletextAttributeExecution {
     /// Broad logical areas only; actual panel enable/width is not validated.
     #[must_use]
     pub fn cell(&self, row: u8, column: u8) -> Option<&TeletextExecutedAttributes> {
-        if usize::from(row) >= HEIGHT || usize::from(column) >= WIDTH {
-            return None;
-        }
-        self.cells[usize::from(row) * WIDTH + usize::from(column)].as_ref()
+        stage_cell(&self.cells, row, column)
+    }
+    /// Shared projection after Local/Active tails, before Adaptive changes.
+    /// Original controls/events remain authoritative for future C.3 replay.
+    #[must_use]
+    pub fn before_adaptive_cell(&self, row: u8, column: u8) -> Option<&TeletextExecutedAttributes> {
+        stage_cell(&self.before_adaptive, row, column)
+    }
+    /// Shared projection after Adaptive changes, before Passive composites.
+    /// Neither stage is a footprint/visibility or final-rendering certificate.
+    #[must_use]
+    pub fn before_passive_cell(&self, row: u8, column: u8) -> Option<&TeletextExecutedAttributes> {
+        stage_cell(&self.before_passive, row, column)
+    }
+    /// Exactly aligned with the original glyph layers, including every loser.
+    #[must_use]
+    pub fn records(&self) -> &[TeletextExecutedGlyphAttributes] {
+        &self.records
     }
     /// Append-only diagnostic provenance, including superseded contenders.
     /// Per-field pending handles identify current value uncertainty; the log
@@ -59,6 +79,14 @@ pub struct TeletextAttributeExecutionError {
 pub enum TeletextAttributeExecutionFailure {
     #[error("input owner {other:?} differs from Base owner")]
     OwnerMismatch { other: TeletextPageAddress },
+    #[error("candidate count {count} exceeds budget {maximum}")]
+    CandidateBudget { count: usize, maximum: usize },
+    #[error("original candidate {candidate} has inconsistent Base/event source")]
+    CandidateMismatch { candidate: usize },
+    #[error("original input correspondence failed: {0}")]
+    OriginalSource(super::TeletextDisplayGeometryFailure),
+    #[error("attribute observation storage/work arithmetic exceeds supported range")]
+    AllocationSize,
     #[error("original command budget {maximum} exhausted")]
     CommandBudget { maximum: usize },
     #[error("bounded attribute update budget exceeds storage range")]
@@ -75,7 +103,9 @@ pub enum TeletextAttributeExecutionFailure {
 /// exact ties retain every contender through bounded linked pending records.
 /// # Errors
 /// Rejects different owners or the first original command beyond the trusted
-/// limit, invalid private instance references, or work-limit arithmetic overflow.
+/// limit, candidate count/correspondence, invalid private instance references,
+/// or storage/work arithmetic overflow. Original-input validation does not run
+/// the geometry region or simultaneous-open gates.
 /// No partial result escapes and inputs remain unchanged.
 pub fn resolve_teletext_attribute_execution(
     base: &TeletextBaseDisplay,
@@ -121,10 +151,51 @@ pub fn resolve_teletext_attribute_execution(
         .len()
         .checked_mul(WIDTH * 9 + 13)
         .ok_or_else(|| fail(TeletextAttributeExecutionFailure::WorkBudget))?;
-    // Preflight every instance before output allocation, even for non-glyph commands.
-    for &event in original.events() {
-        event_type(original, event)?;
+    preflight_observations(base, original, glyph_layers, max_commands)?;
+    let cells = initial_cells(base, row_colours)?;
+    let mut executor = Executor {
+        original,
+        layers: glyph_layers,
+        cells,
+        pending: Vec::new(),
+        remaining: maximum,
+    };
+    executor.capture_unaddressable();
+    executor.execute_tails()?;
+    let before_adaptive = executor.cells.clone();
+    executor.execute_adaptive()?;
+    let before_passive = executor.cells.clone();
+    let mut private = vec![None; original.events().len()];
+    executor.execute_passive(&mut private)?;
+    let records = observe_candidates(glyph_layers, &before_passive, &private)?;
+    if executor.pending.len() > diagnostic_limit {
+        return Err(fail(TeletextAttributeExecutionFailure::WorkBudget));
     }
+    Ok(TeletextAttributeExecution {
+        owner,
+        cells: executor.cells,
+        before_adaptive,
+        before_passive,
+        records,
+        pending: executor.pending,
+    })
+}
+
+fn stage_cell(
+    cells: &[Option<TeletextExecutedAttributes>],
+    row: u8,
+    column: u8,
+) -> Option<&TeletextExecutedAttributes> {
+    if usize::from(row) >= HEIGHT || usize::from(column) >= WIDTH {
+        return None;
+    }
+    cells[usize::from(row) * WIDTH + usize::from(column)].as_ref()
+}
+
+fn initial_cells(
+    base: &TeletextBaseDisplay,
+    row_colours: &[TeletextColourReference; 25],
+) -> Result<Vec<Option<TeletextExecutedAttributes>>, TeletextAttributeExecutionError> {
     let mut cells = Vec::with_capacity(HEIGHT * WIDTH);
     for (row, &row_colour) in row_colours.iter().enumerate() {
         for column in 0..WIDTH {
@@ -135,33 +206,20 @@ pub fn resolve_teletext_attribute_execution(
             } else {
                 Some(default_attributes(
                     TeletextAttributeSource::PanelDefault {
-                        row: u8::try_from(row)
-                            .map_err(|_| fail(TeletextAttributeExecutionFailure::WorkBudget))?,
+                        row: u8::try_from(row).map_err(|_| TeletextAttributeExecutionError {
+                            owner: base.owner(),
+                            location: None,
+                            root_source: None,
+                            invocation: None,
+                            reason: TeletextAttributeExecutionFailure::WorkBudget,
+                        })?,
                     },
                     row_colour,
                 ))
             });
         }
     }
-    let mut executor = Executor {
-        original,
-        layers: glyph_layers,
-        cells,
-        pending: Vec::new(),
-        remaining: maximum,
-    };
-    executor.capture_unaddressable();
-    executor.execute_tails()?;
-    executor.execute_adaptive()?;
-    executor.execute_passive()?;
-    if executor.pending.len() > diagnostic_limit {
-        return Err(fail(TeletextAttributeExecutionFailure::WorkBudget));
-    }
-    Ok(TeletextAttributeExecution {
-        owner,
-        cells: executor.cells,
-        pending: executor.pending,
-    })
+    Ok(cells)
 }
 
 fn base_attributes(cell: TeletextBaseDisplayCell) -> TeletextExecutedAttributes {
@@ -271,7 +329,7 @@ fn position(event: TeletextSpatialEvent) -> (u16, u16) {
         event.absolute_after().column(),
     )
 }
-fn area(position: (u16, u16)) -> Option<(usize, usize, usize)> {
+pub(super) fn area(position: (u16, u16)) -> Option<(usize, usize, usize)> {
     let (row, column) = position;
     if row >= 25 || column >= 72 || (row == 0 && !(8..40).contains(&column)) {
         return None;
@@ -523,7 +581,10 @@ impl Executor<'_> {
         }
         Ok(())
     }
-    fn execute_passive(&mut self) -> Result<(), TeletextAttributeExecutionError> {
+    fn execute_passive(
+        &mut self,
+        private: &mut [Option<TeletextExecutedAttributes>],
+    ) -> Result<(), TeletextAttributeExecutionError> {
         let mut states: BTreeMap<usize, TeletextExecutedAttributes> = BTreeMap::new();
         for (ordinal, &event) in self.original.events().iter().enumerate() {
             if event_type(self.original, event)? != Some(TeletextObjectType::Passive) {
@@ -550,6 +611,9 @@ impl Executor<'_> {
                     );
                 }
                 if is_glyph(operation) {
+                    // Capture every private glyph before placement/winner tests.
+                    // Losing, wide and header candidates retain their own state.
+                    private[ordinal] = Some(*state);
                     if let Some((row, column, _)) = area(position(event)) {
                         if self
                             .layers

@@ -94,23 +94,12 @@ pub fn resolve_teletext_display_geometry(
     budget: TeletextDisplayGeometryBudget,
 ) -> Result<TeletextDisplayGeometry, TeletextDisplayGeometryError> {
     preflight(base, original, layers, budget)?;
-    let mut seen_events = vec![false; original.events().len()];
-    let mut seen_base = vec![false; TELETEXT_ROWS * TELETEXT_COLUMNS];
-    let mut seen_calls = vec![false; original.invocations().len()];
-    validate_events(base.owner(), original, &mut seen_calls)?;
+    validate_original_glyph_inputs(base, original, layers)?;
     let panels = base.presentation().map(|presentation| presentation.panels);
     let (left_width, right_width) =
         panels.map_or((0, 0), super::TeletextSidePanels::level25_widths);
     let mut records = Vec::with_capacity(layers.candidates().len());
     for (candidate_index, &candidate) in layers.candidates().iter().enumerate() {
-        validate_candidate(
-            base,
-            original,
-            candidate,
-            candidate_index,
-            &mut seen_events,
-            &mut seen_base,
-        )?;
         let area = raw_area(candidate.position().1);
         records.push(TeletextPlacedGlyphCandidate {
             candidate_index,
@@ -119,7 +108,6 @@ pub fn resolve_teletext_display_geometry(
             placement: placement(candidate.position(), area, left_width, right_width),
         });
     }
-    validate_completeness(base.owner(), original, &seen_events, &seen_base)?;
     let (object_regions, addresses, writes) =
         object_regions(base.owner(), original, left_width, right_width)?;
     let object_open_count = count_open_objects(base.owner(), &object_regions)?;
@@ -227,6 +215,30 @@ fn preflight(
         return Err(fail(TeletextDisplayGeometryFailure::AllocationSize));
     }
     Ok(())
+}
+
+/// Shared original-input correspondence only, without geometry/admission gates.
+/// Callers fence all raw counts and the three scratch allocations before calling.
+pub(super) fn validate_original_glyph_inputs(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    layers: &TeletextGlyphLayers,
+) -> Result<(), TeletextDisplayGeometryError> {
+    let mut seen_events = vec![false; original.events().len()];
+    let mut seen_base = vec![false; TELETEXT_ROWS * TELETEXT_COLUMNS];
+    let mut seen_calls = vec![false; original.invocations().len()];
+    validate_events(base.owner(), original, &mut seen_calls)?;
+    for (index, &candidate) in layers.candidates().iter().enumerate() {
+        validate_candidate(
+            base,
+            original,
+            candidate,
+            index,
+            &mut seen_events,
+            &mut seen_base,
+        )?;
+    }
+    validate_completeness(base.owner(), original, &seen_events, &seen_base)
 }
 
 fn validate_events(
