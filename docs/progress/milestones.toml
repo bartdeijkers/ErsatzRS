@@ -987,6 +987,40 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 compatibility-aware composed packing checkpoint:
+The same-service packing seam composes and encodes using one immutable exact-owner
+catalog, selected links and original header colour. Main compatibility-row state
+observes every actual row-address word separately from enhanced AP; body glyph
+restoration and safe initial header selectors preserve position/colour and atomic
+DRCS/invocation pairs. Each definition retains independently reset legacy state.
+Both shared sizing and emission include exact added selectors before pointer/body
+allocation. A review-discovered provisional-pointer dependency is fixed: every
+local invocation invalidates the compatibility-row assumption in both passes.
+Eighty-four focused tests pass (6b9727be-e4e0-44cb-8263-9abd9bc50e6c; 442 skipped),
+including twenty-two new state/packing regressions, original word/snapshot baselines,
+source/default ownership, initial header colour, atomic failure and high physical
+markers 104/N80 and 206/NFB at rows one/24. Independent protected-word decoding
+proves pointer-to-marker agreement and exact 208/209 capacity with restorations.
+Final two native tests pass (6b451523-5227-4518-b5db-fda8d23858eb; 524 skipped): two
+new production same-service body/header cases and four unchanged composed cases at
+Levels 1.5/2.5 through guarded teletextimager 0.2.0. New fixture SHA256
+a8e677edf49a3141a5f5a3c2e412d1e6dae29db653b41e42a88f621b7dbb3774;
+original fixture bf458448... and dedicated helper e1cb2ad2... are byte-identical.
+Wrong context goldens fail. The reference and e2e README own exact hashes/replay.
+Pinned imager ignores some historical any-row-address disturbance behavior and
+advances its header AP directly to eight. These native cells do not establish all
+historical compatibility transitions; literal wire and native cell evidence are
+kept distinct. Full suitable-client/decoder coverage remains required.
+Final strict FFmpeg all-target Clippy, workspace formatting, architecture/progress
+checks and independent reviews pass. Explicit header positions and complex late
+header restoration return located pending-normalization errors, not an authoring
+exclusion. Header semantic normalization, original default realization, final
+object/base/attribute geometry, non-Latin proof, complete service lifecycle,
+transport/client/editor/publication acceptance remain open. All six milestone
+acceptance/status/dependency records remain unchanged; no runtime activation.
+
+Earlier ordered composition evidence follows:
+
 2026-10-11 ordered main-program checkpoint:
 An immutable ordered intermediate preserves exact original commands, invocation
 anchors, sparse original defaults and source provenance while composing positioned

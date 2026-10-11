@@ -88,6 +88,12 @@ and restoring row-scoped repertoire. It retains original effective-program and
 colour context. Final dual-receiver positioning, base/object priority, geometry,
 default-resource realization and shared packet sizing remain required; the
 intermediate does not authorize publication or redefine display semantics.
+A same-service packing seam now uses original header colour and separately tracks
+historical compatibility rows. Final main/definition sizing includes inserted body
+restoration selectors; local invocation counts are independent of provisional
+pointer high bits. Complex header cases still require instruction normalization,
+not authoring exclusions. Selected native cells and literal wire/high-pointer
+evidence remain distinct from full decoder/client acceptance (see the reference).
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

@@ -1171,6 +1171,11 @@ An ordered main-program intermediate now preserves commands, invocation anchors,
 compatible fallback and source locations with bounded charset restoration.
 Final dual-receiver wire positions, Active/base priority, geometry/default
 ownership, shared definition sizing and complete service composition remain open.
+The same-service packer now restores body compatibility rows and establishes safe
+initial header colour, including every selector in shared sizing and pointers.
+Local calls use pointer-independent restoration decisions in both passes. Complex
+header normalization, original default realization, final semantics and full
+historical/suitable-client decoding remain required before service publication.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

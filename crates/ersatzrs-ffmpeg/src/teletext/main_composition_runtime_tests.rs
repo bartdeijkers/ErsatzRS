@@ -6,8 +6,9 @@ use ersatzrs_domain::*;
 use super::main_composition::{compose_teletext_main_program, TeletextMainCompositionBudget};
 use super::packets::{data_unit, terminator};
 use super::{
-    allocate_teletext_resource_objects, compile_teletext_local_program_with_objects,
-    encode_teletext_page, source_header, TeletextEncodingRegion,
+    allocate_teletext_resource_objects, compile_teletext_composed_main_program,
+    compile_teletext_local_program_with_objects, encode_teletext_page, source_header,
+    TeletextEncodingRegion,
 };
 
 fn position(row: u8, column: u8) -> TeletextEnhancementCommand {
@@ -90,6 +91,17 @@ fn encoded_case(
     definitions: Vec<TeletextEnhancementObjectDefinition>,
     cells: &[serde_json::Value],
 ) -> serde_json::Value {
+    encoded_case_with_context(name, rows, main, definitions, cells, false)
+}
+
+fn encoded_case_with_context(
+    name: &str,
+    rows: Vec<TeletextRow>,
+    main: Vec<TeletextEnhancementCommand>,
+    definitions: Vec<TeletextEnhancementObjectDefinition>,
+    cells: &[serde_json::Value],
+    compatibility: bool,
+) -> serde_json::Value {
     let mut page = super::transport_tests::draft(200, 0, false);
     // In English, pound is a direct national character. German forces the
     // intended G2 replacement and gives unchanged ASCII repertoire 15.
@@ -97,37 +109,47 @@ fn encoded_case(
     page.rows = rows;
     let owner = page.address;
     let service = service(&page, main, definitions);
-    let composed = compose_teletext_main_program(
-        &service,
-        owner,
-        TeletextMainCompositionBudget {
-            max_input_commands: 64,
-            max_output_commands: 64,
-            collection: TeletextEnhancementCollectionBudget {
-                max_commands: 128,
-                max_drcs_references: 0,
-            },
-        },
-    )
-    .unwrap();
     let objects = service.objects();
     let allocations = allocate_teletext_resource_objects(objects, &[], 4).unwrap();
-    let local = compile_teletext_local_program_with_objects(
-        owner,
-        composed.program(),
-        objects,
-        &allocations,
-        TeletextResolvedObjectPageLinks {
-            public: None,
-            global: None,
-        },
-        TeletextObjectCatalogBudget {
-            max_objects: 4,
+    let composition_budget = TeletextMainCompositionBudget {
+        max_input_commands: 64,
+        max_output_commands: 64,
+        collection: TeletextEnhancementCollectionBudget {
             max_commands: 128,
+            max_drcs_references: 0,
         },
-    )
-    .unwrap();
-    if name == "invocation_anchor" {
+    };
+    let packing_budget = TeletextObjectCatalogBudget {
+        max_objects: 4,
+        max_commands: 128,
+    };
+    let local = if compatibility {
+        compile_teletext_composed_main_program(
+            &service,
+            owner,
+            &allocations,
+            composition_budget,
+            packing_budget,
+        )
+        .unwrap()
+        .encoded()
+        .clone()
+    } else {
+        let composed = compose_teletext_main_program(&service, owner, composition_budget).unwrap();
+        compile_teletext_local_program_with_objects(
+            owner,
+            composed.program(),
+            objects,
+            &allocations,
+            TeletextResolvedObjectPageLinks {
+                public: None,
+                global: None,
+            },
+            packing_budget,
+        )
+        .unwrap()
+    };
+    if matches!(name, "invocation_anchor" | "context_body_restore") {
         let positions = local.definition_positions();
         assert_eq!(positions.len(), 1);
         assert_eq!(positions[0].absolute_index(), 5);
@@ -304,5 +326,99 @@ async fn composed_main_program_decodes_with_pinned_independent_teletextimager() 
         report,
         serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
         "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":4,"levels":["1.5","2.5"]})
+    );
+}
+
+fn contextual_cases() -> Vec<serde_json::Value> {
+    let pound = [0x23, 7, 0, 7, 0];
+    let white = [b'Z', 15, 0, 7, 0];
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
+    let body = encoded_case_with_context(
+        "context_body_restore",
+        vec![text(1, 8, "Z£"), text(2, 8, "TT")],
+        vec![
+            position(1, 8),
+            TeletextEnhancementCommand::InvokeObject {
+                target: identity,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ],
+        vec![TeletextEnhancementObjectDefinition {
+            identity,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![
+                position(1, 0),
+                at(
+                    0,
+                    TeletextColumnOperation::Foreground {
+                        colour: TeletextColourReference::new(1).unwrap(),
+                    },
+                ),
+                at(
+                    0,
+                    TeletextColumnOperation::Background {
+                        colour: TeletextColourReference::new(4).unwrap(),
+                    },
+                ),
+                at(
+                    0,
+                    TeletextColumnOperation::G0 {
+                        code: TeletextGlyphCode::new(b'A').unwrap(),
+                    },
+                ),
+            ])
+            .unwrap(),
+        }],
+        &[
+            cell(1, 8, white, white),
+            cell(1, 9, pound, pound),
+            cell(2, 8, [b'T', 15, 0, 7, 0], [b'A', 0, 0, 1, 4]),
+            cell(2, 9, [b'T', 15, 0, 7, 0], [b'T', 15, 0, 7, 0]),
+        ],
+        true,
+    );
+    let header = encoded_case_with_context(
+        "context_initial_header",
+        vec![text(0, 8, "£Z")],
+        vec![TeletextEnhancementCommand::SetScreenColour {
+            colour: TeletextColourReference::new(1).unwrap(),
+        }],
+        vec![],
+        &[cell(0, 8, pound, pound), cell(0, 9, white, white)],
+        true,
+    );
+    vec![body, header]
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn contextual_main_program_decodes_with_pinned_independent_teletextimager() {
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":contextual_cases()
+    }))
+    .unwrap();
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_CONTEXT_MAIN_FIXTURE"])
+    {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({
+            "decoder":"teletextimager", "decoder_version":"0.2.0",
+            "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
+            "cases_passed":2, "levels":["1.5","2.5"]
+        })
     );
 }

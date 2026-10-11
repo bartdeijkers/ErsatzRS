@@ -6,11 +6,11 @@
 //! headers, packet addresses, publication and transport remain separate.
 
 use ersatzrs_domain::{
-    TeletextColumnOperation, TeletextDrcsTableScope, TeletextEnhancementCommand,
-    TeletextEnhancementPosition, TeletextEnhancementProgram, TeletextEnhancementSource,
-    TeletextFlashMode, TeletextFlashRate, TeletextG3Compatibility, TeletextObjectIdentity,
-    TeletextObjectOffset, TeletextObjectScope, TeletextObjectType, TeletextPageAddress,
-    TeletextRawDataPageNumber, TeletextResolvedObjectPageLinks,
+    TeletextColourReference, TeletextColumnOperation, TeletextDrcsTableScope,
+    TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
+    TeletextEnhancementSource, TeletextFlashMode, TeletextFlashRate, TeletextG3Compatibility,
+    TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectScope, TeletextObjectType,
+    TeletextPageAddress, TeletextRawDataPageNumber, TeletextResolvedObjectPageLinks,
 };
 
 use super::packets::{hamming_24_18, hamming_8_4};
@@ -36,6 +36,10 @@ pub enum TeletextLocalProgramEncodingFailure {
     NeedsRowZeroLowering {
         position: TeletextEnhancementPosition,
     },
+    /// A later header selector cannot move the physical AP back to column zero.
+    /// Semantic normalization remains an explicit final compiler obligation.
+    #[error("compatible glyph position {position:?} needs context-dependent row lowering")]
+    NeedsCompatibilityRowLowering { position: (u8, u8) },
     /// A semantic object ID is not a physical wire pointer.
     #[error(
         "object {target:?}, type {object_type:?}, offset {offset:?} needs physical allocation"
@@ -347,11 +351,19 @@ impl CommandWords {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct LoweringState {
     active_position: (u8, u8),
     global_s1: Option<u8>,
     normal_s1: Option<u8>,
     invocations: [u8; 3],
+    compatibility: Option<CompatibilityContext>,
+}
+
+#[derive(Clone, Copy)]
+struct CompatibilityContext {
+    row: Option<u8>,
+    header_colour: TeletextColourReference,
 }
 
 impl LoweringState {
@@ -361,10 +373,48 @@ impl LoweringState {
             global_s1: None,
             normal_s1: None,
             invocations: [0; 3],
+            compatibility: None,
+        }
+    }
+
+    /// Opt-in main-program policy for the row address seen by Level 1.5.
+    /// Definition compilers keep `new`: objects retain independent wire state.
+    pub(super) const fn new_with_compatibility(header_colour: TeletextColourReference) -> Self {
+        Self {
+            compatibility: Some(CompatibilityContext {
+                row: None,
+                header_colour,
+            }),
+            ..Self::new()
         }
     }
 
     pub(super) fn lower(
+        &mut self,
+        command: TeletextEnhancementCommand,
+        context: Option<ResourceContext<'_>>,
+    ) -> Result<CommandWords, TeletextLocalProgramEncodingFailure> {
+        // A failed compound command exposes neither a partial word sequence nor
+        // advanced AP, DRCS latches or invocation counts to the next command.
+        let mut next = *self;
+        let words = next.lower_command(command, context)?;
+        next.observe_compatibility(&words);
+        if matches!(command, TeletextEnhancementCommand::InvokeObject { target, .. }
+            if target.scope() == TeletextObjectScope::Local)
+        {
+            // A local marker's high bit changes the raw invocation address
+            // between the sizing placeholder and final forward allocation.
+            // Retain no compatibility-row assumption after this command in
+            // either pass, so restoration count is independent of that number.
+            if let Some(context) = &mut next.compatibility {
+                context.row = None;
+            }
+        }
+        *self = next;
+        Ok(words)
+    }
+
+    fn lower_command(
         &mut self,
         command: TeletextEnhancementCommand,
         context: Option<ResourceContext<'_>>,
@@ -397,8 +447,21 @@ impl LoweringState {
                 }
             }
             TeletextEnhancementCommand::AtColumn { column, operation } => {
-                self.move_to((self.active_position.0, column))?;
-                return Ok(self.column(column, operation));
+                let previous = self.active_position;
+                self.move_to((previous.0, column))?;
+                let selector = self.compatibility_selector(previous, column, operation)?;
+                let words = self.column(column, operation);
+                // A compatible glyph lowers to one word. An initial header
+                // DRCS pair is kept atomic: its selector would immediately
+                // disturb the compatibility row even after a header prefix.
+                if let Some(selector) = selector {
+                    if words.len == 1 {
+                        return Ok(CommandWords::two(selector, words.values[0]));
+                    }
+                    // Do not emit a redundant prefix or grow this atomic pair.
+                    // A later compatible header glyph needs normalization.
+                }
+                return Ok(words);
             }
             TeletextEnhancementCommand::InvokeObject {
                 target,
@@ -409,6 +472,65 @@ impl LoweringState {
             }
         };
         Ok(CommandWords::one(value))
+    }
+
+    fn compatibility_selector(
+        &self,
+        previous: (u8, u8),
+        column: u8,
+        operation: TeletextColumnOperation,
+    ) -> Result<Option<u32>, TeletextLocalProgramEncodingFailure> {
+        let Some(context) = self.compatibility else {
+            return Ok(None);
+        };
+        let row = self.active_position.0;
+        if context.row == Some(row) {
+            return Ok(None);
+        }
+        // A colour-aware initial selector is also safe before attributes and
+        // enhanced-only glyphs. Later header positioning must be normalized by
+        // the semantic compiler rather than emitting a backwards row opcode.
+        if row == 0 && previous == (0, 0) {
+            return Ok(Some(word(63, 7, context.header_colour.get())));
+        }
+        if !matches!(
+            operation,
+            TeletextColumnOperation::G2 { .. }
+                | TeletextColumnOperation::G0Diacritic { .. }
+                | TeletextColumnOperation::G3 {
+                    compatibility: TeletextG3Compatibility::Level15,
+                    ..
+                }
+        ) {
+            return Ok(None);
+        }
+        if row == 0 {
+            return Err(
+                TeletextLocalProgramEncodingFailure::NeedsCompatibilityRowLowering {
+                    position: (row, column),
+                },
+            );
+        }
+        Ok(Some(word(row_address(row), 4, column)))
+    }
+
+    fn observe_compatibility(&mut self, words: &CommandWords) {
+        let Some(context) = &mut self.compatibility else {
+            return;
+        };
+        for &value in words.words() {
+            let address = value.to_le_bytes()[0] & 63;
+            let mode = (value >> 6).to_le_bytes()[0] & 31;
+            if address >= 40 {
+                context.row = Some(if address == 40 {
+                    24
+                } else if address == 63 && mode == 7 {
+                    0
+                } else {
+                    address - 40
+                });
+            }
+        }
     }
 
     fn invoke(

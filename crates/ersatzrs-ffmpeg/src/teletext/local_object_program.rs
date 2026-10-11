@@ -5,7 +5,7 @@
 //! geometry/repertoires or establish publication or receiver readiness.
 
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
+    TeletextColourReference, TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
     TeletextEnhancementObjectDefinition, TeletextEnhancementProgram, TeletextEnhancementSource,
     TeletextObjectCatalogBudget, TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress,
     TeletextResolvedObjectPageLinks,
@@ -133,12 +133,25 @@ pub fn compile_teletext_local_program_with_objects(
     links: TeletextResolvedObjectPageLinks,
     budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextLocalObjectProgram, TeletextLocalObjectProgramEncodingError> {
+    compile_with_context(owner, program, catalog, allocations, links, budget, None)
+}
+
+pub(super) fn compile_with_context(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    allocations: &TeletextResourceObjectAllocations,
+    links: TeletextResolvedObjectPageLinks,
+    budget: TeletextObjectCatalogBudget,
+    header_colour: Option<TeletextColourReference>,
+) -> Result<EncodedTeletextLocalObjectProgram, TeletextLocalObjectProgramEncodingError> {
     let input = Input {
         owner,
         program,
         catalog,
         allocations,
         links,
+        header_colour,
     };
     let local_count = input.validate_budget(budget)?;
     // Bound even the temporary map: each definition consumes a marker, and
@@ -170,6 +183,7 @@ struct Input<'a> {
     catalog: &'a TeletextEnhancementObjectCatalog,
     allocations: &'a TeletextResourceObjectAllocations,
     links: TeletextResolvedObjectPageLinks,
+    header_colour: Option<TeletextColourReference>,
 }
 
 struct Plan {
@@ -179,6 +193,11 @@ struct Plan {
 }
 
 impl Input<'_> {
+    fn main_state(&self) -> LoweringState {
+        self.header_colour
+            .map_or_else(LoweringState::new, LoweringState::new_with_compatibility)
+    }
+
     fn locals(&self) -> impl Iterator<Item = &TeletextEnhancementObjectDefinition> {
         self.catalog
             .definitions()
@@ -295,7 +314,7 @@ impl Input<'_> {
         numbers: &[(TeletextObjectIdentity, TeletextObjectType, u8)],
     ) -> Result<Plan, TeletextLocalObjectProgramEncodingError> {
         let mut count = if numbers.is_empty() { 1 } else { 2 };
-        let mut state = LoweringState::new();
+        let mut state = self.main_state();
         for (command, &value) in self.program.commands().iter().enumerate() {
             let location = TeletextEnhancementSource {
                 object: None,
@@ -396,7 +415,11 @@ impl Input<'_> {
         bodies: &mut [[u8; 40]],
         index: &mut usize,
     ) -> Result<(), TeletextLocalObjectProgramEncodingError> {
-        let mut state = LoweringState::new();
+        let mut state = if object.is_none() {
+            self.main_state()
+        } else {
+            LoweringState::new()
+        };
         for (command, &value) in program.commands().iter().enumerate() {
             let location = TeletextEnhancementSource {
                 object: object.map(|item| item.identity),

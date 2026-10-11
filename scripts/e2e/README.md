@@ -622,3 +622,31 @@ the dedicated helper SHA256 is
 The pages explicitly select German national option one: pound therefore requires
 the intended derived G2 replacement, while ordinary ASCII retains repertoire 15
 in the pinned decoder. The original local/resource fixture hashes stay unchanged.
+
+## Teletext compatibility-aware main calibration
+
+Two further fixed cases use `compile_teletext_composed_main_program`, which
+composes and packs against the same immutable service and original header colour.
+They cover a derived body glyph after an anchored Passive invocation and a first
+header glyph after explicit screen colour. Reuse the same detached decoder:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_CONTEXT_MAIN_FIXTURE="$fixture_dir/context-main.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  contextual_main_program_decodes_with_pinned_independent_teletextimager --lib \
+  --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py \
+  < "$fixture_dir/context-main.json"
+```
+
+The separate two-case fixture SHA256 is
+`a8e677edf49a3141a5f5a3c2e412d1e6dae29db653b41e42a88f621b7dbb3774`.
+The helper and original four-case composition fixture are unchanged. The pinned
+decoder proves these literal cells at both levels, but its Level 1.5 path does
+not model every historical row-address disturbance. Separate literal triplet and
+protected-pointer regressions check restoration fields, high local pointers and
+exact physical capacity. This is partial wire/decoder evidence; complex header
+normalization, original default realization, final geometry/priority and suitable
+client navigation remain open. No successful result activates or publishes pages.

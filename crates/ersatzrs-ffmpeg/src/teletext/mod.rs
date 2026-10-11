@@ -12,6 +12,7 @@ mod carousel;
 mod charset;
 mod clock;
 mod colour_context;
+mod composed_main;
 mod compositional;
 mod drcs;
 mod enhancement_program;
@@ -47,6 +48,10 @@ pub use clock::{
 pub use colour_context::{
     resolve_teletext_colour_context, TeletextColourContext, TeletextColourContextError,
     TeletextColourContextFailure,
+};
+pub use composed_main::{
+    compile_teletext_composed_main_program, EncodedTeletextComposedMainProgram,
+    TeletextComposedMainEncodingError, TeletextComposedMainPackingError,
 };
 pub use compositional::encode_teletext_compositional_links;
 pub use drcs::{encode_teletext_drcs_bodies, TeletextDrcsPacketBodies};
@@ -172,6 +177,10 @@ mod buffer_tests;
 mod clock_tests;
 #[cfg(test)]
 mod colour_context_tests;
+#[cfg(test)]
+mod compatibility_lowering_tests;
+#[cfg(test)]
+mod composed_main_tests;
 #[cfg(test)]
 mod compositional_tests;
 #[cfg(test)]

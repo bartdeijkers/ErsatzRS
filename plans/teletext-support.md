@@ -137,6 +137,13 @@ charset context under input/output/expanded budgets. It carries original colour
 context but does not grant readiness. Final dual-receiver wire positions,
 Active/base priority, geometry/default ownership and shared definition sizing
 remain required before complete service composition.
+The same-service composed packer now includes opt-in compatibility-row restoration
+and safe initial header colour selection in final shared sizing/pointer allocation.
+Local-call restoration counts are independent of provisional pointer values.
+Complex header normalization remains required: no neutral selector preserves both
+receiver states after header column advancement. Pinned imager proves selected
+cells, not all historical Level 1.5 transitions; retain separate wire and final
+client/decoder acceptance evidence in the interchange reference.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

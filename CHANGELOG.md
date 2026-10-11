@@ -156,6 +156,9 @@ release section when tagging a release.
   An ordered bounded main-program intermediate now retains original commands,
   invocation anchors and provenance, with compatible-glyph suppression and
   row-scoped charset restoration. Final wire/display semantics remain open.
+  Same-service packing now retains original header colour, restores compatible
+  body-row positioning and includes added selectors in exact local pointers and
+  capacity. Complex header normalization and full receiver acceptance remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

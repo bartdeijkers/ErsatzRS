@@ -228,6 +228,62 @@ decoder; its same-cell designation handling selects the restored repertoire for
 an earlier glyph. That observation neither changes the required engine scope nor
 establishes correctness of the final wire compiler.
 
+### Compatibility-aware composed packing
+
+`compile_teletext_composed_main_program` composes and packs one exact owner from
+the same immutable semantic service. Its catalog, selected resource links and
+original header-row colour cannot come from a detached, different context.
+The returned semantic plan and single main/local-definition sequence remain
+unpublished. Packing failures map through authored/default/base provenance;
+definitions retain their original full identity and command ordinal.
+
+An opt-in lowering policy separately tracks the historical Level 1.5 row and
+enhanced AP. Every emitted row-address word updates the former, including screen
+colour, DRCS selection and object modifier/invocation words. Before a compatible
+body-row glyph, a same-position mode-four selector restores the intended row if
+necessary. Atomic modifier/invocation and DRCS-selector/glyph pairs remain intact;
+normal/global latches and enhanced invocation anchors do not change. A first
+one-word header operation can establish row zero with its original resolved colour
+while AP is still zero/zero. Initial compound DRCS remains an unchanged atomic
+pair; it would immediately disturb that row again.
+
+Local invocation addresses depend on their eventual definition markers. After
+every local invocation the opt-in policy therefore marks the compatibility row
+unknown, even if a preliminary pointer appears to address the desired row. The
+next compatible body glyph emits a restoration independent of that preliminary
+pointer. Both sizing and emission use this same policy, with every actual selector
+charged before body allocation and final forward-pointer placement. High marker
+104/N80 and 206/NFB regressions cover rows one and 24 and the exact 208/209 limit.
+Legacy compilers and individual definition states keep the original policy and
+unchanged packet bytes.
+
+Table 28 provides no neutral header selector: 63/07 also resets AP to zero/zero
+and selects colour. Repeating it after column advancement violates Annex A.4.
+Explicit header positions and header attributes followed by a row-disturbing
+call/DRCS selector and a later compatible glyph still need semantic instruction
+normalization. Current packing returns a source-located unresolved-lowering error
+rather than reserving a feature exclusion or emitting backwards/reserved words.
+Deferred AP and exact invocation-offset adjustment can resolve some cases; full
+attribute inheritance, object/base priority and final display realization must
+be established before choosing a general normalization. Equal-looking charset
+or colour replay is not a generic neutral column operation.
+
+Two additional actual-production cases decode through the unchanged pinned
+teletextimager oracle at both Levels 1.5 and 2.5: a body glyph after a Passive
+invocation, and an initial header glyph after explicit screen colour. The separate
+two-case fixture SHA256 is
+`a8e677edf49a3141a5f5a3c2e412d1e6dae29db653b41e42a88f621b7dbb3774`.
+The original four-case composition fixture remains byte-identical. The
+[same-service packing workflow](../../scripts/e2e/README.md#teletext-compatibility-aware-main-calibration)
+uses the same guarded loader and dedicated helper, without new runtime dependencies.
+Pinned imager's Level 1.5 path does not model every historical any-row-address
+disturbance, and its 63/07 handler advances directly to column eight. Its green
+cells do not prove all historic receiver transitions. Literal wire vectors and
+independent protected-pointer decoding prove inserted fields and physical sizing;
+full suitable-client/decoder coverage remains required. Full header normalization,
+non-Latin decoding, object/base/attribute geometry, original default realization,
+complete service lifecycle and publication remain open.
+
 ## Resource object allocation and invocation
 
 `allocate_teletext_resource_objects` uses the checked object catalog, separately
