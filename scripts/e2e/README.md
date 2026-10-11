@@ -469,3 +469,36 @@ The [interchange reference](../../docs/reference/teletext-design-interchange.md#
 records source pins, coverage and the separately reproduced X27 limitation.
 This diagnostic does not establish client display/navigation, transport integrity,
 complete Level 2.5 compilation or the design/editor/publication workflow.
+
+## Teletext object decoder calibration
+
+The separate explicitly ignored diagnostic uses the same Linux x64, Python 3
+and pinned libzvbi 0.2.42 public ABI. It imports the frozen resource helper's
+version/layout guards, without changing the DRCS oracle.
+
+```bash
+fixture_dir="$(mktemp -d)"
+ERSATZRS_TELETEXT_TEST_OBJECT_FIXTURE="$fixture_dir/objects.json" \
+  ./run.sh test -p ersatzrs-ffmpeg object_runtime_tests --lib \
+  --run-ignored ignored-only
+python3 scripts/e2e/teletext-object-decoder.py < "$fixture_dir/objects.json"
+```
+
+Eight synthetic cases use complete production POP/GPOP pages, exact allocated
+invocations and MOT declarations, including legal empty companions for S1=15.
+They cover public/global active/adaptive/passive objects and two nested chains.
+The fresh-decoder oracle checks exact glyphs, foreground/background colours,
+relative origins, active propagation versus adaptive/passive containment and
+unchanged base cells. It does not compare font pixels.
+
+The helper bounds input to 2 MiB, twelve cases, 256 units and sixteen checked
+cells per case. It rejects unknown/duplicate members and invalid dimensions,
+numbers and bytes before native decoding. Replay emits compact version/count
+JSON; the existing test runner bounds process time, stdout and stderr.
+
+The [object-decoding reference](../../docs/reference/teletext-design-interchange.md#pinned-independent-object-decoding)
+records exact fixture/helper hashes and coverage. Native proof covers the first
+pointer bank only; byte tests cover all pointer banks and capacities. Higher-bank
+external decoding, local objects, complete inheritance/service composition,
+actual client display/navigation, transport and editor/publication remain open.
+This helper is neither a production dependency nor platform acceptance.

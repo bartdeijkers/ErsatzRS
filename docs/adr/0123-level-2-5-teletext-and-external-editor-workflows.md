@@ -46,9 +46,19 @@ twelve independent regressions cover fields, order, physical limits and located
 errors. The nine native cases retain identical bytes through that compiler.
 Bounded resource-object allocation now preserves full IDs and shared MOT defaults;
 resource invocations check exact selection/type and retain immediate offsets.
-Twenty-three focused regressions cover the local compiler and new object paths.
-Actual object definition bodies, local-object allocation, context-dependent
-row-zero positioning and base/enhancement composition remain required work. X27 native decoding has a separately
+Thirty-four focused regressions cover the local compiler, allocation and full
+object-page paths.
+Complete bounded POP/GPOP page writers now emit checked pointer tables,
+definition markers, mandatory function metadata and actual last-row headers.
+Original definitions are encoded once with independent lowering state; explicitly
+declared empty resources remain legal without invented objects. Full capacity,
+catalog/map matching and located colour/lowering checks precede body allocation.
+Eight additional libzvbi 0.2.42 cases independently decode all public/global
+active/adaptive/passive combinations, nested relative origins and exact glyph/
+colour behavior, with unchanged base cells. This covers the first pointer bank,
+not external decoding of every legal pointer or complete display semantics.
+Local-object allocation, context-dependent row-zero positioning and
+base/enhancement composition remain required work. X27 native decoding has a separately
 reproduced version-specific gap; normative encoding is retained. Full external
 feature decoding and actual client display/navigation remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact

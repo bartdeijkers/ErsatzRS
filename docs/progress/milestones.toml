@@ -987,6 +987,43 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 complete public/global object-page checkpoint:
+encode_teletext_object_page uses the original checked catalog and shared immutable
+allocation map. Exact map/type/completeness and resource-command budget checks
+precede lowering; complete capacity preflight reserves every definition marker
+and final terminator before body allocation. Full POP/GPOP sequences carry the
+resource header, mandatory X28/0, two/three/four contiguous pointer rows and
+content through X26/15. Exact pointer destinations use FIRST X3 origin and unused
+halves set to 511; total body capacities are 507/494/481. Derived nn excludes X28.
+Original definitions encode once with fresh AP/DRCS state and preserved nested
+pointers. Adaptive/passive screen/row colours fail at the original object/command.
+Legal empty companions use unused X1/X2 and termination-only X3. Output is at most
+43 DVB units; no closing header, whole service inventory or publication authority.
+Thirty-four focused tests pass in Nextest abc7218a-b499-4777-b079-9dff4c2243a3
+(410 skipped), including 11 new independent byte-oracle cases across every scope,
+type, S1 and pointer bank, actual field/parity coding, all exact capacities,
+empty/header boundaries, map errors, fresh state and nested invocation.
+Eight actual libzvbi 0.2.42 object cases pass in Nextest
+0f9cc01a-6c84-40cd-923c-787bc96f7eeb (one diagnostic,443 skipped), after correcting
+the reviewed MOT fixture coverage mask to 1. They cover all six scope/type
+combinations, exact glyph/colour behavior, two nested chains, relative origins
+and unaffected base B. This native proof uses the first pointer bank only.
+Fixture SHA256: 77f16d8e7723a171b4847c94a20667fe3054a61f8daf26a5f08d6468b1347ce6.
+The new bounded helper reuses the unchanged resource-helper ABI/version guards;
+negative input/oracle checks reject malformed requests and wrong expected glyphs
+or colours. Existing nine DRCS cases pass in Nextest
+2497dcb2-4e7e-4422-aedf-e194b869a8c4, with identical fixture SHA256
+68a84487506433f674c233e5be656dd4bd83d836f911b4ae24caac08c1f1d230.
+Strict FFmpeg all-target Clippy, workspace formatting, architecture and independent
+writer/fixture/oracle reviews pass; the unaffected 426-test baseline is reused.
+Higher-bank external decoding, local-object packing, row-zero positioning,
+base/enhancement composition, final geometry/inheritance and complete service
+lifecycle remain required. Actual suitable-client navigation, transport,
+QTeletextMaker GUI interchange and draft/publication remain open. No milestone,
+acceptance or dependency is changed; no push/publication.
+
+Earlier resource object allocation/invocation checkpoint follows:
+
 2026-10-11 resource object allocation/invocation checkpoint:
 Immutable checked POP/GPOP maps preserve complete scope/page/S1/host-u16-ID/type.
 Raw catalog/default budgets precede scanning; every default is validated before

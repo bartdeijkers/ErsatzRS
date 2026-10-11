@@ -102,9 +102,15 @@ errors; twelve regressions cover every operation family and packet boundaries.
 The nine native cases pass with byte-identical production-compiled invocations.
 Bounded POP/GPOP allocation and resource invocation now preserve complete IDs,
 default priority, exact selection/type and offsets under normative capacities.
-Twenty-three focused regressions pass. Definition pages, local-object packing,
-row-zero position lowering and base/enhancement composition remain required work,
-without permanent scope restrictions.
+Thirty-four focused regressions pass. Complete POP/GPOP writers now retain exact
+pointer destinations, mandatory X28 function metadata, original definition order
+and independent per-object state. They preflight the full body capacity and allow
+explicit empty companion resources. Eight pinned native cases independently
+decode all public/global object types and nested relative origins, including
+exact glyph/colour behavior and unchanged base cells. External decoding beyond
+the first pointer bank remains open. Local-object packing, row-zero position
+lowering and base/enhancement composition remain required work, without permanent
+scope restrictions.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.

@@ -162,15 +162,45 @@ still owns transitive counts, type/ownership closure and selected dependencies.
 Local targets retain `NeedsObjectAllocation` until their actual definition is
 packed into the same owner's X26 sequence; no host ID becomes a wire pointer.
 
-Complete object definition pages remain required. Their pointer values address
-absolute triplets 0–506 relative to the first triplet of packet 3, independently
-of pointer-table extensions. Pointer and definition data cannot share a packet.
-Canonical contiguous pointer tables use two/three/four packets and leave
-507/494/481 definition-area triplets. Local definitions instead share all 208
-X26 slots with authored and base-derived enhancements. Original MOT banks must
-be supplied separately; the effective per-display four default slots cannot
-reconstruct their provenance. Full bodies, display semantics and publication
-remain required acceptance work.
+### Complete public/global object pages
+
+`encode_teletext_object_page` encodes an explicitly supplied POP/GPOP resource
+from the original catalog and the same immutable allocation map. It checks the
+resource command aggregate before lowering, then requires exact catalog/map
+completeness and types. Each definition is emitted once in physical assignment
+order, with fresh active-position, DRCS and direct-invocation state. Nested calls
+retain their checked resource pointers rather than expanding duplicated bodies.
+Shared definitions do not own a display's selected links: the semantic service
+must check each consuming display's complete transitive resource closure.
+
+Pointer destinations address absolute triplets 0–506 relative to the first
+triplet of packet 3, independently of pointer-table extensions. Pointer and
+definition data cannot share a packet. Canonical contiguous pointer tables use
+two/three/four packets and leave 507/494/481 definition-area triplets, including
+every definition marker and the final terminator. Unused halves are 511; the
+reserved first pointer triplet is zero. This contiguous policy does not exclude
+other standard layouts from future import support.
+
+The complete sequence contains a resource header, mandatory X28/0 Format 1,
+pointer rows and content rows, with at most 43 DVB units. Header `nn` is derived
+from the last content encoding row, including X26 designations; X28 does not
+inflate it. Explicit transmission metadata chooses the full update state,
+counter, serial/parallel mode and final-subpage termination data one or three.
+An explicitly declared empty resource has unused X1/X2 and a termination-only
+X3, without an invented object. It can represent a companion subpage required by
+a declared extent. No next-page/FF closing header is added by this page primitive.
+
+Budget, capacity, type, missing definition/allocation and lowering failures retain
+the resource, original object and command ordinal when applicable. Adaptive and
+passive objects reject screen/row-colour operations. Row-zero positioning still
+requires context-dependent lowering. The result is immutable complete page data,
+not service inventory, lifecycle history, carousel timing or publication authority.
+
+Local definitions still share all 208 X26 slots with authored and base-derived
+enhancements. Original MOT banks must be supplied separately; the effective
+per-display four default slots cannot reconstruct their provenance. Local packing,
+final display semantics, complete service composition and publication remain
+required acceptance work.
 
 ## Presentation and supplied service selection
 
@@ -412,6 +442,36 @@ Run/export/replay instructions are in the
 This proves representative independent decoding and offscreen native glyph
 rendering. It proves neither actual client display/navigation nor TS delivery,
 full Level 2.5 support, the QTeletextMaker GUI workflow or design publication.
+
+### Pinned independent object decoding
+
+The separate object helper reuses the frozen resource helper's public ABI and
+runtime-version guards. Eight fresh-decoder cases consume complete production
+POP/GPOP pages, production resource-aware local invocations and normative MOT
+links. They cover all six public/global active/adaptive/passive combinations and
+two active-to-adaptive-to-passive chains. Full semantic IDs `FFFF`, `0100` and
+`0000` remain distinct; logical S1 endpoints zero and fifteen are represented
+with complete declared companion extents. Own-magazine FF closing headers retain
+the unmodified serial resource bytes.
+
+The oracle independently checks exact formatted Unicode, foreground/background
+colours, nested relative origins and an unchanged base B. Adjacent base T cells
+distinguish active colour propagation from adaptive/passive containment. This
+checks actual decoder formatting, not font pixels or full object inheritance.
+Incorrect glyph/colour expectations fail; unknown/duplicate input members,
+duplicate cells, boolean integer fields and oversized input are rejected.
+
+The final eight-case fixture SHA256 is
+`77f16d8e7723a171b4847c94a20667fe3054a61f8daf26a5f08d6468b1347ce6`;
+the helper SHA256 is
+`d8d7001f6df374614b95c59a413b07f60af4038089bed1811c12abbe2cf6c6f1`.
+Thirty-four focused local/allocation/object-page regressions include eleven new
+independent byte-oracle tests, all pointer banks/types/S1 values and exact body
+capacities. Native object proof covers the first pointer bank only. Higher-bank
+independent decoding, local objects, full composition, transport and actual
+suitable-client navigation remain required acceptance work. The separate
+[object calibration workflow](../../scripts/e2e/README.md#teletext-object-decoder-calibration)
+exports and replays the synthetic cases; it has no production runtime dependency.
 
 ## MOT/X27 preservation audit
 

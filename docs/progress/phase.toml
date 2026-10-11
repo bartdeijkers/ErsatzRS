@@ -1146,9 +1146,14 @@ complete bounded MOT/DRCS sequences derive actual last rows, including undefined
 empty DRCS. A bounded local X26 compiler preserves command order, fields and
 independent DRCS latches; twelve regressions cover physical limits and located
 errors. Bounded resource-object allocation and invocation preserve full IDs,
-shared defaults, exact resource/type selection and offsets; 23 focused tests pass.
-Definition pages/local-object packing, row-zero lowering and base/enhancement
-composition remain required work. Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
+shared defaults, exact resource/type selection and offsets. Full bounded POP/GPOP
+pages retain pointers/definition markers, mandatory X28, actual last rows and
+independent object state, with legal empty companions; 34 focused tests pass.
+Eight pinned native object cases cover all scope/type combinations and nested
+relative origins with exact glyph/colour behavior and unchanged base cells.
+External decoding beyond the first pointer bank, local-object packing, row-zero
+lowering and base/enhancement composition remain required work.
+Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations
 are recorded without changing normative wire output. Service lifecycle/scheduling,

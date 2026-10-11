@@ -160,14 +160,31 @@ pub fn compile_teletext_local_program_with_resource_objects(
         owner,
         program,
         max_commands,
-        Some(ResourceContext { allocations, links }),
+        Some(ResourceContext {
+            allocations,
+            links: Some(links),
+        }),
     )
 }
 
 #[derive(Clone, Copy)]
-struct ResourceContext<'a> {
+pub(super) struct ResourceContext<'a> {
     allocations: &'a TeletextResourceObjectAllocations,
-    links: TeletextResolvedObjectPageLinks,
+    links: Option<TeletextResolvedObjectPageLinks>,
+}
+
+impl<'a> ResourceContext<'a> {
+    // Shared definitions can serve several displays. Their original catalogue
+    // edges retain exact resource/type lookup here; the semantic service checks
+    // every consuming display's transitive selected-resource closure separately.
+    pub(super) const fn object_definition(
+        allocations: &'a TeletextResourceObjectAllocations,
+    ) -> Self {
+        Self {
+            allocations,
+            links: None,
+        }
+    }
 }
 
 fn compile(
@@ -188,7 +205,9 @@ fn compile(
     let mut state = LoweringState::new();
     let mut payload_triplet_count = 0;
     for (ordinal, command) in program.commands().iter().enumerate() {
-        let words = state.lower(owner, ordinal, *command, context)?;
+        let words = state
+            .lower(*command, context)
+            .map_err(|reason| located_error(owner, ordinal, reason))?;
         payload_triplet_count += words.len;
         if payload_triplet_count >= MAX_TRIPLETS {
             return Err(located_error(
@@ -209,7 +228,9 @@ fn compile(
     state = LoweringState::new();
     let mut index = 0;
     for (ordinal, command) in program.commands().iter().enumerate() {
-        let words = state.lower(owner, ordinal, *command, context)?;
+        let words = state
+            .lower(*command, context)
+            .map_err(|reason| located_error(owner, ordinal, reason))?;
         for &value in &words.values[..words.len] {
             let body = &mut packet_bodies[index / TRIPLETS_PER_PACKET];
             let offset = 1 + (index % TRIPLETS_PER_PACKET) * 3;
@@ -239,12 +260,15 @@ fn located_error(
     }
 }
 
-struct CommandWords {
+pub(super) struct CommandWords {
     values: [u32; 2],
     len: usize,
 }
 
 impl CommandWords {
+    pub(super) fn words(&self) -> &[u32] {
+        &self.values[..self.len]
+    }
     const fn one(value: u32) -> Self {
         Self {
             values: [value, 0],
@@ -260,7 +284,7 @@ impl CommandWords {
     }
 }
 
-struct LoweringState {
+pub(super) struct LoweringState {
     active_position: (u8, u8),
     global_s1: Option<u8>,
     normal_s1: Option<u8>,
@@ -268,7 +292,7 @@ struct LoweringState {
 }
 
 impl LoweringState {
-    const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             active_position: (0, 0),
             global_s1: None,
@@ -277,23 +301,19 @@ impl LoweringState {
         }
     }
 
-    fn lower(
+    pub(super) fn lower(
         &mut self,
-        owner: TeletextPageAddress,
-        ordinal: usize,
         command: TeletextEnhancementCommand,
         context: Option<ResourceContext<'_>>,
-    ) -> Result<CommandWords, TeletextLocalProgramEncodingError> {
+    ) -> Result<CommandWords, TeletextLocalProgramEncodingFailure> {
         let value = match command {
             TeletextEnhancementCommand::SetPosition { position } => {
                 if position.row() == 0 {
-                    return Err(located_error(
-                        owner,
-                        ordinal,
-                        TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering { position },
-                    ));
+                    return Err(TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
+                        position,
+                    });
                 }
-                self.move_to(owner, ordinal, (position.row(), position.column()))?;
+                self.move_to((position.row(), position.column()))?;
                 word(row_address(position.row()), 4, position.column())
             }
             TeletextEnhancementCommand::SetScreenColour { colour } => {
@@ -305,7 +325,7 @@ impl LoweringState {
                 colour,
                 following_rows,
             } => {
-                self.move_to(owner, ordinal, (row, 0))?;
+                self.move_to((row, 0))?;
                 let data = colour.get() | if following_rows { 0x60 } else { 0 };
                 if row == 0 {
                     word(63, 7, data)
@@ -314,7 +334,7 @@ impl LoweringState {
                 }
             }
             TeletextEnhancementCommand::AtColumn { column, operation } => {
-                self.move_to(owner, ordinal, (self.active_position.0, column))?;
+                self.move_to((self.active_position.0, column))?;
                 return Ok(self.column(column, operation));
             }
             TeletextEnhancementCommand::InvokeObject {
@@ -322,7 +342,7 @@ impl LoweringState {
                 object_type,
                 offset,
             } => {
-                return self.invoke(owner, ordinal, target, object_type, offset, context);
+                return self.invoke(target, object_type, offset, context);
             }
         };
         Ok(CommandWords::one(value))
@@ -330,62 +350,50 @@ impl LoweringState {
 
     fn invoke(
         &mut self,
-        owner: TeletextPageAddress,
-        ordinal: usize,
         target: TeletextObjectIdentity,
         object_type: TeletextObjectType,
         offset: Option<TeletextObjectOffset>,
         context: Option<ResourceContext<'_>>,
-    ) -> Result<CommandWords, TeletextLocalProgramEncodingError> {
-        let fail = |reason| located_error(owner, ordinal, reason);
+    ) -> Result<CommandWords, TeletextLocalProgramEncodingFailure> {
         let Some((context, resource)) = context.zip(target.resource()) else {
-            return Err(fail(
-                TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
+            return Err(TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
+                target,
+                object_type,
+                offset,
+            });
+        };
+        let (selected, scope) = match target.scope() {
+            TeletextObjectScope::Public => (context.links.map(|links| links.public), 0x10),
+            TeletextObjectScope::Global => (context.links.map(|links| links.global), 0x18),
+            TeletextObjectScope::Local => {
+                return Err(TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
                     target,
                     object_type,
                     offset,
-                },
-            ));
-        };
-        let (selected, scope) = match target.scope() {
-            TeletextObjectScope::Public => (context.links.public, 0x10),
-            TeletextObjectScope::Global => (context.links.global, 0x18),
-            TeletextObjectScope::Local => {
-                return Err(fail(
-                    TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
-                        target,
-                        object_type,
-                        offset,
-                    },
-                ));
+                });
             }
         };
-        if selected != Some(resource.page()) {
-            return Err(fail(TeletextLocalProgramEncodingFailure::ObjectSelection {
-                target,
-                selected,
-            }));
+        if let Some(selected) = selected {
+            if selected != Some(resource.page()) {
+                return Err(TeletextLocalProgramEncodingFailure::ObjectSelection {
+                    target,
+                    selected,
+                });
+            }
         }
-        let allocation = context
-            .allocations
-            .lookup(target, object_type)
-            .ok_or_else(|| {
-                fail(
-                    TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
-                        target,
-                        object_type,
-                    },
-                )
-            })?;
+        let allocation = context.allocations.lookup(target, object_type).ok_or(
+            TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+                target,
+                object_type,
+            },
+        )?;
         let (type_index, type_code) = match object_type {
             TeletextObjectType::Active => (0, 1),
             TeletextObjectType::Adaptive => (1, 2),
             TeletextObjectType::Passive => (2, 3),
         };
         if self.invocations[type_index] == 127 {
-            return Err(fail(TeletextLocalProgramEncodingFailure::InvocationCount {
-                object_type,
-            }));
+            return Err(TeletextLocalProgramEncodingFailure::InvocationCount { object_type });
         }
         self.invocations[type_index] += 1;
         let [low, high] = allocation.object_number().to_le_bytes();
@@ -400,21 +408,12 @@ impl LoweringState {
         ))
     }
 
-    fn move_to(
-        &mut self,
-        owner: TeletextPageAddress,
-        ordinal: usize,
-        position: (u8, u8),
-    ) -> Result<(), TeletextLocalProgramEncodingError> {
+    fn move_to(&mut self, position: (u8, u8)) -> Result<(), TeletextLocalProgramEncodingFailure> {
         if position < self.active_position {
-            return Err(located_error(
-                owner,
-                ordinal,
-                TeletextLocalProgramEncodingFailure::ActivePositionOrder {
-                    previous: self.active_position,
-                    requested: position,
-                },
-            ));
+            return Err(TeletextLocalProgramEncodingFailure::ActivePositionOrder {
+                previous: self.active_position,
+                requested: position,
+            });
         }
         self.active_position = position;
         Ok(())

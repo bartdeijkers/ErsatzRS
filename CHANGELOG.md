@@ -143,9 +143,13 @@ release section when tagging a release.
   glyph and DRCS commands with located failures and unchanged input. Required
   row-zero lowering and base/enhancement composition remain open. Resource-object
   allocation now preserves full IDs/shared defaults, exact resource/type selection
-  and invocation offsets; definition bodies/local-object packing remain open.
+  and invocation offsets. Complete bounded POP/GPOP pages now retain exact
+  pointers, definition markers, resource metadata and independent object state;
+  local-object packing and complete service compilation remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
-  native cell rendering and isolated invalid-glyph fallback. X27 decoder limits,
+  native cell rendering and isolated invalid-glyph fallback. Eight additional
+  object cases prove representative public/global types, nested origins and
+  exact glyph/colour behavior. X27 decoder limits,
   full feature/client proof and service scheduling remain open.
   Bounded MOT/X27 derivation preserves provenance,
   original defaults and conflicting candidates. Effective defaults/presentation,

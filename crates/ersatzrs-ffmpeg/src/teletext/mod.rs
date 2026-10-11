@@ -18,6 +18,7 @@ mod layout;
 mod lift;
 mod mot;
 mod object_allocation;
+mod object_pages;
 mod output;
 mod packets;
 mod pmt_install;
@@ -54,6 +55,11 @@ pub use mot::{
 pub use object_allocation::{
     allocate_teletext_resource_objects, TeletextObjectAllocationError,
     TeletextResourceObjectAllocation, TeletextResourceObjectAllocations,
+};
+pub use object_pages::{
+    encode_teletext_object_page, EncodedTeletextObjectPage, TeletextObjectDefinitionPosition,
+    TeletextObjectPageEncodingError, TeletextObjectPageEncodingFailure,
+    TeletextObjectPageTransmission,
 };
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
@@ -154,6 +160,11 @@ mod lift_tests;
 mod mot_tests;
 #[cfg(test)]
 mod object_allocation_tests;
+#[cfg(test)]
+mod object_pages_tests;
+// Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod object_runtime_tests;
 #[cfg(test)]
 mod pmt_install_tests;
 #[cfg(test)]
